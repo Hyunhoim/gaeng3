@@ -1,0 +1,4 @@
+-e ./packages/finance_agent_core
+
+pydantic==2.13.4
+PyYAML==6.0.3

@@ -1,0 +1,203 @@
+{
+  "schema_version": "1.0",
+  "checks": [
+    {
+      "path": "summary.dataset_count",
+      "expected": 4,
+      "reason": "All four official product families are present."
+    },
+    {
+      "path": "summary.raw_data_rows",
+      "expected": 145393,
+      "reason": "Total raw datarows across the four workbooks."
+    },
+    {
+      "path": "datasets.bond.structure.data_rows",
+      "expected": 42394
+    },
+    {
+      "path": "datasets.bond.structure.columns",
+      "expected": 40
+    },
+    {
+      "path": "datasets.bond.structure.header_schema_exact_match",
+      "expected": true
+    },
+    {
+      "path": "datasets.bond.keys.primary.non_null_unique",
+      "expected": 42394
+    },
+    {
+      "path": "datasets.bond.keys.primary.duplicate_rows",
+      "expected": 0
+    },
+    {
+      "path": "datasets.bond.domain.buyable_quantity_gt_zero",
+      "expected": 325
+    },
+    {
+      "path": "datasets.bond.domain.buyable_quantity_gt_zero_maturity_on_or_after_snapshot",
+      "expected": 254
+    },
+    {
+      "path": "datasets.bond.fields.AVG_ANNUAL_TAX_YIELD.zero",
+      "expected": 881
+    },
+    {
+      "path": "datasets.domestic_etp.structure.data_rows",
+      "expected": 1734
+    },
+    {
+      "path": "datasets.domestic_etp.structure.columns",
+      "expected": 73
+    },
+    {
+      "path": "datasets.domestic_etp.structure.header_schema_exact_match",
+      "expected": true
+    },
+    {
+      "path": "datasets.domestic_etp.quality.invalid_key_row_count",
+      "expected": 1
+    },
+    {
+      "path": "datasets.domestic_etp.fields.cu_charge_rt.present",
+      "expected": 217
+    },
+    {
+      "path": "datasets.domestic_etp.fields.du_chas_errt.zero",
+      "expected": 1551
+    },
+    {
+      "path": "datasets.domestic_etp.fields.pd_dvid_yield.zero",
+      "expected": 1551
+    },
+    {
+      "path": "datasets.domestic_etp.domain.product_group_counts.ETF",
+      "expected": 1202
+    },
+    {
+      "path": "datasets.domestic_etp.domain.product_group_counts.ETN",
+      "expected": 532
+    },
+    {
+      "path": "datasets.overseas_etp.structure.data_rows",
+      "expected": 5646
+    },
+    {
+      "path": "datasets.overseas_etp.structure.columns",
+      "expected": 49
+    },
+    {
+      "path": "datasets.overseas_etp.structure.header_schema_exact_match",
+      "expected": true
+    },
+    {
+      "path": "datasets.overseas_etp.quality.sparse_row_count",
+      "expected": 10
+    },
+    {
+      "path": "datasets.overseas_etp.fields.cu_charge_rt.zero",
+      "expected": 363
+    },
+    {
+      "path": "datasets.overseas_etp.fields.du_er_1d.present",
+      "expected": 5388
+    },
+    {
+      "path": "datasets.overseas_etp.fields.du_er_1d.zero",
+      "expected": 5388
+    },
+    {
+      "path": "datasets.overseas_etp.domain.isin.non_null_unique",
+      "expected": 5587
+    },
+    {
+      "path": "datasets.overseas_etp.domain.isin.duplicate_rows",
+      "expected": 50
+    },
+    {
+      "path": "datasets.overseas_etp.domain.isin.null_or_blank_rows",
+      "expected": 9
+    },
+    {
+      "path": "datasets.overseas_etp.domain.first_vertical_slice.fee_lte_0_20_all",
+      "expected": 480
+    },
+    {
+      "path": "datasets.overseas_etp.domain.first_vertical_slice.fee_lte_0_20_zero",
+      "expected": 40
+    },
+    {
+      "path": "datasets.overseas_etp.domain.first_vertical_slice.fee_lte_0_20_positive",
+      "expected": 440
+    },
+    {
+      "path": "datasets.fund.structure.data_rows",
+      "expected": 95619
+    },
+    {
+      "path": "datasets.fund.structure.columns",
+      "expected": 45
+    },
+    {
+      "path": "datasets.fund.structure.header_schema_exact_match",
+      "expected": true
+    },
+    {
+      "path": "datasets.fund.quality.invalid_key_row_count",
+      "expected": 1
+    },
+    {
+      "path": "datasets.fund.keys.primary.non_null_unique",
+      "expected": 95619
+    },
+    {
+      "path": "datasets.fund.domain.product_grain.valid_logical_products",
+      "expected": 11138
+    },
+    {
+      "path": "datasets.fund.domain.product_grain.coverage.fd_nast_suma.present",
+      "expected": 9290
+    },
+    {
+      "path": "datasets.fund.domain.product_grain.coverage.zrin_fd_ivst_risk_gcd.present",
+      "expected": 8565
+    },
+    {
+      "path": "datasets.fund.domain.product_grain.coverage.fd_wk1_ern_r.present",
+      "expected": 7600
+    },
+    {
+      "path": "datasets.fund.domain.product_grain.coverage.fd_mm1_ern_r.present",
+      "expected": 7570
+    },
+    {
+      "path": "datasets.fund.domain.product_grain.coverage.fd_mm3_ern_r.present",
+      "expected": 7497
+    },
+    {
+      "path": "datasets.fund.domain.product_grain.coverage.fd_mm6_ern_r.present",
+      "expected": 7340
+    },
+    {
+      "path": "datasets.fund.domain.product_grain.coverage.fd_mm18_ern_r.present",
+      "expected": 6879
+    },
+    {
+      "path": "datasets.fund.domain.product_grain.coverage.fd_yr1_ern_r.present",
+      "expected": 7017
+    },
+    {
+      "path": "datasets.fund.domain.product_grain.coverage.fd_yr2_ern_r.present",
+      "expected": 6360
+    },
+    {
+      "path": "datasets.fund.domain.product_grain.coverage.fd_yr3_ern_r.present",
+      "expected": 6102
+    },
+    {
+      "path": "datasets.fund.domain.product_grain.coverage.fd_yr5_ern_r.present",
+      "expected": 5580
+    }
+  ]
+}

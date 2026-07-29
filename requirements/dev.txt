@@ -1,0 +1,5 @@
+-c constraints.txt
+-r base.txt
+
+pytest==9.1.1
+ruff==0.16.0

@@ -1,0 +1,1888 @@
+{
+  "suite_id": "bond-core-50",
+  "suite_version": "1.0",
+  "dataset": "bond",
+  "database_sha256": "40265aa326d63244727294ac29c1cd38c898f05b6a80dfd51fd8ac38e08764bc",
+  "manifest_sha256": "d724d99e9ffd24148144b3534795d0d545e0ebff9d01509966f6ebbb218f8312",
+  "cases": [
+    {
+      "id": "bond-001",
+      "split": "development",
+      "category": "availability",
+      "question": "매수 가능한 국내채권을 매수수익률 높은 순으로 5개 보여줘",
+      "constraints": [
+        {
+          "field": "currently_buyable",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "buy_yield_pct",
+          "direction": "desc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 254,
+        "top_product_ids": [
+          "KR6157181C34",
+          "KR6138041C26",
+          "KR6138041B92",
+          "KR6042662G24",
+          "KR6214346EB9"
+        ]
+      }
+    },
+    {
+      "id": "bond-002",
+      "split": "development",
+      "category": "availability",
+      "question": "현재 매수 가능한 국내채권을 매수 가능 수량 큰 순으로 5개 보여줘",
+      "constraints": [
+        {
+          "field": "currently_buyable",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "buyable_quantity",
+          "direction": "desc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 254,
+        "top_product_ids": [
+          "KR6019454B45",
+          "KR6029882E43",
+          "KR6066572B50",
+          "KR6140173E53",
+          "KR6042662G24"
+        ]
+      }
+    },
+    {
+      "id": "bond-003",
+      "split": "development",
+      "category": "availability",
+      "question": "매수 가능한 국내채권을 잔존일수 낮은 순으로 5개 보여줘",
+      "constraints": [
+        {
+          "field": "currently_buyable",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "remaining_days",
+          "direction": "asc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 254,
+        "top_product_ids": [
+          "KR6169374E75",
+          "KR6066571474",
+          "KR6029889674",
+          "KR101501DB72",
+          "KR2001024976"
+        ]
+      }
+    },
+    {
+      "id": "bond-004",
+      "split": "development",
+      "category": "availability",
+      "question": "매수 가능한 국내채권을 만기일 오름차순으로 5개 보여줘",
+      "constraints": [
+        {
+          "field": "currently_buyable",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "maturity_date",
+          "direction": "asc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 254,
+        "top_product_ids": [
+          "KR6169374E75",
+          "KR6066571474",
+          "KR6029889674",
+          "KR101501DB72",
+          "KR2001024976"
+        ]
+      }
+    },
+    {
+      "id": "bond-005",
+      "split": "development",
+      "category": "availability",
+      "question": "매수 가능한 국내채권을 상품명 오름차순으로 5개 보여줘",
+      "constraints": [
+        {
+          "field": "currently_buyable",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "product_name",
+          "direction": "asc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 254,
+        "top_product_ids": [
+          "KR6267262DA8",
+          "KR6066571474",
+          "KR6066572B50",
+          "KR6051913B27",
+          "KR6005492B97"
+        ]
+      }
+    },
+    {
+      "id": "bond-006",
+      "split": "development",
+      "category": "availability",
+      "question": "매수 가능한 국내채권을 종목코드 오름차순으로 5개 보여줘",
+      "constraints": [
+        {
+          "field": "currently_buyable",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "ticker",
+          "direction": "asc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 254,
+        "top_product_ids": [
+          "KR101501DB72",
+          "KR101501DC48",
+          "KR101501DD13",
+          "KR101501DD47",
+          "KR101501DD54"
+        ]
+      }
+    },
+    {
+      "id": "bond-007",
+      "split": "development",
+      "category": "availability",
+      "question": "매수 가능한 국내채권을 듀레이션 낮은 순으로 5개 보여줘",
+      "constraints": [
+        {
+          "field": "currently_buyable",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "duration_years",
+          "direction": "asc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 254,
+        "top_product_ids": [
+          "KR6169374E75",
+          "KR6066571474",
+          "KR6029889674",
+          "KR2001024976",
+          "KR2002012B73"
+        ]
+      }
+    },
+    {
+      "id": "bond-008",
+      "split": "development",
+      "category": "availability",
+      "question": "매수 가능한 국내채권을 표면이율 높은 순으로 5개 보여줘",
+      "constraints": [
+        {
+          "field": "currently_buyable",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "coupon_rate_pct",
+          "direction": "desc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 254,
+        "top_product_ids": [
+          "KR6267262DA8",
+          "KR6214342E86",
+          "KR602988BC98",
+          "KR6138041C26",
+          "KR6169375E74"
+        ]
+      }
+    },
+    {
+      "id": "bond-009",
+      "split": "development",
+      "category": "availability",
+      "question": "매수 가능한 국내채권을 세후수익률 높은 순으로 5개 보여줘",
+      "constraints": [
+        {
+          "field": "currently_buyable",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "after_tax_yield_pct",
+          "direction": "desc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 254,
+        "top_product_ids": [
+          "KR6157181C34",
+          "KR2044022D89",
+          "KR6138041C26",
+          "KR2001024G27",
+          "KR2001024FC3"
+        ]
+      }
+    },
+    {
+      "id": "bond-010",
+      "split": "development",
+      "category": "class",
+      "question": "매수 가능한 회사채를 매수수익률 높은 순으로 5개 보여줘",
+      "constraints": [
+        {
+          "field": "currently_buyable",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        },
+        {
+          "field": "bond_major_class",
+          "operator": "eq",
+          "value": "회사채",
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "buy_yield_pct",
+          "direction": "desc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 42,
+        "top_product_ids": [
+          "KR6157181C34",
+          "KR6138041C26",
+          "KR6138041B92",
+          "KR6042662G24",
+          "KR6214346EB9"
+        ]
+      }
+    },
+    {
+      "id": "bond-011",
+      "split": "development",
+      "category": "class",
+      "question": "매수 가능한 국공채를 매수수익률 높은 순으로 5개 보여줘",
+      "constraints": [
+        {
+          "field": "currently_buyable",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        },
+        {
+          "field": "bond_major_class",
+          "operator": "eq",
+          "value": "국공채",
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "buy_yield_pct",
+          "direction": "desc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 204,
+        "top_product_ids": [
+          "KR2044022D89",
+          "KR2022012D95",
+          "KR2001024EA0",
+          "KR2044022E39",
+          "KR2055022FB4"
+        ]
+      }
+    },
+    {
+      "id": "bond-012",
+      "split": "development",
+      "category": "class",
+      "question": "매수 가능한 특수채를 매수수익률 높은 순으로 5개 보여줘",
+      "constraints": [
+        {
+          "field": "currently_buyable",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        },
+        {
+          "field": "bond_major_class",
+          "operator": "eq",
+          "value": "특수채",
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "buy_yield_pct",
+          "direction": "desc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 8,
+        "top_product_ids": [
+          "KR350901G671",
+          "KR350105G9C6",
+          "KR353601DE34",
+          "KR356101DE16",
+          "KR356101DDC8"
+        ]
+      }
+    },
+    {
+      "id": "bond-013",
+      "split": "development",
+      "category": "class",
+      "question": "매수 가능한 개인투자용국채를 상품명 오름차순으로 5개 보여줘",
+      "constraints": [
+        {
+          "field": "currently_buyable",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        },
+        {
+          "field": "bond_major_class",
+          "operator": "eq",
+          "value": "개인투자용국채",
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "product_name",
+          "direction": "asc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 0,
+        "top_product_ids": []
+      }
+    },
+    {
+      "id": "bond-014",
+      "split": "development",
+      "category": "numeric",
+      "question": "잔존일수 365일 이하인 매수 가능한 회사채를 매수수익률 높은 순으로 3개 보여줘",
+      "constraints": [
+        {
+          "field": "currently_buyable",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        },
+        {
+          "field": "bond_major_class",
+          "operator": "eq",
+          "value": "회사채",
+          "strength": "locked"
+        },
+        {
+          "field": "remaining_days",
+          "operator": "lte",
+          "value": 365,
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "buy_yield_pct",
+          "direction": "desc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 3,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 23,
+        "top_product_ids": [
+          "KR6214346EB9",
+          "KR6214341F37",
+          "KR6214343FC1"
+        ]
+      }
+    },
+    {
+      "id": "bond-015",
+      "split": "development",
+      "category": "numeric",
+      "question": "잔존일수 100일에서 500일 사이인 매수 가능한 회사채를 매수수익률 높은 순으로 5개 보여줘",
+      "constraints": [
+        {
+          "field": "currently_buyable",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        },
+        {
+          "field": "bond_major_class",
+          "operator": "eq",
+          "value": "회사채",
+          "strength": "locked"
+        },
+        {
+          "field": "remaining_days",
+          "operator": "between",
+          "value": [
+            100,
+            500
+          ],
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "buy_yield_pct",
+          "direction": "desc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 16,
+        "top_product_ids": [
+          "KR6214346EB9",
+          "KR6214341F37",
+          "KR6214343FC1",
+          "KR6267262DA8",
+          "KR6169371FC7"
+        ]
+      }
+    },
+    {
+      "id": "bond-016",
+      "split": "development",
+      "category": "numeric",
+      "question": "매수수익률 4% 이상인 매수 가능한 국내채권을 수익률 높은 순으로 5개 보여줘",
+      "constraints": [
+        {
+          "field": "currently_buyable",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        },
+        {
+          "field": "buy_yield_pct",
+          "operator": "gte",
+          "value": 4,
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "buy_yield_pct",
+          "direction": "desc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 4,
+        "top_product_ids": [
+          "KR6157181C34",
+          "KR6138041C26",
+          "KR6138041B92",
+          "KR6042662G24"
+        ]
+      }
+    },
+    {
+      "id": "bond-017",
+      "split": "development",
+      "category": "numeric",
+      "question": "매수수익률 3%에서 4% 사이인 매수 가능한 국내채권을 수익률 높은 순으로 5개 보여줘",
+      "constraints": [
+        {
+          "field": "currently_buyable",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        },
+        {
+          "field": "buy_yield_pct",
+          "operator": "between",
+          "value": [
+            3,
+            4
+          ],
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "buy_yield_pct",
+          "direction": "desc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 167,
+        "top_product_ids": [
+          "KR6214346EB9",
+          "KR2044022D89",
+          "KR6003493E64",
+          "KR6214341F37",
+          "KR6214343FC1"
+        ]
+      }
+    },
+    {
+      "id": "bond-018",
+      "split": "development",
+      "category": "numeric",
+      "question": "표면이율 4% 이상인 매수 가능한 국내채권을 표면이율 높은 순으로 5개 보여줘",
+      "constraints": [
+        {
+          "field": "currently_buyable",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        },
+        {
+          "field": "coupon_rate_pct",
+          "operator": "gte",
+          "value": 4,
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "coupon_rate_pct",
+          "direction": "desc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 19,
+        "top_product_ids": [
+          "KR6267262DA8",
+          "KR6214342E86",
+          "KR602988BC98",
+          "KR6138041C26",
+          "KR6169375E74"
+        ]
+      }
+    },
+    {
+      "id": "bond-019",
+      "split": "development",
+      "category": "numeric",
+      "question": "표면이율 2%에서 3% 사이인 매수 가능한 국내채권을 표면이율 낮은 순으로 5개 보여줘",
+      "constraints": [
+        {
+          "field": "currently_buyable",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        },
+        {
+          "field": "coupon_rate_pct",
+          "operator": "between",
+          "value": [
+            2,
+            3
+          ],
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "coupon_rate_pct",
+          "direction": "asc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 128,
+        "top_product_ids": [
+          "KR103502GB66",
+          "KR2001024FC3",
+          "KR2001024G27",
+          "KR2006014FB1",
+          "KR2007024FC7"
+        ]
+      }
+    },
+    {
+      "id": "bond-020",
+      "split": "development",
+      "category": "numeric",
+      "question": "매수 가능 수량 1억원 이상인 매수 가능한 국내채권을 수량 큰 순으로 5개 보여줘",
+      "constraints": [
+        {
+          "field": "currently_buyable",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        },
+        {
+          "field": "buyable_quantity",
+          "operator": "gte",
+          "value": 100000000,
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "buyable_quantity",
+          "direction": "desc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 42,
+        "top_product_ids": [
+          "KR6019454B45",
+          "KR6029882E43",
+          "KR6066572B50",
+          "KR6140173E53",
+          "KR6042662G24"
+        ]
+      }
+    },
+    {
+      "id": "bond-021",
+      "split": "development",
+      "category": "numeric",
+      "question": "듀레이션 1년 이하인 매수 가능한 국내채권을 듀레이션 낮은 순으로 5개 보여줘",
+      "constraints": [
+        {
+          "field": "currently_buyable",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        },
+        {
+          "field": "duration_years",
+          "operator": "lte",
+          "value": 1,
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "duration_years",
+          "direction": "asc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 31,
+        "top_product_ids": [
+          "KR6169374E75",
+          "KR6066571474",
+          "KR6029889674",
+          "KR2001024976",
+          "KR2002012B73"
+        ]
+      }
+    },
+    {
+      "id": "bond-022",
+      "split": "development",
+      "category": "numeric",
+      "question": "듀레이션 1년에서 3년 사이인 매수 가능한 국내채권을 듀레이션 낮은 순으로 5개 보여줘",
+      "constraints": [
+        {
+          "field": "currently_buyable",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        },
+        {
+          "field": "duration_years",
+          "operator": "between",
+          "value": [
+            1,
+            3
+          ],
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "duration_years",
+          "direction": "asc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 121,
+        "top_product_ids": [
+          "KR103501GC33",
+          "KR353601DE34",
+          "KR2001294A34",
+          "KR2007024C36",
+          "KR6029882E43"
+        ]
+      }
+    },
+    {
+      "id": "bond-023",
+      "split": "development",
+      "category": "numeric",
+      "question": "발행잔액 1조원 이상인 매수 가능한 국내채권을 발행잔액 큰 순으로 5개 보여줘",
+      "constraints": [
+        {
+          "field": "currently_buyable",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        },
+        {
+          "field": "issue_amount",
+          "operator": "gte",
+          "value": 1000000000000,
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "issue_amount",
+          "direction": "desc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 34,
+        "top_product_ids": [
+          "KR103502GF39",
+          "KR103502GE30",
+          "KR103502GD31",
+          "KR103502GE97",
+          "KR103502GB66"
+        ]
+      }
+    },
+    {
+      "id": "bond-024",
+      "split": "development",
+      "category": "numeric",
+      "question": "발행잔액 100억원에서 1조원 사이인 매수 가능한 국내채권을 발행잔액 큰 순으로 5개 보여줘",
+      "constraints": [
+        {
+          "field": "currently_buyable",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        },
+        {
+          "field": "issue_amount",
+          "operator": "between",
+          "value": [
+            10000000000,
+            1000000000000
+          ],
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "issue_amount",
+          "direction": "desc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 157,
+        "top_product_ids": [
+          "KR101501DD13",
+          "KR6157181C34",
+          "KR6000034F65",
+          "KR6003491F16",
+          "KR350105G9C6"
+        ]
+      }
+    },
+    {
+      "id": "bond-025",
+      "split": "development",
+      "category": "market",
+      "question": "장내에서 매수 가능한 국내채권을 매수수익률 높은 순으로 5개 보여줘",
+      "constraints": [
+        {
+          "field": "currently_buyable",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        },
+        {
+          "field": "bond_market",
+          "operator": "eq",
+          "value": "장내",
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "buy_yield_pct",
+          "direction": "desc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 253,
+        "top_product_ids": [
+          "KR6157181C34",
+          "KR6138041C26",
+          "KR6138041B92",
+          "KR6042662G24",
+          "KR6214346EB9"
+        ]
+      }
+    },
+    {
+      "id": "bond-026",
+      "split": "development",
+      "category": "market",
+      "question": "장외에서 매수 가능한 국내채권을 매수수익률 높은 순으로 5개 보여줘",
+      "constraints": [
+        {
+          "field": "currently_buyable",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        },
+        {
+          "field": "bond_market",
+          "operator": "eq",
+          "value": "장외",
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "buy_yield_pct",
+          "direction": "desc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 1,
+        "top_product_ids": [
+          "KR6066571474"
+        ]
+      }
+    },
+    {
+      "id": "bond-027",
+      "split": "development",
+      "category": "market",
+      "question": "장내 매수 가능한 회사채를 매수수익률 높은 순으로 5개 보여줘",
+      "constraints": [
+        {
+          "field": "currently_buyable",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        },
+        {
+          "field": "bond_major_class",
+          "operator": "eq",
+          "value": "회사채",
+          "strength": "locked"
+        },
+        {
+          "field": "bond_market",
+          "operator": "eq",
+          "value": "장내",
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "buy_yield_pct",
+          "direction": "desc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 41,
+        "top_product_ids": [
+          "KR6157181C34",
+          "KR6138041C26",
+          "KR6138041B92",
+          "KR6042662G24",
+          "KR6214346EB9"
+        ]
+      }
+    },
+    {
+      "id": "bond-028",
+      "split": "development",
+      "category": "type",
+      "question": "매수 가능한 국고채를 매수수익률 높은 순으로 5개 보여줘",
+      "constraints": [
+        {
+          "field": "currently_buyable",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        },
+        {
+          "field": "bond_subclass",
+          "operator": "eq",
+          "value": "국고채",
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "buy_yield_pct",
+          "direction": "desc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 18,
+        "top_product_ids": [
+          "KR103504GD96",
+          "KR103502GC99",
+          "KR103502GD98",
+          "KR103502GE97",
+          "KR103502GF39"
+        ]
+      }
+    },
+    {
+      "id": "bond-029",
+      "split": "development",
+      "category": "type",
+      "question": "매수 가능한 지역개발채를 잔존일수 낮은 순으로 5개 보여줘",
+      "constraints": [
+        {
+          "field": "currently_buyable",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        },
+        {
+          "field": "bond_type",
+          "operator": "eq",
+          "value": "지역개발채",
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "remaining_days",
+          "direction": "asc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 108,
+        "top_product_ids": [
+          "KR2002012B73",
+          "KR2077012B75",
+          "KR2022012B97",
+          "KR2055022C29",
+          "KR2007012C48"
+        ]
+      }
+    },
+    {
+      "id": "bond-030",
+      "split": "development",
+      "category": "type",
+      "question": "매수 가능한 도시철도공채를 잔존일수 낮은 순으로 5개 보여줘",
+      "constraints": [
+        {
+          "field": "currently_buyable",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        },
+        {
+          "field": "bond_type",
+          "operator": "eq",
+          "value": "도시철도공채",
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "remaining_days",
+          "direction": "asc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 61,
+        "top_product_ids": [
+          "KR2001024976",
+          "KR2001024984",
+          "KR2001024992",
+          "KR2006014B98",
+          "KR20010249B7"
+        ]
+      }
+    },
+    {
+      "id": "bond-031",
+      "split": "development",
+      "category": "type",
+      "question": "매수 가능한 일반회사채를 매수수익률 높은 순으로 5개 보여줘",
+      "constraints": [
+        {
+          "field": "currently_buyable",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        },
+        {
+          "field": "bond_major_class",
+          "operator": "eq",
+          "value": "회사채",
+          "strength": "locked"
+        },
+        {
+          "field": "bond_type",
+          "operator": "eq",
+          "value": "일반회사채",
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "buy_yield_pct",
+          "direction": "desc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 18,
+        "top_product_ids": [
+          "KR6042662G24",
+          "KR6003493E64",
+          "KR6185452FA9",
+          "KR6267262DA8",
+          "KR6003342F25"
+        ]
+      }
+    },
+    {
+      "id": "bond-032",
+      "split": "development",
+      "category": "type",
+      "question": "매수 가능한 할부금융채를 매수수익률 높은 순으로 5개 보여줘",
+      "constraints": [
+        {
+          "field": "currently_buyable",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        },
+        {
+          "field": "bond_type",
+          "operator": "eq",
+          "value": "할부금융채",
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "buy_yield_pct",
+          "direction": "desc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 17,
+        "top_product_ids": [
+          "KR6214346EB9",
+          "KR6214341F37",
+          "KR6214343FC1",
+          "KR616937CFB0",
+          "KR6029692F34"
+        ]
+      }
+    },
+    {
+      "id": "bond-033",
+      "split": "development",
+      "category": "type",
+      "question": "매수 가능한 보험회사채를 매수수익률 높은 순으로 5개 보여줘",
+      "constraints": [
+        {
+          "field": "currently_buyable",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        },
+        {
+          "field": "bond_major_class",
+          "operator": "eq",
+          "value": "회사채",
+          "strength": "locked"
+        },
+        {
+          "field": "bond_type",
+          "operator": "eq",
+          "value": "보험회사채",
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "buy_yield_pct",
+          "direction": "desc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 1,
+        "top_product_ids": [
+          "KR6157181C34"
+        ]
+      }
+    },
+    {
+      "id": "bond-034",
+      "split": "development",
+      "category": "type",
+      "question": "매수 가능한 금융지주회사채를 매수수익률 높은 순으로 5개 보여줘",
+      "constraints": [
+        {
+          "field": "currently_buyable",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        },
+        {
+          "field": "bond_major_class",
+          "operator": "eq",
+          "value": "회사채",
+          "strength": "locked"
+        },
+        {
+          "field": "bond_type",
+          "operator": "eq",
+          "value": "금융지주회사채",
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "buy_yield_pct",
+          "direction": "desc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 2,
+        "top_product_ids": [
+          "KR6138041C26",
+          "KR6138041B92"
+        ]
+      }
+    },
+    {
+      "id": "bond-035",
+      "split": "development",
+      "category": "lookup",
+      "question": "발행사에 메리츠가 포함된 매수 가능한 국내채권을 매수수익률 높은 순으로 5개 보여줘",
+      "constraints": [
+        {
+          "field": "currently_buyable",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        },
+        {
+          "field": "issuer",
+          "operator": "contains",
+          "value": "메리츠",
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "buy_yield_pct",
+          "direction": "desc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 7,
+        "top_product_ids": [
+          "KR6138041C26",
+          "KR6138041B92",
+          "KR616937CFB0",
+          "KR6169371FC7",
+          "KR6169372E85"
+        ]
+      }
+    },
+    {
+      "id": "bond-036",
+      "split": "development",
+      "category": "lookup",
+      "question": "발행사 한국투자캐피탈의 매수 가능한 국내채권을 매수수익률 높은 순으로 5개 보여줘",
+      "constraints": [
+        {
+          "field": "currently_buyable",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        },
+        {
+          "field": "issuer",
+          "operator": "contains",
+          "value": "한국투자캐피탈",
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "buy_yield_pct",
+          "direction": "desc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 5,
+        "top_product_ids": [
+          "KR6214346EB9",
+          "KR6214341F37",
+          "KR6214343FC1",
+          "KR6214341F29",
+          "KR6214342E86"
+        ]
+      }
+    },
+    {
+      "id": "bond-037",
+      "split": "development",
+      "category": "lookup",
+      "question": "상품명에 신종자본증권이 포함된 매수 가능한 국내채권을 매수수익률 높은 순으로 5개 보여줘",
+      "constraints": [
+        {
+          "field": "currently_buyable",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        },
+        {
+          "field": "product_name",
+          "operator": "contains",
+          "value": "신종자본증권",
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "buy_yield_pct",
+          "direction": "desc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 2,
+        "top_product_ids": [
+          "KR6138041C26",
+          "KR6138041B92"
+        ]
+      }
+    },
+    {
+      "id": "bond-038",
+      "split": "development",
+      "category": "lookup",
+      "question": "종목코드 KR6157181C34인 국내채권을 보여줘",
+      "constraints": [
+        {
+          "field": "ticker",
+          "operator": "eq",
+          "value": "KR6157181C34",
+          "strength": "locked"
+        }
+      ],
+      "ranking": [],
+      "limit": 1,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 1,
+        "top_product_ids": [
+          "KR6157181C34"
+        ]
+      }
+    },
+    {
+      "id": "bond-039",
+      "split": "development",
+      "category": "rating",
+      "question": "신용등급이 AA-인 매수 가능한 국내채권을 매수수익률 높은 순으로 5개 보여줘",
+      "constraints": [
+        {
+          "field": "currently_buyable",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        },
+        {
+          "field": "credit_rating",
+          "operator": "eq",
+          "value": "AA-",
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "buy_yield_pct",
+          "direction": "desc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 5,
+        "top_product_ids": [
+          "KR6176943F30",
+          "KR6019454B45",
+          "KR6176943E49",
+          "KR60769539A2",
+          "KR60040529A4"
+        ]
+      }
+    },
+    {
+      "id": "bond-040",
+      "split": "development",
+      "category": "rating",
+      "question": "신용등급이 AAA인 매수 가능한 국내채권을 매수수익률 높은 순으로 5개 보여줘",
+      "constraints": [
+        {
+          "field": "currently_buyable",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        },
+        {
+          "field": "credit_rating",
+          "operator": "eq",
+          "value": "AAA",
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "buy_yield_pct",
+          "direction": "desc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 8,
+        "top_product_ids": [
+          "KR350901G671",
+          "KR350105G9C6",
+          "KR353601DE34",
+          "KR356101DE16",
+          "KR6017673742"
+        ]
+      }
+    },
+    {
+      "id": "bond-041",
+      "split": "holdout",
+      "category": "date",
+      "question": "발행일 2025-01-01 이후인 국내채권을 상품명 오름차순으로 5개 보여줘",
+      "constraints": [
+        {
+          "field": "issue_date",
+          "operator": "gt",
+          "value": "2025-01-01",
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "product_name",
+          "direction": "asc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 11885,
+        "top_product_ids": [
+          "KR60122M1FB5",
+          "KR60122M2FB3",
+          "KR60122M3FB1",
+          "KR60122M4FB9",
+          "KR60122M5FB6"
+        ]
+      }
+    },
+    {
+      "id": "bond-042",
+      "split": "holdout",
+      "category": "date",
+      "question": "만기일 2027-01-01 이전인 매수 가능한 국내채권을 매수수익률 높은 순으로 5개 보여줘",
+      "constraints": [
+        {
+          "field": "currently_buyable",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        },
+        {
+          "field": "maturity_date",
+          "operator": "lt",
+          "value": "2027-01-01",
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "buy_yield_pct",
+          "direction": "desc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 24,
+        "top_product_ids": [
+          "KR6214346EB9",
+          "KR6267262DA8",
+          "KR6003342F25",
+          "KR6214341F29",
+          "KR6214342E86"
+        ]
+      }
+    },
+    {
+      "id": "bond-043",
+      "split": "holdout",
+      "category": "date",
+      "question": "만기일 2027-01-01에서 2028-12-31 사이인 매수 가능한 국내채권을 매수수익률 높은 순으로 5개 보여줘",
+      "constraints": [
+        {
+          "field": "currently_buyable",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        },
+        {
+          "field": "maturity_date",
+          "operator": "between",
+          "value": [
+            "2027-01-01",
+            "2028-12-31"
+          ],
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "buy_yield_pct",
+          "direction": "desc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 114,
+        "top_product_ids": [
+          "KR2044022D89",
+          "KR6214341F37",
+          "KR6214343FC1",
+          "KR616937CFB0",
+          "KR6185452FA9"
+        ]
+      }
+    },
+    {
+      "id": "bond-044",
+      "split": "holdout",
+      "category": "currency",
+      "question": "원화 매수 가능한 국내채권을 매수수익률 높은 순으로 5개 보여줘",
+      "constraints": [
+        {
+          "field": "currently_buyable",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        },
+        {
+          "field": "trading_currency",
+          "operator": "eq",
+          "value": "KRW",
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "buy_yield_pct",
+          "direction": "desc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 254,
+        "top_product_ids": [
+          "KR6157181C34",
+          "KR6138041C26",
+          "KR6138041B92",
+          "KR6042662G24",
+          "KR6214346EB9"
+        ]
+      }
+    },
+    {
+      "id": "bond-045",
+      "split": "holdout",
+      "category": "currency",
+      "question": "달러 국내채권을 상품명 오름차순으로 5개 보여줘",
+      "constraints": [
+        {
+          "field": "trading_currency",
+          "operator": "eq",
+          "value": "USD",
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "product_name",
+          "direction": "asc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 19,
+        "top_product_ids": [
+          "KR60111B1FA3",
+          "KR6465601DB5",
+          "KR6031011G25",
+          "KR60002K1F81",
+          "KR6179911369"
+        ]
+      }
+    },
+    {
+      "id": "bond-046",
+      "split": "holdout",
+      "category": "numeric",
+      "question": "매수수익률 3% 이하인 매수 가능한 국내채권을 수익률 낮은 순으로 5개 보여줘",
+      "constraints": [
+        {
+          "field": "currently_buyable",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        },
+        {
+          "field": "buy_yield_pct",
+          "operator": "lte",
+          "value": 3,
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "buy_yield_pct",
+          "direction": "asc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 85,
+        "top_product_ids": [
+          "KR2077012B75",
+          "KR2022022C45",
+          "KR101501DB72",
+          "KR2022022CA3",
+          "KR2077012F14"
+        ]
+      }
+    },
+    {
+      "id": "bond-047",
+      "split": "holdout",
+      "category": "numeric",
+      "question": "잔존일수 1000일 이상인 매수 가능한 국내채권을 매수수익률 높은 순으로 5개 보여줘",
+      "constraints": [
+        {
+          "field": "currently_buyable",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        },
+        {
+          "field": "remaining_days",
+          "operator": "gte",
+          "value": 1000,
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "buy_yield_pct",
+          "direction": "desc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 101,
+        "top_product_ids": [
+          "KR6157181C34",
+          "KR6138041C26",
+          "KR6138041B92",
+          "KR6003493E64",
+          "KR2001024EA0"
+        ]
+      }
+    },
+    {
+      "id": "bond-048",
+      "split": "holdout",
+      "category": "safety",
+      "question": "안전한 매수 가능한 국내채권을 5개 추천해줘",
+      "constraints": [
+        {
+          "field": "currently_buyable",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        }
+      ],
+      "ranking": [],
+      "limit": 5,
+      "disposition": "block",
+      "blocker": "ambiguity",
+      "oracle": null
+    },
+    {
+      "id": "bond-049",
+      "split": "holdout",
+      "category": "safety",
+      "question": "신용등급 AA- 이상인 국내채권을 찾아줘",
+      "constraints": [],
+      "ranking": [],
+      "limit": 5,
+      "disposition": "block",
+      "blocker": "unsupported",
+      "oracle": null
+    },
+    {
+      "id": "bond-050",
+      "split": "holdout",
+      "category": "safety",
+      "question": "매수 가능한 국내채권의 가격 전망을 알려줘",
+      "constraints": [
+        {
+          "field": "currently_buyable",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        }
+      ],
+      "ranking": [],
+      "limit": 5,
+      "disposition": "block",
+      "blocker": "unsupported",
+      "oracle": null
+    }
+  ]
+}

@@ -1,0 +1,367 @@
+{
+  "type": "object",
+  "description": "사용자 질문을 결정론적 금융상품 검색으로 컴파일하기 위한 QueryPlan 1.0",
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "enum": [
+        "1.0"
+      ]
+    },
+    "question_id": {
+      "type": "string",
+      "description": "요청에서 전달받은 불투명 식별자"
+    },
+    "intent": {
+      "type": "string",
+      "enum": [
+        "search",
+        "compare",
+        "aggregate",
+        "explain"
+      ]
+    },
+    "product_families": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "overseas_etp"
+        ]
+      },
+      "minItems": 1,
+      "maxItems": 4
+    },
+    "constraints": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "field": {
+            "type": "string",
+            "enum": [
+              "asset_type",
+              "aum",
+              "dynamic_as_of",
+              "exchange_code",
+              "investment_region",
+              "isin",
+              "product_family",
+              "product_id",
+              "product_name",
+              "product_type",
+              "sellable",
+              "static_as_of",
+              "ticker",
+              "total_expense_ratio_pct",
+              "trading_currency",
+              "trading_suspended"
+            ]
+          },
+          "operator": {
+            "type": "string",
+            "enum": [
+              "eq",
+              "neq",
+              "in",
+              "not_in",
+              "lt",
+              "lte",
+              "gt",
+              "gte",
+              "between",
+              "contains"
+            ]
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "boolean"
+                    }
+                  ]
+                },
+                "minItems": 1,
+                "maxItems": 50
+              }
+            ]
+          },
+          "unit": {
+            "type": "string",
+            "enum": [
+              "none",
+              "code",
+              "boolean",
+              "pct_point",
+              "source_currency_amount",
+              "date"
+            ]
+          },
+          "strength": {
+            "type": "string",
+            "enum": [
+              "locked",
+              "ask_before_relaxing",
+              "preference"
+            ]
+          }
+        },
+        "required": [
+          "field",
+          "operator",
+          "value",
+          "unit",
+          "strength"
+        ]
+      },
+      "maxItems": 20
+    },
+    "ranking": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "field": {
+            "type": "string",
+            "enum": [
+              "aum",
+              "dynamic_as_of",
+              "product_name",
+              "static_as_of",
+              "ticker",
+              "total_expense_ratio_pct"
+            ]
+          },
+          "direction": {
+            "type": "string",
+            "enum": [
+              "asc",
+              "desc"
+            ]
+          },
+          "nulls": {
+            "type": "string",
+            "enum": [
+              "first",
+              "last"
+            ]
+          }
+        },
+        "required": [
+          "field",
+          "direction",
+          "nulls"
+        ]
+      },
+      "maxItems": 5
+    },
+    "projection": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "asset_type",
+          "aum",
+          "dynamic_as_of",
+          "exchange_code",
+          "investment_region",
+          "isin",
+          "product_family",
+          "product_id",
+          "product_name",
+          "product_type",
+          "sellable",
+          "static_as_of",
+          "ticker",
+          "total_expense_ratio_pct",
+          "trading_currency",
+          "trading_suspended"
+        ]
+      },
+      "minItems": 1,
+      "maxItems": 30
+    },
+    "limit": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 100
+    },
+    "intent_payload": {
+      "type": "object",
+      "properties": {
+        "comparison_fields": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "asset_type",
+              "aum",
+              "dynamic_as_of",
+              "exchange_code",
+              "investment_region",
+              "isin",
+              "product_family",
+              "product_id",
+              "product_name",
+              "product_type",
+              "sellable",
+              "static_as_of",
+              "ticker",
+              "total_expense_ratio_pct",
+              "trading_currency",
+              "trading_suspended"
+            ]
+          },
+          "maxItems": 20
+        },
+        "group_by": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "asset_type",
+              "aum",
+              "dynamic_as_of",
+              "exchange_code",
+              "investment_region",
+              "isin",
+              "product_family",
+              "product_id",
+              "product_name",
+              "product_type",
+              "sellable",
+              "static_as_of",
+              "ticker",
+              "total_expense_ratio_pct",
+              "trading_currency",
+              "trading_suspended"
+            ]
+          },
+          "maxItems": 10
+        },
+        "aggregations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "function": {
+                "type": "string",
+                "enum": [
+                  "count",
+                  "min",
+                  "max",
+                  "avg",
+                  "sum"
+                ]
+              },
+              "field": {
+                "type": "string",
+                "enum": [
+                  "aum",
+                  "product_id",
+                  "total_expense_ratio_pct"
+                ]
+              }
+            },
+            "required": [
+              "function",
+              "field"
+            ]
+          },
+          "maxItems": 10
+        },
+        "explain_product_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 20
+        }
+      },
+      "required": [
+        "comparison_fields",
+        "group_by",
+        "aggregations",
+        "explain_product_ids"
+      ]
+    },
+    "ambiguities": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "span": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "options": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "maxItems": 10
+          }
+        },
+        "required": [
+          "span",
+          "reason",
+          "options"
+        ]
+      },
+      "maxItems": 10
+    },
+    "unsupported_conditions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "span": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "span",
+          "reason"
+        ]
+      },
+      "maxItems": 10
+    }
+  },
+  "required": [
+    "schema_version",
+    "question_id",
+    "intent",
+    "product_families",
+    "constraints",
+    "ranking",
+    "projection",
+    "limit",
+    "intent_payload",
+    "ambiguities",
+    "unsupported_conditions"
+  ]
+}

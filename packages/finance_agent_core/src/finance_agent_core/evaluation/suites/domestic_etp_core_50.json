@@ -1,0 +1,1995 @@
+{
+  "suite_id": "domestic-etp-core-50",
+  "suite_version": "1.0",
+  "dataset": "domestic_etp",
+  "database_sha256": "a91bfc713b88e9ba1e7da27508857cbe5ea200c4d7821d0b4fee7d9922684484",
+  "manifest_sha256": "2e52b161a260fa19eab50e8281f04f8617ee1ee69d618b19bd624af4635fca97",
+  "cases": [
+    {
+      "id": "detp-001",
+      "split": "development",
+      "category": "type",
+      "question": "국내 ETF를 상품명 오름차순으로 5개 보여줘",
+      "constraints": [
+        {
+          "field": "product_type",
+          "operator": "eq",
+          "value": "ETF",
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "product_name",
+          "direction": "asc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 1201,
+        "top_product_ids": [
+          "KR7495710006",
+          "KR70193M0005",
+          "KR7466810009",
+          "KR7457930006",
+          "KR7487750002"
+        ]
+      }
+    },
+    {
+      "id": "detp-002",
+      "split": "development",
+      "category": "type",
+      "question": "국내 ETN을 종목코드 순으로 5개 찾아줘",
+      "constraints": [
+        {
+          "field": "product_type",
+          "operator": "eq",
+          "value": "ETN",
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "ticker",
+          "direction": "asc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 532,
+        "top_product_ids": [
+          "KRG502400036",
+          "KRG502400044",
+          "KRG502400051",
+          "KRG502400069",
+          "KRG501100074"
+        ]
+      }
+    },
+    {
+      "id": "detp-003",
+      "split": "development",
+      "category": "region_asset",
+      "question": "미국 주식형 국내 ETF를 1개월 수익률 높은 순으로 5개 보여줘",
+      "constraints": [
+        {
+          "field": "product_type",
+          "operator": "eq",
+          "value": "ETF",
+          "strength": "locked"
+        },
+        {
+          "field": "investment_region",
+          "operator": "eq",
+          "value": "미국",
+          "strength": "locked"
+        },
+        {
+          "field": "asset_type",
+          "operator": "eq",
+          "value": "주식",
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "one_month_return_pct",
+          "direction": "desc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 235,
+        "top_product_ids": [
+          "KR70181B0002",
+          "KR7442580007",
+          "KR70176P0003",
+          "KR7469060008",
+          "KR7491830006"
+        ]
+      }
+    },
+    {
+      "id": "detp-004",
+      "split": "development",
+      "category": "region_asset",
+      "question": "국내 채권형 ETF를 AUM 큰 순으로 5개 보여줘",
+      "constraints": [
+        {
+          "field": "product_type",
+          "operator": "eq",
+          "value": "ETF",
+          "strength": "locked"
+        },
+        {
+          "field": "investment_region",
+          "operator": "eq",
+          "value": "국내",
+          "strength": "locked"
+        },
+        {
+          "field": "asset_type",
+          "operator": "eq",
+          "value": "채권",
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "aum",
+          "direction": "desc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 138,
+        "top_product_ids": [
+          "KR7488770009",
+          "KR7273130005",
+          "KR70043B0000",
+          "KR7455890004",
+          "KR7157450008"
+        ]
+      }
+    },
+    {
+      "id": "detp-005",
+      "split": "development",
+      "category": "region_asset",
+      "question": "원자재형 국내 ETN을 1일 수익률 높은 순으로 5개 찾아줘",
+      "constraints": [
+        {
+          "field": "product_type",
+          "operator": "eq",
+          "value": "ETN",
+          "strength": "locked"
+        },
+        {
+          "field": "asset_type",
+          "operator": "eq",
+          "value": "원자재",
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "one_day_return_pct",
+          "direction": "desc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 182,
+        "top_product_ids": [
+          "KRG570001179",
+          "KRG610000892",
+          "KRG580000690",
+          "KRG530001343",
+          "KRG500000945"
+        ]
+      }
+    },
+    {
+      "id": "detp-006",
+      "split": "development",
+      "category": "region_asset",
+      "question": "글로벌 주식형 국내 ETF를 YTD 수익률 높은 순으로 3개 보여줘",
+      "constraints": [
+        {
+          "field": "product_type",
+          "operator": "eq",
+          "value": "ETF",
+          "strength": "locked"
+        },
+        {
+          "field": "investment_region",
+          "operator": "eq",
+          "value": "글로벌",
+          "strength": "locked"
+        },
+        {
+          "field": "asset_type",
+          "operator": "eq",
+          "value": "주식",
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "ytd_return_pct",
+          "direction": "desc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 3,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 64,
+        "top_product_ids": [
+          "KR7423170000",
+          "KR7494340003",
+          "KR7456600006"
+        ]
+      }
+    },
+    {
+      "id": "detp-007",
+      "split": "development",
+      "category": "region_asset",
+      "question": "중국 주식형 국내 ETF를 3개월 수익률 높은 순으로 5개 보여줘",
+      "constraints": [
+        {
+          "field": "product_type",
+          "operator": "eq",
+          "value": "ETF",
+          "strength": "locked"
+        },
+        {
+          "field": "investment_region",
+          "operator": "eq",
+          "value": "중국",
+          "strength": "locked"
+        },
+        {
+          "field": "asset_type",
+          "operator": "eq",
+          "value": "주식",
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "three_month_return_pct",
+          "direction": "desc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 42,
+        "top_product_ids": [
+          "KR7446690000",
+          "KR70162L0003",
+          "KR70164G0008",
+          "KR70043Y0003",
+          "KR7396520009"
+        ]
+      }
+    },
+    {
+      "id": "detp-008",
+      "split": "development",
+      "category": "region_asset",
+      "question": "일본 주식형 국내 ETF를 1년 수익률 높은 순으로 4개 찾아줘",
+      "constraints": [
+        {
+          "field": "product_type",
+          "operator": "eq",
+          "value": "ETF",
+          "strength": "locked"
+        },
+        {
+          "field": "investment_region",
+          "operator": "eq",
+          "value": "일본",
+          "strength": "locked"
+        },
+        {
+          "field": "asset_type",
+          "operator": "eq",
+          "value": "주식",
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "one_year_return_pct",
+          "direction": "desc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 4,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 4,
+        "top_product_ids": [
+          "KR7469160006",
+          "KR7465660009",
+          "KR7488290008",
+          "KR7488480005"
+        ]
+      }
+    },
+    {
+      "id": "detp-009",
+      "split": "development",
+      "category": "region_asset",
+      "question": "인도 주식형 국내 ETF를 6개월 수익률 높은 순으로 5개 보여줘",
+      "constraints": [
+        {
+          "field": "product_type",
+          "operator": "eq",
+          "value": "ETF",
+          "strength": "locked"
+        },
+        {
+          "field": "investment_region",
+          "operator": "eq",
+          "value": "인도",
+          "strength": "locked"
+        },
+        {
+          "field": "asset_type",
+          "operator": "eq",
+          "value": "주식",
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "six_month_return_pct",
+          "direction": "desc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 12,
+        "top_product_ids": [
+          "KR70000H0005",
+          "KR7487920001",
+          "KR70002C0008",
+          "KR7479730004",
+          "KR7487910002"
+        ]
+      }
+    },
+    {
+      "id": "detp-010",
+      "split": "development",
+      "category": "region_asset",
+      "question": "유럽 주식형 국내 ETF를 1개월 수익률 높은 순으로 보여줘",
+      "constraints": [
+        {
+          "field": "product_type",
+          "operator": "eq",
+          "value": "ETF",
+          "strength": "locked"
+        },
+        {
+          "field": "investment_region",
+          "operator": "eq",
+          "value": "유럽",
+          "strength": "locked"
+        },
+        {
+          "field": "asset_type",
+          "operator": "eq",
+          "value": "주식",
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "one_month_return_pct",
+          "direction": "desc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 4,
+        "top_product_ids": [
+          "KR7456250000",
+          "KR70082F0008",
+          "KR7411860000",
+          "KR70102X0002"
+        ]
+      }
+    },
+    {
+      "id": "detp-011",
+      "split": "development",
+      "category": "status",
+      "question": "판매 가능하고 거래정지가 아닌 국내 ETF를 AUM 큰 순으로 5개 보여줘",
+      "constraints": [
+        {
+          "field": "product_type",
+          "operator": "eq",
+          "value": "ETF",
+          "strength": "locked"
+        },
+        {
+          "field": "sellable",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        },
+        {
+          "field": "trading_suspended",
+          "operator": "eq",
+          "value": false,
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "aum",
+          "direction": "desc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 1139,
+        "top_product_ids": [
+          "KR7069500007",
+          "KR7360750004",
+          "KR7396500001",
+          "KR7102110004",
+          "KR7133690008"
+        ]
+      }
+    },
+    {
+      "id": "detp-012",
+      "split": "development",
+      "category": "status",
+      "question": "거래정지된 국내 ETF를 상품명 순으로 찾아줘",
+      "constraints": [
+        {
+          "field": "product_type",
+          "operator": "eq",
+          "value": "ETF",
+          "strength": "locked"
+        },
+        {
+          "field": "trading_suspended",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "product_name",
+          "direction": "asc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 62,
+        "top_product_ids": [
+          "KR7495710006",
+          "KR7464540004",
+          "KR7483230009",
+          "KR7448600007",
+          "KR7427110002"
+        ]
+      }
+    },
+    {
+      "id": "detp-013",
+      "split": "development",
+      "category": "status",
+      "question": "판매 불가인 국내 ETP를 종목코드 순으로 5개 보여줘",
+      "constraints": [
+        {
+          "field": "sellable",
+          "operator": "eq",
+          "value": false,
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "ticker",
+          "direction": "asc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 213,
+        "top_product_ids": [
+          "KR70001S0001",
+          "KR70010E0006",
+          "KR7098560006",
+          "KR7139310007",
+          "KR7265690008"
+        ]
+      }
+    },
+    {
+      "id": "detp-014",
+      "split": "development",
+      "category": "status",
+      "question": "연금 거래 가능한 국내 ETF를 AUM 큰 순으로 5개 보여줘",
+      "constraints": [
+        {
+          "field": "product_type",
+          "operator": "eq",
+          "value": "ETF",
+          "strength": "locked"
+        },
+        {
+          "field": "pension_eligible",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "aum",
+          "direction": "desc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 1001,
+        "top_product_ids": [
+          "KR7069500007",
+          "KR7360750004",
+          "KR7396500001",
+          "KR7102110004",
+          "KR7133690008"
+        ]
+      }
+    },
+    {
+      "id": "detp-015",
+      "split": "development",
+      "category": "status",
+      "question": "핵심 국내 ETF만 1개월 수익률 높은 순으로 5개 보여줘",
+      "constraints": [
+        {
+          "field": "product_type",
+          "operator": "eq",
+          "value": "ETF",
+          "strength": "locked"
+        },
+        {
+          "field": "core_etf",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "one_month_return_pct",
+          "direction": "desc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 88,
+        "top_product_ids": [
+          "KR7122090004",
+          "KR7292500006",
+          "KR7292190006",
+          "KR7304760002",
+          "KR7292160009"
+        ]
+      }
+    },
+    {
+      "id": "detp-016",
+      "split": "development",
+      "category": "status",
+      "question": "연금 거래가 불가능한 국내 ETN을 1일 수익률 높은 순으로 보여줘",
+      "constraints": [
+        {
+          "field": "product_type",
+          "operator": "eq",
+          "value": "ETN",
+          "strength": "locked"
+        },
+        {
+          "field": "pension_eligible",
+          "operator": "eq",
+          "value": false,
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "one_day_return_pct",
+          "direction": "desc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 531,
+        "top_product_ids": [
+          "KRG760000262",
+          "KRG530001400",
+          "KRG760000163",
+          "KRG520001014",
+          "KRG570001179"
+        ]
+      }
+    },
+    {
+      "id": "detp-017",
+      "split": "development",
+      "category": "numeric",
+      "question": "총보수 0.4% 이하인 국내 ETF를 보수 낮은 순으로 5개 보여줘",
+      "constraints": [
+        {
+          "field": "product_type",
+          "operator": "eq",
+          "value": "ETF",
+          "strength": "locked"
+        },
+        {
+          "field": "total_expense_ratio_pct",
+          "operator": "lte",
+          "value": 0.4,
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "total_expense_ratio_pct",
+          "direction": "asc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 36,
+        "top_product_ids": [
+          "KR7272580002",
+          "KR7272910001",
+          "KR7267770006",
+          "KR7285690004",
+          "KR7114820004"
+        ]
+      }
+    },
+    {
+      "id": "detp-018",
+      "split": "development",
+      "category": "numeric",
+      "question": "총보수 0.1%에서 0.5% 사이인 국내 ETF를 보수 낮은 순으로 찾아줘",
+      "constraints": [
+        {
+          "field": "product_type",
+          "operator": "eq",
+          "value": "ETF",
+          "strength": "locked"
+        },
+        {
+          "field": "total_expense_ratio_pct",
+          "operator": "between",
+          "value": [
+            0.1,
+            0.5
+          ],
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "total_expense_ratio_pct",
+          "direction": "asc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 52,
+        "top_product_ids": [
+          "KR7285690004",
+          "KR7114820004",
+          "KR7117690008",
+          "KR7153130000",
+          "KR7214980005"
+        ]
+      }
+    },
+    {
+      "id": "detp-019",
+      "split": "development",
+      "category": "numeric",
+      "question": "AUM 1조원 이상인 국내 ETF를 AUM 큰 순으로 5개 보여줘",
+      "constraints": [
+        {
+          "field": "product_type",
+          "operator": "eq",
+          "value": "ETF",
+          "strength": "locked"
+        },
+        {
+          "field": "aum",
+          "operator": "gte",
+          "value": 1000000000000,
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "aum",
+          "direction": "desc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 92,
+        "top_product_ids": [
+          "KR7069500007",
+          "KR7360750004",
+          "KR7396500001",
+          "KR7102110004",
+          "KR7133690008"
+        ]
+      }
+    },
+    {
+      "id": "detp-020",
+      "split": "development",
+      "category": "numeric",
+      "question": "AUM 1천억원에서 1조원 사이인 국내 ETF를 AUM 큰 순으로 보여줘",
+      "constraints": [
+        {
+          "field": "product_type",
+          "operator": "eq",
+          "value": "ETF",
+          "strength": "locked"
+        },
+        {
+          "field": "aum",
+          "operator": "between",
+          "value": [
+            100000000000,
+            1000000000000
+          ],
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "aum",
+          "direction": "desc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 332,
+        "top_product_ids": [
+          "KR7138540000",
+          "KR7475720009",
+          "KR7385560008",
+          "KR7402970008",
+          "KR7449180009"
+        ]
+      }
+    },
+    {
+      "id": "detp-021",
+      "split": "development",
+      "category": "numeric",
+      "question": "종가 1만원 이하인 국내 ETF를 종가 낮은 순으로 5개 찾아줘",
+      "constraints": [
+        {
+          "field": "product_type",
+          "operator": "eq",
+          "value": "ETF",
+          "strength": "locked"
+        },
+        {
+          "field": "close_price",
+          "operator": "lte",
+          "value": 10000,
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "close_price",
+          "direction": "asc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 178,
+        "top_product_ids": [
+          "KR7252670005",
+          "KR7253230007",
+          "KR7252420005",
+          "KR7252710009",
+          "KR7253160006"
+        ]
+      }
+    },
+    {
+      "id": "detp-022",
+      "split": "development",
+      "category": "numeric",
+      "question": "일 거래대금 100억원 이상인 국내 ETF를 거래대금 큰 순으로 5개 보여줘",
+      "constraints": [
+        {
+          "field": "product_type",
+          "operator": "eq",
+          "value": "ETF",
+          "strength": "locked"
+        },
+        {
+          "field": "daily_trading_value",
+          "operator": "gte",
+          "value": 10000000000,
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "daily_trading_value",
+          "direction": "desc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 194,
+        "top_product_ids": [
+          "KR7069500007",
+          "KR7122630007",
+          "KR70193T0008",
+          "KR7360750004",
+          "KR70193W0003"
+        ]
+      }
+    },
+    {
+      "id": "detp-023",
+      "split": "development",
+      "category": "return",
+      "question": "1일 수익률 5% 초과인 국내 ETF를 수익률 높은 순으로 5개 보여줘",
+      "constraints": [
+        {
+          "field": "product_type",
+          "operator": "eq",
+          "value": "ETF",
+          "strength": "locked"
+        },
+        {
+          "field": "one_day_return_pct",
+          "operator": "gt",
+          "value": 5,
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "one_day_return_pct",
+          "direction": "desc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 216,
+        "top_product_ids": [
+          "KR7243880002",
+          "KR70080Y0007",
+          "KR70192L0007",
+          "KR70195S0007",
+          "KR70194R0009"
+        ]
+      }
+    },
+    {
+      "id": "detp-024",
+      "split": "development",
+      "category": "return",
+      "question": "1개월 수익률 10% 이상인 국내 ETF를 높은 순으로 5개 찾아줘",
+      "constraints": [
+        {
+          "field": "product_type",
+          "operator": "eq",
+          "value": "ETF",
+          "strength": "locked"
+        },
+        {
+          "field": "one_month_return_pct",
+          "operator": "gte",
+          "value": 10,
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "one_month_return_pct",
+          "direction": "desc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 237,
+        "top_product_ids": [
+          "KR7243880002",
+          "KR7367760006",
+          "KR7380340000",
+          "KR7475300000",
+          "KR70167A0001"
+        ]
+      }
+    },
+    {
+      "id": "detp-025",
+      "split": "development",
+      "category": "return",
+      "question": "3개월 수익률 -5%에서 5% 사이인 국내 ETF를 낮은 순으로 보여줘",
+      "constraints": [
+        {
+          "field": "product_type",
+          "operator": "eq",
+          "value": "ETF",
+          "strength": "locked"
+        },
+        {
+          "field": "three_month_return_pct",
+          "operator": "between",
+          "value": [
+            -5,
+            5
+          ],
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "three_month_return_pct",
+          "direction": "asc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 344,
+        "top_product_ids": [
+          "KR70132K0001",
+          "KR70098F0000",
+          "KR7167860006",
+          "KR7363570003",
+          "KR70015F0000"
+        ]
+      }
+    },
+    {
+      "id": "detp-026",
+      "split": "development",
+      "category": "return",
+      "question": "6개월 수익률 20% 초과인 국내 ETN을 높은 순으로 5개 보여줘",
+      "constraints": [
+        {
+          "field": "product_type",
+          "operator": "eq",
+          "value": "ETN",
+          "strength": "locked"
+        },
+        {
+          "field": "six_month_return_pct",
+          "operator": "gt",
+          "value": 20,
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "six_month_return_pct",
+          "direction": "desc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 67,
+        "top_product_ids": [
+          "KRG700000281",
+          "KRG760000130",
+          "KRG530001046",
+          "KRG500000697",
+          "KRG520000545"
+        ]
+      }
+    },
+    {
+      "id": "detp-027",
+      "split": "development",
+      "category": "return",
+      "question": "1년 수익률이 0% 미만인 국내 ETF를 낮은 순으로 5개 찾아줘",
+      "constraints": [
+        {
+          "field": "product_type",
+          "operator": "eq",
+          "value": "ETF",
+          "strength": "locked"
+        },
+        {
+          "field": "one_year_return_pct",
+          "operator": "lt",
+          "value": 0,
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "one_year_return_pct",
+          "direction": "asc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 218,
+        "top_product_ids": [
+          "KR7292730009",
+          "KR7346000003",
+          "KR7373530005",
+          "KR7394350003",
+          "KR7407170000"
+        ]
+      }
+    },
+    {
+      "id": "detp-028",
+      "split": "development",
+      "category": "return",
+      "question": "YTD 수익률 15% 이상인 주식형 국내 ETF를 높은 순으로 보여줘",
+      "constraints": [
+        {
+          "field": "product_type",
+          "operator": "eq",
+          "value": "ETF",
+          "strength": "locked"
+        },
+        {
+          "field": "asset_type",
+          "operator": "eq",
+          "value": "주식",
+          "strength": "locked"
+        },
+        {
+          "field": "ytd_return_pct",
+          "operator": "gte",
+          "value": 15,
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "ytd_return_pct",
+          "direction": "desc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 478,
+        "top_product_ids": [
+          "KR7243880002",
+          "KR7494310006",
+          "KR7488080003",
+          "KR7123320004",
+          "KR7152500005"
+        ]
+      }
+    },
+    {
+      "id": "detp-029",
+      "split": "development",
+      "category": "structure",
+      "question": "2배 레버리지 국내 ETF를 1개월 수익률 높은 순으로 5개 보여줘",
+      "constraints": [
+        {
+          "field": "product_type",
+          "operator": "eq",
+          "value": "ETF",
+          "strength": "locked"
+        },
+        {
+          "field": "leverage_factor",
+          "operator": "eq",
+          "value": 2,
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "one_month_return_pct",
+          "direction": "desc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 62,
+        "top_product_ids": [
+          "KR7243880002",
+          "KR7423920008",
+          "KR7494310006",
+          "KR7253250005",
+          "KR7122630007"
+        ]
+      }
+    },
+    {
+      "id": "detp-030",
+      "split": "development",
+      "category": "structure",
+      "question": "-2배 인버스 국내 ETN을 1개월 수익률 높은 순으로 찾아줘",
+      "constraints": [
+        {
+          "field": "product_type",
+          "operator": "eq",
+          "value": "ETN",
+          "strength": "locked"
+        },
+        {
+          "field": "leverage_factor",
+          "operator": "eq",
+          "value": -2,
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "one_month_return_pct",
+          "direction": "desc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 95,
+        "top_product_ids": [
+          "KRG570001179",
+          "KRG530001343",
+          "KRG580000690",
+          "KRG700000307",
+          "KRG500000945"
+        ]
+      }
+    },
+    {
+      "id": "detp-031",
+      "split": "development",
+      "category": "structure",
+      "question": "액티브 전략 국내 ETF를 AUM 큰 순으로 5개 보여줘",
+      "constraints": [
+        {
+          "field": "product_type",
+          "operator": "eq",
+          "value": "ETF",
+          "strength": "locked"
+        },
+        {
+          "field": "strategy",
+          "operator": "eq",
+          "value": "액티브",
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "aum",
+          "direction": "desc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 343,
+        "top_product_ids": [
+          "KR7488770009",
+          "KR7459580007",
+          "KR7273130005",
+          "KR70043B0000",
+          "KR7481050003"
+        ]
+      }
+    },
+    {
+      "id": "detp-032",
+      "split": "development",
+      "category": "structure",
+      "question": "실물복제 국내 ETF를 총보수 낮은 순으로 5개 찾아줘",
+      "constraints": [
+        {
+          "field": "product_type",
+          "operator": "eq",
+          "value": "ETF",
+          "strength": "locked"
+        },
+        {
+          "field": "strategy",
+          "operator": "eq",
+          "value": "실물복제",
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "total_expense_ratio_pct",
+          "direction": "asc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 745,
+        "top_product_ids": [
+          "KR7267770006",
+          "KR7285690004",
+          "KR7114820004",
+          "KR7117690008",
+          "KR7153130000"
+        ]
+      }
+    },
+    {
+      "id": "detp-033",
+      "split": "development",
+      "category": "structure",
+      "question": "전략 코드 C인 국내 ETN을 1일 수익률 높은 순으로 보여줘",
+      "constraints": [
+        {
+          "field": "product_type",
+          "operator": "eq",
+          "value": "ETN",
+          "strength": "locked"
+        },
+        {
+          "field": "strategy",
+          "operator": "eq",
+          "value": "C",
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "one_day_return_pct",
+          "direction": "desc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 409,
+        "top_product_ids": [
+          "KRG760000262",
+          "KRG530001400",
+          "KRG760000163",
+          "KRG520001014",
+          "KRG570001179"
+        ]
+      }
+    },
+    {
+      "id": "detp-034",
+      "split": "development",
+      "category": "risk",
+      "question": "매우높은위험 1등급 국내 ETF를 AUM 큰 순으로 5개 보여줘",
+      "constraints": [
+        {
+          "field": "product_type",
+          "operator": "eq",
+          "value": "ETF",
+          "strength": "locked"
+        },
+        {
+          "field": "risk_level",
+          "operator": "eq",
+          "value": "매우높은위험(1등급)",
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "aum",
+          "direction": "desc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 231,
+        "top_product_ids": [
+          "KR7396500001",
+          "KR7122630007",
+          "KR7091160002",
+          "KR7498400001",
+          "KR7381180009"
+        ]
+      }
+    },
+    {
+      "id": "detp-035",
+      "split": "development",
+      "category": "risk",
+      "question": "낮은위험 5등급 국내 ETF를 AUM 큰 순으로 찾아줘",
+      "constraints": [
+        {
+          "field": "product_type",
+          "operator": "eq",
+          "value": "ETF",
+          "strength": "locked"
+        },
+        {
+          "field": "risk_level",
+          "operator": "eq",
+          "value": "낮은위험(5등급)",
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "aum",
+          "direction": "desc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 115,
+        "top_product_ids": [
+          "KR7488770009",
+          "KR7273130005",
+          "KR70043B0000",
+          "KR7455890004",
+          "KR7453850000"
+        ]
+      }
+    },
+    {
+      "id": "detp-036",
+      "split": "development",
+      "category": "lookup",
+      "question": "운용사에 미래에셋이 포함된 국내 ETF를 AUM 큰 순으로 5개 보여줘",
+      "constraints": [
+        {
+          "field": "product_type",
+          "operator": "eq",
+          "value": "ETF",
+          "strength": "locked"
+        },
+        {
+          "field": "manager",
+          "operator": "contains",
+          "value": "미래에셋",
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "aum",
+          "direction": "desc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 235,
+        "top_product_ids": [
+          "KR7360750004",
+          "KR7396500001",
+          "KR7102110004",
+          "KR7133690008",
+          "KR7381180009"
+        ]
+      }
+    },
+    {
+      "id": "detp-037",
+      "split": "development",
+      "category": "lookup",
+      "question": "약어명에 KODEX가 들어간 국내 ETF를 1개월 수익률 높은 순으로 5개 보여줘",
+      "constraints": [
+        {
+          "field": "product_type",
+          "operator": "eq",
+          "value": "ETF",
+          "strength": "locked"
+        },
+        {
+          "field": "short_name",
+          "operator": "contains",
+          "value": "KODEX",
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "one_month_return_pct",
+          "direction": "desc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 240,
+        "top_product_ids": [
+          "KR7395160005",
+          "KR7494310006",
+          "KR7122630007",
+          "KR7102780004",
+          "KR7363580002"
+        ]
+      }
+    },
+    {
+      "id": "detp-038",
+      "split": "development",
+      "category": "lookup",
+      "question": "기초지수에 MSCI가 포함된 국내 ETF를 AUM 큰 순으로 찾아줘",
+      "constraints": [
+        {
+          "field": "product_type",
+          "operator": "eq",
+          "value": "ETF",
+          "strength": "locked"
+        },
+        {
+          "field": "base_index",
+          "operator": "contains",
+          "value": "MSCI",
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "aum",
+          "direction": "desc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 19,
+        "top_product_ids": [
+          "KR7373530005",
+          "KR7394350003",
+          "KR7411050008",
+          "KR7411720006",
+          "KR7419170006"
+        ]
+      }
+    },
+    {
+      "id": "detp-039",
+      "split": "development",
+      "category": "lookup",
+      "question": "종목코드 A305080인 국내 ETP를 보여줘",
+      "constraints": [
+        {
+          "field": "ticker",
+          "operator": "eq",
+          "value": "A305080",
+          "strength": "locked"
+        }
+      ],
+      "ranking": [],
+      "limit": 1,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 1,
+        "top_product_ids": [
+          "KR7305080004"
+        ]
+      }
+    },
+    {
+      "id": "detp-040",
+      "split": "development",
+      "category": "lookup",
+      "question": "상품번호 KR7305080004인 국내 ETP를 찾아줘",
+      "constraints": [
+        {
+          "field": "product_id",
+          "operator": "eq",
+          "value": "KR7305080004",
+          "strength": "locked"
+        }
+      ],
+      "ranking": [],
+      "limit": 1,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 1,
+        "top_product_ids": [
+          "KR7305080004"
+        ]
+      }
+    },
+    {
+      "id": "detp-041",
+      "split": "holdout",
+      "category": "region_asset",
+      "question": "판매 가능하고 거래정지가 아닌 미국 채권형 국내 ETF를 1년 수익률 높은 순으로 5개 보여줘",
+      "constraints": [
+        {
+          "field": "product_type",
+          "operator": "eq",
+          "value": "ETF",
+          "strength": "locked"
+        },
+        {
+          "field": "investment_region",
+          "operator": "eq",
+          "value": "미국",
+          "strength": "locked"
+        },
+        {
+          "field": "asset_type",
+          "operator": "eq",
+          "value": "채권",
+          "strength": "locked"
+        },
+        {
+          "field": "sellable",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        },
+        {
+          "field": "trading_suspended",
+          "operator": "eq",
+          "value": false,
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "one_year_return_pct",
+          "direction": "desc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 41,
+        "top_product_ids": [
+          "KR7329750004",
+          "KR7437350002",
+          "KR7468370002",
+          "KR7305080004",
+          "KR7468630009"
+        ]
+      }
+    },
+    {
+      "id": "detp-042",
+      "split": "holdout",
+      "category": "region_asset",
+      "question": "연금 거래 가능한 아시아 주식형 국내 ETF를 YTD 수익률 높은 순으로 3개 보여줘",
+      "constraints": [
+        {
+          "field": "product_type",
+          "operator": "eq",
+          "value": "ETF",
+          "strength": "locked"
+        },
+        {
+          "field": "investment_region",
+          "operator": "eq",
+          "value": "아시아",
+          "strength": "locked"
+        },
+        {
+          "field": "asset_type",
+          "operator": "eq",
+          "value": "주식",
+          "strength": "locked"
+        },
+        {
+          "field": "pension_eligible",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "ytd_return_pct",
+          "direction": "desc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 3,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 20,
+        "top_product_ids": [
+          "KR7138520002",
+          "KR7261060008",
+          "KR7157500000"
+        ]
+      }
+    },
+    {
+      "id": "detp-043",
+      "split": "holdout",
+      "category": "region_asset",
+      "question": "국내 혼합자산형 ETF를 AUM 큰 순으로 4개 보여줘",
+      "constraints": [
+        {
+          "field": "product_type",
+          "operator": "eq",
+          "value": "ETF",
+          "strength": "locked"
+        },
+        {
+          "field": "investment_region",
+          "operator": "eq",
+          "value": "국내",
+          "strength": "locked"
+        },
+        {
+          "field": "asset_type",
+          "operator": "eq",
+          "value": "혼합자산",
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "aum",
+          "direction": "desc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 4,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 44,
+        "top_product_ids": [
+          "KR70162Z0007",
+          "KR7448330001",
+          "KR70177N0004",
+          "KR70025N0008"
+        ]
+      }
+    },
+    {
+      "id": "detp-044",
+      "split": "holdout",
+      "category": "region_asset",
+      "question": "단기자금형 국내 ETF를 일 거래대금 큰 순으로 5개 찾아줘",
+      "constraints": [
+        {
+          "field": "product_type",
+          "operator": "eq",
+          "value": "ETF",
+          "strength": "locked"
+        },
+        {
+          "field": "asset_type",
+          "operator": "eq",
+          "value": "단기자금",
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "daily_trading_value",
+          "direction": "desc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 28,
+        "top_product_ids": [
+          "KR7459580007",
+          "KR7475630000",
+          "KR7357870005",
+          "KR7481050003",
+          "KR7449170000"
+        ]
+      }
+    },
+    {
+      "id": "detp-045",
+      "split": "holdout",
+      "category": "numeric",
+      "question": "총보수 0.4% 초과인 국내 ETF를 보수 높은 순으로 3개 보여줘",
+      "constraints": [
+        {
+          "field": "product_type",
+          "operator": "eq",
+          "value": "ETF",
+          "strength": "locked"
+        },
+        {
+          "field": "total_expense_ratio_pct",
+          "operator": "gt",
+          "value": 0.4,
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "total_expense_ratio_pct",
+          "direction": "desc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 3,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 31,
+        "top_product_ids": [
+          "KR7251340006",
+          "KR7236350005",
+          "KR7091160002"
+        ]
+      }
+    },
+    {
+      "id": "detp-046",
+      "split": "holdout",
+      "category": "structure",
+      "question": "배수가 -1배에서 1배 사이인 국내 ETF를 1일 수익률 높은 순으로 보여줘",
+      "constraints": [
+        {
+          "field": "product_type",
+          "operator": "eq",
+          "value": "ETF",
+          "strength": "locked"
+        },
+        {
+          "field": "leverage_factor",
+          "operator": "between",
+          "value": [
+            -1,
+            1
+          ],
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "one_day_return_pct",
+          "direction": "desc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 1070,
+        "top_product_ids": [
+          "KR7491820007",
+          "KR7139220008",
+          "KR7487240004",
+          "KR70117V0007",
+          "KR7381560002"
+        ]
+      }
+    },
+    {
+      "id": "detp-047",
+      "split": "holdout",
+      "category": "risk",
+      "question": "다소높은위험 3등급이고 연금 거래 가능한 국내 ETF를 AUM 큰 순으로 5개 보여줘",
+      "constraints": [
+        {
+          "field": "product_type",
+          "operator": "eq",
+          "value": "ETF",
+          "strength": "locked"
+        },
+        {
+          "field": "risk_level",
+          "operator": "eq",
+          "value": "다소높은위험(3등급)",
+          "strength": "locked"
+        },
+        {
+          "field": "pension_eligible",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "aum",
+          "direction": "desc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 70,
+        "top_product_ids": [
+          "KR7441640000",
+          "KR7329200000",
+          "KR7446720005",
+          "KR7385560008",
+          "KR7402970008"
+        ]
+      }
+    },
+    {
+      "id": "detp-048",
+      "split": "holdout",
+      "category": "safety",
+      "question": "괜찮은 국내 ETF를 5개 추천해줘",
+      "constraints": [
+        {
+          "field": "product_type",
+          "operator": "eq",
+          "value": "ETF",
+          "strength": "locked"
+        }
+      ],
+      "ranking": [],
+      "limit": 5,
+      "disposition": "block",
+      "blocker": "ambiguity",
+      "oracle": null
+    },
+    {
+      "id": "detp-049",
+      "split": "holdout",
+      "category": "safety",
+      "question": "배당수익률 높은 국내 ETF를 5개 보여줘",
+      "constraints": [
+        {
+          "field": "product_type",
+          "operator": "eq",
+          "value": "ETF",
+          "strength": "locked"
+        }
+      ],
+      "ranking": [],
+      "limit": 5,
+      "disposition": "block",
+      "blocker": "unsupported",
+      "oracle": null
+    },
+    {
+      "id": "detp-050",
+      "split": "holdout",
+      "category": "safety",
+      "question": "국내 ETF와 공모펀드를 함께 비교해줘",
+      "constraints": [
+        {
+          "field": "product_type",
+          "operator": "eq",
+          "value": "ETF",
+          "strength": "locked"
+        }
+      ],
+      "ranking": [],
+      "limit": 5,
+      "disposition": "block",
+      "blocker": "unsupported",
+      "oracle": null
+    }
+  ]
+}
