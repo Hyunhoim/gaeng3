@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from importlib.resources import files
-from typing import Any
+from typing import Any, Literal
 
 from finance_agent_core.config import load_field_registry
 
@@ -23,27 +23,59 @@ HCX_SCHEMA_KEYWORDS = {
 HCX_TYPES = {"string", "number", "boolean", "integer", "object", "array"}
 
 
-def load_hcx_queryplan_schema() -> dict[str, Any]:
+def _capable_fields(
+    product_families: list[str],
+    capability: Literal["queryable", "sortable", "selectable", "aggregatable"],
+) -> list[str]:
+    registry = load_field_registry()
+    return sorted(
+        name
+        for name, definition in registry.fields.items()
+        if any(
+            dataset in definition.datasets and getattr(definition.resolve(dataset), capability)
+            for dataset in product_families
+        )
+    )
+
+
+def _load_queryplan_schema(product_families: list[str]) -> dict[str, Any]:
     resource = files("finance_agent_core.contracts").joinpath("queryplan.hcx.schema.json")
     schema: dict[str, Any] = json.loads(resource.read_text(encoding="utf-8"))
-    registry = load_field_registry()
     properties = schema["properties"]
-    properties["product_families"]["items"]["enum"] = registry.executable_dataset_names()
-    properties["constraints"]["items"]["properties"]["field"]["enum"] = registry.queryable_fields(
-        executable_only=True
+    properties["product_families"]["items"]["enum"] = product_families
+    properties["constraints"]["items"]["properties"]["field"]["enum"] = _capable_fields(
+        product_families,
+        "queryable",
     )
-    properties["ranking"]["items"]["properties"]["field"]["enum"] = registry.sortable_fields(
-        executable_only=True
+    properties["ranking"]["items"]["properties"]["field"]["enum"] = _capable_fields(
+        product_families,
+        "sortable",
     )
-    selectable = registry.selectable_fields(executable_only=True)
+    selectable = _capable_fields(product_families, "selectable")
     properties["projection"]["items"]["enum"] = selectable
     payload = properties["intent_payload"]["properties"]
     payload["comparison_fields"]["items"]["enum"] = selectable
     payload["group_by"]["items"]["enum"] = selectable
     payload["aggregations"]["items"]["properties"]["field"]["enum"] = sorted(
-        set(registry.aggregatable_fields(executable_only=True)) | {"product_id"}
+        set(_capable_fields(product_families, "aggregatable")) | {"product_id"}
     )
     return schema
+
+
+def load_hcx_queryplan_schema() -> dict[str, Any]:
+    """Load the official schema with only execution-enabled product families."""
+
+    return _load_queryplan_schema(load_field_registry().executable_dataset_names())
+
+
+def load_internal_evaluation_queryplan_schema(
+    product_family: Literal["fund"],
+) -> dict[str, Any]:
+    """Load a development-only schema without changing the official HCX surface."""
+
+    if product_family != "fund":
+        raise ValueError("the internal evaluation schema is restricted to fund")
+    return _load_queryplan_schema([product_family])
 
 
 def validate_hcx_schema(schema: dict[str, Any]) -> None:

@@ -16,6 +16,9 @@ from finance_agent_core.agent.linker import (
 )
 from finance_agent_core.config import load_field_registry
 from finance_agent_core.contracts import QueryPlan, load_hcx_queryplan_schema
+from finance_agent_core.contracts.hcx_schema import (
+    load_internal_evaluation_queryplan_schema,
+)
 
 
 class LocalProviderError(RuntimeError):
@@ -71,34 +74,48 @@ class LocalTestSettings:
         return cls(base_url=base_url, model=model, timeout_seconds=timeout)
 
 
-def _field_catalog() -> dict[str, Any]:
+def _field_catalog(product_family: Literal["fund"] | None = None) -> dict[str, Any]:
     registry = load_field_registry()
-    return {
-        name: {
-            "aliases": definition.aliases,
-            "type": definition.value_type.value,
-            "unit": definition.unit,
-            "operators": definition.allowed_operators,
-            "enum": definition.enum_values,
-            "quality": definition.quality.value,
+    catalog: dict[str, Any] = {}
+    for name, definition in registry.fields.items():
+        datasets = (
+            [product_family]
+            if product_family is not None and product_family in definition.datasets
+            else definition.datasets
+            if product_family is None
+            else []
+        )
+        resolved = [definition.resolve(dataset) for dataset in datasets]
+        if not any(item.queryable for item in resolved):
+            continue
+        effective = resolved[0] if len(resolved) == 1 else definition
+        catalog[name] = {
+            "aliases": effective.aliases,
+            "type": effective.value_type.value,
+            "unit": effective.unit,
+            "operators": effective.allowed_operators,
+            "enum": effective.enum_values,
+            "quality": effective.quality.value,
             "notes": definition.notes,
             "datasets": {
                 dataset: {
-                    "quality": definition.resolve(dataset).quality.value,
-                    "queryable": definition.resolve(dataset).queryable,
-                    "sortable": definition.resolve(dataset).sortable,
+                    "quality": resolved_definition.quality.value,
+                    "queryable": resolved_definition.queryable,
+                    "sortable": resolved_definition.sortable,
                 }
-                for dataset in definition.datasets
+                for dataset, resolved_definition in zip(datasets, resolved, strict=True)
             },
         }
-        for name, definition in registry.fields.items()
-        if definition.queryable
-    }
+    return catalog
 
 
-def _system_prompt(question_id: str, question: str) -> str:
+def _system_prompt(
+    question_id: str,
+    question: str,
+    internal_evaluation_family: Literal["fund"] | None = None,
+) -> str:
     catalog = json.dumps(
-        _field_catalog(),
+        _field_catalog(internal_evaluation_family),
         ensure_ascii=False,
         sort_keys=True,
         separators=(",", ":"),
@@ -109,13 +126,45 @@ def _system_prompt(question_id: str, question: str) -> str:
         sort_keys=True,
         separators=(",", ":"),
     )
+    if internal_evaluation_family == "fund":
+        supported_scope = """
+이번 요청은 공식 실행과 분리된 공모펀드 development 평가다.
+상품군은 fund 하나만 사용한다. 공식 Agent의 fund 실행은 여전히 비활성 상태다.
+"""
+        fund_rules = """
+- fund는 사용자가 생략해도 public_offering=true를 locked로 정확히 한 번 넣는다.
+- fund의 국내·해외·국내외혼합은 fund_geography_scope, 주식형·채권형·재간접·
+  MMF 등은 fund_management_attribute를 쓴다.
+- fund의 판매 중/완료는 sellable, 당사 판매는 company_sellable,
+  환헤지 여부는 currency_hedged, 개인·법인은 investor_type을 쓴다.
+- fund는 1주·1개월·3개월·6개월 수익률만 검색·정렬할 수 있다.
+- fund의 AUM 조건·정렬에는 KRW 또는 USD trading_currency를 반드시 잠근다.
+"""
+        fund_safety = """
+- fund의 운용사 이름, 비용, 오늘 기준 최신값, 장기 수익률 순위와 대표 펀드
+  클래스 합산은 unsupported_conditions로 처리한다.
+"""
+        fund_projection = """
+fund 검색 projection은 product_id, product_name, short_name,
+fund_geography_scope, fund_management_attribute, risk_level,
+three_month_return_pct, aum, trading_currency, dynamic_as_of를 이 순서로 쓴다.
+"""
+    else:
+        supported_scope = """
+현재 지원 상품군은 overseas_etp와 domestic_etp, bond다.
+질문의 해외 ETF·ETN·ETP는 overseas_etp, 국내 ETF·ETN·ETP는 domestic_etp,
+국내채권·회사채·국공채·국고채·특수채는 bond로 구분한다.
+"""
+        fund_rules = ""
+        fund_safety = (
+            "- 공모펀드처럼 아직 실행하지 않는 상품군 요청은 unsupported_conditions에 기록한다."
+        )
+        fund_projection = ""
     return f"""
 당신은 금융상품 검색 질문을 QueryPlan JSON으로만 변환하는 parser다.
 계산, 검색, 상품 추천, 답변 문장 생성은 하지 않는다.
 question_id는 {question_id!r}를 정확히 사용한다.
-현재 지원 상품군은 overseas_etp와 domestic_etp, bond다.
-질문의 해외 ETF·ETN·ETP는 overseas_etp, 국내 ETF·ETN·ETP는 domestic_etp,
-국내채권·회사채·국공채·국고채·특수채는 bond로 구분한다.
+{supported_scope}
 명시된 조건만 constraints에 넣고 추정·기본 조건을 추가하지 않는다.
 특히 판매 가능과 거래 중지 여부는 사용자가 직접 말한 경우에만 넣는다.
 모든 명시적 조건은 몰래 완화하지 않고 strength=locked로 둔다.
@@ -149,6 +198,7 @@ question_id는 {question_id!r}를 정확히 사용한다.
   등급의 순서를 요구하는 조건은 unsupported_conditions에 기록하고 임의의
   등급 목록으로 확장하지 않는다. bond_risk_code도 코드 숫자의 순서를
   해석하지 않는다.
+{fund_rules}
 - "판매 가능"은 sellable=true, "판매 불가"는 sellable=false다.
   "거래 중지 아님/거래 가능"은 trading_suspended=false,
   "거래 중지"는 trading_suspended=true다. "현재 거래 가능"처럼 두 의미가
@@ -174,7 +224,7 @@ question_id는 {question_id!r}를 정확히 사용한다.
   환율 변환 등의 조건은 unsupported_conditions에 기록하고 대체
   constraint를 만들지 않는다. 배당수익률을 총보수율로 바꾸는 것처럼 다른
   field에 끼워 맞추지 않는다.
-- 공모펀드처럼 아직 실행하지 않는 상품군 요청은 unsupported_conditions에 기록한다.
+{fund_safety}
 - "적당한", "안전한", "괜찮은"처럼 판단 기준이 없는 표현은 ambiguities에
   기록하고 임의의 수치·정렬로 바꾸지 않는다.
 - field나 상품군이 명백히 지원되지 않는 경우는 unsupported만 사용하고 같은
@@ -191,6 +241,7 @@ one_month_return_pct, aum, trading_currency, dynamic_as_of를 이 순서로 쓴�
 bond 검색 projection은 product_id, product_name, ticker, issuer, bond_type,
 maturity_date, remaining_days, coupon_rate_pct, buy_yield_pct,
 buyable_quantity, dynamic_as_of를 이 순서로 쓴다.
+{fund_projection}
 검색 intent에서는 intent_payload의 네 배열을 모두 빈 배열로 출력한다.
 서버의 결정론적 lexical linker가 찾은 아래 힌트는 사용자 문장에서 직접 확인한
 항목이다. required_eq_constraints는 빠짐없이 넣고, unsupported_spans는
@@ -206,8 +257,14 @@ JSON 외의 텍스트나 Markdown을 출력하지 않는다.
 
 
 class LocalTestProvider:
-    def __init__(self, settings: LocalTestSettings) -> None:
+    def __init__(
+        self,
+        settings: LocalTestSettings,
+        *,
+        internal_evaluation_family: Literal["fund"] | None = None,
+    ) -> None:
         self.settings = settings
+        self.internal_evaluation_family = internal_evaluation_family
 
     @property
     def provider_name(self) -> Literal["local_test"]:
@@ -249,11 +306,22 @@ class LocalTestProvider:
     def generate_query_plan(self, question: str, question_id: str) -> QueryPlan:
         if not question.strip():
             raise ValueError("question cannot be blank")
-        schema = load_hcx_queryplan_schema()
+        schema = (
+            load_internal_evaluation_queryplan_schema(self.internal_evaluation_family)
+            if self.internal_evaluation_family is not None
+            else load_hcx_queryplan_schema()
+        )
         request_payload = {
             "model": self.settings.model,
             "messages": [
-                {"role": "system", "content": _system_prompt(question_id, question)},
+                {
+                    "role": "system",
+                    "content": _system_prompt(
+                        question_id,
+                        question,
+                        self.internal_evaluation_family,
+                    ),
+                },
                 {"role": "user", "content": question},
             ],
             "temperature": 0,

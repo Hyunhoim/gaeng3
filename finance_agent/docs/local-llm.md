@@ -1,6 +1,6 @@
 # 로컬 LLM 테스트 런타임
 
-상태: 개발 전용 · 해외·국내 ETP·국내채권 실제 E2E와 각 50문항 회귀 검증 완료
+상태: 개발 전용 · 3개 기존 상품군 회귀와 공모펀드 development 검증 완료
 기준일: 2026-07-29
 
 ## 경계
@@ -255,6 +255,40 @@ LOCAL_TEST_LLM_MODEL=qwen3-local-test \
 [국내채권 핵심 평가 기준선](evaluation-domestic-bond.md)에 기록한다.
 
 실행 후 서버를 종료했고 GPU는 74MiB·18MiB, utilization 0%로 복귀했으며
+18000 포트가 해제됐다.
+
+## 공모펀드 development 평가
+
+공모펀드는 공식 Agent에서 계속 비활성화한 채, 평가 CLI 안에서만 전용 내부
+schema를 사용한다. 로컬 모델로 아직 사용하지 않은 holdout을 보호하기 위해
+기본 명령은 development split만 허용한다.
+
+```bash
+FINANCE_AGENT_LLM_MODE=local_test \
+ENABLE_NON_HCX_TEST_LLM=1 \
+LLM_PROVIDER=local_test \
+LOCAL_TEST_LLM_BASE_URL=http://127.0.0.1:18000/v1 \
+LOCAL_TEST_LLM_MODEL=qwen3-local-test \
+/home/haeyeongcho/miniforge3/envs/gaeng3-dev/bin/python \
+  -m finance_agent_core.evaluation \
+  --dataset fund \
+  --provider local_test \
+  --split development \
+  --workers 4 \
+  --require-perfect \
+  --output artifacts/evaluation/fund-local-qwen-development.json
+```
+
+2026-07-29 최초 실행 결과는 40/40이다. valid plan, plan·constraint exact,
+Oracle exact와 safety block이 모두 100%였고 생성 지연은 p50 2,905.228ms,
+p95 4,288.772ms, max 4,437.341ms였다. 전체 report SHA-256은
+`c0d8a60b0a6465b9ef6035f1a3787b4835d765385ae18bfc0ad97d15d1cd99f6`이다.
+
+이 결과는 모델 단독 성능이 아니라 로컬 Qwen, 결정론적 linker, 엄격한 계약,
+Oracle과 Verifier를 합친 hybrid parser의 개발 세트 점수다. holdout 10문항은
+아직 모델에 노출하지 않았다. 상세 계약과 다음 실행 순서는
+[공모펀드 핵심 평가 기준선](evaluation-public-fund.md)에 기록한다.
+평가 후 서버를 종료했고 GPU는 71MiB·15MiB, utilization 0%로 복귀했으며
 18000 포트가 해제됐다.
 
 ## 확인된 호환성 메모

@@ -37,13 +37,13 @@ Next.js·FastAPI 애플리케이션 통합과 HyperCLOVA X 연결을 준비하�
 | 해외 ETF·ETN | 정규화, SQLite, Oracle, Verifier, 50문항 평가 구현 |
 | 국내 ETF·ETN | 정규화, SQLite, Oracle, Verifier, 50문항 평가 구현 |
 | 국내채권 | 날짜·stale·신용등급 계약, Oracle, Verifier, 50문항 평가 구현 |
-| 공모펀드 | product-grain 감사 완료, 실행 파이프라인 미구현 |
+| 공모펀드 | 정규화·Oracle·Verifier·로컬 development 40/40, 공식 실행 비활성 |
 | 근거 기반 답변 | Field-level Evidence, Answer Verifier, 안전한 폴백 구현 |
 | 로컬 LLM | 격리된 Qwen/vLLM 개발 테스트 완료, 평가·제출 사용 금지 |
 | HyperCLOVA X | 공식 API 확보 후 연결 예정 |
 | Web·API | Next.js·FastAPI 템플릿 통합 예정 |
 
-현재 AI Core 회귀 기준은 pytest 64개, Ruff lint·format과 문서 검사를 모두
+현재 AI Core 회귀 기준은 pytest 81개, Ruff lint·format과 문서 검사를 모두
 통과한 상태
 
 ## 3. 아키텍처
@@ -138,7 +138,8 @@ Git에 포함하지 않음
 
 ## 8. 다음 작업
 
-- 공모펀드 product-grain 계약과 수직 파이프라인 구현
+- 공모펀드 parser 규칙 commit 후 holdout 최초 1회 평가
+- 공모펀드 grounded answer와 사람 품질 평가
 - 다른 작성자가 만든 blind 평가 문항과 사람 답변 품질 평가 추가
 - Next.js·FastAPI 애플리케이션 템플릿 통합
 - `AgentRequest`, `AgentResponse`, Evidence와 오류·timeout 계약 동결

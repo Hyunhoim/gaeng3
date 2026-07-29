@@ -265,7 +265,7 @@ def test_public_fund_scope_is_mandatory_while_agent_execution_stays_disabled() -
     require_internal_evaluation_search(plan)
 
 
-def test_public_fund_internal_evaluation_rejects_non_expected_provider(
+def test_public_fund_internal_evaluation_rejects_unapproved_provider(
     tmp_path: Path,
 ) -> None:
     path, _, _ = write_sample_fund_database(tmp_path)
@@ -276,12 +276,32 @@ def test_public_fund_internal_evaluation_rejects_non_expected_provider(
         def generate_query_plan(self, question: str, question_id: str) -> QueryPlan:
             return fund_vertical_slice_plan(question_id)
 
-    with pytest.raises(ValueError, match="restricted to the frozen expected provider"):
+    with pytest.raises(ValueError, match="restricted to expected or local_test"):
         EvaluationRunner(
             path,
             NonExpectedProvider(),
             allow_internal_disabled_dataset=True,
         )
+
+
+def test_public_fund_internal_evaluation_accepts_local_test_provider(
+    tmp_path: Path,
+) -> None:
+    path, _, _ = write_sample_fund_database(tmp_path)
+
+    class InternalLocalProvider:
+        provider_name = "local_test"
+
+        def generate_query_plan(self, question: str, question_id: str) -> QueryPlan:
+            return fund_vertical_slice_plan(question_id)
+
+    runner = EvaluationRunner(
+        path,
+        InternalLocalProvider(),
+        allow_internal_disabled_dataset=True,
+    )
+
+    assert runner.product_family == "fund"
 
 
 def test_public_fund_long_return_cannot_drive_execution() -> None:

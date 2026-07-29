@@ -52,7 +52,10 @@
 - 공모펀드 40 development·10 holdout 평가 계약을 동결했다. 실행 44개와 안전
   차단 6개의 expected QueryPlan·Oracle 회귀는 50/50이며, 공식 Agent 실행은
   HCX schema·서버 계약 승인 전까지 비활성화했다.
-- 전체 코드 회귀는 pytest 75개, Ruff lint·format, pip dependency check와
+- 공모펀드 전용 내부 schema와 lexical/schema linker를 구현했다. 개발 전용
+  로컬 Qwen hybrid parser는 development 40문항을 최초 실행에서 40/40
+  통과했고, holdout 10문항은 아직 실행하지 않고 잠가 두었다.
+- 전체 코드 회귀는 pytest 81개, Ruff lint·format, pip dependency check와
   wheel 빌드를 통과했다.
 
 ## 3. 변경할 수 없는 공식 제약
@@ -215,7 +218,9 @@ QueryPlan에는 최소한 intent, 상품군, 필수 조건, 완화 전 확인이
 - [x] 국내 ETP 50문항에서 최종 답변의 수치·순위·evidence·기준일을 평가한다.
 - [x] 국내채권 50문항에서 QueryPlan·oracle·안전 차단과 근거 답변을 평가한다.
 - [x] 공모펀드 50문항의 expected QueryPlan·oracle·안전 차단 계약을 동결한다.
-- [ ] 공모펀드 parser·lexical linker와 grounded answer를 평가한다.
+- [x] 공모펀드 parser·lexical linker를 development 40문항에서 평가한다.
+- [ ] 현재 parser 규칙을 commit한 뒤 공모펀드 holdout을 최초 1회 평가한다.
+- [ ] 공모펀드 grounded answer를 평가한다.
 - [ ] 사람 rubric으로 명확성·중복·비교 용이성과 deterministic 대비 선호를 측정한다.
 - [ ] 다른 작성자가 만든 blind 표현 변형·경계값 중심 v1.1 세트를 최소
   100개로 새로 만들고 최초 holdout 성능을 측정한다.

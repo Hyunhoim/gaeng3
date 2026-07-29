@@ -6,8 +6,8 @@
 네 상품군 field registry·QueryPlan 계약, 해외·국내 ETP·국내채권의 결정론적
 검색·독립 검증·field-level evidence, Mock 및 개발 전용 로컬 LLM provider다.
 공모펀드는 product·attribute·quarantine 저장, Oracle, Verifier, field
-evidence와 동결 50문항 계약까지 구현했고 공식 Agent 실행은 HCX schema·서버
-계약 승인 전까지 비활성화 상태다.
+evidence, 동결 50문항 계약과 개발 전용 로컬 parser까지 구현했다. 공식 Agent
+실행은 HCX schema·서버 계약 승인 전까지 비활성화 상태다.
 최종 답변은 최소권한 GroundedAnswerDraft, Answer Verifier, 결정론적
 evidence compiler와 safe fallback으로 구성할 수 있다.
 
@@ -92,8 +92,8 @@ evidence compiler와 safe fallback으로 구성할 수 있다.
   --output artifacts/e2e/bond-mock-response.json
 ```
 
-공모펀드는 정규화 DB 생성과 내부 Oracle 회귀를 지원하지만 Agent 실행은 아직
-지원하지 않는다.
+공모펀드는 정규화 DB 생성, 내부 Oracle 회귀와 로컬 development parser 평가를
+지원하지만 Agent 실행은 아직 지원하지 않는다.
 
 ```bash
 /home/haeyeongcho/miniforge3/envs/gaeng3-dev/bin/python \
@@ -126,7 +126,9 @@ evidence compiler와 safe fallback으로 구성할 수 있다.
 
 `--provider local_test`는 로컬 Qwen 서버와 세 가지 명시적 opt-in이 모두
 필요하다. 최초 holdout과 사후 회귀를 구분한 결과와 재현 절차는
-[평가 기준선](../../docs/evaluation.md)에 기록한다.
+[평가 기준선](../../docs/evaluation.md)에 기록한다. 공모펀드는
+`--dataset fund --split development`만 기본 허용하며 결과와 holdout 잠금은
+[공모펀드 평가 기준선](../../docs/evaluation-public-fund.md)에 기록한다.
 
 ## 근거 기반 답변 평가
 

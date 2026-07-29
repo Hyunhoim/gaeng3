@@ -35,6 +35,7 @@ REQUIRED_BASELINES = {
     "domestic-bond-queryplan-v1.json",
     "domestic-bond-answer-v1.json",
     "public-fund-queryplan-v1.json",
+    "public-fund-local-development-v1.json",
 }
 REQUIRED_BASELINE_KEYS = {
     "schema_version",

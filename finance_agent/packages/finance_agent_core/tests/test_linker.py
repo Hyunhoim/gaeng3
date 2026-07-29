@@ -5,6 +5,8 @@ from finance_agent_core.agent.linker import (
 )
 from finance_agent_core.agent.providers import first_vertical_slice_plan
 from finance_agent_core.contracts import QueryPlan
+from finance_agent_core.evaluation import load_core_evaluation_suite
+from finance_agent_core.evaluation.scoring import semantic_checks
 
 
 def _plan_with(
@@ -211,3 +213,31 @@ def test_bond_ordered_credit_rating_is_blocked_without_guessing_scale() -> None:
     assert linked["product_families"] == ["bond"]
     assert linked["unsupported_conditions"]
     assert "신용등급 AA- 이상" in linked["unsupported_conditions"][0]["span"]
+
+
+def test_fund_development_linker_matches_all_frozen_plans() -> None:
+    suite = load_core_evaluation_suite("fund").suite
+    development = [case for case in suite.cases if case.split.value == "development"]
+
+    for case in development:
+        payload = canonicalize_query_plan_payload(
+            case.question,
+            first_vertical_slice_plan(case.id).model_dump(mode="json"),
+        )
+        plan = QueryPlan.model_validate(payload)
+        checks = semantic_checks(case, plan, "fund")
+        assert checks["plan_exact"], (
+            case.id,
+            [name for name, passed in checks.items() if not passed],
+        )
+
+
+def test_fund_aum_without_currency_requires_clarification() -> None:
+    hints = build_lexical_hints("AUM이 큰 공모펀드 5개를 보여줘")
+
+    assert hints["product_family"] == "fund"
+    assert hints["required_eq_constraints"] == [
+        {"field": "public_offering", "operator": "eq", "value": True}
+    ]
+    assert hints["required_rankings"] == [{"field": "aum", "direction": "desc", "nulls": "last"}]
+    assert hints["ambiguity_spans"] == ["AUM 비교 통화"]

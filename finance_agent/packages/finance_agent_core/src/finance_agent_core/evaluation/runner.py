@@ -198,9 +198,9 @@ class EvaluationRunner:
         with connect_read_only(self.database_path) as connection:
             self.product_family = load_manifest(connection).dataset
         if allow_internal_disabled_dataset:
-            if provider.provider_name != "expected":
+            if provider.provider_name not in {"expected", "local_test"}:
                 raise ValueError(
-                    "disabled-dataset evaluation is restricted to the frozen expected provider"
+                    "disabled-dataset evaluation is restricted to expected or local_test"
                 )
             if self.product_family != "fund":
                 raise ValueError(

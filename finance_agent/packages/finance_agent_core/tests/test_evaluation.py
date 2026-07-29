@@ -6,6 +6,7 @@ from finance_agent_core.agent import FinanceAgent
 from finance_agent_core.agent.providers import first_vertical_slice_plan
 from finance_agent_core.domain import DatabaseManifest, NormalizedOverseasEtpRecord
 from finance_agent_core.evaluation import load_core_evaluation_suite
+from finance_agent_core.evaluation.cli import main as evaluation_main
 from finance_agent_core.evaluation.models import ExpectedDisposition
 from finance_agent_core.evaluation.scoring import semantic_checks
 from finance_agent_core.execution import PlanExecutionBlockedError
@@ -156,3 +157,17 @@ def test_fund_core_suite_is_frozen_balanced_scoped_and_valid() -> None:
                 constraint.field == "trading_currency" and constraint.operator.value == "eq"
                 for constraint in plan.constraints
             )
+
+
+def test_local_fund_holdout_requires_explicit_unlock() -> None:
+    with pytest.raises(RuntimeError, match="holdout is locked"):
+        evaluation_main(
+            [
+                "--dataset",
+                "fund",
+                "--provider",
+                "local_test",
+                "--split",
+                "holdout",
+            ]
+        )

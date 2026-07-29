@@ -1,13 +1,14 @@
 # 공모펀드 핵심 평가 기준선
 
-상태: v1.0 QueryPlan·Oracle 계약 동결
+상태: v1.1 QueryPlan·Oracle 계약 동결 · 로컬 development 검증 완료
 
 기준일: 2026-07-29
 
 이 문서는 공모펀드 자연어 질문을 검색 계획으로 바꾸는 기준과 실제 데이터
-검색 결과를 고정한 회귀 계약이다. 현재 50/50 결과는 사람이 작성한 기대
-QueryPlan을 실행한 평가 하네스 검증이며, 로컬 LLM이나 HyperCLOVA X의 언어
-이해 성능을 뜻하지 않음
+검색 결과를 고정한 회귀 계약이다. expected provider의 50/50은 사람이 작성한
+기대 QueryPlan을 실행한 평가 하네스 검증이다. 별도로 개발 전용 로컬 Qwen과
+결정론적 linker를 합친 hybrid parser는 development 40문항을 최초 실행에서
+40/40 통과했다. holdout 10문항은 아직 모델에 노출하지 않았다.
 
 ## 1. 동결 평가 세트
 
@@ -65,7 +66,7 @@ AUM은 원천 통화가 다르면 직접 비교할 수 없으므로 모든 AUM �
 - 오늘 기준 최신 수익률
 - 클래스 합산 후 대표 펀드 순위
 
-## 3. 평가 결과
+## 3. Expected QueryPlan·Oracle 결과
 
 동결 SQLite에서 expected provider로 전체 회귀:
 
@@ -89,20 +90,62 @@ AUM은 원천 통화가 다르면 직접 비교할 수 없으므로 모든 AUM �
 
 이 결과만으로 자연어 parser나 LLM 성능을 주장할 수 없음
 
-## 4. 실행 비활성 상태에서의 평가
+## 4. 로컬 Qwen development 최초 결과
+
+공모펀드 전용 내부 schema와 lexical/schema linker를 구현한 뒤 로컬 Qwen
+hybrid parser로 development 40문항만 실행했다.
+
+| 지표 | 최초 결과 |
+| --- | ---: |
+| strict accuracy | 40/40 |
+| valid plan | 100% |
+| plan exact | 100% |
+| constraint exact | 100% |
+| Oracle exact | 100% |
+| safety block | 100% |
+| 생성 지연 p50 | 2,905.228ms |
+| 생성 지연 p95 | 4,288.772ms |
+| 생성 지연 max | 4,437.341ms |
+
+실행 조건:
+
+- provider: `local_test`
+- model: `Qwen/Qwen3-30B-A3B-Instruct-2507-FP8`
+- served name: `qwen3-local-test`
+- model revision:
+  `5a5a776300a41aaa681dd7ff0106608ef2bc90db`
+- workers: 4
+- report:
+  `fund-local-qwen-development-first.json`
+- report SHA-256:
+  `c0d8a60b0a6465b9ef6035f1a3787b4835d765385ae18bfc0ad97d15d1cd99f6`
+
+이 점수는 Qwen 단독 점수가 아니다. 모델이 구조화된 초안을 만들고, 서버의
+결정론적 linker가 문장에서 확인 가능한 공모 범위·분류·수치·정렬·안전 신호를
+canonicalize한 뒤 엄격한 QueryPlan 계약, SQLite Oracle과 독립 verifier가
+검사한 전체 hybrid parser 점수다.
+
+개발 세트는 구현 과정에서 linker 정합성 테스트에도 사용했으므로 새로운 질문에
+대한 일반화 성능으로 주장하지 않는다. 다만 실제 로컬 모델 요청부터 구조화
+출력, canonicalization, 검색, 검증까지 연결된 개발 경로가 동작함을 보장한다.
+
+## 5. 실행 비활성 상태에서의 평가
 
 공모펀드 dataset은 계속 `execution_enabled: false`로 유지. 일반 Agent와
-`local_test` provider는 공모펀드 실행을 허용하지 않음
+공식 HCX schema는 공모펀드 실행을 허용하지 않음
 
 평가 runner는 다음 조건을 모두 만족할 때만 내부 승인 회귀를 허용
 
 - dataset이 정확히 `fund`
-- provider가 동결된 `expected`
+- provider가 동결된 `expected` 또는 개발 전용 `local_test`
 - 공모 범위·모호성·미지원 조건 검사를 모두 통과
 
-따라서 평가 세트를 만들었다는 이유로 공식 Agent 실행 범위가 열리지 않음
+`local_test`는 공모펀드 전용 내부 schema를 사용하며 일반 Agent 경로에는
+노출되지 않는다. 로컬 fund holdout 또는 전체 split은 별도 unlock flag 없이는
+CLI가 실행 전에 실패한다. 따라서 개발 평가를 추가했다는 이유로 공식 Agent
+실행 범위가 열리지 않음
 
-## 5. 재현 명령
+## 6. 재현 명령
 
 `finance_agent/` 디렉터리에서 실행:
 
@@ -123,19 +166,40 @@ AUM은 원천 통화가 다르면 직접 비교할 수 없으므로 모든 AUM �
 첫 명령은 실제 DB에서 44개 문항의 후보 수와 상위 상품 ID를 다시 계산해 suite를
 생성. DB·manifest가 바뀌지 않았다면 suite hash도 동일해야 함
 
-## 6. 해석 한계와 다음 단계
+로컬 development 재현:
+
+```bash
+FINANCE_AGENT_LLM_MODE=local_test \
+ENABLE_NON_HCX_TEST_LLM=1 \
+LLM_PROVIDER=local_test \
+LOCAL_TEST_LLM_BASE_URL=http://127.0.0.1:18000/v1 \
+LOCAL_TEST_LLM_MODEL=qwen3-local-test \
+/home/haeyeongcho/miniforge3/envs/gaeng3-dev/bin/python \
+  -m finance_agent_core.evaluation \
+  --dataset fund \
+  --provider local_test \
+  --split development \
+  --workers 4 \
+  --require-perfect \
+  --output artifacts/evaluation/fund-local-qwen-development.json
+```
+
+holdout을 포함하는 실행은 이 문서의 다음 단계가 완료되기 전에는 수행하지 않는다.
+
+## 7. 해석 한계와 다음 단계
 
 - 같은 개발자가 질문과 기대 조건을 작성했으므로 holdout 10개도 완전한
   unbiased 일반화 세트가 아님
 - 현재 평가는 `SEARCH` intent와 QueryPlan·검색 결과만 검증
 - 공모펀드 답변 문장 품질과 Answer Verifier는 아직 평가하지 않음
-- 로컬 Qwen parser는 아직 공모펀드 field linker를 지원하지 않음
+- development 40개는 구현·정합성 검사에 사용됐으므로 튜닝 세트임
+- holdout 10개는 로컬 Qwen으로 아직 실행하지 않음
 - HyperCLOVA X 성능과 공식 평가 점수를 대변하지 않음
 
 다음 단계:
 
-1. 공모펀드 lexical/schema linker를 구현하고 development 40문항으로만 조정
-2. 규칙 동결 뒤 holdout 10문항을 최초 1회 실행
+1. 현재 parser·lexical linker와 development 결과를 commit
+2. commit 이후 holdout 10문항을 최초 1회만 실행하고 결과를 그대로 보존
 3. 공모펀드 grounded answer와 사람 품질 평가 추가
 4. HCX schema에 fund를 노출하고 서버 계약 테스트 통과
 5. 그 뒤에만 `execution_enabled: true` 전환 검토

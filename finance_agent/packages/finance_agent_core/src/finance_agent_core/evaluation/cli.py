@@ -41,6 +41,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--workers", type=int, default=1)
     parser.add_argument("--output", type=Path)
     parser.add_argument("--require-perfect", action="store_true")
+    parser.add_argument(
+        "--unlock-fund-holdout",
+        action="store_true",
+        help="Explicitly allow local fund holdout/all after a pre-holdout commit.",
+    )
     return parser
 
 
@@ -53,6 +58,13 @@ def _selected_cases(suite, split: str):
 
 def main(argv: list[str] | None = None) -> int:
     arguments = build_parser().parse_args(argv)
+    fund_local = arguments.dataset == "fund" and arguments.provider == "local_test"
+    if arguments.unlock_fund_holdout and not fund_local:
+        raise RuntimeError("--unlock-fund-holdout is only valid for local fund evaluation")
+    if fund_local and arguments.split != "development" and not arguments.unlock_fund_holdout:
+        raise RuntimeError(
+            "local fund holdout is locked; evaluate development first and commit before unlocking"
+        )
     database = arguments.database or Path(f"artifacts/normalized/{arguments.dataset}.sqlite3")
     manifest = arguments.manifest or Path(f"{database}.manifest.json")
     loaded = load_core_evaluation_suite(arguments.dataset)
@@ -71,7 +83,10 @@ def main(argv: list[str] | None = None) -> int:
     model: str | None = None
     if arguments.provider == "local_test":
         settings = LocalTestSettings.from_environment()
-        provider = LocalTestProvider(settings)
+        provider = LocalTestProvider(
+            settings,
+            internal_evaluation_family="fund" if suite.dataset == "fund" else None,
+        )
         provider.healthcheck()
         model = settings.model
     else:
@@ -80,7 +95,7 @@ def main(argv: list[str] | None = None) -> int:
         database,
         provider,
         allow_internal_disabled_dataset=(
-            suite.dataset == "fund" and arguments.provider == "expected"
+            suite.dataset == "fund" and arguments.provider in {"expected", "local_test"}
         ),
     )
     results = runner.run(cases, arguments.workers)

@@ -14,6 +14,8 @@ SCALED_NUMBER = rf"{NUMBER}\s*(?:천억원|백억원|십억원|조원|억원|만
 
 
 def _product_family(question: str) -> str | None:
+    if "공모펀드" in question:
+        return "fund"
     mentions_etp = re.search(r"ETF|ETN|ETP", question)
     if not mentions_etp and re.search(
         r"채권|회사채|국채|국공채|국고채|특수채|금융채|지역개발채|도시철도공채",
@@ -69,7 +71,8 @@ def _numeric_hint(
     alias_pattern = "|".join(re.escape(alias) for alias in aliases)
     between = re.search(
         rf"(?:{alias_pattern}).{{0,12}}?({SCALED_NUMBER})\s*(?:%|배|일|년)?\s*"
-        rf"에서\s*({SCALED_NUMBER})\s*(?:%|배|일|년)?\s*사이",
+        rf"(?:달러|USD|KRW)?\s*에서\s*({SCALED_NUMBER})\s*(?:%|배|일|년)?\s*"
+        rf"(?:달러|USD|KRW)?\s*사이",
         question,
         flags=re.IGNORECASE,
     )
@@ -81,7 +84,7 @@ def _numeric_hint(
         }
     comparison = re.search(
         rf"(?:{alias_pattern}).{{0,16}}?({SCALED_NUMBER})\s*(?:%|배|일|년)?\s*"
-        r"(이하|미만|이상|초과|정확히)",
+        r"(?:달러|USD|KRW)?\s*(이하|미만|이상|초과|정확히)",
         question,
         flags=re.IGNORECASE,
     )
@@ -163,6 +166,8 @@ def build_lexical_hints(question: str) -> dict[str, Any]:
         add("product_type", "ETF")
     if "ETN" in question:
         add("product_type", "ETN")
+    if family == "fund":
+        add("public_offering", True)
 
     if family == "domestic_etp":
         phrase_mappings = [
@@ -186,6 +191,32 @@ def build_lexical_hints(question: str) -> dict[str, Any]:
         ]
         if re.search(r"^국내\s+(?:채권형|혼합자산형)", question):
             add("investment_region", "국내")
+    elif family == "fund":
+        phrase_mappings = [
+            ("국내외 혼합", "fund_geography_scope", "국내외혼합"),
+            ("국내외혼합", "fund_geography_scope", "국내외혼합"),
+            ("해외", "fund_geography_scope", "해외"),
+            ("국내", "fund_geography_scope", "국내"),
+            ("주식혼합", "fund_management_attribute", "주식혼합"),
+            ("채권혼합", "fund_management_attribute", "채권혼합"),
+            ("혼합자산", "fund_management_attribute", "혼합자산"),
+            ("특별자산", "fund_management_attribute", "특별자산"),
+            ("재간접", "fund_management_attribute", "재간접"),
+            ("주식형", "fund_management_attribute", "주식형"),
+            ("채권형", "fund_management_attribute", "채권형"),
+            ("대출형", "fund_management_attribute", "대출형"),
+            ("임대형", "fund_management_attribute", "임대형"),
+            ("MMF", "fund_management_attribute", "MMF"),
+            ("글로벌", "investment_region", "글로벌"),
+            ("아시아", "investment_region", "아시아"),
+            ("남미/북미", "investment_region", "남미/북미"),
+            ("이머징/브릭스", "investment_region", "이머징/브릭스"),
+            ("유럽", "investment_region", "유럽"),
+            ("원화", "trading_currency", "KRW"),
+            ("KRW", "trading_currency", "KRW"),
+            ("달러", "trading_currency", "USD"),
+            ("USD", "trading_currency", "USD"),
+        ]
     elif family == "bond":
         phrase_mappings = [
             ("개인투자용국채", "bond_major_class", "개인투자용국채"),
@@ -227,12 +258,15 @@ def build_lexical_hints(question: str) -> dict[str, Any]:
             continue
         if phrase == "미국" and "미국 제외 글로벌" in question:
             continue
+        if family == "fund" and phrase == "국내" and "국내외" in question:
+            continue
         add(field, value)
 
-    if family != "bond" and "현재 거래 가능" in question:
+    etp_family = family in {"overseas_etp", "domestic_etp"}
+    if etp_family and "현재 거래 가능" in question:
         add("sellable", True)
         add("trading_suspended", False)
-    if family != "bond" and any(
+    if etp_family and any(
         phrase in question
         for phrase in (
             "거래 중지가 아니",
@@ -243,11 +277,11 @@ def build_lexical_hints(question: str) -> dict[str, Any]:
         )
     ):
         add("trading_suspended", False)
-    if family != "bond" and "판매 가능" in question:
+    if etp_family and "판매 가능" in question:
         add("sellable", True)
-    if family != "bond" and ("판매할 수 없" in question or "판매 불가" in question):
+    if etp_family and ("판매할 수 없" in question or "판매 불가" in question):
         add("sellable", False)
-    if family != "bond" and any(
+    if etp_family and any(
         phrase in question for phrase in ("거래가 중지", "거래 중지된", "거래정지된")
     ):
         add("trading_suspended", True)
@@ -294,6 +328,55 @@ def build_lexical_hints(question: str) -> dict[str, Any]:
             if match:
                 add(field, match.group(1).strip(), operator)
 
+    if family == "fund":
+        if "판매 중" in question:
+            add("sellable", True)
+        if any(phrase in question for phrase in ("판매가 완료", "판매 완료")):
+            add("sellable", False)
+        if any(
+            phrase in question
+            for phrase in (
+                "당사에서 판매",
+                "당사에서도 판매",
+                "미래에셋증권에서 판매",
+            )
+        ):
+            add("company_sellable", True)
+        if "개인용" in question or "개인 투자자 대상" in question:
+            add("investor_type", "개인")
+        if "법인용" in question or "법인 투자자 대상" in question:
+            add("investor_type", "법인")
+        if any(phrase in question for phrase in ("환헤지하지 않", "환헤지를 하지 않", "환노출")):
+            add("currency_hedged", False)
+        elif any(
+            phrase in question for phrase in ("환헤지", "환율 변동을 막는", "환율 변동을 줄이는")
+        ):
+            add("currency_hedged", True)
+        for risk in (
+            "매우높은위험(1등급)",
+            "높은위험(2등급)",
+            "다소높은위험(3등급)",
+            "보통위험(4등급)",
+            "낮은위험(5등급)",
+            "매우낮은위험(6등급)",
+        ):
+            loose = risk.replace("(", " ").replace(")", "")
+            if risk in question or loose in question:
+                add("risk_level", risk)
+        lookup_patterns = [
+            (r"상품번호\s*([A-Z0-9]+)", "product_id", "eq"),
+            (r"짧은 이름에\s*(.+?)(?:가|이)\s*들어간", "short_name", "contains"),
+            (
+                r"(?:정식\s*)?상품명에\s*(.+?)(?:가|이)\s*포함된",
+                "product_name",
+                "contains",
+            ),
+        ]
+        for pattern, field, operator in lookup_patterns:
+            match = re.search(pattern, question)
+            if match:
+                add(field, match.group(1).strip(), operator)
+
     if family == "bond":
         if any(
             phrase in question
@@ -328,6 +411,14 @@ def build_lexical_hints(question: str) -> dict[str, Any]:
             ("remaining_days", ("잔존일수", "잔존일")),
             ("duration_years", ("듀레이션",)),
         ]
+    elif family == "fund":
+        numeric_fields = [
+            ("aum", ("AUM", "순자산")),
+            ("one_week_return_pct", ("1주 수익률", "일주일 수익률")),
+            ("one_month_return_pct", ("1개월 수익률", "한 달 수익률")),
+            ("three_month_return_pct", ("3개월 수익률", "석 달 수익률")),
+            ("six_month_return_pct", ("6개월 수익률", "반년 수익률")),
+        ]
     else:
         numeric_fields = [
             ("total_expense_ratio_pct", ("총보수", "보수")),
@@ -351,6 +442,11 @@ def build_lexical_hints(question: str) -> dict[str, Any]:
         hint = _numeric_hint(question, field, aliases)
         if hint is not None:
             add(hint["field"], hint["value"], hint["operator"])
+    if family == "fund" and re.search(
+        r"(?:3개월|석 달)\s*(?:수익률|수익|성과).{0,12}마이너스가 아닌",
+        question,
+    ):
+        add("three_month_return_pct", 0, "gte")
     if family == "bond":
         for field, aliases in [
             ("issue_date", ("발행일",)),
@@ -364,10 +460,21 @@ def build_lexical_hints(question: str) -> dict[str, Any]:
         "배당수익률",
         "원화로 환산",
         "추적오차율",
-        "공모펀드",
         "가격 전망",
     ]
-    if family != "domestic_etp":
+    if family == "fund":
+        unsupported_patterns.extend(
+            [
+                "운용사 이름",
+                "오늘 기준 최신 수익률",
+                "총보수",
+                "판매수수료",
+                "1년 수익률",
+                "대표 펀드",
+                "클래스는 합쳐서",
+            ]
+        )
+    elif family != "domestic_etp":
         unsupported_patterns.extend(["1일 수익률", "3개월 수익률", "국내 ETF"])
     if family == "bond":
         unsupported_patterns.extend(["AUM", "총보수", "판매 가능", "거래정지"])
@@ -376,12 +483,29 @@ def build_lexical_hints(question: str) -> dict[str, Any]:
     rankings: list[dict[str, str]] = []
     ascending = any(phrase in question for phrase in ("오름차순", "낮은 순", "작은 순"))
     descending = any(
-        phrase in question for phrase in ("내림차순", "큰 순", "높은 순", "최신", "상위")
+        phrase in question
+        for phrase in (
+            "내림차순",
+            "큰 순",
+            "높은 순",
+            "최신",
+            "상위",
+            "좋은",
+            "성과순",
+            "가장 많이",
+        )
     )
-    explicit_rank_patterns = [
-        (r"(?:상품명|이름).{0,20}(?:순서|순으로|오름차순|내림차순)", "product_name"),
-        (r"(?:티커|종목코드).{0,20}(?:순서|순으로|오름차순|내림차순)", "ticker"),
-    ]
+    explicit_rank_patterns: list[tuple[str, str]] = []
+    if family == "fund":
+        explicit_rank_patterns.append(
+            (r"짧은 이름.{0,30}(?:순서|순으로|오름차순|내림차순|이름순)", "short_name")
+        )
+    explicit_rank_patterns.extend(
+        [
+            (r"(?:상품명|이름).{0,20}(?:순서|순으로|오름차순|내림차순|이름순)", "product_name"),
+            (r"(?:티커|종목코드).{0,20}(?:순서|순으로|오름차순|내림차순)", "ticker"),
+        ]
+    )
     if family == "bond":
         explicit_rank_patterns.extend(
             [
@@ -399,6 +523,33 @@ def build_lexical_hints(question: str) -> dict[str, Any]:
                 (r"(?:잔존일수|잔존일).{0,30}(?:큰|작은|높은|낮은|순)", "remaining_days"),
                 (r"듀레이션.{0,30}(?:큰|작은|높은|낮은|순)", "duration_years"),
                 (r"만기일.{0,30}(?:순|최신)", "maturity_date"),
+            ]
+        )
+    elif family == "fund":
+        explicit_rank_patterns.extend(
+            [
+                (
+                    r"(?:1주|일주일)\s*(?:수익률|수익|성과).{0,80}"
+                    r"(?:큰|작은|높은|낮은|좋은|성과순|순)",
+                    "one_week_return_pct",
+                ),
+                (
+                    r"(?:1개월|한 달)\s*(?:수익률|수익|성과).{0,80}"
+                    r"(?:큰|작은|높은|낮은|좋은|성과순|순)",
+                    "one_month_return_pct",
+                ),
+                (
+                    r"(?:3개월|석 달)\s*(?:수익률|수익|성과).{0,80}"
+                    r"(?:큰|작은|높은|낮은|좋은|성과순|순)",
+                    "three_month_return_pct",
+                ),
+                (
+                    r"(?:6개월|반년)\s*(?:수익률|수익|성과).{0,80}"
+                    r"(?:큰|작은|높은|낮은|좋은|성과순|순)",
+                    "six_month_return_pct",
+                ),
+                (r"(?:AUM|순자산).{0,30}(?:큰|작은|높은|낮은|상위|순)", "aum"),
+                (r"돈이.{0,30}(?:가장 많이|많이) 모인", "aum"),
             ]
         )
     else:
@@ -446,15 +597,38 @@ def build_lexical_hints(question: str) -> dict[str, Any]:
         if re.search(pattern, question, flags=re.IGNORECASE):
             ranking_field = field
             break
+    if ranking_field is not None and family is not None:
+        try:
+            sortable = (
+                load_field_registry()
+                .require_field(
+                    ranking_field,
+                    [family],
+                )
+                .sortable
+            )
+        except ValueError:
+            sortable = False
+        if not sortable:
+            ranking_field = None
     if ranking_field is not None:
-        if ranking_field in {"product_name", "ticker"} and not descending:
+        if ranking_field in {"product_name", "short_name", "ticker"} and not descending:
             direction = "asc"
         else:
             direction = "asc" if ascending else "desc"
         rankings.append({"field": ranking_field, "direction": direction, "nulls": "last"})
 
-    limit_matches = re.findall(r"(\d+)\s*개(?!월)", question)
     exact_lookup = any(item["field"] in {"ticker", "product_id", "isin"} for item in required)
+    if (
+        family == "fund"
+        and not rankings
+        and not exact_lookup
+        and not any(phrase in question for phrase in unsupported_patterns)
+        and not any(phrase in question for phrase in ambiguity_patterns)
+    ):
+        rankings.append({"field": "product_name", "direction": "asc", "nulls": "last"})
+
+    limit_matches = re.findall(r"(\d+)\s*개(?!월)", question)
     limit = int(limit_matches[-1]) if limit_matches else (1 if exact_lookup else 5)
     unsupported_spans = [phrase for phrase in unsupported_patterns if phrase in question]
     if family == "bond":
@@ -465,6 +639,16 @@ def build_lexical_hints(question: str) -> dict[str, Any]:
         if ordered_rating:
             required[:] = [item for item in required if item["field"] != "credit_rating"]
             unsupported_spans.append(ordered_rating.group(0))
+    ambiguity_spans = [phrase for phrase in ambiguity_patterns if phrase in question]
+    if family == "fund":
+        aum_requested = any(item["field"] == "aum" for item in required) or any(
+            item["field"] == "aum" for item in rankings
+        )
+        currency_locked = any(
+            item["field"] == "trading_currency" and item["operator"] == "eq" for item in required
+        )
+        if aum_requested and not currency_locked:
+            ambiguity_spans.append("AUM 비교 통화")
     return {
         "product_family": family,
         "required_constraints": required,
@@ -472,7 +656,7 @@ def build_lexical_hints(question: str) -> dict[str, Any]:
         "required_rankings": rankings,
         "limit": limit,
         "unsupported_spans": list(dict.fromkeys(unsupported_spans)),
-        "ambiguity_spans": [phrase for phrase in ambiguity_patterns if phrase in question],
+        "ambiguity_spans": list(dict.fromkeys(ambiguity_spans)),
     }
 
 
