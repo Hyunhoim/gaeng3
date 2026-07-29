@@ -8,16 +8,17 @@
 
 1. [현재 프로젝트 기준](project-baseline.md)
 2. [데이터 감사 기준](data-audit.md)
-3. [Field Registry와 QueryPlan 계약](contracts.md)
-4. [해외 ETP 핵심 평가 기준선](evaluation.md)
-5. [국내 ETP 핵심 평가 기준선](evaluation-domestic-etp.md)
-6. [국내채권 핵심 평가 기준선](evaluation-domestic-bond.md)
-7. [근거 기반 최종 답변 평가](evaluation-grounded-answers.md)
-8. [개발 환경과 현재 구현 상태](development.md)
-9. [로컬 LLM 테스트 런타임](local-llm.md)
-10. [Agent Core v0.1 마일스톤](milestones/2026-07-29-agent-core-v0.1.md)
-11. [재현 가능한 평가 baseline](../evaluation/README.md)
-12. [저장소 부트스트랩 작업 명세](prompts/01-repository-bootstrap.md)
+3. [공모펀드 원천 데이터 계약](public-fund-contract.md)
+4. [Field Registry와 QueryPlan 계약](contracts.md)
+5. [해외 ETP 핵심 평가 기준선](evaluation.md)
+6. [국내 ETP 핵심 평가 기준선](evaluation-domestic-etp.md)
+7. [국내채권 핵심 평가 기준선](evaluation-domestic-bond.md)
+8. [근거 기반 최종 답변 평가](evaluation-grounded-answers.md)
+9. [개발 환경과 현재 구현 상태](development.md)
+10. [로컬 LLM 테스트 런타임](local-llm.md)
+11. [Agent Core v0.1 마일스톤](milestones/2026-07-29-agent-core-v0.1.md)
+12. [재현 가능한 평가 baseline](../evaluation/README.md)
+13. [저장소 부트스트랩 작업 명세](prompts/01-repository-bootstrap.md)
 
 ## 문서 지도
 
@@ -25,7 +26,9 @@
 | --- | --- | --- |
 | [현재 프로젝트 기준](project-baseline.md) | 공식 제약, 모델 정책, 역할 분담, 목표 아키텍처, 우선순위 | 현재 정본 |
 | [데이터 감사 기준](data-audit.md) | 상품군별 grain·결측·sentinel·손상 행·검색 허용 범위 | 현재 정본 |
-| [Field Registry와 QueryPlan 계약](contracts.md) | 해외·국내 ETP·국내채권 field capability, 서버 QueryPlan, HCX schema subset | P1 정본 |
+| [공모펀드 원천 데이터 계약](public-fund-contract.md) | 공모펀드 grain·field capability·품질 규칙·실행 승인 조건 | P1 정본 |
+| [공모펀드 계약 감사 노트북](../notebooks/public-fund-contract-audit.ipynb) | product-grain 전수 감사 재현 흐름과 품질 회귀 | 재현 보조 |
+| [Field Registry와 QueryPlan 계약](contracts.md) | 네 상품군 field capability, 서버 QueryPlan, HCX schema subset | P1 정본 |
 | [해외 ETP 핵심 평가 기준선](evaluation.md) | 동결 50문항, oracle·채점 규칙, 최초 holdout과 사후 회귀 결과 | v1.0 정본 |
 | [국내 ETP 핵심 평가 기준선](evaluation-domestic-etp.md) | 국내 ETP 동결 50문항, 품질 계약, local-inference split 결과 | v1.0 정본 |
 | [국내채권 핵심 평가 기준선](evaluation-domestic-bond.md) | 국내채권 동결 50문항, stale·날짜 계약, 로컬 Qwen·답변 결과 | v1.0 정본 |
@@ -40,22 +43,28 @@
 
 ## 현재 구현
 
-- [finance_agent_core](../packages/finance_agent_core/README.md): 감사, 해외·국내 ETP·국내채권
-  정규화·SQLite 적재, QueryPlan, oracle, verifier, evidence, Agent
+- [finance_agent_core](../packages/finance_agent_core/README.md): 네 상품군 감사·정규화·SQLite
+  적재, 해외·국내 ETP·국내채권 QueryPlan·oracle·verifier·evidence·Agent
 - [개발 Conda 환경](../environment.yml): `gaeng3-dev`, Python 3.12
 - [로컬 LLM Conda 환경](../environment.local-llm.yml): `gaeng3-llm-local`,
   Python 3.12
 - [개발 requirements](../requirements/dev.txt): editable core, Pydantic, PyYAML,
   pytest, Ruff
 - [로컬 추론 requirements](../requirements/local-llm.txt): 개발 전용 vLLM
-- 감사 회귀 기준: 4종 145,393행, 핵심 expectation 49개
+- 감사 회귀 기준: 4종 145,393행, 핵심 expectation 65개
 - 해외 ETP 적재 기준: 5,646행, 검색 가능 5,636행, sparse 격리 10행
 - 첫 vertical slice oracle 기준: 후보 440개, 결정론적 상위 5개
 - 국내 ETP 적재 기준: 1,734행, 검색 가능 1,733행, 손상 행 1개 격리
 - 국내 ETP 대표 oracle: 후보 211개, 수익률 상위 5개와 field evidence 재현
 - 국내채권 적재 기준: 42,394행, 검색 가능 42,394행, 실제 매수 가능 254행
 - 국내채권 대표 oracle: 잔존일수 365일 이하 회사채 후보 23개와 상위 3개 재현
-- 코드 회귀 기준: 전체 pytest 64개, Ruff, pip dependency check
+- 공모펀드 적재 기준: 95,619 raw행, 논리 상품 11,138개, 속성 95,618개,
+  손상 source row 84,563 한 건, 공모 검색 범위 11,115개
+- 공모펀드 재현 기준: 독립 2회 SQLite·manifest SHA-256 byte 일치,
+  `integrity_check=ok`, foreign-key 위반 0건
+- 공모펀드 대표 oracle: 해외·주식형·판매중·당사 판매 후보 1,811개,
+  3개월 수익률 상위 5개와 13개 field evidence 재현
+- 코드 회귀 기준: 전체 pytest 73개, Ruff, pip dependency check
 - 로컬 Qwen 평가 기준: 동결 50문항에서 최초 미사용 holdout 9/10,
   오류 수정 후 전체 회귀 50/50을 연속 2회 재현
 - 국내 ETP 로컬 Qwen 기준: development 40/40, local-inference holdout 첫 실행 10/10
@@ -65,7 +74,8 @@
   수치·순위·evidence·기준일 100%, 폴백 0
 - 국내채권 답변 기준: 46개 LLM 생성·1개 결정론적 빈 결과·3개 안전 차단,
   전체 50/50, 폴백 0
-- 다음 구현: 새 blind 표현 변형·사람 품질 평가, 공모펀드, 공식 `/answer` adapter
+- 다음 구현: 공모펀드 핵심 평가 질문, 새 blind 표현 변형·사람 품질 평가,
+  공식 `/answer` adapter
 
 ## 저장소 밖의 근거 자료
 

@@ -2,9 +2,11 @@
 
 금융상품 Agent의 데이터 감사, 정규화 계약, QueryPlan, 결정론적 검색과 검증을 애플리케이션 shell과 독립적으로 개발하는 Python 패키지다.
 
-현재 구현 범위는 원천 XLSX의 재현 가능한 감사, 해외·국내 ETP·국내채권 정규화,
-field registry·QueryPlan 계약, 결정론적 검색·독립 검증·field-level evidence,
-Mock 및 개발 전용 로컬 LLM provider다.
+현재 구현 범위는 원천 XLSX의 재현 가능한 감사, 네 상품군 정규화·SQLite,
+네 상품군 field registry·QueryPlan 계약, 해외·국내 ETP·국내채권의 결정론적
+검색·독립 검증·field-level evidence, Mock 및 개발 전용 로컬 LLM provider다.
+공모펀드는 product·attribute·quarantine 저장, Oracle, Verifier, field
+evidence까지 구현했고 공식 Agent 실행은 평가 전까지 비활성화 상태다.
 최종 답변은 최소권한 GroundedAnswerDraft, Answer Verifier, 결정론적
 evidence compiler와 safe fallback으로 구성할 수 있다.
 
@@ -39,10 +41,11 @@ evidence compiler와 safe fallback으로 구성할 수 있다.
 
 ## 계약
 
-- [`field_registry.yaml`](src/finance_agent_core/config/field_registry.yaml): 해외·국내 ETP·국내채권 canonical field, 상품군별 원천 매핑, 품질, 단위, 연산자
+- [`field_registry.yaml`](src/finance_agent_core/config/field_registry.yaml): 네 상품군 canonical field, 상품군별 원천 매핑, 품질, 단위, 연산자와 실행 승인 상태
 - [`queryplan.py`](src/finance_agent_core/contracts/queryplan.py): 서버의 엄격한 구조·의미 검증
 - [`queryplan.hcx.schema.json`](src/finance_agent_core/contracts/queryplan.hcx.schema.json): HyperCLOVA X Structured Outputs용 보수적 schema
 - [계약 설명](../../docs/contracts.md): 설계 근거, 첫 vertical slice 예시, 확장 규칙
+- [공모펀드 계약](../../docs/public-fund-contract.md): product grain, capability, 품질 규칙, 실행 승인 조건
 
 ## 상품군 vertical slice
 
@@ -86,6 +89,16 @@ evidence compiler와 safe fallback으로 구성할 수 있다.
   --database artifacts/normalized/bond.sqlite3 \
   --provider mock \
   --output artifacts/e2e/bond-mock-response.json
+```
+
+공모펀드는 정규화 DB 생성과 내부 Oracle 회귀를 지원하지만 Agent 실행은 아직
+지원하지 않는다.
+
+```bash
+/home/haeyeongcho/miniforge3/envs/gaeng3-dev/bin/python \
+  -m finance_agent_core.storage \
+  --dataset fund \
+  --data-dir "../../../2. Data/1. Raw/1.금융상품"
 ```
 
 로컬 Qwen 연결은 [별도 테스트 런타임 문서](../../docs/local-llm.md)를 따른다.

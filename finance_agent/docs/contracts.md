@@ -1,11 +1,12 @@
 # Field Registry와 QueryPlan 계약
 
-상태: P1 해외·국내 ETP·국내채권 계약 정본
+상태: P1 네 상품군 field 계약 정본
 기준일: 2026-07-29
 
-이 문서는 자연어 질문과 결정론적 검색기 사이의 계약을 설명한다. 현재 동결
-범위는 해외 ETP, 국내 ETP와 국내채권이며, 공모펀드는 동일한 감사·검증 절차를
-거치기 전까지 fail-closed로 거절한다.
+이 문서는 자연어 질문과 결정론적 검색기 사이의 계약을 설명한다. 해외 ETP,
+국내 ETP, 국내채권은 실행 가능하다. 공모펀드는 grain·field capability와
+정규화 SQLite·oracle·verifier·field evidence까지 구현했다. 핵심 평가 세트와
+HCX schema 노출을 마칠 때까지 공식 Agent 실행은 fail-closed로 거절한다.
 
 ## 1. 구현 파일
 
@@ -41,7 +42,7 @@ HyperCLOVA X 공식 Structured Outputs 문서 기준으로 현재 이 기능은 
 - intent별 payload 검증
 - field별 타입·단위·enum·허용 연산자 검증
 - filter·sort·projection·aggregation capability 검증
-- 아직 동결되지 않은 상품군과 필드 거절
+- 아직 실행 승인되지 않은 상품군과 필드 거절
 
 ## 3. 해외 ETP registry의 근거
 
@@ -107,7 +108,32 @@ canonical field는 이름·타입·단위를 공유하되 `dataset_overrides`로
 유지한다. `AA- 이상` 같은 신용등급 순서 조건, 미래 수익 예측, 안전성 판단은
 실행하지 않는다.
 
-## 6. QueryPlan 1.0
+## 6. 공모펀드 registry의 근거
+
+상세 정본은 [공모펀드 원천 데이터 계약](public-fund-contract.md)이다.
+
+| 항목 | 계약 |
+| --- | --- |
+| 원천 grain | `(itm_no, prfd_attr_cd)` 한 행, 중복 0 |
+| 논리 grain | `itm_no` 한 펀드 클래스, 정상 11,138개 |
+| 반복 구조 | 상품별 속성 4~16행, 속성코드 외 필드 충돌 0 |
+| 격리 | Excel source row 84,563 한 건 |
+| 기본 과제 범위 | 공모 11,115개만 기본 검색, 사모 15개·구분 결측 8개 제외 |
+| AUM | 9,290개 존재, 0인 298개는 `UNKNOWN`, 동일 통화 안에서 비교 |
+| 위험등급 | 코드 1~6이 있는 8,565개, 코드 기준 canonical label 변환 |
+| 단기 수익률 | 1주·1·3·6개월만 조건·정렬·집계 허용 |
+| 장기 수익률 | 극단·비정상 값 때문에 18개월·1·2·3·5년은 표시 전용 |
+| 기준일 | 필드별 날짜가 없어 파일 스냅샷 2026-07-11만 경고와 함께 표시 |
+| 미지원 | 보수, 운용사명, 대표펀드 그룹, 장기 수익률 순위 |
+
+registry에는 공모펀드 원천 매핑과 capability를 포함하고
+`fund_products`·`fund_attributes`·`fund_quarantine` SQLite에 적재하되 dataset의
+`execution_enabled`를 `false`로 유지한다. 따라서 계약과 저장 결과를 코드로
+검사하고 내부 Oracle 회귀를 실행할 수 있지만 HCX schema의 상품군 enum과 공식
+Agent 실행에는 아직 노출되지 않는다. QueryPlan 구조 검증과 배포 실행 허용은
+서로 다른 안전 경계로 관리한다.
+
+## 7. QueryPlan 1.0
 
 필수 최상위 필드는 다음과 같다.
 
@@ -168,7 +194,7 @@ QueryPlan은 현재 한 번에 한 상품군만 실행한다. schema에는 세 �
 있지만 교차 상품군 검색·비교는 별도 통화·날짜·field 정합성 계약 전까지
 oracle이 거절한다.
 
-## 7. 검증
+## 8. 검증
 
 `finance_agent/` 디렉터리에서 실행한다.
 
@@ -187,24 +213,25 @@ oracle이 거절한다.
 - 서버 전용 JSON Schema keyword를 HCX schema에 넣는 행위
 - registry field 목록과 HCX enum이 어긋나는 변경
 
-## 8. 연결 상태와 다음 순서
+## 9. 연결 상태와 다음 순서
 
 완료:
 
-1. 원천 key와 원천값을 보존하는 해외·국내 ETP·국내채권 정규화 레코드
-2. exact decimal을 integer scale로 저장하는 상품군별 SQLite 적재와 manifest
+1. 원천 key와 원천값을 보존하는 네 상품군 정규화 레코드
+2. exact decimal을 integer scale로 저장하는 네 상품군별 SQLite 적재와 manifest
 3. registry 기반 parameterized predicate·sort를 만드는 oracle
 4. SQL과 독립된 Python result verifier
 5. field-level evidence DTO와 결정론적 safe renderer
 6. 동일 QueryPlan을 사용하는 Mock 및 개발 전용 로컬 provider
 7. 상품군별 동결 50문항의 parser·oracle·안전 차단 평가 하네스
 8. 최소권한 grounded answer 계약, Answer Verifier, 결정론적 폴백과 답변 평가 하네스
+9. 공모펀드 공모 범위 잠금, parameterized oracle, 독립 verifier, field evidence
 
 다음:
 
 1. 다른 작성자가 만든 blind 표현 변형 세트를 최소 100문항으로 만든다.
 2. 사람이 명확성·중복·비교 용이성을 평가하는 답변 rubric을 추가한다.
-3. 공모펀드를 감사→product-grain 정규화→registry→oracle→verifier 순서로 확장한다.
+3. 공모펀드 핵심 평가 질문과 blind 표현 변형 회귀 세트를 만든다.
 4. 공식 HyperCLOVA X provider에서 동일 계약 fixture를 재사용한다.
 5. 공식 `/answer` adapter와 오류·timeout 계약을 연결한다.
 

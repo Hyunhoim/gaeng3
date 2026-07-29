@@ -19,7 +19,7 @@
   원격에는 아직 push하지 않았다.
 - 동료가 가져올 `vintasoftware/nextjs-fastapi-template`은 루트의 `fastapi_backend`, `nextjs-frontend`, `docs` 구조와 UV를 사용한다. Agent·데이터 작업공간은 `finance_agent/`에 격리하고, 애플리케이션이 재사용할 Python 코드는 `finance_agent/packages/finance_agent_core`에서 개발한다.
 - `gaeng3-dev` Conda 환경과 pip requirements를 만들고, 표준 라이브러리 기반 데이터 감사기를 구현했다.
-- 4종 145,393행 감사, expectation 49/49, 8개 입력 hash 대조, 두 번의 결정적 재실행을 통과했다.
+- 4종 145,393행 감사, expectation 65/65, 8개 입력 hash 대조, 두 번의 결정적 재실행을 통과했다.
 - 해외 ETP 17개 canonical field registry, 엄격한 서버 QueryPlan, HCX keyword subset schema를 구현하고 계약 테스트를 통과했다.
 - 해외 ETP 5,646행을 정규화해 SQLite에 적재하고 sparse 10행을 격리했다.
 - parameterized SQLite oracle, 독립 Python verifier, field-level evidence,
@@ -44,7 +44,14 @@
   안전 계약을 registry·Oracle·Verifier·evidence에 연결했다.
 - 국내채권 QueryPlan과 근거 답변 50문항이 각각 50/50을 통과했다. 실제
   질문→계획→검색→검증→답변 E2E도 통과했고 로컬 Qwen 폴백은 0건이었다.
-- 전체 코드 회귀는 pytest 64개, Ruff lint·format, pip dependency check와
+- 공모펀드 raw 95,619행을 논리 상품 11,138개·속성 95,618개·격리 1개로
+  정규화하는 세 테이블 SQLite와 manifest를 구현했다. 독립 2회 빌드의 DB
+  SHA-256이 일치했다.
+- 공모펀드 공모 범위 잠금, Oracle, Result Verifier, field evidence를 연결했다.
+  대표 질의는 후보 1,811개와 상위 5개를 SQL·Python에서 동일하게 재현했다.
+  클래스 상위 그룹 의미는 추측하지 않고 경고하며 공식 Agent 실행은 평가 전까지
+  비활성화했다.
+- 전체 코드 회귀는 pytest 73개, Ruff lint·format, pip dependency check와
   wheel 빌드를 통과했다.
 
 ## 3. 변경할 수 없는 공식 제약
@@ -186,7 +193,9 @@ QueryPlan에는 최소한 intent, 상품군, 필수 조건, 완화 전 확인이
 - [x] 국내 ETP logical grain·field capability·손상 행 격리·정규화 적재를 동결한다.
 - [x] oracle·verifier·evidence를 해외·국내 ETP·국내채권 상품군 라우팅으로 일반화한다.
 - [x] 국내채권 grain·stale·날짜·검색 capability와 정규화 적재를 동결한다.
-- [ ] 공모펀드 product-grain 계약을 동결한다.
+- [x] 공모펀드 product-grain·field capability·품질 규칙을 동결한다.
+- [x] 동결된 공모펀드 계약으로 product·attribute·quarantine 정규화 적재를 구현한다.
+- [x] 공모펀드 정규화 DB에 oracle·verifier·field evidence를 연결한다.
 
 ### P2 — Agent 수직 통합
 

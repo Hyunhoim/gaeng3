@@ -77,31 +77,42 @@ SOURCE_DATE_EPOCH=1785283200 \
 2026-07-29 결과:
 
 - Ruff: 통과
-- pytest: 64개 통과
+- pytest: 73개 통과
 - pip dependency check: 통과
 - 문서 링크·인덱스·평가 baseline·suite hash 검사: 통과
 - 고정 `SOURCE_DATE_EPOCH` wheel을 서로 다른 임시 디렉터리에서 두 번 빌드해
   byte hash 일치, SHA-256
-  `a199a8b532537256be43c6e1da2a742b27e6ce063ade23b727efabaab8a33431`
+  `e71bee8713e1489a46ab8827a861207a314a3e8592730ef809dd4acb4f204760`
 
 ## P1 계약 구현
 
 - [Field Registry와 QueryPlan 계약](contracts.md)
-- 해외·국내 ETP·국내채권 49개 canonical field와 상품군별 field capability를 Pydantic으로 검증
+- 네 상품군 60개 canonical field와 상품군별 field capability를 Pydantic으로 검증
 - 서버 QueryPlan은 추가 property, 타입·단위·enum·연산자, intent payload를 fail-closed로 검증
 - HCX 전송 schema는 공식 Structured Outputs keyword subset만 사용
 - registry의 queryable·sortable·selectable·aggregatable field와 HCX enum 정합성을 테스트
-- 아직 동결되지 않은 공모펀드와 교차 상품군 QueryPlan은 명시적으로 거절
+- 공모펀드 QueryPlan은 내부 계약 검증이 가능하지만 실제 Agent 진입점에서는
+  `execution_enabled: false`로 명시적으로 거절
 
 ## 상품 정규화·검색
 
 - 해외 ETP: 5,646행, sparse 10행 격리, 검색 가능 5,636행
 - 국내 ETP: 1,734행, 손상 Excel 1155행 격리, 검색 가능 1,733행
 - 국내채권: 42,394행, 격리 없이 전 행 검색 가능, 실제 매수 가능 254행
-- 세 상품군은 별도 SQLite·manifest를 사용하고 같은 QueryPlan,
-  parameterized oracle, 독립 verifier, field evidence 계약을 공유한다.
+- 공모펀드: raw 95,619행을 논리 상품 11,138개·속성 95,618개·격리 1개로
+  정규화, 공모 기본 범위 11,115개
+- 네 상품군은 별도 SQLite·manifest와 같은 QueryPlan, parameterized oracle,
+  독립 verifier, field evidence 계약을 공유한다.
+- 공모펀드 대표 Oracle은 해외·주식형·판매중·당사 판매 조건에서 후보
+  1,811개와 3개월 수익률 상위 5개를 SQL과 독립 Python 검증으로 재현했다.
+- 공모펀드 공식 Agent 실행은 핵심 평가 세트와 HCX schema 노출 전까지
+  `execution_enabled: false`로 유지한다.
 - 국내 DB와 manifest를 임시 경로에 재구축했을 때 원본 artifact와 SHA-256이
   byte 단위로 일치했다.
+- 공모펀드 SQLite를 두 임시 경로에서 재구축했을 때 DB와 manifest가 각각
+  SHA-256 `99fac786e5be0ec5a7a53e11e1bd3bbccd5b37ab15243ecbf8b864a85b375ca4`,
+  `be83a616d033db2328d231499d1f0492323d02bace4f153ad3da4860a0d10bcd`로
+  byte 단위 일치했다.
 
 ## 원천 데이터 감사
 
@@ -117,7 +128,7 @@ SOURCE_DATE_EPOCH=1785283200 \
 - 국내 ETP 1,734행 × 73열
 - 해외 ETP 5,646행 × 49열
 - 공모펀드 95,619행 × 45열
-- 회귀 expectation 49/49 통과
+- 회귀 expectation 65/65 통과
 - GPT Pro manifest의 8개 XLSX 입력 SHA-256과 모두 일치
 - 동일 명령을 두 번 실행했을 때 5개 JSON 출력 SHA-256이 모두 동일
 
