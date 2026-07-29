@@ -15,7 +15,9 @@
 7. [근거 기반 최종 답변 평가](evaluation-grounded-answers.md)
 8. [개발 환경과 현재 구현 상태](development.md)
 9. [로컬 LLM 테스트 런타임](local-llm.md)
-10. [저장소 부트스트랩 작업 명세](prompts/01-repository-bootstrap.md)
+10. [Agent Core v0.1 마일스톤](milestones/2026-07-29-agent-core-v0.1.md)
+11. [재현 가능한 평가 baseline](../evaluation/README.md)
+12. [저장소 부트스트랩 작업 명세](prompts/01-repository-bootstrap.md)
 
 ## 문서 지도
 
@@ -30,6 +32,8 @@
 | [근거 기반 최종 답변 평가](evaluation-grounded-answers.md) | Answer Verifier, 최소권한 LLM 입력, 폴백, 국내 ETP·채권 결과 | v1.1 정본 |
 | [개발 환경과 현재 구현 상태](development.md) | Git branch, Conda + pip, 검증 명령, 템플릿 통합 경계 | 현재 정본 |
 | [로컬 LLM 테스트 런타임](local-llm.md) | 격리된 Qwen/vLLM 환경, 안전 경계, 재현 가능한 E2E | 개발 전용 |
+| [Agent Core v0.1 마일스톤](milestones/2026-07-29-agent-core-v0.1.md) | 시작 상태, 채택 결정, 구현·실험·검증·다음 단계 인수인계 | 완료 |
+| [재현 가능한 평가 baseline](../evaluation/README.md) | Git에서 제외된 전체 report 대신 집계 지표·hash·재현 조건 보존 | v1.0 |
 | [저장소 부트스트랩 작업 명세](prompts/01-repository-bootstrap.md) | 애플리케이션 저장소를 처음 구현할 때 Codex에 전달할 실행 명세 | 활성 프롬프트 |
 | [Agent 전략 연구 요청](prompts/02-agent-strategy-research.md) | GPT Pro에 전달했던 질문과 당시 제약 | 과거 입력 기록 |
 | [GPT Pro 연구 기록](research/2026-07-28-gpt-pro/README.md) | GPT Pro 원문 답변, 감사 번들, 검토 결과, 원본 ZIP 위치 | 연구·감사 기록 |
@@ -57,8 +61,10 @@
 - 국내 ETP 로컬 Qwen 기준: development 40/40, local-inference holdout 첫 실행 10/10
 - 국내채권 로컬 Qwen 기준: QueryPlan 50/50, grounded answer 50/50,
   실제 통합 E2E Answer Verifier 통과
-- 근거 기반 답변 기준: 47개 LLM 생성·3개 안전 차단, 전체 50/50,
+- 국내 ETP 답변 기준: 47개 LLM 생성·3개 안전 차단, 전체 50/50,
   수치·순위·evidence·기준일 100%, 폴백 0
+- 국내채권 답변 기준: 46개 LLM 생성·1개 결정론적 빈 결과·3개 안전 차단,
+  전체 50/50, 폴백 0
 - 다음 구현: 새 blind 표현 변형·사람 품질 평가, 공모펀드, 공식 `/answer` adapter
 
 ## 저장소 밖의 근거 자료

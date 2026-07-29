@@ -15,6 +15,8 @@
 - GPT Pro 산출물은 유용한 연구 근거지만, 그대로 실행 가능한 구현 명세는 아니다.
 - 애플리케이션 저장소 로컬 경로는 `3. Workspace/gaeng3`로 정했다.
 - 로컬 `haeyeongcho` branch가 `origin/haeyeongcho`를 추적한다. 2026-07-28 확인 시 원격 `main`·`hyunhoim`·`haeyeongcho`는 모두 초기 README 커밋 `f366414`를 가리킨다.
+- 검증된 Agent Core 기반은 2026-07-29 로컬 commit `a65c2b2`로 보존했으며
+  원격에는 아직 push하지 않았다.
 - 동료가 가져올 `vintasoftware/nextjs-fastapi-template`은 `fastapi_backend`, `nextjs-frontend`, `docs` 구조와 UV를 사용한다. 동료의 템플릿 적응 작업이 원격에 반영되기 전까지 Agent·데이터 코드는 충돌 가능성이 낮은 `packages/finance_agent_core`에서 개발한다.
 - `gaeng3-dev` Conda 환경과 pip requirements를 만들고, 표준 라이브러리 기반 데이터 감사기를 구현했다.
 - 4종 145,393행 감사, expectation 49/49, 8개 입력 hash 대조, 두 번의 결정적 재실행을 통과했다.
@@ -37,6 +39,13 @@
 - 최소권한 grounded answer 계약과 Answer Verifier를 구현했다. 국내 ETP
   50문항에서 47개 LLM 생성·3개 안전 차단, 수치·순위·evidence·기준일 100%,
   폴백 0건을 기록했다. 이는 자유 생성 점수가 아니라 hybrid 계약 준수율이다.
+- 국내채권 42,394행을 정규화하고 254개를 스냅샷 기준 실제 매수 가능으로
+  판정했다. stale 동적 값, 0 날짜 sentinel, 재계산 잔존일수, 신용등급·위험코드
+  안전 계약을 registry·Oracle·Verifier·evidence에 연결했다.
+- 국내채권 QueryPlan과 근거 답변 50문항이 각각 50/50을 통과했다. 실제
+  질문→계획→검색→검증→답변 E2E도 통과했고 로컬 Qwen 폴백은 0건이었다.
+- 전체 코드 회귀는 pytest 64개, Ruff lint·format, pip dependency check와
+  wheel 빌드를 통과했다.
 
 ## 3. 변경할 수 없는 공식 제약
 

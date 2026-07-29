@@ -9,7 +9,9 @@
 - upstream: `origin/haeyeongcho`
 - 원격 commit: `f366414e16e4e0eb00d08a68920d32af4a24b740`
 - 원격 `main`, `hyunhoim`, `haeyeongcho`는 모두 같은 초기 README commit을 가리킨다.
-- 현재 로컬 구현은 아직 commit·push하지 않았다.
+- Agent Core 기반은 로컬 commit `a65c2b2`로 보존했다.
+- 온보딩·평가 baseline·문서 검사 강화는 기반 commit 다음의 별도 commit으로
+  관리하며, 원격 push는 아직 하지 않는다.
 
 동료가 가져올 `vintasoftware/nextjs-fastapi-template`은 `fastapi_backend`, `nextjs-frontend`, `docs`를 사용한다. 충돌을 줄이기 위해 AI·데이터 코드는 [finance_agent_core](../packages/finance_agent_core/README.md)에서 독립적으로 시작했다. 템플릿의 `docs/README.md` symlink와 충돌하지 않도록 프로젝트 문서 인덱스는 `docs/project-index.md`를 사용한다.
 
@@ -58,6 +60,14 @@ Python 개발 의존성:
 /home/haeyeongcho/miniforge3/envs/gaeng3-dev/bin/ruff format --check .
 /home/haeyeongcho/miniforge3/envs/gaeng3-dev/bin/ruff check .
 /home/haeyeongcho/miniforge3/envs/gaeng3-dev/bin/pytest
+/home/haeyeongcho/miniforge3/envs/gaeng3-dev/bin/python -m pip check
+/home/haeyeongcho/miniforge3/envs/gaeng3-dev/bin/python scripts/check-docs.py
+SOURCE_DATE_EPOCH=1785283200 \
+  /home/haeyeongcho/miniforge3/envs/gaeng3-dev/bin/python -m pip wheel \
+  --no-deps \
+  --no-build-isolation \
+  --wheel-dir packages/finance_agent_core/dist \
+  packages/finance_agent_core
 ```
 
 2026-07-29 결과:
@@ -65,6 +75,10 @@ Python 개발 의존성:
 - Ruff: 통과
 - pytest: 64개 통과
 - pip dependency check: 통과
+- 문서 링크·인덱스·평가 baseline·suite hash 검사: 통과
+- 고정 `SOURCE_DATE_EPOCH` wheel을 서로 다른 임시 디렉터리에서 두 번 빌드해
+  byte hash 일치, SHA-256
+  `a199a8b532537256be43c6e1da2a742b27e6ce063ade23b727efabaab8a33431`
 
 ## P1 계약 구현
 

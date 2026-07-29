@@ -44,7 +44,7 @@ evidence compiler와 safe fallback으로 구성할 수 있다.
 - [`queryplan.hcx.schema.json`](src/finance_agent_core/contracts/queryplan.hcx.schema.json): HyperCLOVA X Structured Outputs용 보수적 schema
 - [계약 설명](../../docs/contracts.md): 설계 근거, 첫 vertical slice 예시, 확장 규칙
 
-## ETP vertical slice
+## 상품군 vertical slice
 
 ```bash
 /home/haeyeongcho/miniforge3/envs/gaeng3-dev/bin/python \
