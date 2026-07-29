@@ -1,6 +1,6 @@
 # 공모펀드 핵심 평가 기준선
 
-상태: v1.1 QueryPlan·Oracle 계약 동결 · 로컬 development 검증 완료
+상태: v1.2 QueryPlan·Oracle 계약 동결 · 최초 holdout 9/10 보존
 
 기준일: 2026-07-29
 
@@ -8,7 +8,9 @@
 검색 결과를 고정한 회귀 계약이다. expected provider의 50/50은 사람이 작성한
 기대 QueryPlan을 실행한 평가 하네스 검증이다. 별도로 개발 전용 로컬 Qwen과
 결정론적 linker를 합친 hybrid parser는 development 40문항을 최초 실행에서
-40/40 통과했다. holdout 10문항은 아직 모델에 노출하지 않았다.
+40/40 통과했다. parser 규칙을 commit `32e12fa`로 동결한 뒤 처음 실행한
+holdout 10문항은 9/10이었다. 실패 한 건은 수정하거나 숨기지 않고 그대로
+보존한다.
 
 ## 1. 동결 평가 세트
 
@@ -129,7 +131,58 @@ canonicalize한 뒤 엄격한 QueryPlan 계약, SQLite Oracle과 독립 verifier
 대한 일반화 성능으로 주장하지 않는다. 다만 실제 로컬 모델 요청부터 구조화
 출력, canonicalization, 검색, 검증까지 연결된 개발 경로가 동작함을 보장한다.
 
-## 5. 실행 비활성 상태에서의 평가
+## 5. 로컬 Qwen holdout 최초 결과
+
+parser·규칙과 development 결과를 commit `32e12fa`로 먼저 고정하고, 기존
+holdout report가 없는 것을 확인한 뒤 10문항을 최초 1회 실행했다.
+
+| 지표 | 최초 결과 |
+| --- | ---: |
+| strict accuracy | 9/10 |
+| valid plan | 100% |
+| plan exact | 90% |
+| constraint exact | 90% |
+| Oracle exact | 100% |
+| safety block | 100% |
+| 생성 지연 p50 | 3,900.262ms |
+| 생성 지연 p95 | 8,786.938ms |
+| 생성 지연 max | 8,786.938ms |
+
+결과 보존:
+
+- report:
+  `fund-local-qwen-holdout-first-run.json`
+- report SHA-256:
+  `4bc96ecd7278bbbefe299a0ccea9bff94d14784621b91b2e7a71b414f945846f`
+- development와 최초 holdout 합계: 49/50
+- 실패 case: `fund-050`
+
+실패 질문:
+
+> 클래스는 합쳐서 대표 펀드별 AUM 합계가 큰 순으로 5개 보여줘
+
+기대 동작은 공모 범위를 잠그고, 클래스 합산과 대표 펀드 집계를 현재 데이터
+grain에서 지원하지 않는 조건으로 인식해 차단하는 것이다. 실제 plan은
+`product_families=["fund"]`를 선택했지만 다음 차이가 있었다.
+
+- `public_offering=true` locked 조건 누락
+- 클래스 합산·대표 펀드 집계의 unsupported 신호 누락
+- 지원할 수 없는 AUM 순위 생성
+
+서버는 AUM 비교 통화가 지정되지 않았다는 별도 모호성을 통해 SQL 실행을
+차단했다. 따라서 `safety_block_rate=100%`였지만 올바른 이유로 차단한 것은
+아니며, strict failure가 맞다.
+
+확인된 원인은 lexical family 감지가 질문에 `공모펀드`라는 정확한 표현이 있을
+때만 `fund`를 반환한다는 점이다. `대표 펀드`라고만 말한 holdout 표현에서는
+모델이 선택한 fund 상품군을 linker가 이어받지 못해 공모 범위와 펀드 전용
+unsupported 규칙을 적용하지 못했다.
+
+이 문항은 이제 공개된 실패 사례이므로 이후 수정 후 통과하더라도 새로운
+holdout 성능으로 보고하지 않는다. 기존 suite의 사후 회귀와 별도의 새 blind
+질문 평가를 구분한다.
+
+## 6. 실행 비활성 상태에서의 평가
 
 공모펀드 dataset은 계속 `execution_enabled: false`로 유지. 일반 Agent와
 공식 HCX schema는 공모펀드 실행을 허용하지 않음
@@ -145,7 +198,7 @@ canonicalize한 뒤 엄격한 QueryPlan 계약, SQLite Oracle과 독립 verifier
 CLI가 실행 전에 실패한다. 따라서 개발 평가를 추가했다는 이유로 공식 Agent
 실행 범위가 열리지 않음
 
-## 6. 재현 명령
+## 7. 재현 명령
 
 `finance_agent/` 디렉터리에서 실행:
 
@@ -184,22 +237,40 @@ LOCAL_TEST_LLM_MODEL=qwen3-local-test \
   --output artifacts/evaluation/fund-local-qwen-development.json
 ```
 
-holdout을 포함하는 실행은 이 문서의 다음 단계가 완료되기 전에는 수행하지 않는다.
+최초 holdout에 사용한 명령:
 
-## 7. 해석 한계와 다음 단계
+```bash
+FINANCE_AGENT_LLM_MODE=local_test \
+ENABLE_NON_HCX_TEST_LLM=1 \
+LLM_PROVIDER=local_test \
+LOCAL_TEST_LLM_BASE_URL=http://127.0.0.1:18000/v1 \
+LOCAL_TEST_LLM_MODEL=qwen3-local-test \
+/home/haeyeongcho/miniforge3/envs/gaeng3-dev/bin/python \
+  -m finance_agent_core.evaluation \
+  --dataset fund \
+  --provider local_test \
+  --split holdout \
+  --unlock-fund-holdout \
+  --workers 4 \
+  --output artifacts/evaluation/fund-local-qwen-holdout-first-run.json
+```
+
+이 명령을 다시 실행한 결과는 최초 holdout이 아니며 사후 회귀로만 취급한다.
+
+## 8. 해석 한계와 다음 단계
 
 - 같은 개발자가 질문과 기대 조건을 작성했으므로 holdout 10개도 완전한
   unbiased 일반화 세트가 아님
 - 현재 평가는 `SEARCH` intent와 QueryPlan·검색 결과만 검증
 - 공모펀드 답변 문장 품질과 Answer Verifier는 아직 평가하지 않음
 - development 40개는 구현·정합성 검사에 사용됐으므로 튜닝 세트임
-- holdout 10개는 로컬 Qwen으로 아직 실행하지 않음
+- holdout 10개는 commit 이후 최초 1회 실행해 9/10이며 이제 미사용 세트가 아님
 - HyperCLOVA X 성능과 공식 평가 점수를 대변하지 않음
 
 다음 단계:
 
-1. 현재 parser·lexical linker와 development 결과를 commit
-2. commit 이후 holdout 10문항을 최초 1회만 실행하고 결과를 그대로 보존
+1. `fund-050` 실패 원인을 regression test로 추가하고 family handoff를 수정
+2. 기존 50문항은 사후 회귀로만 사용하고 새 blind 표현 변형 세트를 별도 작성
 3. 공모펀드 grounded answer와 사람 품질 평가 추가
 4. HCX schema에 fund를 노출하고 서버 계약 테스트 통과
 5. 그 뒤에만 `execution_enabled: true` 전환 검토

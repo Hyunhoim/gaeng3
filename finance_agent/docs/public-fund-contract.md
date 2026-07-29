@@ -20,6 +20,7 @@
 - `fund_products`, `fund_attributes`, `fund_quarantine` 정규화 SQLite와 manifest 구현 완료
 - parameterized Oracle, 독립 Result Verifier, field-level evidence와 안전 렌더러 연결 완료
 - 40 development·10 holdout 핵심 평가 세트의 expected Oracle 회귀 50/50
+- 로컬 Qwen hybrid parser는 development 40/40, 최초 holdout 9/10
 - HCX schema 노출과 서버 계약 테스트 전까지 공식 Agent 실행은 비활성화
 
 ## 1. 근거와 재현 방법

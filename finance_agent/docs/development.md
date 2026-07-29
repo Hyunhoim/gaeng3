@@ -105,8 +105,8 @@ SOURCE_DATE_EPOCH=1785283200 \
 - 공모펀드 expected QueryPlan·Oracle 50문항은 실행 44개·안전 차단 6개로
   전체 50/50을 통과했다.
 - 공모펀드 전용 내부 schema와 lexical/schema linker를 구현했고 로컬 Qwen
-  hybrid parser의 development 최초 실행은 40/40이다. holdout 10개는 아직
-  실행하지 않았다.
+  hybrid parser의 development 최초 실행은 40/40이다. commit `32e12fa`
+  이후 최초 holdout은 9/10이며 실패 1건을 그대로 보존했다.
 - 공모펀드 공식 Agent 실행은 HCX schema 노출과 서버 계약 테스트 전까지
   `execution_enabled: false`로 유지한다.
 - 국내 DB와 manifest를 임시 경로에 재구축했을 때 원본 artifact와 SHA-256이
@@ -186,8 +186,10 @@ Verifier가 일치했다.
 [공모펀드 핵심 평가 기준선](evaluation-public-fund.md)은 같은 40/10 구조로
 50문항을 동결했다. expected provider에서 실행 44개와 안전 차단 6개가 모두
 통과했다. 로컬 Qwen hybrid parser는 development 40문항을 최초 실행에서
-40/40 통과했다. holdout은 parser·규칙을 commit한 뒤 최초 1회 실행하기 위해
-잠가 두었다. 이 결과는 HyperCLOVA X parser 성능이 아니다.
+40/40 통과했다. parser·규칙을 commit한 뒤 최초 실행한 holdout은 9/10이다.
+실패한 클래스 합산 질문은 실행 자체는 차단됐지만 기대한 unsupported가 아니라
+AUM 통화 모호성으로 차단되어 strict failure다. 이 결과는 HyperCLOVA X
+parser 성능이 아니다.
 
 ## 근거 기반 최종 답변
 

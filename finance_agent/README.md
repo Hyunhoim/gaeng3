@@ -11,7 +11,7 @@
 | 해외 ETF·ETN | 감사, 정규화, SQLite, Oracle, Verifier, 50문항 완료 |
 | 국내 ETF·ETN | 감사, 정규화, SQLite, Oracle, Verifier, 50문항 완료 |
 | 국내채권 | 감사, stale·날짜 계약, SQLite, Oracle, Verifier, 50문항 완료 |
-| 공모펀드 | 검색 기반·50문항 계약·로컬 development 40/40, Agent 실행 비활성 |
+| 공모펀드 | 로컬 development 40/40·최초 holdout 9/10, Agent 실행 비활성 |
 | 근거 기반 답변 | 최소권한 LLM 입력, Answer Verifier, 결정론적 폴백 완료 |
 | HyperCLOVA X | 공식 API 확보 후 연결 예정 |
 
@@ -120,5 +120,6 @@ fail-closed로 비활성화되어 있다.
 동료의 템플릿 작업과 합칠 때는 `AgentRequest`, `AgentResponse`, evidence,
 오류·timeout 계약을 먼저 고정하고 공식 `/answer` adapter를 연결한다.
 
-현재 우선순위는 공모펀드 parser 규칙 commit 후 holdout 최초 평가, grounded
-answer와 사람 품질 평가, HCX schema·HyperCLOVA X, 공식 `/answer` adapter 순이다.
+현재 우선순위는 공모펀드 holdout 실패 1건의 회귀 수정과 새 blind 질문,
+grounded answer와 사람 품질 평가, HCX schema·HyperCLOVA X, 공식 `/answer`
+adapter 순이다.

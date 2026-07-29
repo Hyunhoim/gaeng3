@@ -260,8 +260,8 @@ LOCAL_TEST_LLM_MODEL=qwen3-local-test \
 ## 공모펀드 development 평가
 
 공모펀드는 공식 Agent에서 계속 비활성화한 채, 평가 CLI 안에서만 전용 내부
-schema를 사용한다. 로컬 모델로 아직 사용하지 않은 holdout을 보호하기 위해
-기본 명령은 development split만 허용한다.
+schema를 사용한다. 기본 명령은 development split만 허용하고, holdout은
+parser 규칙을 commit한 뒤 명시적 unlock으로 최초 1회 실행했다.
 
 ```bash
 FINANCE_AGENT_LLM_MODE=local_test \
@@ -285,8 +285,14 @@ p95 4,288.772ms, max 4,437.341ms였다. 전체 report SHA-256은
 `c0d8a60b0a6465b9ef6035f1a3787b4835d765385ae18bfc0ad97d15d1cd99f6`이다.
 
 이 결과는 모델 단독 성능이 아니라 로컬 Qwen, 결정론적 linker, 엄격한 계약,
-Oracle과 Verifier를 합친 hybrid parser의 개발 세트 점수다. holdout 10문항은
-아직 모델에 노출하지 않았다. 상세 계약과 다음 실행 순서는
+Oracle과 Verifier를 합친 hybrid parser의 개발 세트 점수다.
+
+commit `32e12fa` 이후 처음 실행한 holdout은 9/10이었다. 실패한 `fund-050`은
+클래스 합산·대표 펀드 집계를 unsupported로 인식하지 못했다. 실행은 AUM 통화
+모호성으로 차단됐지만 올바른 이유가 아니므로 strict failure로 보존했다. 전체
+report SHA-256은
+`4bc96ecd7278bbbefe299a0ccea9bff94d14784621b91b2e7a71b414f945846f`다.
+상세 계약과 실패 분석은
 [공모펀드 핵심 평가 기준선](evaluation-public-fund.md)에 기록한다.
 평가 후 서버를 종료했고 GPU는 71MiB·15MiB, utilization 0%로 복귀했으며
 18000 포트가 해제됐다.

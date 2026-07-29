@@ -37,7 +37,7 @@ Next.js·FastAPI 애플리케이션 통합과 HyperCLOVA X 연결을 준비하�
 | 해외 ETF·ETN | 정규화, SQLite, Oracle, Verifier, 50문항 평가 구현 |
 | 국내 ETF·ETN | 정규화, SQLite, Oracle, Verifier, 50문항 평가 구현 |
 | 국내채권 | 날짜·stale·신용등급 계약, Oracle, Verifier, 50문항 평가 구현 |
-| 공모펀드 | 정규화·Oracle·Verifier·로컬 development 40/40, 공식 실행 비활성 |
+| 공모펀드 | 로컬 development 40/40·최초 holdout 9/10, 공식 실행 비활성 |
 | 근거 기반 답변 | Field-level Evidence, Answer Verifier, 안전한 폴백 구현 |
 | 로컬 LLM | 격리된 Qwen/vLLM 개발 테스트 완료, 평가·제출 사용 금지 |
 | HyperCLOVA X | 공식 API 확보 후 연결 예정 |
@@ -138,7 +138,7 @@ Git에 포함하지 않음
 
 ## 8. 다음 작업
 
-- 공모펀드 parser 규칙 commit 후 holdout 최초 1회 평가
+- 공모펀드 최초 holdout 실패 1건 회귀 수정과 새 blind 질문 세트 작성
 - 공모펀드 grounded answer와 사람 품질 평가
 - 다른 작성자가 만든 blind 평가 문항과 사람 답변 품질 평가 추가
 - Next.js·FastAPI 애플리케이션 템플릿 통합

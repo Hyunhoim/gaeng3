@@ -27,10 +27,15 @@ DB, 원천 XLSX, 전체 report, 모델 가중치는 계속 `artifacts/` 또는 �
 | [국내채권 답변](baselines/domestic-bond-answer-v1.json) | grounded answer·빈 결과·안전 차단 |
 | [공모펀드 QueryPlan·Oracle](baselines/public-fund-queryplan-v1.json) | expected plan·Oracle·안전 차단 계약 |
 | [공모펀드 로컬 development](baselines/public-fund-local-development-v1.json) | 로컬 Qwen hybrid parser 개발 40문항·holdout 잠금 |
+| [공모펀드 최초 holdout](baselines/public-fund-local-holdout-first-run-v1.json) | commit 이후 최초 10문항 9/10·실패 원인 보존 |
 
 이 수치는 HyperCLOVA X나 공식 공모전 평가 결과가 아니다. 동결된 개발 질문에서
 로컬 LLM, 결정론적 linker, 계약, Oracle과 Verifier를 합친 시스템의 회귀
 기준선이다.
+
+대부분의 baseline은 완전 통과한 회귀 기준이다. `holdout_first_run_observed`
+상태는 최초 실행 결과가 완전하지 않아도 수정하거나 숨기지 않고 관측값 그대로
+보존한다.
 
 ## 검사
 

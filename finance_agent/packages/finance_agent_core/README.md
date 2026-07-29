@@ -127,7 +127,8 @@ evidence compiler와 safe fallback으로 구성할 수 있다.
 `--provider local_test`는 로컬 Qwen 서버와 세 가지 명시적 opt-in이 모두
 필요하다. 최초 holdout과 사후 회귀를 구분한 결과와 재현 절차는
 [평가 기준선](../../docs/evaluation.md)에 기록한다. 공모펀드는
-`--dataset fund --split development`만 기본 허용하며 결과와 holdout 잠금은
+`--dataset fund --split development`만 기본 허용한다. commit 이후 명시적으로
+unlock한 최초 holdout 9/10 결과와 실패 분석은
 [공모펀드 평가 기준선](../../docs/evaluation-public-fund.md)에 기록한다.
 
 ## 근거 기반 답변 평가

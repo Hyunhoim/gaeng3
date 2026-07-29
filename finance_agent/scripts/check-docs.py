@@ -36,6 +36,7 @@ REQUIRED_BASELINES = {
     "domestic-bond-answer-v1.json",
     "public-fund-queryplan-v1.json",
     "public-fund-local-development-v1.json",
+    "public-fund-local-holdout-first-run-v1.json",
 }
 REQUIRED_BASELINE_KEYS = {
     "schema_version",
@@ -214,10 +215,30 @@ def _check_baseline(path: Path) -> list[str]:
                 errors.append(f"{name}: report artifact_name must be a filename")
 
     metrics = payload["metrics"]
-    if metrics.get("total") != metrics.get("passed"):
-        errors.append(f"{name}: frozen baseline is not perfect")
-    if metrics.get("strict_accuracy") != 1.0:
-        errors.append(f"{name}: strict_accuracy must match the frozen perfect baseline")
+    total = metrics.get("total")
+    passed = metrics.get("passed")
+    strict_accuracy = metrics.get("strict_accuracy")
+    if payload["status"] == "holdout_first_run_observed":
+        if (
+            not isinstance(total, int)
+            or isinstance(total, bool)
+            or total <= 0
+            or not isinstance(passed, int)
+            or isinstance(passed, bool)
+            or not 0 <= passed <= total
+        ):
+            errors.append(f"{name}: observed holdout counts are invalid")
+        elif strict_accuracy != passed / total:
+            errors.append(
+                f"{name}: strict_accuracy differs from observed holdout counts"
+            )
+    else:
+        if total != passed:
+            errors.append(f"{name}: frozen baseline is not perfect")
+        if strict_accuracy != 1.0:
+            errors.append(
+                f"{name}: strict_accuracy must match the frozen perfect baseline"
+            )
     return errors
 
 
