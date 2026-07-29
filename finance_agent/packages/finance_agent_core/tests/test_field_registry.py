@@ -33,7 +33,12 @@ def test_risky_fields_are_encoded_fail_closed() -> None:
 def test_registry_exposes_only_frozen_capabilities() -> None:
     registry = load_field_registry()
 
-    assert list(registry.datasets) == ["overseas_etp", "domestic_etp", "bond"]
+    assert list(registry.datasets) == ["overseas_etp", "domestic_etp", "bond", "fund"]
+    assert registry.executable_dataset_names() == [
+        "overseas_etp",
+        "domestic_etp",
+        "bond",
+    ]
     overseas_return = registry.require_field("one_day_return_pct", ["overseas_etp"])
     domestic_return = registry.require_field("one_day_return_pct", ["domestic_etp"])
     assert not overseas_return.selectable
@@ -41,6 +46,42 @@ def test_registry_exposes_only_frozen_capabilities() -> None:
     assert domestic_return.queryable
     assert "one_month_return_pct" in registry.aggregatable_fields()
     assert "daily_trading_value" in registry.sortable_fields()
+
+
+def test_fund_grain_and_capabilities_match_product_grain_audit() -> None:
+    registry = load_field_registry()
+    dataset = registry.require_dataset("fund")
+
+    assert dataset.primary_key == ["itm_no"]
+    assert dataset.raw_primary_key == ["itm_no", "prfd_attr_cd"]
+    assert dataset.row_count == 95_619
+    assert dataset.logical_row_count == 11_138
+    assert dataset.quarantined_rows == 1
+    assert not dataset.execution_enabled
+
+    public = registry.require_field("public_offering", ["fund"])
+    aum = registry.require_field("aum", ["fund"])
+    risk = registry.require_field("risk_level", ["fund"])
+    one_week = registry.require_field("one_week_return_pct", ["fund"])
+    one_year = registry.require_field("one_year_return_pct", ["fund"])
+    fund_type = registry.require_field("fund_management_attribute", ["fund"])
+
+    assert public.coverage_pct == pytest.approx(99.9282)
+    assert public.source.value_map == {"공모": True, "사모": False}
+    assert aum.coverage_pct == pytest.approx(83.4082)
+    assert aum.sentinel_values == {"0": "UNKNOWN"}
+    assert risk.coverage_pct == pytest.approx(76.8989)
+    assert one_week.queryable and one_week.sortable and one_week.aggregatable
+    assert not one_year.queryable and not one_year.sortable and not one_year.aggregatable
+    assert fund_type.sentinel_values == {"06": "UNKNOWN"}
+
+
+def test_fund_contract_is_frozen_but_execution_fails_closed() -> None:
+    registry = load_field_registry()
+
+    assert registry.require_dataset("fund").source_id == "PRFD01N001"
+    with pytest.raises(ValueError, match="execution is not enabled"):
+        registry.require_executable_dataset("fund")
 
 
 def test_domestic_etp_dataset_contract_matches_audit() -> None:
@@ -77,6 +118,6 @@ def test_unknown_family_and_field_fail_closed() -> None:
     registry = load_field_registry()
 
     with pytest.raises(ValueError, match="no frozen field registry"):
-        registry.require_dataset("fund")
+        registry.require_dataset("imaginary_family")
     with pytest.raises(ValueError, match="unknown canonical field"):
         registry.require_field("imaginary_return", ["overseas_etp"])

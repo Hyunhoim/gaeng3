@@ -77,7 +77,7 @@ class AnswerVerifier:
             value.casefold()
             for product in context.products
             for value in (product.product_id, product.product_name, product.ticker)
-            if len(value.strip()) >= 2
+            if value is not None and len(value.strip()) >= 2
         }
         checks["prose_has_no_product_identifiers"] = all(
             not any(identifier in text.casefold() for identifier in forbidden_identifiers)

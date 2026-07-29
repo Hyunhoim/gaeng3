@@ -28,16 +28,20 @@ def load_hcx_queryplan_schema() -> dict[str, Any]:
     schema: dict[str, Any] = json.loads(resource.read_text(encoding="utf-8"))
     registry = load_field_registry()
     properties = schema["properties"]
-    properties["product_families"]["items"]["enum"] = list(registry.datasets)
-    properties["constraints"]["items"]["properties"]["field"]["enum"] = registry.queryable_fields()
-    properties["ranking"]["items"]["properties"]["field"]["enum"] = registry.sortable_fields()
-    selectable = registry.selectable_fields()
+    properties["product_families"]["items"]["enum"] = registry.executable_dataset_names()
+    properties["constraints"]["items"]["properties"]["field"]["enum"] = registry.queryable_fields(
+        executable_only=True
+    )
+    properties["ranking"]["items"]["properties"]["field"]["enum"] = registry.sortable_fields(
+        executable_only=True
+    )
+    selectable = registry.selectable_fields(executable_only=True)
     properties["projection"]["items"]["enum"] = selectable
     payload = properties["intent_payload"]["properties"]
     payload["comparison_fields"]["items"]["enum"] = selectable
     payload["group_by"]["items"]["enum"] = selectable
     payload["aggregations"]["items"]["properties"]["field"]["enum"] = sorted(
-        set(registry.aggregatable_fields()) | {"product_id"}
+        set(registry.aggregatable_fields(executable_only=True)) | {"product_id"}
     )
     return schema
 
@@ -96,10 +100,12 @@ def validate_hcx_schema_registry_alignment(schema: dict[str, Any]) -> None:
     ]
 
     expected = {
-        "constraint": registry.queryable_fields(),
-        "ranking": registry.sortable_fields(),
-        "projection": registry.selectable_fields(),
-        "aggregation": sorted(set(registry.aggregatable_fields()) | {"product_id"}),
+        "constraint": registry.queryable_fields(executable_only=True),
+        "ranking": registry.sortable_fields(executable_only=True),
+        "projection": registry.selectable_fields(executable_only=True),
+        "aggregation": sorted(
+            set(registry.aggregatable_fields(executable_only=True)) | {"product_id"}
+        ),
     }
     actual = {
         "constraint": constraint_field_enum,

@@ -8,7 +8,10 @@ from finance_agent_core.domain.models import (
     NormalizedEtpRecord,
     NormalizedOverseasEtpRecord,
     NormalizedProductRecord,
+    NormalizedPublicFundAttribute,
+    NormalizedPublicFundRecord,
     ProductEvidence,
+    QuarantinedPublicFundRow,
     VerifiedSearch,
 )
 
@@ -22,6 +25,9 @@ __all__ = [
     "NormalizedEtpRecord",
     "NormalizedOverseasEtpRecord",
     "NormalizedProductRecord",
+    "NormalizedPublicFundAttribute",
+    "NormalizedPublicFundRecord",
     "ProductEvidence",
+    "QuarantinedPublicFundRow",
     "VerifiedSearch",
 ]

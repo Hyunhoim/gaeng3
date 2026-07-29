@@ -311,6 +311,10 @@ def row_to_record(row: sqlite3.Row) -> NormalizedProductRecord:
         from finance_agent_core.storage.domestic_etp import row_to_domestic_etp_record
 
         return row_to_domestic_etp_record(row)
+    if family == "fund":
+        from finance_agent_core.storage.public_fund import row_to_public_fund_record
+
+        return row_to_public_fund_record(row)
     if family != "overseas_etp":
         raise ValueError(f"unsupported normalized product family: {family}")
     return NormalizedOverseasEtpRecord(
@@ -357,5 +361,9 @@ def load_all_records(
         from finance_agent_core.storage.domestic_etp import load_all_domestic_etp_records
 
         return load_all_domestic_etp_records(connection)
+    if manifest.dataset == "fund":
+        from finance_agent_core.storage.public_fund import load_all_public_fund_records
+
+        return load_all_public_fund_records(connection)
     rows = connection.execute("SELECT * FROM overseas_etp_products ORDER BY product_id").fetchall()
     return [row_to_record(row) for row in rows]

@@ -103,7 +103,7 @@ def build_product_evidence(
             ProductEvidence(
                 product_id=record.product_id,
                 product_name=record.product_name,
-                ticker=record.ticker,
+                ticker=getattr(record, "ticker", None),
                 fields=fields,
             )
         )

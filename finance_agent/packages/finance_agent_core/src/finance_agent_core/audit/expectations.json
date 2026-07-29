@@ -148,12 +148,50 @@
       "expected": 1
     },
     {
+      "path": "datasets.fund.quality.invalid_key_rows",
+      "expected": [84563],
+      "reason": "Excel source row 84,563 is the single shifted/corrupted row."
+    },
+    {
       "path": "datasets.fund.keys.primary.non_null_unique",
       "expected": 95619
     },
     {
       "path": "datasets.fund.domain.product_grain.valid_logical_products",
       "expected": 11138
+    },
+    {
+      "path": "datasets.fund.domain.product_grain.rows_per_product.min",
+      "expected": 4
+    },
+    {
+      "path": "datasets.fund.domain.product_grain.rows_per_product.max",
+      "expected": 16
+    },
+    {
+      "path": "datasets.fund.domain.product_grain.attribute_code_count_mismatch_products",
+      "expected": 0
+    },
+    {
+      "path": "datasets.fund.domain.product_grain.field_conflict_counts",
+      "expected": {},
+      "reason": "Only prfd_attr_cd may vary inside one itm_no group."
+    },
+    {
+      "path": "datasets.fund.domain.product_grain.scope_counts.public_products",
+      "expected": 11115
+    },
+    {
+      "path": "datasets.fund.domain.product_grain.scope_counts.private_products",
+      "expected": 15
+    },
+    {
+      "path": "datasets.fund.domain.product_grain.scope_counts.unknown_offering_scope",
+      "expected": 8
+    },
+    {
+      "path": "datasets.fund.domain.product_grain.scope_counts.public_sale_open_company_y_products",
+      "expected": 8434
     },
     {
       "path": "datasets.fund.domain.product_grain.coverage.fd_nast_suma.present",
@@ -198,6 +236,36 @@
     {
       "path": "datasets.fund.domain.product_grain.coverage.fd_yr5_ern_r.present",
       "expected": 5580
+    },
+    {
+      "path": "datasets.fund.domain.product_grain.fields.fd_nast_suma.zero",
+      "expected": 298,
+      "reason": "Zero AUM remains UNKNOWN until its source meaning is confirmed."
+    },
+    {
+      "path": "datasets.fund.domain.product_grain.fields.exchdg_yn.present",
+      "expected": 6919
+    },
+    {
+      "path": "datasets.fund.domain.product_grain.fields.or_attr_desc.value_counts.06",
+      "expected": 686,
+      "reason": "Unresolved code 06 is excluded from semantic fund-type filtering."
+    },
+    {
+      "path": "datasets.fund.domain.product_grain.return_outliers.fd_mm6_ern_r.below_minus_100",
+      "expected": 0
+    },
+    {
+      "path": "datasets.fund.domain.product_grain.return_outliers.fd_mm18_ern_r.below_minus_100",
+      "expected": 1
+    },
+    {
+      "path": "datasets.fund.domain.product_grain.return_outliers.fd_yr1_ern_r.above_500",
+      "expected": 15
+    },
+    {
+      "path": "datasets.fund.domain.product_grain.return_outliers.fd_yr3_ern_r.below_minus_100",
+      "expected": 1
     }
   ]
 }

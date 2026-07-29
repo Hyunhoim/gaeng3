@@ -8,6 +8,7 @@ from finance_agent_core.domain import (
     NormalizedBondRecord,
     NormalizedDomesticEtpRecord,
     NormalizedOverseasEtpRecord,
+    NormalizedPublicFundRecord,
     VerifiedSearch,
 )
 
@@ -37,6 +38,20 @@ WARNING_MESSAGES = {
     ),
     "after_tax_yield_assumptions": (
         "세후수익률의 개인별 세제 적용 조건은 제공 데이터만으로 확정할 수 없습니다."
+    ),
+    "fund_public_scope_locked": (
+        "공모펀드 기본 범위를 적용해 사모 및 공·사모 구분 미확인 상품을 제외했습니다."
+    ),
+    "fund_snapshot_level_returns": (
+        "공모펀드 수익률은 개별 갱신일이 없어 파일 스냅샷 2026-07-11을 "
+        "기준일 한계와 함께 표시합니다."
+    ),
+    "unknown_fund_management_attribute": (
+        "펀드 운용 속성의 결측 및 의미 미확인 코드 06은 UNKNOWN으로 제외했습니다."
+    ),
+    "fund_class_level_results": (
+        "공모펀드 결과는 itm_no로 식별되는 클래스 단위이며 같은 대표 펀드의 "
+        "여러 클래스가 함께 표시될 수 있습니다."
     ),
 }
 
@@ -141,6 +156,36 @@ def _bond_record_line(
     return f"{index}. {record.product_name} ({record.ticker}){suffix}"
 
 
+def _fund_record_line(
+    index: int,
+    record: NormalizedPublicFundRecord,
+    plan: QueryPlan,
+) -> str:
+    registry = load_field_registry()
+    details: list[str] = []
+    skipped = {"product_id", "product_name", "short_name"}
+    for field_name in plan.projection:
+        if field_name in skipped:
+            continue
+        definition = registry.require_field(field_name, ["fund"])
+        quality, _ = record.row_level_quality(field_name)
+        value = record.canonical_value(field_name)
+        rendered = (
+            "확인 불가"
+            if value is None
+            or quality
+            in {
+                QualityStatus.UNKNOWN,
+                QualityStatus.INVALID,
+                QualityStatus.UNSUPPORTED,
+            }
+            else _format_value(value, definition.unit)
+        )
+        details.append(f"{definition.label} {rendered}")
+    suffix = f" — {', '.join(details)}" if details else ""
+    return f"{index}. {record.product_name} ({record.product_id}){suffix}"
+
+
 def warning_codes_for_search(
     plan: QueryPlan,
     verified: VerifiedSearch,
@@ -150,14 +195,16 @@ def warning_codes_for_search(
     ranked_fields = {ranking.field for ranking in plan.ranking}
     domestic = verified.manifest.dataset == "domestic_etp"
     bond = verified.manifest.dataset == "bond"
+    fund = verified.manifest.dataset == "fund"
 
-    if {"sellable", "trading_suspended"} & constrained_fields:
+    if not fund and {"sellable", "trading_suspended"} & constrained_fields:
         codes.append("provisional_trading_status_mapping")
     if "total_expense_ratio_pct" in constrained_fields:
         codes.append("unknown_zero_expense_ratio")
     if "aum" in ranked_fields:
         codes.append("unknown_zero_aum")
     return_fields = {
+        "one_week_return_pct",
         "one_day_return_pct",
         "one_month_return_pct",
         "three_month_return_pct",
@@ -165,7 +212,7 @@ def warning_codes_for_search(
         "one_year_return_pct",
         "ytd_return_pct",
     }
-    if domestic and return_fields & (constrained_fields | ranked_fields):
+    if (domestic or fund) and return_fields & (constrained_fields | ranked_fields):
         codes.append("historical_return_not_forecast")
     used_fields = constrained_fields | ranked_fields | set(plan.projection)
     bond_dynamic_fields = {
@@ -186,6 +233,21 @@ def warning_codes_for_search(
         codes.append("unconfirmed_bond_risk_code")
     if bond and "after_tax_yield_pct" in used_fields:
         codes.append("after_tax_yield_assumptions")
+    if fund:
+        codes.append("fund_public_scope_locked")
+        codes.append("fund_class_level_results")
+    if fund and (
+        {
+            "one_week_return_pct",
+            "one_month_return_pct",
+            "three_month_return_pct",
+            "six_month_return_pct",
+        }
+        & used_fields
+    ):
+        codes.append("fund_snapshot_level_returns")
+    if fund and "fund_management_attribute" in used_fields:
+        codes.append("unknown_fund_management_attribute")
     return codes
 
 
@@ -194,6 +256,7 @@ def render_blocked_plan(plan: QueryPlan, product_family: str) -> str:
         "domestic_etp": "국내 ETP",
         "overseas_etp": "해외 ETP",
         "bond": "국내채권",
+        "fund": "공모펀드",
     }.get(product_family, product_family)
     reasons: list[str] = []
     if plan.ambiguities:
@@ -220,9 +283,12 @@ def render_verified_search(
     warnings = [WARNING_MESSAGES[code] for code in warning_codes]
     domestic = verified.manifest.dataset == "domestic_etp"
     bond = verified.manifest.dataset == "bond"
+    fund = verified.manifest.dataset == "fund"
 
     if not verified.records:
-        family_label = "국내채권" if bond else "국내 ETP" if domestic else "해외 ETP"
+        family_label = (
+            "공모펀드" if fund else "국내채권" if bond else "국내 ETP" if domestic else "해외 ETP"
+        )
         answer = (
             f"잠긴 조건을 모두 만족하고 품질 검증을 통과한 {family_label}를 찾지 "
             "못했습니다. 조건을 자동으로 완화하지 않았습니다."
@@ -237,6 +303,12 @@ def render_verified_search(
                     if isinstance(record, NormalizedBondRecord)
                 ]
                 if bond
+                else [
+                    _fund_record_line(index, record, plan)
+                    for index, record in enumerate(verified.records, start=1)
+                    if isinstance(record, NormalizedPublicFundRecord)
+                ]
+                if fund
                 else [
                     _domestic_record_line(index, record, plan)
                     for index, record in enumerate(verified.records, start=1)

@@ -52,6 +52,18 @@ SEARCH_PROJECTION_BY_FAMILY = {
         "buyable_quantity",
         "dynamic_as_of",
     ],
+    "fund": [
+        "product_id",
+        "product_name",
+        "short_name",
+        "fund_geography_scope",
+        "fund_management_attribute",
+        "risk_level",
+        "three_month_return_pct",
+        "aum",
+        "trading_currency",
+        "dynamic_as_of",
+    ],
 }
 
 

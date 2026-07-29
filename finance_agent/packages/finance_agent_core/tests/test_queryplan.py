@@ -107,10 +107,6 @@ def test_vertical_slice_queryplan_round_trips(vertical_slice_plan: dict) -> None
             "requires unit pct_point",
         ),
         (
-            lambda plan: plan.update(product_families=["fund"]),
-            "no frozen field registry",
-        ),
-        (
             lambda plan: plan["projection"].append("one_day_return_pct"),
             "is not selectable",
         ),

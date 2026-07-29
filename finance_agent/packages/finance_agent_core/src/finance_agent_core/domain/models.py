@@ -253,13 +253,124 @@ class NormalizedBondRecord(DomainModel):
         )
 
 
+class NormalizedPublicFundRecord(DomainModel):
+    source_dataset: Literal["fund"] = "fund"
+    source_id: Literal["PRFD01N001"] = "PRFD01N001"
+    source_row: int = Field(ge=2)
+    source_snapshot_date: date
+    present_source_fields: int = Field(ge=0)
+    is_quarantined: Literal[False] = False
+    quarantine_reason: None = None
+    row_quality: Literal[QualityStatus.VALID] = QualityStatus.VALID
+    source_values: dict[str, RawScalar]
+    attribute_count: int = Field(ge=1)
+
+    product_id: str
+    product_family: Literal["fund"] = "fund"
+    product_name: str
+    short_name: str
+    public_offering: bool | None
+    sellable: bool
+    company_sellable: bool | None
+    trading_currency: str
+    investment_region: str | None
+    fund_geography_scope: str | None
+    fund_management_attribute: str | None
+    investor_type: str | None
+    currency_hedged: bool | None
+    risk_level: str | None
+    aum: Decimal | None = Field(default=None, ge=0)
+    base_index: str | None
+    one_week_return_pct: Decimal | None
+    one_month_return_pct: Decimal | None
+    three_month_return_pct: Decimal | None
+    six_month_return_pct: Decimal | None
+    eighteen_month_return_pct: Decimal | None
+    one_year_return_pct: Decimal | None
+    two_year_return_pct: Decimal | None
+    three_year_return_pct: Decimal | None
+    five_year_return_pct: Decimal | None
+    static_as_of: date
+    dynamic_as_of: date
+    field_quality: dict[str, QualityStatus]
+    field_quality_reasons: dict[str, str | None]
+
+    @model_validator(mode="after")
+    def validate_quality_contract(self) -> NormalizedPublicFundRecord:
+        if set(self.field_quality) != set(self.field_quality_reasons):
+            raise ValueError("field quality and reason keys must agree")
+        if self.aum is None or self.aum == 0:
+            if self.field_quality.get("aum") is not QualityStatus.UNKNOWN:
+                raise ValueError("missing or zero fund AUM must remain UNKNOWN")
+        elif self.field_quality.get("aum") is not QualityStatus.VALID:
+            raise ValueError("positive fund AUM must be VALID")
+        if self.fund_management_attribute is None:
+            if self.field_quality.get("fund_management_attribute") is not QualityStatus.UNKNOWN:
+                raise ValueError("missing or code 06 fund attribute must remain UNKNOWN")
+        for field_name in (
+            "one_week_return_pct",
+            "one_month_return_pct",
+            "three_month_return_pct",
+            "six_month_return_pct",
+        ):
+            value = getattr(self, field_name)
+            quality = self.field_quality.get(field_name)
+            expected = QualityStatus.UNKNOWN if value is None else QualityStatus.PARTIAL
+            if quality is not expected:
+                raise ValueError(f"{field_name} does not match the short-return contract")
+        for field_name in (
+            "eighteen_month_return_pct",
+            "one_year_return_pct",
+            "two_year_return_pct",
+            "three_year_return_pct",
+            "five_year_return_pct",
+        ):
+            if self.field_quality.get(field_name) is not QualityStatus.UNKNOWN:
+                raise ValueError(f"{field_name} must remain display-only UNKNOWN")
+        return self
+
+    def canonical_value(self, field_name: str) -> object:
+        return getattr(self, field_name)
+
+    def row_level_quality(self, field_name: str) -> tuple[QualityStatus | None, str | None]:
+        return (
+            self.field_quality.get(field_name),
+            self.field_quality_reasons.get(field_name),
+        )
+
+
+class NormalizedPublicFundAttribute(DomainModel):
+    source_dataset: Literal["fund"] = "fund"
+    source_id: Literal["PRFD01N001"] = "PRFD01N001"
+    source_row: int = Field(ge=2)
+    product_id: str
+    attribute_code: str
+    quality: Literal[QualityStatus.UNKNOWN] = QualityStatus.UNKNOWN
+    quality_reason: Literal["attribute_codebook_unconfirmed"] = "attribute_codebook_unconfirmed"
+
+
+class QuarantinedPublicFundRow(DomainModel):
+    source_dataset: Literal["fund"] = "fund"
+    source_id: Literal["PRFD01N001"] = "PRFD01N001"
+    source_row: int = Field(ge=2)
+    source_snapshot_date: date
+    present_source_fields: int = Field(ge=0)
+    raw_item_number: str | None
+    raw_attribute_code: str | None
+    quarantine_reason: str
+    row_quality: Literal[QualityStatus.INVALID] = QualityStatus.INVALID
+    source_values: dict[str, RawScalar]
+
+
 type NormalizedEtpRecord = NormalizedOverseasEtpRecord | NormalizedDomesticEtpRecord
-type NormalizedProductRecord = NormalizedEtpRecord | NormalizedBondRecord
+type NormalizedProductRecord = (
+    NormalizedEtpRecord | NormalizedBondRecord | NormalizedPublicFundRecord
+)
 
 
 class DatabaseManifest(DomainModel):
-    schema_version: Literal["1.0"] = "1.0"
-    dataset: Literal["overseas_etp", "domestic_etp", "bond"] = "overseas_etp"
+    schema_version: Literal["1.0", "1.1"] = "1.0"
+    dataset: Literal["overseas_etp", "domestic_etp", "bond", "fund"] = "overseas_etp"
     registry_schema_version: str
     source_file_name: str
     source_file_sha256: str
@@ -268,11 +379,38 @@ class DatabaseManifest(DomainModel):
     total_rows: int = Field(gt=0)
     searchable_rows: int = Field(ge=0)
     quarantined_rows: int = Field(ge=0)
+    logical_product_rows: int | None = Field(default=None, gt=0)
+    attribute_rows: int | None = Field(default=None, ge=0)
+    scope_excluded_rows: int | None = Field(default=None, ge=0)
 
     @model_validator(mode="after")
     def validate_counts(self) -> DatabaseManifest:
-        if self.searchable_rows + self.quarantined_rows != self.total_rows:
-            raise ValueError("searchable and quarantined rows must equal total rows")
+        if self.dataset != "fund":
+            if any(
+                value is not None
+                for value in (
+                    self.logical_product_rows,
+                    self.attribute_rows,
+                    self.scope_excluded_rows,
+                )
+            ):
+                raise ValueError("fund-specific manifest counts require dataset fund")
+            if self.searchable_rows + self.quarantined_rows != self.total_rows:
+                raise ValueError("searchable and quarantined rows must equal total rows")
+            return self
+
+        if self.schema_version != "1.1":
+            raise ValueError("fund manifest requires schema version 1.1")
+        if (
+            self.logical_product_rows is None
+            or self.attribute_rows is None
+            or self.scope_excluded_rows is None
+        ):
+            raise ValueError("fund manifest requires logical, attribute, and scope counts")
+        if self.attribute_rows + self.quarantined_rows != self.total_rows:
+            raise ValueError("fund attribute and quarantined rows must equal raw total rows")
+        if self.searchable_rows + self.scope_excluded_rows != self.logical_product_rows:
+            raise ValueError("fund searchable and scope-excluded rows must equal logical products")
         return self
 
 
@@ -303,7 +441,7 @@ class FieldEvidence(DomainModel):
 class ProductEvidence(DomainModel):
     product_id: str
     product_name: str
-    ticker: str
+    ticker: str | None
     fields: list[FieldEvidence]
 
 

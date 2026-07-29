@@ -99,9 +99,22 @@ DATASET_SPECS: tuple[DatasetSpec, ...] = (
         validation_key_pattern=re.compile(r"KR[A-Z0-9]{10}"),
         metric_fields=(
             "itm_no",
+            "itm_nm",
+            "itm_abrv_nm",
             "prfd_attr_cd",
+            "prvo_pbff_desc",
+            "sale_yn",
+            "thco_sale_yn",
+            "curr_cd",
+            "fd_ivst_rgn_desc",
+            "ovrs_fd_desc",
+            "or_attr_desc",
+            "pers_corp_desc",
+            "exchdg_yn",
+            "bmrk_nm",
             "fd_nast_suma",
             "zrin_fd_ivst_risk_gcd",
+            "zrin_fd_ivst_risk_grd_nm",
             "fd_wk1_ern_r",
             "fd_mm1_ern_r",
             "fd_mm3_ern_r",
@@ -126,7 +139,22 @@ DATASET_SPECS: tuple[DatasetSpec, ...] = (
                 "fd_yr5_ern_r",
             }
         ),
-        categorical_fields=frozenset({"prfd_attr_cd", "zrin_fd_ivst_risk_gcd"}),
+        categorical_fields=frozenset(
+            {
+                "prfd_attr_cd",
+                "prvo_pbff_desc",
+                "sale_yn",
+                "thco_sale_yn",
+                "curr_cd",
+                "fd_ivst_rgn_desc",
+                "ovrs_fd_desc",
+                "or_attr_desc",
+                "pers_corp_desc",
+                "exchdg_yn",
+                "zrin_fd_ivst_risk_gcd",
+                "zrin_fd_ivst_risk_grd_nm",
+            }
+        ),
     ),
 )
 

@@ -18,6 +18,7 @@ from finance_agent_core.domain import (
     NormalizedProductRecord,
     VerifiedSearch,
 )
+from finance_agent_core.execution.policy import require_fund_public_scope
 
 
 class ResultVerificationError(ValueError):
@@ -128,6 +129,7 @@ class ResultVerifier:
         executed: ExecutedSearch,
         universe: list[NormalizedProductRecord],
     ) -> VerifiedSearch:
+        require_fund_public_scope(plan)
         if executed.question_id != plan.question_id:
             raise ResultVerificationError("question_id changed during execution")
         candidates = [

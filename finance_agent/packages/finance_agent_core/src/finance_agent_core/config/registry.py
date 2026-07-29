@@ -98,15 +98,21 @@ class DatasetDefinition(BaseModel):
     source_label: str
     logical_grain: str
     primary_key: list[str] = Field(min_length=1)
+    raw_primary_key: list[str] = Field(default_factory=list)
     row_count: int = Field(gt=0)
+    logical_row_count: int | None = Field(default=None, gt=0)
     snapshot_date: date
     quarantined_rows: int = Field(ge=0)
+    execution_enabled: bool = True
+    notes: str = ""
     provenance: DatasetProvenance
 
     @model_validator(mode="after")
     def validate_primary_key(self) -> DatasetDefinition:
         if len(self.primary_key) != len(set(self.primary_key)):
             raise ValueError("primary_key fields must be unique")
+        if len(self.raw_primary_key) != len(set(self.raw_primary_key)):
+            raise ValueError("raw_primary_key fields must be unique")
         return self
 
 
@@ -286,6 +292,17 @@ class FieldRegistry(BaseModel):
                 f"product family has no frozen field registry: {product_family}"
             ) from error
 
+    def require_executable_dataset(self, product_family: str) -> DatasetDefinition:
+        dataset = self.require_dataset(product_family)
+        if not dataset.execution_enabled:
+            raise ValueError(
+                f"product family contract is frozen but execution is not enabled: {product_family}"
+            )
+        return dataset
+
+    def executable_dataset_names(self) -> list[str]:
+        return [name for name, definition in self.datasets.items() if definition.execution_enabled]
+
     def require_field(self, name: str, product_families: list[str]) -> FieldDefinition:
         try:
             field_definition = self.fields[name]
@@ -298,32 +315,50 @@ class FieldRegistry(BaseModel):
             raise ValueError("cross-family field resolution is not executable yet")
         return field_definition.resolve(product_families[0])
 
-    def queryable_fields(self) -> list[str]:
+    def _field_datasets(self, definition: FieldDefinition, *, executable_only: bool) -> list[str]:
+        if not executable_only:
+            return definition.datasets
+        executable = set(self.executable_dataset_names())
+        return [dataset for dataset in definition.datasets if dataset in executable]
+
+    def queryable_fields(self, *, executable_only: bool = False) -> list[str]:
         return sorted(
             name
             for name, definition in self.fields.items()
-            if any(definition.resolve(dataset).queryable for dataset in definition.datasets)
+            if any(
+                definition.resolve(dataset).queryable
+                for dataset in self._field_datasets(definition, executable_only=executable_only)
+            )
         )
 
-    def selectable_fields(self) -> list[str]:
+    def selectable_fields(self, *, executable_only: bool = False) -> list[str]:
         return sorted(
             name
             for name, definition in self.fields.items()
-            if any(definition.resolve(dataset).selectable for dataset in definition.datasets)
+            if any(
+                definition.resolve(dataset).selectable
+                for dataset in self._field_datasets(definition, executable_only=executable_only)
+            )
         )
 
-    def sortable_fields(self) -> list[str]:
+    def sortable_fields(self, *, executable_only: bool = False) -> list[str]:
         return sorted(
             name
             for name, definition in self.fields.items()
-            if any(definition.resolve(dataset).sortable for dataset in definition.datasets)
+            if any(
+                definition.resolve(dataset).sortable
+                for dataset in self._field_datasets(definition, executable_only=executable_only)
+            )
         )
 
-    def aggregatable_fields(self) -> list[str]:
+    def aggregatable_fields(self, *, executable_only: bool = False) -> list[str]:
         return sorted(
             name
             for name, definition in self.fields.items()
-            if any(definition.resolve(dataset).aggregatable for dataset in definition.datasets)
+            if any(
+                definition.resolve(dataset).aggregatable
+                for dataset in self._field_datasets(definition, executable_only=executable_only)
+            )
         )
 
 

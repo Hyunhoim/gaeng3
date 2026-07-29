@@ -11,6 +11,7 @@ from finance_agent_core.agent.providers.mock import (
     bond_vertical_slice_plan,
     domestic_vertical_slice_plan,
     first_vertical_slice_plan,
+    fund_vertical_slice_plan,
 )
 
 __all__ = [
@@ -24,4 +25,5 @@ __all__ = [
     "bond_vertical_slice_plan",
     "domestic_vertical_slice_plan",
     "first_vertical_slice_plan",
+    "fund_vertical_slice_plan",
 ]

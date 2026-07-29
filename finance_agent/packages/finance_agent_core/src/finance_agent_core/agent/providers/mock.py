@@ -208,6 +208,82 @@ def bond_vertical_slice_plan(question_id: str) -> QueryPlan:
     )
 
 
+def fund_vertical_slice_plan(question_id: str) -> QueryPlan:
+    return QueryPlan.model_validate(
+        {
+            "schema_version": "1.0",
+            "question_id": question_id,
+            "intent": "search",
+            "product_families": ["fund"],
+            "constraints": [
+                {
+                    "field": "public_offering",
+                    "operator": "eq",
+                    "value": True,
+                    "unit": "boolean",
+                    "strength": "locked",
+                },
+                {
+                    "field": "sellable",
+                    "operator": "eq",
+                    "value": True,
+                    "unit": "boolean",
+                    "strength": "locked",
+                },
+                {
+                    "field": "company_sellable",
+                    "operator": "eq",
+                    "value": True,
+                    "unit": "boolean",
+                    "strength": "locked",
+                },
+                {
+                    "field": "fund_geography_scope",
+                    "operator": "eq",
+                    "value": "해외",
+                    "unit": "code",
+                    "strength": "locked",
+                },
+                {
+                    "field": "fund_management_attribute",
+                    "operator": "eq",
+                    "value": "주식형",
+                    "unit": "code",
+                    "strength": "locked",
+                },
+            ],
+            "ranking": [
+                {
+                    "field": "three_month_return_pct",
+                    "direction": "desc",
+                    "nulls": "last",
+                }
+            ],
+            "projection": [
+                "product_id",
+                "product_name",
+                "short_name",
+                "fund_geography_scope",
+                "fund_management_attribute",
+                "risk_level",
+                "three_month_return_pct",
+                "aum",
+                "trading_currency",
+                "dynamic_as_of",
+            ],
+            "limit": 5,
+            "intent_payload": {
+                "comparison_fields": [],
+                "group_by": [],
+                "aggregations": [],
+                "explain_product_ids": [],
+            },
+            "ambiguities": [],
+            "unsupported_conditions": [],
+        }
+    )
+
+
 class MockProvider:
     @property
     def provider_name(self) -> Literal["mock"]:

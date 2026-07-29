@@ -12,9 +12,8 @@ from typing import Any
 from finance_agent_core.audit.registry import DatasetSpec, resolve_inputs
 from finance_agent_core.audit.xlsx import XlsxStream, index_to_column
 
-FUND_PRODUCT_FIELDS = (
+FUND_NUMERIC_FIELDS = (
     "fd_nast_suma",
-    "zrin_fd_ivst_risk_gcd",
     "fd_wk1_ern_r",
     "fd_mm1_ern_r",
     "fd_mm3_ern_r",
@@ -25,6 +24,7 @@ FUND_PRODUCT_FIELDS = (
     "fd_yr3_ern_r",
     "fd_yr5_ern_r",
 )
+FUND_RETURN_FIELDS = tuple(name for name in FUND_NUMERIC_FIELDS if name != "fd_nast_suma")
 
 
 def _text(value: Any) -> str:
@@ -201,10 +201,12 @@ def _category_counts(stats: dict[str, FieldStats], field_name: str) -> dict[str,
     return dict(sorted(stats[field_name].values.items(), key=lambda item: (-item[1], item[0])))
 
 
-def _product_coverage(products: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]]:
+def _product_coverage(
+    products: dict[str, dict[str, Any]], field_names: Iterable[str]
+) -> dict[str, dict[str, Any]]:
     total = len(products)
     coverage: dict[str, dict[str, Any]] = {}
-    for field_name in FUND_PRODUCT_FIELDS:
+    for field_name in field_names:
         present = sum(_is_present(product[field_name]) for product in products.values())
         coverage[field_name] = {
             "present": present,
@@ -263,6 +265,9 @@ def audit_dataset(
         slice_counts: Counter[str] = Counter()
         fund_products: dict[str, dict[str, Any]] = {}
         fund_conflicts: Counter[str] = Counter()
+        fund_rows_per_product: Counter[str] = Counter()
+        fund_attribute_codes: dict[str, set[str]] = {}
+        fund_product_fields = tuple(name for name in header if name != "prfd_attr_cd")
 
         for row_number, cells in rows:
             data_rows += 1
@@ -336,7 +341,11 @@ def audit_dataset(
 
             elif spec.name == "fund" and valid_key:
                 item_number = validation_key
-                values = {name: cells.get(index[name]) for name in FUND_PRODUCT_FIELDS}
+                values = {name: cells.get(index[name]) for name in fund_product_fields}
+                fund_rows_per_product[item_number] += 1
+                fund_attribute_codes.setdefault(item_number, set()).add(
+                    _text(cells.get(index["prfd_attr_cd"]))
+                )
                 existing = fund_products.get(item_number)
                 if existing is None:
                     fund_products[item_number] = values
@@ -368,11 +377,80 @@ def audit_dataset(
                 "first_vertical_slice": dict(slice_counts),
             }
         elif spec.name == "fund":
+            product_stats = {
+                name: FieldStats(
+                    numeric=name in spec.numeric_fields,
+                    categorical=name in spec.categorical_fields,
+                )
+                for name in spec.metric_fields
+                if name != "prfd_attr_cd"
+            }
+            for product in fund_products.values():
+                for name, stats in product_stats.items():
+                    stats.add(product[name])
+            product_fields = {name: stats.to_dict() for name, stats in product_stats.items()}
+            rows_histogram = Counter(fund_rows_per_product.values())
+            attribute_count_mismatches = sum(
+                len(fund_attribute_codes[item_number]) != row_count
+                for item_number, row_count in fund_rows_per_product.items()
+            )
+            scope_counts = Counter()
+            for product in fund_products.values():
+                offering_scope = _text(product["prvo_pbff_desc"])
+                sale_status = _text(product["sale_yn"])
+                company_sale = _text(product["thco_sale_yn"])
+                scope_counts["valid_products"] += 1
+                if offering_scope == "공모":
+                    scope_counts["public_products"] += 1
+                elif offering_scope == "사모":
+                    scope_counts["private_products"] += 1
+                else:
+                    scope_counts["unknown_offering_scope"] += 1
+                if sale_status == "판매중":
+                    scope_counts["sale_open_products"] += 1
+                if company_sale == "Y":
+                    scope_counts["company_sale_y_products"] += 1
+                if offering_scope == "공모" and sale_status == "판매중":
+                    scope_counts["public_sale_open_products"] += 1
+                if offering_scope == "공모" and company_sale == "Y":
+                    scope_counts["public_company_sale_y_products"] += 1
+                if offering_scope == "공모" and sale_status == "판매중" and company_sale == "Y":
+                    scope_counts["public_sale_open_company_y_products"] += 1
+
+            return_outliers: dict[str, dict[str, int]] = {}
+            for name in FUND_RETURN_FIELDS:
+                below_minus_100 = 0
+                above_500 = 0
+                for product in fund_products.values():
+                    value = _decimal(product[name])
+                    if value is None:
+                        continue
+                    below_minus_100 += value < Decimal("-100")
+                    above_500 += value > Decimal("500")
+                return_outliers[name] = {
+                    "below_minus_100": below_minus_100,
+                    "above_500": above_500,
+                }
+
             domain = {
                 "product_grain": {
                     "valid_logical_products": len(fund_products),
-                    "coverage": _product_coverage(fund_products),
+                    "primary_key": ["itm_no"],
+                    "raw_primary_key": ["itm_no", "prfd_attr_cd"],
+                    "rows_per_product": {
+                        "min": min(fund_rows_per_product.values()),
+                        "max": max(fund_rows_per_product.values()),
+                        "histogram": {
+                            str(row_count): product_count
+                            for row_count, product_count in sorted(rows_histogram.items())
+                        },
+                    },
+                    "attribute_code_count_mismatch_products": attribute_count_mismatches,
+                    "coverage": _product_coverage(fund_products, product_stats),
+                    "fields": product_fields,
                     "field_conflict_counts": dict(sorted(fund_conflicts.items())),
+                    "scope_counts": dict(sorted(scope_counts.items())),
+                    "return_outliers": return_outliers,
                 }
             }
 

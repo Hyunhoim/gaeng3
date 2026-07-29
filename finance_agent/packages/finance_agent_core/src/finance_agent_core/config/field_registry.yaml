@@ -1,4 +1,4 @@
-schema_version: "1.2"
+schema_version: "1.3"
 
 datasets:
   overseas_etp:
@@ -44,12 +44,32 @@ datasets:
       schema_file_pattern: PRBD01N001*_schema*.xlsx
       static_as_of_column: __file_snapshot__
       dynamic_as_of_column: PD_STD_INFO_UPDATE
+  fund:
+    source_id: PRFD01N001
+    source_label: 공모펀드 마스터
+    logical_grain: itm_no로 식별되는 펀드 클래스 한 상품
+    primary_key:
+      - itm_no
+    raw_primary_key:
+      - itm_no
+      - prfd_attr_cd
+    row_count: 95619
+    logical_row_count: 11138
+    snapshot_date: "2026-07-11"
+    quarantined_rows: 1
+    execution_enabled: false
+    notes: 정상 상품 11,138개 중 공모 11,115개, 사모 15개, 공사모 구분 결측 8개다. 실행 파이프라인이 구현될 때까지 HCX QueryPlan에서는 닫아 둔다.
+    provenance:
+      raw_file_pattern: PRFD01N001*_datarows*.xlsx
+      schema_file_pattern: PRFD01N001*_schema*.xlsx
+      static_as_of_column: __file_snapshot__
+      dynamic_as_of_column: __file_snapshot__
 
 fields:
   product_id:
     label: 상품 식별자
     aliases: [상품 ID, product id]
-    datasets: [overseas_etp, domestic_etp, bond]
+    datasets: [overseas_etp, domestic_etp, bond, fund]
     value_type: string
     unit: code
     source:
@@ -72,11 +92,16 @@ fields:
           dataset: bond
           columns: [PD_NO]
         notes: 42,394행에서 결측과 중복이 없는 원천 기본키다.
+      fund:
+        source:
+          dataset: fund
+          columns: [itm_no]
+        notes: 상품 클래스 수준 논리 기본키다. 원천 반복행 기본키는 itm_no와 prfd_attr_cd의 조합이다.
 
   product_family:
     label: 상품군
     aliases: [상품 유형군, product family]
-    datasets: [overseas_etp, domestic_etp, bond]
+    datasets: [overseas_etp, domestic_etp, bond, fund]
     value_type: enum
     unit: code
     source:
@@ -88,8 +113,8 @@ fields:
     coverage_pct: 100.0
     queryable: true
     allowed_operators: [eq, in]
-    enum_values: [overseas_etp, domestic_etp, bond]
-    notes: 이 registry 단계에서는 해외 ETP만 동결했다.
+    enum_values: [overseas_etp, domestic_etp, bond, fund]
+    notes: 공식 4개 상품군을 나타내는 canonical 값이다.
     dataset_overrides:
       domestic_etp:
         source:
@@ -105,6 +130,13 @@ fields:
           transform: constant
           constant_value: bond
         notes: PRBD01N001 국내채권 마스터 상품군이다.
+      fund:
+        source:
+          dataset: fund
+          columns: []
+          transform: constant
+          constant_value: fund
+        notes: PRFD01N001 공모펀드 마스터 상품군이다.
 
   product_type:
     label: ETP 유형
@@ -131,7 +163,7 @@ fields:
   product_name:
     label: 상품명
     aliases: [종목명, 펀드명, name]
-    datasets: [overseas_etp, domestic_etp, bond]
+    datasets: [overseas_etp, domestic_etp, bond, fund]
     value_type: string
     source:
       dataset: overseas_etp
@@ -155,6 +187,13 @@ fields:
           columns: [PD_NM]
         coverage_pct: 100.0
         notes: 42,394행에서 모두 존재하며 상품 식별에는 PD_NO를 사용한다.
+      fund:
+        source:
+          dataset: fund
+          columns: [itm_nm]
+        quality: VALID
+        coverage_pct: 100.0
+        notes: 정상 논리 상품 11,138개에서 모두 존재하며 클래스명이 포함될 수 있다.
 
   exchange_code:
     label: 거래소 코드
@@ -231,7 +270,7 @@ fields:
   sellable:
     label: 판매 가능 여부
     aliases: [판매 여부, sale status]
-    datasets: [overseas_etp, domestic_etp]
+    datasets: [overseas_etp, domestic_etp, fund]
     value_type: boolean
     unit: boolean
     source:
@@ -258,6 +297,17 @@ fields:
         quality: PARTIAL
         coverage_pct: 100.0
         notes: schema의 상품판매여부를 0=false, 1=true로 잠정 매핑하며 공식 코드북 확인 전 경고한다.
+      fund:
+        source:
+          dataset: fund
+          columns: [sale_yn]
+          transform: boolean_code
+          value_map:
+            판매완료: false
+            판매중: true
+        quality: VALID
+        coverage_pct: 100.0
+        notes: 정상 논리 상품 기준 판매중 8,445개, 판매완료 2,693개다.
 
   trading_suspended:
     label: 거래 중지 여부
@@ -331,7 +381,7 @@ fields:
   investment_region:
     label: 투자 지역
     aliases: [지역, 국가, investment region]
-    datasets: [overseas_etp, domestic_etp]
+    datasets: [overseas_etp, domestic_etp, fund]
     value_type: enum
     unit: code
     source:
@@ -421,6 +471,13 @@ fields:
         quality: VALID
         coverage_pct: 100.0
         notes: 격리 행을 제외한 값은 11개 한국어 투자지역 중 하나다.
+      fund:
+        source:
+          dataset: fund
+          columns: [fd_ivst_rgn_desc]
+        quality: PARTIAL
+        coverage_pct: 99.9282
+        notes: 8개 상품이 결측이며 국내·글로벌·아시아·남미/북미·이머징/브릭스·유럽·중동/아프리카 값을 원문으로 보존한다.
 
   total_expense_ratio_pct:
     label: 총보수율
@@ -454,7 +511,7 @@ fields:
   aum:
     label: 최근 AUM
     aliases: [순자산, 운용 자산, assets under management]
-    datasets: [overseas_etp, domestic_etp]
+    datasets: [overseas_etp, domestic_etp, fund]
     value_type: number
     unit: source_currency_amount
     source:
@@ -483,11 +540,22 @@ fields:
         sentinel_values:
           "0": UNKNOWN
         notes: 280행 결측, 411행 0이다. ETN 409행의 0을 포함해 의미 확인 전 UNKNOWN으로 처리한다.
+      fund:
+        source:
+          dataset: fund
+          columns: [fd_nast_suma]
+        quality: PARTIAL
+        coverage_pct: 83.4082
+        comparison_scope: same_trading_currency
+        as_of_basis: snapshot
+        sentinel_values:
+          "0": UNKNOWN
+        notes: 1,848개 상품이 결측이고 298개가 0이다. 0의 공식 의미 확인 전 필터·정렬·집계에서 제외한다.
 
   trading_currency:
     label: 거래 통화
     aliases: [통화, currency]
-    datasets: [overseas_etp, domestic_etp, bond]
+    datasets: [overseas_etp, domestic_etp, bond, fund]
     value_type: enum
     unit: code
     source:
@@ -518,11 +586,18 @@ fields:
         quality: PARTIAL
         coverage_pct: 100.0
         notes: KRW 42,372행 외 USD 19행, EUR·JPY·000 각 1행을 원문 그대로 보존한다. 통화 간 금액 비교는 하지 않는다.
+      fund:
+        source:
+          dataset: fund
+          columns: [curr_cd]
+        quality: VALID
+        coverage_pct: 100.0
+        notes: 정상 논리 상품 기준 KRW 11,067개와 USD 71개다. 통화가 다른 AUM은 직접 비교하지 않는다.
 
   static_as_of:
     label: 정적 속성 기준일
     aliases: [속성 업데이트일, static as of]
-    datasets: [overseas_etp, domestic_etp, bond]
+    datasets: [overseas_etp, domestic_etp, bond, fund]
     value_type: date
     unit: date
     source:
@@ -553,11 +628,21 @@ fields:
         coverage_pct: 100.0
         as_of_basis: snapshot
         notes: 정적 속성에는 독립 갱신일이 없어 파일 최종 추출일 2026-07-11을 사용한다.
+      fund:
+        source:
+          dataset: fund
+          columns: []
+          transform: constant
+          constant_value: "2026-07-11"
+        quality: VALID
+        coverage_pct: 100.0
+        as_of_basis: snapshot
+        notes: 원천에 독립 갱신일이 없어 파일 스냅샷일 2026-07-11을 사용한다.
 
   dynamic_as_of:
     label: 동적 지표 기준일
     aliases: [AUM 업데이트일, dynamic as of]
-    datasets: [overseas_etp, domestic_etp, bond]
+    datasets: [overseas_etp, domestic_etp, bond, fund]
     value_type: date
     unit: date
     source:
@@ -587,6 +672,19 @@ fields:
         coverage_pct: 75.0649
         as_of_basis: dynamic
         notes: 동적 매수·수익률 값이 있는 881행은 모두 2026-02-24 기준으로 파일 추출일보다 137일 오래되었다.
+      fund:
+        source:
+          dataset: fund
+          columns: []
+          transform: constant
+          constant_value: "2026-07-11"
+        quality: PARTIAL
+        coverage_pct: 100.0
+        queryable: false
+        sortable: false
+        allowed_operators: []
+        as_of_basis: snapshot
+        notes: 개별 AUM·수익률 갱신일이 없어 파일 스냅샷일만 제공한다. 필드 기준일로 오인하지 않도록 경고한다.
 
   one_day_return_pct:
     label: 1일 수익률
@@ -620,7 +718,7 @@ fields:
   short_name:
     label: 상품 약어명
     aliases: [약어명, 단축 상품명, short name]
-    datasets: [domestic_etp, bond]
+    datasets: [domestic_etp, bond, fund]
     value_type: string
     source:
       dataset: domestic_etp
@@ -639,6 +737,13 @@ fields:
         quality: PARTIAL
         coverage_pct: 99.139
         notes: 365행이 결측이며 식별자로 사용하지 않는다.
+      fund:
+        source:
+          dataset: fund
+          columns: [itm_abrv_nm]
+        quality: VALID
+        coverage_pct: 100.0
+        notes: 정상 논리 상품 11,138개에서 모두 존재하지만 상품 식별에는 itm_no를 사용한다.
 
   manager:
     label: 운용사
@@ -658,7 +763,7 @@ fields:
   base_index:
     label: 기초지수
     aliases: [추종 지수, benchmark, base index]
-    datasets: [domestic_etp]
+    datasets: [domestic_etp, fund]
     value_type: string
     source:
       dataset: domestic_etp
@@ -668,6 +773,18 @@ fields:
     queryable: true
     allowed_operators: [eq, contains]
     notes: 58행만 제공되므로 일치 상품 탐색에는 쓸 수 있지만 결측을 지수 부재로 해석하지 않는다.
+    dataset_overrides:
+      fund:
+        source:
+          dataset: fund
+          columns: [bmrk_nm]
+        quality: UNKNOWN
+        coverage_pct: 100.0
+        queryable: false
+        sortable: false
+        aggregatable: false
+        allowed_operators: []
+        notes: 형식상 모두 존재하지만 placeholder와 의미 품질을 확인하지 못해 표시 전용으로 보존한다.
 
   strategy:
     label: 운용 전략
@@ -705,7 +822,7 @@ fields:
   risk_level:
     label: 상품 위험등급
     aliases: [위험등급, 위험도, risk level]
-    datasets: [domestic_etp]
+    datasets: [domestic_etp, fund]
     value_type: enum
     unit: code
     source:
@@ -723,6 +840,129 @@ fields:
       - 낮은위험(5등급)
       - 매우낮은위험(6등급)
     notes: 원천 등급명을 그대로 보존하며 투자 적합성 판단을 대신하지 않는다.
+    dataset_overrides:
+      fund:
+        source:
+          dataset: fund
+          columns: [zrin_fd_ivst_risk_gcd]
+          transform: code_map
+          value_map:
+            "1": 매우높은위험(1등급)
+            "2": 높은위험(2등급)
+            "3": 다소높은위험(3등급)
+            "4": 보통위험(4등급)
+            "5": 낮은위험(5등급)
+            "6": 매우낮은위험(6등급)
+        quality: PARTIAL
+        coverage_pct: 76.8989
+        notes: 코드 1~6을 기준으로 정규화한다. 원천 등급명에는 띄어쓰기 변형이 있어 직접 비교하지 않는다.
+
+  public_offering:
+    label: 공모 여부
+    aliases: [공모펀드 여부, 공사모 구분, public offering]
+    datasets: [fund]
+    value_type: boolean
+    unit: boolean
+    source:
+      dataset: fund
+      columns: [prvo_pbff_desc]
+      transform: boolean_code
+      value_map:
+        공모: true
+        사모: false
+    quality: PARTIAL
+    coverage_pct: 99.9282
+    queryable: true
+    allowed_operators: [eq]
+    notes: 정상 논리 상품 중 공모 11,115개, 사모 15개, 결측 8개다. 공모펀드 기본 검색은 true를 강제하고 사모·결측은 제외한다.
+
+  company_sellable:
+    label: 당사 판매 여부
+    aliases: [미래에셋 판매 여부, 당사판매, company sellable]
+    datasets: [fund]
+    value_type: boolean
+    unit: boolean
+    source:
+      dataset: fund
+      columns: [thco_sale_yn]
+      transform: boolean_code
+      value_map:
+        N: false
+        Y: true
+    quality: PARTIAL
+    coverage_pct: 93.7691
+    queryable: true
+    allowed_operators: [eq]
+    notes: Y 10,444개와 결측 694개만 관측되고 N은 없다. Y/N을 boolean으로 매핑하되 결측을 false로 보간하지 않고 UNKNOWN으로 유지한다.
+
+  currency_hedged:
+    label: 환헤지 여부
+    aliases: [환헤지, currency hedged]
+    datasets: [fund]
+    value_type: boolean
+    unit: boolean
+    source:
+      dataset: fund
+      columns: [exchdg_yn]
+      transform: boolean_code
+      value_map:
+        N: false
+        Y: true
+    quality: PARTIAL
+    coverage_pct: 62.1207
+    queryable: true
+    allowed_operators: [eq]
+    notes: Y 4,612개, N 2,307개, 결측 4,219개다. hdge_fd_yn은 헤지펀드 여부이므로 이 필드와 혼동하지 않는다.
+
+  fund_management_attribute:
+    label: 펀드 운용 속성
+    aliases: [펀드 유형, 운용 속성, fund management attribute]
+    datasets: [fund]
+    value_type: enum
+    unit: code
+    source:
+      dataset: fund
+      columns: [or_attr_desc]
+    quality: PARTIAL
+    coverage_pct: 93.7691
+    queryable: true
+    allowed_operators: [eq, in]
+    enum_values: [MMF, 대출형, 임대형, 재간접, 주식형, 주식혼합, 채권형, 채권혼합, 특별자산, 혼합자산]
+    sentinel_values:
+      "06": UNKNOWN
+    notes: 결측 8개와 의미 미확인 코드 06인 686개를 UNKNOWN으로 제외한 의미상 coverage다.
+
+  fund_geography_scope:
+    label: 국내외 펀드 구분
+    aliases: [국내외 구분, 해외펀드 여부, fund geography]
+    datasets: [fund]
+    value_type: enum
+    unit: code
+    source:
+      dataset: fund
+      columns: [ovrs_fd_desc]
+    quality: PARTIAL
+    coverage_pct: 99.9282
+    queryable: true
+    allowed_operators: [eq, in]
+    enum_values: [국내, 해외, 국내외혼합]
+    notes: 국내 4,675개, 해외 5,353개, 국내외혼합 1,102개이며 8개가 결측이다.
+
+  investor_type:
+    label: 투자자 구분
+    aliases: [개인 법인 구분, 투자자 유형, investor type]
+    datasets: [fund]
+    value_type: enum
+    unit: code
+    source:
+      dataset: fund
+      columns: [pers_corp_desc]
+    quality: PARTIAL
+    coverage_pct: 99.9282
+    queryable: true
+    allowed_operators: [eq, in]
+    enum_values: [해당없음, 개인, 법인]
+    notes: 해당없음 8,711개, 개인 1,763개, 법인 656개이며 8개가 결측이다.
 
   pension_eligible:
     label: 연금 거래 가능 여부
@@ -785,7 +1025,7 @@ fields:
   one_month_return_pct:
     label: 1개월 수익률
     aliases: [월간 수익률, 1M 수익률, one month return]
-    datasets: [domestic_etp]
+    datasets: [domestic_etp, fund]
     value_type: number
     unit: pct_point
     source:
@@ -799,11 +1039,20 @@ fields:
     allowed_operators: [eq, lt, lte, gt, gte, between]
     as_of_basis: dynamic
     notes: 값이 있는 1,540행은 원천 퍼센트포인트를 그대로 보존하고 결측은 UNKNOWN이다.
+    dataset_overrides:
+      fund:
+        source:
+          dataset: fund
+          columns: [fd_mm1_ern_r]
+        quality: PARTIAL
+        coverage_pct: 67.9655
+        as_of_basis: snapshot
+        notes: 정상 논리 상품 7,570개에 존재하며 -63.11~15.65 범위다. 결측은 UNKNOWN이다.
 
   three_month_return_pct:
     label: 3개월 수익률
     aliases: [3M 수익률, three month return]
-    datasets: [domestic_etp]
+    datasets: [domestic_etp, fund]
     value_type: number
     unit: pct_point
     source:
@@ -817,11 +1066,20 @@ fields:
     allowed_operators: [eq, lt, lte, gt, gte, between]
     as_of_basis: dynamic
     notes: 값이 있는 1,505행은 원천 퍼센트포인트를 그대로 보존하고 결측은 UNKNOWN이다.
+    dataset_overrides:
+      fund:
+        source:
+          dataset: fund
+          columns: [fd_mm3_ern_r]
+        quality: PARTIAL
+        coverage_pct: 67.3101
+        as_of_basis: snapshot
+        notes: 정상 논리 상품 7,497개에 존재하며 -88.46~144.21 범위다. 결측은 UNKNOWN이다.
 
   six_month_return_pct:
     label: 6개월 수익률
     aliases: [6M 수익률, six month return]
-    datasets: [domestic_etp]
+    datasets: [domestic_etp, fund]
     value_type: number
     unit: pct_point
     source:
@@ -835,11 +1093,20 @@ fields:
     allowed_operators: [eq, lt, lte, gt, gte, between]
     as_of_basis: dynamic
     notes: 값이 있는 1,476행은 원천 퍼센트포인트를 그대로 보존하고 결측은 UNKNOWN이다.
+    dataset_overrides:
+      fund:
+        source:
+          dataset: fund
+          columns: [fd_mm6_ern_r]
+        quality: PARTIAL
+        coverage_pct: 65.9005
+        as_of_basis: snapshot
+        notes: 정상 논리 상품 7,340개에 존재하며 -84.16~369.68 범위다. 결측은 UNKNOWN이다.
 
   one_year_return_pct:
     label: 1년 수익률
     aliases: [연간 수익률, 1Y 수익률, one year return]
-    datasets: [domestic_etp]
+    datasets: [domestic_etp, fund]
     value_type: number
     unit: pct_point
     source:
@@ -853,6 +1120,19 @@ fields:
     allowed_operators: [eq, lt, lte, gt, gte, between]
     as_of_basis: dynamic
     notes: 값이 있는 1,377행은 원천 퍼센트포인트를 그대로 보존하고 결측은 UNKNOWN이다.
+    dataset_overrides:
+      fund:
+        source:
+          dataset: fund
+          columns: [fd_yr1_ern_r]
+        quality: UNKNOWN
+        coverage_pct: 63.0005
+        queryable: false
+        sortable: false
+        aggregatable: false
+        allowed_operators: []
+        as_of_basis: snapshot
+        notes: 7,017개에 존재하지만 500% 초과 값 15개와 최대 975.10이 관측되어 공식 산식 확인 전 표시 전용으로 제한한다.
 
   ytd_return_pct:
     label: 연초 이후 수익률
@@ -889,6 +1169,96 @@ fields:
     allowed_operators: [eq, lt, lte, gt, gte, between]
     as_of_basis: dynamic
     notes: 0은 거래 없음으로 유효하게 보존하고 결측 4행만 UNKNOWN이다.
+
+  one_week_return_pct:
+    label: 1주 수익률
+    aliases: [주간 수익률, 1W 수익률, one week return]
+    datasets: [fund]
+    value_type: number
+    unit: pct_point
+    source:
+      dataset: fund
+      columns: [fd_wk1_ern_r]
+    quality: PARTIAL
+    coverage_pct: 68.2349
+    queryable: true
+    sortable: true
+    aggregatable: true
+    allowed_operators: [eq, lt, lte, gt, gte, between]
+    as_of_basis: snapshot
+    notes: 정상 논리 상품 7,600개에 존재하며 -60.92~26.59 범위다. 개별 기준일은 제공되지 않는다.
+
+  eighteen_month_return_pct:
+    label: 18개월 수익률
+    aliases: [18M 수익률, eighteen month return]
+    datasets: [fund]
+    value_type: number
+    unit: pct_point
+    source:
+      dataset: fund
+      columns: [fd_mm18_ern_r]
+    quality: UNKNOWN
+    coverage_pct: 61.7615
+    queryable: false
+    sortable: false
+    aggregatable: false
+    allowed_operators: []
+    as_of_basis: snapshot
+    notes: -100% 미만 1개와 500% 초과 20개가 있어 공식 산식·이상치 기준 확인 전 표시 전용으로 제한한다.
+
+  two_year_return_pct:
+    label: 2년 수익률
+    aliases: [2Y 수익률, two year return]
+    datasets: [fund]
+    value_type: number
+    unit: pct_point
+    source:
+      dataset: fund
+      columns: [fd_yr2_ern_r]
+    quality: UNKNOWN
+    coverage_pct: 57.1018
+    queryable: false
+    sortable: false
+    aggregatable: false
+    allowed_operators: []
+    as_of_basis: snapshot
+    notes: 최솟값 -3675.44와 500% 초과 14개가 있어 공식 산식·이상치 기준 확인 전 표시 전용으로 제한한다.
+
+  three_year_return_pct:
+    label: 3년 수익률
+    aliases: [3Y 수익률, three year return]
+    datasets: [fund]
+    value_type: number
+    unit: pct_point
+    source:
+      dataset: fund
+      columns: [fd_yr3_ern_r]
+    quality: UNKNOWN
+    coverage_pct: 54.7854
+    queryable: false
+    sortable: false
+    aggregatable: false
+    allowed_operators: []
+    as_of_basis: snapshot
+    notes: 최솟값 -4381.56과 500% 초과 21개가 있어 공식 산식·이상치 기준 확인 전 표시 전용으로 제한한다.
+
+  five_year_return_pct:
+    label: 5년 수익률
+    aliases: [5Y 수익률, five year return]
+    datasets: [fund]
+    value_type: number
+    unit: pct_point
+    source:
+      dataset: fund
+      columns: [fd_yr5_ern_r]
+    quality: UNKNOWN
+    coverage_pct: 50.0988
+    queryable: false
+    sortable: false
+    aggregatable: false
+    allowed_operators: []
+    as_of_basis: snapshot
+    notes: 최솟값 -4254.75와 500% 초과 15개가 있어 공식 산식·이상치 기준 확인 전 표시 전용으로 제한한다.
 
   bond_market:
     label: 채권 거래시장

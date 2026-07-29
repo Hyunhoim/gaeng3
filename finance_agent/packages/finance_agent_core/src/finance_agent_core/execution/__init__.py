@@ -3,6 +3,7 @@ from finance_agent_core.execution.oracle import SQLiteOracle
 from finance_agent_core.execution.policy import (
     PlanExecutionBlockedError,
     require_executable_search,
+    require_fund_public_scope,
 )
 from finance_agent_core.execution.renderer import (
     render_blocked_plan,
@@ -18,6 +19,7 @@ __all__ = [
     "SQLiteOracle",
     "build_product_evidence",
     "require_executable_search",
+    "require_fund_public_scope",
     "render_blocked_plan",
     "render_verified_search",
     "warning_codes_for_search",
