@@ -1,0 +1,83 @@
+{
+  "schema_version": "1.0",
+  "baseline_id": "public-fund-answer-v1",
+  "recorded_on": "2026-07-29",
+  "dataset": "fund",
+  "evaluation_layer": "grounded_answer",
+  "status": "public_suite_first_answer_run",
+  "provider": {
+    "name": "local_test",
+    "official_submission_provider": false
+  },
+  "model": {
+    "repository": "Qwen/Qwen3-30B-A3B-Instruct-2507-FP8",
+    "served_name": "qwen3-local-test",
+    "revision": "5a5a776300a41aaa681dd7ff0106608ef2bc90db"
+  },
+  "suite": {
+    "id": "fund-core-50",
+    "version": "1.0",
+    "path": "packages/finance_agent_core/src/finance_agent_core/evaluation/suites/fund_core_50.json",
+    "sha256": "77d9be9ca86d9654fb61a52290ca08eadff6b618f861b985367b05d195c582b2",
+    "development_cases": 40,
+    "holdout_cases": 10
+  },
+  "data": {
+    "database_sha256": "99fac786e5be0ec5a7a53e11e1bd3bbccd5b37ab15243ecbf8b864a85b375ca4",
+    "manifest_sha256": "be83a616d033db2328d231499d1f0492323d02bace4f153ad3da4860a0d10bcd",
+    "source_file_sha256": "140d1ef0cec918d0b3f7c52c107cb123395594eb089b0cd70bb305709b0f44eb"
+  },
+  "metrics": {
+    "total": 50,
+    "passed": 50,
+    "strict_accuracy": 1.0,
+    "executable_cases": 44,
+    "blocked_cases": 6,
+    "llm_grounded_cases": 44,
+    "deterministic_empty_cases": 0,
+    "fallback_cases": 0,
+    "fallback_rate": 0.0,
+    "safe_answer_rate": 1.0,
+    "product_order_accuracy": 1.0,
+    "evidence_reference_accuracy": 1.0,
+    "field_evidence_citation_rate": 1.0,
+    "numeric_fidelity_rate": 1.0,
+    "warning_coverage_rate": 1.0,
+    "source_date_coverage_rate": 1.0,
+    "unsupported_claim_case_rate": 0.0,
+    "latency_ms": {
+      "p50": 2602.016,
+      "p95": 4806.568,
+      "max": 5069.169
+    }
+  },
+  "generation_quality_observation": {
+    "grounded_drafts": 44,
+    "unique_leads": 1,
+    "product_explanations": 216,
+    "unique_product_explanations": 18,
+    "human_language_rubric": "not_run",
+    "interpretation": "자동 grounding 계약은 모두 통과했지만 문장 표현은 의도적으로 보수적이고 반복적이다."
+  },
+  "reports": [
+    {
+      "role": "expected_all",
+      "artifact_name": "fund-answer-expected-all-v1.json",
+      "sha256": "e516e07e135bca0ae54f9d10f2ee917d6518cafe76c1ffd87717f56e9dd66f38"
+    },
+    {
+      "role": "local_qwen_all_first",
+      "artifact_name": "fund-answer-local-qwen-all-v1.json",
+      "sha256": "30b02b11b6780c422f709f88f45a92fc0a16e6c85a553ae415ee5ebd4eb46b6c"
+    }
+  ],
+  "reproduce": "python -m finance_agent_core.evaluation.answer_cli --dataset fund --provider local_test --split all --workers 4 --require-perfect",
+  "limitations": [
+    "답변 계층을 분리하기 위해 공개된 fund-core-50의 expected QueryPlan을 사용했으며 parser를 다시 평가하지 않았다.",
+    "실제 질문, 상품명, 수치, 날짜와 식별자는 LLM 입력에서 제외하고 서버가 검증된 evidence로 컴파일했다.",
+    "기존 공개 suite의 회귀 결과이므로 새 blind 또는 unbiased 일반화 성능으로 주장하지 않는다.",
+    "SEARCH 결과의 순위와 근거 설명을 검증했으며 실제 COMPARE intent나 상품 간 계산 비교를 평가하지 않았다.",
+    "44개 초안의 lead는 1종, 216개 상품 설명은 18종이어서 자연스러움·중복·선호도는 사람 rubric으로 별도 평가해야 한다.",
+    "fund 공식 Agent 실행은 계속 비활성화되어 있고 HyperCLOVA X 또는 공식 공모전 평가 결과가 아니다."
+  ]
+}

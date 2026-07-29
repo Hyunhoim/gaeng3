@@ -101,13 +101,19 @@ def _answer_schema(context: GroundedAnswerContext) -> dict[str, Any]:
     prefix_items: list[dict[str, Any]] = []
     for index, product in enumerate(context.products, start=1):
         item = deepcopy(base_product)
+        usable_fields = [
+            field.canonical_field
+            for field in product.fields
+            if field.normalized_value is not None
+            and field.quality in {QualityStatus.VALID, QualityStatus.PARTIAL}
+        ]
         item["properties"]["result_ref"] = {
             "type": "string",
             "const": f"result_{index}",
         }
         item["properties"]["evidence_fields"]["items"] = {
             "type": "string",
-            "enum": [field.canonical_field for field in product.fields],
+            "enum": usable_fields,
         }
         prefix_items.append(item)
     schema["properties"]["products"] = {

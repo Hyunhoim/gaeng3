@@ -20,11 +20,11 @@ from finance_agent_core.evaluation.suite import load_core_evaluation_suite
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Evaluate grounded final-answer generation over a frozen ETP suite."
+        description="Evaluate grounded final-answer generation over a frozen product suite."
     )
     parser.add_argument(
         "--dataset",
-        choices=("overseas_etp", "domestic_etp", "bond"),
+        choices=("overseas_etp", "domestic_etp", "bond", "fund"),
         default="domestic_etp",
     )
     parser.add_argument("--database", type=Path)
@@ -68,7 +68,13 @@ def main(argv: list[str] | None = None) -> int:
     else:
         provider = ExpectedGroundedAnswerProvider()
     cases = _selected_cases(suite, arguments.split)
-    runner = AnswerEvaluationRunner(database, provider)
+    runner = AnswerEvaluationRunner(
+        database,
+        provider,
+        allow_internal_disabled_dataset=(
+            suite.dataset == "fund" and arguments.provider in {"expected", "local_test"}
+        ),
+    )
     results = runner.run(cases, arguments.workers)
     report = build_answer_report(
         suite_id=suite.suite_id,

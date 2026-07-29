@@ -127,3 +127,57 @@ class AnswerVerifier:
             checks=checks,
             violations=violations,
         )
+
+    def verify_compiled(
+        self,
+        context: GroundedAnswerContext,
+        draft: GroundedAnswerDraft,
+        answer: str,
+    ) -> AnswerVerification:
+        """Verify the final server-compiled facts as well as the model draft."""
+
+        draft_verification = self.verify(context, draft)
+        checks = dict(draft_verification.checks)
+        violations = list(draft_verification.violations)
+
+        checks["compiled_core_exact"] = answer.endswith(context.deterministic_answer)
+        if not checks["compiled_core_exact"]:
+            violations.append(
+                "compiled answer does not preserve the exact verified product order and values"
+            )
+
+        evidence_by_ref = {
+            f"result_{index}": {field.canonical_field: field for field in product.fields}
+            for index, product in enumerate(context.products, start=1)
+        }
+        citations_exact = True
+        for product in draft.products:
+            available = evidence_by_ref.get(product.result_ref, {})
+            for field_name in product.evidence_fields:
+                evidence = available.get(field_name)
+                if evidence is None:
+                    citations_exact = False
+                    continue
+                source_columns = "/".join(evidence.source_columns) or "constant"
+                citation = (
+                    f"{evidence.source_id} 원본 행 {evidence.source_row}, "
+                    f"{source_columns}, 기준일 {evidence.as_of.isoformat()}"
+                )
+                if citation not in answer:
+                    citations_exact = False
+        checks["compiled_evidence_citations_exact"] = citations_exact
+        if not citations_exact:
+            violations.append(
+                "compiled answer omits or changes field-level source and as-of evidence"
+            )
+
+        source_date = context.source_manifest.source_snapshot_date.isoformat()
+        checks["compiled_source_date_present"] = source_date in answer
+        if not checks["compiled_source_date_present"]:
+            violations.append("compiled answer omits the source snapshot date")
+
+        return AnswerVerification(
+            passed=all(checks.values()),
+            checks=checks,
+            violations=violations,
+        )

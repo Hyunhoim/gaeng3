@@ -112,7 +112,19 @@ def compose_grounded_answer(
         )
 
     latency_ms = round((time.perf_counter() - started) * 1000, 3)
-    verification = AnswerVerifier().verify(context, draft)
+    verifier = AnswerVerifier()
+    draft_verification = verifier.verify(context, draft)
+    if not draft_verification.passed:
+        return AnswerComposition(
+            mode="deterministic_fallback",
+            answer=context.deterministic_answer,
+            model=provider.model_name,
+            generation_latency_ms=latency_ms,
+            draft=draft,
+            verification=draft_verification,
+        )
+    compiled_answer = _compile_answer(context, draft)
+    verification = verifier.verify_compiled(context, draft, compiled_answer)
     if not verification.passed:
         return AnswerComposition(
             mode="deterministic_fallback",
@@ -124,7 +136,7 @@ def compose_grounded_answer(
         )
     return AnswerComposition(
         mode="llm_grounded",
-        answer=_compile_answer(context, draft),
+        answer=compiled_answer,
         model=provider.model_name,
         generation_latency_ms=latency_ms,
         draft=draft,

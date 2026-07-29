@@ -8,9 +8,26 @@ import pytest
 from pydantic import ValidationError
 
 from finance_agent_core.agent.providers import fund_vertical_slice_plan
+from finance_agent_core.answering import (
+    ExpectedGroundedAnswerProvider,
+    build_grounded_answer_context,
+    compose_grounded_answer,
+)
 from finance_agent_core.config import QualityStatus
 from finance_agent_core.contracts import QueryPlan
 from finance_agent_core.domain import DatabaseManifest, NormalizedPublicFundRecord
+from finance_agent_core.evaluation.answer_cli import build_parser as build_answer_parser
+from finance_agent_core.evaluation.answer_runner import (
+    AnswerEvaluationRunner,
+    build_answer_report,
+)
+from finance_agent_core.evaluation.models import (
+    EvaluationCase,
+    EvaluationSplit,
+    ExpectedConstraint,
+    ExpectedDisposition,
+    OracleExpectation,
+)
 from finance_agent_core.evaluation.runner import EvaluationRunner
 from finance_agent_core.execution import (
     PlanExecutionBlockedError,
@@ -248,6 +265,179 @@ def test_public_fund_oracle_verifier_evidence_and_renderer_agree(
     assert len(warnings) == 5
 
 
+def test_public_fund_grounded_answer_compiles_and_verifies_field_evidence(
+    tmp_path: Path,
+) -> None:
+    path, _, _ = write_sample_fund_database(tmp_path)
+    plan = fund_vertical_slice_plan("fund-answer-001")
+    executed = SQLiteOracle(path).execute(plan)
+    with connect_read_only(path) as connection:
+        universe = load_all_records(connection)
+    verified = ResultVerifier().verify(plan, executed, universe)
+    products = build_product_evidence(plan, verified)
+    context = build_grounded_answer_context(
+        question="해외 주식형 공모펀드를 3개월 수익률 순으로 보여줘",
+        plan=plan,
+        verified=verified,
+        products=products,
+    )
+
+    composition = compose_grounded_answer(
+        question=context.question,
+        plan=plan,
+        verified=verified,
+        products=products,
+        provider=ExpectedGroundedAnswerProvider(),
+    )
+
+    assert composition.mode == "llm_grounded"
+    assert composition.verification.passed
+    assert composition.verification.checks["compiled_core_exact"]
+    assert composition.verification.checks["compiled_evidence_citations_exact"]
+    assert composition.verification.checks["compiled_source_date_present"]
+    assert "테스트 공모펀드 KR0000000001" in composition.answer
+    assert "3개월 수익률 3.75%" in composition.answer
+    assert "PRFD01N001 원본 행 2, fd_mm3_ern_r, 기준일 2026-07-11" in composition.answer
+    assert "스냅샷 2026-07-11" in composition.answer
+    assert "공모펀드 기본 범위" in composition.answer
+    assert "클래스 단위" in composition.answer
+
+
+def test_public_fund_answer_verifier_fails_closed_on_product_claim(
+    tmp_path: Path,
+) -> None:
+    path, _, _ = write_sample_fund_database(tmp_path)
+    plan = fund_vertical_slice_plan("fund-answer-fallback-001")
+    executed = SQLiteOracle(path).execute(plan)
+    with connect_read_only(path) as connection:
+        universe = load_all_records(connection)
+    verified = ResultVerifier().verify(plan, executed, universe)
+    products = build_product_evidence(plan, verified)
+    context = build_grounded_answer_context(
+        question="공모펀드 결과를 설명해줘",
+        plan=plan,
+        verified=verified,
+        products=products,
+    )
+    expected = ExpectedGroundedAnswerProvider().generate_grounded_answer(context)
+    first = expected.products[0].model_copy(
+        update={"explanation": "테스트 공모펀드 KR0000000001이 가장 좋은 상품입니다."}
+    )
+    tampered = expected.model_copy(update={"products": [first]})
+
+    class TamperedProvider:
+        provider_name = "tampered"
+        model_name = "tampered-model"
+
+        def generate_grounded_answer(self, _context):
+            return tampered
+
+    composition = compose_grounded_answer(
+        question=context.question,
+        plan=plan,
+        verified=verified,
+        products=products,
+        provider=TamperedProvider(),
+    )
+
+    assert composition.mode == "deterministic_fallback"
+    assert composition.answer == context.deterministic_answer
+    assert not composition.verification.checks["prose_has_no_advice_or_forecast"]
+    assert not composition.verification.checks["prose_has_no_product_identifiers"]
+    assert "가장 좋은" not in composition.answer
+
+
+def test_public_fund_answer_evaluation_is_internal_only(tmp_path: Path) -> None:
+    path, _, _ = write_sample_fund_database(tmp_path)
+    runner = AnswerEvaluationRunner(
+        path,
+        ExpectedGroundedAnswerProvider(),
+        allow_internal_disabled_dataset=True,
+    )
+
+    assert runner.product_family == "fund"
+    assert build_answer_parser().parse_args(["--dataset", "fund"]).dataset == "fund"
+
+    class UnapprovedAnswerProvider:
+        provider_name = "unapproved"
+        model_name = None
+
+        def generate_grounded_answer(self, context):
+            return ExpectedGroundedAnswerProvider().generate_grounded_answer(context)
+
+    with pytest.raises(ValueError, match="restricted to expected or local_test"):
+        AnswerEvaluationRunner(
+            path,
+            UnapprovedAnswerProvider(),
+            allow_internal_disabled_dataset=True,
+        )
+
+
+def test_public_fund_answer_runner_preserves_safe_fallback_metrics(
+    tmp_path: Path,
+) -> None:
+    path, _, _ = write_sample_fund_database(tmp_path)
+    plan = fund_vertical_slice_plan("fund-answer-runner-001")
+    case = EvaluationCase(
+        id=plan.question_id,
+        split=EvaluationSplit.DEVELOPMENT,
+        category="grounded_fallback",
+        question="해외 주식형 공모펀드를 3개월 수익률 순으로 보여줘",
+        constraints=[
+            ExpectedConstraint.model_validate(
+                {
+                    "field": constraint.field,
+                    "operator": constraint.operator,
+                    "value": constraint.value,
+                    "strength": constraint.strength,
+                }
+            )
+            for constraint in plan.constraints
+        ],
+        ranking=plan.ranking,
+        limit=plan.limit,
+        disposition=ExpectedDisposition.EXECUTE,
+        oracle=OracleExpectation(
+            candidate_count=1,
+            top_product_ids=["KR0000000001"],
+        ),
+    )
+
+    class InvalidEvidenceProvider:
+        provider_name = "local_test"
+        model_name = "invalid-evidence-model"
+
+        def generate_grounded_answer(self, context):
+            draft = ExpectedGroundedAnswerProvider().generate_grounded_answer(context)
+            first = draft.products[0].model_copy(update={"evidence_fields": ["missing_field"]})
+            return draft.model_copy(update={"products": [first]})
+
+    runner = AnswerEvaluationRunner(
+        path,
+        InvalidEvidenceProvider(),
+        allow_internal_disabled_dataset=True,
+    )
+    result = runner.run_case(case)
+    report = build_answer_report(
+        suite_id="fund-answer-fallback-test",
+        suite_version="1.0",
+        suite_sha256="a" * 64,
+        database_sha256="b" * 64,
+        manifest_sha256="c" * 64,
+        provider="local_test",
+        model="invalid-evidence-model",
+        split="development",
+        workers=1,
+        results=[result],
+    )
+
+    assert result.mode == "deterministic_fallback"
+    assert result.error is None
+    assert result.checks["safe_answer"]
+    assert report.summary.fallback_cases == 1
+    assert report.summary.fallback_rate == 1.0
+
+
 def test_public_fund_scope_is_mandatory_while_agent_execution_stays_disabled() -> None:
     plan = fund_vertical_slice_plan("fund-policy-001")
     payload = plan.model_dump(mode="json")
@@ -263,6 +453,35 @@ def test_public_fund_scope_is_mandatory_while_agent_execution_stays_disabled() -
     with pytest.raises(PlanExecutionBlockedError, match="not enabled for execution"):
         require_executable_search(plan)
     require_internal_evaluation_search(plan)
+
+
+def test_public_fund_aum_comparison_requires_locked_currency_scope() -> None:
+    payload = fund_vertical_slice_plan("fund-aum-policy-001").model_dump(mode="json")
+    payload["ranking"] = [
+        {
+            "field": "aum",
+            "direction": "desc",
+            "nulls": "last",
+        }
+    ]
+    without_currency = QueryPlan.model_validate(payload)
+
+    with pytest.raises(PlanExecutionBlockedError, match="trading_currency = KRW or USD"):
+        compile_search_sql(without_currency)
+
+    payload["constraints"].append(
+        {
+            "field": "trading_currency",
+            "operator": "eq",
+            "value": "KRW",
+            "unit": "code",
+            "strength": "locked",
+        }
+    )
+    scoped = QueryPlan.model_validate(payload)
+
+    compile_search_sql(scoped)
+    require_internal_evaluation_search(scoped)
 
 
 def test_public_fund_internal_evaluation_rejects_unapproved_provider(
@@ -368,6 +587,17 @@ def test_public_fund_unknown_sentinels_cannot_match_oracle_filters(
         },
     ]
     for condition in cases:
-        payload = {**base, "constraints": [public_scope, condition]}
+        constraints = [public_scope, condition]
+        if condition["field"] == "aum":
+            constraints.append(
+                {
+                    "field": "trading_currency",
+                    "operator": "eq",
+                    "value": "KRW",
+                    "unit": "code",
+                    "strength": "locked",
+                }
+            )
+        payload = {**base, "constraints": constraints}
         plan = QueryPlan.model_validate(payload)
         assert SQLiteOracle(path).execute(plan).candidate_count == 0

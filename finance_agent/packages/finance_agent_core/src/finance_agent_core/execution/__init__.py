@@ -3,6 +3,7 @@ from finance_agent_core.execution.oracle import SQLiteOracle
 from finance_agent_core.execution.policy import (
     PlanExecutionBlockedError,
     require_executable_search,
+    require_fund_aum_currency_scope,
     require_fund_public_scope,
     require_internal_evaluation_search,
 )
@@ -20,6 +21,7 @@ __all__ = [
     "SQLiteOracle",
     "build_product_evidence",
     "require_executable_search",
+    "require_fund_aum_currency_scope",
     "require_fund_public_scope",
     "require_internal_evaluation_search",
     "render_blocked_plan",

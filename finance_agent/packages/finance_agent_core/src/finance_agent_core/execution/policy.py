@@ -31,6 +31,32 @@ def require_fund_public_scope(plan: QueryPlan) -> None:
         )
 
 
+def require_fund_aum_currency_scope(plan: QueryPlan) -> None:
+    if plan.product_families != [ProductFamily.FUND]:
+        return
+    compares_aum = any(constraint.field == "aum" for constraint in plan.constraints) or any(
+        ranking.field == "aum" for ranking in plan.ranking
+    )
+    compares_aum = compares_aum or any(
+        aggregation.field == "aum" for aggregation in plan.intent_payload.aggregations
+    )
+    if not compares_aum:
+        return
+    currency_constraints = [
+        constraint for constraint in plan.constraints if constraint.field == "trading_currency"
+    ]
+    if (
+        len(currency_constraints) != 1
+        or currency_constraints[0].operator is not ConstraintOperator.EQ
+        or currency_constraints[0].value not in {"KRW", "USD"}
+        or currency_constraints[0].strength is not ConstraintStrength.LOCKED
+    ):
+        raise PlanExecutionBlockedError(
+            "fund AUM comparison requires exactly one locked "
+            "trading_currency = KRW or USD constraint"
+        )
+
+
 def _require_search_contract(
     plan: QueryPlan,
     *,
@@ -52,6 +78,10 @@ def _require_search_contract(
                 blockers.append(f"product family {family.value!r} is not enabled for execution")
     try:
         require_fund_public_scope(plan)
+    except PlanExecutionBlockedError as error:
+        blockers.append(str(error))
+    try:
+        require_fund_aum_currency_scope(plan)
     except PlanExecutionBlockedError as error:
         blockers.append(str(error))
     if blockers:

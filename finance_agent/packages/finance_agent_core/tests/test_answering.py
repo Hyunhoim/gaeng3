@@ -62,6 +62,9 @@ def test_grounded_answer_compiles_only_verified_values(
     assert composition is not None
     assert composition.mode == "llm_grounded"
     assert composition.verification.passed
+    assert composition.verification.checks["compiled_core_exact"]
+    assert composition.verification.checks["compiled_evidence_citations_exact"]
+    assert composition.verification.checks["compiled_source_date_present"]
     assert composition.draft is not None
     assert all(
         not any(character.isdigit() for character in product.explanation)
@@ -167,6 +170,36 @@ def test_answer_provider_error_fails_closed(
     assert composition.mode == "deterministic_fallback"
     assert composition.answer == context.deterministic_answer
     assert composition.verification.violations == ["RuntimeError: generation failed"]
+
+
+def test_compiled_answer_verifier_rejects_changed_field_citation(
+    domestic_sample_database: tuple[
+        Path,
+        list[NormalizedDomesticEtpRecord],
+        DatabaseManifest,
+    ],
+) -> None:
+    path, _, _ = domestic_sample_database
+    plan, verified, products, context = _verified_domestic_context(path)
+    composition = compose_grounded_answer(
+        question=context.question,
+        plan=plan,
+        verified=verified,
+        products=products,
+        provider=ExpectedGroundedAnswerProvider(),
+    )
+    assert composition.draft is not None
+    changed = composition.answer.replace("du_er_1m", "changed_source_column", 1)
+
+    verification = AnswerVerifier().verify_compiled(
+        context,
+        composition.draft,
+        changed,
+    )
+
+    assert not verification.passed
+    assert verification.checks["compiled_core_exact"]
+    assert not verification.checks["compiled_evidence_citations_exact"]
 
 
 def test_local_grounded_provider_uses_structured_output(

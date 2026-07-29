@@ -13,7 +13,10 @@ from finance_agent_core.contracts.queryplan import (
     QueryPlan,
 )
 from finance_agent_core.domain import ExecutedSearch
-from finance_agent_core.execution.policy import require_fund_public_scope
+from finance_agent_core.execution.policy import (
+    require_fund_aum_currency_scope,
+    require_fund_public_scope,
+)
 from finance_agent_core.storage.bond import (
     DURATION_SCALE,
     QUANTITY_SCALE,
@@ -383,6 +386,7 @@ def compile_search_sql(
     if len(plan.product_families) != 1:
         raise ValueError("the deterministic oracle requires exactly one product family")
     require_fund_public_scope(plan)
+    require_fund_aum_currency_scope(plan)
     family = plan.product_families[0].value
     try:
         sql_fields = SQL_FIELDS_BY_FAMILY[family]

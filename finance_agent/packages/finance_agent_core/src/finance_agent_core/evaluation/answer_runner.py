@@ -14,6 +14,7 @@ from finance_agent_core.answering import (
     build_grounded_answer_context,
     compose_grounded_answer,
 )
+from finance_agent_core.contracts import QueryPlan
 from finance_agent_core.domain import NormalizedProductRecord
 from finance_agent_core.evaluation.models import (
     EvaluationCase,
@@ -27,6 +28,7 @@ from finance_agent_core.execution import (
     build_product_evidence,
     render_blocked_plan,
     require_executable_search,
+    require_internal_evaluation_search,
 )
 from finance_agent_core.storage import connect_read_only, load_all_records, load_manifest
 
@@ -69,6 +71,7 @@ class AnswerEvaluationSummary(AnswerEvaluationModel):
     llm_grounded_cases: int
     deterministic_empty_cases: int
     fallback_cases: int
+    fallback_rate: float
     safe_answer_rate: float
     product_order_accuracy: float | None
     evidence_reference_accuracy: float | None
@@ -150,8 +153,13 @@ def _evidence_citations_present(
         for index, product in enumerate(context.products, start=1)
     }
     for product in draft.products:
+        available = by_ref.get(product.result_ref)
+        if available is None:
+            return False
         for field_name in product.evidence_fields:
-            evidence = by_ref[product.result_ref][field_name]
+            evidence = available.get(field_name)
+            if evidence is None:
+                return False
             required_fragments = [
                 f"{evidence.source_id} 원본 행 {evidence.source_row}",
                 f"기준일 {evidence.as_of.isoformat()}",
@@ -167,6 +175,8 @@ class AnswerEvaluationRunner:
         database_path: str | Path,
         provider: GroundedAnswerProvider,
         universe: list[NormalizedProductRecord] | None = None,
+        *,
+        allow_internal_disabled_dataset: bool = False,
     ) -> None:
         self.database_path = Path(database_path)
         self.provider = provider
@@ -174,10 +184,26 @@ class AnswerEvaluationRunner:
         self.verifier = ResultVerifier()
         with connect_read_only(self.database_path) as connection:
             self.product_family = load_manifest(connection).dataset
+        if allow_internal_disabled_dataset:
+            if provider.provider_name not in {"expected", "local_test"}:
+                raise ValueError(
+                    "disabled-dataset answer evaluation is restricted to expected or local_test"
+                )
+            if self.product_family != "fund":
+                raise ValueError(
+                    "disabled-dataset answer evaluation is restricted to the fund approval gate"
+                )
+        self.allow_internal_disabled_dataset = allow_internal_disabled_dataset
         if universe is None:
             with connect_read_only(self.database_path) as connection:
                 universe = load_all_records(connection)
         self.universe = universe
+
+    def _require_search(self, plan: QueryPlan) -> None:
+        if self.allow_internal_disabled_dataset:
+            require_internal_evaluation_search(plan)
+        else:
+            require_executable_search(plan)
 
     def run_case(self, case: EvaluationCase) -> AnswerCaseResult:
         started = time.perf_counter()
@@ -186,7 +212,7 @@ class AnswerEvaluationRunner:
             answer = render_blocked_plan(plan, self.product_family)
             finished = time.perf_counter()
             try:
-                require_executable_search(plan)
+                self._require_search(plan)
             except PlanExecutionBlockedError:
                 execution_blocked = True
             else:
@@ -216,6 +242,7 @@ class AnswerEvaluationRunner:
             )
 
         try:
+            self._require_search(plan)
             executed = self.oracle.execute(plan)
             verified = self.verifier.verify(plan, executed, self.universe)
             products = build_product_evidence(plan, verified)
@@ -280,9 +307,11 @@ class AnswerEvaluationRunner:
                             )
                         ),
                         "field_evidence_citations": _evidence_citations_present(
-                            composition.answer,
-                            context,
-                            composition.draft,
+                            composition.answer, context, composition.draft
+                        )
+                        and composition.verification.checks.get(
+                            "compiled_evidence_citations_exact",
+                            False,
                         ),
                     }
                 )
@@ -358,6 +387,10 @@ def build_answer_report(
         results,
         "unsupported_claims_zero",
     )
+    grounded_attempts = sum(
+        result.mode in {"llm_grounded", "deterministic_fallback"} for result in results
+    )
+    fallback_cases = sum(result.mode == "deterministic_fallback" for result in results)
     summary = AnswerEvaluationSummary(
         total=len(results),
         passed=sum(result.passed for result in results),
@@ -366,7 +399,8 @@ def build_answer_report(
         blocked_cases=sum(result.disposition is ExpectedDisposition.BLOCK for result in results),
         llm_grounded_cases=sum(result.mode == "llm_grounded" for result in results),
         deterministic_empty_cases=sum(result.mode == "deterministic" for result in results),
-        fallback_cases=sum(result.mode == "deterministic_fallback" for result in results),
+        fallback_cases=fallback_cases,
+        fallback_rate=_rate(fallback_cases, grounded_attempts),
         safe_answer_rate=_optional_check_rate(results, "safe_answer") or 0.0,
         product_order_accuracy=_optional_check_rate(results, "product_order_exact"),
         evidence_reference_accuracy=_optional_check_rate(
