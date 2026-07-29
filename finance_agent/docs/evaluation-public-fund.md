@@ -182,6 +182,23 @@ unsupported 규칙을 적용하지 못했다.
 holdout 성능으로 보고하지 않는다. 기존 suite의 사후 회귀와 별도의 새 blind
 질문 평가를 구분한다.
 
+### 5.1 사후 회귀 수정
+
+최초 9/10 report를 commit `8871055`로 먼저 보존한 뒤 다음 최소 수정만 적용했다.
+
+- 질문에서 상품군을 명시하면 기존 lexical 판정을 계속 우선
+- 명시가 없으면 모델의 구조화 출력에 있는 단일 상품군을 보조 힌트로 전달
+- 공모펀드 미지원 조건이 발견되면 실행 가능한 정렬도 fail-closed로 제거
+
+`fund-050`의 실제 질문과 모델이 선택했던 `product_families=["fund"]`를 고정한
+회귀 테스트를 추가했다. 수정 후 기대한 `public_offering=true` 조건,
+unsupported 신호, 빈 ranking과 block disposition이 모두 일치한다.
+
+로컬 Qwen holdout은 다시 호출하지 않았다. 무모델 deterministic linker로 동결
+50문항을 재생한 결과는 50/50이고, 실제 DB의 expected QueryPlan·Oracle도
+50/50이다. 이는 공개된 실패의 사후 회귀 통과일 뿐 최초 holdout 9/10을
+대체하지 않는다.
+
 ## 6. 실행 비활성 상태에서의 평가
 
 공모펀드 dataset은 계속 `execution_enabled: false`로 유지. 일반 Agent와
@@ -269,8 +286,7 @@ LOCAL_TEST_LLM_MODEL=qwen3-local-test \
 
 다음 단계:
 
-1. `fund-050` 실패 원인을 regression test로 추가하고 family handoff를 수정
-2. 기존 50문항은 사후 회귀로만 사용하고 새 blind 표현 변형 세트를 별도 작성
-3. 공모펀드 grounded answer와 사람 품질 평가 추가
-4. HCX schema에 fund를 노출하고 서버 계약 테스트 통과
-5. 그 뒤에만 `execution_enabled: true` 전환 검토
+1. 기존 50문항은 사후 회귀로만 사용하고 새 blind 표현 변형 세트를 별도 작성
+2. 공모펀드 grounded answer와 사람 품질 평가 추가
+3. HCX schema에 fund를 노출하고 서버 계약 테스트 통과
+4. 그 뒤에만 `execution_enabled: true` 전환 검토

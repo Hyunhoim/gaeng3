@@ -294,6 +294,8 @@ report SHA-256은
 `4bc96ecd7278bbbefe299a0ccea9bff94d14784621b91b2e7a71b414f945846f`다.
 상세 계약과 실패 분석은
 [공모펀드 핵심 평가 기준선](evaluation-public-fund.md)에 기록한다.
+최초 결과를 commit한 뒤 family handoff를 회귀 수정했으며 로컬 Qwen holdout은
+다시 호출하지 않았다. 공개된 50문항의 무모델 linker replay만 50/50 통과했다.
 평가 후 서버를 종료했고 GPU는 71MiB·15MiB, utilization 0%로 복귀했으며
 18000 포트가 해제됐다.
 

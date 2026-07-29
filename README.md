@@ -43,7 +43,7 @@ Next.js·FastAPI 애플리케이션 통합과 HyperCLOVA X 연결을 준비하�
 | HyperCLOVA X | 공식 API 확보 후 연결 예정 |
 | Web·API | Next.js·FastAPI 템플릿 통합 예정 |
 
-현재 AI Core 회귀 기준은 pytest 81개, Ruff lint·format과 문서 검사를 모두
+현재 AI Core 회귀 기준은 pytest 82개, Ruff lint·format과 문서 검사를 모두
 통과한 상태
 
 ## 3. 아키텍처
@@ -138,7 +138,7 @@ Git에 포함하지 않음
 
 ## 8. 다음 작업
 
-- 공모펀드 최초 holdout 실패 1건 회귀 수정과 새 blind 질문 세트 작성
+- 공모펀드 새 blind 질문 세트 작성과 일반화 성능 재평가
 - 공모펀드 grounded answer와 사람 품질 평가
 - 다른 작성자가 만든 blind 평가 문항과 사람 답변 품질 평가 추가
 - Next.js·FastAPI 애플리케이션 템플릿 통합

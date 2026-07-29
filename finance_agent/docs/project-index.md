@@ -70,7 +70,9 @@
   expected QueryPlan·Oracle 전체 50/50
 - 공모펀드 로컬 Qwen hybrid parser: development 최초 실행 40/40,
   commit 이후 최초 holdout 9/10, 합계 49/50
-- 코드 회귀 기준: 전체 pytest 81개, Ruff, pip dependency check
+- 공개된 공모펀드 실패 회귀 수정 후 무모델 linker replay 50/50,
+  로컬 holdout 미재실행
+- 코드 회귀 기준: 전체 pytest 82개, Ruff, pip dependency check
 - 로컬 Qwen 평가 기준: 동결 50문항에서 최초 미사용 holdout 9/10,
   오류 수정 후 전체 회귀 50/50을 연속 2회 재현
 - 국내 ETP 로컬 Qwen 기준: development 40/40, local-inference holdout 첫 실행 10/10
@@ -80,8 +82,8 @@
   수치·순위·evidence·기준일 100%, 폴백 0
 - 국내채권 답변 기준: 46개 LLM 생성·1개 결정론적 빈 결과·3개 안전 차단,
   전체 50/50, 폴백 0
-- 다음 구현: 공모펀드 holdout 실패 1건 회귀 수정, 새 blind 표현 변형,
-  grounded answer·사람 품질 평가, 공식 `/answer` adapter
+- 다음 구현: 공모펀드 새 blind 표현 변형, grounded answer·사람 품질 평가,
+  공식 `/answer` adapter
 
 ## 저장소 밖의 근거 자료
 

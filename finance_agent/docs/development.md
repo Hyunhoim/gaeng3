@@ -74,7 +74,7 @@ SOURCE_DATE_EPOCH=1785283200 \
 2026-07-29 결과:
 
 - Ruff: 통과
-- pytest: 81개 통과
+- pytest: 82개 통과
 - pip dependency check: 통과
 - 문서 링크·인덱스·평가 baseline·suite hash 검사: 통과
 - 고정 `SOURCE_DATE_EPOCH` wheel을 서로 다른 임시 디렉터리에서 두 번 빌드해
@@ -185,11 +185,16 @@ Verifier가 일치했다.
 
 [공모펀드 핵심 평가 기준선](evaluation-public-fund.md)은 같은 40/10 구조로
 50문항을 동결했다. expected provider에서 실행 44개와 안전 차단 6개가 모두
-통과했다. 로컬 Qwen hybrid parser는 development 40문항을 최초 실행에서
+  통과했다. 로컬 Qwen hybrid parser는 development 40문항을 최초 실행에서
 40/40 통과했다. parser·규칙을 commit한 뒤 최초 실행한 holdout은 9/10이다.
 실패한 클래스 합산 질문은 실행 자체는 차단됐지만 기대한 unsupported가 아니라
 AUM 통화 모호성으로 차단되어 strict failure다. 이 결과는 HyperCLOVA X
 parser 성능이 아니다.
+
+최초 결과를 별도 commit으로 보존한 뒤, 질문에 상품군이 없을 때 모델의 단일
+상품군을 보조 힌트로 넘기는 family handoff와 공모펀드 unsupported 정렬 제거를
+추가했다. 로컬 Qwen holdout은 다시 실행하지 않았고, 공개된 실패의 회귀 테스트와
+무모델 50문항 replay만 50/50 통과했다.
 
 ## 근거 기반 최종 답변
 

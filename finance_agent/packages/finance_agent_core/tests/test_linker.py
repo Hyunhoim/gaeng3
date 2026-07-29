@@ -241,3 +241,26 @@ def test_fund_aum_without_currency_requires_clarification() -> None:
     ]
     assert hints["required_rankings"] == [{"field": "aum", "direction": "desc", "nulls": "last"}]
     assert hints["ambiguity_spans"] == ["AUM 비교 통화"]
+
+
+def test_fund_model_family_handoff_blocks_unsupported_class_aggregation() -> None:
+    suite = load_core_evaluation_suite("fund").suite
+    case = next(case for case in suite.cases if case.id == "fund-050")
+    payload = first_vertical_slice_plan(case.id).model_dump(mode="json")
+    payload["product_families"] = ["fund"]
+
+    linked = QueryPlan.model_validate(
+        canonicalize_query_plan_payload(
+            case.question,
+            payload,
+        )
+    )
+    checks = semantic_checks(case, linked, "fund")
+
+    assert checks["plan_exact"], [name for name, passed in checks.items() if not passed]
+    assert [item.field for item in linked.constraints] == ["public_offering"]
+    assert linked.ranking == []
+    assert {item.span for item in linked.unsupported_conditions} == {
+        "대표 펀드",
+        "클래스는 합쳐서",
+    }

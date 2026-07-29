@@ -120,6 +120,6 @@ fail-closed로 비활성화되어 있다.
 동료의 템플릿 작업과 합칠 때는 `AgentRequest`, `AgentResponse`, evidence,
 오류·timeout 계약을 먼저 고정하고 공식 `/answer` adapter를 연결한다.
 
-현재 우선순위는 공모펀드 holdout 실패 1건의 회귀 수정과 새 blind 질문,
-grounded answer와 사람 품질 평가, HCX schema·HyperCLOVA X, 공식 `/answer`
-adapter 순이다.
+현재 우선순위는 공모펀드 새 blind 질문과 grounded answer·사람 품질 평가,
+HCX schema·HyperCLOVA X, 공식 `/answer` adapter 순이다. 최초 holdout 실패
+1건은 회귀 수정했지만 9/10 기록은 그대로 유지한다.

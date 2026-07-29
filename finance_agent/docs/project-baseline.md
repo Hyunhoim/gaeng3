@@ -56,7 +56,9 @@
   로컬 Qwen hybrid parser는 development 40문항을 최초 실행에서 40/40
   통과했다. commit `32e12fa` 이후 최초 실행한 holdout은 9/10이며 클래스 합산
   질문 한 건의 의미 해석 실패를 관측값 그대로 보존했다.
-- 전체 코드 회귀는 pytest 81개, Ruff lint·format, pip dependency check와
+- 공개된 실패는 family handoff와 unsupported ranking 제거로 회귀 수정했다.
+  로컬 Qwen holdout은 다시 호출하지 않았고 무모델 50문항 replay만 50/50이다.
+- 전체 코드 회귀는 pytest 82개, Ruff lint·format, pip dependency check와
   wheel 빌드를 통과했다.
 
 ## 3. 변경할 수 없는 공식 제약
@@ -221,7 +223,8 @@ QueryPlan에는 최소한 intent, 상품군, 필수 조건, 완화 전 확인이
 - [x] 공모펀드 50문항의 expected QueryPlan·oracle·안전 차단 계약을 동결한다.
 - [x] 공모펀드 parser·lexical linker를 development 40문항에서 평가한다.
 - [x] parser 규칙을 commit한 뒤 공모펀드 holdout을 최초 1회 평가한다.
-- [ ] 공개된 holdout 실패를 회귀 수정하고 새 blind 표현 변형 세트를 만든다.
+- [x] 공개된 holdout 실패를 family handoff 회귀 테스트로 수정한다.
+- [ ] 새 blind 표현 변형 세트를 만든다.
 - [ ] 공모펀드 grounded answer를 평가한다.
 - [ ] 사람 rubric으로 명확성·중복·비교 용이성과 deterministic 대비 선호를 측정한다.
 - [ ] 다른 작성자가 만든 blind 표현 변형·경계값 중심 v1.1 세트를 최소

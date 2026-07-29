@@ -153,8 +153,13 @@ def _date_hint(
     return None
 
 
-def build_lexical_hints(question: str) -> dict[str, Any]:
+def build_lexical_hints(
+    question: str,
+    product_family_hint: str | None = None,
+) -> dict[str, Any]:
     family = _product_family(question)
+    if family is None and product_family_hint in SEARCH_PROJECTION_BY_FAMILY:
+        family = product_family_hint
     required: list[dict[str, Any]] = []
 
     def add(field: str, value: Any, operator: str = "eq") -> None:
@@ -631,6 +636,8 @@ def build_lexical_hints(question: str) -> dict[str, Any]:
     limit_matches = re.findall(r"(\d+)\s*개(?!월)", question)
     limit = int(limit_matches[-1]) if limit_matches else (1 if exact_lookup else 5)
     unsupported_spans = [phrase for phrase in unsupported_patterns if phrase in question]
+    if family == "fund" and unsupported_spans:
+        rankings = []
     if family == "bond":
         ordered_rating = re.search(
             r"신용등급.{0,20}?(?:이상|이하|초과|미만|높은|낮은)",
@@ -699,15 +706,18 @@ def canonicalize_query_plan_payload(
     question: str,
     payload: dict[str, Any],
 ) -> dict[str, Any]:
-    hints = build_lexical_hints(question)
+    raw_families = payload.get("product_families")
+    product_family_hint = (
+        raw_families[0]
+        if isinstance(raw_families, list)
+        and len(raw_families) == 1
+        and isinstance(raw_families[0], str)
+        else None
+    )
+    hints = build_lexical_hints(question, product_family_hint)
     family = hints["product_family"]
     if family is None:
-        raw_families = payload.get("product_families")
-        family = (
-            raw_families[0]
-            if isinstance(raw_families, list) and len(raw_families) == 1
-            else "overseas_etp"
-        )
+        family = "overseas_etp"
     payload["schema_version"] = "1.0"
     payload["intent"] = "search"
     payload["product_families"] = [family]
