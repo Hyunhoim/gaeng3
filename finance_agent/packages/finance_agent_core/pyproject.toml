@@ -20,6 +20,7 @@ finance-build-etp = "finance_agent_core.storage.cli:main"
 finance-agent-answer = "finance_agent_core.agent.cli:main"
 finance-evaluate-core = "finance_agent_core.evaluation.cli:main"
 finance-evaluate-answers = "finance_agent_core.evaluation.answer_cli:main"
+finance-evaluate-fund-blind = "finance_agent_core.evaluation.blind_cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
