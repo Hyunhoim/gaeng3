@@ -125,3 +125,34 @@ def test_bond_core_suite_is_frozen_balanced_and_valid() -> None:
     ]
     assert len(plans) == 47
     assert all(plan.product_families[0].value == "bond" for plan in plans)
+
+
+def test_fund_core_suite_is_frozen_balanced_scoped_and_valid() -> None:
+    loaded = load_core_evaluation_suite("fund")
+    suite = loaded.suite
+
+    assert suite.suite_id == "fund-core-50"
+    assert Counter(case.split.value for case in suite.cases) == {
+        "development": 40,
+        "holdout": 10,
+    }
+    assert Counter(case.disposition.value for case in suite.cases) == {
+        "execute": 44,
+        "block": 6,
+    }
+    plans = [case.expected_plan("fund") for case in suite.cases]
+    assert all(plan.product_families[0].value == "fund" for plan in plans)
+    for plan in plans:
+        public_scope = [
+            constraint for constraint in plan.constraints if constraint.field == "public_offering"
+        ]
+        assert len(public_scope) == 1
+        assert public_scope[0].value is True
+        aum_fields = {constraint.field for constraint in plan.constraints} | {
+            ranking.field for ranking in plan.ranking
+        }
+        if "aum" in aum_fields:
+            assert any(
+                constraint.field == "trading_currency" and constraint.operator.value == "eq"
+                for constraint in plan.constraints
+            )

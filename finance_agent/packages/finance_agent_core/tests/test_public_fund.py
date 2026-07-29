@@ -11,6 +11,7 @@ from finance_agent_core.agent.providers import fund_vertical_slice_plan
 from finance_agent_core.config import QualityStatus
 from finance_agent_core.contracts import QueryPlan
 from finance_agent_core.domain import DatabaseManifest, NormalizedPublicFundRecord
+from finance_agent_core.evaluation.runner import EvaluationRunner
 from finance_agent_core.execution import (
     PlanExecutionBlockedError,
     ResultVerifier,
@@ -18,6 +19,7 @@ from finance_agent_core.execution import (
     build_product_evidence,
     render_verified_search,
     require_executable_search,
+    require_internal_evaluation_search,
 )
 from finance_agent_core.execution.oracle import compile_search_sql
 from finance_agent_core.normalization import (
@@ -260,6 +262,26 @@ def test_public_fund_scope_is_mandatory_while_agent_execution_stays_disabled() -
         compile_search_sql(unscoped)
     with pytest.raises(PlanExecutionBlockedError, match="not enabled for execution"):
         require_executable_search(plan)
+    require_internal_evaluation_search(plan)
+
+
+def test_public_fund_internal_evaluation_rejects_non_expected_provider(
+    tmp_path: Path,
+) -> None:
+    path, _, _ = write_sample_fund_database(tmp_path)
+
+    class NonExpectedProvider:
+        provider_name = "mock"
+
+        def generate_query_plan(self, question: str, question_id: str) -> QueryPlan:
+            return fund_vertical_slice_plan(question_id)
+
+    with pytest.raises(ValueError, match="restricted to the frozen expected provider"):
+        EvaluationRunner(
+            path,
+            NonExpectedProvider(),
+            allow_internal_disabled_dataset=True,
+        )
 
 
 def test_public_fund_long_return_cannot_drive_execution() -> None:

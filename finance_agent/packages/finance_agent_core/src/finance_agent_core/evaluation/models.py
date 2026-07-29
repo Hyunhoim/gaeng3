@@ -148,9 +148,14 @@ class EvaluationCase(EvaluationModel):
 
 
 class EvaluationSuite(EvaluationModel):
-    suite_id: Literal["overseas-etp-core-50", "domestic-etp-core-50", "bond-core-50"]
+    suite_id: Literal[
+        "overseas-etp-core-50",
+        "domestic-etp-core-50",
+        "bond-core-50",
+        "fund-core-50",
+    ]
     suite_version: Literal["1.0"]
-    dataset: Literal["overseas_etp", "domestic_etp", "bond"]
+    dataset: Literal["overseas_etp", "domestic_etp", "bond", "fund"]
     database_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     manifest_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     cases: list[EvaluationCase] = Field(min_length=1)

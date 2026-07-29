@@ -4,6 +4,7 @@ from finance_agent_core.execution.policy import (
     PlanExecutionBlockedError,
     require_executable_search,
     require_fund_public_scope,
+    require_internal_evaluation_search,
 )
 from finance_agent_core.execution.renderer import (
     render_blocked_plan,
@@ -20,6 +21,7 @@ __all__ = [
     "build_product_evidence",
     "require_executable_search",
     "require_fund_public_scope",
+    "require_internal_evaluation_search",
     "render_blocked_plan",
     "render_verified_search",
     "warning_codes_for_search",

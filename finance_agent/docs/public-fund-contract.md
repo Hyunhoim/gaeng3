@@ -19,7 +19,8 @@
 - 사모 15개와 공·사모 구분 결측 8개는 구조적으로 정상이나 기본 검색 범위에서 제외
 - `fund_products`, `fund_attributes`, `fund_quarantine` 정규화 SQLite와 manifest 구현 완료
 - parameterized Oracle, 독립 Result Verifier, field-level evidence와 안전 렌더러 연결 완료
-- 핵심 평가 세트와 HCX schema 노출 전까지 공식 Agent 실행은 비활성화
+- 40 development·10 holdout 핵심 평가 세트의 expected Oracle 회귀 50/50
+- HCX schema 노출과 서버 계약 테스트 전까지 공식 Agent 실행은 비활성화
 
 ## 1. 근거와 재현 방법
 
@@ -296,5 +297,5 @@ manifest schema 1.1은 raw 행 수, 논리 상품 수, 속성 수, 격리 수와
 - [x] field registry 기반 parameterized oracle 구현
 - [x] AUM 0, 코드 06, 장기 수익률 제한 oracle 회귀 테스트
 - [x] result verifier와 field-level evidence DTO 연결
-- [ ] 핵심 평가 질문과 blind 표현 변형 회귀 세트 통과
+- [x] 핵심 평가 질문과 blind 표현 변형의 expected Oracle 회귀 세트 통과
 - [ ] HCX schema에 fund를 노출한 뒤 서버 QueryPlan 계약 테스트 통과

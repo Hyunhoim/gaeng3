@@ -11,7 +11,7 @@
 | 해외 ETF·ETN | 감사, 정규화, SQLite, Oracle, Verifier, 50문항 완료 |
 | 국내 ETF·ETN | 감사, 정규화, SQLite, Oracle, Verifier, 50문항 완료 |
 | 국내채권 | 감사, stale·날짜 계약, SQLite, Oracle, Verifier, 50문항 완료 |
-| 공모펀드 | 정규화 SQLite, Oracle, Verifier, field evidence 완료, 평가 세트 예정 |
+| 공모펀드 | 정규화·Oracle·Verifier·evidence와 50문항 계약 완료, Agent 실행 비활성 |
 | 근거 기반 답변 | 최소권한 LLM 입력, Answer Verifier, 결정론적 폴백 완료 |
 | HyperCLOVA X | 공식 API 확보 후 연결 예정 |
 
@@ -94,8 +94,9 @@ conda run -n gaeng3-dev \
 ```
 
 `--dataset`은 `overseas_etp`, `domestic_etp`, `bond`, `fund` 중에서 선택한다.
-`fund`는 정규화 SQLite 생성과 내부 Oracle·Verifier 회귀를 지원한다. 핵심 평가
-세트와 HCX schema 노출 전까지 공식 Agent 실행은 fail-closed로 비활성화되어 있다.
+`fund`는 정규화 SQLite 생성과 동결 50문항의 내부 Oracle·Verifier 회귀를
+지원한다. HCX schema 노출과 서버 계약 테스트 전까지 공식 Agent 실행은
+fail-closed로 비활성화되어 있다.
 
 ## 문서
 
@@ -104,6 +105,7 @@ conda run -n gaeng3-dev \
 - [현재 프로젝트 기준](docs/project-baseline.md)
 - [데이터 감사 기준](docs/data-audit.md)
 - [공모펀드 원천 데이터 계약](docs/public-fund-contract.md)
+- [공모펀드 핵심 평가 기준선](docs/evaluation-public-fund.md)
 - [Field Registry와 QueryPlan 계약](docs/contracts.md)
 - [개발 환경과 구현 상태](docs/development.md)
 - [재현 가능한 평가 baseline](evaluation/README.md)
@@ -118,5 +120,5 @@ conda run -n gaeng3-dev \
 동료의 템플릿 작업과 합칠 때는 `AgentRequest`, `AgentResponse`, evidence,
 오류·timeout 계약을 먼저 고정하고 공식 `/answer` adapter를 연결한다.
 
-현재 우선순위는 공모펀드 핵심 평가 질문·blind 표현 변형, 사람 답변 품질 평가,
-HyperCLOVA X와 공식 `/answer` adapter 순이다.
+현재 우선순위는 공모펀드 parser·lexical linker의 development 평가, grounded
+answer와 사람 품질 평가, HCX schema·HyperCLOVA X, 공식 `/answer` adapter 순이다.

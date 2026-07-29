@@ -14,9 +14,8 @@
 - 원천 145,393행의 1차 감사와 GPT Pro 전략 연구를 마쳤다.
 - GPT Pro 산출물은 유용한 연구 근거지만, 그대로 실행 가능한 구현 명세는 아니다.
 - 애플리케이션 저장소 로컬 경로는 `3. Workspace/gaeng3`로 정했다.
-- 로컬 `haeyeongcho` branch가 `origin/haeyeongcho`를 추적한다. 2026-07-28 확인 시 원격 `main`·`hyunhoim`·`haeyeongcho`는 모두 초기 README 커밋 `f366414`를 가리킨다.
-- 검증된 Agent Core 기반은 2026-07-29 로컬 commit `a65c2b2`로 보존했으며
-  원격에는 아직 push하지 않았다.
+- 로컬 `haeyeongcho` branch가 `origin/haeyeongcho`를 추적하며 공모펀드 구현·문서
+  commit `be2797a`까지 원격에 push했다.
 - 동료가 가져올 `vintasoftware/nextjs-fastapi-template`은 루트의 `fastapi_backend`, `nextjs-frontend`, `docs` 구조와 UV를 사용한다. Agent·데이터 작업공간은 `finance_agent/`에 격리하고, 애플리케이션이 재사용할 Python 코드는 `finance_agent/packages/finance_agent_core`에서 개발한다.
 - `gaeng3-dev` Conda 환경과 pip requirements를 만들고, 표준 라이브러리 기반 데이터 감사기를 구현했다.
 - 4종 145,393행 감사, expectation 65/65, 8개 입력 hash 대조, 두 번의 결정적 재실행을 통과했다.
@@ -49,9 +48,11 @@
   SHA-256이 일치했다.
 - 공모펀드 공모 범위 잠금, Oracle, Result Verifier, field evidence를 연결했다.
   대표 질의는 후보 1,811개와 상위 5개를 SQL·Python에서 동일하게 재현했다.
-  클래스 상위 그룹 의미는 추측하지 않고 경고하며 공식 Agent 실행은 평가 전까지
-  비활성화했다.
-- 전체 코드 회귀는 pytest 73개, Ruff lint·format, pip dependency check와
+  클래스 상위 그룹 의미는 추측하지 않고 경고한다.
+- 공모펀드 40 development·10 holdout 평가 계약을 동결했다. 실행 44개와 안전
+  차단 6개의 expected QueryPlan·Oracle 회귀는 50/50이며, 공식 Agent 실행은
+  HCX schema·서버 계약 승인 전까지 비활성화했다.
+- 전체 코드 회귀는 pytest 75개, Ruff lint·format, pip dependency check와
   wheel 빌드를 통과했다.
 
 ## 3. 변경할 수 없는 공식 제약
@@ -213,6 +214,8 @@ QueryPlan에는 최소한 intent, 상품군, 필수 조건, 완화 전 확인이
 - [x] 국내 ETP에도 40 development/10 local-inference split을 추가한다.
 - [x] 국내 ETP 50문항에서 최종 답변의 수치·순위·evidence·기준일을 평가한다.
 - [x] 국내채권 50문항에서 QueryPlan·oracle·안전 차단과 근거 답변을 평가한다.
+- [x] 공모펀드 50문항의 expected QueryPlan·oracle·안전 차단 계약을 동결한다.
+- [ ] 공모펀드 parser·lexical linker와 grounded answer를 평가한다.
 - [ ] 사람 rubric으로 명확성·중복·비교 용이성과 deterministic 대비 선호를 측정한다.
 - [ ] 다른 작성자가 만든 blind 표현 변형·경계값 중심 v1.1 세트를 최소
   100개로 새로 만들고 최초 holdout 성능을 측정한다.

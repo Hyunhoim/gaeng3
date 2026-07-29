@@ -31,7 +31,11 @@ def require_fund_public_scope(plan: QueryPlan) -> None:
         )
 
 
-def require_executable_search(plan: QueryPlan) -> None:
+def _require_search_contract(
+    plan: QueryPlan,
+    *,
+    require_enabled_dataset: bool,
+) -> None:
     blockers: list[str] = []
     if plan.intent is not Intent.SEARCH:
         blockers.append(f"intent {plan.intent.value!r} is not executable yet")
@@ -41,13 +45,24 @@ def require_executable_search(plan: QueryPlan) -> None:
         blockers.append(
             f"{len(plan.unsupported_conditions)} unsupported condition(s) require a safe refusal"
         )
-    registry = load_field_registry()
-    for family in plan.product_families:
-        if not registry.require_dataset(family.value).execution_enabled:
-            blockers.append(f"product family {family.value!r} is not enabled for execution")
+    if require_enabled_dataset:
+        registry = load_field_registry()
+        for family in plan.product_families:
+            if not registry.require_dataset(family.value).execution_enabled:
+                blockers.append(f"product family {family.value!r} is not enabled for execution")
     try:
         require_fund_public_scope(plan)
     except PlanExecutionBlockedError as error:
         blockers.append(str(error))
     if blockers:
         raise PlanExecutionBlockedError("; ".join(blockers))
+
+
+def require_executable_search(plan: QueryPlan) -> None:
+    _require_search_contract(plan, require_enabled_dataset=True)
+
+
+def require_internal_evaluation_search(plan: QueryPlan) -> None:
+    """Validate a frozen Oracle regression plan without opening Agent execution."""
+
+    _require_search_contract(plan, require_enabled_dataset=False)

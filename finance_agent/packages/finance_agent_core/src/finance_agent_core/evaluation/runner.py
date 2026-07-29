@@ -23,6 +23,7 @@ from finance_agent_core.execution import (
     ResultVerifier,
     SQLiteOracle,
     require_executable_search,
+    require_internal_evaluation_search,
 )
 from finance_agent_core.storage import connect_read_only, load_all_records, load_manifest
 
@@ -187,6 +188,8 @@ class EvaluationRunner:
         database_path: str | Path,
         provider: QueryPlanProvider | ExpectedPlanProvider,
         universe: list[NormalizedProductRecord] | None = None,
+        *,
+        allow_internal_disabled_dataset: bool = False,
     ) -> None:
         self.database_path = Path(database_path)
         self.provider = provider
@@ -194,10 +197,26 @@ class EvaluationRunner:
         self.verifier = ResultVerifier()
         with connect_read_only(self.database_path) as connection:
             self.product_family = load_manifest(connection).dataset
+        if allow_internal_disabled_dataset:
+            if provider.provider_name != "expected":
+                raise ValueError(
+                    "disabled-dataset evaluation is restricted to the frozen expected provider"
+                )
+            if self.product_family != "fund":
+                raise ValueError(
+                    "disabled-dataset evaluation is restricted to the fund approval gate"
+                )
+        self.allow_internal_disabled_dataset = allow_internal_disabled_dataset
         if universe is None:
             with connect_read_only(self.database_path) as connection:
                 universe = load_all_records(connection)
         self.universe = universe
+
+    def _require_search(self, plan: QueryPlan) -> None:
+        if self.allow_internal_disabled_dataset:
+            require_internal_evaluation_search(plan)
+        else:
+            require_executable_search(plan)
 
     def run_case(self, case: EvaluationCase) -> CaseEvaluationResult:
         started = time.perf_counter()
@@ -214,7 +233,7 @@ class EvaluationRunner:
             checks.update(semantic_checks(case, plan, self.product_family))
             if case.disposition is ExpectedDisposition.EXECUTE:
                 try:
-                    require_executable_search(plan)
+                    self._require_search(plan)
                     checks["execution_allowed"] = True
                 except PlanExecutionBlockedError as exception:
                     checks["execution_allowed"] = False
@@ -230,7 +249,7 @@ class EvaluationRunner:
                 checks["oracle_exact"] = checks["candidate_count"] and checks["top_product_ids"]
             else:
                 try:
-                    require_executable_search(plan)
+                    self._require_search(plan)
                 except PlanExecutionBlockedError:
                     checks["execution_blocked"] = True
                 else:

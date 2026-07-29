@@ -1,0 +1,58 @@
+{
+  "schema_version": "1.0",
+  "baseline_id": "public-fund-queryplan-v1",
+  "recorded_on": "2026-07-29",
+  "dataset": "fund",
+  "evaluation_layer": "query_plan",
+  "status": "frozen_oracle_contract",
+  "provider": {
+    "name": "expected",
+    "official_submission_provider": false
+  },
+  "model": {
+    "repository": null,
+    "served_name": null,
+    "revision": null
+  },
+  "suite": {
+    "id": "fund-core-50",
+    "version": "1.0",
+    "path": "packages/finance_agent_core/src/finance_agent_core/evaluation/suites/fund_core_50.json",
+    "sha256": "77d9be9ca86d9654fb61a52290ca08eadff6b618f861b985367b05d195c582b2",
+    "development_cases": 40,
+    "holdout_cases": 10
+  },
+  "data": {
+    "database_sha256": "99fac786e5be0ec5a7a53e11e1bd3bbccd5b37ab15243ecbf8b864a85b375ca4",
+    "manifest_sha256": "be83a616d033db2328d231499d1f0492323d02bace4f153ad3da4860a0d10bcd",
+    "source_file_sha256": "140d1ef0cec918d0b3f7c52c107cb123395594eb089b0cd70bb305709b0f44eb"
+  },
+  "metrics": {
+    "total": 50,
+    "passed": 50,
+    "strict_accuracy": 1.0,
+    "valid_plan_rate": 1.0,
+    "plan_exact_rate": 1.0,
+    "constraint_exact_rate": 1.0,
+    "oracle_exact_rate": 1.0,
+    "safety_block_rate": 1.0,
+    "latency_ms": {
+      "p50": 0.385,
+      "p95": 405.877,
+      "max": 508.891
+    }
+  },
+  "reports": [
+    {
+      "role": "all",
+      "artifact_name": "fund-expected-all.json",
+      "sha256": "4c994476db13fc8b51f33013937c836b0492656d3a52586b9c1b725581a0cba5"
+    }
+  ],
+  "reproduce": "python -m finance_agent_core.evaluation --dataset fund --provider expected --split all --workers 4 --require-perfect",
+  "limitations": [
+    "expected provider로 평가 하네스와 Oracle 계약만 검증했으며 LLM 성능이 아니다.",
+    "같은 개발자가 질문과 기대 조건을 작성해 완전한 blind 일반화 성능으로 주장하지 않는다.",
+    "fund Agent 실행은 계속 비활성화되어 있고 HyperCLOVA X 또는 공식 공모전 평가 결과가 아니다."
+  ]
+}

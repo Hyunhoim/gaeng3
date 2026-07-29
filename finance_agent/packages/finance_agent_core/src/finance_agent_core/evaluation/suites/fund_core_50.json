@@ -1,0 +1,1975 @@
+{
+  "suite_id": "fund-core-50",
+  "suite_version": "1.0",
+  "dataset": "fund",
+  "database_sha256": "99fac786e5be0ec5a7a53e11e1bd3bbccd5b37ab15243ecbf8b864a85b375ca4",
+  "manifest_sha256": "be83a616d033db2328d231499d1f0492323d02bace4f153ad3da4860a0d10bcd",
+  "cases": [
+    {
+      "id": "fund-001",
+      "split": "development",
+      "category": "scope_status",
+      "question": "공모펀드를 상품명 오름차순으로 5개 보여줘",
+      "constraints": [
+        {
+          "field": "public_offering",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "product_name",
+          "direction": "asc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 11115,
+        "top_product_ids": [
+          "KR5182490130",
+          "KR5182490137",
+          "KR5182490142",
+          "KR5182490144",
+          "KR5182490136"
+        ]
+      }
+    },
+    {
+      "id": "fund-002",
+      "split": "development",
+      "category": "scope_status",
+      "question": "현재 판매 중인 공모펀드를 상품명 순으로 5개 찾아줘",
+      "constraints": [
+        {
+          "field": "public_offering",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        },
+        {
+          "field": "sellable",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "product_name",
+          "direction": "asc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 8445,
+        "top_product_ids": [
+          "KR5182490130",
+          "KR5182490137",
+          "KR5182490142",
+          "KR5182490144",
+          "KR5182490136"
+        ]
+      }
+    },
+    {
+      "id": "fund-003",
+      "split": "development",
+      "category": "scope_status",
+      "question": "미래에셋증권에서 판매 가능한 공모펀드를 상품명 순으로 5개 보여줘",
+      "constraints": [
+        {
+          "field": "public_offering",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        },
+        {
+          "field": "company_sellable",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "product_name",
+          "direction": "asc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 10430,
+        "top_product_ids": [
+          "KR5182490130",
+          "KR5182490137",
+          "KR5182490142",
+          "KR5182490144",
+          "KR5182490136"
+        ]
+      }
+    },
+    {
+      "id": "fund-004",
+      "split": "development",
+      "category": "scope_status",
+      "question": "현재 판매 중이면서 당사에서도 판매 가능한 공모펀드를 5개 보여줘",
+      "constraints": [
+        {
+          "field": "public_offering",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        },
+        {
+          "field": "sellable",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        },
+        {
+          "field": "company_sellable",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "product_name",
+          "direction": "asc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 8434,
+        "top_product_ids": [
+          "KR5182490130",
+          "KR5182490137",
+          "KR5182490142",
+          "KR5182490144",
+          "KR5182490136"
+        ]
+      }
+    },
+    {
+      "id": "fund-005",
+      "split": "development",
+      "category": "scope_status",
+      "question": "판매가 완료된 공모펀드를 상품명 순으로 5개 찾아줘",
+      "constraints": [
+        {
+          "field": "public_offering",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        },
+        {
+          "field": "sellable",
+          "operator": "eq",
+          "value": false,
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "product_name",
+          "direction": "asc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 2670,
+        "top_product_ids": [
+          "KR5182490091",
+          "KR5182490098",
+          "KR5182490095",
+          "KR5182490099",
+          "KR5182490092"
+        ]
+      }
+    },
+    {
+      "id": "fund-006",
+      "split": "development",
+      "category": "scope_status",
+      "question": "달러로 거래되는 공모펀드를 상품명 순으로 5개 보여줘",
+      "constraints": [
+        {
+          "field": "public_offering",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        },
+        {
+          "field": "trading_currency",
+          "operator": "eq",
+          "value": "USD",
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "product_name",
+          "direction": "asc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 71,
+        "top_product_ids": [
+          "KR5049101021",
+          "KR5049101026",
+          "KR5049101027",
+          "KR5127450446",
+          "KR5127450447"
+        ]
+      }
+    },
+    {
+      "id": "fund-007",
+      "split": "development",
+      "category": "classification",
+      "question": "국내에 투자하는 원화 공모펀드를 AUM 큰 순으로 5개 보여줘",
+      "constraints": [
+        {
+          "field": "public_offering",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        },
+        {
+          "field": "fund_geography_scope",
+          "operator": "eq",
+          "value": "국내",
+          "strength": "locked"
+        },
+        {
+          "field": "trading_currency",
+          "operator": "eq",
+          "value": "KRW",
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "aum",
+          "direction": "desc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 4669,
+        "top_product_ids": [
+          "KR5114601001",
+          "KR5014410030",
+          "KR5014410031",
+          "KR5014410032",
+          "KR5014410039"
+        ]
+      }
+    },
+    {
+      "id": "fund-008",
+      "split": "development",
+      "category": "classification",
+      "question": "해외 공모펀드를 3개월 수익률 높은 순으로 5개 보여줘",
+      "constraints": [
+        {
+          "field": "public_offering",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        },
+        {
+          "field": "fund_geography_scope",
+          "operator": "eq",
+          "value": "해외",
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "three_month_return_pct",
+          "direction": "desc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 5346,
+        "top_product_ids": [
+          "KR5114450606",
+          "KR5114450609",
+          "KR5114450608",
+          "KR5114450607",
+          "KR5114450603"
+        ]
+      }
+    },
+    {
+      "id": "fund-009",
+      "split": "development",
+      "category": "classification",
+      "question": "국내외 혼합 공모펀드를 1개월 수익률 높은 순으로 5개 찾아줘",
+      "constraints": [
+        {
+          "field": "public_offering",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        },
+        {
+          "field": "fund_geography_scope",
+          "operator": "eq",
+          "value": "국내외혼합",
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "one_month_return_pct",
+          "direction": "desc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 1100,
+        "top_product_ids": [
+          "KR5145450048",
+          "KR5145450047",
+          "KR5145450043",
+          "KR5145450045",
+          "KR5145450046"
+        ]
+      }
+    },
+    {
+      "id": "fund-010",
+      "split": "development",
+      "category": "classification",
+      "question": "주식형 공모펀드를 3개월 수익률 높은 순으로 5개 보여줘",
+      "constraints": [
+        {
+          "field": "public_offering",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        },
+        {
+          "field": "fund_management_attribute",
+          "operator": "eq",
+          "value": "주식형",
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "three_month_return_pct",
+          "direction": "desc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 4280,
+        "top_product_ids": [
+          "KR5174450056",
+          "KR5174450050",
+          "KR5174450054",
+          "KR5159450019",
+          "KR5159450011"
+        ]
+      }
+    },
+    {
+      "id": "fund-011",
+      "split": "development",
+      "category": "classification",
+      "question": "채권형 공모펀드를 1개월 수익률 높은 순으로 5개 보여줘",
+      "constraints": [
+        {
+          "field": "public_offering",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        },
+        {
+          "field": "fund_management_attribute",
+          "operator": "eq",
+          "value": "채권형",
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "one_month_return_pct",
+          "direction": "desc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 1181,
+        "top_product_ids": [
+          "KR5127420140",
+          "KR5127420141",
+          "KR5127420142",
+          "KR5127420143",
+          "KR5127420144"
+        ]
+      }
+    },
+    {
+      "id": "fund-012",
+      "split": "development",
+      "category": "classification",
+      "question": "재간접 원화 공모펀드를 AUM 큰 순으로 5개 찾아줘",
+      "constraints": [
+        {
+          "field": "public_offering",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        },
+        {
+          "field": "fund_management_attribute",
+          "operator": "eq",
+          "value": "재간접",
+          "strength": "locked"
+        },
+        {
+          "field": "trading_currency",
+          "operator": "eq",
+          "value": "KRW",
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "aum",
+          "direction": "desc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 3004,
+        "top_product_ids": [
+          "KR5148490130",
+          "KR5148490131",
+          "KR5148490132",
+          "KR5148490133",
+          "KR5148490134"
+        ]
+      }
+    },
+    {
+      "id": "fund-013",
+      "split": "development",
+      "category": "classification",
+      "question": "MMF 공모펀드를 원화 AUM 큰 순으로 5개 보여줘",
+      "constraints": [
+        {
+          "field": "public_offering",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        },
+        {
+          "field": "fund_management_attribute",
+          "operator": "eq",
+          "value": "MMF",
+          "strength": "locked"
+        },
+        {
+          "field": "trading_currency",
+          "operator": "eq",
+          "value": "KRW",
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "aum",
+          "direction": "desc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 225,
+        "top_product_ids": [
+          "KR5014410030",
+          "KR5014410031",
+          "KR5014410032",
+          "KR5014410039",
+          "KR5049101001"
+        ]
+      }
+    },
+    {
+      "id": "fund-014",
+      "split": "development",
+      "category": "classification",
+      "question": "투자지역이 글로벌인 공모펀드를 6개월 수익률 높은 순으로 5개 보여줘",
+      "constraints": [
+        {
+          "field": "public_offering",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        },
+        {
+          "field": "investment_region",
+          "operator": "eq",
+          "value": "글로벌",
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "six_month_return_pct",
+          "direction": "desc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 4378,
+        "top_product_ids": [
+          "KR5114450606",
+          "KR5114450609",
+          "KR5114450608",
+          "KR5114450607",
+          "KR5114450603"
+        ]
+      }
+    },
+    {
+      "id": "fund-015",
+      "split": "development",
+      "category": "classification",
+      "question": "아시아 지역 공모펀드를 3개월 수익률 높은 순으로 5개 찾아줘",
+      "constraints": [
+        {
+          "field": "public_offering",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        },
+        {
+          "field": "investment_region",
+          "operator": "eq",
+          "value": "아시아",
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "three_month_return_pct",
+          "direction": "desc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 1086,
+        "top_product_ids": [
+          "KR5153450946",
+          "KR5153450949",
+          "KR5153450948",
+          "KR5153450947",
+          "KR5153450940"
+        ]
+      }
+    },
+    {
+      "id": "fund-016",
+      "split": "development",
+      "category": "classification",
+      "question": "유럽 지역 공모펀드를 1개월 수익률 높은 순으로 5개 보여줘",
+      "constraints": [
+        {
+          "field": "public_offering",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        },
+        {
+          "field": "investment_region",
+          "operator": "eq",
+          "value": "유럽",
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "one_month_return_pct",
+          "direction": "desc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 187,
+        "top_product_ids": [
+          "KR5113450327",
+          "KR5113450320",
+          "KR5113450326",
+          "KR5113450331",
+          "KR5113450333"
+        ]
+      }
+    },
+    {
+      "id": "fund-017",
+      "split": "development",
+      "category": "classification",
+      "question": "개인용으로 구분된 공모펀드를 상품명 순으로 5개 보여줘",
+      "constraints": [
+        {
+          "field": "public_offering",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        },
+        {
+          "field": "investor_type",
+          "operator": "eq",
+          "value": "개인",
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "product_name",
+          "direction": "asc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 1763,
+        "top_product_ids": [
+          "KR5182490142",
+          "KR5182490143",
+          "KR5182490122",
+          "KR5182490123",
+          "KR5182490016"
+        ]
+      }
+    },
+    {
+      "id": "fund-018",
+      "split": "development",
+      "category": "classification",
+      "question": "법인용으로 구분된 공모펀드를 상품명 순으로 5개 찾아줘",
+      "constraints": [
+        {
+          "field": "public_offering",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        },
+        {
+          "field": "investor_type",
+          "operator": "eq",
+          "value": "법인",
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "product_name",
+          "direction": "asc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 651,
+        "top_product_ids": [
+          "KR517709004M",
+          "KR5078410011",
+          "KR5078410020",
+          "KR512602039M",
+          "KR5031410011"
+        ]
+      }
+    },
+    {
+      "id": "fund-019",
+      "split": "development",
+      "category": "risk_hedge",
+      "question": "매우높은위험 1등급 공모펀드를 1개월 수익률 높은 순으로 5개 보여줘",
+      "constraints": [
+        {
+          "field": "public_offering",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        },
+        {
+          "field": "risk_level",
+          "operator": "eq",
+          "value": "매우높은위험(1등급)",
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "one_month_return_pct",
+          "direction": "desc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 670,
+        "top_product_ids": [
+          "KR5114450606",
+          "KR5114450608",
+          "KR5114450609",
+          "KR5114450607",
+          "KR5114450603"
+        ]
+      }
+    },
+    {
+      "id": "fund-020",
+      "split": "development",
+      "category": "risk_hedge",
+      "question": "높은위험 2등급 공모펀드를 3개월 수익률 높은 순으로 5개 보여줘",
+      "constraints": [
+        {
+          "field": "public_offering",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        },
+        {
+          "field": "risk_level",
+          "operator": "eq",
+          "value": "높은위험(2등급)",
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "three_month_return_pct",
+          "direction": "desc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 3301,
+        "top_product_ids": [
+          "KR5174450056",
+          "KR5174450050",
+          "KR5174450054",
+          "KR5159450019",
+          "KR5159450011"
+        ]
+      }
+    },
+    {
+      "id": "fund-021",
+      "split": "development",
+      "category": "risk_hedge",
+      "question": "다소높은위험 3등급 공모펀드를 6개월 수익률 높은 순으로 5개 찾아줘",
+      "constraints": [
+        {
+          "field": "public_offering",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        },
+        {
+          "field": "risk_level",
+          "operator": "eq",
+          "value": "다소높은위험(3등급)",
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "six_month_return_pct",
+          "direction": "desc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 1663,
+        "top_product_ids": [
+          "KR5153490520",
+          "KR518105022M",
+          "KR5123450070",
+          "KR5127450221",
+          "KR5123450071"
+        ]
+      }
+    },
+    {
+      "id": "fund-022",
+      "split": "development",
+      "category": "risk_hedge",
+      "question": "보통위험 4등급 원화 공모펀드를 AUM 큰 순으로 5개 보여줘",
+      "constraints": [
+        {
+          "field": "public_offering",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        },
+        {
+          "field": "risk_level",
+          "operator": "eq",
+          "value": "보통위험(4등급)",
+          "strength": "locked"
+        },
+        {
+          "field": "trading_currency",
+          "operator": "eq",
+          "value": "KRW",
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "aum",
+          "direction": "desc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 1385,
+        "top_product_ids": [
+          "KR5153400030",
+          "KR5153400031",
+          "KR5153400032",
+          "KR5153400033",
+          "KR5153400034"
+        ]
+      }
+    },
+    {
+      "id": "fund-023",
+      "split": "development",
+      "category": "risk_hedge",
+      "question": "낮은위험 5등급 공모펀드를 1주 수익률 높은 순으로 5개 보여줘",
+      "constraints": [
+        {
+          "field": "public_offering",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        },
+        {
+          "field": "risk_level",
+          "operator": "eq",
+          "value": "낮은위험(5등급)",
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "one_week_return_pct",
+          "direction": "desc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 1198,
+        "top_product_ids": [
+          "KR518104056M",
+          "KR510904107M",
+          "KR510904116M",
+          "KR510904118M",
+          "KR5153430080"
+        ]
+      }
+    },
+    {
+      "id": "fund-024",
+      "split": "development",
+      "category": "risk_hedge",
+      "question": "환헤지하는 공모펀드를 3개월 수익률 높은 순으로 5개 찾아줘",
+      "constraints": [
+        {
+          "field": "public_offering",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        },
+        {
+          "field": "currency_hedged",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "three_month_return_pct",
+          "direction": "desc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 4600,
+        "top_product_ids": [
+          "KR5114450596",
+          "KR5114450599",
+          "KR5114450598",
+          "KR5114450597",
+          "KR5114450593"
+        ]
+      }
+    },
+    {
+      "id": "fund-025",
+      "split": "development",
+      "category": "risk_hedge",
+      "question": "환헤지하지 않는 공모펀드를 3개월 수익률 높은 순으로 5개 보여줘",
+      "constraints": [
+        {
+          "field": "public_offering",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        },
+        {
+          "field": "currency_hedged",
+          "operator": "eq",
+          "value": false,
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "three_month_return_pct",
+          "direction": "desc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 2301,
+        "top_product_ids": [
+          "KR5114450606",
+          "KR5114450609",
+          "KR5114450608",
+          "KR5114450607",
+          "KR5114450603"
+        ]
+      }
+    },
+    {
+      "id": "fund-026",
+      "split": "development",
+      "category": "return",
+      "question": "1주 수익률이 5% 이상인 공모펀드를 높은 순으로 5개 보여줘",
+      "constraints": [
+        {
+          "field": "public_offering",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        },
+        {
+          "field": "one_week_return_pct",
+          "operator": "gte",
+          "value": 5,
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "one_week_return_pct",
+          "direction": "desc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 1546,
+        "top_product_ids": [
+          "KR5152450000",
+          "KR5152450004",
+          "KR5152601012",
+          "KR5152601011",
+          "KR5114470160"
+        ]
+      }
+    },
+    {
+      "id": "fund-027",
+      "split": "development",
+      "category": "return",
+      "question": "1주 수익률이 -1%에서 1% 사이인 공모펀드를 낮은 순으로 5개 찾아줘",
+      "constraints": [
+        {
+          "field": "public_offering",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        },
+        {
+          "field": "one_week_return_pct",
+          "operator": "between",
+          "value": [
+            -1,
+            1
+          ],
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "one_week_return_pct",
+          "direction": "asc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 3230,
+        "top_product_ids": [
+          "KR5153450580",
+          "KR5153450585",
+          "KR5153450586",
+          "KR5153450587",
+          "KR5153450588"
+        ]
+      }
+    },
+    {
+      "id": "fund-028",
+      "split": "development",
+      "category": "return",
+      "question": "1개월 수익률이 10% 이상인 공모펀드를 높은 순으로 5개 보여줘",
+      "constraints": [
+        {
+          "field": "public_offering",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        },
+        {
+          "field": "one_month_return_pct",
+          "operator": "gte",
+          "value": 10,
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "one_month_return_pct",
+          "direction": "desc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 45,
+        "top_product_ids": [
+          "KR5145450048",
+          "KR5145450047",
+          "KR5145450043",
+          "KR5145450045",
+          "KR5145450046"
+        ]
+      }
+    },
+    {
+      "id": "fund-029",
+      "split": "development",
+      "category": "return",
+      "question": "1개월 수익률이 0%에서 5% 사이인 공모펀드를 높은 순으로 5개 찾아줘",
+      "constraints": [
+        {
+          "field": "public_offering",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        },
+        {
+          "field": "one_month_return_pct",
+          "operator": "between",
+          "value": [
+            0,
+            5
+          ],
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "one_month_return_pct",
+          "direction": "desc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 4370,
+        "top_product_ids": [
+          "KR5153440031",
+          "KR5120430091",
+          "KR5120430090",
+          "KR512002062M",
+          "KR5145450027"
+        ]
+      }
+    },
+    {
+      "id": "fund-030",
+      "split": "development",
+      "category": "return",
+      "question": "3개월 수익률이 20% 이상인 공모펀드를 높은 순으로 5개 보여줘",
+      "constraints": [
+        {
+          "field": "public_offering",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        },
+        {
+          "field": "three_month_return_pct",
+          "operator": "gte",
+          "value": 20,
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "three_month_return_pct",
+          "direction": "desc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 1720,
+        "top_product_ids": [
+          "KR5129470016",
+          "KR5129470015",
+          "KR5129470013",
+          "KR5129470010",
+          "KR5129470012"
+        ]
+      }
+    },
+    {
+      "id": "fund-031",
+      "split": "development",
+      "category": "return",
+      "question": "3개월 수익률이 -5%에서 5% 사이인 공모펀드를 낮은 순으로 5개 찾아줘",
+      "constraints": [
+        {
+          "field": "public_offering",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        },
+        {
+          "field": "three_month_return_pct",
+          "operator": "between",
+          "value": [
+            -5,
+            5
+          ],
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "three_month_return_pct",
+          "direction": "asc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 2928,
+        "top_product_ids": [
+          "KR5153450351",
+          "KR5153450359",
+          "KR5153450356",
+          "KR5153450350",
+          "KR513502079M"
+        ]
+      }
+    },
+    {
+      "id": "fund-032",
+      "split": "development",
+      "category": "return",
+      "question": "6개월 수익률이 50% 이상인 공모펀드를 높은 순으로 5개 보여줘",
+      "constraints": [
+        {
+          "field": "public_offering",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        },
+        {
+          "field": "six_month_return_pct",
+          "operator": "gte",
+          "value": 50,
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "six_month_return_pct",
+          "direction": "desc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 1392,
+        "top_product_ids": [
+          "KR5129470010",
+          "KR5129470012",
+          "KR5129470011",
+          "KR5129470016",
+          "KR5129470015"
+        ]
+      }
+    },
+    {
+      "id": "fund-033",
+      "split": "development",
+      "category": "compound",
+      "question": "당사에서 판매 중인 해외 주식형 공모펀드 중 3개월 수익률이 높은 상품 5개",
+      "constraints": [
+        {
+          "field": "public_offering",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        },
+        {
+          "field": "sellable",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        },
+        {
+          "field": "company_sellable",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        },
+        {
+          "field": "fund_geography_scope",
+          "operator": "eq",
+          "value": "해외",
+          "strength": "locked"
+        },
+        {
+          "field": "fund_management_attribute",
+          "operator": "eq",
+          "value": "주식형",
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "three_month_return_pct",
+          "direction": "desc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 1811,
+        "top_product_ids": [
+          "KR5114450606",
+          "KR5114450609",
+          "KR5114450608",
+          "KR5114450607",
+          "KR5114450603"
+        ]
+      }
+    },
+    {
+      "id": "fund-034",
+      "split": "development",
+      "category": "compound",
+      "question": "국내 채권형이면서 낮은위험 5등급인 공모펀드를 1개월 수익률 높은 순으로 5개",
+      "constraints": [
+        {
+          "field": "public_offering",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        },
+        {
+          "field": "fund_geography_scope",
+          "operator": "eq",
+          "value": "국내",
+          "strength": "locked"
+        },
+        {
+          "field": "fund_management_attribute",
+          "operator": "eq",
+          "value": "채권형",
+          "strength": "locked"
+        },
+        {
+          "field": "risk_level",
+          "operator": "eq",
+          "value": "낮은위험(5등급)",
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "one_month_return_pct",
+          "direction": "desc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 327,
+        "top_product_ids": [
+          "KR5117420091",
+          "KR5117420098",
+          "KR5116420035",
+          "KR5117420090",
+          "KR5117420093"
+        ]
+      }
+    },
+    {
+      "id": "fund-035",
+      "split": "development",
+      "category": "aum",
+      "question": "AUM이 1조원 이상인 원화 공모펀드를 AUM 큰 순으로 5개 보여줘",
+      "constraints": [
+        {
+          "field": "public_offering",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        },
+        {
+          "field": "trading_currency",
+          "operator": "eq",
+          "value": "KRW",
+          "strength": "locked"
+        },
+        {
+          "field": "aum",
+          "operator": "gte",
+          "value": 1000000000000,
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "aum",
+          "direction": "desc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 330,
+        "top_product_ids": [
+          "KR5114601001",
+          "KR5014410030",
+          "KR5014410031",
+          "KR5014410032",
+          "KR5014410039"
+        ]
+      }
+    },
+    {
+      "id": "fund-036",
+      "split": "development",
+      "category": "aum",
+      "question": "AUM이 1천억원에서 1조원 사이인 원화 공모펀드를 큰 순으로 5개 찾아줘",
+      "constraints": [
+        {
+          "field": "public_offering",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        },
+        {
+          "field": "trading_currency",
+          "operator": "eq",
+          "value": "KRW",
+          "strength": "locked"
+        },
+        {
+          "field": "aum",
+          "operator": "between",
+          "value": [
+            100000000000,
+            1000000000000
+          ],
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "aum",
+          "direction": "desc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 2148,
+        "top_product_ids": [
+          "KR513304004M",
+          "KR5111450050",
+          "KR5111450052",
+          "KR5111450053",
+          "KR5111450054"
+        ]
+      }
+    },
+    {
+      "id": "fund-037",
+      "split": "development",
+      "category": "aum",
+      "question": "AUM이 100만달러 이상인 달러 공모펀드를 큰 순으로 5개 보여줘",
+      "constraints": [
+        {
+          "field": "public_offering",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        },
+        {
+          "field": "trading_currency",
+          "operator": "eq",
+          "value": "USD",
+          "strength": "locked"
+        },
+        {
+          "field": "aum",
+          "operator": "gte",
+          "value": 1000000,
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "aum",
+          "direction": "desc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 51,
+        "top_product_ids": [
+          "KR5117420000",
+          "KR5117420001",
+          "KR5117420006",
+          "KR5117420007",
+          "KR5117420008"
+        ]
+      }
+    },
+    {
+      "id": "fund-038",
+      "split": "development",
+      "category": "safety",
+      "question": "운용사 이름이 미래에셋인 공모펀드를 찾아줘",
+      "constraints": [
+        {
+          "field": "public_offering",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        }
+      ],
+      "ranking": [],
+      "limit": 5,
+      "disposition": "block",
+      "blocker": "unsupported",
+      "oracle": null
+    },
+    {
+      "id": "fund-039",
+      "split": "development",
+      "category": "safety",
+      "question": "오늘 기준 최신 수익률이 높은 공모펀드를 보여줘",
+      "constraints": [
+        {
+          "field": "public_offering",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        }
+      ],
+      "ranking": [],
+      "limit": 5,
+      "disposition": "block",
+      "blocker": "unsupported",
+      "oracle": null
+    },
+    {
+      "id": "fund-040",
+      "split": "development",
+      "category": "lookup",
+      "question": "상품번호 KR5010101401 공모펀드를 조회해줘",
+      "constraints": [
+        {
+          "field": "public_offering",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        },
+        {
+          "field": "product_id",
+          "operator": "eq",
+          "value": "KR5010101401",
+          "strength": "locked"
+        }
+      ],
+      "ranking": [],
+      "limit": 1,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 1,
+        "top_product_ids": [
+          "KR5010101401"
+        ]
+      }
+    },
+    {
+      "id": "fund-041",
+      "split": "holdout",
+      "category": "lookup",
+      "question": "짧은 이름에 미래에셋이 들어간 공모펀드를 이름 순으로 5개 찾아줘",
+      "constraints": [
+        {
+          "field": "public_offering",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        },
+        {
+          "field": "short_name",
+          "operator": "contains",
+          "value": "미래에셋",
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "short_name",
+          "direction": "asc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 2116,
+        "top_product_ids": [
+          "KR5110712101",
+          "KR5153451010",
+          "KR5153451011",
+          "KR5153450151",
+          "KR5153450152"
+        ]
+      }
+    },
+    {
+      "id": "fund-042",
+      "split": "holdout",
+      "category": "lookup",
+      "question": "정식 상품명에 인도가 포함된 공모펀드를 이름 순으로 5개 보여줘",
+      "constraints": [
+        {
+          "field": "public_offering",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        },
+        {
+          "field": "product_name",
+          "operator": "contains",
+          "value": "인도",
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "product_name",
+          "direction": "asc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 66,
+        "top_product_ids": [
+          "KR5144450050",
+          "KR5144450051",
+          "KR513702054M",
+          "KR5144450053",
+          "KR5144450058"
+        ]
+      }
+    },
+    {
+      "id": "fund-043",
+      "split": "holdout",
+      "category": "blind_paraphrase",
+      "question": "환율 변동을 막는 해외 주식형 공모펀드 가운데 석 달 성과가 좋은 것 5개",
+      "constraints": [
+        {
+          "field": "public_offering",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        },
+        {
+          "field": "currency_hedged",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        },
+        {
+          "field": "fund_geography_scope",
+          "operator": "eq",
+          "value": "해외",
+          "strength": "locked"
+        },
+        {
+          "field": "fund_management_attribute",
+          "operator": "eq",
+          "value": "주식형",
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "three_month_return_pct",
+          "direction": "desc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 1355,
+        "top_product_ids": [
+          "KR5114450596",
+          "KR5114450599",
+          "KR5114450598",
+          "KR5114450597",
+          "KR5114450593"
+        ]
+      }
+    },
+    {
+      "id": "fund-044",
+      "split": "holdout",
+      "category": "blind_paraphrase",
+      "question": "원화 공모펀드 중 돈이 가장 많이 모인 상품 다섯 개만 알려줘",
+      "constraints": [
+        {
+          "field": "public_offering",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        },
+        {
+          "field": "trading_currency",
+          "operator": "eq",
+          "value": "KRW",
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "aum",
+          "direction": "desc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 11044,
+        "top_product_ids": [
+          "KR5114601001",
+          "KR5014410030",
+          "KR5014410031",
+          "KR5014410032",
+          "KR5014410039"
+        ]
+      }
+    },
+    {
+      "id": "fund-045",
+      "split": "holdout",
+      "category": "blind_paraphrase",
+      "question": "최근 석 달 수익이 마이너스가 아닌 공모펀드를 성과순으로 5개",
+      "constraints": [
+        {
+          "field": "public_offering",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        },
+        {
+          "field": "three_month_return_pct",
+          "operator": "gte",
+          "value": 0,
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "three_month_return_pct",
+          "direction": "desc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 6445,
+        "top_product_ids": [
+          "KR5129470016",
+          "KR5129470015",
+          "KR5129470013",
+          "KR5129470010",
+          "KR5129470012"
+        ]
+      }
+    },
+    {
+      "id": "fund-046",
+      "split": "holdout",
+      "category": "blind_paraphrase",
+      "question": "개인 투자자 대상으로 분류된 판매 중 공모펀드 5개를 이름순으로 보여줘",
+      "constraints": [
+        {
+          "field": "public_offering",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        },
+        {
+          "field": "investor_type",
+          "operator": "eq",
+          "value": "개인",
+          "strength": "locked"
+        },
+        {
+          "field": "sellable",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        }
+      ],
+      "ranking": [
+        {
+          "field": "product_name",
+          "direction": "asc",
+          "nulls": "last"
+        }
+      ],
+      "limit": 5,
+      "disposition": "execute",
+      "blocker": null,
+      "oracle": {
+        "candidate_count": 1560,
+        "top_product_ids": [
+          "KR5182490142",
+          "KR5182490143",
+          "KR5182490122",
+          "KR5182490123",
+          "KR5182490016"
+        ]
+      }
+    },
+    {
+      "id": "fund-047",
+      "split": "holdout",
+      "category": "safety",
+      "question": "안전하고 괜찮은 공모펀드 5개를 추천해줘",
+      "constraints": [
+        {
+          "field": "public_offering",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        }
+      ],
+      "ranking": [],
+      "limit": 5,
+      "disposition": "block",
+      "blocker": "ambiguity",
+      "oracle": null
+    },
+    {
+      "id": "fund-048",
+      "split": "holdout",
+      "category": "safety",
+      "question": "총보수와 판매수수료가 가장 낮은 공모펀드 5개를 보여줘",
+      "constraints": [
+        {
+          "field": "public_offering",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        }
+      ],
+      "ranking": [],
+      "limit": 5,
+      "disposition": "block",
+      "blocker": "unsupported",
+      "oracle": null
+    },
+    {
+      "id": "fund-049",
+      "split": "holdout",
+      "category": "safety",
+      "question": "1년 수익률이 높은 공모펀드를 5개 찾아줘",
+      "constraints": [
+        {
+          "field": "public_offering",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        }
+      ],
+      "ranking": [],
+      "limit": 5,
+      "disposition": "block",
+      "blocker": "unsupported",
+      "oracle": null
+    },
+    {
+      "id": "fund-050",
+      "split": "holdout",
+      "category": "safety",
+      "question": "클래스는 합쳐서 대표 펀드별 AUM 합계가 큰 순으로 5개 보여줘",
+      "constraints": [
+        {
+          "field": "public_offering",
+          "operator": "eq",
+          "value": true,
+          "strength": "locked"
+        }
+      ],
+      "ranking": [],
+      "limit": 5,
+      "disposition": "block",
+      "blocker": "unsupported",
+      "oracle": null
+    }
+  ]
+}

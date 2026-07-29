@@ -7,11 +7,8 @@
 
 - 로컬 branch: `haeyeongcho`
 - upstream: `origin/haeyeongcho`
-- 원격 commit: `f366414e16e4e0eb00d08a68920d32af4a24b740`
-- 원격 `main`, `hyunhoim`, `haeyeongcho`는 모두 같은 초기 README commit을 가리킨다.
-- Agent Core 기반은 로컬 commit `a65c2b2`로 보존했다.
-- 온보딩·평가 baseline·문서 검사 강화는 기반 commit 다음의 별도 commit으로
-  관리하며, 원격 push는 아직 하지 않는다.
+- 원격 commit: `be2797a`
+- 공모펀드 수직 검색 파이프라인과 계약 문서까지 원격 branch에 반영됨
 
 동료가 가져올 `vintasoftware/nextjs-fastapi-template`은 저장소 루트의
 `fastapi_backend`, `nextjs-frontend`, `docs`를 사용한다. AI·데이터 작업공간은
@@ -77,7 +74,7 @@ SOURCE_DATE_EPOCH=1785283200 \
 2026-07-29 결과:
 
 - Ruff: 통과
-- pytest: 73개 통과
+- pytest: 75개 통과
 - pip dependency check: 통과
 - 문서 링크·인덱스·평가 baseline·suite hash 검사: 통과
 - 고정 `SOURCE_DATE_EPOCH` wheel을 서로 다른 임시 디렉터리에서 두 번 빌드해
@@ -105,7 +102,9 @@ SOURCE_DATE_EPOCH=1785283200 \
   독립 verifier, field evidence 계약을 공유한다.
 - 공모펀드 대표 Oracle은 해외·주식형·판매중·당사 판매 조건에서 후보
   1,811개와 3개월 수익률 상위 5개를 SQL과 독립 Python 검증으로 재현했다.
-- 공모펀드 공식 Agent 실행은 핵심 평가 세트와 HCX schema 노출 전까지
+- 공모펀드 expected QueryPlan·Oracle 50문항은 실행 44개·안전 차단 6개로
+  전체 50/50을 통과했다.
+- 공모펀드 공식 Agent 실행은 HCX schema 노출과 서버 계약 테스트 전까지
   `execution_enabled: false`로 유지한다.
 - 국내 DB와 manifest를 임시 경로에 재구축했을 때 원본 artifact와 SHA-256이
   byte 단위로 일치했다.
@@ -180,6 +179,11 @@ development 40/40, local-inference holdout 첫 실행 10/10이다. 다만 같은
 50문항을 동결했다. expected provider와 로컬 Qwen hybrid parser가 모두 50/50을
 통과했고, 실제 통합 E2E에서도 세 조건·상위 3개·field evidence와 Answer
 Verifier가 일치했다.
+
+[공모펀드 핵심 평가 기준선](evaluation-public-fund.md)은 같은 40/10 구조로
+50문항을 동결했다. expected provider에서 실행 44개와 안전 차단 6개가 모두
+통과했다. 이 결과는 평가 하네스·Oracle 계약 검증이며 로컬 Qwen이나
+HyperCLOVA X parser 성능이 아니다.
 
 ## 근거 기반 최종 답변
 

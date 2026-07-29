@@ -17,11 +17,11 @@ from finance_agent_core.evaluation.suite import load_core_evaluation_suite
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Run a frozen ETP QueryPlan and oracle regression suite."
+        description="Run a frozen financial-product QueryPlan and oracle regression suite."
     )
     parser.add_argument(
         "--dataset",
-        choices=("overseas_etp", "domestic_etp", "bond"),
+        choices=("overseas_etp", "domestic_etp", "bond", "fund"),
         default="overseas_etp",
     )
     parser.add_argument(
@@ -76,7 +76,13 @@ def main(argv: list[str] | None = None) -> int:
         model = settings.model
     else:
         provider = ExpectedPlanProvider(cases, suite.dataset)
-    runner = EvaluationRunner(database, provider)
+    runner = EvaluationRunner(
+        database,
+        provider,
+        allow_internal_disabled_dataset=(
+            suite.dataset == "fund" and arguments.provider == "expected"
+        ),
+    )
     results = runner.run(cases, arguments.workers)
     report = build_report(
         suite_id=suite.suite_id,

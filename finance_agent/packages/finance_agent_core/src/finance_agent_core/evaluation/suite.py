@@ -22,6 +22,7 @@ def load_core_evaluation_suite(
         "overseas_etp": "overseas_etp_core_50.json",
         "domestic_etp": "domestic_etp_core_50.json",
         "bond": "bond_core_50.json",
+        "fund": "fund_core_50.json",
     }
     try:
         resource_name = resources[dataset]

@@ -6,7 +6,8 @@
 네 상품군 field registry·QueryPlan 계약, 해외·국내 ETP·국내채권의 결정론적
 검색·독립 검증·field-level evidence, Mock 및 개발 전용 로컬 LLM provider다.
 공모펀드는 product·attribute·quarantine 저장, Oracle, Verifier, field
-evidence까지 구현했고 공식 Agent 실행은 평가 전까지 비활성화 상태다.
+evidence와 동결 50문항 계약까지 구현했고 공식 Agent 실행은 HCX schema·서버
+계약 승인 전까지 비활성화 상태다.
 최종 답변은 최소권한 GroundedAnswerDraft, Answer Verifier, 결정론적
 evidence compiler와 safe fallback으로 구성할 수 있다.
 
@@ -118,9 +119,10 @@ evidence compiler와 safe fallback으로 구성할 수 있다.
   --output artifacts/evaluation/expected-all.json
 ```
 
-국내 suite는 `--dataset domestic_etp` 또는 `--dataset bond`로 선택한다.
+다른 suite는 `--dataset domestic_etp`, `bond`, `fund`로 선택한다.
 결과와 한계는 [국내 ETP 평가 기준선](../../docs/evaluation-domestic-etp.md)과
-[국내채권 평가 기준선](../../docs/evaluation-domestic-bond.md)에 기록한다.
+[국내채권 평가 기준선](../../docs/evaluation-domestic-bond.md),
+[공모펀드 평가 기준선](../../docs/evaluation-public-fund.md)에 기록한다.
 
 `--provider local_test`는 로컬 Qwen 서버와 세 가지 명시적 opt-in이 모두
 필요하다. 최초 holdout과 사후 회귀를 구분한 결과와 재현 절차는

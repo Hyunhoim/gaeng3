@@ -5,8 +5,9 @@
 
 이 문서는 자연어 질문과 결정론적 검색기 사이의 계약을 설명한다. 해외 ETP,
 국내 ETP, 국내채권은 실행 가능하다. 공모펀드는 grain·field capability와
-정규화 SQLite·oracle·verifier·field evidence까지 구현했다. 핵심 평가 세트와
-HCX schema 노출을 마칠 때까지 공식 Agent 실행은 fail-closed로 거절한다.
+정규화 SQLite·oracle·verifier·field evidence와 동결 50문항 계약까지 구현했다.
+HCX schema 노출과 서버 계약 테스트를 마칠 때까지 공식 Agent 실행은
+fail-closed로 거절한다.
 
 ## 1. 구현 파일
 
@@ -231,8 +232,9 @@ oracle이 거절한다.
 
 1. 다른 작성자가 만든 blind 표현 변형 세트를 최소 100문항으로 만든다.
 2. 사람이 명확성·중복·비교 용이성을 평가하는 답변 rubric을 추가한다.
-3. 공모펀드 핵심 평가 질문과 blind 표현 변형 회귀 세트를 만든다.
-4. 공식 HyperCLOVA X provider에서 동일 계약 fixture를 재사용한다.
-5. 공식 `/answer` adapter와 오류·timeout 계약을 연결한다.
+3. 공모펀드 parser·lexical linker를 development 40문항에서 평가한다.
+4. 공모펀드 grounded answer와 사람 품질 평가를 추가한다.
+5. HCX schema에 fund를 노출하고 공식 HyperCLOVA X provider에서 같은 fixture를 재사용한다.
+6. 공식 `/answer` adapter와 오류·timeout 계약을 연결한다.
 
 다른 상품군을 추가할 때는 HCX enum만 늘리지 않는다. 데이터 감사, logical grain, sentinel, 단위, 기준일, field capability, 계약 테스트를 함께 추가해야 한다.
