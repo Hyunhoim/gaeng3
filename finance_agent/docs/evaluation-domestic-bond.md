@@ -134,7 +134,7 @@ HyperCLOVA X endpoint·credential은 사용하지 않았다. 테스트 종료 �
 /home/haeyeongcho/miniforge3/envs/gaeng3-dev/bin/python \
   -m finance_agent_core.storage \
   --dataset bond \
-  --data-dir "../../2. Data/1. Raw/1.금융상품"
+  --data-dir "../../../2. Data/1. Raw/1.금융상품"
 
 /home/haeyeongcho/miniforge3/envs/gaeng3-dev/bin/python \
   -m finance_agent_core.evaluation \

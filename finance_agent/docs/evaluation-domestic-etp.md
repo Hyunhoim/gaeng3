@@ -106,7 +106,7 @@ holdout은 p50 3.26초, p95·최대 4.77초였다.
 /home/haeyeongcho/miniforge3/envs/gaeng3-dev/bin/python \
   -m finance_agent_core.storage \
   --dataset domestic_etp \
-  --data-dir "../../2. Data/1. Raw/1.금융상품"
+  --data-dir "../../../2. Data/1. Raw/1.금융상품"
 
 /home/haeyeongcho/miniforge3/envs/gaeng3-dev/bin/python \
   -m finance_agent_core.evaluation \

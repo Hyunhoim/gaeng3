@@ -121,7 +121,7 @@ prompt만으로 70%까지 올랐고, 남은 오류는 결정론적 linker와 fai
 
 ## 5. 재현 명령
 
-저장소 루트에서 모델 없이 suite·oracle·채점기를 먼저 검증한다.
+`finance_agent/` 디렉터리에서 모델 없이 suite·oracle·채점기를 먼저 검증한다.
 
 ```bash
 /home/haeyeongcho/miniforge3/envs/gaeng3-dev/bin/python \

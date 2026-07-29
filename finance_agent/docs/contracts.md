@@ -170,7 +170,7 @@ oracle이 거절한다.
 
 ## 7. 검증
 
-저장소 루트에서 실행한다.
+`finance_agent/` 디렉터리에서 실행한다.
 
 ```bash
 /home/haeyeongcho/miniforge3/envs/gaeng3-dev/bin/python -m pytest

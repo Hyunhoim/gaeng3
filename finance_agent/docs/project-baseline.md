@@ -17,7 +17,7 @@
 - 로컬 `haeyeongcho` branch가 `origin/haeyeongcho`를 추적한다. 2026-07-28 확인 시 원격 `main`·`hyunhoim`·`haeyeongcho`는 모두 초기 README 커밋 `f366414`를 가리킨다.
 - 검증된 Agent Core 기반은 2026-07-29 로컬 commit `a65c2b2`로 보존했으며
   원격에는 아직 push하지 않았다.
-- 동료가 가져올 `vintasoftware/nextjs-fastapi-template`은 `fastapi_backend`, `nextjs-frontend`, `docs` 구조와 UV를 사용한다. 동료의 템플릿 적응 작업이 원격에 반영되기 전까지 Agent·데이터 코드는 충돌 가능성이 낮은 `packages/finance_agent_core`에서 개발한다.
+- 동료가 가져올 `vintasoftware/nextjs-fastapi-template`은 루트의 `fastapi_backend`, `nextjs-frontend`, `docs` 구조와 UV를 사용한다. Agent·데이터 작업공간은 `finance_agent/`에 격리하고, 애플리케이션이 재사용할 Python 코드는 `finance_agent/packages/finance_agent_core`에서 개발한다.
 - `gaeng3-dev` Conda 환경과 pip requirements를 만들고, 표준 라이브러리 기반 데이터 감사기를 구현했다.
 - 4종 145,393행 감사, expectation 49/49, 8개 입력 hash 대조, 두 번의 결정적 재실행을 통과했다.
 - 해외 ETP 17개 canonical field registry, 엄격한 서버 QueryPlan, HCX keyword subset schema를 구현하고 계약 테스트를 통과했다.

@@ -39,7 +39,7 @@ MoE다. 가중치는 저장소에 넣지 않고 `/home/haeyeongcho/.cache/huggin
 
 ## 설치
 
-저장소 루트에서 실행한다.
+`finance_agent/` 디렉터리에서 실행한다.
 
 ```bash
 /home/haeyeongcho/miniforge3/bin/conda env create \

@@ -13,7 +13,7 @@
 
 ```bash
 /home/haeyeongcho/miniforge3/envs/gaeng3-dev/bin/finance-data-audit \
-  --data-dir "../../2. Data/1. Raw/1.금융상품" \
+  --data-dir "../../../2. Data/1. Raw/1.금융상품" \
   --output-dir artifacts/data-audit
 ```
 
@@ -35,7 +35,7 @@
 ```bash
 /home/haeyeongcho/miniforge3/envs/gaeng3-dev/bin/python \
   -m finance_agent_core.storage \
-  --data-dir "../../2. Data/1. Raw/1.금융상품" \
+  --data-dir "../../../2. Data/1. Raw/1.금융상품" \
   --output artifacts/normalized/overseas_etp.sqlite3
 ```
 
@@ -54,7 +54,7 @@
 | 공모펀드 | 95,619 | `itm_no`당 상품 1개 + 속성 N개 | 정규화 후 논리 상품 11,138개 |
 | 합계 | 145,393 | 상품군별 상이 | 원천 행 수를 상품 수로 사용하지 않음 |
 
-원천 파일은 [Raw 데이터 디렉터리](<../../../2. Data/1. Raw/1.금융상품/>)에서 읽고 수정하지 않는다.
+원천 파일은 [Raw 데이터 디렉터리](<../../../../2. Data/1. Raw/1.금융상품/>)에서 읽고 수정하지 않는다.
 
 ## 2. 상품군별 판정
 

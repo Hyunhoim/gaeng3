@@ -13,7 +13,8 @@
 - 작업 branch: `haeyeongcho`
 - 시작 원격 commit: `f366414`
 - 동료는 `vintasoftware/nextjs-fastapi-template` 분석·적응을 담당
-- AI·데이터 코드는 충돌을 줄이기 위해 `packages/finance_agent_core`에서 독립 개발
+- AI·데이터 작업공간은 충돌을 줄이기 위해 `finance_agent/`로 격리하고,
+  재사용 코드는 `finance_agent/packages/finance_agent_core`에서 독립 개발
 - Python 환경은 Conda `gaeng3-dev`와 pip requirements로 관리
 - HyperCLOVA X API를 아직 사용할 수 없어 별도 `gaeng3-llm-local` 환경의
   Qwen을 개발 전용 대역으로 사용

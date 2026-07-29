@@ -2,7 +2,12 @@
 
 버전: 2
 기준일: 2026-07-28
-상태: 활성 실행 명세
+상태: 완료된 실행 명세
+
+> 이 프롬프트는 최초 Agent Core 부트스트랩 당시의 실행 기록이다. 현재 AI
+> 작업공간은 저장소 루트 충돌을 피하도록 `finance_agent/`로 이동했다.
+> 최신 경로와 실행 방법은 `finance_agent/README.md`와
+> `finance_agent/docs/project-index.md`를 따른다.
 
 ## 1. 역할과 목표
 

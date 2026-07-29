@@ -7,9 +7,9 @@
 - 요청 프롬프트: [Agent 전략 연구 요청](../../prompts/02-agent-strategy-research.md)
 - 원문 답변: [response.md](response.md)
 - 추출된 산출물: [audit-bundle](audit-bundle/)
-- 원본 ZIP: [Source Archive](<../../../../../2. Data/0. Source Archive/2026-07-28-gpt-pro-finance-agent-audit-bundle.zip>)
-- 검사한 공식 PDF: [공식 과제 소개자료](<../../../../../0. Official Materials/(배표용)과제소개자료_금융상품Agent.pdf>)
-- 검사한 원천 데이터: [Raw 데이터](<../../../../../2. Data/1. Raw/1.금융상품/>)
+- 원본 ZIP: [Source Archive](<../../../../../../2. Data/0. Source Archive/2026-07-28-gpt-pro-finance-agent-audit-bundle.zip>)
+- 검사한 공식 PDF: [공식 과제 소개자료](<../../../../../../0. Official Materials/(배표용)과제소개자료_금융상품Agent.pdf>)
+- 검사한 원천 데이터: [Raw 데이터](<../../../../../../2. Data/1. Raw/1.금융상품/>)
 
 2026-07-28 이동 전후 확인값:
 
@@ -44,13 +44,13 @@ ZIP 안의 13개 파일과 추출된 `audit-bundle/`의 상대 경로·SHA-256�
 
 | 원문 링크 표시명 | 현재 위치 |
 | --- | --- |
-| 공식 과제 소개 PDF | [공식 PDF](<../../../../../0. Official Materials/(배표용)과제소개자료_금융상품Agent.pdf>) |
+| 공식 과제 소개 PDF | [공식 PDF](<../../../../../../0. Official Materials/(배표용)과제소개자료_금융상품Agent.pdf>) |
 | 데이터 감사 요약 | [finance_data_audit_summary.md](audit-bundle/finance_data_audit_summary.md) |
 | 전체 데이터 감사 JSON | [finance_data_audit.json](audit-bundle/finance_data_audit.json) |
 | Typed QueryPlan JSON Schema | [queryplan.schema.json](audit-bundle/queryplan.schema.json) |
 | 첫 vertical slice QueryPlan 예시 | [queryplan.example.json](audit-bundle/queryplan.example.json) |
 | Agent/API 계약 예시 | [agent_contract_examples.json](audit-bundle/agent_contract_examples.json) |
-| 감사 스크립트와 결과 전체 재현 번들 | [원본 ZIP](<../../../../../2. Data/0. Source Archive/2026-07-28-gpt-pro-finance-agent-audit-bundle.zip>) |
+| 감사 스크립트와 결과 전체 재현 번들 | [원본 ZIP](<../../../../../../2. Data/0. Source Archive/2026-07-28-gpt-pro-finance-agent-audit-bundle.zip>) |
 
 ## 검토 결론
 

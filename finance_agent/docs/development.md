@@ -13,7 +13,11 @@
 - 온보딩·평가 baseline·문서 검사 강화는 기반 commit 다음의 별도 commit으로
   관리하며, 원격 push는 아직 하지 않는다.
 
-동료가 가져올 `vintasoftware/nextjs-fastapi-template`은 `fastapi_backend`, `nextjs-frontend`, `docs`를 사용한다. 충돌을 줄이기 위해 AI·데이터 코드는 [finance_agent_core](../packages/finance_agent_core/README.md)에서 독립적으로 시작했다. 템플릿의 `docs/README.md` symlink와 충돌하지 않도록 프로젝트 문서 인덱스는 `docs/project-index.md`를 사용한다.
+동료가 가져올 `vintasoftware/nextjs-fastapi-template`은 저장소 루트의
+`fastapi_backend`, `nextjs-frontend`, `docs`를 사용한다. AI·데이터 작업공간은
+루트 충돌을 피하도록 `finance_agent/`에 격리했고, 재사용 코드는
+[finance_agent_core](../packages/finance_agent_core/README.md)에서 독립적으로
+개발한다. AI 문서 인덱스도 `finance_agent/docs/project-index.md`에 둔다.
 
 ## 로컬 도구
 
@@ -31,7 +35,7 @@ Conda는 Python 환경을 격리하고 pip는 Python 패키지를 설치한다. 
 
 ## 환경 생성
 
-저장소 루트에서 실행한다.
+`finance_agent/` 디렉터리에서 실행한다.
 
 ```bash
 /home/haeyeongcho/miniforge3/bin/conda env create -f environment.yml
@@ -103,7 +107,7 @@ SOURCE_DATE_EPOCH=1785283200 \
 
 ```bash
 /home/haeyeongcho/miniforge3/envs/gaeng3-dev/bin/finance-data-audit \
-  --data-dir "../../2. Data/1. Raw/1.금융상품" \
+  --data-dir "../../../2. Data/1. Raw/1.금융상품" \
   --output-dir artifacts/data-audit
 ```
 

@@ -34,7 +34,7 @@
 | [로컬 LLM 테스트 런타임](local-llm.md) | 격리된 Qwen/vLLM 환경, 안전 경계, 재현 가능한 E2E | 개발 전용 |
 | [Agent Core v0.1 마일스톤](milestones/2026-07-29-agent-core-v0.1.md) | 시작 상태, 채택 결정, 구현·실험·검증·다음 단계 인수인계 | 완료 |
 | [재현 가능한 평가 baseline](../evaluation/README.md) | Git에서 제외된 전체 report 대신 집계 지표·hash·재현 조건 보존 | v1.0 |
-| [저장소 부트스트랩 작업 명세](prompts/01-repository-bootstrap.md) | 애플리케이션 저장소를 처음 구현할 때 Codex에 전달할 실행 명세 | 활성 프롬프트 |
+| [저장소 부트스트랩 작업 명세](prompts/01-repository-bootstrap.md) | 최초 Agent Core를 구현할 때 Codex에 전달한 실행 명세 | 완료 기록 |
 | [Agent 전략 연구 요청](prompts/02-agent-strategy-research.md) | GPT Pro에 전달했던 질문과 당시 제약 | 과거 입력 기록 |
 | [GPT Pro 연구 기록](research/2026-07-28-gpt-pro/README.md) | GPT Pro 원문 답변, 감사 번들, 검토 결과, 원본 ZIP 위치 | 연구·감사 기록 |
 
@@ -69,11 +69,11 @@
 
 ## 저장소 밖의 근거 자료
 
-- [공식 과제 소개자료](<../../../0. Official Materials/(배표용)과제소개자료_금융상품Agent.pdf>)
-- [공식 공지 정리](<../../../0. Official Materials/07-28(화) - 공지사항 정리하기.md>)
-- [원천 데이터](<../../../2. Data/1. Raw/1.금융상품/>)
-- [원천 데이터 ZIP](<../../../2. Data/0. Source Archive/1.금융상품.zip>)
-- [프로젝트 허브](<../../../26-07 미래에셋증권AI공모전.md>)
+- [공식 과제 소개자료](<../../../../0. Official Materials/(배표용)과제소개자료_금융상품Agent.pdf>)
+- [공식 공지 정리](<../../../../0. Official Materials/07-28(화) - 공지사항 정리하기.md>)
+- [원천 데이터](<../../../../2. Data/1. Raw/1.금융상품/>)
+- [원천 데이터 ZIP](<../../../../2. Data/0. Source Archive/1.금융상품.zip>)
+- [프로젝트 허브](<../../../../26-07 미래에셋증권AI공모전.md>)
 
 ## 판단 우선순위
 

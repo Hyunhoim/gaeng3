@@ -10,7 +10,7 @@ evidence compiler와 safe fallback으로 구성할 수 있다.
 
 ## 환경
 
-저장소 루트에서 실행한다.
+`finance_agent/` 디렉터리에서 실행한다.
 
 ```bash
 /home/haeyeongcho/miniforge3/bin/conda env update -n gaeng3-dev -f environment.yml
@@ -23,7 +23,7 @@ evidence compiler와 safe fallback으로 구성할 수 있다.
 ```bash
 /home/haeyeongcho/miniforge3/bin/conda run -n gaeng3-dev \
   finance-data-audit \
-  --data-dir "../../2. Data/1. Raw/1.금융상품" \
+  --data-dir "../../../2. Data/1. Raw/1.금융상품" \
   --output-dir artifacts/data-audit
 ```
 
@@ -50,7 +50,7 @@ evidence compiler와 safe fallback으로 구성할 수 있다.
 /home/haeyeongcho/miniforge3/envs/gaeng3-dev/bin/python \
   -m finance_agent_core.storage \
   --dataset overseas_etp \
-  --data-dir "../../2. Data/1. Raw/1.금융상품"
+  --data-dir "../../../2. Data/1. Raw/1.금융상품"
 
 /home/haeyeongcho/miniforge3/envs/gaeng3-dev/bin/python \
   -m finance_agent_core.agent \
@@ -64,7 +64,7 @@ evidence compiler와 safe fallback으로 구성할 수 있다.
 /home/haeyeongcho/miniforge3/envs/gaeng3-dev/bin/python \
   -m finance_agent_core.storage \
   --dataset domestic_etp \
-  --data-dir "../../2. Data/1. Raw/1.금융상품"
+  --data-dir "../../../2. Data/1. Raw/1.금융상품"
 
 /home/haeyeongcho/miniforge3/envs/gaeng3-dev/bin/python \
   -m finance_agent_core.agent \
@@ -79,7 +79,7 @@ evidence compiler와 safe fallback으로 구성할 수 있다.
 /home/haeyeongcho/miniforge3/envs/gaeng3-dev/bin/python \
   -m finance_agent_core.storage \
   --dataset bond \
-  --data-dir "../../2. Data/1. Raw/1.금융상품"
+  --data-dir "../../../2. Data/1. Raw/1.금융상품"
 
 /home/haeyeongcho/miniforge3/envs/gaeng3-dev/bin/python \
   -m finance_agent_core.agent \

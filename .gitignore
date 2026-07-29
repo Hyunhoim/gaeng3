@@ -3,6 +3,12 @@
 .idea/
 .vscode/
 
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+!.env.*.example
+
 # Python
 __pycache__/
 *.py[cod]
@@ -20,42 +26,12 @@ htmlcov/
 .venv/
 venv/
 
-# Secrets and local configuration
-.env
-.env.*
-!.env.example
-!.env.*.example
-
-# Raw and generated financial data
-*.xlsx
-*.xls
-*.zip
-data/raw/
-data/processed/
-artifacts/
-
-# Local research material pending redistribution review
-docs/research/**/audit-bundle/
-
-# Databases, caches, and logs
-*.db
-*.sqlite
-*.sqlite3
-*.log
-logs/
-cache/
-
-# Local model weights and caches
-*.safetensors
-*.gguf
-pytorch_model*.bin
-models/
-.cache/huggingface/
-hf-cache/
-vllm-cache/
-
 # Frontend
 node_modules/
 .next/
 out/
 coverage/
+
+# Logs
+*.log
+logs/
