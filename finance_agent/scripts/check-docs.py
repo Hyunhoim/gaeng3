@@ -22,6 +22,7 @@ REQUIRED_INDEX_TARGETS = {
     "evaluation-domestic-etp.md",
     "evaluation-domestic-bond.md",
     "evaluation-public-fund.md",
+    "evaluation-public-fund-blind-v1.1.md",
     "evaluation-grounded-answers.md",
     "development.md",
     "local-llm.md",
@@ -37,6 +38,7 @@ REQUIRED_BASELINES = {
     "public-fund-queryplan-v1.json",
     "public-fund-local-development-v1.json",
     "public-fund-local-holdout-first-run-v1.json",
+    "public-fund-answer-v1.json",
 }
 REQUIRED_BASELINE_KEYS = {
     "schema_version",

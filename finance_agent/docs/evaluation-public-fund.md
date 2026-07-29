@@ -1,6 +1,6 @@
 # 공모펀드 핵심 평가 기준선
 
-상태: v1.2 QueryPlan·Oracle 계약 동결 · 최초 holdout 9/10 보존
+상태: v1.3 QueryPlan·Oracle·grounded answer 계약 동결 · 최초 holdout 9/10 보존
 
 기준일: 2026-07-29
 
@@ -10,7 +10,8 @@
 결정론적 linker를 합친 hybrid parser는 development 40문항을 최초 실행에서
 40/40 통과했다. parser 규칙을 commit `32e12fa`로 동결한 뒤 처음 실행한
 holdout 10문항은 9/10이었다. 실패 한 건은 수정하거나 숨기지 않고 그대로
-보존한다.
+보존한다. 공개된 50문항에는 별도로 field-level evidence부터 검증된 최종 답변까지
+잇는 grounded answer 회귀도 추가했다.
 
 ## 1. 동결 평가 세트
 
@@ -199,6 +200,53 @@ unsupported 신호, 빈 ranking과 block disposition이 모두 일치한다.
 50/50이다. 이는 공개된 실패의 사후 회귀 통과일 뿐 최초 holdout 9/10을
 대체하지 않는다.
 
+### 5.2 공모펀드 grounded answer 회귀
+
+동결 expected QueryPlan으로 parser 오차를 분리한 뒤 공개된 `fund-core-50`
+전체에 다음 답변 경로를 실행했다.
+
+1. Oracle 검색 결과를 상품·필드 단위 출처가 있는 field-level evidence DTO로 변환
+2. 로컬 Qwen에는 질문을 다시 해석시키지 않고 검증된 evidence만 전달
+3. draft verifier가 결과 순서·허용 evidence·경고와 숫자·식별자·금지 주장을 검증
+4. 결정론적 compiler로 최종 핵심 문장과 citation을 생성
+5. compiled verifier가 최종 문장의 상품 순서·값·기준일·출처 열을 다시 검증
+6. 한 단계라도 실패하면 추측 없는 결정론적 답변으로 fallback
+
+| 지표 | expected | local Qwen |
+| --- | ---: | ---: |
+| strict accuracy | 50/50 | 50/50 |
+| grounded answer | 44 | 44 |
+| safety block | 6 | 6 |
+| deterministic fallback | 0 | 0 |
+| fallback rate | 0% | 0% |
+| 상품·수치·순위·기준일·근거 검증 | 100% | 100% |
+| 생성 지연 p50 | 해당 없음 | 2,602.016ms |
+| 생성 지연 p95 | 해당 없음 | 4,806.568ms |
+| 생성 지연 max | 해당 없음 | 5,069.169ms |
+
+결과 보존:
+
+- expected report SHA-256:
+  `e516e07e135bca0ae54f9d10f2ee917d6518cafe76c1ffd87717f56e9dd66f38`
+- local Qwen report SHA-256:
+  `30b02b11b6780c422f709f88f45a92fc0a16e6c85a553ae415ee5ebd4eb46b6c`
+- local Qwen 실행 중 GPU 메모리: `28,253MiB`·`28,197MiB`
+
+자동 grounding 계약은 모두 통과했지만 생성 문체가 풍부하다는 뜻은 아니다.
+44개 초안의 lead는 1종, 상품별 설명 216개는 18종으로 확인돼 문장이 보수적이고
+반복적이다. 자연스러움·중복·비교 용이성과 deterministic 답변 대비 선호는 아직
+사람 rubric으로 평가하지 않았다.
+
+AUM을 조건·정렬·집계에 쓰는 계획은 실행 직전에도 정확히 하나의
+`trading_currency = KRW` 또는 `USD` locked 조건을 요구한다. suite 바깥에서
+수동으로 만든 QueryPlan도 이 조건 없이는 Oracle SQL을 컴파일할 수 없다.
+
+이 평가는 `answer_cli`가 suite의 expected QueryPlan을 직접 사용해 답변 계층만
+격리 검증한 결과다. 자연어 parser, 최초 holdout, 새 blind 질문을 다시 실행한
+E2E 결과가 아니다. 또한 현재 50문항은 `SEARCH` intent의 검색 결과 설명과
+순위 표현만 평가하며, 사용자가 두 상품을 직접 지정하는 실제 `COMPARE` intent
+답변은 아직 평가하지 않았다.
+
 ## 6. 실행 비활성 상태에서의 평가
 
 공모펀드 dataset은 계속 `execution_enabled: false`로 유지. 일반 Agent와
@@ -278,15 +326,19 @@ LOCAL_TEST_LLM_MODEL=qwen3-local-test \
 
 - 같은 개발자가 질문과 기대 조건을 작성했으므로 holdout 10개도 완전한
   unbiased 일반화 세트가 아님
-- 현재 평가는 `SEARCH` intent와 QueryPlan·검색 결과만 검증
-- 공모펀드 답변 문장 품질과 Answer Verifier는 아직 평가하지 않음
+- 현재 parser 평가는 `SEARCH` intent와 QueryPlan·검색 결과만 검증
+- grounded answer도 expected QueryPlan 기반 `SEARCH` 50문항만 검증했으며
+  실제 `COMPARE` intent는 미평가
+- 자동 검증은 근거 충실성을 보장하지만 사람 관점의 설명 자연스러움·유용성은
+  별도 평가가 필요
 - development 40개는 구현·정합성 검사에 사용됐으므로 튜닝 세트임
 - holdout 10개는 commit 이후 최초 1회 실행해 9/10이며 이제 미사용 세트가 아님
 - HyperCLOVA X 성능과 공식 평가 점수를 대변하지 않음
 
 다음 단계:
 
-1. 기존 50문항은 사후 회귀로만 사용하고 새 blind 표현 변형 세트를 별도 작성
-2. 공모펀드 grounded answer와 사람 품질 평가 추가
+1. [blind v1.1 설계](evaluation-public-fund-blind-v1.1.md)에 따라 금융 도메인
+   담당자가 새 100문항을 독립 작성
+2. 공모펀드 실제 `COMPARE` intent와 사람 품질 평가 추가
 3. HCX schema에 fund를 노출하고 서버 계약 테스트 통과
 4. 그 뒤에만 `execution_enabled: true` 전환 검토

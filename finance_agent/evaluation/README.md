@@ -28,6 +28,7 @@ DB, 원천 XLSX, 전체 report, 모델 가중치는 계속 `artifacts/` 또는 �
 | [공모펀드 QueryPlan·Oracle](baselines/public-fund-queryplan-v1.json) | expected plan·Oracle·안전 차단 계약 |
 | [공모펀드 로컬 development](baselines/public-fund-local-development-v1.json) | 로컬 Qwen hybrid parser 개발 40문항·holdout 잠금 |
 | [공모펀드 최초 holdout](baselines/public-fund-local-holdout-first-run-v1.json) | commit 이후 최초 10문항 9/10·실패 원인 보존 |
+| [공모펀드 답변](baselines/public-fund-answer-v1.json) | 최소권한 grounded answer·최종 컴파일 검증·fallback |
 
 이 수치는 HyperCLOVA X나 공식 공모전 평가 결과가 아니다. 동결된 개발 질문에서
 로컬 LLM, 결정론적 linker, 계약, Oracle과 Verifier를 합친 시스템의 회귀
@@ -45,3 +46,14 @@ conda run -n gaeng3-dev python scripts/check-docs.py
 
 검사기는 baseline 구조, SHA-256 형식, suite 실제 hash, 문서 인덱스와 로컬
 Markdown 링크를 함께 확인한다.
+
+## 새 blind 평가
+
+공모펀드 다음 일반화 평가는 기존 50문항을 늘려 쓰지 않고 독립 작성한
+100문항으로 수행한다. 질문·비공개 정답키·parser commit을 hash로 봉인하고
+최초 실행 상태 파일로 중복 실행을 막는다.
+
+- [blind v1.1 설계](../docs/evaluation-public-fund-blind-v1.1.md)
+- 검증·봉인·실행 도구: `scripts/blind-fund-eval.py`
+
+실제 문항과 비공개 정답키는 첫 실행 전 Git에 포함하지 않는다.

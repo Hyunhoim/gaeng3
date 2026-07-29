@@ -14,12 +14,13 @@
 6. [국내 ETP 핵심 평가 기준선](evaluation-domestic-etp.md)
 7. [국내채권 핵심 평가 기준선](evaluation-domestic-bond.md)
 8. [공모펀드 핵심 평가 기준선](evaluation-public-fund.md)
-9. [근거 기반 최종 답변 평가](evaluation-grounded-answers.md)
-10. [개발 환경과 현재 구현 상태](development.md)
-11. [로컬 LLM 테스트 런타임](local-llm.md)
-12. [Agent Core v0.1 마일스톤](milestones/2026-07-29-agent-core-v0.1.md)
-13. [재현 가능한 평가 baseline](../evaluation/README.md)
-14. [저장소 부트스트랩 작업 명세](prompts/01-repository-bootstrap.md)
+9. [공모펀드 blind v1.1 평가 설계](evaluation-public-fund-blind-v1.1.md)
+10. [근거 기반 최종 답변 평가](evaluation-grounded-answers.md)
+11. [개발 환경과 현재 구현 상태](development.md)
+12. [로컬 LLM 테스트 런타임](local-llm.md)
+13. [Agent Core v0.1 마일스톤](milestones/2026-07-29-agent-core-v0.1.md)
+14. [재현 가능한 평가 baseline](../evaluation/README.md)
+15. [저장소 부트스트랩 작업 명세](prompts/01-repository-bootstrap.md)
 
 ## 문서 지도
 
@@ -33,8 +34,9 @@
 | [해외 ETP 핵심 평가 기준선](evaluation.md) | 동결 50문항, oracle·채점 규칙, 최초 holdout과 사후 회귀 결과 | v1.0 정본 |
 | [국내 ETP 핵심 평가 기준선](evaluation-domestic-etp.md) | 국내 ETP 동결 50문항, 품질 계약, local-inference split 결과 | v1.0 정본 |
 | [국내채권 핵심 평가 기준선](evaluation-domestic-bond.md) | 국내채권 동결 50문항, stale·날짜 계약, 로컬 Qwen·답변 결과 | v1.0 정본 |
-| [공모펀드 핵심 평가 기준선](evaluation-public-fund.md) | Oracle·로컬 development·최초 holdout 9/10과 실패 분석 | v1.2 정본 |
-| [근거 기반 최종 답변 평가](evaluation-grounded-answers.md) | Answer Verifier, 최소권한 LLM 입력, 폴백, 국내 ETP·채권 결과 | v1.1 정본 |
+| [공모펀드 핵심 평가 기준선](evaluation-public-fund.md) | Oracle·로컬 development·최초 holdout 9/10·grounded answer 결과 | v1.3 정본 |
+| [공모펀드 blind v1.1 평가 설계](evaluation-public-fund-blind-v1.1.md) | 독립 100문항 분포·역할 분리·hash 봉인·최초 실행 프로토콜 | 작성 준비 |
+| [근거 기반 최종 답변 평가](evaluation-grounded-answers.md) | Answer Verifier, 최소권한 LLM 입력, 폴백, 국내 ETP·채권·공모펀드 결과 | v1.1 정본 |
 | [개발 환경과 현재 구현 상태](development.md) | Git branch, Conda + pip, 검증 명령, 템플릿 통합 경계 | 현재 정본 |
 | [로컬 LLM 테스트 런타임](local-llm.md) | 격리된 Qwen/vLLM 환경, 안전 경계, 재현 가능한 E2E | 개발 전용 |
 | [Agent Core v0.1 마일스톤](milestones/2026-07-29-agent-core-v0.1.md) | 시작 상태, 채택 결정, 구현·실험·검증·다음 단계 인수인계 | 완료 |
@@ -72,7 +74,12 @@
   commit 이후 최초 holdout 9/10, 합계 49/50
 - 공개된 공모펀드 실패 회귀 수정 후 무모델 linker replay 50/50,
   로컬 holdout 미재실행
-- 코드 회귀 기준: 전체 pytest 82개, Ruff, pip dependency check
+- 공모펀드 답변 기준: expected·local provider 각각 50/50,
+  44개 grounded 생성·6개 안전 차단, 폴백 0
+- 공모펀드 답변 검증 기준: 상품명·수치·순위·evidence·기준일·warning 100%
+- 공모펀드 답변 평가 경계: 동결된 expected QueryPlan으로 SEARCH 결과 설명만
+  평가, parser·독립 blind·true COMPARE 미실행, 공식 Agent 실행 비활성
+- 코드 회귀 기준: 전체 pytest 96개, Ruff, pip dependency check
 - 로컬 Qwen 평가 기준: 동결 50문항에서 최초 미사용 holdout 9/10,
   오류 수정 후 전체 회귀 50/50을 연속 2회 재현
 - 국내 ETP 로컬 Qwen 기준: development 40/40, local-inference holdout 첫 실행 10/10
@@ -82,8 +89,8 @@
   수치·순위·evidence·기준일 100%, 폴백 0
 - 국내채권 답변 기준: 46개 LLM 생성·1개 결정론적 빈 결과·3개 안전 차단,
   전체 50/50, 폴백 0
-- 다음 구현: 공모펀드 새 blind 표현 변형, grounded answer·사람 품질 평가,
-  공식 `/answer` adapter
+- 다음 구현: 금융 도메인 담당자의 blind 100문항 독립 작성, 사람 rubric,
+  공모펀드 true COMPARE, HyperCLOVA X provider와 공식 `/answer` adapter
 
 ## 저장소 밖의 근거 자료
 

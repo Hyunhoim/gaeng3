@@ -5,9 +5,10 @@
 
 이 문서는 자연어 질문과 결정론적 검색기 사이의 계약을 설명한다. 해외 ETP,
 국내 ETP, 국내채권은 실행 가능하다. 공모펀드는 grain·field capability와
-정규화 SQLite·oracle·verifier·field evidence와 동결 50문항 계약까지 구현했다.
-HCX schema 노출과 서버 계약 테스트를 마칠 때까지 공식 Agent 실행은
-fail-closed로 거절한다.
+정규화 SQLite·oracle·result verifier·field-level evidence, grounded answer와
+동결 50문항 계약까지 구현했다. 공모펀드 답변 평가는 동결 expected QueryPlan을
+입력으로 사용하는 격리 하네스에서만 허용하며, HCX schema 노출과 서버 계약
+테스트를 마칠 때까지 공식 Agent 실행은 fail-closed로 거절한다.
 
 ## 1. 구현 파일
 
@@ -21,7 +22,9 @@ fail-closed로 거절한다.
 | [`linker.py`](../packages/finance_agent_core/src/finance_agent_core/agent/linker.py) | 질문에 명시된 범주·수치·정렬을 결정론적으로 canonicalize |
 | [`policy.py`](../packages/finance_agent_core/src/finance_agent_core/execution/policy.py) | 모호성·미지원 조건·비검색 intent를 SQL 전에 fail-closed 차단 |
 | [`answering/models.py`](../packages/finance_agent_core/src/finance_agent_core/answering/models.py) | GroundedAnswerDraft·context·verification·composition 계약 |
-| [`answering/verifier.py`](../packages/finance_agent_core/src/finance_agent_core/answering/verifier.py) | 결과 순서·evidence·숫자·식별자·투자 해석·경고 후검증 |
+| [`answering/verifier.py`](../packages/finance_agent_core/src/finance_agent_core/answering/verifier.py) | draft와 최종 compiled answer의 결과 순서·evidence·숫자·식별자·기준일·경고 후검증 |
+| [`answering/composer.py`](../packages/finance_agent_core/src/finance_agent_core/answering/composer.py) | evidence-only 생성, 검증된 결정론적 core 결합, 실패 시 safe fallback |
+| [`evaluation/answer_cli.py`](../packages/finance_agent_core/src/finance_agent_core/evaluation/answer_cli.py) | expected QueryPlan 기반 상품군별 답변 격리 회귀 평가 |
 
 ## 2. 두 스키마를 분리하는 이유
 
@@ -134,6 +137,20 @@ registry에는 공모펀드 원천 매핑과 capability를 포함하고
 Agent 실행에는 아직 노출되지 않는다. QueryPlan 구조 검증과 배포 실행 허용은
 서로 다른 안전 경계로 관리한다.
 
+내부 답변 하네스는 공모펀드 검색 결과를 field-level evidence DTO로 변환하고,
+로컬 Qwen에는 질문 해석이나 원천 행 대신 사용 가능한 evidence만 전달한다.
+생성된 `GroundedAnswerDraft`와 결정론적 core를 결합한 최종 답변을 각각
+Answer Verifier가 검사하며, 상품명·식별자·수치·순서·기준일·근거 인용이나
+필수 경고가 계약과 다르면 추측 없는 결정론적 답변으로 대체한다. AUM
+조건·정렬·집계는 하나의 거래 통화가 `locked` 조건으로 지정된 경우에만 내부
+실행한다.
+
+공개 `fund-core-50` 답변 회귀는 expected provider와 로컬 Qwen 모두 50/50을
+통과했다. 실행 가능 44문항은 grounded answer, 정책상 차단할 6문항은 blocked로
+처리됐고, 로컬 Qwen의 verifier fallback은 0건이었다. 이 수치는 동결 expected
+QueryPlan을 직접 재사용한 답변 계층 평가이므로 parser를 다시 실행하거나 blind
+질문의 일반화 성능을 측정한 결과는 아니다.
+
 ## 7. QueryPlan 1.0
 
 필수 최상위 필드는 다음과 같다.
@@ -213,6 +230,8 @@ oracle이 거절한다.
 - 검색 intent에 비교·집계 payload를 섞는 행위
 - 서버 전용 JSON Schema keyword를 HCX schema에 넣는 행위
 - registry field 목록과 HCX enum이 어긋나는 변경
+- draft 및 compiled answer가 상품명·수치·순서·기준일·근거를 바꾸거나 누락하는 변경
+- Answer Verifier 실패 시 결정론적 fallback을 거치지 않는 변경
 
 ## 9. 연결 상태와 다음 순서
 
@@ -225,15 +244,16 @@ oracle이 거절한다.
 5. field-level evidence DTO와 결정론적 safe renderer
 6. 동일 QueryPlan을 사용하는 Mock 및 개발 전용 로컬 provider
 7. 상품군별 동결 50문항의 parser·oracle·안전 차단 평가 하네스
-8. 최소권한 grounded answer 계약, Answer Verifier, 결정론적 폴백과 답변 평가 하네스
-9. 공모펀드 공모 범위 잠금, parameterized oracle, 독립 verifier, field evidence
+8. 최소권한 grounded answer 계약, draft·compiled Answer Verifier, 결정론적 폴백과 답변 평가 하네스
+9. 공모펀드 공모 범위 잠금, parameterized oracle, 독립 result verifier, field-level evidence
+10. `answer_cli --dataset fund` expected·로컬 Qwen 공개 50문항 50/50 회귀
 
 다음:
 
 1. 다른 작성자가 만든 blind 표현 변형 세트를 최소 100문항으로 만든다.
 2. 사람이 명확성·중복·비교 용이성을 평가하는 답변 rubric을 추가한다.
-3. 공모펀드 parser·lexical linker를 development 40문항에서 평가한다.
-4. 공모펀드 grounded answer와 사람 품질 평가를 추가한다.
+3. `Intent.COMPARE` 전용 선택·비교 표현·검증 계약을 추가한다.
+4. blind 질문에서 parser부터 답변까지 전체 경로를 별도로 평가한다.
 5. HCX schema에 fund를 노출하고 공식 HyperCLOVA X provider에서 같은 fixture를 재사용한다.
 6. 공식 `/answer` adapter와 오류·timeout 계약을 연결한다.
 

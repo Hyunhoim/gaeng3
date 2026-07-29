@@ -74,7 +74,7 @@ SOURCE_DATE_EPOCH=1785283200 \
 2026-07-29 결과:
 
 - Ruff: 통과
-- pytest: 82개 통과
+- pytest: 96개 통과
 - pip dependency check: 통과
 - 문서 링크·인덱스·평가 baseline·suite hash 검사: 통과
 - 고정 `SOURCE_DATE_EPOCH` wheel을 서로 다른 임시 디렉터리에서 두 번 빌드해
@@ -104,6 +104,10 @@ SOURCE_DATE_EPOCH=1785283200 \
   1,811개와 3개월 수익률 상위 5개를 SQL과 독립 Python 검증으로 재현했다.
 - 공모펀드 expected QueryPlan·Oracle 50문항은 실행 44개·안전 차단 6개로
   전체 50/50을 통과했다.
+- 공모펀드 field-level evidence, 로컬 Qwen 설명, 최종 Answer Verifier와
+  결정론적 폴백을 연결했다. `fund-core-50`의 expected·local provider가
+  각각 50/50이며, 44개 grounded 생성·6개 안전 차단·폴백 0건이다.
+- 상품명·수치·순위·evidence·기준일·warning 검증률은 모두 100%다.
 - 공모펀드 전용 내부 schema와 lexical/schema linker를 구현했고 로컬 Qwen
   hybrid parser의 development 최초 실행은 40/40이다. commit `32e12fa`
   이후 최초 holdout은 9/10이며 실패 1건을 그대로 보존했다.
@@ -196,6 +200,11 @@ parser 성능이 아니다.
 추가했다. 로컬 Qwen holdout은 다시 실행하지 않았고, 공개된 실패의 회귀 테스트와
 무모델 50문항 replay만 50/50 통과했다.
 
+[공모펀드 blind v1.1 평가 설계](evaluation-public-fund-blind-v1.1.md)는
+기존 문항과 분리된 100문항의 범주·표현·처리 분포, 역할 분리, 질문·정답키
+SHA-256 commitment와 최초 실행 상태 계약을 고정한다. 검증·봉인·실행 코드는
+구현했고 실제 문항은 금융 도메인 담당자의 독립 작성 전이다.
+
 ## 근거 기반 최종 답변
 
 [근거 기반 최종 답변 평가](evaluation-grounded-answers.md)는 기대 QueryPlan으로
@@ -206,6 +215,17 @@ renderer로 폴백한다.
 
 최종 국내 ETP 50문항은 47개 grounded 생성과 3개 안전 차단을 통과했다.
 국내채권은 46개 grounded 생성, 1개 결정론적 빈 결과, 3개 안전 차단으로
-50/50이며 폴백은 0건이었다. 자유 생성 LLM 점수가 아니라 제한된 hybrid
-system의 계약 준수율이며, 사람 기준의 표현 품질과 새 blind 질문 평가는 아직
-남아 있다.
+50/50이며 폴백은 0건이었다.
+
+공모펀드는 expected·local provider 모두 50/50을 통과했다. 실행 가능한
+44문항은 grounded answer를 생성했고 6문항은 안전하게 차단했으며 폴백은
+0건이었다. 상품명·수치·순위·evidence·기준일·warning 검증률은 모두 100%다.
+
+이 평가는 동결된 expected QueryPlan을 사용하는 answer CLI로 답변 계층만
+격리했다. parser와 독립 blind 세트는 실행하지 않았고, 현재 문항은 SEARCH
+결과 설명만 다루므로 true COMPARE intent의 비교 답변은 평가하지 않았다.
+공모펀드 공식 Agent 실행은 계속 `execution_enabled: false`다.
+
+이 수치는 자유 생성 LLM 점수가 아니라 제한된 hybrid system의 계약 준수율이다.
+다음 평가는 독립 blind 100문항, 사람 rubric, true COMPARE, HyperCLOVA X
+provider와 공식 adapter 순으로 확장한다.

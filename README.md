@@ -37,13 +37,13 @@ Next.js·FastAPI 애플리케이션 통합과 HyperCLOVA X 연결을 준비하�
 | 해외 ETF·ETN | 정규화, SQLite, Oracle, Verifier, 50문항 평가 구현 |
 | 국내 ETF·ETN | 정규화, SQLite, Oracle, Verifier, 50문항 평가 구현 |
 | 국내채권 | 날짜·stale·신용등급 계약, Oracle, Verifier, 50문항 평가 구현 |
-| 공모펀드 | 로컬 development 40/40·최초 holdout 9/10, 공식 실행 비활성 |
-| 근거 기반 답변 | Field-level Evidence, Answer Verifier, 안전한 폴백 구현 |
+| 공모펀드 | parser development 40/40·최초 holdout 9/10, grounded answer 50/50, 공식 실행 비활성 |
+| 근거 기반 답변 | 공모펀드 44개 grounded·6개 안전 차단, 폴백 0, 핵심 검증률 100% |
 | 로컬 LLM | 격리된 Qwen/vLLM 개발 테스트 완료, 평가·제출 사용 금지 |
 | HyperCLOVA X | 공식 API 확보 후 연결 예정 |
 | Web·API | Next.js·FastAPI 템플릿 통합 예정 |
 
-현재 AI Core 회귀 기준은 pytest 82개, Ruff lint·format과 문서 검사를 모두
+현재 AI Core 회귀 기준은 pytest 96개, Ruff lint·format과 문서 검사를 모두
 통과한 상태
 
 ## 3. 아키텍처
@@ -138,9 +138,10 @@ Git에 포함하지 않음
 
 ## 8. 다음 작업
 
-- 공모펀드 새 blind 질문 세트 작성과 일반화 성능 재평가
-- 공모펀드 grounded answer와 사람 품질 평가
-- 다른 작성자가 만든 blind 평가 문항과 사람 답변 품질 평가 추가
+- 금융 도메인 담당자의 공모펀드 blind 100문항 독립 작성과 hash 봉인
+- 사람 rubric으로 공모펀드 답변의 명확성·중복·비교 용이성 평가
+- 공모펀드 true COMPARE intent의 생성·검증·폴백 평가
+- 다른 작성자가 만든 blind 평가 문항 추가
 - Next.js·FastAPI 애플리케이션 템플릿 통합
 - `AgentRequest`, `AgentResponse`, Evidence와 오류·timeout 계약 동결
 - HyperCLOVA X provider와 공식 `/answer` adapter 연결

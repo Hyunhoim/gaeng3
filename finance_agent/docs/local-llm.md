@@ -1,6 +1,6 @@
 # 로컬 LLM 테스트 런타임
 
-상태: 개발 전용 · 3개 기존 상품군 회귀와 공모펀드 development 검증 완료
+상태: 개발 전용 · 3개 기존 상품군 회귀와 공모펀드 parser·grounded answer 검증 완료
 기준일: 2026-07-29
 
 ## 경계
@@ -257,7 +257,7 @@ LOCAL_TEST_LLM_MODEL=qwen3-local-test \
 실행 후 서버를 종료했고 GPU는 74MiB·18MiB, utilization 0%로 복귀했으며
 18000 포트가 해제됐다.
 
-## 공모펀드 development 평가
+## 공모펀드 QueryPlan development 평가
 
 공모펀드는 공식 Agent에서 계속 비활성화한 채, 평가 CLI 안에서만 전용 내부
 schema를 사용한다. 기본 명령은 development split만 허용하고, holdout은
@@ -298,6 +298,74 @@ report SHA-256은
 다시 호출하지 않았다. 공개된 50문항의 무모델 linker replay만 50/50 통과했다.
 평가 후 서버를 종료했고 GPU는 71MiB·15MiB, utilization 0%로 복귀했으며
 18000 포트가 해제됐다.
+
+## 공모펀드 grounded answer 평가
+
+공개된 `fund-core-50`의 expected QueryPlan으로 검색 해석을 고정한 뒤,
+field-level evidence를 입력으로 받는 최종 답변 계층을 격리 평가한다.
+로컬 Qwen은 evidence에 없는 상품명·수치·순위·기준일·근거를 만들 수 없으며
+draft verifier와 compiled verifier를 모두 통과해야 한다. 하나라도 실패하면
+검증된 검색 결과만 사용하는 결정론적 답변으로 fallback한다.
+
+expected provider 기준선:
+
+```bash
+/home/haeyeongcho/miniforge3/envs/gaeng3-dev/bin/python \
+  -m finance_agent_core.evaluation.answer_cli \
+  --dataset fund \
+  --provider expected \
+  --split all \
+  --workers 4 \
+  --require-perfect \
+  --output artifacts/evaluation/fund-answer-expected-all-v1.json
+```
+
+로컬 Qwen 평가:
+
+```bash
+FINANCE_AGENT_LLM_MODE=local_test \
+ENABLE_NON_HCX_TEST_LLM=1 \
+LLM_PROVIDER=local_test \
+LOCAL_TEST_LLM_BASE_URL=http://127.0.0.1:18000/v1 \
+LOCAL_TEST_LLM_MODEL=qwen3-local-test \
+/home/haeyeongcho/miniforge3/envs/gaeng3-dev/bin/python \
+  -m finance_agent_core.evaluation.answer_cli \
+  --dataset fund \
+  --provider local_test \
+  --split all \
+  --workers 4 \
+  --require-perfect \
+  --output artifacts/evaluation/fund-answer-local-qwen-all-v1.json
+```
+
+두 실행 모두 strict 50/50이며, 실행 가능한 44문항은 grounded answer로
+생성되고 안전 문항 6개는 검색 전에 차단됐다. deterministic fallback은 0건,
+LLM 생성 시도 기준 fallback rate는 0%다. 상품명·수치·순위·기준일·근거와
+warning 검증도 모두 100%다.
+
+- expected report SHA-256:
+  `e516e07e135bca0ae54f9d10f2ee917d6518cafe76c1ffd87717f56e9dd66f38`
+- local Qwen report SHA-256:
+  `30b02b11b6780c422f709f88f45a92fc0a16e6c85a553ae415ee5ebd4eb46b6c`
+- local Qwen 생성 지연: p50 `2,602.016ms`, p95 `4,806.568ms`,
+  max `5,069.169ms`
+- 실행 중 GPU 메모리: `28,253MiB`·`28,197MiB`
+
+자동 grounding 품질과 별개로 문장 다양성도 기록했다. 44개 초안의 lead는
+1종, 상품별 설명 216개는 18종으로 문체가 보수적이고 반복적이다. 사람 rubric은
+아직 실행하지 않았으므로 자연스러움이나 사용자 선호가 100%라는 의미는 아니다.
+
+AUM 조건·정렬·집계에는 `trading_currency = KRW` 또는 `USD`가 정확히 하나의
+locked 조건으로 있어야 한다. 그렇지 않으면 실행 정책과 Oracle compiler가
+모두 fail-closed한다.
+
+이 명령의 `answer_cli`는 동결 suite의 expected QueryPlan만 사용한다. 자연어
+parser, 최초 holdout, 새 blind 질문을 재실행하지 않으므로 QueryPlan 성능이나
+새 질문 일반화 성능으로 해석하지 않는다. 현재 공개 suite는 `SEARCH` intent의
+검색 결과 설명과 순위 표현만 포함하며, 사용자가 상품들을 직접 지정하는 실제
+`COMPARE` intent 답변은 아직 평가하지 않았다. 상세 계약과 결과는
+[공모펀드 핵심 평가 기준선](evaluation-public-fund.md)과
+[근거 기반 최종 답변 평가](evaluation-grounded-answers.md)에 기록한다.
 
 ## 확인된 호환성 메모
 

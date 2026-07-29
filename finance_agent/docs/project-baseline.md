@@ -58,7 +58,15 @@
   질문 한 건의 의미 해석 실패를 관측값 그대로 보존했다.
 - 공개된 실패는 family handoff와 unsupported ranking 제거로 회귀 수정했다.
   로컬 Qwen holdout은 다시 호출하지 않았고 무모델 50문항 replay만 50/50이다.
-- 전체 코드 회귀는 pytest 82개, Ruff lint·format, pip dependency check와
+- 공모펀드 field-level evidence부터 로컬 Qwen 설명, 최종 Answer Verifier,
+  결정론적 폴백까지 연결했다. `fund-core-50`의 expected·local provider가
+  각각 50/50을 통과했으며, 44개 grounded 생성·6개 안전 차단·폴백 0건이다.
+  상품명·수치·순위·evidence·기준일·warning 검증률은 모두 100%다.
+- 이 답변 평가는 동결된 expected QueryPlan으로 SEARCH 결과 설명 계층만
+  격리해 측정했다. parser와 독립 blind 세트는 실행하지 않았고, 복수 상품을
+  직접 비교하는 true COMPARE intent도 아직 평가하지 않았다. 공모펀드 공식
+  Agent 실행은 계속 비활성화한다.
+- 전체 코드 회귀는 pytest 96개, Ruff lint·format, pip dependency check와
   wheel 빌드를 통과했다.
 
 ## 3. 변경할 수 없는 공식 제약
@@ -224,9 +232,11 @@ QueryPlan에는 최소한 intent, 상품군, 필수 조건, 완화 전 확인이
 - [x] 공모펀드 parser·lexical linker를 development 40문항에서 평가한다.
 - [x] parser 규칙을 commit한 뒤 공모펀드 holdout을 최초 1회 평가한다.
 - [x] 공개된 holdout 실패를 family handoff 회귀 테스트로 수정한다.
-- [ ] 새 blind 표현 변형 세트를 만든다.
-- [ ] 공모펀드 grounded answer를 평가한다.
+- [x] 독립 100문항 blind 세트의 분포·봉인·최초 실행 프로토콜을 구현한다.
+- [x] 공모펀드 grounded answer를 `fund-core-50`에서 평가한다.
+- [ ] 금융 도메인 담당자가 새 blind 100문항과 비공개 정답키를 독립 작성한다.
 - [ ] 사람 rubric으로 명확성·중복·비교 용이성과 deterministic 대비 선호를 측정한다.
+- [ ] 공모펀드 true COMPARE intent의 생성·검증·폴백을 별도로 평가한다.
 - [ ] 다른 작성자가 만든 blind 표현 변형·경계값 중심 v1.1 세트를 최소
   100개로 새로 만들고 최초 holdout 성능을 측정한다.
 - 이후 250~400개의 사람 검토·oracle 생성 평가 세트로 확장한다.

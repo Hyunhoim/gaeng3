@@ -6,10 +6,10 @@
 네 상품군 field registry·QueryPlan 계약, 해외·국내 ETP·국내채권의 결정론적
 검색·독립 검증·field-level evidence, Mock 및 개발 전용 로컬 LLM provider다.
 공모펀드는 product·attribute·quarantine 저장, Oracle, Verifier, field
-evidence, 동결 50문항 계약과 개발 전용 로컬 parser까지 구현했다. 공식 Agent
-실행은 HCX schema·서버 계약 승인 전까지 비활성화 상태다.
-최종 답변은 최소권한 GroundedAnswerDraft, Answer Verifier, 결정론적
-evidence compiler와 safe fallback으로 구성할 수 있다.
+evidence, 동결 50문항 계약, 개발 전용 로컬 parser와 grounded answer 평가까지
+구현했다. 최종 답변은 evidence만 입력받는 최소권한 GroundedAnswerDraft,
+draft·compiled Answer Verifier, 결정론적 evidence compiler와 safe fallback으로
+구성한다. 공식 Agent 실행은 HCX schema·서버 계약 승인 전까지 비활성화 상태다.
 
 ## 환경
 
@@ -92,8 +92,9 @@ evidence compiler와 safe fallback으로 구성할 수 있다.
   --output artifacts/e2e/bond-mock-response.json
 ```
 
-공모펀드는 정규화 DB 생성, 내부 Oracle 회귀와 로컬 development parser 평가를
-지원하지만 Agent 실행은 아직 지원하지 않는다.
+공모펀드는 정규화 DB 생성, 내부 Oracle 회귀, 로컬 development parser와
+expected QueryPlan 기반 답변 격리 평가를 지원한다. `finance_agent_core.agent`
+공식 실행 경로는 아직 지원하지 않는다.
 
 ```bash
 /home/haeyeongcho/miniforge3/envs/gaeng3-dev/bin/python \
@@ -124,6 +125,11 @@ evidence compiler와 safe fallback으로 구성할 수 있다.
 [국내채권 평가 기준선](../../docs/evaluation-domestic-bond.md),
 [공모펀드 평가 기준선](../../docs/evaluation-public-fund.md)에 기록한다.
 
+다음 일반화 평가는 AI 담당자와 분리된 작성자가 만든 blind 100문항으로
+수행한다. 분포·정답 계약, hash commitment, 최초 1회 실행과 상태 파일은
+[blind v1.1 설계](../../docs/evaluation-public-fund-blind-v1.1.md)와
+`scripts/blind-fund-eval.py`를 따른다.
+
 `--provider local_test`는 로컬 Qwen 서버와 세 가지 명시적 opt-in이 모두
 필요하다. 최초 holdout과 사후 회귀를 구분한 결과와 재현 절차는
 [평가 기준선](../../docs/evaluation.md)에 기록한다. 공모펀드는
@@ -138,7 +144,7 @@ unlock한 최초 holdout 9/10 결과와 실패 분석은
 ```bash
 /home/haeyeongcho/miniforge3/envs/gaeng3-dev/bin/python \
   -m finance_agent_core.evaluation.answer_cli \
-  --dataset domestic_etp \
+  --dataset fund \
   --provider expected \
   --split all \
   --workers 4 \
@@ -149,6 +155,13 @@ unlock한 최초 holdout 9/10 결과와 실패 분석은
 Agent 전체 E2E에서는 `--provider local_test --answer-provider local_test`를
 함께 사용한다. 계약, 실패 과정, 지표 해석은
 [근거 기반 최종 답변 평가](../../docs/evaluation-grounded-answers.md)에 기록한다.
+
+공개 `fund-core-50` 결과는 expected provider와 로컬 Qwen 모두 50/50이다.
+44개 실행 가능 문항은 grounded answer, 6개 정책 차단 문항은 blocked이며 로컬
+Qwen의 verifier fallback은 0건이다. 이 명령은 동결 expected QueryPlan을
+직접 재사용해 답변 계층만 격리 평가하므로 parser나 blind 질문을 다시 실행하지
+않는다. `Intent.COMPARE` 전용 계약, 사람의 생성 품질 평가, 공식 HyperCLOVA X
+재현은 다음 단계다.
 
 ## 검증
 

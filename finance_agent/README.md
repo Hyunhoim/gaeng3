@@ -11,8 +11,8 @@
 | 해외 ETF·ETN | 감사, 정규화, SQLite, Oracle, Verifier, 50문항 완료 |
 | 국내 ETF·ETN | 감사, 정규화, SQLite, Oracle, Verifier, 50문항 완료 |
 | 국내채권 | 감사, stale·날짜 계약, SQLite, Oracle, Verifier, 50문항 완료 |
-| 공모펀드 | 로컬 development 40/40·최초 holdout 9/10, Agent 실행 비활성 |
-| 근거 기반 답변 | 최소권한 LLM 입력, Answer Verifier, 결정론적 폴백 완료 |
+| 공모펀드 | parser development 40/40·최초 holdout 9/10, grounded answer 50/50, Agent 실행 비활성 |
+| 근거 기반 답변 | 공모펀드 44개 grounded·6개 안전 차단, 폴백 0, 핵심 검증률 100% |
 | HyperCLOVA X | 공식 API 확보 후 연결 예정 |
 
 로컬 Qwen은 개발 전용 테스트 대역이다. 평가·제출 경로의 LLM은 공식 규칙에
@@ -120,6 +120,11 @@ fail-closed로 비활성화되어 있다.
 동료의 템플릿 작업과 합칠 때는 `AgentRequest`, `AgentResponse`, evidence,
 오류·timeout 계약을 먼저 고정하고 공식 `/answer` adapter를 연결한다.
 
-현재 우선순위는 공모펀드 새 blind 질문과 grounded answer·사람 품질 평가,
-HCX schema·HyperCLOVA X, 공식 `/answer` adapter 순이다. 최초 holdout 실패
-1건은 회귀 수정했지만 9/10 기록은 그대로 유지한다.
+공모펀드 grounded answer 평가는 동결된 expected QueryPlan으로 SEARCH 결과
+설명 계층만 격리했다. expected·local provider 모두 50/50이며 상품명·수치·순위·
+evidence·기준일·warning 검증률은 100%다. parser·독립 blind·true COMPARE는
+이 실행에 포함되지 않았고 공식 Agent 실행은 계속 비활성화한다.
+
+현재 우선순위는 금융 도메인 담당자의 공모펀드 blind 100문항 독립 작성,
+사람 rubric, true COMPARE, HCX schema·HyperCLOVA X, 공식 `/answer` adapter
+순이다. 최초 holdout 실패 1건은 회귀 수정했지만 9/10 기록은 그대로 유지한다.
