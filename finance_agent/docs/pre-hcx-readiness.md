@@ -1,0 +1,93 @@
+# HyperCLOVA X 연결 전 준비 기준
+
+마지막 갱신: 2026-07-30
+
+이 문서는 HyperCLOVA X API를 연결하기 전에 Agent Core에서 끝내야 할 구현,
+평가, 계약과 외부 확인 게이트를 추적하는 정본이다. 완료 표시는 코드·테스트·
+재현 가능한 산출물이 모두 일치할 때만 갱신한다.
+
+## 0. 시작 기준선
+
+점검 대상은 `haeyeongcho` 브랜치의 현재 작업 트리다. 공모펀드 자연어 비교
+작업이 아직 커밋되지 않은 상태이므로 기존 변경을 보존하고 그 위에서 작업한다.
+이번 준비 작업에서는 commit, push, PR을 수행하지 않는다.
+
+2026-07-30 최초 점검 결과:
+
+- pytest `204 passed`
+- Ruff lint 통과
+- 문서 검사 `24 Markdown files`, `12 evaluation baselines` 통과
+- `pip check` 통과
+
+최초 확인한 핵심 간극과 현재 해결 상태:
+
+- QueryPlan 계약에는 `search`, `compare`, `aggregate`, `explain`이 있으나
+  SQLite Oracle은 `search`, `compare`만 실행 가능 → 네 상품군 공통
+  AGGREGATE Oracle·독립 verifier·evidence까지 해결
+- 공통 Intent Router가 없고 상품군별 linker와 공모펀드 비교 parser가 분리됨
+- `detail`, `clarify`, `unsupported`는 공통 라우팅 계약으로 표현되지 않음
+- 네 상품군과 일곱 질의 유형을 함께 측정하는 진단 세트가 없음
+- 상품군·질의 유형별 실행 가능 범위를 기계적으로 검사하는 capability matrix가 없음
+- 비정형 문서를 위한 BM25/SQLite FTS 검색 계층이 없음
+- 사람 평가 rubric과 Backend 전달용 프레임워크 독립 DTO가 확정되지 않음
+- 독립 blind holdout과 사람 평가는 금융 도메인 담당자의 외부 작성·검수가 필요
+
+## 1. 완료 대상
+
+| 단계 | 산출물 | 완료 조건 | 상태 |
+| --- | --- | --- | --- |
+| 0 | 현재 코드·문서·평가 감사 | 시작 검사와 간극 기록 | 완료 |
+| 1 | 공통 진단·외부 holdout 프로토콜 | schema, validator, SHA 봉인, 진단 전·후 report | 내부 완료·외부 작성 대기 |
+| 2 | 네 상품군 capability matrix | QueryPlan·Oracle과 자동 정합성 검사 | 완료 |
+| 3 | fail-closed Router·공통 답변 경로 | 실행·역질문·거절이 계약대로 분리되고 E2E 검증 | 완료 |
+| 3A | 네 상품군 AGGREGATE | Decimal 계산·통화 gate·결측·기준일·독립 verifier·Backend evidence | 완료 |
+| 4 | BM25/SQLite FTS 문서 RAG | 적재·필터·top-k·근거·기준일·not-found 테스트 | 최소 기능 완료·실제 corpus 승인 대기 |
+| 5 | 사람 rubric·Backend DTO | JSON 예시·schema·contract test 포함 | 계약 완료·사람 평가 대기 |
+| 6 | baseline 동결·전체 QA | 회귀·wheel·문서·hash 검증과 외부 게이트 명시 | 내부 완료 |
+
+## 2. 평가 해석 원칙
+
+- AI 담당자가 만든 문항은 `internal diagnostic`으로만 부르고 최종 blind라고
+  주장하지 않는다
+- 최종 blind 질문과 비공개 정답키는 금융 도메인 담당자가 독립 작성하고,
+  최초 공개 전에 질문·정답·코드 버전을 SHA-256으로 봉인한다
+- 공개 회귀 세트의 100%는 배선과 회귀 안정성을 뜻하며 일반화 성능을 뜻하지 않는다
+- 로컬 Qwen 결과는 개발 경로의 관측값이며 공식 HyperCLOVA X 성능이 아니다
+- 지원하지 않는 기능을 억지로 실행하지 않고 `clarify` 또는 `unsupported`로
+  명시적으로 종료하는 것도 올바른 결과로 채점한다
+
+내부 라우팅 진단 결과:
+
+- Router 도입 전 search 강제 replay: 4/28, strict accuracy `0.142857`
+- 현재 fail-closed Router: 28/28, strict accuracy `1.0`
+- 현재 AGGREGATE capability를 포함한 diagnostic v2 suite SHA-256:
+  `ef35437ac3b9a02c2438ef664b49c339a631c249f53784b43fb2c1050d86e271`
+- v1은 AGGREGATE 미지원 시점의 봉인 이력으로 그대로 보존
+- 위 결과는 공개 배선 진단이며 독립 blind나 최종 답변 점수가 아님
+
+## 3. 외부 완료 게이트
+
+다음 항목은 저장소 코드만으로 완료할 수 없으며 최종 baseline과 분리해 관리한다.
+
+- 금융 도메인 담당자가 독립 작성한 네 상품군 blind 질문과 비공개 정답키
+- 봉인 이후 단 한 번 수행하는 최초 blind 실행
+- 금융 도메인 담당자와 팀원이 수행한 사람 평가 점수
+- 주최 측이 허용한 외부 비정형 문서 corpus와 사용 범위 확인
+- HyperCLOVA X 모델명·API 계약·Structured Outputs 범위 확인과 공식 재현
+
+이 게이트가 남아 있는 동안 저장소는 “HyperCLOVA X 연결 전 내부 준비 완료”까지만
+주장할 수 있고, 최종 평가 준비 완료나 일반화 성능 완료를 주장하지 않는다.
+
+## 4. 내부 완료 QA
+
+- pytest `239 passed`
+- Ruff lint와 format 통과
+- 문서 검사 `31 Markdown files`, `16 evaluation baselines` 통과
+- `pip check` 통과
+- build isolation 없이 wheel 생성과 신규 JSON package data 포함 여부 통과
+- `git diff --check` 통과
+- source·test·문서·baseline·protocol tree SHA-256 manifest 검증
+
+source freeze는
+`evaluation/protocols/pre-hcx-readiness-v1.manifest.json`에 보존한다. 외부
+게이트가 남아 있으므로 status는 `internal_ready_external_gates_pending`이다.

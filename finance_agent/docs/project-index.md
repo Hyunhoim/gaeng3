@@ -1,6 +1,6 @@
 # gaeng3 프로젝트 문서
 
-마지막 갱신: 2026-07-29
+마지막 갱신: 2026-07-30
 
 이 디렉터리는 금융상품 Agent 구현에 직접 사용하는 문서의 정본이다. 연구 요청·외부 모델 답변·감사 산출물은 근거 자료로 보존하되, 실제 구현 판단은 `project-baseline.md`와 `data-audit.md`를 우선한다.
 
@@ -20,7 +20,14 @@
 12. [로컬 LLM 테스트 런타임](local-llm.md)
 13. [Agent Core v0.1 마일스톤](milestones/2026-07-29-agent-core-v0.1.md)
 14. [재현 가능한 평가 baseline](../evaluation/README.md)
-15. [저장소 부트스트랩 작업 명세](prompts/01-repository-bootstrap.md)
+15. [HyperCLOVA X 연결 전 준비 기준](pre-hcx-readiness.md)
+16. [연결 전 진단·외부 blind 프로토콜](evaluation-pre-hcx-diagnostic.md)
+17. [금융상품 Agent capability matrix](capability-matrix.md)
+18. [네 상품군 공통 AGGREGATE 엔진](aggregate-engine.md)
+19. [BM25/SQLite FTS 문서 RAG](document-rag.md)
+20. [Backend 전달용 Agent DTO](backend-contract.md)
+21. [금융상품 Agent 사람 평가 rubric](human-evaluation.md)
+22. [저장소 부트스트랩 작업 명세](prompts/01-repository-bootstrap.md)
 
 ## 문서 지도
 
@@ -34,13 +41,20 @@
 | [해외 ETP 핵심 평가 기준선](evaluation.md) | 동결 50문항, oracle·채점 규칙, 최초 holdout과 사후 회귀 결과 | v1.0 정본 |
 | [국내 ETP 핵심 평가 기준선](evaluation-domestic-etp.md) | 국내 ETP 동결 50문항, 품질 계약, local-inference split 결과 | v1.0 정본 |
 | [국내채권 핵심 평가 기준선](evaluation-domestic-bond.md) | 국내채권 동결 50문항, stale·날짜 계약, 로컬 Qwen·답변 결과 | v1.0 정본 |
-| [공모펀드 핵심 평가 기준선](evaluation-public-fund.md) | Oracle·로컬 development·최초 holdout 9/10·grounded answer 결과 | v1.3 정본 |
+| [공모펀드 핵심 평가 기준선](evaluation-public-fund.md) | Oracle·최초 SEARCH parser holdout 9/10·답변 50/50·COMPARE 20/20·자연어 COMPARE 통합 E2E 24/24 | v1.6 정본 |
 | [공모펀드 blind v1.1 평가 설계](evaluation-public-fund-blind-v1.1.md) | 독립 100문항 분포·역할 분리·hash 봉인·최초 실행 프로토콜 | 작성 준비 |
-| [근거 기반 최종 답변 평가](evaluation-grounded-answers.md) | Answer Verifier, 최소권한 LLM 입력, 폴백, 국내 ETP·채권·공모펀드 결과 | v1.1 정본 |
+| [근거 기반 최종 답변 평가](evaluation-grounded-answers.md) | Answer Verifier, 최소권한 LLM 입력, 폴백, SEARCH·COMPARE·자연어 통합 E2E 결과 | v1.3 정본 |
 | [개발 환경과 현재 구현 상태](development.md) | Git branch, Conda + pip, 검증 명령, 템플릿 통합 경계 | 현재 정본 |
 | [로컬 LLM 테스트 런타임](local-llm.md) | 격리된 Qwen/vLLM 환경, 안전 경계, 재현 가능한 E2E | 개발 전용 |
 | [Agent Core v0.1 마일스톤](milestones/2026-07-29-agent-core-v0.1.md) | 시작 상태, 채택 결정, 구현·실험·검증·다음 단계 인수인계 | 완료 |
 | [재현 가능한 평가 baseline](../evaluation/README.md) | Git에서 제외된 전체 report 대신 집계 지표·hash·재현 조건 보존 | v1.0 |
+| [HyperCLOVA X 연결 전 준비 기준](pre-hcx-readiness.md) | API 연결 전 구현·진단·계약·외부 게이트와 단계별 증거 추적 | 진행 중 |
+| [연결 전 진단·외부 blind 프로토콜](evaluation-pre-hcx-diagnostic.md) | 네 상품군·일곱 intent 내부 진단과 금융 도메인 담당자 external blind 봉인 | v1.0 |
+| [금융상품 Agent capability matrix](capability-matrix.md) | 네 상품군·일곱 intent 실행·역질문·미지원 범위와 자동 정합성 검사 | v1.0 |
+| [네 상품군 공통 AGGREGATE 엔진](aggregate-engine.md) | 함수·그룹·통화·결측·기준일·독립 verifier·Backend evidence 계약 | v1.0 |
+| [BM25/SQLite FTS 문서 RAG](document-rag.md) | 승인 문서 적재·BM25 검색·필터·근거·기준일·not-found 계약 | 최소 기능 완료 |
+| [Backend 전달용 Agent DTO](backend-contract.md) | 프레임워크 독립 request·response·citation·fallback 계약과 JSON 예시 | v1.0 |
+| [금융상품 Agent 사람 평가 rubric](human-evaluation.md) | 6개 평가 축·critical gate·독립 reviewer·집계 계약 | rubric 완료·실평가 대기 |
 | [저장소 부트스트랩 작업 명세](prompts/01-repository-bootstrap.md) | 최초 Agent Core를 구현할 때 Codex에 전달한 실행 명세 | 완료 기록 |
 | [Agent 전략 연구 요청](prompts/02-agent-strategy-research.md) | GPT Pro에 전달했던 질문과 당시 제약 | 과거 입력 기록 |
 | [GPT Pro 연구 기록](research/2026-07-28-gpt-pro/README.md) | GPT Pro 원문 답변, 감사 번들, 검토 결과, 원본 ZIP 위치 | 연구·감사 기록 |
@@ -77,9 +91,33 @@
 - 공모펀드 답변 기준: expected·local provider 각각 50/50,
   44개 grounded 생성·6개 안전 차단, 폴백 0
 - 공모펀드 답변 검증 기준: 상품명·수치·순위·evidence·기준일·warning 100%
-- 공모펀드 답변 평가 경계: 동결된 expected QueryPlan으로 SEARCH 결과 설명만
-  평가, parser·독립 blind·true COMPARE 미실행, 공식 Agent 실행 비활성
-- 코드 회귀 기준: 전체 pytest 96개, Ruff, pip dependency check
+- 공모펀드 COMPARE 기준: expected·local provider 각각 20/20,
+  18개 grounded 생성·2개 누락 대상 결정론 처리·폴백 0
+- 공모펀드 COMPARE 검증 기준: 요청 순서·field status·numeric delta·
+  evidence·기준일 100%, AUM 통화 불일치와 결측은 차이 미계산
+- 공모펀드 자연어 COMPARE 기준: 정식명·짧은 이름·상품번호 exact resolver,
+  ordered identity·정확한 연결어·위치별 문장부호 문법, expected·로컬 Qwen
+  각각 24/24, 실행 16·안전 차단 8
+- 공모펀드 자연어 COMPARE 통합 E2E: 공개 24문항 expected·로컬 Qwen
+  각각 24/24, parser 호출 24·answer 호출 16, grounded 16·폴백 0,
+  parser·resolution·독립 계획 계약·Oracle·field status·numeric delta·
+  실제 비교 셀 값·별도 근거 provenance·차단·답변 핵심 검증률 100%
+- 공모펀드 자연어 COMPARE parser 단독 로컬 지연: p50 569.018ms,
+  p95 796.637ms, 최대 889.169ms
+- 공모펀드 자연어 COMPARE 통합 E2E 로컬 p95: parser 751.575ms, answer
+  2,225.406ms, 전체 2,737.07ms
+- 공모펀드 자연어 COMPARE 안전 문법: 제외·대신·포함과 질문 전체 미등록
+  잔여 표현, 빈·미종결·역방향·중첩·줄바꿈 따옴표 차단
+- 공모펀드 평가 경계: 동결 expected QueryPlan의 SEARCH·COMPARE 답변 격리
+  회귀와 공개 24문항 자연어 통합 E2E까지 완료, 독립 blind E2E·사람 rubric·
+  HyperCLOVA X 미완료, 공식 Agent 실행 비활성
+- 연결 전 Router 진단: 도입 전 search 강제 replay 4/28, 현재 28/28
+- 네 상품군 공통 집계: COUNT·MIN·MAX·AVG·허용 SUM, 최대 두 그룹,
+  금액 통화 gate, 결측·기준일 공개, SQL 후보와 독립 Python 재검산
+- 문서 검색 기준: BM25/SQLite FTS synthetic 적재·필터·근거·not-found 통과
+- 팀 계약 기준: Backend DTO JSON 예시·schema, 사람 rubric validator 통과
+- 코드 회귀 기준: 전체 pytest 239개, Ruff lint·format, pip dependency check,
+  wheel과 필수 package data 검사
 - 로컬 Qwen 평가 기준: 동결 50문항에서 최초 미사용 holdout 9/10,
   오류 수정 후 전체 회귀 50/50을 연속 2회 재현
 - 국내 ETP 로컬 Qwen 기준: development 40/40, local-inference holdout 첫 실행 10/10
@@ -89,8 +127,9 @@
   수치·순위·evidence·기준일 100%, 폴백 0
 - 국내채권 답변 기준: 46개 LLM 생성·1개 결정론적 빈 결과·3개 안전 차단,
   전체 50/50, 폴백 0
-- 다음 구현: 금융 도메인 담당자의 blind 100문항 독립 작성, 사람 rubric,
-  공모펀드 true COMPARE, HyperCLOVA X provider와 공식 `/answer` adapter
+- 다음 외부 게이트: 금융 도메인 담당자의 external blind 100문항·비공개 정답키,
+  승인 corpus, 실제 사람 평가
+- 다음 기술 통합: HyperCLOVA X provider와 공식 `/answer` adapter
 
 ## 저장소 밖의 근거 자료
 

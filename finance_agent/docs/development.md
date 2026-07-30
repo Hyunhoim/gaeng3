@@ -221,11 +221,51 @@ renderer로 폴백한다.
 44문항은 grounded answer를 생성했고 6문항은 안전하게 차단했으며 폴백은
 0건이었다. 상품명·수치·순위·evidence·기준일·warning 검증률은 모두 100%다.
 
-이 평가는 동결된 expected QueryPlan을 사용하는 answer CLI로 답변 계층만
-격리했다. parser와 독립 blind 세트는 실행하지 않았고, 현재 문항은 SEARCH
-결과 설명만 다루므로 true COMPARE intent의 비교 답변은 평가하지 않았다.
-공모펀드 공식 Agent 실행은 계속 `execution_enabled: false`다.
+별도의 `comparison_cli`는 정확한 `itm_no` 두 개를 지정하는 true COMPARE
+20문항을 실행한다. expected·로컬 Qwen 모두 20/20이며 완전한 비교 18개는
+grounded answer, 누락 상품이 있는 2개는 LLM 미호출 결정론 답변으로 처리됐다.
+field status·numeric delta·근거·기준일은 100%, verifier fallback은 0건이다.
+서버가 요청 순서, 차이, 통화 호환성과 결측을 결정하고 LLM은 설명만 담당한다.
+
+별도의 `comparison_parser_cli`는 자연어의 정식명·짧은 이름·`itm_no`를 정확한
+공모펀드 비교 대상으로 연결한다. 공개 24문항에서 expected·로컬 Qwen 모두
+24/24이며 정상 비교 16개와 안전 차단 8개를 Oracle 전후로 검증했다. 중복
+단축명·사모·미등록·동일 상품 중복은 추측하지 않는다.
+
+`comparison_e2e_cli`는 같은 공개 24문항에서 두 격리 계층을 실제로 연결한다.
+
+```bash
+/home/haeyeongcho/miniforge3/envs/gaeng3-dev/bin/python \
+  -m finance_agent_core.evaluation.comparison_e2e_cli \
+  --provider expected \
+  --split all \
+  --workers 4 \
+  --require-perfect
+```
+
+expected·로컬 Qwen 모두 24/24다. 로컬 Qwen은 parser를 24회 호출하고, 정책을
+통과한 16문항에서만 answer를 호출했다. 결과는 실행 16개·안전 차단 8개,
+grounded answer 16개, verifier fallback 0개다. parser target·field,
+grounding, resolution, QueryPlan, Oracle, 안전 차단, Answer Verifier,
+field status·numeric delta·실제 비교 셀 값과 별도의 근거 provenance, field
+evidence 인용과 기준일 검증률은 모두 100%다. 자연어 비교 parser 단독 실행의
+로컬 지연은 p50 569.018ms, p95 796.637ms, 최대 889.169ms다. 통합 E2E의
+로컬 p95 latency는 parser 751.575ms, answer 2,225.406ms, 전체
+2,737.07ms다.
+
+E2E overlay는 QueryPlan 핵심 계약과 실행 16건의 field status·delta·실제
+비교 셀 값과 별도의 근거 provenance를 동결한다. 전체 대상 sequence와 두
+identity 사이의 정확한 연결어, 접두·연결·꼬리 위치별 문장부호 문법을 검사해
+상품명 prefix·suffix와 누락된 세 번째 대상을 막는다. 제외·대신·포함 역할,
+identity와 지원 언어를 제외한 질문 전체의 미등록 잔여 표현, 비어 있거나
+미종결·역방향·중첩·줄바꿈이 잘못된 따옴표도 차단한다. 이 통합 결과는 공개
+회귀 질문에 대한 배선 검증이다. 다른 작성자가 만든 독립 blind 질문의
+parser→답변 E2E와 사람 rubric은 아직 실행하지 않았다.
+HyperCLOVA X도 아직 연결하지 않았으며, 공모펀드 공식 Agent 실행은 계속
+`execution_enabled: false`다.
 
 이 수치는 자유 생성 LLM 점수가 아니라 제한된 hybrid system의 계약 준수율이다.
-다음 평가는 독립 blind 100문항, 사람 rubric, true COMPARE, HyperCLOVA X
-provider와 공식 adapter 순으로 확장한다.
+네 상품군·일곱 intent Router, capability matrix, BM25/SQLite FTS 문서 검색,
+사람 rubric validator와 Backend DTO까지 구현했다. 다음 평가는 금융 도메인
+담당자의 external blind 100문항 parser→답변 E2E와 실제 사람 평가이며, 이후
+HyperCLOVA X provider와 공식 adapter를 연결한다.

@@ -1,8 +1,8 @@
 # 공모펀드 핵심 평가 기준선
 
-상태: v1.3 QueryPlan·Oracle·grounded answer 계약 동결 · 최초 holdout 9/10 보존
+상태: v1.6 QueryPlan·Oracle·SEARCH·COMPARE·상품명 resolution·검증 답변 E2E 계약 동결 · 최초 SEARCH parser holdout 9/10 보존
 
-기준일: 2026-07-29
+기준일: 2026-07-30
 
 이 문서는 공모펀드 자연어 질문을 검색 계획으로 바꾸는 기준과 실제 데이터
 검색 결과를 고정한 회귀 계약이다. expected provider의 50/50은 사람이 작성한
@@ -11,7 +11,11 @@
 40/40 통과했다. parser 규칙을 commit `32e12fa`로 동결한 뒤 처음 실행한
 holdout 10문항은 9/10이었다. 실패 한 건은 수정하거나 숨기지 않고 그대로
 보존한다. 공개된 50문항에는 별도로 field-level evidence부터 검증된 최종 답변까지
-잇는 grounded answer 회귀도 추가했다.
+잇는 grounded answer 회귀도 추가했다. 정확한 상품번호 두 개를 대상으로 하는
+true `COMPARE` 20문항도 별도 회귀 세트로 검증했다.
+정식명·짧은 이름·상품번호에서 정확한 비교 대상을 찾는 자연어 COMPARE
+parser와 resolver도 공개 24문항에서 별도로 검증했다. 같은 24문항으로
+자연어 질문부터 검증된 grounded answer까지 잇는 통합 회귀도 완료했다.
 
 ## 1. 동결 평가 세트
 
@@ -241,11 +245,211 @@ AUM을 조건·정렬·집계에 쓰는 계획은 실행 직전에도 정확히 
 `trading_currency = KRW` 또는 `USD` locked 조건을 요구한다. suite 바깥에서
 수동으로 만든 QueryPlan도 이 조건 없이는 Oracle SQL을 컴파일할 수 없다.
 
-이 평가는 `answer_cli`가 suite의 expected QueryPlan을 직접 사용해 답변 계층만
+이 평가는 `answer_cli`가 suite의 expected QueryPlan을 직접 사용해 SEARCH 답변 계층만
 격리 검증한 결과다. 자연어 parser, 최초 holdout, 새 blind 질문을 다시 실행한
-E2E 결과가 아니다. 또한 현재 50문항은 `SEARCH` intent의 검색 결과 설명과
-순위 표현만 평가하며, 사용자가 두 상품을 직접 지정하는 실제 `COMPARE` intent
-답변은 아직 평가하지 않았다.
+E2E 결과가 아니다. `COMPARE`는 다음 별도 세트에서 평가한다.
+
+### 5.3 공모펀드 true COMPARE 회귀
+
+공개 `fund-compare-core-20`은 두 상품을 직접 지정한 비교 계약을 검증한다.
+자연어 parser 오차를 분리하기 위해 expected COMPARE QueryPlan을 사용하며,
+대상은 `itm_no`로 정확히 식별되는 공모펀드 클래스 두 개로 제한한다.
+
+```text
+expected COMPARE QueryPlan
+→ 공모 범위·정확한 상품번호 2개 실행 정책
+→ parameterized SQLite Oracle·독립 Result Verifier
+→ 요청 순서 복원·field-level evidence
+→ 서버의 값 대조·차이 계산·통화·결측 판정
+→ 로컬 Qwen 최소권한 설명
+→ Answer Verifier
+→ 근거 컴파일 또는 결정론적 fallback
+```
+
+차이는 항상 `두 번째 상품 - 첫 번째 상품`으로 서버가 계산한다. AUM은 두
+레코드의 실제 거래 통화가 같을 때만 차이를 계산한다. 통화가 다르면 각 값을
+단위와 함께 표시하되 차이는 만들지 않는다. 한쪽 값이 없으면 `확인 불가`,
+상품 자체가 없으면 LLM을 호출하지 않고 누락 대상을 명시한다.
+
+평가 범주는 위험등급·상품명 같은 원천값 대조, 1주·1개월·3개월·6개월
+수익률 차이, KRW·USD AUM 차이, 역순 요청, 다중 필드, 통화 불일치, 결측값,
+한 개 또는 두 개 상품 누락이다.
+
+| 지표 | expected | local Qwen |
+| --- | ---: | ---: |
+| strict accuracy | 20/20 | 20/20 |
+| 완전한 비교 | 18 | 18 |
+| 누락 대상 결정론 처리 | 2 | 2 |
+| grounded answer | 18 | 18 |
+| deterministic fallback | 0 | 0 |
+| field status·numeric delta | 100% | 100% |
+| field citation·기준일 | 100% | 100% |
+| 생성 지연 p50 | 해당 없음 | 1,522.937ms |
+| 생성 지연 p95 | 해당 없음 | 4,447.683ms |
+| 생성 지연 max | 해당 없음 | 4,447.683ms |
+
+동결 정보:
+
+- suite SHA-256:
+  `2f22ca18150016845b1ef7a9c4b77d028721ebcae85e8ff196d0cab6612e4b6d`
+- expected report SHA-256:
+  `d4b76c1743963b45673c63436f210d9975bcf74c7ce74a1de95f5eb7bbb86d85`
+- local Qwen report SHA-256:
+  `fc64cffa4f920af752ea0c6948cf40691980072a5c073ed7f2aab0f1c25dfd8f`
+
+20문항은 구현 과정에서 작성·공개한 회귀 세트다. 16/4 split 이름을 사용하지만
+새로운 blind 일반화 성능으로 주장하지 않는다. 이 세트 자체는 자연어 상품명에서
+`itm_no`를 찾는 entity resolution과 parser를 분리했으며, 그 계층은 다음
+24문항 세트에서 평가한다. 사람 관점의 설명 품질은 두 평가 모두 범위 밖이다.
+
+### 5.4 자연어 상품명 COMPARE parser·resolver 회귀
+
+`fund-compare-parser-core-24`는 질문에 적힌 정식명·짧은 이름·`itm_no`를
+정확한 공모펀드 클래스에 연결하고, 실제 `Intent.COMPARE` QueryPlan과 Oracle
+실행 또는 안전 차단까지 검증한다.
+
+```text
+사용자 비교 질문
+→ 로컬 Qwen이 대상 표현·비교 필드만 구조화
+→ 질문 문자열 grounding 검사
+→ 서버 exact resolver
+→ 결정론적 필드 재추출
+→ COMPARE QueryPlan·실행 정책
+→ Oracle·Result Verifier·요청 순서 복원
+```
+
+resolver는 Unicode NFKC·대소문자·공백 차이와 균형 잡힌 바깥쪽 따옴표만
+정규화한다. 상품명 내부 괄호, 하이픈, 대괄호와 클래스 표기는 지우지 않는다.
+별칭 우선순위는 상품번호, 정식명, 짧은 이름이며 공모 범위에서 정확히 하나가
+일치할 때만 locked 상품 ID 조건을 만든다. 중복 짧은 이름, 사모 범위,
+미등록명, 같은 상품 중복 지정, 대상·비교 의도·필드 부족과 미지원 총보수는
+Oracle 전에 차단한다.
+
+실제 공모 범위 11,115개에서 상품번호를 포함한 유효 alias key는 32,949개다.
+정식명·짧은 이름만 보면 정규화 key 21,834개 중 18개가 여러 상품에 연결되며
+연관 상품은 중복 제거 후 39개다. 이 충돌을 관측했기 때문에 단축명 하나를
+임의 선택하는 fuzzy fallback을 두지 않는다.
+
+평가 구성:
+
+- development 18문항, holdout 6문항
+- 정상 실행 16문항, 안전 차단 8문항
+- 따옴표 정식명·짧은 이름·상품번호·공백·전각 괄호·비인용 이름
+- 필드 동의어·요청 순서·KRW/USD AUM
+- 중복 단축명·사모·미등록·동일 상품·단일 대상·필드/의도 누락·미지원 비용
+
+| 지표 | expected | local Qwen |
+| --- | ---: | ---: |
+| strict accuracy | 24/24 | 24/24 |
+| 대상 표현 exact | 100% | 100% |
+| 비교 필드 exact | 100% | 100% |
+| 질문 grounding | 100% | 100% |
+| 상품 resolution·plan exact | 100% | 100% |
+| Oracle exact | 16/16 | 16/16 |
+| safety block | 8/8 | 8/8 |
+| 생성 지연 p50 | 해당 없음 | 569.018ms |
+| 생성 지연 p95 | 해당 없음 | 796.637ms |
+| 생성 지연 max | 해당 없음 | 889.169ms |
+
+동결 정보:
+
+- suite SHA-256:
+  `9e2bd72c001f6384a08111ae195de0bf1a962fe6aafa46b52df012917c1b4c9c`
+- expected report SHA-256:
+  `579283ec3ccd67574a70c4bce387819c0247922458bd3e9688fa2fd8ccdfe7dd`
+- local Qwen report SHA-256:
+  `c886abd61861abc10bca7ae727c8c7f32caf4390e9e2b4ceccc4dbb8fc4fdfea`
+
+LLM의 역할은 질문에 실제로 적힌 문자열과 필드 이름을 복사하는 데 그친다.
+서버는 따옴표 전체 span과 비인용 별칭 경계를 원자적으로 검사하고, 질문에
+나타난 대상 surface의 전체 순서가 draft와 일치하는지 확인한다. 두 identity
+사이에는 허용된 연결어만 정확히 두며, 접두·연결·꼬리 위치별 문장부호 문법도
+검사한다. 제외·대신·포함 표현, 미등록 상품번호, identity와 지원 비교 언어를
+마스킹한 뒤 질문 전체에 남는 미등록 비인용 표현도 차단한다. 비어 있거나
+닫히지 않았거나 역방향·중첩·줄바꿈이 잘못된 따옴표도 실행하지 않으며 최종
+필드는 질문에서 결정론적으로 재추출한다. 따라서 모델이 질문에 없는 상품·
+필드를 만들거나 세 번째 대상을 누락해도 Oracle 조건으로 승격하지 않는다.
+plan exact도 동일 compiler 자기비교가 아닌 동결 case 계약으로 검증한다.
+
+이 세트도 같은 개발자가 작성한 공개 회귀다. `holdout` 표시는 구현 중
+분할일 뿐 독립 blind 일반화 성능을 뜻하지 않는다. 오탈자·부분 이름을
+유사검색으로 복구하지 않고 역질문하는 보수적 계약이며, HyperCLOVA X나 공식
+공모전 평가 결과가 아니다.
+
+### 5.5 자연어 COMPARE부터 검증 답변까지 통합 회귀
+
+`comparison_e2e_cli`는 5.4의 공개 24문항을 그대로 사용해 앞서 분리 검증한
+parser·resolver와 5.3의 비교 답변 계층을 한 번에 연결한다. 별도의 E2E
+overlay에는 실행 16문항의 필드별 상태·수치 차이·실제 비교 셀 값·field
+evidence provenance를 동결해 비교 계산과 근거 연결까지 독립적으로 회귀
+검증한다.
+
+```text
+사용자 자연어 비교 질문
+→ Qwen 대상 표현·필드 초안
+→ 질문 grounding·exact resolver
+→ COMPARE QueryPlan·실행 정책
+→ Oracle·Result Verifier
+→ 요청 순서·field-level evidence·서버 비교 계산
+→ Qwen GroundedAnswerDraft
+→ draft·compiled Answer Verifier
+→ 근거·기준일이 있는 답변 또는 결정론적 fallback
+```
+
+모든 24문항에서 parser를 한 번씩 호출한다. 실행 가능한 16문항만 Oracle과
+답변 계층으로 진행해 Qwen 답변 생성을 16번 시도했고, 안전 차단 8문항은
+Oracle·답변 생성 전에 종료했다.
+
+| 지표 | expected | local Qwen |
+| --- | ---: | ---: |
+| strict accuracy | 24/24 | 24/24 |
+| 실행·안전 차단 | 16/16 · 8/8 | 16/16 · 8/8 |
+| parser 호출·답변 생성 시도 | 24 · 16 | 24 · 16 |
+| grounded answer | 16/16 | 16/16 |
+| deterministic fallback | 0 | 0 |
+| 대상·필드·grounding | 100% | 100% |
+| resolution·plan·Oracle·안전 차단 | 100% | 100% |
+| field status·numeric delta | 100% | 100% |
+| 실제 비교 셀 값·evidence provenance | 100% | 100% |
+| Answer Verifier | 100% | 100% |
+| evidence citation·기준일 | 100% | 100% |
+
+로컬 Qwen 지연:
+
+| 구간 | p50 | p95 | max |
+| --- | ---: | ---: | ---: |
+| parser | 567.105ms | 751.575ms | 805.811ms |
+| answer | 1,582.531ms | 2,225.406ms | 2,225.406ms |
+| 전체 E2E | 2,142.249ms | 2,737.07ms | 2,853.783ms |
+
+동결 정보:
+
+- E2E overlay suite SHA-256:
+  `5f1511c8dea53b13d1207ee1c80adcf6db4c431581ca8b15d5d683951bc7f88c`
+- source question suite SHA-256:
+  `9e2bd72c001f6384a08111ae195de0bf1a962fe6aafa46b52df012917c1b4c9c`
+- expected report SHA-256:
+  `01840035f13f14923d335bb01ad77355d0ef3b493c4849ab7c89bfaa6bee435d`
+- local Qwen report SHA-256:
+  `b67ccbad9ab1cc93d682f4b27d0ae38a901623081477309a7f53f07d91709976`
+- [집계 baseline](../evaluation/baselines/public-fund-compare-e2e-v1.json)
+
+QueryPlan은 같은 compiler를 두 번 호출해 비교하지 않고 schema·의도·상품군·
+공모 범위·상품 순서·projection·limit·차단 사유를 독립 계약으로 검사한다.
+질문의 상품명 grounding도 단순 부분 문자열이 아니라 정확한 인용 span 또는
+상품 식별자 경계를 요구한다. 질문에 나타난 알려진 상품과 미등록 상품번호의
+순서 전체가 draft와 일치해야 하고, 두 identity 사이의 연결어와 접두·연결·
+꼬리 위치별 문장부호도 허용 문법과 정확히 맞아야 한다. 제외·대신·포함 표현과
+identity·지원 비교 언어를 제외한 질문 전체의 미등록 잔여 표현은 차단한다.
+비어 있거나 닫히지 않았거나 역방향·중첩·줄바꿈이 잘못된 따옴표도 실행하지
+않는다. 따라서 더 긴 상품명의 prefix·suffix나 세 번째 대상을 다른 두 상품으로
+오인해 실행하지 않는다. parser 예외는 세부 지표의 분모에서 빠지지 않고 실패로
+계산한다. 실제 `ComparisonCell.value`와 field evidence provenance는 서로
+독립된 SHA-256 fingerprint로 두 상품 각각 동결한다.
+
+이 결과는 같은 개발자가 작성한 공개 24문항의 통합 회귀다. 독립 blind
+일반화, 사람이 판단하는 설명 품질, HyperCLOVA X 성능이나 공식 평가 결과가
+아니다. 공모펀드 공식 Agent 실행도 계속 비활성 상태다.
 
 ## 6. 실행 비활성 상태에서의 평가
 
@@ -256,7 +460,8 @@ E2E 결과가 아니다. 또한 현재 50문항은 `SEARCH` intent의 검색 결
 
 - dataset이 정확히 `fund`
 - provider가 동결된 `expected` 또는 개발 전용 `local_test`
-- 공모 범위·모호성·미지원 조건 검사를 모두 통과
+- SEARCH는 공모 범위·모호성·미지원 조건 검사, COMPARE는 공모 범위·정확히
+  해석된 서로 다른 상품 두 개·지원 필드 검사를 모두 통과
 
 `local_test`는 공모펀드 전용 내부 schema를 사용하며 일반 Agent 경로에는
 노출되지 않는다. 로컬 fund holdout 또는 전체 split은 별도 unlock flag 없이는
@@ -322,13 +527,73 @@ LOCAL_TEST_LLM_MODEL=qwen3-local-test \
 
 이 명령을 다시 실행한 결과는 최초 holdout이 아니며 사후 회귀로만 취급한다.
 
+COMPARE expected 기준선:
+
+```bash
+/home/haeyeongcho/miniforge3/envs/gaeng3-dev/bin/python \
+  -m finance_agent_core.evaluation.comparison_cli \
+  --provider expected \
+  --split all \
+  --workers 4 \
+  --require-perfect \
+  --output artifacts/evaluation/fund-compare-answer-expected-all-v1.json
+```
+
+COMPARE 로컬 Qwen은 위 명령에 로컬 provider 환경변수와
+`--provider local_test`를 적용하고 출력 파일을
+`fund-compare-answer-local-all-v1.json`으로 지정한다.
+
+자연어 COMPARE parser·resolver expected 기준선:
+
+```bash
+/home/haeyeongcho/miniforge3/envs/gaeng3-dev/bin/python \
+  -m finance_agent_core.evaluation.comparison_parser_cli \
+  --provider expected \
+  --split all \
+  --workers 4 \
+  --require-perfect
+```
+
+로컬 Qwen은 같은 명령에 로컬 provider 환경변수와
+`--provider local_test`를 적용한다.
+
+자연어 COMPARE부터 검증 답변까지 expected 통합 기준선:
+
+```bash
+/home/haeyeongcho/miniforge3/envs/gaeng3-dev/bin/python \
+  -m finance_agent_core.evaluation.comparison_e2e_cli \
+  --provider expected \
+  --split all \
+  --workers 4 \
+  --require-perfect \
+  --output artifacts/evaluation/fund-compare-e2e-expected-all.json
+```
+
+로컬 Qwen 통합 회귀:
+
+```bash
+FINANCE_AGENT_LLM_MODE=local_test \
+ENABLE_NON_HCX_TEST_LLM=1 \
+LLM_PROVIDER=local_test \
+LOCAL_TEST_LLM_BASE_URL=http://127.0.0.1:18000/v1 \
+LOCAL_TEST_LLM_MODEL=qwen3-local-test \
+/home/haeyeongcho/miniforge3/envs/gaeng3-dev/bin/python \
+  -m finance_agent_core.evaluation.comparison_e2e_cli \
+  --provider local_test \
+  --split all \
+  --workers 4 \
+  --require-perfect \
+  --output artifacts/evaluation/fund-compare-e2e-local_test-all.json
+```
+
 ## 8. 해석 한계와 다음 단계
 
 - 같은 개발자가 질문과 기대 조건을 작성했으므로 holdout 10개도 완전한
   unbiased 일반화 세트가 아님
-- 현재 parser 평가는 `SEARCH` intent와 QueryPlan·검색 결과만 검증
-- grounded answer도 expected QueryPlan 기반 `SEARCH` 50문항만 검증했으며
-  실제 `COMPARE` intent는 미평가
+- `SEARCH` parser 평가는 QueryPlan·검색 결과까지만 검증
+- grounded answer는 expected QueryPlan 기반 SEARCH 50문항과 COMPARE
+  20문항을 검증했다. 자연어 상품명 resolution부터 답변까지는 별도 공개
+  24문항에서 통합 검증했지만 독립 blind E2E는 미평가
 - 자동 검증은 근거 충실성을 보장하지만 사람 관점의 설명 자연스러움·유용성은
   별도 평가가 필요
 - development 40개는 구현·정합성 검사에 사용됐으므로 튜닝 세트임
@@ -339,6 +604,7 @@ LOCAL_TEST_LLM_MODEL=qwen3-local-test \
 
 1. [blind v1.1 설계](evaluation-public-fund-blind-v1.1.md)에 따라 금융 도메인
    담당자가 새 100문항을 독립 작성
-2. 공모펀드 실제 `COMPARE` intent와 사람 품질 평가 추가
-3. HCX schema에 fund를 노출하고 서버 계약 테스트 통과
-4. 그 뒤에만 `execution_enabled: true` 전환 검토
+2. 사람 rubric으로 SEARCH·COMPARE 설명 품질과 deterministic 대비 선호 평가
+3. 봉인한 새 blind 질문에서 같은 자연어 비교 E2E를 최초 평가
+4. HCX schema에 fund를 노출하고 서버 계약 테스트 통과
+5. 그 뒤에만 `execution_enabled: true` 전환 검토

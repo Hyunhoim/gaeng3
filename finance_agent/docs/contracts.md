@@ -25,6 +25,10 @@
 | [`answering/verifier.py`](../packages/finance_agent_core/src/finance_agent_core/answering/verifier.py) | draft와 최종 compiled answer의 결과 순서·evidence·숫자·식별자·기준일·경고 후검증 |
 | [`answering/composer.py`](../packages/finance_agent_core/src/finance_agent_core/answering/composer.py) | evidence-only 생성, 검증된 결정론적 core 결합, 실패 시 safe fallback |
 | [`evaluation/answer_cli.py`](../packages/finance_agent_core/src/finance_agent_core/evaluation/answer_cli.py) | expected QueryPlan 기반 상품군별 답변 격리 회귀 평가 |
+| [`fund_resolver.py`](../packages/finance_agent_core/src/finance_agent_core/agent/fund_resolver.py) | 공모 범위의 `itm_no`·정식명·짧은 이름 exact resolution |
+| [`fund_comparison_parser.py`](../packages/finance_agent_core/src/finance_agent_core/agent/fund_comparison_parser.py) | 최소권한 자연어 비교 초안과 서버 검증 COMPARE QueryPlan |
+| [`comparison_e2e_runner.py`](../packages/finance_agent_core/src/finance_agent_core/evaluation/comparison_e2e_runner.py) | 자연어 비교부터 검증 답변·안전 차단까지 공개 통합 회귀 |
+| [`comparison_e2e_cli.py`](../packages/finance_agent_core/src/finance_agent_core/evaluation/comparison_e2e_cli.py) | expected·개발 전용 로컬 provider 통합 E2E 실행 |
 
 ## 2. 두 스키마를 분리하는 이유
 
@@ -212,6 +216,149 @@ QueryPlan은 현재 한 번에 한 상품군만 실행한다. schema에는 세 �
 있지만 교차 상품군 검색·비교는 별도 통화·날짜·field 정합성 계약 전까지
 oracle이 거절한다.
 
+### 7.1 공모펀드 내부 COMPARE 계약
+
+공모펀드 true COMPARE는 공식 Agent 실행과 분리된 내부 평가 경로에서 다음
+조건을 모두 만족할 때만 허용한다.
+
+- `intent = compare`, `product_families = ["fund"]`
+- `public_offering = true` locked 조건
+- 서로 다른 정확한 `product_id` 두 개를 하나의 locked `IN` 조건으로 지정
+- ranking 없음, limit 2
+- 비교 필드를 projection과 `intent_payload.comparison_fields`에 모두 포함
+- AUM 비교는 각 레코드의 실제 `trading_currency`도 projection
+- 모호성·미지원 조건 없음
+
+Oracle은 parameterized SQL로 두 레코드를 조회하고 Result Verifier가 조건과
+반환 집합을 독립 재검사한다. 이후 비교 builder가 사용자의 요청 순서로
+레코드와 evidence를 다시 정렬한다. 수치 차이는 `두 번째-첫 번째`로 계산하고,
+비수치 필드는 순서를 부여하지 않고 원천값만 대조한다. AUM 통화가 다르거나
+값이 없으면 차이를 생성하지 않는다. 상품이 없으면 누락 ID를 표시하고 LLM
+호출을 건너뛴다.
+
+이 계약은 `fund-compare-core-20` 내부 회귀에서만 승인한다. 공모펀드
+`execution_enabled: false`, 공식 HCX schema와 일반 Agent 실행 차단은
+그대로 유지한다.
+
+### 7.2 공모펀드 비교 대상 resolution 계약
+
+자연어 COMPARE 초안은 상품을 직접 선택하지 않고 질문에 적힌 대상 표현과 비교
+필드 이름만 복사한다. 서버 resolver가 다음 우선순위의 정확 일치로 ID를 결정한다.
+
+1. `itm_no`
+2. 정식 상품명 `product_name`
+3. 짧은 이름 `short_name`
+
+Unicode NFKC, 대소문자·공백 차이와 균형 잡힌 바깥쪽 따옴표만 정규화한다.
+상품명 내부 괄호·하이픈·대괄호·클래스 표기는 상품 의미를 구분할 수 있어
+제거하지 않는다. 공모 범위에서 하나만 일치할 때만 `product_id` locked 조건을
+만든다.
+
+- 같은 별칭이 여러 공모펀드에 연결되면 후보 ID·정식명을 제시하고 역질문
+- 사모 또는 공모 여부 미확인 상품만 일치하면 범위 밖으로 차단
+- 일치하지 않거나 질문에 없는 대상이면 차단
+- 질문의 전체 대상 surface·순서와 draft가 다르면 차단
+- 두 대상 사이에는 허용된 연결어만 정확히 한 번 두고, 접두·꼬리 구문과
+  문장부호는 위치별 허용 문법을 벗어나면 차단
+- 제외·대신·포함 역할, 세 번째 대상, 미등록 상품번호가 있으면 차단
+- 알려진 identity와 지원 비교 언어를 마스킹한 뒤 질문 전체에 미등록 비인용
+  표현이나 허용되지 않은 문장부호가 남으면 차단
+- 비어 있거나 닫히지 않았거나 역방향·중첩·줄바꿈이 잘못된 따옴표가 있으면 차단
+- 두 표현이 같은 상품으로 연결되거나 대상이 정확히 두 개가 아니면 차단
+- 비교 의도·지원 비교 필드가 없거나 미지원 필드가 있으면 차단
+
+LLM이 반환한 비교 필드 목록은 평가 지표로 기록하지만 실행 필드는 서버가
+질문에서 다시 추출한다. 따라서 모델이 질문에 없는 필드나 상품을 만들어도
+Oracle 조건으로 승격되지 않는다. plan 회귀는 동일 compiler가 만든 기대값이
+아닌 동결 case의 schema·의도·범위·identity·projection·limit·blocker
+계약으로 검사한다. 이 계약은
+`fund-compare-parser-core-24`의 내부 회귀에만 승인하며 공식 fund 실행 상태를
+바꾸지 않는다.
+
+### 7.3 공모펀드 공개 COMPARE 통합 E2E 계약
+
+공개 통합 회귀는 같은 `fund-compare-parser-core-24` 질문과
+`fund-compare-e2e-core-24` 동결 overlay를 사용해 다음 경계를 한 번에
+검사한다.
+
+```text
+자연어 질문
+→ 최소권한 비교 draft
+→ exact resolver
+→ 서버 검증 COMPARE QueryPlan
+→ Oracle·Result Verifier
+→ 요청 순서의 field-level evidence
+→ grounded answer draft
+→ Answer Verifier·결정론적 fallback
+```
+
+실행 가능한 문항은 Oracle 결과가 정확한 두 상품인지 확인한 뒤에만 answer
+provider를 호출한다. 모호성·범위 밖 상품·미지원 조건이 있는 문항은 Oracle과
+answer provider를 모두 호출하지 않고 결정론적 차단 답변을 반환한다. Answer
+Verifier가 상품 순서, 근거 필드, 경고, 숫자·상품 식별자 누출, 투자 조언,
+compiled evidence와 기준일을 모두 검사하며 하나라도 실패하면 서버의
+결정론적 비교 답변으로 대체한다.
+
+E2E의 QueryPlan 검증은 같은 compiler로 만든 예상값과 비교하지 않는다.
+schema·의도·상품군·공모 범위·locked 상품 순서·projection·limit·차단 사유를
+독립 계약으로 검사한다. overlay는 실행 16문항의 field status·numeric
+delta와 두 상품의 실제 `ComparisonCell.value`·field evidence provenance
+fingerprint를 별도로 동결해 조회·비교·근거 회귀를 검출한다. 대상 grounding은 정확한 인용 span
+또는 공백 허용 식별자 경계와 질문의 전체 대상 순서를 요구한다. 두 identity
+사이의 연결어는 정확히 검사하고 문장부호는 접두·연결·꼬리 위치에 맞는 문법만
+허용한다. 더 긴 상품명의 prefix·suffix, 누락된 세 번째 대상, 제외·대신·포함
+역할, 미등록 상품번호, identity와 지원 언어를 제외한 질문 전체의 미등록 잔여
+표현을 실행하지 않는다. 비어 있거나 닫히지 않았거나 역방향·중첩·줄바꿈이
+잘못된 따옴표도 차단한다. parser 예외는 모든 parser 세부 지표에서 실패로 계산한다.
+
+expected·로컬 Qwen 공개 회귀는 각각 24/24다. 로컬 Qwen 호출은 parser 24회와
+실행 문항의 answer 16회이며, 실행 16건·안전 차단 8건, grounded answer
+16건·fallback 0건이다. parser·resolution·계획·Oracle·차단·답변의 핵심
+검증률은 모두 100%다. 이 결과는 공개 문항의 계약 회귀이며 독립 blind E2E나
+사람 생성 품질 점수가 아니다. `execution_enabled: false`, 공식 HCX schema
+미노출과 일반 Agent 실행 차단은 그대로 유지한다.
+
+### 7.4 공통 fail-closed Router와 서버 compiler
+
+`IntentRouter`는 모델 호출 전에 SEARCH, DETAIL, COMPARE, AGGREGATE,
+EXPLAIN, CLARIFY, UNSUPPORTED를 분류하고 상품군과 disposition을 결정한다.
+의도 인식과 실행 가능 여부는 분리한다. 예를 들어 국내채권 비교 질문의 의도는
+COMPARE지만 capability matrix에 검증된 비교 executor가 없으므로 Oracle을
+호출하지 않고 unsupported로 종료한다.
+
+공통 실행 경로:
+
+```text
+자연어 질문
+→ fail-closed IntentRouter
+→ 비실행 MinimalQueryDraft
+→ capability matrix
+→ 서버 소유 QueryPlan compiler
+├─ SEARCH·DETAIL·COMPARE·EXPLAIN
+│  → 상품군 SQLite Oracle
+│  → 독립 Result Verifier
+│  → field-level evidence
+│  → 결정론적 renderer 또는 grounded answer
+│  → Answer Verifier
+│  → 검증 실패 시 결정론적 fallback
+└─ AGGREGATE
+   → SQLite locked 후보 선택
+   → Decimal 기반 함수·그룹 집계
+   → 독립 AggregateResultVerifier 재계산
+   → AggregateEvidence
+   → 결정론적 aggregate renderer
+```
+
+DETAIL과 EXPLAIN은 정확한 상품번호·종목코드가 서버 linker에서 locked equality
+조건으로 다시 확인될 때만 SEARCH QueryPlan으로 낮춘다. Router가 문자열을
+식별자처럼 보았더라도 compiler가 정확한 field constraint로 연결하지 못하면
+역질문으로 종료한다. 공모펀드 COMPARE는 정확한 두 `itm_no`와 지원 field를
+기존 resolver·비교 compiler에서 다시 검증한다.
+
+공모펀드는 capability가 구현돼 있어도 공식 registry의
+`execution_enabled: false`를 유지한다. 공통 서비스에서 내부 평가 flag를
+명시한 경우에만 기존 internal evaluation policy로 실행할 수 있다.
+
 ## 8. 검증
 
 `finance_agent/` 디렉터리에서 실행한다.
@@ -232,6 +379,13 @@ oracle이 거절한다.
 - registry field 목록과 HCX enum이 어긋나는 변경
 - draft 및 compiled answer가 상품명·수치·순서·기준일·근거를 바꾸거나 누락하는 변경
 - Answer Verifier 실패 시 결정론적 fallback을 거치지 않는 변경
+- 차단된 자연어 COMPARE가 Oracle 또는 grounded answer provider를 호출하는 변경
+- COMPARE parser와 답변 계층을 각각 통과하지만 통합 경계에서 순서·근거가
+  달라지는 변경
+- AGGREGATE에 ranking, 중복 metric, projection 밖 group·metric field를 넣는 변경
+- 숫자·날짜·identity group 또는 허용되지 않은 `SUM`을 실행하는 변경
+- 통화 범위를 잠그지 않은 금액 집계와 결측을 0으로 대체하는 변경
+- AggregateResultVerifier가 후보 수·그룹·값·유효/제외 개수 변조를 놓치는 변경
 
 ## 9. 연결 상태와 다음 순서
 
@@ -247,13 +401,24 @@ oracle이 거절한다.
 8. 최소권한 grounded answer 계약, draft·compiled Answer Verifier, 결정론적 폴백과 답변 평가 하네스
 9. 공모펀드 공모 범위 잠금, parameterized oracle, 독립 result verifier, field-level evidence
 10. `answer_cli --dataset fund` expected·로컬 Qwen 공개 50문항 50/50 회귀
+11. 공모펀드 true COMPARE 선택·요청 순서·차이·통화·결측·근거·fallback과
+    공개 20문항 expected·로컬 Qwen 20/20 회귀
+12. 공모펀드 정식명·짧은 이름·상품번호 exact resolver, 자연어 COMPARE parser와
+    공개 24문항 expected·로컬 Qwen 24/24 회귀
+13. 공개 24문항의 자연어 COMPARE parser→resolver→Oracle·Verifier→field
+    evidence→grounded answer→Answer Verifier·fallback 통합 E2E 24/24 회귀
+14. 네 상품군·일곱 intent Router, capability matrix, 서버 compiler와 공통
+    Oracle 실행 경로
+15. 네 상품군 COUNT·MIN·MAX·AVG·허용 SUM과 최대 두 범주 group의
+    Decimal 집계, 통화 gate, 독립 AggregateResultVerifier, AggregateEvidence
+16. BM25/SQLite FTS 문서 RAG 최소 기능, 사람 평가 rubric, Backend DTO·JSON 예시
 
 다음:
 
-1. 다른 작성자가 만든 blind 표현 변형 세트를 최소 100문항으로 만든다.
-2. 사람이 명확성·중복·비교 용이성을 평가하는 답변 rubric을 추가한다.
-3. `Intent.COMPARE` 전용 선택·비교 표현·검증 계약을 추가한다.
-4. blind 질문에서 parser부터 답변까지 전체 경로를 별도로 평가한다.
+1. 금융 도메인 담당자가 external blind 100문항과 비공개 정답키를 작성한다.
+2. 독립 blind 질문에서 parser부터 답변까지 전체 경로를 별도로 평가한다.
+3. 승인된 실제 문서 corpus를 적재하고 출처·활용 범위를 검수한다.
+4. 최소 두 명의 reviewer가 사람 평가 rubric을 실제로 수행한다.
 5. HCX schema에 fund를 노출하고 공식 HyperCLOVA X provider에서 같은 fixture를 재사용한다.
 6. 공식 `/answer` adapter와 오류·timeout 계약을 연결한다.
 

@@ -1,7 +1,7 @@
 # 금융상품 Agent 현재 프로젝트 기준
 
 상태: 현재 정본
-기준일: 2026-07-29
+기준일: 2026-07-30
 대상 저장소: `https://github.com/Hyunhoim/gaeng3`
 
 ## 1. 한 문장 목표
@@ -62,11 +62,42 @@
   결정론적 폴백까지 연결했다. `fund-core-50`의 expected·local provider가
   각각 50/50을 통과했으며, 44개 grounded 생성·6개 안전 차단·폴백 0건이다.
   상품명·수치·순위·evidence·기준일·warning 검증률은 모두 100%다.
-- 이 답변 평가는 동결된 expected QueryPlan으로 SEARCH 결과 설명 계층만
-  격리해 측정했다. parser와 독립 blind 세트는 실행하지 않았고, 복수 상품을
-  직접 비교하는 true COMPARE intent도 아직 평가하지 않았다. 공모펀드 공식
-  Agent 실행은 계속 비활성화한다.
-- 전체 코드 회귀는 pytest 96개, Ruff lint·format, pip dependency check와
+- 공모펀드 true COMPARE 계약을 정확한 `itm_no` 두 개, 공모 범위, 요청 순서,
+  지원 필드와 서버 계산 규칙으로 제한해 구현했다. `fund-compare-core-20`의
+  expected·로컬 Qwen이 각각 20/20을 통과했다. 완전한 비교 18건은 grounded
+  생성, 누락 대상 2건은 LLM 미호출 결정론 처리, verifier 폴백은 0건이다.
+- COMPARE 답변은 서버가 `두 번째-첫 번째` 차이, AUM 통화 호환성과 결측을
+  결정하고 LLM은 evidence 설명만 담당한다.
+- 공모펀드 정식명·짧은 이름·`itm_no`의 정확 일치 resolver와 최소권한 자연어
+  COMPARE parser를 구현했다. 공개 `fund-compare-parser-core-24`에서
+  expected·로컬 Qwen 모두 24/24이며, 실행 16건의 Oracle과 차단 8건의
+  fail-closed 정책이 모두 일치했다.
+- 같은 공개 24문항을 자연어 parser→resolver→Oracle·Result Verifier→field
+  evidence→Qwen grounded answer→Answer Verifier·fallback으로 연결한 통합
+  E2E도 expected·로컬 Qwen 모두 24/24를 통과했다. 로컬 Qwen은 parser 24회와
+  실행 문항 answer 16회를 호출했고, 실행 16건·안전 차단 8건, grounded
+  answer 16건·fallback 0건이다. parser·resolution·계획·Oracle·차단·답변
+  핵심 검증률과 동결 field status·numeric delta·실제 비교 셀 값과 별도의
+  근거 provenance 정확도는 모두 100%이며 p95 latency는 parser 751.575ms,
+  answer 2,225.406ms, 전체 2,737.07ms다. 독립 QueryPlan 계약과 정확한
+  상품명 span·전체 대상 순서, identity 사이의 정확한 연결어와 위치별
+  문장부호 문법도 함께 회귀 검증한다.
+- 자연어 비교 parser 단독 로컬 지연은 p50 569.018ms, p95 796.637ms, 최대
+  889.169ms다. 제외·대신·포함 표현, 질문 전체의 미등록 잔여 표현과 비어
+  있거나 미종결·역방향·중첩·줄바꿈이 잘못된 따옴표를 fail-closed로 차단한다.
+- 이 결과는 공개 회귀 세트의 통합 배선 검증이다. 독립 blind E2E·사람
+  rubric·HyperCLOVA X 재현은 아직 완료하지 않았고 공모펀드 공식 Agent
+  실행은 계속 비활성화한다.
+- 네 상품군·일곱 intent의 공개 내부 진단은 Router 도입 전 replay 4/28,
+  fail-closed Router 28/28이다. self-authored diagnostic이므로 blind 점수가 아니다.
+- 상품군별 capability matrix와 서버 QueryPlan compiler를 공통
+  실행 경로에 연결했다. 상품 검색은 field evidence·Answer Verifier를 사용하고,
+  집계는 Decimal 계산·독립 AggregateResultVerifier·AggregateEvidence를 사용한다.
+- caller-fed BM25/SQLite FTS 문서 검색은 chunk·필터·top-k·출처·기준일·
+  provided 우선순위·not-found를 검증했다. 실제 corpus는 승인 전이다.
+- 사람 평가 rubric v1과 프레임워크 독립 Backend DTO·JSON 예시를 구현했다.
+  실제 사람 평가는 외부 게이트다.
+- 전체 코드 회귀는 pytest 239개, Ruff lint·format, pip dependency check와
   wheel 빌드를 통과했다.
 
 ## 3. 변경할 수 없는 공식 제약
@@ -148,11 +179,17 @@ CUDA·PyTorch·vLLM 조합의 smoke test와 실제 structured-output E2E를 통�
 → LLM이 Typed QueryPlan 생성
 → 서버의 엄격한 schema·지원 범위 검증
 → parameterized SQL 또는 결정론적 도구 실행
-→ 독립 result verifier
-→ field-level evidence DTO 생성
-→ 검증된 evidence로 결정론적 safe renderer 실행
-→ 인용·수치·금융 문구 후검증
-→ 선택적으로 HCX 설명 계층을 붙이고 실패 시 안전한 template 응답
+├─ 상품 조회·비교
+│  → 독립 result verifier
+│  → field-level evidence DTO
+│  → 결정론적 safe renderer 또는 HCX 설명 계층
+│  → 인용·수치·금융 문구 Answer Verifier
+│  → 실패 시 안전한 template 응답
+└─ 집계
+   → Decimal reducer
+   → 독립 AggregateResultVerifier
+   → AggregateEvidence DTO
+   → 결정론적 aggregate renderer
 ```
 
 LLM은 주로 언어를 계약으로 변환하고 결과를 설명한다. 다음 작업은 LLM에 맡기지 않는다.
@@ -168,7 +205,8 @@ LLM은 주로 언어를 계약으로 변환하고 결과를 설명한다. 다음
 - `queryplan.hcx.schema.json`: HyperCLOVA X Structured Outputs가 지원하는 keyword만 사용
 - 서버 Pydantic 모델 또는 엄격한 JSON Schema: `additionalProperties`, 복합 조건, 길이·범위 등 전체 검증
 - `field_registry.yaml`: alias, 타입, 단위, enum, 연산자, coverage, sentinel, freshness, 비교 가능 범위
-- evidence DTO: 원천 테이블·키·필드·값·단위·기준일·품질 상태
+- product evidence DTO: 원천 테이블·키·필드·값·단위·기준일·품질 상태
+- aggregate evidence DTO: 함수·그룹·값·유효/제외 개수·통화·기준일·품질 상태
 
 QueryPlan에는 최소한 intent, 상품군, 필수 조건, 완화 전 확인이 필요한 조건, 선호 조건, 정렬, projection, limit, 모호성, 미지원 조건이 있어야 한다. 조건 강도는 `locked`, `ask_before_relaxing`, `preference`로 구분한다.
 
@@ -220,6 +258,8 @@ QueryPlan에는 최소한 intent, 상품군, 필수 조건, 완화 전 확인이
 - [x] 국내 ETP 대표 질문의 Mock E2E와 로컬 Qwen batch 회귀를 통과한다.
 - [x] 국내채권 대표 질문의 Mock·로컬 Qwen 통합 E2E를 통과한다.
 - [x] grounded answer 생성·후검증·결정론적 폴백과 답변 평가를 연결한다.
+- [x] 네 상품군 공통 AGGREGATE의 함수·그룹·통화·결측·기준일 계약,
+  결정론적 실행·독립 verifier·Backend evidence를 연결한다.
 - [ ] HyperCLOVA X provider와 공식 `/answer` adapter·오류·timeout 계약을 연결한다.
 
 ### P3 — 평가 확장
@@ -234,9 +274,20 @@ QueryPlan에는 최소한 intent, 상품군, 필수 조건, 완화 전 확인이
 - [x] 공개된 holdout 실패를 family handoff 회귀 테스트로 수정한다.
 - [x] 독립 100문항 blind 세트의 분포·봉인·최초 실행 프로토콜을 구현한다.
 - [x] 공모펀드 grounded answer를 `fund-core-50`에서 평가한다.
+- [x] 공모펀드 true COMPARE의 선택·계산·근거·검증·폴백을 20문항에서 평가한다.
+- [x] 자연어 상품명·짧은 이름·상품번호를 정확한 COMPARE 대상으로 연결하는
+  parser·entity resolution을 공개 24문항에서 평가한다.
+- [x] 공개 24문항에서 자연어 COMPARE parser부터 Answer Verifier·fallback까지
+  통합 E2E를 평가한다.
+- [x] 네 상품군·일곱 intent 내부 diagnostic, fail-closed Router와 capability
+  matrix를 구현하고 도입 전·후 결과를 분리 보존한다.
+- [x] 서버 MinimalQueryDraft→QueryPlan compiler와 공통 답변 경로를 구현한다.
+- [x] BM25/SQLite FTS 문서 검색 최소 기능과 synthetic contract test를 구현한다.
+- [x] 사람 평가 rubric·집계 validator와 Backend DTO·JSON 예시를 확정한다.
 - [ ] 금융 도메인 담당자가 새 blind 100문항과 비공개 정답키를 독립 작성한다.
-- [ ] 사람 rubric으로 명확성·중복·비교 용이성과 deterministic 대비 선호를 측정한다.
-- [ ] 공모펀드 true COMPARE intent의 생성·검증·폴백을 별도로 평가한다.
+- [ ] 독립 blind 질문으로 자연어 COMPARE 전체 E2E 일반화 성능을 평가한다.
+- [ ] 완성된 rubric으로 명확성·근거·안전·비교 용이성과 deterministic 대비
+  선호를 실제 팀원이 측정한다.
 - [ ] 다른 작성자가 만든 blind 표현 변형·경계값 중심 v1.1 세트를 최소
   100개로 새로 만들고 최초 holdout 성능을 측정한다.
 - 이후 250~400개의 사람 검토·oracle 생성 평가 세트로 확장한다.

@@ -11,8 +11,12 @@
 | 해외 ETF·ETN | 감사, 정규화, SQLite, Oracle, Verifier, 50문항 완료 |
 | 국내 ETF·ETN | 감사, 정규화, SQLite, Oracle, Verifier, 50문항 완료 |
 | 국내채권 | 감사, stale·날짜 계약, SQLite, Oracle, Verifier, 50문항 완료 |
-| 공모펀드 | parser development 40/40·최초 holdout 9/10, grounded answer 50/50, Agent 실행 비활성 |
-| 근거 기반 답변 | 공모펀드 44개 grounded·6개 안전 차단, 폴백 0, 핵심 검증률 100% |
+| 공모펀드 | SEARCH parser 40/40·최초 holdout 9/10, 답변 50/50·COMPARE 20/20, 자연어 COMPARE 통합 E2E 24/24, Agent 실행 비활성 |
+| 근거 기반 답변 | 공모펀드 SEARCH 44개·정확 ID COMPARE 18개·자연어 COMPARE 16개 grounded, 폴백 0 |
+| 공통 Router | 네 상품군·7 intent 공개 진단: 도입 전 4/28, fail-closed Router 28/28 |
+| 공통 AGGREGATE | 네 상품군 COUNT·MIN·MAX·AVG·허용 SUM, 최대 2개 group, 통화·결측·기준일·독립 verifier |
+| 문서 RAG | caller-fed BM25/SQLite FTS 적재·필터·근거·기준일·not-found 최소 기능 |
+| 팀 통합 계약 | 프레임워크 독립 Backend DTO·JSON Schema/예시, 사람 평가 rubric v1 |
 | HyperCLOVA X | 공식 API 확보 후 연결 예정 |
 
 로컬 Qwen은 개발 전용 테스트 대역이다. 평가·제출 경로의 LLM은 공식 규칙에
@@ -23,14 +27,23 @@
 
 ```text
 질문
-→ lexical/schema linker
+→ fail-closed Intent Router
+→ minimal draft·capability matrix
+→ 서버 QueryPlan compiler
+→ 정확 일치 상품 identity resolver
 → typed QueryPlan
 → registry·Pydantic 검증
-→ parameterized SQLite Oracle
-→ 독립 Python Result Verifier
-→ field-level evidence
-→ Answer Verifier
-→ evidence compiler 또는 deterministic safe fallback
+├─ SEARCH·DETAIL·COMPARE·EXPLAIN
+│  → parameterized SQLite Oracle
+│  → 독립 Python Result Verifier
+│  → field-level product evidence
+│  → Answer Verifier
+│  → evidence compiler 또는 deterministic safe fallback
+└─ AGGREGATE
+   → SQLite 후보 선택·Decimal 집계
+   → 독립 Python AggregateResultVerifier
+   → AggregateEvidence
+   → deterministic aggregate renderer
 ```
 
 LLM은 수치 계산, 필터, 정렬, 상품 순위와 원천 인용을 직접 만들지 않는다.
@@ -107,6 +120,12 @@ fail-closed로 비활성화되어 있다.
 - [공모펀드 원천 데이터 계약](docs/public-fund-contract.md)
 - [공모펀드 핵심 평가 기준선](docs/evaluation-public-fund.md)
 - [Field Registry와 QueryPlan 계약](docs/contracts.md)
+- [HyperCLOVA X 연결 전 준비 기준](docs/pre-hcx-readiness.md)
+- [Capability matrix](docs/capability-matrix.md)
+- [네 상품군 공통 AGGREGATE 엔진](docs/aggregate-engine.md)
+- [문서 RAG](docs/document-rag.md)
+- [Backend DTO](docs/backend-contract.md)
+- [사람 평가 rubric](docs/human-evaluation.md)
 - [개발 환경과 구현 상태](docs/development.md)
 - [재현 가능한 평가 baseline](evaluation/README.md)
 - [Agent Core v0.1 마일스톤](docs/milestones/2026-07-29-agent-core-v0.1.md)
@@ -117,14 +136,33 @@ fail-closed로 비활성화되어 있다.
 ## 팀 통합 경계
 
 `packages/finance_agent_core`는 Next.js·FastAPI application shell과 독립적이다.
-동료의 템플릿 작업과 합칠 때는 `AgentRequest`, `AgentResponse`, evidence,
-오류·timeout 계약을 먼저 고정하고 공식 `/answer` adapter를 연결한다.
+동료의 템플릿 작업과 합칠 때는 v1 Backend DTO와 JSON Schema 예시를 사용하고,
+FastAPI adapter에는 HTTP status·인증·timeout만 추가한다.
 
-공모펀드 grounded answer 평가는 동결된 expected QueryPlan으로 SEARCH 결과
-설명 계층만 격리했다. expected·local provider 모두 50/50이며 상품명·수치·순위·
-evidence·기준일·warning 검증률은 100%다. parser·독립 blind·true COMPARE는
-이 실행에 포함되지 않았고 공식 Agent 실행은 계속 비활성화한다.
+공모펀드 grounded answer 평가는 SEARCH 50문항과 별도의 true COMPARE
+20문항을 모두 통과했다. 비교는 정확한 `itm_no` 두 개를 요청 순서대로 조회하고,
+서버가 필드값·차이·통화·결측을 계산한 뒤 field-level evidence와 기준일을
+컴파일한다. 로컬 Qwen은 검증된 근거의 설명만 담당하며 18개 생성 답변이 모두
+검증을 통과했고, 누락 상품 2개는 LLM 호출 없이 결정론적으로 처리됐다.
 
-현재 우선순위는 금융 도메인 담당자의 공모펀드 blind 100문항 독립 작성,
-사람 rubric, true COMPARE, HCX schema·HyperCLOVA X, 공식 `/answer` adapter
-순이다. 최초 holdout 실패 1건은 회귀 수정했지만 9/10 기록은 그대로 유지한다.
+정식명·짧은 이름·`itm_no`를 공모 범위의 정확한 상품 ID로 연결하는 자연어
+COMPARE parser도 공개 24문항에서 expected·로컬 Qwen 모두 24/24를 통과했다.
+ordered identity와 두 대상 사이의 정확한 연결어, 접두·연결·꼬리 위치별
+문장부호 문법을 서버가 검사한다. 중복 단축명, 사모상품, 미등록 상품, 같은
+상품 중복뿐 아니라 제외·대신·포함 표현, 질문 전체의 미등록 잔여 표현과
+빈·미종결·역방향·중첩·줄바꿈 따옴표도 Oracle 실행 전에 차단한다.
+
+같은 공개 24문항을 사용해 자연어 parser부터 resolver, Oracle·Result Verifier,
+field-level evidence, Qwen grounded answer, Answer Verifier·fallback까지 한
+번에 잇는 통합 E2E도 완료했다. expected·로컬 Qwen 모두 24/24이며 정상 비교
+16개는 grounded answer, 정책 차단 8개는 Answer LLM을 호출하지 않는 안전
+응답이다. 로컬 실행은 parser 24회와 answer 16회, 폴백 0회였고 parser·resolution·
+계획·Oracle·차단·답변 검증의 핵심 지표는 모두 100%였다.
+
+이 결과는 공개 회귀 문항의 전체 배선 검증이며 독립 blind 일반화 평가나 실제
+사람 rubric 결과는 아니다. 내부 구현으로는 네 상품군 Router, BM25 문서 검색,
+공통 AGGREGATE, rubric·Backend DTO까지 준비했다. 남은 우선순위는 금융 도메인 담당자의
+external blind 100문항·비공개 정답키 작성, 승인된 실제 문서 corpus와 사람
+평가, HCX schema·HyperCLOVA X, 공식 `/answer` adapter다. 최초 SEARCH parser
+holdout 실패 1건은 회귀 수정했지만 9/10 기록은 그대로 유지한다. 공모펀드
+공식 Agent 실행도 계속 비활성화한다.

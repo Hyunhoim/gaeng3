@@ -7,9 +7,21 @@
 검색·독립 검증·field-level evidence, Mock 및 개발 전용 로컬 LLM provider다.
 공모펀드는 product·attribute·quarantine 저장, Oracle, Verifier, field
 evidence, 동결 50문항 계약, 개발 전용 로컬 parser와 grounded answer 평가까지
-구현했다. 최종 답변은 evidence만 입력받는 최소권한 GroundedAnswerDraft,
-draft·compiled Answer Verifier, 결정론적 evidence compiler와 safe fallback으로
-구성한다. 공식 Agent 실행은 HCX schema·서버 계약 승인 전까지 비활성화 상태다.
+구현했다. 정확한 `itm_no` 두 개를 대상으로 하는 true COMPARE, 필드별 차이·
+통화·결측 처리와 20문항 회귀도 구현했다. 정식명·짧은 이름·`itm_no`의 정확
+일치 resolver와 자연어 COMPARE parser는 별도 24문항에서 검증했다. 같은
+24문항의 parser부터 grounded answer 후검증까지 잇는 통합 E2E도 구현했다.
+네 상품군·일곱 intent의 fail-closed Router와 서버 QueryPlan compiler를
+구현했다. 상품 검색·비교는 Oracle→Result Verifier→field evidence→Answer
+Verifier 경로를 사용한다. BM25/SQLite FTS 문서 검색, 프레임워크 독립
+Backend DTO와 사람 평가 rubric은 별도 계약으로 제공한다.
+네 상품군 공통 AGGREGATE는 COUNT·MIN·MAX·AVG·허용 SUM, 최대 두 범주
+group, 금액 통화 gate, 결측·기준일 보존, 별도 Python verifier와
+`AggregateEvidence`까지 구현했다. 집계 답변은 현재 LLM 없이 결정론적으로
+컴파일한다.
+최종 답변은 evidence만 입력받는 최소권한 GroundedAnswerDraft, draft·compiled
+Answer Verifier, 결정론적 evidence compiler와 safe fallback으로 구성한다.
+공식 Agent 실행은 HCX schema·서버 계약 승인 전까지 비활성화 상태다.
 
 ## 환경
 
@@ -45,8 +57,13 @@ draft·compiled Answer Verifier, 결정론적 evidence compiler와 safe fallback
 - [`field_registry.yaml`](src/finance_agent_core/config/field_registry.yaml): 네 상품군 canonical field, 상품군별 원천 매핑, 품질, 단위, 연산자와 실행 승인 상태
 - [`queryplan.py`](src/finance_agent_core/contracts/queryplan.py): 서버의 엄격한 구조·의미 검증
 - [`queryplan.hcx.schema.json`](src/finance_agent_core/contracts/queryplan.hcx.schema.json): HyperCLOVA X Structured Outputs용 보수적 schema
+- [`capability_matrix.json`](src/finance_agent_core/config/capability_matrix.json): 상품군·intent별 실행·통제 범위
+- [`backend.py`](src/finance_agent_core/contracts/backend.py): Backend request·response·citation·fallback DTO
 - [계약 설명](../../docs/contracts.md): 설계 근거, 첫 vertical slice 예시, 확장 규칙
 - [공모펀드 계약](../../docs/public-fund-contract.md): product grain, capability, 품질 규칙, 실행 승인 조건
+- [문서 RAG 계약](../../docs/document-rag.md): 승인 문서 BM25/SQLite FTS 검색
+- [공통 AGGREGATE 계약](../../docs/aggregate-engine.md): 함수·그룹·통화·결측·근거
+- [사람 평가 rubric](../../docs/human-evaluation.md): 독립 reviewer·critical gate
 
 ## 상품군 vertical slice
 
@@ -92,9 +109,9 @@ draft·compiled Answer Verifier, 결정론적 evidence compiler와 safe fallback
   --output artifacts/e2e/bond-mock-response.json
 ```
 
-공모펀드는 정규화 DB 생성, 내부 Oracle 회귀, 로컬 development parser와
-expected QueryPlan 기반 답변 격리 평가를 지원한다. `finance_agent_core.agent`
-공식 실행 경로는 아직 지원하지 않는다.
+공모펀드는 정규화 DB 생성, 내부 Oracle 회귀, 로컬 development parser,
+expected QueryPlan 기반 SEARCH·COMPARE 답변 격리 평가를 지원한다.
+`finance_agent_core.agent` 공식 실행 경로는 아직 지원하지 않는다.
 
 ```bash
 /home/haeyeongcho/miniforge3/envs/gaeng3-dev/bin/python \
@@ -125,10 +142,10 @@ expected QueryPlan 기반 답변 격리 평가를 지원한다. `finance_agent_c
 [국내채권 평가 기준선](../../docs/evaluation-domestic-bond.md),
 [공모펀드 평가 기준선](../../docs/evaluation-public-fund.md)에 기록한다.
 
-다음 일반화 평가는 AI 담당자와 분리된 작성자가 만든 blind 100문항으로
+다음 일반화 평가는 금융 도메인 담당자가 독립 작성한 external blind 100문항으로
 수행한다. 분포·정답 계약, hash commitment, 최초 1회 실행과 상태 파일은
-[blind v1.1 설계](../../docs/evaluation-public-fund-blind-v1.1.md)와
-`scripts/blind-fund-eval.py`를 따른다.
+[연결 전 진단·external blind 프로토콜](../../docs/evaluation-pre-hcx-diagnostic.md)과
+`finance-pre-hcx` 도구를 따른다.
 
 `--provider local_test`는 로컬 Qwen 서버와 세 가지 명시적 opt-in이 모두
 필요하다. 최초 holdout과 사후 회귀를 구분한 결과와 재현 절차는
@@ -156,12 +173,79 @@ Agent 전체 E2E에서는 `--provider local_test --answer-provider local_test`�
 함께 사용한다. 계약, 실패 과정, 지표 해석은
 [근거 기반 최종 답변 평가](../../docs/evaluation-grounded-answers.md)에 기록한다.
 
-공개 `fund-core-50` 결과는 expected provider와 로컬 Qwen 모두 50/50이다.
+공개 `fund-core-50` SEARCH 결과는 expected provider와 로컬 Qwen 모두 50/50이다.
 44개 실행 가능 문항은 grounded answer, 6개 정책 차단 문항은 blocked이며 로컬
 Qwen의 verifier fallback은 0건이다. 이 명령은 동결 expected QueryPlan을
 직접 재사용해 답변 계층만 격리 평가하므로 parser나 blind 질문을 다시 실행하지
-않는다. `Intent.COMPARE` 전용 계약, 사람의 생성 품질 평가, 공식 HyperCLOVA X
-재현은 다음 단계다.
+않는다.
+
+공모펀드 true COMPARE는 별도 공개 회귀 세트로 평가한다.
+
+```bash
+/home/haeyeongcho/miniforge3/envs/gaeng3-dev/bin/python \
+  -m finance_agent_core.evaluation.comparison_cli \
+  --provider expected \
+  --split all \
+  --workers 4 \
+  --require-perfect
+```
+
+로컬 Qwen은 동일 명령에 세 가지 opt-in과 `--provider local_test`를 적용한다.
+`fund-compare-core-20`은 expected·로컬 Qwen 모두 20/20이며, 완전한 비교
+18개는 grounded answer, 존재하지 않는 비교 대상이 포함된 2개는 LLM을 호출하지
+않고 결정론적으로 답했다. verifier fallback은 0건이다. 현재 계약은 한 상품군,
+두 개의 정확한 상품 ID, 서버 계산 가능한 필드만 허용한다.
+
+자연어 비교 대상 resolution은 별도 공개 회귀로 평가한다.
+
+```bash
+/home/haeyeongcho/miniforge3/envs/gaeng3-dev/bin/python \
+  -m finance_agent_core.evaluation.comparison_parser_cli \
+  --provider expected \
+  --split all \
+  --workers 4 \
+  --require-perfect
+```
+
+로컬 Qwen은 같은 명령에 세 가지 opt-in과 `--provider local_test`를 적용한다.
+`fund-compare-parser-core-24`의 expected·로컬 Qwen 결과는 모두 24/24다.
+resolver는 Unicode NFKC·대소문자·공백 차이와 균형 잡힌 바깥쪽 따옴표만
+정규화하고, 상품명 내부 문장부호와 클래스 표기는 보존한다. 중복명·미등록명·
+사모 범위·중복 대상·미지원 비교는 추측하지 않고 차단한다. 질문의 ordered
+identity를 draft와 대조하고 두 identity 사이의 연결어와 접두·연결·꼬리
+위치별 문장부호 문법을 정확히 검사한다. 누락된 세 번째 대상, 제외·대신·포함
+역할, 미등록 상품번호와 identity·지원 비교 언어를 제외한 질문 전체의 미등록
+잔여 표현을 실행하지 않는다. 비어 있거나 미종결·역방향·중첩·줄바꿈이 잘못된
+따옴표도 차단한다. 로컬 parser 지연은 p50 569.018ms, p95 796.637ms, 최대
+889.169ms다.
+
+공개 24문항의 전체 경로는 다음 명령으로 재현한다.
+
+```bash
+/home/haeyeongcho/miniforge3/envs/gaeng3-dev/bin/python \
+  -m finance_agent_core.evaluation.comparison_e2e_cli \
+  --provider expected \
+  --split all \
+  --workers 4 \
+  --require-perfect
+```
+
+설치된 console script에서는 `finance-evaluate-fund-compare-e2e`를 사용할 수
+있다. 로컬 Qwen은 같은 명령에 세 가지 opt-in과 `--provider local_test`를
+적용한다. 이 E2E는 자연어 draft 24건을 모두 생성하고, 실행 가능한 16건에만
+grounded answer를 추가 생성한다. expected·로컬 결과는 모두 24/24이며
+실행 16건·안전 차단 8건, grounded answer 16건, verifier fallback 0건이다.
+parser target·field, grounding, resolution, QueryPlan, Oracle, 안전 차단,
+field status·numeric delta·실제 비교 셀 값과 별도의 근거 provenance,
+Answer Verifier·인용·기준일 지표는 모두 100%다. 로컬 Qwen p95 latency는
+parser 751.575ms, answer 2,225.406ms, 전체 2,737.07ms였다.
+
+E2E overlay는 QueryPlan의 핵심 필드를 동일 compiler가 아닌 독립 계약으로
+검사하고, 실행 16건의 field status·numeric delta와 실제 비교 셀 값·근거
+provenance fingerprint를 별도로 동결한다. 상품명은 정확한 인용 span·식별자 경계뿐 아니라
+질문의 전체 대상 순서까지 일치해야 한다. 이는 공개 회귀 세트의 통합 배선
+검증이며 AI 담당자와 분리된 작성자의 독립 blind E2E, 사람의 생성 품질 rubric,
+공식 HyperCLOVA X 재현은 다음 단계다.
 
 ## 검증
 
