@@ -6,8 +6,8 @@
   "git_commit": null,
   "generated_from_dirty_worktree": true,
   "hash_algorithm": "sha256(sorted(relative_path + NUL + file_sha256 + LF))",
-  "file_count": 212,
-  "tree_sha256": "9c2f8d09fae3d286816b81433461cf15ed7dff853af359a5bde2eafef17b2aa4",
+  "file_count": 215,
+  "tree_sha256": "867fa3411d729de018efd63adf9dabed4a92841fe652dca6a262b13d2fbff687",
   "included_scope": [
     "README.md",
     "environment*.yml",
@@ -32,11 +32,11 @@
     "limitation": "self_authored_internal_diagnostic_not_independent_blind"
   },
   "qa": {
-    "pytest_passed": 269,
+    "pytest_passed": 285,
     "ruff_lint": "passed",
     "ruff_format": "passed",
     "pip_check": "passed",
-    "documentation_markdown": 34,
+    "documentation_markdown": 35,
     "documentation_baselines": 20,
     "wheel_build_no_isolation": "passed",
     "wheel_required_package_data": "passed",
@@ -47,7 +47,7 @@
     "봉인 이후 최초 blind E2E 단일 실행",
     "승인된 실제 비정형 문서 corpus와 활용 범위 확인",
     "최소 2명의 독립 reviewer가 수행한 실제 사람 평가",
-    "HyperCLOVA X 모델·API·Structured Outputs 계약 확인과 공식 재현",
+    "HyperCLOVA X 모델·Structured Outputs·endpoint·인증 계약 확인, 실제 HTTP transport와 공식 재현",
     "공식 /answer adapter와 주최 측 실행 환경 통합"
   ],
   "limitations": [

@@ -113,7 +113,7 @@ def _field_catalog(product_family: Literal["fund"] | None = None) -> dict[str, A
     return catalog
 
 
-def _system_prompt(
+def build_query_plan_system_prompt(
     question_id: str,
     question: str,
     internal_evaluation_family: Literal["fund"] | None = None,
@@ -324,7 +324,7 @@ class LocalTestProvider:
             "messages": [
                 {
                     "role": "system",
-                    "content": _system_prompt(
+                    "content": build_query_plan_system_prompt(
                         question_id,
                         question,
                         self.internal_evaluation_family,
@@ -371,7 +371,7 @@ class LocalTestProvider:
         return canonicalize_linked_query_plan(question, plan)
 
 
-def _fund_comparison_draft_system_prompt(question: str) -> str:
+def build_fund_comparison_draft_system_prompt(question: str) -> str:
     fields = ", ".join(SUPPORTED_FUND_COMPARISON_FIELDS)
     return f"""
 당신은 공모펀드 비교 질문에서 두 가지 정보만 추출하는 parser다.
@@ -458,7 +458,7 @@ class LocalFundComparisonDraftProvider:
             "messages": [
                 {
                     "role": "system",
-                    "content": _fund_comparison_draft_system_prompt(question),
+                    "content": build_fund_comparison_draft_system_prompt(question),
                 },
                 {
                     "role": "user",

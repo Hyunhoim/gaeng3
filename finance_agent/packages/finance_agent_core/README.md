@@ -286,6 +286,23 @@ projection으로 읽어 독립 재검산한다. 네 상품군 실제 데이터 8
 설치된 console script는 `finance-benchmark-search-aggregate`다. 이 평가는 공개된
 고정 문항의 회귀·개발 장비 성능 기준선이며 독립 blind나 운영 SLO가 아니다.
 
+## HyperCLOVA X provider 경계
+
+실제 API 없이 QueryPlan, 공모펀드 비교 초안, 근거 답변의 공통 요청·응답·오류
+계약을 테스트할 수 있다. 공식 경로 설정은 다음과 같이 fail-closed로 제한한다.
+
+```text
+FINANCE_AGENT_LLM_MODE=evaluation 또는 production
+LLM_PROVIDER=hyperclova
+HCX_MODEL=HCX-로 시작하는 공식 확인 모델 ID
+HCX_TIMEOUT_SECONDS=60
+```
+
+현재 구현은 주입형 transport와 fake transport 테스트까지다. endpoint·credential·
+인증 header를 추측하지 않았고 실제 API 호출용 transport나 CLI 선택지는 아직
+없다. 자세한 범위와 남은 작업은
+[HyperCLOVA X provider 계약](../../docs/hyperclova-provider.md)을 따른다.
+
 ## 검증
 
 ```bash

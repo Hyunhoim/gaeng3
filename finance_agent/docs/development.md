@@ -112,8 +112,8 @@ SOURCE_DATE_EPOCH=1785283200 \
 - 공모펀드 전용 내부 schema와 lexical/schema linker를 구현했고 로컬 Qwen
   hybrid parser의 development 최초 실행은 40/40이다. commit `32e12fa`
   이후 최초 holdout은 9/10이며 실패 1건을 그대로 보존했다.
-- 공모펀드 공식 Agent 실행은 HCX schema 노출과 서버 계약 테스트 전까지
-  `execution_enabled: false`로 유지한다.
+- 공모펀드 공식 Agent 실행은 실제 HyperCLOVA X HTTP transport와 공식
+  `/answer` adapter를 검증할 때까지 `execution_enabled: false`로 유지한다.
 - 국내 DB와 manifest를 임시 경로에 재구축했을 때 원본 artifact와 SHA-256이
   byte 단위로 일치했다.
 - 공모펀드 SQLite를 두 임시 경로에서 재구축했을 때 DB와 manifest가 각각
@@ -262,14 +262,16 @@ identity와 지원 언어를 제외한 질문 전체의 미등록 잔여 표현,
 미종결·역방향·중첩·줄바꿈이 잘못된 따옴표도 차단한다. 이 통합 결과는 공개
 회귀 질문에 대한 배선 검증이다. 다른 작성자가 만든 독립 blind 질문의
 parser→답변 E2E와 사람 rubric은 아직 실행하지 않았다.
-HyperCLOVA X도 아직 연결하지 않았으며, 공모펀드 공식 Agent 실행은 계속
+HyperCLOVA X는 세 operation의 provider·주입형 transport·오류 계약과 API 없는
+fake 테스트까지만 완료했다. 실제 endpoint·인증 header·HTTP transport는 아직
+연결하지 않았으며, 공모펀드 공식 Agent 실행은 계속
 `execution_enabled: false`다.
 
 이 수치는 자유 생성 LLM 점수가 아니라 제한된 hybrid system의 계약 준수율이다.
 네 상품군·일곱 intent Router, capability matrix, BM25/SQLite FTS 문서 검색,
 사람 rubric validator와 Backend DTO까지 구현했다. 다음 평가는 금융 도메인
 담당자의 external blind 100문항 parser→답변 E2E와 실제 사람 평가이며, 이후
-HyperCLOVA X provider와 공식 adapter를 연결한다.
+공식 API 계약에 맞는 HyperCLOVA X HTTP transport와 adapter를 연결한다.
 
 같은 상품군의 정확한 두 상품 COMPARE도 네 상품군 공통 경로로 일반화했다.
 해외·국내 ETP·국내채권 exact resolver, registry 비교 capability,
@@ -298,3 +300,10 @@ SEARCH·AGGREGATE 기본 경로도 전체 정규화 레코드를 verifier univer
 상세 계약은
 [SEARCH·AGGREGATE 성능 기준선](evaluation-search-aggregate-performance.md)에
 기록한다.
+
+HyperCLOVA X 경계는 QueryPlan, 공모펀드 비교 초안, 근거 답변이 공유하는
+semantic structured request와 오류·token·latency 관측을 제공한다. fake
+transport로 정상 응답, 401·403·429·500, timeout, 연결 실패와 잘못된 응답을
+검증한다. 실제 API 호출 완료로 오해하지 않도록
+[HyperCLOVA X provider 계약](hyperclova-provider.md)에 완료 범위와 외부
+게이트를 분리해 기록한다.

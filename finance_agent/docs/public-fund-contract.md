@@ -22,7 +22,8 @@
 - 40 development·10 holdout 핵심 평가 세트의 expected Oracle 회귀 50/50
 - 로컬 Qwen hybrid parser는 development 40/40, 최초 holdout 9/10
 - 공개된 holdout 실패는 family handoff 회귀 수정 후 무모델 replay 50/50
-- HCX schema 노출과 서버 계약 테스트 전까지 공식 Agent 실행은 비활성화
+- 실제 HyperCLOVA X HTTP transport와 공식 `/answer` adapter 검증 전까지
+  공식 Agent 실행은 비활성화
 
 ## 1. 근거와 재현 방법
 

@@ -1,9 +1,18 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from copy import deepcopy
 from typing import Any, Literal
 
+from finance_agent_core.agent.providers.hyperclova import (
+    HyperClovaXCallRecord,
+    HyperClovaXClient,
+    HyperClovaXResponseError,
+    HyperClovaXSettings,
+    HyperClovaXTransport,
+    parse_hcx_json_object,
+)
 from finance_agent_core.agent.providers.local_test import (
     LocalProviderError,
     LocalTestProvider,
@@ -57,7 +66,7 @@ def _generation_payload(context: GroundedAnswerContext) -> dict[str, Any]:
     }
 
 
-def _answer_system_prompt(context: GroundedAnswerContext) -> str:
+def build_grounded_answer_system_prompt(context: GroundedAnswerContext) -> str:
     payload = json.dumps(
         _generation_payload(context),
         ensure_ascii=False,
@@ -212,7 +221,7 @@ class LocalGroundedAnswerProvider:
         request_payload = {
             "model": self.settings.model,
             "messages": [
-                {"role": "system", "content": _answer_system_prompt(context)},
+                {"role": "system", "content": build_grounded_answer_system_prompt(context)},
                 {
                     "role": "user",
                     "content": "검증된 입력만 사용해 grounded answer JSON을 작성해줘.",
@@ -251,3 +260,116 @@ class LocalGroundedAnswerProvider:
             raise LocalProviderError(
                 f"local model returned an invalid grounded answer: {error}"
             ) from error
+
+
+def _hcx_grounded_answer_schema(
+    context: GroundedAnswerContext,
+) -> dict[str, Any]:
+    result_refs = [f"result_{index}" for index in range(1, len(context.products) + 1)]
+    usable_fields = sorted(
+        {
+            field.canonical_field
+            for product in context.products
+            for field in product.fields
+            if field.normalized_value is not None
+            and field.quality in {QualityStatus.VALID, QualityStatus.PARTIAL}
+        }
+    )
+    warning_codes = [warning.code for warning in context.warnings]
+    warning_items: dict[str, Any] = {"type": "string"}
+    if warning_codes:
+        warning_items["enum"] = warning_codes
+    product_schema = {
+        "type": "object",
+        "properties": {
+            "result_ref": {
+                "type": "string",
+                "enum": result_refs,
+            },
+            "evidence_fields": {
+                "type": "array",
+                "items": {
+                    "type": "string",
+                    "enum": usable_fields,
+                },
+                "minItems": 1,
+                "maxItems": 20,
+            },
+            "explanation": {
+                "type": "string",
+                "description": ("근거 필드가 검색·식별·비교에 사용됐다는 짧은 한국어 설명"),
+            },
+        },
+        "required": ["result_ref", "evidence_fields", "explanation"],
+    }
+    return {
+        "type": "object",
+        "properties": {
+            "schema_version": {
+                "type": "string",
+                "enum": ["1.0"],
+            },
+            "lead": {
+                "type": "string",
+                "enum": _SAFE_LEADS,
+            },
+            "products": {
+                "type": "array",
+                "items": product_schema,
+                "minItems": len(context.products),
+                "maxItems": len(context.products),
+            },
+            "acknowledged_warning_codes": {
+                "type": "array",
+                "items": warning_items,
+                "minItems": len(warning_codes),
+                "maxItems": len(warning_codes),
+            },
+        },
+        "required": [
+            "schema_version",
+            "lead",
+            "products",
+            "acknowledged_warning_codes",
+        ],
+    }
+
+
+class HyperClovaXGroundedAnswerProvider:
+    def __init__(
+        self,
+        settings: HyperClovaXSettings,
+        transport: HyperClovaXTransport,
+        *,
+        on_call: Callable[[HyperClovaXCallRecord], None] | None = None,
+    ) -> None:
+        self.settings = settings
+        self._client = HyperClovaXClient(settings, transport, on_call=on_call)
+
+    @property
+    def provider_name(self) -> Literal["hyperclova"]:
+        return "hyperclova"
+
+    @property
+    def model_name(self) -> str:
+        return self.settings.model
+
+    def generate_grounded_answer(
+        self,
+        context: GroundedAnswerContext,
+    ) -> GroundedAnswerDraft:
+        content = self._client.complete(
+            operation="grounded_answer",
+            system_prompt=build_grounded_answer_system_prompt(context),
+            user_prompt="검증된 입력만 사용해 grounded answer JSON을 작성해줘.",
+            schema_name="grounded_finance_answer",
+            response_schema=_hcx_grounded_answer_schema(context),
+            max_output_tokens=2048,
+        )
+        payload = parse_hcx_json_object(content, "grounded answer")
+        try:
+            return GroundedAnswerDraft.model_validate(payload)
+        except ValueError:
+            raise HyperClovaXResponseError(
+                "HyperCLOVA X returned an invalid grounded answer"
+            ) from None

@@ -46,6 +46,7 @@ REQUIRED_INDEX_TARGETS = {
     "evaluation-grounded-answers.md",
     "evaluation-product-comparison.md",
     "evaluation-search-aggregate-performance.md",
+    "hyperclova-provider.md",
     "evaluation-pre-hcx-diagnostic.md",
     "development.md",
     "local-llm.md",
@@ -415,7 +416,7 @@ def _check_readiness_manifest() -> list[str]:
     if not payload.get("external_gates"):
         errors.append("pre-HCX source manifest must preserve external gates")
     qa = payload.get("qa", {})
-    if qa.get("pytest_passed") != 269:
+    if qa.get("pytest_passed") != 285:
         errors.append("pre-HCX source manifest pytest count differs from frozen QA")
     if qa.get("documentation_baselines") != len(REQUIRED_BASELINES):
         errors.append("pre-HCX source manifest baseline count differs")

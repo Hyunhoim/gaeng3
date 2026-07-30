@@ -19,7 +19,7 @@
 | SEARCH·AGGREGATE 성능 | 네 상품군 8문항 결과 지문 8/8, projected verifier, 새 프로세스 p50 308.749ms·최대 추가 RSS 51,000KiB |
 | 문서 RAG | caller-fed BM25/SQLite FTS 적재·필터·근거·기준일·not-found 최소 기능 |
 | 팀 통합 계약 | 프레임워크 독립 Backend DTO·JSON Schema/예시, 사람 평가 rubric v1 |
-| HyperCLOVA X | 공식 API 확보 후 연결 예정 |
+| HyperCLOVA X | 세 provider의 요청·응답·오류 계약과 fake transport 완료, 실제 HTTP 연결 대기 |
 
 로컬 Qwen은 개발 전용 테스트 대역이다. 평가·제출 경로의 LLM은 공식 규칙에
 따라 HyperCLOVA X로 제한하며, 로컬 provider는 세 가지 명시적 opt-in 없이는
@@ -111,8 +111,8 @@ conda run -n gaeng3-dev \
 
 `--dataset`은 `overseas_etp`, `domestic_etp`, `bond`, `fund` 중에서 선택한다.
 `fund`는 정규화 SQLite 생성과 동결 50문항의 내부 Oracle·Verifier 회귀를
-지원한다. HCX schema 노출과 서버 계약 테스트 전까지 공식 Agent 실행은
-fail-closed로 비활성화되어 있다.
+지원한다. 실제 HyperCLOVA X HTTP transport와 공식 `/answer` adapter를
+검증할 때까지 공식 Agent 실행은 fail-closed로 비활성화되어 있다.
 
 ## 문서
 
@@ -124,6 +124,7 @@ fail-closed로 비활성화되어 있다.
 - [공모펀드 핵심 평가 기준선](docs/evaluation-public-fund.md)
 - [Field Registry와 QueryPlan 계약](docs/contracts.md)
 - [HyperCLOVA X 연결 전 준비 기준](docs/pre-hcx-readiness.md)
+- [HyperCLOVA X provider 계약](docs/hyperclova-provider.md)
 - [Capability matrix](docs/capability-matrix.md)
 - [네 상품군 공통 AGGREGATE 엔진](docs/aggregate-engine.md)
 - [네 상품군 자연어 COMPARE 공개 회귀](docs/evaluation-product-comparison.md)
@@ -167,6 +168,6 @@ field-level evidence, Qwen grounded answer, Answer Verifier·fallback까지 한
 사람 rubric 결과는 아니다. 내부 구현으로는 네 상품군 Router, BM25 문서 검색,
 공통 AGGREGATE, rubric·Backend DTO까지 준비했다. 남은 우선순위는 금융 도메인 담당자의
 external blind 100문항·비공개 정답키 작성, 승인된 실제 문서 corpus와 사람
-평가, HCX schema·HyperCLOVA X, 공식 `/answer` adapter다. 최초 SEARCH parser
+평가, HyperCLOVA X 실제 HTTP transport, 공식 `/answer` adapter다. 최초 SEARCH parser
 holdout 실패 1건은 회귀 수정했지만 9/10 기록은 그대로 유지한다. 공모펀드
 공식 Agent 실행도 계속 비활성화한다.

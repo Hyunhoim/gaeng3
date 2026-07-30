@@ -27,10 +27,11 @@
 19. [네 상품군 공통 COMPARE 엔진 설계](comparison-engine-design.md)
 20. [네 상품군 자연어 COMPARE 공개 회귀](evaluation-product-comparison.md)
 21. [SEARCH·AGGREGATE 성능 기준선](evaluation-search-aggregate-performance.md)
-22. [BM25/SQLite FTS 문서 RAG](document-rag.md)
-23. [Backend 전달용 Agent DTO](backend-contract.md)
-24. [금융상품 Agent 사람 평가 rubric](human-evaluation.md)
-25. [저장소 부트스트랩 작업 명세](prompts/01-repository-bootstrap.md)
+22. [HyperCLOVA X provider 계약](hyperclova-provider.md)
+23. [BM25/SQLite FTS 문서 RAG](document-rag.md)
+24. [Backend 전달용 Agent DTO](backend-contract.md)
+25. [금융상품 Agent 사람 평가 rubric](human-evaluation.md)
+26. [저장소 부트스트랩 작업 명세](prompts/01-repository-bootstrap.md)
 
 ## 문서 지도
 
@@ -58,6 +59,7 @@
 | [네 상품군 공통 COMPARE 엔진 설계](comparison-engine-design.md) | 상품군별 비교 필드·식별·통화·기준일·결측·공통 evidence 설계 | v1.0 구현 |
 | [네 상품군 자연어 COMPARE 공개 회귀](evaluation-product-comparison.md) | 세 상품군 신규 30문항과 기존 공모펀드 24문항의 비교 배선·안전 경계 | v1.0 정본 |
 | [SEARCH·AGGREGATE 성능 기준선](evaluation-search-aggregate-performance.md) | 네 상품군 8문항의 결과 지문·새 프로세스 지연·RSS와 projected verifier 전후 비교 | v1.0 정본 |
+| [HyperCLOVA X provider 계약](hyperclova-provider.md) | 세 LLM 역할의 요청·응답·오류·관측 계약과 API 없는 fake transport 검증 | 계약·fake 완료·실제 HTTP 대기 |
 | [BM25/SQLite FTS 문서 RAG](document-rag.md) | 승인 문서 적재·BM25 검색·필터·근거·기준일·not-found 계약 | 최소 기능 완료 |
 | [Backend 전달용 Agent DTO](backend-contract.md) | 프레임워크 독립 request·response·citation·fallback 계약과 JSON 예시 | v1.0 |
 | [금융상품 Agent 사람 평가 rubric](human-evaluation.md) | 6개 평가 축·critical gate·독립 reviewer·집계 계약 | rubric 완료·실평가 대기 |
@@ -121,15 +123,18 @@
 - 네 상품군 비교 공개 문항: 위 30문항과 기존 공모펀드 24문항을 합쳐 54문항
 - 네 상품군 SEARCH·AGGREGATE 실제 데이터 성능 회귀: 새 프로세스 8문항 8/8,
   p50 308.749ms, 최대 추가 RSS 51,000KiB, 결과 지문 100% 일치
+- HyperCLOVA X 경계: QueryPlan·공모펀드 비교 초안·근거 답변의 semantic
+  structured request, 공식 mode/provider gate, HCX schema 검사, token·latency
+  call record와 fake transport 오류 계약 완료, 실제 HTTP transport는 대기
 - 공모펀드 평가 경계: 동결 expected QueryPlan의 SEARCH·COMPARE 답변 격리
   회귀와 공개 24문항 자연어 통합 E2E까지 완료, 독립 blind E2E·사람 rubric·
-  HyperCLOVA X 미완료, 공식 Agent 실행 비활성
+  HyperCLOVA X 실제 HTTP 재현 미완료, 공식 Agent 실행 비활성
 - 연결 전 Router 진단: 도입 전 search 강제 replay 4/28, 현재 28/28
 - 네 상품군 공통 집계: COUNT·MIN·MAX·AVG·허용 SUM, 최대 두 그룹,
   금액 통화 gate, 결측·기준일 공개, SQL 후보와 독립 Python 재검산
 - 문서 검색 기준: BM25/SQLite FTS synthetic 적재·필터·근거·not-found 통과
 - 팀 계약 기준: Backend DTO JSON 예시·schema, 사람 rubric validator 통과
-- 코드 회귀 기준: 전체 pytest 269개, Ruff lint·format, pip dependency check,
+- 코드 회귀 기준: 전체 pytest 285개, Ruff lint·format, pip dependency check,
   wheel과 필수 package data 검사
 - 로컬 Qwen 평가 기준: 동결 50문항에서 최초 미사용 holdout 9/10,
   오류 수정 후 전체 회귀 50/50을 연속 2회 재현
@@ -142,7 +147,8 @@
   전체 50/50, 폴백 0
 - 다음 외부 게이트: 금융 도메인 담당자의 external blind 100문항·비공개 정답키,
   승인 corpus, 실제 사람 평가
-- 다음 기술 통합: HyperCLOVA X provider와 공식 `/answer` adapter
+- 다음 기술 통합: 공식 endpoint·인증 계약 기반 HyperCLOVA X HTTP transport와
+  공식 `/answer` adapter
 
 ## 저장소 밖의 근거 자료
 

@@ -108,11 +108,16 @@
   실제 데이터 8문항 결과 지문은 8/8 일치했고 p50 308.749ms, 최대 추가 RSS
   51,000KiB다. 변경 전 대비 국내채권은 약 92~93%, 공모펀드는 약 94~95%
   메모리 증가량이 감소했다. 단일 장비·단일 실행의 방향성 기준선이다.
+- HyperCLOVA X QueryPlan·공모펀드 비교 초안·근거 답변 provider가 공유하는
+  semantic structured request와 주입형 transport 계약을 구현했다. 공식
+  mode/provider gate, HCX schema subset, token·latency 관측, 인증·rate limit·
+  timeout·서비스·응답 오류를 fake transport로 검증했다. 실제 endpoint·인증
+  header·HTTP transport와 공식 재현은 아직 외부 게이트다.
 - caller-fed BM25/SQLite FTS 문서 검색은 chunk·필터·top-k·출처·기준일·
   provided 우선순위·not-found를 검증했다. 실제 corpus는 승인 전이다.
 - 사람 평가 rubric v1과 프레임워크 독립 Backend DTO·JSON 예시를 구현했다.
   실제 사람 평가는 외부 게이트다.
-- 전체 코드 회귀는 pytest 269개, Ruff lint·format, pip dependency check와
+- 전체 코드 회귀는 pytest 285개, Ruff lint·format, pip dependency check와
   wheel 빌드를 통과했다.
 
 ## 3. 변경할 수 없는 공식 제약
@@ -129,7 +134,7 @@
 
 | 구성요소 | 개발 단계 | 평가·제출 경로 | 현재 결정 |
 | --- | --- | --- | --- |
-| HyperCLOVA X | API 확보 후 통합 | 허용·필수 | 최종 provider |
+| HyperCLOVA X | 요청·응답·오류 계약과 fake transport 완료 | 허용·필수 | 실제 HTTP transport 대기 |
 | Mock/fixture provider | 기본 테스트와 CI | 실제 답변 생성에 사용하지 않음 | 항상 유지 |
 | `Qwen/Qwen3-30B-A3B-Instruct-2507-FP8` | 명시적으로 켠 로컬 실험만 | 금지 | 임시 개발 provider |
 | 다른 생성형 LLM/VLM | 사용하지 않음 | 금지 | 제외 |
@@ -277,7 +282,10 @@ QueryPlan에는 최소한 intent, 상품군, 필수 조건, 완화 전 확인이
   결정론적 실행·독립 verifier·Backend evidence를 연결한다.
 - [x] 네 상품군 공통 COMPARE의 exact identity·필드·통화·기준일 계약과
   공통 ComparisonEvidence·독립 verifier를 연결한다.
-- [ ] HyperCLOVA X provider와 공식 `/answer` adapter·오류·timeout 계약을 연결한다.
+- [x] HyperCLOVA X provider의 세 operation, 주입형 transport, 오류·timeout
+  계약과 API 없는 fake 테스트를 구현한다.
+- [ ] 공식 endpoint·인증 계약에 맞는 HTTP transport와 `/answer` adapter를
+  연결하고 실제 API로 재현한다.
 
 ### P3 — 평가 확장
 
@@ -316,6 +324,7 @@ QueryPlan에는 최소한 intent, 상품군, 필수 조건, 완화 전 확인이
 ## 9. 2026-08-06 설명회에서 확인할 항목
 
 - 허용되는 HyperCLOVA X 정확한 모델명·버전과 Structured Outputs 지원 범위
+- 공식 endpoint·인증 header·요청·응답 body와 request ID 규칙
 - API 인증, timeout, QPS, 재시도, 입력 길이, 응답 필수 필드
 - 다른 모델로 만든 개발용 synthetic 질문·응답 또는 평가 데이터의 제출 가능 여부
 - 임베딩, re-ranker, NER, 번역 모델이 공식 정의상 LLM에 포함되는지

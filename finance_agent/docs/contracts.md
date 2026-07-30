@@ -19,9 +19,11 @@
 | [`queryplan.py`](../packages/finance_agent_core/src/finance_agent_core/contracts/queryplan.py) | 서버의 엄격한 QueryPlan 구조·의미 검증 |
 | [`queryplan.hcx.schema.json`](../packages/finance_agent_core/src/finance_agent_core/contracts/queryplan.hcx.schema.json) | HyperCLOVA X용 보수적 Structured Outputs schema template |
 | [`hcx_schema.py`](../packages/finance_agent_core/src/finance_agent_core/contracts/hcx_schema.py) | registry에서 상품군·field enum을 materialize하고 HCX keyword subset 검증 |
+| [`hyperclova.py`](../packages/finance_agent_core/src/finance_agent_core/agent/providers/hyperclova.py) | 공식 mode gate, 세 operation의 semantic structured request, transport·오류·token 관측 계약 |
 | [`linker.py`](../packages/finance_agent_core/src/finance_agent_core/agent/linker.py) | 질문에 명시된 범주·수치·정렬을 결정론적으로 canonicalize |
 | [`policy.py`](../packages/finance_agent_core/src/finance_agent_core/execution/policy.py) | 모호성·미지원 조건·비검색 intent를 SQL 전에 fail-closed 차단 |
 | [`answering/models.py`](../packages/finance_agent_core/src/finance_agent_core/answering/models.py) | GroundedAnswerDraft·context·verification·composition 계약 |
+| [`answering/providers.py`](../packages/finance_agent_core/src/finance_agent_core/answering/providers.py) | expected·로컬 provider와 evidence-only HyperCLOVA X 답변 provider |
 | [`answering/verifier.py`](../packages/finance_agent_core/src/finance_agent_core/answering/verifier.py) | draft와 최종 compiled answer의 결과 순서·evidence·숫자·식별자·기준일·경고 후검증 |
 | [`answering/composer.py`](../packages/finance_agent_core/src/finance_agent_core/answering/composer.py) | evidence-only 생성, 검증된 결정론적 core 결합, 실패 시 safe fallback |
 | [`evaluation/answer_cli.py`](../packages/finance_agent_core/src/finance_agent_core/evaluation/answer_cli.py) | expected QueryPlan 기반 상품군별 답변 격리 회귀 평가 |

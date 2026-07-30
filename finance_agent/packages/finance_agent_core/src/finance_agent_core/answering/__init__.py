@@ -15,6 +15,7 @@ from finance_agent_core.answering.models import (
 )
 from finance_agent_core.answering.providers import (
     ExpectedGroundedAnswerProvider,
+    HyperClovaXGroundedAnswerProvider,
     LocalGroundedAnswerProvider,
 )
 from finance_agent_core.answering.verifier import AnswerVerifier
@@ -28,6 +29,7 @@ __all__ = [
     "GroundedAnswerContext",
     "GroundedAnswerDraft",
     "GroundedAnswerProvider",
+    "HyperClovaXGroundedAnswerProvider",
     "LocalGroundedAnswerProvider",
     "ProductAnswerDraft",
     "build_grounded_answer_context",
