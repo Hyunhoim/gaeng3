@@ -520,6 +520,51 @@ class ProductEvidence(DomainModel):
     fields: list[FieldEvidence]
 
 
+class ComparisonCellEvidence(DomainModel):
+    target_index: Literal[1, 2]
+    product_id: str
+    product_name: str | None
+    value: EvidenceScalar
+    trading_currency: str | None
+    quality: QualityStatus | None
+    quality_reason: str | None
+    as_of: date | None
+    source_dataset: str | None
+    source_id: str | None
+    source_row: int | None
+    source_columns: list[str]
+    evidence_ref: str | None
+
+
+class ComparisonEvidence(DomainModel):
+    canonical_field: str
+    label: str
+    unit: str
+    status: Literal[
+        "numeric_delta",
+        "value_only",
+        "currency_mismatch",
+        "as_of_mismatch",
+        "stale_input",
+        "unavailable",
+        "incomplete",
+    ]
+    delta: str | None
+    delta_basis: Literal["second_minus_first"] | None
+    reason: str | None
+    cells: list[ComparisonCellEvidence] = Field(min_length=2, max_length=2)
+
+    @model_validator(mode="after")
+    def validate_comparison_cells(self) -> ComparisonEvidence:
+        if [cell.target_index for cell in self.cells] != [1, 2]:
+            raise ValueError("comparison cells must preserve target order 1, 2")
+        if self.delta is None and self.delta_basis is not None:
+            raise ValueError("comparison without delta cannot expose a delta basis")
+        if self.delta is not None and self.delta_basis != "second_minus_first":
+            raise ValueError("comparison delta requires second_minus_first basis")
+        return self
+
+
 class AggregateEvidence(DomainModel):
     evidence_id: str
     function: AggregateFunction

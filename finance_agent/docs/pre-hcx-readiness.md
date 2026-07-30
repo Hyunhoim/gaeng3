@@ -41,6 +41,7 @@
 | 2 | 네 상품군 capability matrix | QueryPlan·Oracle과 자동 정합성 검사 | 완료 |
 | 3 | fail-closed Router·공통 답변 경로 | 실행·역질문·거절이 계약대로 분리되고 E2E 검증 | 완료 |
 | 3A | 네 상품군 AGGREGATE | Decimal 계산·통화 gate·결측·기준일·독립 verifier·Backend evidence | 완료 |
+| 3B | 네 상품군 COMPARE | exact identity·field capability·통화·기준일·stale·독립 verifier·Backend evidence | 완료 |
 | 4 | BM25/SQLite FTS 문서 RAG | 적재·필터·top-k·근거·기준일·not-found 테스트 | 최소 기능 완료·실제 corpus 승인 대기 |
 | 5 | 사람 rubric·Backend DTO | JSON 예시·schema·contract test 포함 | 계약 완료·사람 평가 대기 |
 | 6 | baseline 동결·전체 QA | 회귀·wheel·문서·hash 검증과 외부 게이트 명시 | 내부 완료 |
@@ -60,10 +61,27 @@
 
 - Router 도입 전 search 강제 replay: 4/28, strict accuracy `0.142857`
 - 현재 fail-closed Router: 28/28, strict accuracy `1.0`
-- 현재 AGGREGATE capability를 포함한 diagnostic v2 suite SHA-256:
-  `ef35437ac3b9a02c2438ef664b49c339a631c249f53784b43fb2c1050d86e271`
-- v1은 AGGREGATE 미지원 시점의 봉인 이력으로 그대로 보존
+- 현재 AGGREGATE·COMPARE capability를 포함한 diagnostic v3 suite SHA-256:
+  `8bab9b0f4fd3e40782c591e2e3aea2f9d76b94a2d31d846d8b957604af0313b0`
+- v1·v2는 당시 capability의 봉인 이력으로 그대로 보존
 - 위 결과는 공개 배선 진단이며 독립 blind나 최종 답변 점수가 아님
+
+자연어 비교 공개 회귀 결과:
+
+- 해외 ETP·국내 ETP·국내채권 신규 30문항 30/30
+- 실행 18문항과 안전 차단 12문항의 계획·순서·상태·차이·Backend 계약 100%
+- 기존 공모펀드 24문항과 합친 네 상품군 공개 비교 질문 54문항
+- suite SHA-256:
+  `7eec27471f2dbd218b0ed056f03b02ef69aed6b283055d72d98ff7d423e411ee`
+- 공개 회귀이므로 독립 blind 일반화 성능으로 해석하지 않음
+
+SEARCH·AGGREGATE 경량 verifier 결과:
+
+- 네 상품군 대표 SEARCH·AGGREGATE 8문항 결과 지문 8/8 일치
+- 각 문항을 새 프로세스에서 실행한 p50 308.749ms, 최대 추가 RSS 51,000KiB
+- QueryPlan에 필요한 열만 별도 projection으로 읽어 전체 원천값 사전 적재 제거
+- 국내채권 약 92~93%, 공모펀드 약 94~95%의 추가 RSS 감소
+- 단일 개발 장비·문항별 1회 측정이며 운영 SLO나 일반화 성능으로 해석하지 않음
 
 ## 3. 외부 완료 게이트
 
@@ -80,9 +98,9 @@
 
 ## 4. 내부 완료 QA
 
-- pytest `239 passed`
+- pytest `269 passed`
 - Ruff lint와 format 통과
-- 문서 검사 `31 Markdown files`, `16 evaluation baselines` 통과
+- 문서 검사 `34 Markdown files`, `20 evaluation baselines` 통과
 - `pip check` 통과
 - build isolation 없이 wheel 생성과 신규 JSON package data 포함 여부 통과
 - `git diff --check` 통과

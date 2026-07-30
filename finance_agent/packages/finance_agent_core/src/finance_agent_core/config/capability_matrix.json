@@ -1,10 +1,10 @@
 {
   "schema_version": "1.0",
-  "matrix_version": "2026-07-30.2",
+  "matrix_version": "2026-07-30.3",
   "entries": [
     {"product_family": "overseas_etp", "intent": "search", "status": "executable", "query_plan_intent": "search", "oracle_mode": "search", "reason": "조건 검색 Oracle과 verifier를 사용"},
     {"product_family": "overseas_etp", "intent": "detail", "status": "executable", "query_plan_intent": "search", "oracle_mode": "search", "reason": "정확한 식별자를 search plan으로 낮춰 조회"},
-    {"product_family": "overseas_etp", "intent": "compare", "status": "unsupported", "query_plan_intent": null, "oracle_mode": "none", "reason": "검증된 두 상품 비교 executor가 없음"},
+    {"product_family": "overseas_etp", "intent": "compare", "status": "executable", "query_plan_intent": "compare", "oracle_mode": "compare", "reason": "두 상품 exact resolver와 공통 비교 Oracle·verifier를 사용"},
     {"product_family": "overseas_etp", "intent": "aggregate", "status": "executable", "query_plan_intent": "aggregate", "oracle_mode": "aggregate", "reason": "통화·결측·기준일을 보존하는 결정론적 집계 Oracle과 독립 verifier를 사용"},
     {"product_family": "overseas_etp", "intent": "explain", "status": "executable", "query_plan_intent": "search", "oracle_mode": "search", "reason": "정확한 식별자의 field evidence만 설명"},
     {"product_family": "overseas_etp", "intent": "clarify", "status": "control", "query_plan_intent": null, "oracle_mode": "none", "reason": "필요 조건을 역질문"},
@@ -12,7 +12,7 @@
 
     {"product_family": "domestic_etp", "intent": "search", "status": "executable", "query_plan_intent": "search", "oracle_mode": "search", "reason": "조건 검색 Oracle과 verifier를 사용"},
     {"product_family": "domestic_etp", "intent": "detail", "status": "executable", "query_plan_intent": "search", "oracle_mode": "search", "reason": "정확한 식별자를 search plan으로 낮춰 조회"},
-    {"product_family": "domestic_etp", "intent": "compare", "status": "unsupported", "query_plan_intent": null, "oracle_mode": "none", "reason": "검증된 두 상품 비교 executor가 없음"},
+    {"product_family": "domestic_etp", "intent": "compare", "status": "executable", "query_plan_intent": "compare", "oracle_mode": "compare", "reason": "두 상품 exact resolver와 공통 비교 Oracle·verifier를 사용"},
     {"product_family": "domestic_etp", "intent": "aggregate", "status": "executable", "query_plan_intent": "aggregate", "oracle_mode": "aggregate", "reason": "통화·결측·기준일을 보존하는 결정론적 집계 Oracle과 독립 verifier를 사용"},
     {"product_family": "domestic_etp", "intent": "explain", "status": "executable", "query_plan_intent": "search", "oracle_mode": "search", "reason": "정확한 식별자의 field evidence만 설명"},
     {"product_family": "domestic_etp", "intent": "clarify", "status": "control", "query_plan_intent": null, "oracle_mode": "none", "reason": "필요 조건을 역질문"},
@@ -20,7 +20,7 @@
 
     {"product_family": "bond", "intent": "search", "status": "executable", "query_plan_intent": "search", "oracle_mode": "search", "reason": "조건 검색 Oracle과 verifier를 사용"},
     {"product_family": "bond", "intent": "detail", "status": "executable", "query_plan_intent": "search", "oracle_mode": "search", "reason": "정확한 식별자를 search plan으로 낮춰 조회"},
-    {"product_family": "bond", "intent": "compare", "status": "unsupported", "query_plan_intent": null, "oracle_mode": "none", "reason": "검증된 두 상품 비교 executor가 없음"},
+    {"product_family": "bond", "intent": "compare", "status": "executable", "query_plan_intent": "compare", "oracle_mode": "compare", "reason": "두 상품 exact resolver와 공통 비교 Oracle·verifier를 사용"},
     {"product_family": "bond", "intent": "aggregate", "status": "executable", "query_plan_intent": "aggregate", "oracle_mode": "aggregate", "reason": "통화·결측·기준일을 보존하는 결정론적 집계 Oracle과 독립 verifier를 사용"},
     {"product_family": "bond", "intent": "explain", "status": "executable", "query_plan_intent": "search", "oracle_mode": "search", "reason": "정확한 식별자의 field evidence만 설명"},
     {"product_family": "bond", "intent": "clarify", "status": "control", "query_plan_intent": null, "oracle_mode": "none", "reason": "필요 조건을 역질문"},
@@ -28,7 +28,7 @@
 
     {"product_family": "fund", "intent": "search", "status": "executable", "query_plan_intent": "search", "oracle_mode": "search", "reason": "공모 범위를 잠근 조건 검색 Oracle과 verifier를 사용"},
     {"product_family": "fund", "intent": "detail", "status": "executable", "query_plan_intent": "search", "oracle_mode": "search", "reason": "정확한 itm_no를 search plan으로 낮춰 조회"},
-    {"product_family": "fund", "intent": "compare", "status": "executable", "query_plan_intent": "compare", "oracle_mode": "fund_compare", "reason": "두 공모펀드 전용 비교 계약과 verifier를 사용"},
+    {"product_family": "fund", "intent": "compare", "status": "executable", "query_plan_intent": "compare", "oracle_mode": "compare", "reason": "두 공모펀드 exact resolver와 공통 비교 Oracle·verifier를 사용"},
     {"product_family": "fund", "intent": "aggregate", "status": "executable", "query_plan_intent": "aggregate", "oracle_mode": "aggregate", "reason": "공모 범위와 통화·결측·기준일을 잠근 결정론적 집계 Oracle과 독립 verifier를 사용"},
     {"product_family": "fund", "intent": "explain", "status": "executable", "query_plan_intent": "search", "oracle_mode": "search", "reason": "정확한 itm_no의 field evidence만 설명"},
     {"product_family": "fund", "intent": "clarify", "status": "control", "query_plan_intent": null, "oracle_mode": "none", "reason": "필요 조건을 역질문"},

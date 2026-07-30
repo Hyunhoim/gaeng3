@@ -8,13 +8,15 @@
 
 | 상품군·계층 | 상태 |
 | --- | --- |
-| 해외 ETF·ETN | 감사, 정규화, SQLite, Oracle, Verifier, 50문항 완료 |
-| 국내 ETF·ETN | 감사, 정규화, SQLite, Oracle, Verifier, 50문항 완료 |
-| 국내채권 | 감사, stale·날짜 계약, SQLite, Oracle, Verifier, 50문항 완료 |
+| 해외 ETF·ETN | 감사, 정규화, SQLite, Oracle, Verifier, 50문항·공통 COMPARE 완료 |
+| 국내 ETF·ETN | 감사, 정규화, SQLite, Oracle, Verifier, 50문항·공통 COMPARE 완료 |
+| 국내채권 | 감사, stale·날짜 계약, SQLite, Oracle, Verifier, 50문항·공통 COMPARE 완료 |
 | 공모펀드 | SEARCH parser 40/40·최초 holdout 9/10, 답변 50/50·COMPARE 20/20, 자연어 COMPARE 통합 E2E 24/24, Agent 실행 비활성 |
 | 근거 기반 답변 | 공모펀드 SEARCH 44개·정확 ID COMPARE 18개·자연어 COMPARE 16개 grounded, 폴백 0 |
 | 공통 Router | 네 상품군·7 intent 공개 진단: 도입 전 4/28, fail-closed Router 28/28 |
 | 공통 AGGREGATE | 네 상품군 COUNT·MIN·MAX·AVG·허용 SUM, 최대 2개 group, 통화·결측·기준일·독립 verifier |
+| 공통 COMPARE | 같은 상품군의 정확한 두 상품, 필드 allowlist·통화·기준일·stale·독립 verifier·Backend evidence, 공개 자연어 54문항 |
+| SEARCH·AGGREGATE 성능 | 네 상품군 8문항 결과 지문 8/8, projected verifier, 새 프로세스 p50 308.749ms·최대 추가 RSS 51,000KiB |
 | 문서 RAG | caller-fed BM25/SQLite FTS 적재·필터·근거·기준일·not-found 최소 기능 |
 | 팀 통합 계약 | 프레임워크 독립 Backend DTO·JSON Schema/예시, 사람 평가 rubric v1 |
 | HyperCLOVA X | 공식 API 확보 후 연결 예정 |
@@ -37,6 +39,7 @@
 │  → parameterized SQLite Oracle
 │  → 독립 Python Result Verifier
 │  → field-level product evidence
+│  → COMPARE는 ComparisonEvidence·ComparisonResultVerifier
 │  → Answer Verifier
 │  → evidence compiler 또는 deterministic safe fallback
 └─ AGGREGATE
@@ -123,6 +126,7 @@ fail-closed로 비활성화되어 있다.
 - [HyperCLOVA X 연결 전 준비 기준](docs/pre-hcx-readiness.md)
 - [Capability matrix](docs/capability-matrix.md)
 - [네 상품군 공통 AGGREGATE 엔진](docs/aggregate-engine.md)
+- [네 상품군 자연어 COMPARE 공개 회귀](docs/evaluation-product-comparison.md)
 - [문서 RAG](docs/document-rag.md)
 - [Backend DTO](docs/backend-contract.md)
 - [사람 평가 rubric](docs/human-evaluation.md)

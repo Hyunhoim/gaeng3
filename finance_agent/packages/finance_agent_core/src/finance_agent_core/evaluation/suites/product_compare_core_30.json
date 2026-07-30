@@ -1,0 +1,554 @@
+{
+  "schema_version": "1.0",
+  "suite_id": "product-compare-core-30",
+  "suite_version": "1.0",
+  "status": "public_regression_not_blind",
+  "complements_suite_id": "fund-compare-e2e-core-24",
+  "data": {
+    "overseas_etp": {
+      "database_sha256": "eee9009ca741713a9a61e498cd5ed8366836d754c7d0c2dbd74ed7e456a2ebbe",
+      "manifest_sha256": "5dd159ade2353154ed8d3d32068dd512cb2b3becba39972aa0dabff0edd50771",
+      "source_file_sha256": "3cec19043f742771e0016d56fe806f19ad78f4295d1ae59192740a78feb2253b"
+    },
+    "domestic_etp": {
+      "database_sha256": "a91bfc713b88e9ba1e7da27508857cbe5ea200c4d7821d0b4fee7d9922684484",
+      "manifest_sha256": "2e52b161a260fa19eab50e8281f04f8617ee1ee69d618b19bd624af4635fca97",
+      "source_file_sha256": "0f5706d45f93284bcaac2fa8eaed04db920a7043abaa859e455f06e246d54723"
+    },
+    "bond": {
+      "database_sha256": "40265aa326d63244727294ac29c1cd38c898f05b6a80dfd51fd8ac38e08764bc",
+      "manifest_sha256": "d724d99e9ffd24148144b3534795d0d545e0ebff9d01509966f6ebbb218f8312",
+      "source_file_sha256": "728f44a567a986d21cf843d711c6c4dfa1a24d05b39c7da0541b981b57ecccf8"
+    }
+  },
+  "cases": [
+    {
+      "id": "product-compare-overseas-001",
+      "product_family": "overseas_etp",
+      "category": "quoted_product_id_numeric_exchange",
+      "question": "해외 ETF \"101:IVEG.O\"와 \"101:IWTR.O\"의 총보수율과 AUM을 비교해줘",
+      "expected": {
+        "status": "executed",
+        "product_ids": ["101:IVEG.O", "101:IWTR.O"],
+        "comparison_fields": ["total_expense_ratio_pct", "aum"],
+        "field_statuses": {
+          "total_expense_ratio_pct": "numeric_delta",
+          "aum": "numeric_delta"
+        },
+        "deltas": {
+          "total_expense_ratio_pct": "0.00",
+          "aum": "2500000"
+        },
+        "answer_contains": ["총보수율", "최근 AUM", "차이(두 번째-첫 번째)"]
+      }
+    },
+    {
+      "id": "product-compare-overseas-002",
+      "product_family": "overseas_etp",
+      "category": "labeled_ticker_value_fields",
+      "question": "해외 ETF 티커 MNTL.O와 티커 PTEC.O의 투자 지역과 자산군을 비교해줘",
+      "expected": {
+        "status": "executed",
+        "product_ids": ["101:MNTL.O", "101:PTEC.O"],
+        "comparison_fields": ["investment_region", "asset_type"],
+        "field_statuses": {
+          "investment_region": "value_only",
+          "asset_type": "value_only"
+        },
+        "deltas": {
+          "investment_region": null,
+          "asset_type": null
+        },
+        "answer_contains": ["투자 지역", "투자 자산 유형", "원천값만 대조"]
+      }
+    },
+    {
+      "id": "product-compare-overseas-003",
+      "product_family": "overseas_etp",
+      "category": "quoted_exact_name",
+      "question": "해외 ETF \"Global X Solar ETF\"와 \"Global X Wind Energy ETF\"의 거래소 코드와 상품 유형을 비교해줘",
+      "expected": {
+        "status": "executed",
+        "product_ids": ["101:RAYS.O", "101:WNDY.O"],
+        "comparison_fields": ["exchange_code", "product_type"],
+        "field_statuses": {
+          "exchange_code": "value_only",
+          "product_type": "value_only"
+        },
+        "deltas": {
+          "exchange_code": null,
+          "product_type": null
+        },
+        "answer_contains": ["거래소 코드", "ETP 유형", "원천값만 대조"]
+      }
+    },
+    {
+      "id": "product-compare-overseas-004",
+      "product_family": "overseas_etp",
+      "category": "labeled_isin_boolean_fields",
+      "question": "해외 ETF 종목코드 US46436E3953과 종목코드 US46436E3466의 판매 여부와 거래 정지 여부를 비교해줘",
+      "expected": {
+        "status": "executed",
+        "product_ids": ["101:IVEG.O", "101:IWTR.O"],
+        "comparison_fields": ["sellable", "trading_suspended"],
+        "field_statuses": {
+          "sellable": "value_only",
+          "trading_suspended": "value_only"
+        },
+        "deltas": {
+          "sellable": null,
+          "trading_suspended": null
+        },
+        "answer_contains": ["판매 가능 여부", "거래 중지 여부", "원천값만 대조"]
+      }
+    },
+    {
+      "id": "product-compare-overseas-005",
+      "product_family": "overseas_etp",
+      "category": "missing_aum",
+      "question": "해외 ETF 티커 ABFL.K와 티커 IVEG.O의 AUM과 보수율을 비교해줘",
+      "expected": {
+        "status": "executed",
+        "product_ids": ["AMX:ABFL.K", "101:IVEG.O"],
+        "comparison_fields": ["aum", "total_expense_ratio_pct"],
+        "field_statuses": {
+          "aum": "unavailable",
+          "total_expense_ratio_pct": "numeric_delta"
+        },
+        "deltas": {
+          "aum": null,
+          "total_expense_ratio_pct": "-0.02"
+        },
+        "answer_contains": ["확인 불가", "하나 이상의 값이 없어", "총보수율"]
+      }
+    },
+    {
+      "id": "product-compare-overseas-006",
+      "product_family": "overseas_etp",
+      "category": "etn_value_fields",
+      "question": "해외 ETN 티커 AIQD.K와 티커 AIQU.K의 상품 유형과 거래 통화를 비교해줘",
+      "expected": {
+        "status": "executed",
+        "product_ids": ["AMX:AIQD.K", "AMX:AIQU.K"],
+        "comparison_fields": ["product_type", "trading_currency"],
+        "field_statuses": {
+          "product_type": "value_only",
+          "trading_currency": "value_only"
+        },
+        "deltas": {
+          "product_type": null,
+          "trading_currency": null
+        },
+        "answer_contains": ["ETP 유형", "거래 통화", "원천값만 대조"]
+      }
+    },
+    {
+      "id": "product-compare-overseas-007",
+      "product_family": "overseas_etp",
+      "category": "unsupported_return",
+      "question": "해외 ETF 티커 IVEG.O와 티커 IWTR.O의 수익률을 비교해줘",
+      "expected": {
+        "status": "clarify",
+        "product_ids": [],
+        "comparison_fields": [],
+        "field_statuses": {},
+        "deltas": {},
+        "answer_contains": ["해외 ETP 수익률 비교는 현재 지원하지 않습니다"]
+      }
+    },
+    {
+      "id": "product-compare-overseas-008",
+      "product_family": "overseas_etp",
+      "category": "same_product",
+      "question": "해외 ETF 티커 IVEG.O와 티커 IVEG.O의 AUM을 비교해줘",
+      "expected": {
+        "status": "clarify",
+        "product_ids": [],
+        "comparison_fields": [],
+        "field_statuses": {},
+        "deltas": {},
+        "answer_contains": ["서로 다른 두 상품의 정확한 식별자가 필요"]
+      }
+    },
+    {
+      "id": "product-compare-overseas-009",
+      "product_family": "overseas_etp",
+      "category": "identity_not_found",
+      "question": "해외 ETF 티커 IVEG.O와 티커 NOPE.O의 AUM을 비교해줘",
+      "expected": {
+        "status": "clarify",
+        "product_ids": [],
+        "comparison_fields": [],
+        "field_statuses": {},
+        "deltas": {},
+        "answer_contains": ["제공 데이터에서 정확히 찾지 못했습니다"]
+      }
+    },
+    {
+      "id": "product-compare-overseas-010",
+      "product_family": "overseas_etp",
+      "category": "unsafe_target_role",
+      "question": "해외 ETF 티커 IVEG.O는 제외하고 티커 IWTR.O의 AUM을 비교해줘",
+      "expected": {
+        "status": "clarify",
+        "product_ids": [],
+        "comparison_fields": [],
+        "field_statuses": {},
+        "deltas": {},
+        "answer_contains": ["비교 대상 역할을 바꾸는 표현은 현재 지원하지 않습니다"]
+      }
+    },
+    {
+      "id": "product-compare-domestic-001",
+      "product_family": "domestic_etp",
+      "category": "explicit_product_id_returns_price",
+      "question": "국내 ETF KR70000D0009와 KR70000H0005의 1개월 수익률과 종가를 비교해줘",
+      "expected": {
+        "status": "executed",
+        "product_ids": ["KR70000D0009", "KR70000H0005"],
+        "comparison_fields": ["one_month_return_pct", "close_price"],
+        "field_statuses": {
+          "one_month_return_pct": "numeric_delta",
+          "close_price": "numeric_delta"
+        },
+        "deltas": {
+          "one_month_return_pct": "5.18",
+          "close_price": "1050"
+        },
+        "answer_contains": ["1개월 수익률", "종가", "차이(두 번째-첫 번째)"]
+      }
+    },
+    {
+      "id": "product-compare-domestic-002",
+      "product_family": "domestic_etp",
+      "category": "labeled_ticker_fee_aum",
+      "question": "국내 ETF 티커 A091160과 티커 A091220의 총보수율과 AUM을 비교해줘",
+      "expected": {
+        "status": "executed",
+        "product_ids": ["KR7091160002", "KR7091220004"],
+        "comparison_fields": ["total_expense_ratio_pct", "aum"],
+        "field_statuses": {
+          "total_expense_ratio_pct": "numeric_delta",
+          "aum": "numeric_delta"
+        },
+        "deltas": {
+          "total_expense_ratio_pct": "0.00",
+          "aum": "-7103916422000"
+        },
+        "answer_contains": ["총보수율", "최근 AUM", "차이(두 번째-첫 번째)"]
+      }
+    },
+    {
+      "id": "product-compare-domestic-003",
+      "product_family": "domestic_etp",
+      "category": "quoted_short_name",
+      "question": "국내 ETF \"KODEX 반도체\"와 \"TIGER 반도체\"의 위험등급과 운용사를 비교해줘",
+      "expected": {
+        "status": "executed",
+        "product_ids": ["KR7091160002", "KR7091230003"],
+        "comparison_fields": ["risk_level", "manager"],
+        "field_statuses": {
+          "risk_level": "value_only",
+          "manager": "value_only"
+        },
+        "deltas": {
+          "risk_level": null,
+          "manager": null
+        },
+        "answer_contains": ["상품 위험등급", "운용사", "원천값만 대조"]
+      }
+    },
+    {
+      "id": "product-compare-domestic-004",
+      "product_family": "domestic_etp",
+      "category": "missing_base_index",
+      "question": "국내 ETF KR70000D0009와 KR70000H0005의 기초지수와 운용전략을 비교해줘",
+      "expected": {
+        "status": "executed",
+        "product_ids": ["KR70000D0009", "KR70000H0005"],
+        "comparison_fields": ["base_index", "strategy"],
+        "field_statuses": {
+          "base_index": "unavailable",
+          "strategy": "value_only"
+        },
+        "deltas": {
+          "base_index": null,
+          "strategy": null
+        },
+        "answer_contains": ["기초지수", "확인 불가", "운용 전략"]
+      }
+    },
+    {
+      "id": "product-compare-domestic-005",
+      "product_family": "domestic_etp",
+      "category": "missing_return",
+      "question": "국내 ETF KR70185L0006과 KR70189Z0006의 1개월 수익률과 AUM을 비교해줘",
+      "expected": {
+        "status": "executed",
+        "product_ids": ["KR70185L0006", "KR70189Z0006"],
+        "comparison_fields": ["one_month_return_pct", "aum"],
+        "field_statuses": {
+          "one_month_return_pct": "unavailable",
+          "aum": "numeric_delta"
+        },
+        "deltas": {
+          "one_month_return_pct": null,
+          "aum": "-53201556000"
+        },
+        "answer_contains": ["1개월 수익률", "확인 불가", "최근 AUM"]
+      }
+    },
+    {
+      "id": "product-compare-domestic-006",
+      "product_family": "domestic_etp",
+      "category": "etn_zero_price_quality",
+      "question": "국내 ETN KRG500000556과 KRG500000572의 상품 유형과 종가를 비교해줘",
+      "expected": {
+        "status": "executed",
+        "product_ids": ["KRG500000556", "KRG500000572"],
+        "comparison_fields": ["product_type", "close_price"],
+        "field_statuses": {
+          "product_type": "value_only",
+          "close_price": "unavailable"
+        },
+        "deltas": {
+          "product_type": null,
+          "close_price": null
+        },
+        "answer_contains": ["ETP 유형", "종가", "하나 이상의 값이 없어"]
+      }
+    },
+    {
+      "id": "product-compare-domestic-007",
+      "product_family": "domestic_etp",
+      "category": "ambiguous_return_period",
+      "question": "국내 ETF KR70000D0009와 KR70000H0005의 수익률을 비교해줘",
+      "expected": {
+        "status": "clarify",
+        "product_ids": [],
+        "comparison_fields": [],
+        "field_statuses": {},
+        "deltas": {},
+        "answer_contains": ["기간이 없는 국내 ETP 수익률 비교는 현재 지원하지 않습니다"]
+      }
+    },
+    {
+      "id": "product-compare-domestic-008",
+      "product_family": "domestic_etp",
+      "category": "same_product",
+      "question": "국내 ETF KR70000D0009와 KR70000D0009의 AUM을 비교해줘",
+      "expected": {
+        "status": "clarify",
+        "product_ids": [],
+        "comparison_fields": [],
+        "field_statuses": {},
+        "deltas": {},
+        "answer_contains": ["서로 다른 두 상품의 정확한 식별자가 필요"]
+      }
+    },
+    {
+      "id": "product-compare-domestic-009",
+      "product_family": "domestic_etp",
+      "category": "identity_not_found",
+      "question": "국내 ETF KR70000D0009와 KR7999999999의 AUM을 비교해줘",
+      "expected": {
+        "status": "clarify",
+        "product_ids": [],
+        "comparison_fields": [],
+        "field_statuses": {},
+        "deltas": {},
+        "answer_contains": ["제공 데이터에서 정확히 찾지 못했습니다"]
+      }
+    },
+    {
+      "id": "product-compare-domestic-010",
+      "product_family": "domestic_etp",
+      "category": "unsafe_target_role",
+      "question": "국내 ETF KR70000D0009를 포함해서 KR70000H0005의 종가를 비교해줘",
+      "expected": {
+        "status": "clarify",
+        "product_ids": [],
+        "comparison_fields": [],
+        "field_statuses": {},
+        "deltas": {},
+        "answer_contains": ["비교 대상 역할을 바꾸는 표현은 현재 지원하지 않습니다"]
+      }
+    },
+    {
+      "id": "product-compare-bond-001",
+      "product_family": "bond",
+      "category": "stale_yields",
+      "question": "국내채권 KR350101GB84와 KR350102GA35의 매수수익률과 세후수익률을 비교해줘",
+      "expected": {
+        "status": "executed",
+        "product_ids": ["KR350101GB84", "KR350102GA35"],
+        "comparison_fields": ["buy_yield_pct", "after_tax_yield_pct"],
+        "field_statuses": {
+          "buy_yield_pct": "stale_input",
+          "after_tax_yield_pct": "stale_input"
+        },
+        "deltas": {
+          "buy_yield_pct": "0.153",
+          "after_tax_yield_pct": "0.2012"
+        },
+        "answer_contains": ["매수수익률", "세후수익률", "오래된 입력값"]
+      }
+    },
+    {
+      "id": "product-compare-bond-002",
+      "product_family": "bond",
+      "category": "quoted_exact_name",
+      "question": "국내채권 \"한국전력공사채권1057\"과 \"한국전력공사채권1023\"의 표면이율과 만기일을 비교해줘",
+      "expected": {
+        "status": "executed",
+        "product_ids": ["KR350101GB84", "KR350102GA35"],
+        "comparison_fields": ["coupon_rate_pct", "maturity_date"],
+        "field_statuses": {
+          "coupon_rate_pct": "numeric_delta",
+          "maturity_date": "value_only"
+        },
+        "deltas": {
+          "coupon_rate_pct": "-0.412",
+          "maturity_date": null
+        },
+        "answer_contains": ["표면이율", "만기일", "차이(두 번째-첫 번째)"]
+      }
+    },
+    {
+      "id": "product-compare-bond-003",
+      "product_family": "bond",
+      "category": "amount_and_remaining_days",
+      "question": "국내채권 KR101501DB72와 KR101501DB80의 발행금액과 잔존일수를 비교해줘",
+      "expected": {
+        "status": "executed",
+        "product_ids": ["KR101501DB72", "KR101501DB80"],
+        "comparison_fields": ["issue_amount", "remaining_days"],
+        "field_statuses": {
+          "issue_amount": "numeric_delta",
+          "remaining_days": "numeric_delta"
+        },
+        "deltas": {
+          "issue_amount": "-107098420000",
+          "remaining_days": "31"
+        },
+        "answer_contains": ["발행잔액", "잔존일수", "차이(두 번째-첫 번째)"]
+      }
+    },
+    {
+      "id": "product-compare-bond-004",
+      "product_family": "bond",
+      "category": "rating_and_issuer",
+      "question": "국내채권 KR310220GDB6와 KR350101GB84의 신용등급과 발행기관을 비교해줘",
+      "expected": {
+        "status": "executed",
+        "product_ids": ["KR310220GDB6", "KR350101GB84"],
+        "comparison_fields": ["credit_rating", "issuer"],
+        "field_statuses": {
+          "credit_rating": "value_only",
+          "issuer": "value_only"
+        },
+        "deltas": {
+          "credit_rating": null,
+          "issuer": null
+        },
+        "answer_contains": ["신용등급", "발행기관", "원천값만 대조"]
+      }
+    },
+    {
+      "id": "product-compare-bond-005",
+      "product_family": "bond",
+      "category": "stale_quantity_and_boolean",
+      "question": "국내채권 KR101501DB72와 KR101501DC48의 매수가능수량과 현재 매수 가능 여부를 비교해줘",
+      "expected": {
+        "status": "executed",
+        "product_ids": ["KR101501DB72", "KR101501DC48"],
+        "comparison_fields": ["buyable_quantity", "currently_buyable"],
+        "field_statuses": {
+          "buyable_quantity": "stale_input",
+          "currently_buyable": "value_only"
+        },
+        "deltas": {
+          "buyable_quantity": "21228000",
+          "currently_buyable": null
+        },
+        "answer_contains": ["매수가능수량", "스냅샷 기준 매수 가능 여부", "오래된 입력값"]
+      }
+    },
+    {
+      "id": "product-compare-bond-006",
+      "product_family": "bond",
+      "category": "missing_credit_rating",
+      "question": "국내채권 KR101501DB72와 KR350101GB84의 신용등급과 채권유형을 비교해줘",
+      "expected": {
+        "status": "executed",
+        "product_ids": ["KR101501DB72", "KR350101GB84"],
+        "comparison_fields": ["credit_rating", "bond_type"],
+        "field_statuses": {
+          "credit_rating": "unavailable",
+          "bond_type": "value_only"
+        },
+        "deltas": {
+          "credit_rating": null,
+          "bond_type": null
+        },
+        "answer_contains": ["신용등급", "확인 불가", "채권 종류"]
+      }
+    },
+    {
+      "id": "product-compare-bond-007",
+      "product_family": "bond",
+      "category": "unsupported_yield",
+      "question": "국내채권 KR101501DB72와 KR101501DB80의 만기수익률을 비교해줘",
+      "expected": {
+        "status": "clarify",
+        "product_ids": [],
+        "comparison_fields": [],
+        "field_statuses": {},
+        "deltas": {},
+        "answer_contains": ["제공 데이터에 없는 수익률 비교는 현재 지원하지 않습니다"]
+      }
+    },
+    {
+      "id": "product-compare-bond-008",
+      "product_family": "bond",
+      "category": "same_product",
+      "question": "국내채권 KR101501DB72와 KR101501DB72의 표면이율을 비교해줘",
+      "expected": {
+        "status": "clarify",
+        "product_ids": [],
+        "comparison_fields": [],
+        "field_statuses": {},
+        "deltas": {},
+        "answer_contains": ["서로 다른 두 상품의 정확한 식별자가 필요"]
+      }
+    },
+    {
+      "id": "product-compare-bond-009",
+      "product_family": "bond",
+      "category": "identity_not_found",
+      "question": "국내채권 KR101501DB72와 KR9999999999의 표면이율을 비교해줘",
+      "expected": {
+        "status": "clarify",
+        "product_ids": [],
+        "comparison_fields": [],
+        "field_statuses": {},
+        "deltas": {},
+        "answer_contains": ["제공 데이터에서 정확히 찾지 못했습니다"]
+      }
+    },
+    {
+      "id": "product-compare-bond-010",
+      "product_family": "bond",
+      "category": "unsafe_target_role",
+      "question": "국내채권 KR101501DB72는 빼고 KR101501DB80의 잔존일수를 비교해줘",
+      "expected": {
+        "status": "clarify",
+        "product_ids": [],
+        "comparison_fields": [],
+        "field_statuses": {},
+        "deltas": {},
+        "answer_contains": ["비교 대상 역할을 바꾸는 표현은 현재 지원하지 않습니다"]
+      }
+    }
+  ]
+}

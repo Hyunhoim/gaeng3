@@ -1,0 +1,40 @@
+{
+  "schema_version": "1.0",
+  "suite_id": "pre-hcx-route-diagnostic-28-v3",
+  "suite_version": "3.0",
+  "status": "internal_diagnostic_not_blind",
+  "author_role": "ai_engineering",
+  "cases": [
+    {"id": "pre-hcx-001", "product_family": "overseas_etp", "intent": "search", "question": "해외 ETF 중 총보수가 낮은 순으로 3개 보여줘", "expected_disposition": "execute", "expected_query_plan_intent": "search"},
+    {"id": "pre-hcx-002", "product_family": "overseas_etp", "intent": "detail", "question": "종목코드 NAS:QQQ인 해외 ETF 상세 정보 조회", "expected_disposition": "execute", "expected_query_plan_intent": "search"},
+    {"id": "pre-hcx-003", "product_family": "overseas_etp", "intent": "compare", "question": "해외 ETF \"NAS:AAA\"와 \"NYS:BBB\"의 총보수를 비교해줘", "expected_disposition": "execute", "expected_query_plan_intent": "compare"},
+    {"id": "pre-hcx-004", "product_family": "overseas_etp", "intent": "aggregate", "question": "미국 해외 ETF는 모두 몇 개인지 집계해줘", "expected_disposition": "execute", "expected_query_plan_intent": "aggregate"},
+    {"id": "pre-hcx-005", "product_family": "overseas_etp", "intent": "explain", "question": "종목코드 AMX:SPY인 해외 ETF의 보수와 AUM을 설명해줘", "expected_disposition": "execute", "expected_query_plan_intent": "search"},
+    {"id": "pre-hcx-006", "product_family": "overseas_etp", "intent": "clarify", "question": "안전한 해외 ETF를 찾아줘", "expected_disposition": "clarify", "expected_query_plan_intent": null},
+    {"id": "pre-hcx-007", "product_family": "overseas_etp", "intent": "unsupported", "question": "내일 가장 오를 해외 ETF를 예측해줘", "expected_disposition": "unsupported", "expected_query_plan_intent": null},
+
+    {"id": "pre-hcx-008", "product_family": "domestic_etp", "intent": "search", "question": "국내 ETF 중 1개월 수익률 높은 순으로 3개 보여줘", "expected_disposition": "execute", "expected_query_plan_intent": "search"},
+    {"id": "pre-hcx-009", "product_family": "domestic_etp", "intent": "detail", "question": "상품번호 KR7000000001인 국내 ETF 상세 정보를 조회해줘", "expected_disposition": "execute", "expected_query_plan_intent": "search"},
+    {"id": "pre-hcx-010", "product_family": "domestic_etp", "intent": "compare", "question": "국내 ETF \"KR7000000001\"과 \"KR7000000002\"의 1개월 수익률을 비교해줘", "expected_disposition": "execute", "expected_query_plan_intent": "compare"},
+    {"id": "pre-hcx-011", "product_family": "domestic_etp", "intent": "aggregate", "question": "연금 거래 가능한 국내 ETF가 몇 개인지 알려줘", "expected_disposition": "execute", "expected_query_plan_intent": "aggregate"},
+    {"id": "pre-hcx-012", "product_family": "domestic_etp", "intent": "explain", "question": "상품번호 KR7000000001인 국내 ETF의 수익률을 설명해줘", "expected_disposition": "execute", "expected_query_plan_intent": "search"},
+    {"id": "pre-hcx-013", "product_family": "domestic_etp", "intent": "clarify", "question": "괜찮은 국내 ETF를 찾아줘", "expected_disposition": "clarify", "expected_query_plan_intent": null},
+    {"id": "pre-hcx-014", "product_family": "domestic_etp", "intent": "unsupported", "question": "다음 달 수익률이 가장 높을 국내 ETF를 예측해줘", "expected_disposition": "unsupported", "expected_query_plan_intent": null},
+
+    {"id": "pre-hcx-015", "product_family": "bond", "intent": "search", "question": "현재 매수 가능한 국내채권을 만기일 빠른 순으로 3개 보여줘", "expected_disposition": "execute", "expected_query_plan_intent": "search"},
+    {"id": "pre-hcx-016", "product_family": "bond", "intent": "detail", "question": "종목코드 BOND001인 국내채권 상세 정보를 조회해줘", "expected_disposition": "execute", "expected_query_plan_intent": "search"},
+    {"id": "pre-hcx-017", "product_family": "bond", "intent": "compare", "question": "국내채권 \"BOND001\"과 \"BOND002\"의 매수수익률을 비교해줘", "expected_disposition": "execute", "expected_query_plan_intent": "compare"},
+    {"id": "pre-hcx-018", "product_family": "bond", "intent": "aggregate", "question": "현재 매수 가능한 국내채권이 몇 개인지 집계해줘", "expected_disposition": "execute", "expected_query_plan_intent": "aggregate"},
+    {"id": "pre-hcx-019", "product_family": "bond", "intent": "explain", "question": "종목코드 BOND001인 국내채권의 만기와 수익률을 설명해줘", "expected_disposition": "execute", "expected_query_plan_intent": "search"},
+    {"id": "pre-hcx-020", "product_family": "bond", "intent": "clarify", "question": "안전한 국내채권을 찾아줘", "expected_disposition": "clarify", "expected_query_plan_intent": null},
+    {"id": "pre-hcx-021", "product_family": "bond", "intent": "unsupported", "question": "가격이 오를 국내채권을 예측하고 매수 추천해줘", "expected_disposition": "unsupported", "expected_query_plan_intent": null},
+
+    {"id": "pre-hcx-022", "product_family": "fund", "intent": "search", "question": "해외 주식형 공모펀드를 3개월 수익률 높은 순으로 3개 보여줘", "expected_disposition": "execute", "expected_query_plan_intent": "search"},
+    {"id": "pre-hcx-023", "product_family": "fund", "intent": "detail", "question": "상품번호 KR0000000001인 공모펀드 상세 정보를 조회해줘", "expected_disposition": "execute", "expected_query_plan_intent": "search"},
+    {"id": "pre-hcx-024", "product_family": "fund", "intent": "compare", "question": "공모펀드 \"KR0000000001\"과 \"KR0000000002\"의 위험등급을 비교해줘", "expected_disposition": "execute", "expected_query_plan_intent": "compare"},
+    {"id": "pre-hcx-025", "product_family": "fund", "intent": "aggregate", "question": "판매 중인 공모펀드가 몇 개인지 집계해줘", "expected_disposition": "execute", "expected_query_plan_intent": "aggregate"},
+    {"id": "pre-hcx-026", "product_family": "fund", "intent": "explain", "question": "상품번호 KR0000000001인 공모펀드의 위험등급을 설명해줘", "expected_disposition": "execute", "expected_query_plan_intent": "search"},
+    {"id": "pre-hcx-027", "product_family": "fund", "intent": "clarify", "question": "괜찮은 공모펀드를 찾아줘", "expected_disposition": "clarify", "expected_query_plan_intent": null},
+    {"id": "pre-hcx-028", "product_family": "fund", "intent": "unsupported", "question": "다음 달 수익률이 가장 높을 공모펀드를 예측해줘", "expected_disposition": "unsupported", "expected_query_plan_intent": null}
+  ]
+}

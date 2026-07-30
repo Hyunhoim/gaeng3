@@ -13,13 +13,14 @@
 
 ## 2. 내부 diagnostic
 
-현재 정본인 `pre_hcx_route_diagnostic_28_v2.json`은 상품군·질의 유형 조합
+현재 정본인 `pre_hcx_route_diagnostic_28_v3.json`은 상품군·질의 유형 조합
 28개를 한 번씩 포함한다. AI 담당자가 현재 빈 구간을 찾기 위해 작성한 공개 세트이므로
 `internal_diagnostic_not_blind`로 고정하고 최종 blind 또는 일반화 성능으로
 부르지 않는다.
 
 - v1: AGGREGATE 미지원 시점의 기대 disposition을 봉인한 역사 기준선
-- v2: 네 상품군 AGGREGATE 실행 capability를 반영한 현재 회귀 기준선
+- v2: 네 상품군 AGGREGATE 실행 capability를 반영한 역사 기준선
+- v3: 네 상품군 AGGREGATE와 same-family COMPARE 실행 capability를 반영한 현재 기준선
 - 기존 봉인 파일은 수정하지 않고 suite·commitment·baseline을 새 버전으로 추가
 
 내부 diagnostic이 확인하는 항목:
@@ -30,15 +31,16 @@
 - 실행·역질문·미지원 disposition
 - 실행 가능한 경우 서버 QueryPlan intent
 
-v2 재현 결과:
+v3 재현 결과:
 
 - pre-router search 강제 replay: 4/28
 - 현재 Router: 28/28
 - suite SHA-256:
-  `ef35437ac3b9a02c2438ef664b49c339a631c249f53784b43fb2c1050d86e271`
+  `8bab9b0f4fd3e40782c591e2e3aea2f9d76b94a2d31d846d8b957604af0313b0`
 
-라우팅 진단은 AGGREGATE 질문이 실행 경로로 연결되는지만 확인한다. 실제 후보
-수·함수값·통화·결측·기준일은 네 상품군 집계 단위·통합 테스트에서 검증한다.
+라우팅 진단은 AGGREGATE·COMPARE 질문이 실행 경로로 연결되는지만 확인한다.
+실제 후보 수·함수값·비교값·통화·결측·기준일은 별도 단위·통합 테스트에서
+검증한다.
 
 ## 3. 독립 external blind
 

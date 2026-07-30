@@ -301,20 +301,30 @@ def load_manifest(connection: sqlite3.Connection) -> DatabaseManifest:
     return DatabaseManifest.model_validate(payload)
 
 
-def row_to_record(row: sqlite3.Row) -> NormalizedProductRecord:
+def row_to_record(
+    row: sqlite3.Row,
+    *,
+    include_source_values: bool = True,
+) -> NormalizedProductRecord:
     family = row["product_family"]
     if family == "bond":
         from finance_agent_core.storage.bond import row_to_bond_record
 
-        return row_to_bond_record(row)
+        return row_to_bond_record(row, include_source_values=include_source_values)
     if family == "domestic_etp":
         from finance_agent_core.storage.domestic_etp import row_to_domestic_etp_record
 
-        return row_to_domestic_etp_record(row)
+        return row_to_domestic_etp_record(
+            row,
+            include_source_values=include_source_values,
+        )
     if family == "fund":
         from finance_agent_core.storage.public_fund import row_to_public_fund_record
 
-        return row_to_public_fund_record(row)
+        return row_to_public_fund_record(
+            row,
+            include_source_values=include_source_values,
+        )
     if family != "overseas_etp":
         raise ValueError(f"unsupported normalized product family: {family}")
     return NormalizedOverseasEtpRecord(
@@ -324,7 +334,7 @@ def row_to_record(row: sqlite3.Row) -> NormalizedProductRecord:
         is_quarantined=bool(row["is_quarantined"]),
         quarantine_reason=row["quarantine_reason"],
         row_quality=QualityStatus(row["row_quality"]),
-        source_values=json.loads(row["source_values_json"]),
+        source_values=(json.loads(row["source_values_json"]) if include_source_values else {}),
         product_id=row["product_id"],
         product_type=row["product_type"],
         product_name=row["product_name"],
@@ -351,19 +361,30 @@ def row_to_record(row: sqlite3.Row) -> NormalizedProductRecord:
 
 def load_all_records(
     connection: sqlite3.Connection,
+    *,
+    include_source_values: bool = True,
 ) -> list[NormalizedProductRecord]:
     manifest = load_manifest(connection)
     if manifest.dataset == "bond":
         from finance_agent_core.storage.bond import load_all_bond_records
 
-        return load_all_bond_records(connection)
+        return load_all_bond_records(
+            connection,
+            include_source_values=include_source_values,
+        )
     if manifest.dataset == "domestic_etp":
         from finance_agent_core.storage.domestic_etp import load_all_domestic_etp_records
 
-        return load_all_domestic_etp_records(connection)
+        return load_all_domestic_etp_records(
+            connection,
+            include_source_values=include_source_values,
+        )
     if manifest.dataset == "fund":
         from finance_agent_core.storage.public_fund import load_all_public_fund_records
 
-        return load_all_public_fund_records(connection)
+        return load_all_public_fund_records(
+            connection,
+            include_source_values=include_source_values,
+        )
     rows = connection.execute("SELECT * FROM overseas_etp_products ORDER BY product_id").fetchall()
-    return [row_to_record(row) for row in rows]
+    return [row_to_record(row, include_source_values=include_source_values) for row in rows]

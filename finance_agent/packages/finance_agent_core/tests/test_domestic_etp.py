@@ -8,6 +8,10 @@ from finance_agent_core.agent.providers import (
 from finance_agent_core.config import QualityStatus
 from finance_agent_core.domain import DatabaseManifest, NormalizedDomesticEtpRecord
 from finance_agent_core.execution import ResultVerifier, SQLiteOracle, build_product_evidence
+from finance_agent_core.execution.verifier_projection import (
+    load_projected_verifier_records,
+    verifier_projection_fields,
+)
 from finance_agent_core.normalization import normalize_domestic_etp_row
 from finance_agent_core.storage import connect_read_only, load_all_records, load_manifest
 
@@ -114,3 +118,31 @@ def test_domestic_aggregate_groups_etf_and_etn(
         for item in result.aggregates
     ] == [("ETF", 6, 6), ("ETN", 1, 1)]
     assert "전체 후보의 85.71%" in result.answer
+
+
+def test_domestic_verifier_projection_matches_normalized_records(
+    domestic_sample_database: tuple[
+        Path,
+        list[NormalizedDomesticEtpRecord],
+        DatabaseManifest,
+    ],
+) -> None:
+    path, records, _ = domestic_sample_database
+    agent = RoutedFinanceAgent({"domestic_etp": path})
+    decision = agent.router.route(
+        "국내 ETP의 상품유형별 분포를 집계해줘",
+        "projection-domestic-001",
+    )
+    plan = agent.compiler.compile(decision)
+    projected = load_projected_verifier_records(path, plan)
+    expected = {record.product_id: record for record in records}
+
+    assert [record.product_id for record in projected] == sorted(expected)
+    for record in projected:
+        original = expected[record.product_id]
+        assert record.is_quarantined == original.is_quarantined
+        for field_name in verifier_projection_fields(plan):
+            assert record.canonical_value(field_name) == original.canonical_value(field_name)
+            assert (
+                record.row_level_quality(field_name)[0] == original.row_level_quality(field_name)[0]
+            )

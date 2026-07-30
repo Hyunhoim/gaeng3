@@ -17,7 +17,12 @@ from finance_agent_core.answering import (
 )
 from finance_agent_core.contracts import QueryPlan, RouteDecision, RouteDisposition
 from finance_agent_core.contracts.queryplan import Intent, ProductFamily
-from finance_agent_core.domain import AggregateEvidence, DatabaseManifest, ProductEvidence
+from finance_agent_core.domain import (
+    AggregateEvidence,
+    ComparisonEvidence,
+    DatabaseManifest,
+    ProductEvidence,
+)
 from finance_agent_core.execution import (
     AggregateResultVerifier,
     PlanExecutionBlockedError,
@@ -25,7 +30,8 @@ from finance_agent_core.execution import (
     SQLiteAggregateOracle,
     SQLiteOracle,
     build_aggregate_evidence,
-    build_fund_comparison,
+    build_comparison_evidence,
+    build_product_comparison,
     build_product_evidence,
     render_blocked_plan,
     render_verified_aggregation,
@@ -37,7 +43,13 @@ from finance_agent_core.execution import (
     require_internal_evaluation_comparison,
     require_internal_evaluation_search,
 )
-from finance_agent_core.storage import connect_read_only, load_all_records
+from finance_agent_core.execution.verifier_projection import (
+    load_projected_verifier_records,
+)
+from finance_agent_core.storage import (
+    ProductIdentitySnapshotCache,
+    RecordSnapshotCache,
+)
 
 
 class RoutedServiceModel(BaseModel):
@@ -54,6 +66,7 @@ class RoutedAgentResult(RoutedServiceModel):
     candidate_count: int | None
     products: list[ProductEvidence]
     aggregates: list[AggregateEvidence] = Field(default_factory=list)
+    comparisons: list[ComparisonEvidence] = Field(default_factory=list)
     warnings: list[str]
     source_manifest: DatabaseManifest | None
     answer_composition: AnswerComposition | None
@@ -73,6 +86,7 @@ class RoutedAgentResult(RoutedServiceModel):
             self.candidate_count is not None
             or self.products
             or self.aggregates
+            or self.comparisons
             or self.source_manifest is not None
             or self.answer_composition is not None
         ):
@@ -102,14 +116,32 @@ class RoutedFinanceAgent:
         router: IntentRouter | None = None,
         answer_provider: GroundedAnswerProvider | None = None,
         allow_internal_disabled_dataset: bool = False,
+        record_cache: RecordSnapshotCache | None = None,
+        identity_cache: ProductIdentitySnapshotCache | None = None,
     ) -> None:
         self.database_paths = {
             ProductFamily(key): Path(value) for key, value in database_paths.items()
         }
+        self.record_cache = record_cache or RecordSnapshotCache(
+            max_entries=max(1, len(self.database_paths))
+        )
+        self._record_cache_enabled = record_cache is not None
+        self.identity_cache = identity_cache or ProductIdentitySnapshotCache(
+            max_entries=max(1, len(self.database_paths))
+        )
         self.router = router or IntentRouter()
-        self.compiler = ServerQueryPlanCompiler(self.database_paths)
+        self.compiler = ServerQueryPlanCompiler(
+            self.database_paths,
+            record_cache=self.record_cache,
+            identity_cache=self.identity_cache,
+        )
         self.answer_provider = answer_provider
         self.allow_internal_disabled_dataset = allow_internal_disabled_dataset
+
+    def _record_universe(self, database_path: Path, plan: QueryPlan):
+        if self._record_cache_enabled:
+            return self.record_cache.get(database_path).records
+        return load_projected_verifier_records(database_path, plan)
 
     def answer(self, question: str, request_id: str) -> RoutedAgentResult:
         decision = self.router.route(question, request_id)
@@ -150,9 +182,8 @@ class RoutedFinanceAgent:
                 reason=f"{family.value} database path is not configured",
                 plan=plan,
             )
-        with connect_read_only(database_path) as connection:
-            universe = load_all_records(connection)
         if plan.intent is Intent.AGGREGATE:
+            universe = self._record_universe(database_path, plan)
             executed_aggregation = SQLiteAggregateOracle(database_path).execute(plan)
             verified_aggregation = AggregateResultVerifier().verify(
                 plan,
@@ -174,18 +205,24 @@ class RoutedFinanceAgent:
                 candidate_count=verified_aggregation.candidate_count,
                 products=[],
                 aggregates=aggregates,
+                comparisons=[],
                 warnings=warnings,
                 source_manifest=verified_aggregation.manifest,
                 answer_composition=None,
             )
         oracle = SQLiteOracle(database_path)
         executed = oracle.execute(plan)
+        universe = (
+            None if plan.intent is Intent.COMPARE else self._record_universe(database_path, plan)
+        )
         verified = ResultVerifier().verify(plan, executed, universe)
         products = build_product_evidence(plan, verified)
+        comparisons: list[ComparisonEvidence] = []
         if plan.intent is Intent.COMPARE:
-            comparison = build_fund_comparison(plan, verified, products)
+            comparison = build_product_comparison(plan, verified, products)
             verified = comparison.verified
             products = list(comparison.products)
+            comparisons = build_comparison_evidence(comparison)
         answer, warnings = render_verified_search(plan, verified, products)
         composition: AnswerComposition | None = None
         if self.answer_provider is not None:
@@ -206,6 +243,7 @@ class RoutedFinanceAgent:
             candidate_count=verified.candidate_count,
             products=products,
             aggregates=[],
+            comparisons=comparisons,
             warnings=warnings,
             source_manifest=verified.manifest,
             answer_composition=composition,
@@ -248,6 +286,7 @@ class RoutedFinanceAgent:
             candidate_count=None,
             products=[],
             aggregates=[],
+            comparisons=[],
             warnings=[],
             source_manifest=None,
             answer_composition=None,

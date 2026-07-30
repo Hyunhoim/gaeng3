@@ -14,7 +14,7 @@
 
 | 파일 | 책임 |
 | --- | --- |
-| [`field_registry.yaml`](../packages/finance_agent_core/src/finance_agent_core/config/field_registry.yaml) | 원천 매핑, 타입, 단위, enum, 연산자, coverage, sentinel, 비교 범위 |
+| [`field_registry.yaml`](../packages/finance_agent_core/src/finance_agent_core/config/field_registry.yaml) | 원천 매핑, 타입, 단위, enum, 연산자, coverage, sentinel, 비교 capability·범위 |
 | [`registry.py`](../packages/finance_agent_core/src/finance_agent_core/config/registry.py) | registry 자체의 구조·참조·capability 검증 |
 | [`queryplan.py`](../packages/finance_agent_core/src/finance_agent_core/contracts/queryplan.py) | 서버의 엄격한 QueryPlan 구조·의미 검증 |
 | [`queryplan.hcx.schema.json`](../packages/finance_agent_core/src/finance_agent_core/contracts/queryplan.hcx.schema.json) | HyperCLOVA X용 보수적 Structured Outputs schema template |
@@ -27,8 +27,18 @@
 | [`evaluation/answer_cli.py`](../packages/finance_agent_core/src/finance_agent_core/evaluation/answer_cli.py) | expected QueryPlan 기반 상품군별 답변 격리 회귀 평가 |
 | [`fund_resolver.py`](../packages/finance_agent_core/src/finance_agent_core/agent/fund_resolver.py) | 공모 범위의 `itm_no`·정식명·짧은 이름 exact resolution |
 | [`fund_comparison_parser.py`](../packages/finance_agent_core/src/finance_agent_core/agent/fund_comparison_parser.py) | 최소권한 자연어 비교 초안과 서버 검증 COMPARE QueryPlan |
+| [`product_comparison.py`](../packages/finance_agent_core/src/finance_agent_core/agent/product_comparison.py) | 해외·국내 ETP·국내채권 exact resolver와 비교 field compiler |
+| [`identity_cache.py`](../packages/finance_agent_core/src/finance_agent_core/storage/identity_cache.py) | DB 파일 변경을 감지하는 비교용 compact identity snapshot·bounded LRU |
+| [`record_cache.py`](../packages/finance_agent_core/src/finance_agent_core/storage/record_cache.py) | 명시적 opt-in 시 사용하는 SEARCH·AGGREGATE Python verifier용 전체 레코드 snapshot·bounded LRU |
+| [`sql_schema.py`](../packages/finance_agent_core/src/finance_agent_core/execution/sql_schema.py) | 네 상품군 canonical field와 SQLite 열·scale의 공통 실행 매핑 |
+| [`verification_types.py`](../packages/finance_agent_core/src/finance_agent_core/execution/verification_types.py) | 전체·경량 레코드가 함께 만족하는 최소 verifier Protocol |
+| [`verifier_projection.py`](../packages/finance_agent_core/src/finance_agent_core/execution/verifier_projection.py) | QueryPlan 조건·정렬·그룹·집계에 필요한 열만 읽는 기본 verifier universe |
+| [`comparison.py`](../packages/finance_agent_core/src/finance_agent_core/execution/comparison.py) | 공통 ProductComparison·ComparisonEvidence·ComparisonResultVerifier |
 | [`comparison_e2e_runner.py`](../packages/finance_agent_core/src/finance_agent_core/evaluation/comparison_e2e_runner.py) | 자연어 비교부터 검증 답변·안전 차단까지 공개 통합 회귀 |
 | [`comparison_e2e_cli.py`](../packages/finance_agent_core/src/finance_agent_core/evaluation/comparison_e2e_cli.py) | expected·개발 전용 로컬 provider 통합 E2E 실행 |
+| [`product_comparison_runner.py`](../packages/finance_agent_core/src/finance_agent_core/evaluation/product_comparison_runner.py) | 세 상품군 자연어 비교의 실제 DB·결정론적 답변·Backend 계약 공개 회귀 |
+| [`product_comparison_cli.py`](../packages/finance_agent_core/src/finance_agent_core/evaluation/product_comparison_cli.py) | DB·manifest hash 검증 후 30문항 공통 비교 실행 |
+| [`search_aggregate_benchmark.py`](../packages/finance_agent_core/src/finance_agent_core/evaluation/search_aggregate_benchmark.py) | 새 프로세스 8문항의 결과 지문·지연·RSS 회귀 |
 
 ## 2. 두 스키마를 분리하는 이유
 
@@ -50,6 +60,7 @@ HyperCLOVA X 공식 Structured Outputs 문서 기준으로 현재 이 기능은 
 - intent별 payload 검증
 - field별 타입·단위·enum·허용 연산자 검증
 - filter·sort·projection·aggregation capability 검증
+- COMPARE field의 `comparable`·`comparison_mode`·`comparison_scope` 검증
 - 아직 실행 승인되지 않은 상품군과 필드 거절
 
 ## 3. 해외 ETP registry의 근거
@@ -386,6 +397,8 @@ DETAIL과 EXPLAIN은 정확한 상품번호·종목코드가 서버 linker에서
 - 숫자·날짜·identity group 또는 허용되지 않은 `SUM`을 실행하는 변경
 - 통화 범위를 잠그지 않은 금액 집계와 결측을 0으로 대체하는 변경
 - AggregateResultVerifier가 후보 수·그룹·값·유효/제외 개수 변조를 놓치는 변경
+- 공통 COMPARE가 요청 상품·필드 순서, field status·delta 또는 Backend
+  comparison citation을 바꾸는 변경
 
 ## 9. 연결 상태와 다음 순서
 

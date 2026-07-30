@@ -17,9 +17,9 @@ from finance_agent_core.contracts.routing import (
     RouteDisposition,
 )
 
-DIAGNOSTIC_SUITE_ID = "pre-hcx-route-diagnostic-28-v2"
+DIAGNOSTIC_SUITE_ID = "pre-hcx-route-diagnostic-28-v3"
 DIAGNOSTIC_CASE_COUNT = 28
-DIAGNOSTIC_SUITE_PATTERN = r"^pre-hcx-route-diagnostic-28(?:-v2)?$"
+DIAGNOSTIC_SUITE_PATTERN = r"^pre-hcx-route-diagnostic-28(?:-v[23])?$"
 
 
 class DiagnosticModel(BaseModel):
@@ -47,7 +47,7 @@ class DiagnosticCase(DiagnosticModel):
 class DiagnosticSuite(DiagnosticModel):
     schema_version: Literal["1.0"]
     suite_id: str = Field(pattern=DIAGNOSTIC_SUITE_PATTERN)
-    suite_version: Literal["1.0", "2.0"]
+    suite_version: Literal["1.0", "2.0", "3.0"]
     status: Literal["internal_diagnostic_not_blind"]
     author_role: Literal["ai_engineering"]
     cases: list[DiagnosticCase] = Field(
@@ -57,7 +57,10 @@ class DiagnosticSuite(DiagnosticModel):
 
     @model_validator(mode="after")
     def validate_coverage(self) -> DiagnosticSuite:
-        expected_version = "2.0" if self.suite_id == "pre-hcx-route-diagnostic-28-v2" else "1.0"
+        expected_version = {
+            "pre-hcx-route-diagnostic-28-v3": "3.0",
+            "pre-hcx-route-diagnostic-28-v2": "2.0",
+        }.get(self.suite_id, "1.0")
         if self.suite_version != expected_version:
             raise ValueError("diagnostic suite id and version differ")
         expected_ids = [f"pre-hcx-{index:03d}" for index in range(1, 29)]
@@ -123,7 +126,7 @@ def sha256_path(path: Path) -> str:
 
 def load_diagnostic_suite() -> tuple[DiagnosticSuite, str]:
     resource = files("finance_agent_core.evaluation.suites").joinpath(
-        "pre_hcx_route_diagnostic_28_v2.json"
+        "pre_hcx_route_diagnostic_28_v3.json"
     )
     raw = resource.read_bytes()
     return DiagnosticSuite.model_validate(json.loads(raw)), hashlib.sha256(raw).hexdigest()

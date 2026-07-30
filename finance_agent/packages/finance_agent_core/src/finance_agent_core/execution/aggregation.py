@@ -11,9 +11,9 @@ from finance_agent_core.domain import (
     AggregateGroup,
     AggregateGroupKey,
     AggregateMetric,
-    NormalizedProductRecord,
     VerifiedAggregation,
 )
+from finance_agent_core.execution.verification_types import VerifierRecord
 
 _EXCLUDED_QUALITIES = {
     QualityStatus.UNKNOWN,
@@ -24,7 +24,7 @@ _AVERAGE_QUANTUM = Decimal("0.000000000001")
 
 
 def _field_quality(
-    record: NormalizedProductRecord,
+    record: VerifierRecord,
     field_name: str,
 ) -> tuple[QualityStatus, str | None]:
     override, reason = record.row_level_quality(field_name)
@@ -40,7 +40,7 @@ def _field_quality(
 
 
 def _field_as_of(
-    record: NormalizedProductRecord,
+    record: VerifierRecord,
     field_name: str,
 ) -> date:
     definition = load_field_registry().require_field(field_name, [record.product_family])
@@ -52,7 +52,7 @@ def _field_as_of(
 
 
 def _usable_value(
-    record: NormalizedProductRecord,
+    record: VerifierRecord,
     field_name: str,
 ) -> object | None:
     quality, _ = _field_quality(record, field_name)
@@ -99,14 +99,14 @@ def _average(values: list[Decimal]) -> Decimal:
 
 
 def _group_key(
-    record: NormalizedProductRecord,
+    record: VerifierRecord,
     fields: list[str],
 ) -> tuple[str | int | bool | None, ...]:
     return tuple(_evidence_scalar(_usable_value(record, field)) for field in fields)
 
 
 def _group_sort_key(
-    item: tuple[tuple[str | int | bool | None, ...], list[NormalizedProductRecord]],
+    item: tuple[tuple[str | int | bool | None, ...], list[VerifierRecord]],
 ) -> tuple[object, ...]:
     key, records = item
     rendered = tuple(
@@ -119,8 +119,8 @@ def _group_sort_key(
 def _aggregate_quality(
     *,
     field_name: str,
-    records: list[NormalizedProductRecord],
-    valid_records: list[NormalizedProductRecord],
+    records: list[VerifierRecord],
+    valid_records: list[VerifierRecord],
 ) -> tuple[QualityStatus, str | None]:
     if not valid_records:
         return QualityStatus.UNKNOWN, "all_values_missing_or_unusable"
@@ -144,7 +144,7 @@ def _aggregate_quality(
 
 def _metric(
     plan: QueryPlan,
-    records: list[NormalizedProductRecord],
+    records: list[VerifierRecord],
     *,
     function: AggregateFunction,
     field_name: str,
@@ -207,7 +207,7 @@ def _metric(
 
 def aggregate_records(
     plan: QueryPlan,
-    records: Iterable[NormalizedProductRecord],
+    records: Iterable[VerifierRecord],
 ) -> tuple[int, list[AggregateGroup]]:
     """Reduce already-filtered rows using exact Decimal arithmetic.
 
@@ -221,7 +221,7 @@ def aggregate_records(
         return 0, []
     grouped: dict[
         tuple[str | int | bool | None, ...],
-        list[NormalizedProductRecord],
+        list[VerifierRecord],
     ] = {}
     group_fields = plan.intent_payload.group_by
     for record in selected:

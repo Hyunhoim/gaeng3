@@ -143,6 +143,7 @@ fields:
     aliases: [ETF 여부, ETF 또는 ETN, product type]
     datasets: [overseas_etp, domestic_etp]
     value_type: enum
+    comparable: true
     unit: code
     source:
       dataset: overseas_etp
@@ -165,6 +166,7 @@ fields:
     aliases: [종목명, 펀드명, name]
     datasets: [overseas_etp, domestic_etp, bond, fund]
     value_type: string
+    comparable: true
     source:
       dataset: overseas_etp
       columns: [pd_nm]
@@ -200,6 +202,7 @@ fields:
     aliases: [거래소, exchange]
     datasets: [overseas_etp, domestic_etp]
     value_type: enum
+    comparable: true
     unit: code
     source:
       dataset: overseas_etp
@@ -272,6 +275,7 @@ fields:
     aliases: [판매 여부, sale status]
     datasets: [overseas_etp, domestic_etp, fund]
     value_type: boolean
+    comparable: true
     unit: boolean
     source:
       dataset: overseas_etp
@@ -314,6 +318,7 @@ fields:
     aliases: [거래 가능 여부, 거래 정지, trading status]
     datasets: [overseas_etp, domestic_etp]
     value_type: boolean
+    comparable: true
     unit: boolean
     source:
       dataset: overseas_etp
@@ -345,6 +350,7 @@ fields:
     aliases: [자산군, 기초 자산, asset class]
     datasets: [overseas_etp, domestic_etp]
     value_type: enum
+    comparable: true
     unit: code
     source:
       dataset: overseas_etp
@@ -383,6 +389,7 @@ fields:
     aliases: [지역, 국가, investment region]
     datasets: [overseas_etp, domestic_etp, fund]
     value_type: enum
+    comparable: true
     unit: code
     source:
       dataset: overseas_etp
@@ -484,6 +491,8 @@ fields:
     aliases: [총보수, 보수율, expense ratio, fee]
     datasets: [overseas_etp, domestic_etp]
     value_type: number
+    comparable: true
+    comparison_mode: numeric_delta
     unit: pct_point
     source:
       dataset: overseas_etp
@@ -513,6 +522,8 @@ fields:
     aliases: [순자산, 운용 자산, assets under management]
     datasets: [overseas_etp, domestic_etp, fund]
     value_type: number
+    comparable: true
+    comparison_mode: numeric_delta
     unit: source_currency_amount
     source:
       dataset: overseas_etp
@@ -557,6 +568,7 @@ fields:
     aliases: [통화, currency]
     datasets: [overseas_etp, domestic_etp, bond, fund]
     value_type: enum
+    comparable: true
     unit: code
     source:
       dataset: overseas_etp
@@ -711,6 +723,8 @@ fields:
         selectable: true
         sortable: true
         aggregatable: true
+        comparable: true
+        comparison_mode: numeric_delta
         allowed_operators: [eq, lt, lte, gt, gte, between]
         as_of_basis: dynamic
         notes: 격리 행 제외 1,562행에 실측 변동값이 있어 검색·정렬에 사용하되 결측은 UNKNOWN이다.
@@ -720,6 +734,7 @@ fields:
     aliases: [약어명, 단축 상품명, short name]
     datasets: [domestic_etp, bond, fund]
     value_type: string
+    comparable: true
     source:
       dataset: domestic_etp
       columns: [pd_abrv_nm]
@@ -750,6 +765,7 @@ fields:
     aliases: [자산운용사, 발행사, manager]
     datasets: [domestic_etp]
     value_type: string
+    comparable: true
     source:
       dataset: domestic_etp
       columns: [cu_fund_mgmt_co]
@@ -765,6 +781,7 @@ fields:
     aliases: [추종 지수, benchmark, base index]
     datasets: [domestic_etp, fund]
     value_type: string
+    comparable: true
     source:
       dataset: domestic_etp
       columns: [cu_base_index]
@@ -783,6 +800,8 @@ fields:
         queryable: false
         sortable: false
         aggregatable: false
+        comparable: false
+        comparison_mode: value_only
         allowed_operators: []
         notes: 형식상 모두 존재하지만 placeholder와 의미 품질을 확인하지 못해 표시 전용으로 보존한다.
 
@@ -791,6 +810,7 @@ fields:
     aliases: [복제 방식, strategy]
     datasets: [domestic_etp]
     value_type: enum
+    comparable: true
     unit: code
     source:
       dataset: domestic_etp
@@ -807,6 +827,8 @@ fields:
     aliases: [배수, 레버리지, leverage factor]
     datasets: [domestic_etp]
     value_type: number
+    comparable: true
+    comparison_mode: numeric_delta
     unit: none
     source:
       dataset: domestic_etp
@@ -824,6 +846,7 @@ fields:
     aliases: [위험등급, 위험도, risk level]
     datasets: [domestic_etp, fund]
     value_type: enum
+    comparable: true
     unit: code
     source:
       dataset: domestic_etp
@@ -881,6 +904,7 @@ fields:
     aliases: [미래에셋 판매 여부, 당사판매, company sellable]
     datasets: [fund]
     value_type: boolean
+    comparable: true
     unit: boolean
     source:
       dataset: fund
@@ -900,6 +924,7 @@ fields:
     aliases: [환헤지, currency hedged]
     datasets: [fund]
     value_type: boolean
+    comparable: true
     unit: boolean
     source:
       dataset: fund
@@ -919,6 +944,7 @@ fields:
     aliases: [펀드 유형, 운용 속성, fund management attribute]
     datasets: [fund]
     value_type: enum
+    comparable: true
     unit: code
     source:
       dataset: fund
@@ -937,6 +963,7 @@ fields:
     aliases: [국내외 구분, 해외펀드 여부, fund geography]
     datasets: [fund]
     value_type: enum
+    comparable: true
     unit: code
     source:
       dataset: fund
@@ -953,6 +980,7 @@ fields:
     aliases: [개인 법인 구분, 투자자 유형, investor type]
     datasets: [fund]
     value_type: enum
+    comparable: true
     unit: code
     source:
       dataset: fund
@@ -969,6 +997,7 @@ fields:
     aliases: [연금 가능, 연금계좌 거래, pension eligible]
     datasets: [domestic_etp]
     value_type: boolean
+    comparable: true
     unit: boolean
     source:
       dataset: domestic_etp
@@ -988,6 +1017,7 @@ fields:
     aliases: [핵심 ETF, core ETF]
     datasets: [domestic_etp]
     value_type: boolean
+    comparable: true
     unit: boolean
     source:
       dataset: domestic_etp
@@ -1007,6 +1037,9 @@ fields:
     aliases: [마감 가격, close price]
     datasets: [domestic_etp]
     value_type: number
+    comparable: true
+    comparison_mode: numeric_delta
+    comparison_scope: same_trading_currency
     unit: source_currency_amount
     source:
       dataset: domestic_etp
@@ -1027,6 +1060,8 @@ fields:
     aliases: [월간 수익률, 1M 수익률, one month return]
     datasets: [domestic_etp, fund]
     value_type: number
+    comparable: true
+    comparison_mode: numeric_delta
     unit: pct_point
     source:
       dataset: domestic_etp
@@ -1054,6 +1089,8 @@ fields:
     aliases: [3M 수익률, three month return]
     datasets: [domestic_etp, fund]
     value_type: number
+    comparable: true
+    comparison_mode: numeric_delta
     unit: pct_point
     source:
       dataset: domestic_etp
@@ -1081,6 +1118,8 @@ fields:
     aliases: [6M 수익률, six month return]
     datasets: [domestic_etp, fund]
     value_type: number
+    comparable: true
+    comparison_mode: numeric_delta
     unit: pct_point
     source:
       dataset: domestic_etp
@@ -1108,6 +1147,8 @@ fields:
     aliases: [연간 수익률, 1Y 수익률, one year return]
     datasets: [domestic_etp, fund]
     value_type: number
+    comparable: true
+    comparison_mode: numeric_delta
     unit: pct_point
     source:
       dataset: domestic_etp
@@ -1130,6 +1171,8 @@ fields:
         queryable: false
         sortable: false
         aggregatable: false
+        comparable: false
+        comparison_mode: value_only
         allowed_operators: []
         as_of_basis: snapshot
         notes: 7,017개에 존재하지만 500% 초과 값 15개와 최대 975.10이 관측되어 공식 산식 확인 전 표시 전용으로 제한한다.
@@ -1139,6 +1182,8 @@ fields:
     aliases: [YTD 수익률, 연초대비 수익률]
     datasets: [domestic_etp]
     value_type: number
+    comparable: true
+    comparison_mode: numeric_delta
     unit: pct_point
     source:
       dataset: domestic_etp
@@ -1157,6 +1202,9 @@ fields:
     aliases: [거래대금, 일간 거래대금, daily trading value]
     datasets: [domestic_etp]
     value_type: number
+    comparable: true
+    comparison_mode: numeric_delta
+    comparison_scope: same_trading_currency
     unit: source_currency_amount
     source:
       dataset: domestic_etp
@@ -1175,6 +1223,8 @@ fields:
     aliases: [주간 수익률, 1W 수익률, one week return]
     datasets: [fund]
     value_type: number
+    comparable: true
+    comparison_mode: numeric_delta
     unit: pct_point
     source:
       dataset: fund
@@ -1265,6 +1315,7 @@ fields:
     aliases: [장내외 구분, 거래시장, bond market]
     datasets: [bond]
     value_type: enum
+    comparable: true
     unit: code
     source:
       dataset: bond
@@ -1281,6 +1332,7 @@ fields:
     aliases: [발행사, 발행자, issuer]
     datasets: [bond]
     value_type: string
+    comparable: true
     source:
       dataset: bond
       columns: [PD_PBCM]
@@ -1296,6 +1348,7 @@ fields:
     aliases: [채권 분류, 대분류]
     datasets: [bond]
     value_type: enum
+    comparable: true
     unit: code
     source:
       dataset: bond
@@ -1312,6 +1365,7 @@ fields:
     aliases: [소분류, bond subclass]
     datasets: [bond]
     value_type: enum
+    comparable: true
     unit: code
     source:
       dataset: bond
@@ -1331,6 +1385,7 @@ fields:
     aliases: [채종, 채권유형, bond type]
     datasets: [bond]
     value_type: string
+    comparable: true
     unit: code
     source:
       dataset: bond
@@ -1347,6 +1402,8 @@ fields:
     aliases: [발행금액, 발행 잔액, issue amount]
     datasets: [bond]
     value_type: number
+    comparable: true
+    comparison_mode: numeric_delta
     unit: source_currency_amount
     source:
       dataset: bond
@@ -1365,6 +1422,7 @@ fields:
     aliases: [채권 발행일, issue date]
     datasets: [bond]
     value_type: date
+    comparable: true
     unit: date
     source:
       dataset: bond
@@ -1381,6 +1439,7 @@ fields:
     aliases: [상환일, maturity date]
     datasets: [bond]
     value_type: date
+    comparable: true
     unit: date
     source:
       dataset: bond
@@ -1397,6 +1456,8 @@ fields:
     aliases: [쿠폰금리, 표면금리, coupon rate]
     datasets: [bond]
     value_type: number
+    comparable: true
+    comparison_mode: numeric_delta
     unit: pct_point
     source:
       dataset: bond
@@ -1414,6 +1475,7 @@ fields:
     aliases: [채권등급, credit rating]
     datasets: [bond]
     value_type: enum
+    comparable: true
     unit: code
     source:
       dataset: bond
@@ -1432,6 +1494,7 @@ fields:
     aliases: [위험등급코드, risk code]
     datasets: [bond]
     value_type: enum
+    comparable: true
     unit: code
     source:
       dataset: bond
@@ -1448,6 +1511,8 @@ fields:
     aliases: [매수 수익률, 세전 매수수익률, buy yield]
     datasets: [bond]
     value_type: number
+    comparable: true
+    comparison_mode: numeric_delta
     unit: pct_point
     source:
       dataset: bond
@@ -1466,6 +1531,8 @@ fields:
     aliases: [세후 수익률, after-tax yield]
     datasets: [bond]
     value_type: number
+    comparable: true
+    comparison_mode: numeric_delta
     unit: pct_point
     source:
       dataset: bond
@@ -1484,6 +1551,8 @@ fields:
     aliases: [매수 가능 수량, 주문가능수량, buyable quantity]
     datasets: [bond]
     value_type: number
+    comparable: true
+    comparison_mode: numeric_delta
     unit: source_quantity
     source:
       dataset: bond
@@ -1502,6 +1571,7 @@ fields:
     aliases: [매수 가능, 현재 매수 가능, available to buy]
     datasets: [bond]
     value_type: boolean
+    comparable: true
     unit: boolean
     source:
       dataset: bond
@@ -1519,6 +1589,8 @@ fields:
     aliases: [잔존일, 만기까지 남은 일수, remaining days]
     datasets: [bond]
     value_type: number
+    comparable: true
+    comparison_mode: numeric_delta
     unit: day
     source:
       dataset: bond
@@ -1538,6 +1610,8 @@ fields:
     aliases: [수정 듀레이션, duration]
     datasets: [bond]
     value_type: number
+    comparable: true
+    comparison_mode: numeric_delta
     unit: year
     source:
       dataset: bond

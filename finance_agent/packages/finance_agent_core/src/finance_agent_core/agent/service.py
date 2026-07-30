@@ -13,13 +13,16 @@ from finance_agent_core.domain import AgentResponse
 from finance_agent_core.execution import (
     ResultVerifier,
     SQLiteOracle,
-    build_fund_comparison,
+    build_product_comparison,
     build_product_evidence,
     render_verified_search,
     require_executable_comparison,
     require_executable_search,
 )
-from finance_agent_core.storage import connect_read_only, load_all_records
+from finance_agent_core.execution.verifier_projection import (
+    load_projected_verifier_records,
+)
+from finance_agent_core.storage import RecordSnapshotCache
 
 
 class FinanceAgent:
@@ -28,10 +31,13 @@ class FinanceAgent:
         database_path: str | Path,
         provider: QueryPlanProvider,
         answer_provider: GroundedAnswerProvider | None = None,
+        record_cache: RecordSnapshotCache | None = None,
     ) -> None:
         self.database_path = Path(database_path)
         self.provider = provider
         self.answer_provider = answer_provider
+        self.record_cache = record_cache or RecordSnapshotCache(max_entries=1)
+        self._record_cache_enabled = record_cache is not None
         self.oracle = SQLiteOracle(self.database_path)
         self.verifier = ResultVerifier()
 
@@ -56,12 +62,19 @@ class FinanceAgent:
         else:
             require_executable_search(plan)
         executed = self.oracle.execute(plan)
-        with connect_read_only(self.database_path) as connection:
-            universe = load_all_records(connection)
+        universe = (
+            None
+            if plan.intent is Intent.COMPARE
+            else (
+                self.record_cache.get(self.database_path).records
+                if self._record_cache_enabled
+                else load_projected_verifier_records(self.database_path, plan)
+            )
+        )
         verified = self.verifier.verify(plan, executed, universe)
         products = build_product_evidence(plan, verified)
         if plan.intent is Intent.COMPARE:
-            comparison = build_fund_comparison(plan, verified, products)
+            comparison = build_product_comparison(plan, verified, products)
             verified = comparison.verified
             products = list(comparison.products)
         answer, warnings = render_verified_search(plan, verified, products)

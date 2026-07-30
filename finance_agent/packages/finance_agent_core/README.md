@@ -19,6 +19,10 @@ Backend DTO와 사람 평가 rubric은 별도 계약으로 제공한다.
 group, 금액 통화 gate, 결측·기준일 보존, 별도 Python verifier와
 `AggregateEvidence`까지 구현했다. 집계 답변은 현재 LLM 없이 결정론적으로
 컴파일한다.
+네 상품군 공통 COMPARE는 같은 상품군의 정확한 두 상품만 받아 field
+`comparable` capability, 통화·기준일·stale·결측 정책을 적용한다.
+`ComparisonEvidence`와 별도 `ComparisonResultVerifier`, Backend
+`comparison_field` citation까지 연결했다.
 최종 답변은 evidence만 입력받는 최소권한 GroundedAnswerDraft, draft·compiled
 Answer Verifier, 결정론적 evidence compiler와 safe fallback으로 구성한다.
 공식 Agent 실행은 HCX schema·서버 계약 승인 전까지 비활성화 상태다.
@@ -63,6 +67,7 @@ Answer Verifier, 결정론적 evidence compiler와 safe fallback으로 구성한
 - [공모펀드 계약](../../docs/public-fund-contract.md): product grain, capability, 품질 규칙, 실행 승인 조건
 - [문서 RAG 계약](../../docs/document-rag.md): 승인 문서 BM25/SQLite FTS 검색
 - [공통 AGGREGATE 계약](../../docs/aggregate-engine.md): 함수·그룹·통화·결측·근거
+- [공통 COMPARE 계약](../../docs/comparison-engine-design.md): exact identity·필드·통화·기준일·stale
 - [사람 평가 rubric](../../docs/human-evaluation.md): 독립 reviewer·critical gate
 
 ## 상품군 vertical slice
@@ -246,6 +251,40 @@ provenance fingerprint를 별도로 동결한다. 상품명은 정확한 인용 
 질문의 전체 대상 순서까지 일치해야 한다. 이는 공개 회귀 세트의 통합 배선
 검증이며 AI 담당자와 분리된 작성자의 독립 blind E2E, 사람의 생성 품질 rubric,
 공식 HyperCLOVA X 재현은 다음 단계다.
+
+해외 ETP·국내 ETP·국내채권의 공통 자연어 COMPARE 경로는 별도의 결정론적
+30문항 회귀로 평가한다.
+
+```bash
+/home/haeyeongcho/miniforge3/envs/gaeng3-dev/bin/python \
+  -m finance_agent_core.evaluation.product_comparison_cli \
+  --workers 3 \
+  --require-perfect
+```
+
+설치된 console script는 `finance-evaluate-product-compare`다. 실행 18문항과
+안전 차단 12문항이 모두 통과하며 QueryPlan, 상품·필드 순서, field status,
+numeric delta, 답변 필수 문구와 Backend comparison citation을 함께 검사한다.
+기존 공모펀드 24문항과 합친 공개 자연어 비교 범위는 54문항이다.
+COMPARE resolver는 전체 정규화 레코드 대신 최소 identity 열만 bounded
+process-local cache에 보관한다. DB 파일 버전이 달라지면 자동 무효화하며,
+30문항 report에는 identity/full-record cache hit·miss·load와 latency가 함께
+기록된다. 현재 3 workers 기준 p50은 65.522ms, p95는 954.670ms이고 비교
+경로의 full-record cache load는 0회다.
+
+SEARCH·AGGREGATE verifier도 기본 실행에서는 전체 정규화 Pydantic 레코드를
+적재하지 않는다. QueryPlan의 조건·정렬·그룹·집계 필드와 품질·기준일만
+projection으로 읽어 독립 재검산한다. 네 상품군 실제 데이터 8문항의 결과
+지문·지연·RSS를 함께 재현하려면 다음을 실행한다.
+
+```bash
+/home/haeyeongcho/miniforge3/envs/gaeng3-dev/bin/python \
+  -m finance_agent_core.evaluation.search_aggregate_benchmark_cli \
+  --require-perfect
+```
+
+설치된 console script는 `finance-benchmark-search-aggregate`다. 이 평가는 공개된
+고정 문항의 회귀·개발 장비 성능 기준선이며 독립 blind나 운영 SLO가 아니다.
 
 ## 검증
 

@@ -30,13 +30,13 @@ Pydantic request·response 계약이다. FastAPI route나 Next.js 타입은 이 
 
 | status | 의미 | 주요 UI 동작 |
 | --- | --- | --- |
-| `success` | 상품·집계 또는 문서 evidence가 있는 정상 답변 | 답변·상품·집계·근거 표시 |
+| `success` | 상품·비교·집계 또는 문서 evidence가 있는 정상 답변 | 답변·상품·비교·집계·근거 표시 |
 | `clarification` | 상품군·식별자·수치 기준이 부족 | required field 입력 요청 |
 | `unsupported` | 예측·추천 또는 미구현 연산 | 안전 사유와 지원 질문 예시 표시 |
 | `not_found` | 잠긴 조건에서 결과 0건 | 조건 자동 완화 없이 수정 유도 |
 | `error` | 시스템 오류 | error code와 retryable에 따라 처리 |
 
-응답은 원래 intent, 상품군, 서버 QueryPlan, 후보 수, 상품·집계·문서 evidence,
+응답은 원래 intent, 상품군, 서버 QueryPlan, 후보 수, 상품·비교·집계·문서 evidence,
 구조화 citation, 기준일, warning, 답변 mode와 fallback 여부를 분리해 제공한다.
 
 ## 4. 근거와 fallback
@@ -44,6 +44,11 @@ Pydantic request·response 계약이다. FastAPI route나 Next.js 타입은 이 
 상품 citation은 `product_id:canonical_field` evidence를 원천 dataset·row·column·
 기준일에 연결한다. 문서 citation은 document·chunk ID, source URI와 기준일에
 연결한다.
+
+비교 citation의 `kind`는 `comparison_field`다. `comparisons` 배열은 요청 순서의
+두 상품 값·품질·통화·기준일·원천 위치, field status와
+`second_minus_first` 차이를 분리해 제공한다. 차이가 차단돼도 두 원천값과
+차단 사유는 보존한다.
 
 집계 citation의 `kind`는 `aggregate_field`다. `aggregates` 배열의
 `AggregateEvidence`와 다음을 연결한다.
@@ -74,6 +79,10 @@ package에 다음 예시를 포함하고 contract test에서 매번 검증한다
 - `backend_clarification_response_v1.json`
 - `backend_document_response_v1.json`
 - `backend_aggregate_response_v1.json`
+
+COMPARE 응답은 같은 schema의 `comparisons`와 `comparison_field` citation으로
+전달한다. `product-compare-core-30` 공개 회귀가 실행·차단 30문항에서
+Backend response 검증과 비교 citation 수를 함께 확인한다.
 
 실제 FastAPI adapter가 추가되면 JSON Schema에서 OpenAPI·TypeScript 타입을
 생성하거나 동일 필드를 수동 매핑할 수 있다. adapter는 DTO 필드를 삭제·재해석하지

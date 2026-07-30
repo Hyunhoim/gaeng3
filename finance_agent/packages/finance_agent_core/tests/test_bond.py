@@ -6,6 +6,10 @@ from finance_agent_core.agent.providers import BondMockProvider, bond_vertical_s
 from finance_agent_core.config import QualityStatus
 from finance_agent_core.domain import DatabaseManifest, NormalizedBondRecord
 from finance_agent_core.execution import ResultVerifier, SQLiteOracle, build_product_evidence
+from finance_agent_core.execution.verifier_projection import (
+    load_projected_verifier_records,
+    verifier_projection_fields,
+)
 from finance_agent_core.normalization import normalize_bond_row
 from finance_agent_core.storage import connect_read_only, load_all_records, write_bond_database
 
@@ -188,6 +192,27 @@ def test_bond_aggregate_uses_only_currently_buyable_yields(tmp_path: Path) -> No
     assert "137일 오래되었습니다" in result.answer
 
 
+def test_bond_verifier_projection_matches_normalized_records(tmp_path: Path) -> None:
+    path, records = make_bond_database(tmp_path)
+    agent = RoutedFinanceAgent({"bond": path})
+    decision = agent.router.route(
+        "현재 매수 가능한 국내채권의 매수수익률 평균과 최댓값을 집계해줘",
+        "projection-bond-001",
+    )
+    plan = agent.compiler.compile(decision)
+    projected = load_projected_verifier_records(path, plan)
+    expected = {record.product_id: record for record in records}
+
+    assert [record.product_id for record in projected] == sorted(expected)
+    for record in projected:
+        original = expected[record.product_id]
+        for field_name in verifier_projection_fields(plan):
+            assert record.canonical_value(field_name) == original.canonical_value(field_name)
+            assert (
+                record.row_level_quality(field_name)[0] == original.row_level_quality(field_name)[0]
+            )
+
+
 def test_bond_amount_aggregate_requires_currency_scope(tmp_path: Path) -> None:
     path, _ = make_bond_database(tmp_path)
     agent = RoutedFinanceAgent({"bond": path})
@@ -206,3 +231,29 @@ def test_bond_amount_aggregate_requires_currency_scope(tmp_path: Path) -> None:
     assert executed.status == "executed"
     assert executed.aggregates[0].value == "6000000000"
     assert "KRW" in executed.answer
+
+
+def test_bond_comparison_runs_through_common_engine(tmp_path: Path) -> None:
+    path, _ = make_bond_database(tmp_path)
+    result = RoutedFinanceAgent({"bond": path}).answer(
+        "국내채권 KRTEST000002와 KRTEST000001의 매수수익률과 매수가능수량, 신용등급을 비교해줘",
+        "compare-bond-001",
+    )
+
+    assert result.status == "executed"
+    assert [product.product_id for product in result.products] == [
+        "KRTEST000002",
+        "KRTEST000001",
+    ]
+    assert [item.canonical_field for item in result.comparisons] == [
+        "buy_yield_pct",
+        "buyable_quantity",
+        "credit_rating",
+    ]
+    assert [item.status for item in result.comparisons] == [
+        "stale_input",
+        "stale_input",
+        "value_only",
+    ]
+    assert [item.delta for item in result.comparisons] == ["1.0", "-100", None]
+    assert "137일 오래되었습니다" in result.answer

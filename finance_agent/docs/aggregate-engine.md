@@ -115,7 +115,9 @@ AUM별로 상품 수를 알려줘
 적용한 후보 행을 고른다. 실제 수치 축약은 SQLite 부동소수점 오차와 정수
 overflow를 피하기 위해 Python `Decimal`로 수행한다.
 
-`AggregateResultVerifier`는 전체 정규화 레코드에서 다음을 별도로 재계산한다.
+`AggregateResultVerifier`는 QueryPlan의 조건·그룹·집계 필드와 품질·기준일만
+별도 SQL projection으로 읽어 다음을 Python에서 재계산한다. 기본 경로에서는
+전체 정규화 Pydantic 레코드와 원천값 사전을 메모리에 올리지 않는다.
 
 - locked constraint를 만족하는 후보 수
 - 전체 그룹 수와 반환 그룹 순서
@@ -126,6 +128,10 @@ overflow를 피하기 위해 Python `Decimal`로 수행한다.
 
 후보 수, 그룹, metric 중 하나라도 실행 결과와 다르면 답변을 만들지 않고
 `ResultVerificationError`로 종료한다.
+
+네 상품군 SEARCH·AGGREGATE의 projected record 동등성과 변조 탐지, 실제 데이터
+성능 결과는 [SEARCH·AGGREGATE 성능 기준선](evaluation-search-aggregate-performance.md)에
+고정한다.
 
 ## 8. AggregateEvidence와 Backend DTO
 
@@ -166,4 +172,5 @@ Backend 응답의 `aggregates` 배열과 `aggregate_field` citation으로 전달
 - 라우팅 진단 v2: 도입 전 replay 4/28, 현재 Router 28/28
 
 라우팅 v1 진단은 AGGREGATE 미지원 시점의 봉인 이력으로 유지한다. 현재 회귀
-정본은 `pre_hcx_route_diagnostic_28_v2.json`과 v2 baseline이다.
+AGGREGATE 최초 활성화 이력은 `pre_hcx_route_diagnostic_28_v2.json`과 v2
+baseline에 보존한다. 현재 capability 정본은 공통 COMPARE까지 포함한 v3다.

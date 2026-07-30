@@ -65,10 +65,10 @@ def test_capability_matrix_rejects_oracle_overclaim() -> None:
     entry.update(
         status="executable",
         query_plan_intent="compare",
-        oracle_mode="fund_compare",
+        oracle_mode="search",
     )
 
-    with pytest.raises(ValidationError, match="exceeds the Oracle policy"):
+    with pytest.raises(ValidationError, match="requires compare Oracle mode"):
         CapabilityMatrix.model_validate(payload)
 
 

@@ -1,0 +1,13 @@
+{
+  "protocol_version": "1.0",
+  "suite_id": "product-compare-core-30",
+  "suite_version": "1.0",
+  "status": "sealed_public_regression_not_blind",
+  "suite_sha256": "7eec27471f2dbd218b0ed056f03b02ef69aed6b283055d72d98ff7d423e411ee",
+  "case_count": 30,
+  "executable_cases": 18,
+  "control_cases": 12,
+  "created_at_utc": "2026-07-30T07:00:00Z",
+  "complements_suite_id": "fund-compare-e2e-core-24",
+  "limitation": "self_authored_public_regression_not_independent_blind"
+}

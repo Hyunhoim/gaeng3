@@ -32,15 +32,27 @@ DB, 원천 XLSX, 전체 report, 모델 가중치는 계속 `artifacts/` 또는 �
 | [공모펀드 비교 답변](baselines/public-fund-compare-v1.json) | 두 상품 true COMPARE·차이 계산·통화·결측·fallback |
 | [공모펀드 자연어 비교](baselines/public-fund-compare-parser-v1.json) | 상품명·짧은 이름·상품번호 resolver·COMPARE parser·안전 차단 |
 | [공모펀드 자연어 비교 E2E](baselines/public-fund-compare-e2e-v1.json) | 자연어 parser·resolver·Oracle·검증 답변·안전 차단 통합 |
+| [세 상품군 자연어 비교](baselines/product-compare-v1.json) | 해외·국내 ETP·국내채권 30문항의 결정론적 비교·Backend 계약·안전 차단 |
+| [SEARCH·AGGREGATE 성능](baselines/search-aggregate-performance-v1.json) | 네 상품군 8문항의 결과 지문·새 프로세스 지연·RSS·경량 verifier 전후 비교 |
 | [연결 전 라우팅 초기 진단 v1](baselines/pre-hcx-route-diagnostic-initial-v1.json) | AGGREGATE 미지원 시점의 Router 도입 전 search 강제 동작 4/28 |
 | [연결 전 라우팅 개선 진단 v1](baselines/pre-hcx-route-diagnostic-improved-v1.json) | AGGREGATE 미지원 시점의 네 상품군·일곱 intent 라우팅 28/28 |
 | [연결 전 라우팅 초기 진단 v2](baselines/pre-hcx-route-diagnostic-initial-v2.json) | 현재 AGGREGATE 기대값을 적용한 도입 전 replay 4/28 |
 | [연결 전 라우팅 개선 진단 v2](baselines/pre-hcx-route-diagnostic-improved-v2.json) | 네 상품군 AGGREGATE 실행을 포함한 현재 회귀 28/28 |
+| [연결 전 라우팅 초기 진단 v3](baselines/pre-hcx-route-diagnostic-initial-v3.json) | AGGREGATE·COMPARE 기대값을 적용한 도입 전 replay 4/28 |
+| [연결 전 라우팅 개선 진단 v3](baselines/pre-hcx-route-diagnostic-improved-v3.json) | 네 상품군 AGGREGATE·same-family COMPARE 실행을 포함한 현재 회귀 28/28 |
 
 자연어 비교 E2E baseline은 실행 16문항의 실제 `ComparisonCell.value`와 field
 evidence provenance를 서로 별도의 fingerprint로 동결한다. parser 안전 계약은
 ordered identity·정확한 연결어·위치별 문장부호 문법과 질문 전체 잔여 표현,
 제외·대신·포함 역할, 빈·미종결·역방향·중첩·줄바꿈 따옴표 차단을 포함한다.
+
+`product-compare-core-30`은 공모펀드와 겹치지 않는 세 상품군의 실행 18문항과
+안전 차단 12문항을 동결한다. 기존 공모펀드 24문항과 합쳐 네 상품군 자연어
+COMPARE 공개 회귀 54문항을 구성한다.
+
+`search-aggregate-performance-8`은 네 상품군에서 SEARCH와 AGGREGATE를 하나씩
+새 프로세스로 실행한다. 후보 수와 결과 지문이 모두 일치해야 통과하며 지연과
+추가 RSS는 같은 장비의 방향성 기준선으로만 사용한다.
 
 이 수치는 HyperCLOVA X나 공식 공모전 평가 결과가 아니다. 동결된 개발 질문에서
 로컬 LLM, 결정론적 linker, 계약, Oracle과 Verifier를 합친 시스템의 회귀
@@ -50,8 +62,9 @@ ordered identity·정확한 연결어·위치별 문장부호 문법과 질문 �
 상태는 최초 실행 결과가 완전하지 않아도 수정하거나 숨기지 않고 관측값 그대로
 보존한다.
 
-라우팅 v1은 AGGREGATE가 아직 미지원이던 당시의 봉인 이력이다. 현재 capability
-정본은 원본을 수정하지 않고 별도 suite·commitment로 봉인한 v2를 사용한다.
+라우팅 v1은 AGGREGATE 미지원, v2는 COMPARE가 공모펀드에만 열렸던 당시의
+봉인 이력이다. 현재 capability 정본은 원본을 수정하지 않고 별도
+suite·commitment로 봉인한 v3를 사용한다.
 
 ## 검사
 

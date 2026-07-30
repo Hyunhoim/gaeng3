@@ -14,6 +14,22 @@ EVALUATION_ARTIFACT_ROOT = PROJECT_ROOT / "artifacts" / "evaluation"
 READINESS_MANIFEST = (
     PROJECT_ROOT / "evaluation" / "protocols" / "pre-hcx-readiness-v1.manifest.json"
 )
+PRODUCT_COMPARE_COMMITMENT = (
+    PROJECT_ROOT
+    / "evaluation"
+    / "protocols"
+    / "product-compare-core-30.commitment.json"
+)
+PRODUCT_COMPARE_SUITE = (
+    PROJECT_ROOT
+    / "packages"
+    / "finance_agent_core"
+    / "src"
+    / "finance_agent_core"
+    / "evaluation"
+    / "suites"
+    / "product_compare_core_30.json"
+)
 
 LINK_PATTERN = re.compile(r"!?\[[^\]]*]\((?:<(?P<angle>[^>]+)>|(?P<plain>[^)\s]+))\)")
 SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
@@ -28,6 +44,8 @@ REQUIRED_INDEX_TARGETS = {
     "evaluation-public-fund.md",
     "evaluation-public-fund-blind-v1.1.md",
     "evaluation-grounded-answers.md",
+    "evaluation-product-comparison.md",
+    "evaluation-search-aggregate-performance.md",
     "evaluation-pre-hcx-diagnostic.md",
     "development.md",
     "local-llm.md",
@@ -54,10 +72,14 @@ REQUIRED_BASELINES = {
     "public-fund-compare-e2e-v1.json",
     "public-fund-compare-v1.json",
     "public-fund-compare-parser-v1.json",
+    "product-compare-v1.json",
+    "search-aggregate-performance-v1.json",
     "pre-hcx-route-diagnostic-initial-v1.json",
     "pre-hcx-route-diagnostic-improved-v1.json",
     "pre-hcx-route-diagnostic-initial-v2.json",
     "pre-hcx-route-diagnostic-improved-v2.json",
+    "pre-hcx-route-diagnostic-initial-v3.json",
+    "pre-hcx-route-diagnostic-improved-v3.json",
 }
 REQUIRED_BASELINE_KEYS = {
     "schema_version",
@@ -197,6 +219,7 @@ def _check_baseline(path: Path) -> list[str]:
         "query_plan",
         "grounded_answer",
         "intent_route",
+        "system_performance",
     }:
         errors.append(f"{name}: invalid evaluation_layer")
     if payload["provider"].get("official_submission_provider") is not False:
@@ -302,6 +325,28 @@ def _check_baselines() -> list[str]:
     return errors
 
 
+def _check_product_comparison_commitment() -> list[str]:
+    errors: list[str] = []
+    if not PRODUCT_COMPARE_COMMITMENT.is_file():
+        return ["missing product comparison commitment"]
+    if not PRODUCT_COMPARE_SUITE.is_file():
+        return ["missing product comparison suite"]
+    try:
+        commitment = json.loads(PRODUCT_COMPARE_COMMITMENT.read_text(encoding="utf-8"))
+        suite = json.loads(PRODUCT_COMPARE_SUITE.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        return [f"cannot load product comparison commitment: {error}"]
+    if commitment.get("suite_id") != suite.get("suite_id"):
+        errors.append("product comparison commitment suite_id differs")
+    if commitment.get("suite_version") != suite.get("suite_version"):
+        errors.append("product comparison commitment suite_version differs")
+    if commitment.get("suite_sha256") != _sha256(PRODUCT_COMPARE_SUITE):
+        errors.append("product comparison commitment SHA-256 differs")
+    if commitment.get("case_count") != len(suite.get("cases", [])):
+        errors.append("product comparison commitment case_count differs")
+    return errors
+
+
 def _readiness_files() -> list[Path]:
     package_root = PROJECT_ROOT / "packages" / "finance_agent_core"
     files = {
@@ -370,7 +415,7 @@ def _check_readiness_manifest() -> list[str]:
     if not payload.get("external_gates"):
         errors.append("pre-HCX source manifest must preserve external gates")
     qa = payload.get("qa", {})
-    if qa.get("pytest_passed") != 239:
+    if qa.get("pytest_passed") != 269:
         errors.append("pre-HCX source manifest pytest count differs from frozen QA")
     if qa.get("documentation_baselines") != len(REQUIRED_BASELINES):
         errors.append("pre-HCX source manifest baseline count differs")
@@ -382,6 +427,7 @@ def main() -> int:
         *_check_markdown_links(),
         *_check_document_index(),
         *_check_baselines(),
+        *_check_product_comparison_commitment(),
         *_check_readiness_manifest(),
     ]
     if errors:

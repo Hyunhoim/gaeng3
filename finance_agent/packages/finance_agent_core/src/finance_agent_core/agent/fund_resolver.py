@@ -3,10 +3,12 @@ from __future__ import annotations
 import re
 import unicodedata
 from collections import defaultdict
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Literal
 
-from finance_agent_core.domain import NormalizedProductRecord, NormalizedPublicFundRecord
+from finance_agent_core.domain import NormalizedProductRecord
+from finance_agent_core.storage import ProductIdentityRecord
 
 type FundMentionStatus = Literal[
     "resolved",
@@ -74,11 +76,14 @@ class FundMentionResolution:
 class FundProductResolver:
     """Resolve exact public-fund identities and surface every collision."""
 
-    def __init__(self, records: list[NormalizedProductRecord]) -> None:
+    def __init__(
+        self,
+        records: Sequence[NormalizedProductRecord | ProductIdentityRecord],
+    ) -> None:
         fund_records = [
             record
             for record in records
-            if isinstance(record, NormalizedPublicFundRecord) and not record.is_quarantined
+            if record.product_family == "fund" and not record.is_quarantined
         ]
         if not fund_records:
             raise ValueError("fund resolver requires at least one public-fund record")

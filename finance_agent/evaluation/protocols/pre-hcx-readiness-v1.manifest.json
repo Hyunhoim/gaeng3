@@ -6,8 +6,8 @@
   "git_commit": null,
   "generated_from_dirty_worktree": true,
   "hash_algorithm": "sha256(sorted(relative_path + NUL + file_sha256 + LF))",
-  "file_count": 187,
-  "tree_sha256": "57bded69d3729649414299055247e75f35c1777dd561b7d6625e9bdf4bcef558",
+  "file_count": 212,
+  "tree_sha256": "9c2f8d09fae3d286816b81433461cf15ed7dff853af359a5bde2eafef17b2aa4",
   "included_scope": [
     "README.md",
     "environment*.yml",
@@ -23,21 +23,21 @@
     "scripts/check-docs.py"
   ],
   "diagnostic": {
-    "suite_sha256": "ef35437ac3b9a02c2438ef664b49c339a631c249f53784b43fb2c1050d86e271",
-    "initial_report_sha256": "297a9a8ed62f7058f7f33ffead90615cc24acc249d32441afd083bc1a7aa5fe6",
-    "improved_report_sha256": "37220c8513858e42ac58f58743f78bf8051ee609d14ffabb008dcd5b186ba530",
+    "suite_sha256": "8bab9b0f4fd3e40782c591e2e3aea2f9d76b94a2d31d846d8b957604af0313b0",
+    "initial_report_sha256": "44d7054a8c3e3efb8b7623e4521aca29b6b3150c3f3e33151c51549747315f35",
+    "improved_report_sha256": "266641d7129f982965a97575057ef659a565daa919d256ca064219b18bc48af0",
     "initial_passed": 4,
     "improved_passed": 28,
     "total": 28,
     "limitation": "self_authored_internal_diagnostic_not_independent_blind"
   },
   "qa": {
-    "pytest_passed": 239,
+    "pytest_passed": 269,
     "ruff_lint": "passed",
     "ruff_format": "passed",
     "pip_check": "passed",
-    "documentation_markdown": 32,
-    "documentation_baselines": 16,
+    "documentation_markdown": 34,
+    "documentation_baselines": 20,
     "wheel_build_no_isolation": "passed",
     "wheel_required_package_data": "passed",
     "git_diff_check": "passed"

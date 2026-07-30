@@ -9,7 +9,12 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from finance_agent_core.agent.routed_service import RoutedAgentResult
 from finance_agent_core.contracts.queryplan import ProductFamily, QueryPlan
 from finance_agent_core.contracts.routing import InteractionIntent
-from finance_agent_core.domain import AggregateEvidence, DatabaseManifest, ProductEvidence
+from finance_agent_core.domain import (
+    AggregateEvidence,
+    ComparisonEvidence,
+    DatabaseManifest,
+    ProductEvidence,
+)
 from finance_agent_core.retrieval import DocumentEvidence
 
 
@@ -67,7 +72,12 @@ class BackendError(BackendContractModel):
 
 class SourceCitation(BackendContractModel):
     citation_id: str = Field(min_length=1, max_length=300)
-    kind: Literal["product_field", "aggregate_field", "document_chunk"]
+    kind: Literal[
+        "product_field",
+        "comparison_field",
+        "aggregate_field",
+        "document_chunk",
+    ]
     label: str = Field(min_length=1, max_length=500)
     source_id: str = Field(min_length=1, max_length=300)
     source_locator: str = Field(min_length=1, max_length=1000)
@@ -85,6 +95,7 @@ class BackendAgentResponse(BackendContractModel):
     query_plan: QueryPlan | None
     candidate_count: int | None = Field(default=None, ge=0)
     products: list[ProductEvidence]
+    comparisons: list[ComparisonEvidence] = Field(default_factory=list)
     aggregates: list[AggregateEvidence] = Field(default_factory=list)
     documents: list[DocumentEvidence]
     citations: list[SourceCitation]
@@ -106,14 +117,25 @@ class BackendAgentResponse(BackendContractModel):
         if len(self.as_of_dates) != len(set(self.as_of_dates)):
             raise ValueError("as_of_dates must be unique")
         if self.status is BackendStatus.SUCCESS:
-            if not self.products and not self.aggregates and not self.documents:
+            if (
+                not self.products
+                and not self.comparisons
+                and not self.aggregates
+                and not self.documents
+            ):
                 raise ValueError(
                     "success response requires product, aggregate, or document evidence"
                 )
             if self.error is not None or self.clarification is not None:
                 raise ValueError("success response cannot contain control details")
         elif self.status is BackendStatus.NOT_FOUND:
-            if self.products or self.aggregates or self.documents or self.citations:
+            if (
+                self.products
+                or self.comparisons
+                or self.aggregates
+                or self.documents
+                or self.citations
+            ):
                 raise ValueError("not_found response cannot contain evidence")
             if self.candidate_count != 0:
                 raise ValueError("not_found response requires candidate_count=0")
@@ -122,13 +144,20 @@ class BackendAgentResponse(BackendContractModel):
                 raise ValueError("clarification response requires clarification details")
             if (
                 self.products
+                or self.comparisons
                 or self.aggregates
                 or self.documents
                 or self.candidate_count is not None
             ):
                 raise ValueError("clarification response cannot contain executed results")
         elif self.status is BackendStatus.UNSUPPORTED:
-            if self.error is not None or self.products or self.aggregates or self.documents:
+            if (
+                self.error is not None
+                or self.products
+                or self.comparisons
+                or self.aggregates
+                or self.documents
+            ):
                 raise ValueError("unsupported response cannot contain error or evidence")
             if self.candidate_count is not None:
                 raise ValueError("unsupported response cannot contain candidate_count")
@@ -189,6 +218,47 @@ def _aggregate_citations(aggregates: list[AggregateEvidence]) -> list[SourceCita
     return citations
 
 
+def _comparison_citations(
+    comparisons: list[ComparisonEvidence],
+) -> list[SourceCitation]:
+    citations: list[SourceCitation] = []
+    for comparison in comparisons:
+        grounded = [
+            cell
+            for cell in comparison.cells
+            if cell.source_id is not None
+            and cell.source_row is not None
+            and cell.as_of is not None
+            and cell.evidence_ref is not None
+        ]
+        if not grounded:
+            continue
+        locators = [
+            (
+                f"{cell.product_id}: {cell.source_dataset} row {cell.source_row} · "
+                f"{'/'.join(cell.source_columns) or 'constant'}"
+            )
+            for cell in grounded
+        ]
+        source_ids = list(
+            dict.fromkeys(cell.source_id for cell in grounded if cell.source_id is not None)
+        )
+        citations.append(
+            SourceCitation(
+                citation_id=f"comparison:{comparison.canonical_field}",
+                kind="comparison_field",
+                label=f"{comparison.label} · 두 상품 비교",
+                source_id="/".join(source_ids),
+                source_locator="; ".join(locators),
+                as_of=max(cell.as_of for cell in grounded if cell.as_of is not None),
+                evidence_refs=[
+                    cell.evidence_ref for cell in grounded if cell.evidence_ref is not None
+                ],
+            )
+        )
+    return citations
+
+
 def routed_result_to_backend(result: RoutedAgentResult) -> BackendAgentResponse:
     status = {
         "executed": (
@@ -209,11 +279,18 @@ def routed_result_to_backend(result: RoutedAgentResult) -> BackendAgentResponse:
         provider_model = result.answer_composition.model
     citations = [
         *_product_citations(result.products),
+        *_comparison_citations(result.comparisons),
         *_aggregate_citations(result.aggregates),
     ]
     as_of_dates = sorted(
         {
             *(field.as_of for product in result.products for field in product.fields),
+            *(
+                cell.as_of
+                for comparison in result.comparisons
+                for cell in comparison.cells
+                if cell.as_of is not None
+            ),
             *(
                 bound
                 for evidence in result.aggregates
@@ -248,6 +325,7 @@ def routed_result_to_backend(result: RoutedAgentResult) -> BackendAgentResponse:
         query_plan=result.query_plan,
         candidate_count=result.candidate_count,
         products=result.products,
+        comparisons=[] if status is BackendStatus.NOT_FOUND else result.comparisons,
         aggregates=result.aggregates,
         documents=[],
         citations=[] if status is BackendStatus.NOT_FOUND else citations,

@@ -87,7 +87,8 @@ SOURCE_DATE_EPOCH=1785283200 \
 - 네 상품군 60개 canonical field와 상품군별 field capability를 Pydantic으로 검증
 - 서버 QueryPlan은 추가 property, 타입·단위·enum·연산자, intent payload를 fail-closed로 검증
 - HCX 전송 schema는 공식 Structured Outputs keyword subset만 사용
-- registry의 queryable·sortable·selectable·aggregatable field와 HCX enum 정합성을 테스트
+- registry의 queryable·sortable·selectable·aggregatable·comparable field와
+  HCX enum 정합성을 테스트
 - 공모펀드 QueryPlan은 내부 계약 검증이 가능하지만 실제 Agent 진입점에서는
   `execution_enabled: false`로 명시적으로 거절
 
@@ -269,3 +270,31 @@ HyperCLOVA X도 아직 연결하지 않았으며, 공모펀드 공식 Agent 실�
 사람 rubric validator와 Backend DTO까지 구현했다. 다음 평가는 금융 도메인
 담당자의 external blind 100문항 parser→답변 E2E와 실제 사람 평가이며, 이후
 HyperCLOVA X provider와 공식 adapter를 연결한다.
+
+같은 상품군의 정확한 두 상품 COMPARE도 네 상품군 공통 경로로 일반화했다.
+해외·국내 ETP·국내채권 exact resolver, registry 비교 capability,
+`ComparisonEvidence`·독립 verifier·Backend citation을 합성 fixture E2E로
+검증했다. 세 상품군 `product-compare-core-30`은 실제 정규화 DB에서 실행
+18문항·안전 차단 12문항을 모두 통과했다. 기존 공모펀드 24문항과 합친 네
+상품군 자연어 비교 공개 회귀는 54문항이다. 독립 blind는 아직 남아 있다.
+비교 resolver는 원본 DB의 상품번호·이름·티커·ISIN 등 최소 identity 열만
+bounded cache에 보관한다. DB inode·크기·수정시각이 바뀌면 자동 무효화하며
+COMPARE Result Verifier는 전체 레코드 적재 없이 locked 두 상품 ID·후보 수·
+정렬·범위 조건을 재검사한다. 공개 30문항의 3 workers 기준 지연은 p50
+65.522ms·p95 954.670ms다.
+
+SEARCH·AGGREGATE 기본 경로도 전체 정규화 레코드를 verifier universe로
+적재하지 않는다. QueryPlan의 조건·정렬·그룹·집계 필드와 품질·기준일만
+별도 projection으로 읽는다. 네 상품군 대표 8문항을 각각 새 프로세스에서
+실행한 결과 지문은 8/8 일치했고 p50 308.749ms, 최대 추가 RSS 51,000KiB다.
+
+```bash
+/home/haeyeongcho/miniforge3/envs/gaeng3-dev/bin/python \
+  -m finance_agent_core.evaluation.search_aggregate_benchmark_cli \
+  --require-perfect
+```
+
+이 수치는 같은 개발 장비의 단일 실행 방향성 기준선이며 운영 SLO가 아니다.
+상세 계약은
+[SEARCH·AGGREGATE 성능 기준선](evaluation-search-aggregate-performance.md)에
+기록한다.

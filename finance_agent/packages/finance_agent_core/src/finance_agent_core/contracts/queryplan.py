@@ -285,6 +285,8 @@ class QueryPlan(ContractModel):
             definition = registry.require_field(field_name, families)
             if not definition.selectable:
                 raise ValueError(f"{field_name} is not selectable")
+            if field_name in self.intent_payload.comparison_fields and not definition.comparable:
+                raise ValueError(f"{field_name} is not comparable")
 
         for aggregation in self.intent_payload.aggregations:
             definition = registry.require_field(aggregation.field, families)

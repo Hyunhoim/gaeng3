@@ -21,15 +21,16 @@ from finance_agent_core.domain import (
     AggregateMetric,
     ExecutedAggregation,
     ExecutedSearch,
-    NormalizedProductRecord,
     VerifiedAggregation,
     VerifiedSearch,
 )
 from finance_agent_core.execution.policy import (
+    comparison_product_ids,
     require_aggregate_contract,
-    require_fund_comparison_contract,
+    require_comparison_contract,
     require_fund_public_scope,
 )
+from finance_agent_core.execution.verification_types import VerifierRecord
 
 
 class ResultVerificationError(ValueError):
@@ -39,7 +40,7 @@ class ResultVerificationError(ValueError):
 _AVERAGE_QUANTUM = Decimal("0.000000000001")
 
 
-def _comparable_value(record: NormalizedProductRecord, field_name: str) -> object | None:
+def _comparable_value(record: VerifierRecord, field_name: str) -> object | None:
     quality, _ = record.row_level_quality(field_name)
     if quality in {
         QualityStatus.UNKNOWN,
@@ -63,7 +64,7 @@ def _expected_value(record_value: object, query_value: object) -> object:
 
 
 def _matches_constraint(
-    record: NormalizedProductRecord,
+    record: VerifierRecord,
     constraint: Constraint,
 ) -> bool:
     actual = _comparable_value(record, constraint.field)
@@ -120,8 +121,8 @@ def _compare_values(
 
 def _record_comparator(plan: QueryPlan):
     def compare(
-        left: NormalizedProductRecord,
-        right: NormalizedProductRecord,
+        left: VerifierRecord,
+        right: VerifierRecord,
     ) -> int:
         for ranking in plan.ranking:
             comparison = _compare_values(
@@ -141,14 +142,48 @@ class ResultVerifier:
         self,
         plan: QueryPlan,
         executed: ExecutedSearch,
-        universe: list[NormalizedProductRecord],
+        universe: list[VerifierRecord] | None = None,
     ) -> VerifiedSearch:
         if plan.intent is Intent.COMPARE:
-            require_fund_comparison_contract(plan)
-        else:
-            require_fund_public_scope(plan)
+            require_comparison_contract(plan)
         if executed.question_id != plan.question_id:
             raise ResultVerificationError("question_id changed during execution")
+        if executed.manifest.dataset != plan.product_families[0].value:
+            raise ResultVerificationError("search manifest dataset differs from the plan")
+        if plan.intent is Intent.COMPARE:
+            requested_ids = comparison_product_ids(plan)
+            actual_ids = [record.product_id for record in executed.records]
+            if executed.candidate_count != len(actual_ids):
+                raise ResultVerificationError(
+                    "comparison candidate_count mismatch: "
+                    f"SQL={executed.candidate_count}, records={len(actual_ids)}"
+                )
+            if (
+                len(actual_ids) != len(set(actual_ids))
+                or not set(actual_ids).issubset(requested_ids)
+                or actual_ids != sorted(actual_ids)
+            ):
+                raise ResultVerificationError(
+                    f"comparison results mismatch: SQL={actual_ids}, "
+                    f"requested={sorted(requested_ids)}"
+                )
+            if any(
+                record.is_quarantined
+                or not all(_matches_constraint(record, item) for item in plan.constraints)
+                for record in executed.records
+            ):
+                raise ResultVerificationError(
+                    "comparison result violates a locked identity or scope constraint"
+                )
+            return VerifiedSearch(
+                question_id=plan.question_id,
+                candidate_count=len(actual_ids),
+                records=executed.records,
+                manifest=executed.manifest,
+            )
+        require_fund_public_scope(plan)
+        if universe is None:
+            raise ResultVerificationError("search verification requires the record universe")
         candidates = [
             record
             for record in universe
@@ -178,7 +213,7 @@ class ResultVerifier:
         )
 
 
-def _verifier_as_of(record: NormalizedProductRecord, field_name: str) -> date:
+def _verifier_as_of(record: VerifierRecord, field_name: str) -> date:
     definition = load_field_registry().require_field(field_name, [record.product_family])
     if definition.as_of_basis is AsOfBasis.DYNAMIC:
         return record.dynamic_as_of
@@ -188,7 +223,7 @@ def _verifier_as_of(record: NormalizedProductRecord, field_name: str) -> date:
 
 
 def _verifier_quality(
-    record: NormalizedProductRecord,
+    record: VerifierRecord,
     field_name: str,
 ) -> QualityStatus:
     override, _ = record.row_level_quality(field_name)
@@ -200,7 +235,7 @@ def _verifier_quality(
     return definition.quality
 
 
-def _verifier_usable(record: NormalizedProductRecord, field_name: str) -> object | None:
+def _verifier_usable(record: VerifierRecord, field_name: str) -> object | None:
     if _verifier_quality(record, field_name) in {
         QualityStatus.UNKNOWN,
         QualityStatus.INVALID,
@@ -249,7 +284,7 @@ def _verifier_average(values: list[Decimal]) -> Decimal:
 
 def _verifier_metric(
     plan: QueryPlan,
-    records: list[NormalizedProductRecord],
+    records: list[VerifierRecord],
     function: AggregateFunction,
     field_name: str,
     group_values: dict[str, str | int | bool | None],
@@ -325,13 +360,13 @@ def _verifier_metric(
 
 def _expected_aggregate_groups(
     plan: QueryPlan,
-    records: list[NormalizedProductRecord],
+    records: list[VerifierRecord],
 ) -> tuple[int, list[AggregateGroup]]:
     if not records:
         return 0, []
     grouped: dict[
         tuple[str | int | bool | None, ...],
-        list[NormalizedProductRecord],
+        list[VerifierRecord],
     ] = {}
     fields = plan.intent_payload.group_by
     for record in records:
@@ -341,7 +376,7 @@ def _expected_aggregate_groups(
     def sort_key(
         item: tuple[
             tuple[str | int | bool | None, ...],
-            list[NormalizedProductRecord],
+            list[VerifierRecord],
         ],
     ) -> tuple[object, ...]:
         key, group_records = item
@@ -389,7 +424,7 @@ class AggregateResultVerifier:
         self,
         plan: QueryPlan,
         executed: ExecutedAggregation,
-        universe: list[NormalizedProductRecord],
+        universe: list[VerifierRecord],
     ) -> VerifiedAggregation:
         require_aggregate_contract(plan)
         if executed.question_id != plan.question_id:

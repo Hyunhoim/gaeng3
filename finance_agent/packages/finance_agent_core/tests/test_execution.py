@@ -13,6 +13,10 @@ from finance_agent_core.execution import (
     SQLiteOracle,
     build_product_evidence,
 )
+from finance_agent_core.execution.verifier_projection import (
+    load_projected_verifier_records,
+    verifier_projection_fields,
+)
 from finance_agent_core.storage import connect_read_only, load_all_records
 
 
@@ -47,6 +51,19 @@ def test_verifier_rejects_tampered_order(
     tampered = executed.model_copy(update={"records": list(reversed(executed.records))})
     with connect_read_only(path) as connection:
         universe = load_all_records(connection)
+
+    with pytest.raises(ResultVerificationError, match="top results mismatch"):
+        ResultVerifier().verify(plan, tampered, universe)
+
+
+def test_projected_verifier_rejects_tampered_order(
+    sample_database: tuple[Path, list[NormalizedOverseasEtpRecord], DatabaseManifest],
+) -> None:
+    path, _, _ = sample_database
+    plan = first_vertical_slice_plan("oracle-projected-001")
+    executed = SQLiteOracle(path).execute(plan)
+    tampered = executed.model_copy(update={"records": list(reversed(executed.records))})
+    universe = load_projected_verifier_records(path, plan)
 
     with pytest.raises(ResultVerificationError, match="top results mismatch"):
         ResultVerifier().verify(plan, tampered, universe)
@@ -108,8 +125,31 @@ def test_aggregate_verifier_rejects_tampered_metric(
     metric = executed.groups[0].metrics[0].model_copy(update={"value": "999"})
     group = executed.groups[0].model_copy(update={"metrics": [metric]})
     tampered = executed.model_copy(update={"groups": [group]})
-    with connect_read_only(path) as connection:
-        universe = load_all_records(connection)
+    universe = load_projected_verifier_records(path, plan)
 
     with pytest.raises(ResultVerificationError, match="groups or metrics differ"):
         AggregateResultVerifier().verify(plan, tampered, universe)
+
+
+def test_overseas_verifier_projection_matches_normalized_records(
+    sample_database: tuple[Path, list[NormalizedOverseasEtpRecord], DatabaseManifest],
+) -> None:
+    path, records, _ = sample_database
+    agent = RoutedFinanceAgent({"overseas_etp": path})
+    decision = agent.router.route(
+        "해외 ETF의 총보수율 평균과 최댓값을 집계해줘",
+        "projection-overseas-001",
+    )
+    plan = agent.compiler.compile(decision)
+    projected = load_projected_verifier_records(path, plan)
+    expected = {record.product_id: record for record in records}
+
+    assert [record.product_id for record in projected] == sorted(expected)
+    for record in projected:
+        original = expected[record.product_id]
+        assert record.is_quarantined == original.is_quarantined
+        for field_name in verifier_projection_fields(plan):
+            assert record.canonical_value(field_name) == original.canonical_value(field_name)
+            assert (
+                record.row_level_quality(field_name)[0] == original.row_level_quality(field_name)[0]
+            )

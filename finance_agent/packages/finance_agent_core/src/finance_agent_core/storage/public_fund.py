@@ -456,7 +456,11 @@ def build_public_fund_database(
     return manifest
 
 
-def row_to_public_fund_record(row: sqlite3.Row) -> NormalizedPublicFundRecord:
+def row_to_public_fund_record(
+    row: sqlite3.Row,
+    *,
+    include_source_values: bool = True,
+) -> NormalizedPublicFundRecord:
     qualities = {
         name: QualityStatus(value) for name, value in json.loads(row["field_quality_json"]).items()
     }
@@ -469,7 +473,7 @@ def row_to_public_fund_record(row: sqlite3.Row) -> NormalizedPublicFundRecord:
         source_row=row["source_row"],
         source_snapshot_date=row["source_snapshot_date"],
         present_source_fields=row["present_source_fields"],
-        source_values=json.loads(row["source_values_json"]),
+        source_values=(json.loads(row["source_values_json"]) if include_source_values else {}),
         attribute_count=row["attribute_count"],
         product_id=row["product_id"],
         product_name=row["product_name"],
@@ -533,9 +537,13 @@ def row_to_public_fund_record(row: sqlite3.Row) -> NormalizedPublicFundRecord:
 
 def load_all_public_fund_records(
     connection: sqlite3.Connection,
+    *,
+    include_source_values: bool = True,
 ) -> list[NormalizedPublicFundRecord]:
     rows = connection.execute("SELECT * FROM fund_products ORDER BY product_id").fetchall()
-    return [row_to_public_fund_record(row) for row in rows]
+    return [
+        row_to_public_fund_record(row, include_source_values=include_source_values) for row in rows
+    ]
 
 
 def load_public_fund_attributes(

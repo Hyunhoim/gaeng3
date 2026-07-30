@@ -93,11 +93,26 @@
 - 상품군별 capability matrix와 서버 QueryPlan compiler를 공통
   실행 경로에 연결했다. 상품 검색은 field evidence·Answer Verifier를 사용하고,
   집계는 Decimal 계산·독립 AggregateResultVerifier·AggregateEvidence를 사용한다.
+- 네 상품군 same-family COMPARE를 공통 실행 경로에 연결했다. exact resolver,
+  registry `comparable` capability, 요청 순서, 통화·기준일·stale·결측 상태,
+  `ComparisonEvidence`와 독립 `ComparisonResultVerifier`를 사용한다. 해외·국내
+  ETP와 국내채권은 합성 fixture E2E를 통과했고, 기존 공모펀드 공개 회귀는
+  그대로 유지했다. 실제 DB 기반 세 상품군 공개 자연어 회귀 30문항도 30/30을
+  통과해 기존 공모펀드 24문항과 합친 비교 공개 범위는 54문항이다. 네 상품군
+  독립 blind 일반화 평가는 아직 수행하지 않았다. 비교 경로는 전체 레코드를
+  보관하지 않고 compact identity 49,774건만 파일 변경 감지형 cache에 둔다.
+  3 workers 기준 p50 65.522ms·p95 954.670ms이며 전체 레코드 cache는
+  메모리 비용 때문에 제외했다. 이 수치는 개발 장비의 방향성 기준선이다.
+- SEARCH·AGGREGATE 기본 verifier는 전체 Pydantic 레코드 대신 QueryPlan의
+  조건·정렬·그룹·집계 필드와 품질·기준일만 별도 projection으로 읽는다.
+  실제 데이터 8문항 결과 지문은 8/8 일치했고 p50 308.749ms, 최대 추가 RSS
+  51,000KiB다. 변경 전 대비 국내채권은 약 92~93%, 공모펀드는 약 94~95%
+  메모리 증가량이 감소했다. 단일 장비·단일 실행의 방향성 기준선이다.
 - caller-fed BM25/SQLite FTS 문서 검색은 chunk·필터·top-k·출처·기준일·
   provided 우선순위·not-found를 검증했다. 실제 corpus는 승인 전이다.
 - 사람 평가 rubric v1과 프레임워크 독립 Backend DTO·JSON 예시를 구현했다.
   실제 사람 평가는 외부 게이트다.
-- 전체 코드 회귀는 pytest 239개, Ruff lint·format, pip dependency check와
+- 전체 코드 회귀는 pytest 269개, Ruff lint·format, pip dependency check와
   wheel 빌드를 통과했다.
 
 ## 3. 변경할 수 없는 공식 제약
@@ -260,7 +275,7 @@ QueryPlan에는 최소한 intent, 상품군, 필수 조건, 완화 전 확인이
 - [x] grounded answer 생성·후검증·결정론적 폴백과 답변 평가를 연결한다.
 - [x] 네 상품군 공통 AGGREGATE의 함수·그룹·통화·결측·기준일 계약,
   결정론적 실행·독립 verifier·Backend evidence를 연결한다.
-- [ ] 네 상품군 공통 COMPARE의 exact identity·필드·통화·기준일 계약과
+- [x] 네 상품군 공통 COMPARE의 exact identity·필드·통화·기준일 계약과
   공통 ComparisonEvidence·독립 verifier를 연결한다.
 - [ ] HyperCLOVA X provider와 공식 `/answer` adapter·오류·timeout 계약을 연결한다.
 
@@ -281,6 +296,8 @@ QueryPlan에는 최소한 intent, 상품군, 필수 조건, 완화 전 확인이
   parser·entity resolution을 공개 24문항에서 평가한다.
 - [x] 공개 24문항에서 자연어 COMPARE parser부터 Answer Verifier·fallback까지
   통합 E2E를 평가한다.
+- [x] 해외·국내 ETP·국내채권 자연어 COMPARE 30문항의 실제 DB·Backend
+  통합 회귀를 동결하고 기존 공모펀드 24문항과 함께 관리한다.
 - [x] 네 상품군·일곱 intent 내부 diagnostic, fail-closed Router와 capability
   matrix를 구현하고 도입 전·후 결과를 분리 보존한다.
 - [x] 서버 MinimalQueryDraft→QueryPlan compiler와 공통 답변 경로를 구현한다.

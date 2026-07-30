@@ -2,7 +2,7 @@
 
 마지막 갱신: 2026-07-30
 
-상태: v0.1 설계 확정·공모펀드 외 실행 미지원
+상태: v1.0 네 상품군 same-family 실행 구현·독립 blind 평가 대기
 
 이 문서는 해외 ETF·ETN, 국내 ETF·ETN, 국내채권, 공모펀드의 상품 간 비교를
 하나의 안전 계약으로 일반화하기 위한 구현 설계다. 현재 동작하는 공모펀드
@@ -187,16 +187,19 @@ QueryPlan 검증은 모든 `comparison_fields`가 대상 상품군에서 `compar
 - 서로 다른 상품군을 한 질문에서 조회하는 기능은 우선 병렬 SEARCH와 설명으로 처리
 - cross-family field는 금융 도메인 담당자의 의미 검수 후 별도 allowlist로 승인
 
-## 9. 구현 단계
+## 9. 구현 상태
 
-1. registry에 비교 capability와 dataset override 추가
-2. 상품군별 exact resolver 작성
-3. 공모펀드 전용 `FundComparison`을 공통 `ProductComparison`으로 일반화
-4. 통화·기준일·STALE 상태를 포함하는 ComparisonEvidence 구현
-5. 독립 ComparisonResultVerifier 구현
-6. Router·compiler·capability matrix에서 세 상품군 COMPARE를 순차 활성화
-7. Backend DTO와 evidence-only 답변 schema·Answer Verifier 확장
-8. 상품군별 공개 회귀 세트와 독립 blind를 분리해 평가
+- [x] registry에 `comparable`, `comparison_mode`, dataset override capability 추가
+- [x] 해외 ETP·국내 ETP·국내채권 exact resolver와 fail-closed compiler 추가
+- [x] 공모펀드 `FundComparison` 호환성을 유지하며 공통 `ProductComparison`으로 일반화
+- [x] 통화·기준일·STALE·결측 상태를 포함하는 `ComparisonEvidence` 구현
+- [x] 요청 순서·셀 값·근거·차이를 재검산하는 `ComparisonResultVerifier` 구현
+- [x] Router·compiler·capability matrix에서 네 상품군 COMPARE 활성화
+- [x] Backend DTO에 `comparisons`와 `comparison_field` citation 추가
+- [x] 세 상품군 합성 fixture E2E와 기존 공모펀드 공개 회귀를 함께 통과
+- [x] 세 상품군 `product-compare-core-30` 공개 회귀 30/30과 기존 공모펀드
+  24문항을 합쳐 네 상품군 자연어 비교 54문항 구성
+- [ ] 금융 도메인 담당자가 봉인한 독립 blind에서 최초 일반화 평가
 
-실행 capability는 구현·테스트·문서·baseline이 모두 갖춰진 상품군만
-`executable`로 변경한다.
+현재 `executable`은 같은 상품군의 정확한 두 상품 비교만 뜻한다. 상품군 간
+비교, 세 상품 이상 비교, 환율 환산, 우열·추천 판단은 계속 닫혀 있다.

@@ -27,6 +27,11 @@ class ValueType(StrEnum):
     ENUM = "enum"
 
 
+class ComparisonMode(StrEnum):
+    VALUE_ONLY = "value_only"
+    NUMERIC_DELTA = "numeric_delta"
+
+
 class AsOfBasis(StrEnum):
     STATIC = "static"
     DYNAMIC = "dynamic"
@@ -128,6 +133,8 @@ class FieldDatasetOverride(BaseModel):
     selectable: bool | None = None
     sortable: bool | None = None
     aggregatable: bool | None = None
+    comparable: bool | None = None
+    comparison_mode: ComparisonMode | None = None
     allowed_operators: list[str] | None = None
     comparison_scope: str | None = None
     as_of_basis: AsOfBasis | None = None
@@ -150,6 +157,8 @@ class FieldDefinition(BaseModel):
     selectable: bool = True
     sortable: bool = False
     aggregatable: bool = False
+    comparable: bool = False
+    comparison_mode: ComparisonMode = ComparisonMode.VALUE_ONLY
     allowed_operators: list[str] = Field(default_factory=list)
     enum_values: list[str] = Field(default_factory=list)
     comparison_scope: str = "same_dataset"
@@ -194,9 +203,24 @@ class FieldDefinition(BaseModel):
         }:
             raise ValueError("range operators require a number or date field")
         if self.quality in {QualityStatus.INVALID, QualityStatus.UNSUPPORTED} and (
-            self.queryable or self.sortable or self.aggregatable
+            self.queryable or self.sortable or self.aggregatable or self.comparable
         ):
             raise ValueError("invalid or unsupported fields cannot drive execution")
+        if self.comparison_mode is ComparisonMode.NUMERIC_DELTA:
+            if not self.comparable:
+                raise ValueError("numeric_delta comparison mode requires comparable=true")
+            if self.value_type is not ValueType.NUMBER:
+                raise ValueError("numeric_delta comparison mode requires a numeric field")
+        supported_comparison_scopes = {
+            "same_dataset",
+            "same_trading_currency",
+            "same_as_of",
+            "same_trading_currency_and_as_of",
+        }
+        if self.comparison_scope not in supported_comparison_scopes:
+            raise ValueError(f"unsupported comparison scope: {self.comparison_scope}")
+        if "trading_currency" in self.comparison_scope and self.unit != "source_currency_amount":
+            raise ValueError("trading-currency comparison scope requires source_currency_amount")
         if len(self.aliases) != len(set(self.aliases)):
             raise ValueError("aliases must be unique")
         supported_units = {
@@ -358,6 +382,19 @@ class FieldRegistry(BaseModel):
             if any(
                 definition.resolve(dataset).aggregatable
                 for dataset in self._field_datasets(definition, executable_only=executable_only)
+            )
+        )
+
+    def comparable_fields(self, *, executable_only: bool = False) -> list[str]:
+        return sorted(
+            name
+            for name, definition in self.fields.items()
+            if any(
+                definition.resolve(dataset).comparable
+                for dataset in self._field_datasets(
+                    definition,
+                    executable_only=executable_only,
+                )
             )
         )
 

@@ -319,7 +319,11 @@ def build_domestic_etp_database(
     return manifest
 
 
-def row_to_domestic_etp_record(row: sqlite3.Row) -> NormalizedDomesticEtpRecord:
+def row_to_domestic_etp_record(
+    row: sqlite3.Row,
+    *,
+    include_source_values: bool = True,
+) -> NormalizedDomesticEtpRecord:
     field_quality = {
         name: QualityStatus(value) for name, value in json.loads(row["field_quality_json"]).items()
     }
@@ -330,7 +334,7 @@ def row_to_domestic_etp_record(row: sqlite3.Row) -> NormalizedDomesticEtpRecord:
         is_quarantined=bool(row["is_quarantined"]),
         quarantine_reason=row["quarantine_reason"],
         row_quality=QualityStatus(row["row_quality"]),
-        source_values=json.loads(row["source_values_json"]),
+        source_values=(json.loads(row["source_values_json"]) if include_source_values else {}),
         product_id=row["product_id"],
         product_type=row["product_type"],
         product_name=row["product_name"],
@@ -418,6 +422,10 @@ def row_to_domestic_etp_record(row: sqlite3.Row) -> NormalizedDomesticEtpRecord:
 
 def load_all_domestic_etp_records(
     connection: sqlite3.Connection,
+    *,
+    include_source_values: bool = True,
 ) -> list[NormalizedDomesticEtpRecord]:
     rows = connection.execute("SELECT * FROM domestic_etp_products ORDER BY product_id").fetchall()
-    return [row_to_domestic_etp_record(row) for row in rows]
+    return [
+        row_to_domestic_etp_record(row, include_source_values=include_source_values) for row in rows
+    ]

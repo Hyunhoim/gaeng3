@@ -25,7 +25,7 @@ class CapabilityEntry(CapabilityModel):
     intent: InteractionIntent
     status: Literal["executable", "unsupported", "control"]
     query_plan_intent: Intent | None
-    oracle_mode: Literal["search", "fund_compare", "aggregate", "none"]
+    oracle_mode: Literal["search", "compare", "fund_compare", "aggregate", "none"]
     reason: str = Field(min_length=1, max_length=500)
 
     @model_validator(mode="after")
@@ -38,8 +38,8 @@ class CapabilityEntry(CapabilityModel):
             if self.query_plan_intent is Intent.COMPARE:
                 if self.product_family not in ORACLE_COMPARABLE_FAMILIES:
                     raise ValueError("comparison capability exceeds the Oracle policy")
-                if self.oracle_mode != "fund_compare":
-                    raise ValueError("fund comparison requires fund_compare Oracle mode")
+                if self.oracle_mode not in {"compare", "fund_compare"}:
+                    raise ValueError("comparison requires compare Oracle mode")
             elif self.query_plan_intent is Intent.AGGREGATE:
                 if self.product_family not in ORACLE_AGGREGATABLE_FAMILIES:
                     raise ValueError("aggregation capability exceeds the Oracle policy")

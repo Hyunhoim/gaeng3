@@ -17,7 +17,7 @@ from finance_agent_core.domain import (
 from finance_agent_core.execution.comparison import (
     ComparisonCell,
     FieldComparison,
-    build_fund_comparison,
+    build_product_comparison,
 )
 from finance_agent_core.execution.evidence import build_product_evidence
 
@@ -244,7 +244,7 @@ def _comparison_evidence(cell: ComparisonCell) -> str:
 
 
 def _comparison_delta(field: FieldComparison) -> str:
-    if field.status == "numeric_delta":
+    if field.status in {"numeric_delta", "stale_input"}:
         assert field.delta is not None
         if field.unit == "pct_point":
             value = f"{_format_decimal(field.delta)}%p"
@@ -253,9 +253,12 @@ def _comparison_delta(field: FieldComparison) -> str:
             value = f"{field.delta:,.2f} {currency}"
         else:
             value = _format_value(field.delta, field.unit)
-        return f"차이(두 번째-첫 번째) {value}"
+        suffix = " (오래된 입력값)" if field.status == "stale_input" else ""
+        return f"차이(두 번째-첫 번째) {value}{suffix}"
     if field.status == "currency_mismatch":
         return "거래 통화가 달라 금액 차이를 계산하지 않음"
+    if field.status == "as_of_mismatch":
+        return "필드 기준일이 달라 차이를 계산하지 않음"
     if field.status == "unavailable":
         if field.reason == "trading_currency_unavailable":
             return "거래 통화를 확인할 수 없어 금액 차이를 계산하지 않음"
@@ -270,12 +273,18 @@ def render_verified_comparison(
     verified: VerifiedSearch,
     products: list[ProductEvidence],
 ) -> tuple[str, list[str]]:
-    comparison = build_fund_comparison(plan, verified, products)
+    comparison = build_product_comparison(plan, verified, products)
     warning_codes = warning_codes_for_search(plan, comparison.verified)
     warnings = [WARNING_MESSAGES[code] for code in warning_codes]
+    family_label = {
+        "overseas_etp": "해외 ETP",
+        "domestic_etp": "국내 ETP",
+        "bond": "국내채권",
+        "fund": "공모펀드",
+    }[verified.manifest.dataset]
     lines = [
         (
-            f"요청한 공모펀드 {len(comparison.requested_product_ids)}개 중 "
+            f"요청한 {family_label} {len(comparison.requested_product_ids)}개 중 "
             f"{len(comparison.found_product_ids)}개를 확인했습니다."
         ),
         "비교 대상:",

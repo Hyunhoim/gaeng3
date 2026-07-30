@@ -81,6 +81,10 @@ from finance_agent_core.execution import (
     require_internal_evaluation_search,
 )
 from finance_agent_core.execution.oracle import compile_search_sql
+from finance_agent_core.execution.verifier_projection import (
+    load_projected_verifier_records,
+    verifier_projection_fields,
+)
 from finance_agent_core.normalization import (
     PublicFundNormalizationError,
     PublicFundNormalizationResult,
@@ -258,6 +262,30 @@ def test_fund_aggregate_groups_risk_levels_in_public_scope(tmp_path: Path) -> No
     }
     assert "공모펀드 기본 범위" in result.answer
     assert "클래스 단위" in result.answer
+
+
+def test_fund_verifier_projection_matches_normalized_records(tmp_path: Path) -> None:
+    path, records, _ = write_comparison_fund_database(tmp_path)
+    agent = RoutedFinanceAgent(
+        {"fund": path},
+        allow_internal_disabled_dataset=True,
+    )
+    decision = agent.router.route(
+        "공모펀드의 위험등급별 분포를 집계해줘",
+        "projection-fund-001",
+    )
+    plan = agent.compiler.compile(decision)
+    projected = load_projected_verifier_records(path, plan)
+    expected = {record.product_id: record for record in records.products}
+
+    assert [record.product_id for record in projected] == sorted(expected)
+    for record in projected:
+        original = expected[record.product_id]
+        for field_name in verifier_projection_fields(plan):
+            assert record.canonical_value(field_name) == original.canonical_value(field_name)
+            assert (
+                record.row_level_quality(field_name)[0] == original.row_level_quality(field_name)[0]
+            )
 
 
 def test_fund_amount_aggregate_requires_currency_or_currency_group(tmp_path: Path) -> None:

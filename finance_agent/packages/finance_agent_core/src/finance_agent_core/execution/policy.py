@@ -68,7 +68,7 @@ def require_fund_aum_currency_scope(plan: QueryPlan) -> None:
         )
 
 
-def fund_comparison_product_ids(plan: QueryPlan) -> list[str]:
+def comparison_product_ids(plan: QueryPlan) -> list[str]:
     constraints = [
         constraint for constraint in plan.constraints if constraint.field == "product_id"
     ]
@@ -85,13 +85,21 @@ def fund_comparison_product_ids(plan: QueryPlan) -> list[str]:
         or len(set(constraints[0].value)) != 2
     ):
         raise PlanExecutionBlockedError(
-            "fund comparison requires exactly two unique product IDs in one "
+            "comparison requires exactly two unique product IDs in one "
             "locked product_id IN constraint"
         )
     return list(constraints[0].value)
 
 
-def require_fund_comparison_contract(
+def fund_comparison_product_ids(plan: QueryPlan) -> list[str]:
+    """Backward-compatible public-fund comparison identity helper."""
+
+    if plan.product_families != [ProductFamily.FUND]:
+        raise PlanExecutionBlockedError("fund comparison requires product family fund")
+    return comparison_product_ids(plan)
+
+
+def require_comparison_contract(
     plan: QueryPlan,
     *,
     require_enabled_dataset: bool = False,
@@ -99,8 +107,8 @@ def require_fund_comparison_contract(
     blockers: list[str] = []
     if plan.intent is not Intent.COMPARE:
         blockers.append(f"intent {plan.intent.value!r} is not a comparison")
-    if plan.product_families != [ProductFamily.FUND]:
-        blockers.append("the first comparison vertical slice supports fund only")
+    if len(plan.product_families) != 1:
+        blockers.append("comparison requires exactly one product family")
     if plan.ambiguities:
         blockers.append(f"{len(plan.ambiguities)} ambiguity item(s) require clarification")
     if plan.unsupported_conditions:
@@ -110,22 +118,23 @@ def require_fund_comparison_contract(
     if plan.ranking:
         blockers.append("comparison preserves requested product order and forbids ranking")
     if plan.limit != 2:
-        blockers.append("fund comparison limit must equal the two requested products")
-    unsupported_constraint_fields = {constraint.field for constraint in plan.constraints} - {
-        "public_offering",
-        "product_id",
-    }
+        blockers.append("comparison limit must equal the two requested products")
+    allowed_constraint_fields = {"product_id"}
+    if plan.product_families == [ProductFamily.FUND]:
+        allowed_constraint_fields.add("public_offering")
+    unsupported_constraint_fields = {
+        constraint.field for constraint in plan.constraints
+    } - allowed_constraint_fields
     if unsupported_constraint_fields:
         blockers.append(
-            "fund comparison contains non-identity constraints: "
-            f"{sorted(unsupported_constraint_fields)}"
+            f"comparison contains non-identity constraints: {sorted(unsupported_constraint_fields)}"
         )
     try:
         require_fund_public_scope(plan)
     except PlanExecutionBlockedError as error:
         blockers.append(str(error))
     try:
-        fund_comparison_product_ids(plan)
+        comparison_product_ids(plan)
     except PlanExecutionBlockedError as error:
         blockers.append(str(error))
     required_projection = {
@@ -135,15 +144,38 @@ def require_fund_comparison_contract(
     }
     missing_projection = required_projection - set(plan.projection)
     if missing_projection:
-        blockers.append(f"fund comparison projection is missing {sorted(missing_projection)}")
-    if "aum" in plan.intent_payload.comparison_fields and "trading_currency" not in plan.projection:
-        blockers.append("fund AUM comparison must project trading_currency")
-    if require_enabled_dataset:
+        blockers.append(f"comparison projection is missing {sorted(missing_projection)}")
+    if len(plan.product_families) == 1:
         registry = load_field_registry()
-        if not registry.require_dataset("fund").execution_enabled:
-            blockers.append("product family 'fund' is not enabled for execution")
+        family = plan.product_families[0].value
+        for field_name in plan.intent_payload.comparison_fields:
+            definition = registry.require_field(field_name, [family])
+            if not definition.comparable:
+                blockers.append(f"field {field_name!r} is not comparable for {family!r}")
+            if (
+                "trading_currency" in definition.comparison_scope
+                and "trading_currency" not in plan.projection
+            ):
+                blockers.append(f"{field_name} comparison must project trading_currency")
+        if require_enabled_dataset and not registry.require_dataset(family).execution_enabled:
+            blockers.append(f"product family {family!r} is not enabled for execution")
     if blockers:
         raise PlanExecutionBlockedError("; ".join(blockers))
+
+
+def require_fund_comparison_contract(
+    plan: QueryPlan,
+    *,
+    require_enabled_dataset: bool = False,
+) -> None:
+    """Backward-compatible public-fund comparison contract."""
+
+    if plan.product_families != [ProductFamily.FUND]:
+        raise PlanExecutionBlockedError("fund comparison requires product family fund")
+    require_comparison_contract(
+        plan,
+        require_enabled_dataset=require_enabled_dataset,
+    )
 
 
 def require_aggregate_contract(
@@ -265,13 +297,13 @@ def require_internal_evaluation_search(plan: QueryPlan) -> None:
 
 
 def require_executable_comparison(plan: QueryPlan) -> None:
-    require_fund_comparison_contract(plan, require_enabled_dataset=True)
+    require_comparison_contract(plan, require_enabled_dataset=True)
 
 
 def require_internal_evaluation_comparison(plan: QueryPlan) -> None:
-    """Validate the fund comparison slice without opening official Agent execution."""
+    """Validate comparison without opening a disabled official dataset."""
 
-    require_fund_comparison_contract(plan, require_enabled_dataset=False)
+    require_comparison_contract(plan, require_enabled_dataset=False)
 
 
 def require_executable_aggregation(plan: QueryPlan) -> None:
