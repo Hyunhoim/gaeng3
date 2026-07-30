@@ -59,6 +59,7 @@ def _evidence_fields(plan: QueryPlan) -> list[str]:
         *plan.projection,
         *(constraint.field for constraint in plan.constraints),
         *(ranking.field for ranking in plan.ranking),
+        *plan.intent_payload.comparison_fields,
     ]:
         if name not in fields:
             fields.append(name)

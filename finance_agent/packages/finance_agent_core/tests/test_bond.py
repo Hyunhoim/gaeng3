@@ -1,7 +1,7 @@
 from datetime import date
 from pathlib import Path
 
-from finance_agent_core.agent import FinanceAgent
+from finance_agent_core.agent import FinanceAgent, RoutedFinanceAgent
 from finance_agent_core.agent.providers import BondMockProvider, bond_vertical_slice_plan
 from finance_agent_core.config import QualityStatus
 from finance_agent_core.domain import DatabaseManifest, NormalizedBondRecord
@@ -169,3 +169,40 @@ def test_bond_mock_agent_completes_verified_vertical_slice(tmp_path: Path) -> No
     assert "매수수익률 5%" in response.answer
     assert response.source_manifest.dataset == "bond"
     assert len(response.warnings) == 2
+
+
+def test_bond_aggregate_uses_only_currently_buyable_yields(tmp_path: Path) -> None:
+    path, _ = make_bond_database(tmp_path)
+    result = RoutedFinanceAgent({"bond": path}).answer(
+        "현재 매수 가능한 국내채권의 매수수익률 평균과 최댓값을 집계해줘",
+        "aggregate-bond-001",
+    )
+
+    assert result.status == "executed"
+    assert result.candidate_count == 3
+    assert [(item.function.value, item.value) for item in result.aggregates] == [
+        ("avg", "4.333333333333"),
+        ("max", "5"),
+    ]
+    assert all(item.as_of_start.isoformat() == "2026-02-24" for item in result.aggregates)
+    assert "137일 오래되었습니다" in result.answer
+
+
+def test_bond_amount_aggregate_requires_currency_scope(tmp_path: Path) -> None:
+    path, _ = make_bond_database(tmp_path)
+    agent = RoutedFinanceAgent({"bond": path})
+
+    blocked = agent.answer(
+        "국내채권의 발행잔액 합계를 집계해줘",
+        "aggregate-bond-002",
+    )
+    executed = agent.answer(
+        "원화 국내채권의 발행잔액 합계를 집계해줘",
+        "aggregate-bond-003",
+    )
+
+    assert blocked.status == "clarify"
+    assert "trading_currency" in blocked.answer
+    assert executed.status == "executed"
+    assert executed.aggregates[0].value == "6000000000"
+    assert "KRW" in executed.answer

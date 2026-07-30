@@ -10,11 +10,15 @@ from finance_agent_core.contracts.queryplan import (
     ConstraintOperator,
     Intent,
     NullPlacement,
+    ProductFamily,
     QueryPlan,
 )
-from finance_agent_core.domain import ExecutedSearch
+from finance_agent_core.domain import ExecutedAggregation, ExecutedSearch
+from finance_agent_core.execution.aggregation import aggregate_records
 from finance_agent_core.execution.policy import (
+    require_aggregate_contract,
     require_fund_aum_currency_scope,
+    require_fund_comparison_contract,
     require_fund_public_scope,
 )
 from finance_agent_core.storage.bond import (
@@ -307,6 +311,10 @@ TABLE_BY_FAMILY = {
     "fund": "fund_products",
 }
 
+ORACLE_SUPPORTED_INTENTS = frozenset({Intent.SEARCH, Intent.COMPARE, Intent.AGGREGATE})
+ORACLE_COMPARABLE_FAMILIES = frozenset({ProductFamily.FUND})
+ORACLE_AGGREGATABLE_FAMILIES = frozenset(ProductFamily)
+
 
 def _scaled_parameter(value: object, scale: Decimal | None) -> str | int | bool:
     if scale is None:
@@ -381,12 +389,17 @@ def _ranking_expression(field_name: str, sql_fields: dict[str, SqlField]) -> str
 def compile_search_sql(
     plan: QueryPlan,
 ) -> tuple[str, str, list[str | int | bool]]:
-    if plan.intent is not Intent.SEARCH:
-        raise ValueError("the deterministic oracle currently supports search intent only")
+    if plan.intent not in {Intent.SEARCH, Intent.COMPARE}:
+        raise ValueError("the deterministic oracle supports search and compare intents only")
     if len(plan.product_families) != 1:
         raise ValueError("the deterministic oracle requires exactly one product family")
-    require_fund_public_scope(plan)
-    require_fund_aum_currency_scope(plan)
+    if plan.intent is Intent.COMPARE:
+        if plan.product_families[0] not in ORACLE_COMPARABLE_FAMILIES:
+            raise ValueError("the deterministic comparison Oracle supports public funds only")
+        require_fund_comparison_contract(plan)
+    else:
+        require_fund_public_scope(plan)
+        require_fund_aum_currency_scope(plan)
     family = plan.product_families[0].value
     try:
         sql_fields = SQL_FIELDS_BY_FAMILY[family]
@@ -417,6 +430,34 @@ def compile_search_sql(
     return select_sql, count_sql, parameters
 
 
+def compile_aggregate_sql(
+    plan: QueryPlan,
+) -> tuple[str, list[str | int | bool]]:
+    if plan.intent is not Intent.AGGREGATE:
+        raise ValueError("the aggregate Oracle requires aggregate intent")
+    if len(plan.product_families) != 1:
+        raise ValueError("the aggregate Oracle requires exactly one product family")
+    if plan.product_families[0] not in ORACLE_AGGREGATABLE_FAMILIES:
+        raise ValueError("product family is outside the aggregate Oracle policy")
+    require_aggregate_contract(plan)
+    family = plan.product_families[0].value
+    try:
+        sql_fields = SQL_FIELDS_BY_FAMILY[family]
+        table = TABLE_BY_FAMILY[family]
+    except KeyError as error:
+        raise ValueError(
+            f"no deterministic aggregate Oracle for product family: {family}"
+        ) from error
+    where_clauses = ["is_quarantined = 0"]
+    parameters: list[str | int | bool] = []
+    for constraint in plan.constraints:
+        clause, values = _constraint_sql(constraint, sql_fields)
+        where_clauses.append(f"({clause})")
+        parameters.extend(values)
+    where_sql = " AND ".join(where_clauses)
+    return f"SELECT * FROM {table} WHERE {where_sql} ORDER BY product_id ASC", parameters
+
+
 class SQLiteOracle:
     def __init__(self, database_path: str | Path) -> None:
         self.database_path = Path(database_path)
@@ -444,4 +485,33 @@ class SQLiteOracle:
             manifest=manifest,
             sql_template=select_sql,
             sql_parameters=[*parameters, plan.limit],
+        )
+
+
+class SQLiteAggregateOracle:
+    """Select aggregate candidates in SQLite and reduce them with exact Decimal math."""
+
+    def __init__(self, database_path: str | Path) -> None:
+        self.database_path = Path(database_path)
+
+    def execute(self, plan: QueryPlan) -> ExecutedAggregation:
+        select_sql, parameters = compile_aggregate_sql(plan)
+        with connect_read_only(self.database_path) as connection:
+            manifest = load_manifest(connection)
+            family = plan.product_families[0].value
+            if manifest.dataset != family:
+                raise ValueError(
+                    f"plan requests {family}, but database contains {manifest.dataset}"
+                )
+            rows = connection.execute(select_sql, parameters).fetchall()
+        records = [row_to_record(row) for row in rows]
+        total_group_count, groups = aggregate_records(plan, records)
+        return ExecutedAggregation(
+            question_id=plan.question_id,
+            candidate_count=len(records),
+            total_group_count=total_group_count,
+            groups=groups,
+            manifest=manifest,
+            sql_template=select_sql,
+            sql_parameters=parameters,
         )

@@ -12,7 +12,7 @@ from finance_agent_core.answering.models import (
 )
 from finance_agent_core.answering.verifier import AnswerVerifier
 from finance_agent_core.config import load_field_registry
-from finance_agent_core.contracts import QueryPlan
+from finance_agent_core.contracts.queryplan import Intent, QueryPlan
 from finance_agent_core.domain import ProductEvidence, VerifiedSearch
 
 
@@ -83,6 +83,26 @@ def compose_grounded_answer(
         verified=verified,
         products=products,
     )
+    if plan.intent is Intent.COMPARE:
+        requested_ids = {
+            str(product_id)
+            for constraint in plan.constraints
+            if constraint.field == "product_id" and isinstance(constraint.value, list)
+            for product_id in constraint.value
+        }
+        if {product.product_id for product in products} != requested_ids:
+            return AnswerComposition(
+                mode="deterministic",
+                answer=context.deterministic_answer,
+                model=provider.model_name,
+                generation_latency_ms=0,
+                draft=None,
+                verification=AnswerVerification(
+                    passed=True,
+                    checks={"comparison_incomplete_deterministic": True},
+                    violations=[],
+                ),
+            )
     if not context.products:
         return AnswerComposition(
             mode="deterministic",

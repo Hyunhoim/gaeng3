@@ -10,6 +10,7 @@ from finance_agent_core.config import load_field_registry
 from finance_agent_core.contracts.queryplan import (
     Constraint,
     ConstraintOperator,
+    Intent,
     QueryPlan,
     Ranking,
     SortDirection,
@@ -81,7 +82,16 @@ def render_query_contract(plan: QueryPlan) -> str:
             "정렬 기준: "
             + ", ".join(_ranking_text(ranking, product_family) for ranking in plan.ranking)
         )
-    lines.append(f"최대 표시 개수: {plan.limit}개")
+    if plan.intent is Intent.COMPARE:
+        registry = load_field_registry()
+        labels = [
+            registry.require_field(field, [product_family]).label
+            for field in plan.intent_payload.comparison_fields
+        ]
+        lines.append("비교 항목: " + ", ".join(labels))
+        lines.append(f"비교 대상 수: {plan.limit}개")
+    else:
+        lines.append(f"최대 표시 개수: {plan.limit}개")
     return "\n".join(lines)
 
 
@@ -92,7 +102,7 @@ def build_grounded_answer_context(
     verified: VerifiedSearch,
     products: list[ProductEvidence],
 ) -> GroundedAnswerContext:
-    rendered, _ = render_verified_search(plan, verified)
+    rendered, _ = render_verified_search(plan, verified, products)
     deterministic_answer = f"{render_query_contract(plan)}\n{rendered}"
     warnings = [
         AnswerWarning(code=code, message=WARNING_MESSAGES[code])
@@ -110,6 +120,8 @@ def build_grounded_answer_context(
 
 
 def required_evidence_fields(context: GroundedAnswerContext) -> list[str]:
+    if context.query_plan.intent is Intent.COMPARE:
+        return context.query_plan.intent_payload.comparison_fields
     ranked = [ranking.field for ranking in context.query_plan.ranking]
     if ranked:
         return ranked

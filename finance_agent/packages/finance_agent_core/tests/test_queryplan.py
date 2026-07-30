@@ -162,6 +162,52 @@ def test_compare_requires_comparison_fields(vertical_slice_plan: dict) -> None:
         QueryPlan.model_validate(payload)
 
 
+def test_compare_requires_projection_and_forbids_ranking(vertical_slice_plan: dict) -> None:
+    payload = deepcopy(vertical_slice_plan)
+    payload["intent"] = "compare"
+    payload["intent_payload"]["comparison_fields"] = ["aum"]
+
+    with pytest.raises(ValidationError, match="forbids ranking"):
+        QueryPlan.model_validate(payload)
+
+    payload["ranking"] = []
+    payload["projection"].remove("aum")
+    with pytest.raises(ValidationError, match="projection omits comparison fields"):
+        QueryPlan.model_validate(payload)
+
+
+def test_aggregate_requires_unique_metrics_projection_and_no_ranking(
+    vertical_slice_plan: dict,
+) -> None:
+    payload = deepcopy(vertical_slice_plan)
+    payload["intent"] = "aggregate"
+    payload["ranking"] = []
+    payload["intent_payload"]["aggregations"] = [
+        {"function": "avg", "field": "aum"},
+    ]
+    assert QueryPlan.model_validate(payload).intent.value == "aggregate"
+
+    payload["projection"].remove("aum")
+    with pytest.raises(ValidationError, match="projection omits execution fields"):
+        QueryPlan.model_validate(payload)
+
+    payload["projection"].append("aum")
+    payload["intent_payload"]["aggregations"].append({"function": "avg", "field": "aum"})
+    with pytest.raises(ValidationError, match="aggregations must not contain duplicates"):
+        QueryPlan.model_validate(payload)
+
+
+def test_aggregate_forbids_search_ranking(vertical_slice_plan: dict) -> None:
+    payload = deepcopy(vertical_slice_plan)
+    payload["intent"] = "aggregate"
+    payload["intent_payload"]["aggregations"] = [
+        {"function": "max", "field": "aum"},
+    ]
+
+    with pytest.raises(ValidationError, match="forbid ranking"):
+        QueryPlan.model_validate(payload)
+
+
 def test_extra_properties_are_forbidden(vertical_slice_plan: dict) -> None:
     payload = deepcopy(vertical_slice_plan)
     payload["silent_relaxation"] = True

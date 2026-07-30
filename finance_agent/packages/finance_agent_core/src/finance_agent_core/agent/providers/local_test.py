@@ -9,6 +9,10 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
+from finance_agent_core.agent.fund_comparison_parser import (
+    SUPPORTED_FUND_COMPARISON_FIELDS,
+    FundComparisonDraft,
+)
 from finance_agent_core.agent.linker import (
     build_lexical_hints,
     canonicalize_linked_query_plan,
@@ -270,6 +274,10 @@ class LocalTestProvider:
     def provider_name(self) -> Literal["local_test"]:
         return "local_test"
 
+    @property
+    def model_name(self) -> str:
+        return self.settings.model
+
     def _request_json(self, path: str, payload: dict[str, Any] | None) -> Any:
         url = f"{self.settings.base_url}/{path.lstrip('/')}"
         body = None
@@ -361,3 +369,132 @@ class LocalTestProvider:
                 f"local model returned an invalid QueryPlan: {error}"
             ) from error
         return canonicalize_linked_query_plan(question, plan)
+
+
+def _fund_comparison_draft_system_prompt(question: str) -> str:
+    fields = ", ".join(SUPPORTED_FUND_COMPARISON_FIELDS)
+    return f"""
+당신은 공모펀드 비교 질문에서 두 가지 정보만 추출하는 parser다.
+검색하거나 답변하지 말고 JSON 하나만 출력한다.
+
+target_mentions 규칙:
+- 질문에 실제로 적힌 비교 대상 표현만 등장 순서대로 복사한다.
+- 따옴표 안의 이름은 바깥 따옴표를 제외한 문자열을 그대로 복사한다.
+- KR로 시작하는 12자리 상품번호는 그대로 복사한다.
+- 띄어쓰기·괄호·클래스 표기·대소문자를 고치거나 새 이름을 만들지 않는다.
+- 대상이 하나뿐이면 하나만, 확인할 수 없으면 빈 배열로 둔다.
+- 같은 대상을 이름과 상품번호로 두 번 말했어도 두 표현을 모두 보존한다.
+
+comparison_fields 규칙:
+- 질문에 명시된 항목만 등장 순서대로 canonical field로 바꾼다.
+- 사용할 수 있는 값은 다음 목록뿐이다: {fields}
+- 위험등급=risk_level, AUM·순자산·운용자산=aum, 거래통화=trading_currency
+- 1주·1개월·3개월·6개월 수익률은 각각 one_week_return_pct,
+  one_month_return_pct, three_month_return_pct, six_month_return_pct
+- 국내외 구분=fund_geography_scope, 펀드 유형·운용 속성=fund_management_attribute
+- 투자 지역=investment_region, 투자자 유형=investor_type
+- 환헤지 여부=currency_hedged, 판매 여부=sellable,
+  당사·미래에셋 판매 여부=company_sellable
+- 정식 상품명=product_name, 짧은 이름·단축 상품명=short_name
+- 총보수·판매수수료·장기 수익률·전망·추천처럼 목록에 없는 항목은 넣지 않는다.
+- 항목이 없거나 모두 미지원이면 빈 배열로 둔다.
+
+질문:
+{question}
+""".strip()
+
+
+def _fund_comparison_draft_schema() -> dict[str, Any]:
+    schema = FundComparisonDraft.model_json_schema()
+    schema["properties"]["target_mentions"].update(
+        {
+            "minItems": 0,
+            "maxItems": 4,
+            "items": {"type": "string"},
+        }
+    )
+    schema["properties"]["comparison_fields"].update(
+        {
+            "minItems": 0,
+            "maxItems": 16,
+            "items": {
+                "type": "string",
+                "enum": list(SUPPORTED_FUND_COMPARISON_FIELDS),
+            },
+        }
+    )
+    return schema
+
+
+class LocalFundComparisonDraftProvider:
+    """Development-only Qwen adapter for minimum-privilege comparison parsing."""
+
+    def __init__(self, settings: LocalTestSettings) -> None:
+        self.settings = settings
+        self._client = LocalTestProvider(settings, internal_evaluation_family="fund")
+
+    @property
+    def provider_name(self) -> Literal["local_test"]:
+        return "local_test"
+
+    @property
+    def model_name(self) -> str:
+        return self.settings.model
+
+    def healthcheck(self) -> dict[str, Any]:
+        return self._client.healthcheck()
+
+    def generate_comparison_draft(
+        self,
+        question: str,
+        question_id: str,
+    ) -> FundComparisonDraft:
+        if not question.strip():
+            raise ValueError("question cannot be blank")
+        if not question_id.strip():
+            raise ValueError("question_id cannot be blank")
+        request_payload = {
+            "model": self.settings.model,
+            "messages": [
+                {
+                    "role": "system",
+                    "content": _fund_comparison_draft_system_prompt(question),
+                },
+                {
+                    "role": "user",
+                    "content": "질문에 실제로 적힌 비교 대상과 비교 항목만 추출해줘.",
+                },
+            ],
+            "temperature": 0,
+            "seed": 42,
+            "max_tokens": 1024,
+            "response_format": {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "fund_comparison_draft",
+                    "strict": True,
+                    "schema": _fund_comparison_draft_schema(),
+                },
+            },
+        }
+        response = self._client._request_json("chat/completions", request_payload)
+        try:
+            content = response["choices"][0]["message"]["content"]
+        except (KeyError, IndexError, TypeError) as error:
+            raise LocalProviderError(
+                "local comparison draft response has an unexpected shape"
+            ) from error
+        if not isinstance(content, str):
+            raise LocalProviderError("local comparison draft content is not text")
+        try:
+            payload = json.loads(content)
+        except json.JSONDecodeError as error:
+            raise LocalProviderError("local model did not return comparison draft JSON") from error
+        if not isinstance(payload, dict):
+            raise LocalProviderError("local model did not return a JSON object")
+        try:
+            return FundComparisonDraft.model_validate(payload)
+        except ValueError as error:
+            raise LocalProviderError(
+                f"local model returned an invalid fund comparison draft: {error}"
+            ) from error

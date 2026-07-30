@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from finance_agent_core.agent import FinanceAgent
+from finance_agent_core.agent import FinanceAgent, RoutedFinanceAgent
 from finance_agent_core.agent.providers import (
     DomesticMockProvider,
     domestic_vertical_slice_plan,
@@ -92,3 +92,25 @@ def test_domestic_corrupt_key_is_quarantined_without_repair_guess() -> None:
     assert record.row_quality is QualityStatus.INVALID
     assert record.total_expense_ratio_quality is QualityStatus.UNKNOWN
     assert record.aum_quality is QualityStatus.UNKNOWN
+
+
+def test_domestic_aggregate_groups_etf_and_etn(
+    domestic_sample_database: tuple[
+        Path,
+        list[NormalizedDomesticEtpRecord],
+        DatabaseManifest,
+    ],
+) -> None:
+    path, _, _ = domestic_sample_database
+    result = RoutedFinanceAgent({"domestic_etp": path}).answer(
+        "국내 ETP의 상품유형별 분포를 집계해줘",
+        "aggregate-domestic-001",
+    )
+
+    assert result.status == "executed"
+    assert result.candidate_count == 7
+    assert [
+        (item.group_values["product_type"], item.value, item.valid_count)
+        for item in result.aggregates
+    ] == [("ETF", 6, 6), ("ETN", 1, 1)]
+    assert "전체 후보의 85.71%" in result.answer

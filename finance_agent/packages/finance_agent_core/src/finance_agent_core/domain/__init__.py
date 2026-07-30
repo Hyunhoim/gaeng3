@@ -1,6 +1,11 @@
 from finance_agent_core.domain.models import (
     AgentResponse,
+    AggregateEvidence,
+    AggregateGroup,
+    AggregateGroupKey,
+    AggregateMetric,
     DatabaseManifest,
+    ExecutedAggregation,
     ExecutedSearch,
     FieldEvidence,
     NormalizedBondRecord,
@@ -12,12 +17,18 @@ from finance_agent_core.domain.models import (
     NormalizedPublicFundRecord,
     ProductEvidence,
     QuarantinedPublicFundRow,
+    VerifiedAggregation,
     VerifiedSearch,
 )
 
 __all__ = [
+    "AggregateEvidence",
+    "AggregateGroup",
+    "AggregateGroupKey",
+    "AggregateMetric",
     "AgentResponse",
     "DatabaseManifest",
+    "ExecutedAggregation",
     "ExecutedSearch",
     "FieldEvidence",
     "NormalizedBondRecord",
@@ -29,5 +40,6 @@ __all__ = [
     "NormalizedPublicFundRecord",
     "ProductEvidence",
     "QuarantinedPublicFundRow",
+    "VerifiedAggregation",
     "VerifiedSearch",
 ]

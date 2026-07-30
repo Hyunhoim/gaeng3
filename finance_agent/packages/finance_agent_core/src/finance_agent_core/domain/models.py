@@ -7,7 +7,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from finance_agent_core.config import QualityStatus
-from finance_agent_core.contracts.queryplan import QueryPlan
+from finance_agent_core.contracts.queryplan import AggregateFunction, QueryPlan
 
 type RawScalar = str | int | bool | None
 type EvidenceScalar = str | int | bool | None
@@ -423,6 +423,81 @@ class ExecutedSearch(DomainModel):
     sql_parameters: list[str | int | float | bool]
 
 
+class AggregateGroupKey(DomainModel):
+    field: str
+    value: EvidenceScalar
+    unit: str
+
+
+class AggregateMetric(DomainModel):
+    function: AggregateFunction
+    field: str
+    value: str | int | None
+    unit: str
+    valid_count: int = Field(ge=0)
+    missing_count: int = Field(ge=0)
+    as_of_start: date | None
+    as_of_end: date | None
+    quality: QualityStatus
+    quality_reason: str | None
+
+    @model_validator(mode="after")
+    def validate_metric_dates(self) -> AggregateMetric:
+        if (self.as_of_start is None) != (self.as_of_end is None):
+            raise ValueError("aggregate metric date bounds must both be present or absent")
+        if (
+            self.as_of_start is not None
+            and self.as_of_end is not None
+            and self.as_of_start > self.as_of_end
+        ):
+            raise ValueError("aggregate metric date bounds are reversed")
+        if self.valid_count == 0 and self.quality is not QualityStatus.UNKNOWN:
+            raise ValueError("aggregate metric without valid values must be UNKNOWN")
+        return self
+
+
+class AggregateGroup(DomainModel):
+    keys: list[AggregateGroupKey]
+    row_count: int = Field(ge=0)
+    metrics: list[AggregateMetric]
+
+    @model_validator(mode="after")
+    def validate_group_counts(self) -> AggregateGroup:
+        key_fields = [key.field for key in self.keys]
+        if len(key_fields) != len(set(key_fields)):
+            raise ValueError("aggregate group key fields must be unique")
+        metric_keys = [(metric.function, metric.field) for metric in self.metrics]
+        if len(metric_keys) != len(set(metric_keys)):
+            raise ValueError("aggregate metrics must be unique within a group")
+        for metric in self.metrics:
+            if metric.valid_count + metric.missing_count != self.row_count:
+                raise ValueError("aggregate metric counts must equal the group row count")
+            if metric.function is AggregateFunction.COUNT:
+                if not isinstance(metric.value, int) or metric.value != metric.valid_count:
+                    raise ValueError("count metric value must equal valid_count")
+            elif metric.value is not None and not isinstance(metric.value, str):
+                raise ValueError("numeric aggregate values must use exact decimal strings")
+        return self
+
+
+class ExecutedAggregation(DomainModel):
+    question_id: str
+    candidate_count: int = Field(ge=0)
+    total_group_count: int = Field(ge=0)
+    groups: list[AggregateGroup]
+    manifest: DatabaseManifest
+    sql_template: str
+    sql_parameters: list[str | int | float | bool]
+
+    @model_validator(mode="after")
+    def validate_group_window(self) -> ExecutedAggregation:
+        if len(self.groups) > self.total_group_count:
+            raise ValueError("returned aggregate groups exceed total_group_count")
+        if self.candidate_count == 0 and (self.total_group_count or self.groups):
+            raise ValueError("empty aggregate candidates cannot contain groups")
+        return self
+
+
 class FieldEvidence(DomainModel):
     canonical_field: str
     source_dataset: str
@@ -445,10 +520,55 @@ class ProductEvidence(DomainModel):
     fields: list[FieldEvidence]
 
 
+class AggregateEvidence(DomainModel):
+    evidence_id: str
+    function: AggregateFunction
+    field: str
+    label: str
+    value: str | int | None
+    unit: str
+    group_values: dict[str, EvidenceScalar]
+    group_source_columns: dict[str, list[str]]
+    row_count: int = Field(ge=0)
+    valid_count: int = Field(ge=0)
+    missing_count: int = Field(ge=0)
+    source_dataset: str
+    source_id: str
+    source_columns: list[str]
+    source_snapshot_date: date
+    as_of_start: date | None
+    as_of_end: date | None
+    quality: QualityStatus
+    quality_reason: str | None
+
+    @model_validator(mode="after")
+    def validate_evidence_counts_and_dates(self) -> AggregateEvidence:
+        if self.valid_count + self.missing_count != self.row_count:
+            raise ValueError("aggregate evidence counts must equal row_count")
+        if (self.as_of_start is None) != (self.as_of_end is None):
+            raise ValueError("aggregate evidence date bounds must both be present or absent")
+        if (
+            self.as_of_start is not None
+            and self.as_of_end is not None
+            and self.as_of_start > self.as_of_end
+        ):
+            raise ValueError("aggregate evidence date bounds are reversed")
+        return self
+
+
 class VerifiedSearch(DomainModel):
     question_id: str
     candidate_count: int = Field(ge=0)
     records: list[NormalizedProductRecord]
+    manifest: DatabaseManifest
+    verifier_version: Literal["1.0"] = "1.0"
+
+
+class VerifiedAggregation(DomainModel):
+    question_id: str
+    candidate_count: int = Field(ge=0)
+    total_group_count: int = Field(ge=0)
+    groups: list[AggregateGroup]
     manifest: DatabaseManifest
     verifier_version: Literal["1.0"] = "1.0"
 

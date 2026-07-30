@@ -284,6 +284,59 @@ def fund_vertical_slice_plan(question_id: str) -> QueryPlan:
     )
 
 
+def fund_comparison_plan(
+    question_id: str,
+    product_ids: list[str],
+    comparison_fields: list[str],
+) -> QueryPlan:
+    if len(product_ids) != 2 or len(set(product_ids)) != 2:
+        raise ValueError("fund comparison requires exactly two unique product IDs")
+    projection = [
+        "product_id",
+        "product_name",
+        "short_name",
+        *comparison_fields,
+        *(["trading_currency"] if "aum" in comparison_fields else []),
+        "dynamic_as_of",
+    ]
+    projection = list(dict.fromkeys(projection))
+    return QueryPlan.model_validate(
+        {
+            "schema_version": "1.0",
+            "question_id": question_id,
+            "intent": "compare",
+            "product_families": ["fund"],
+            "constraints": [
+                {
+                    "field": "public_offering",
+                    "operator": "eq",
+                    "value": True,
+                    "unit": "boolean",
+                    "strength": "locked",
+                },
+                {
+                    "field": "product_id",
+                    "operator": "in",
+                    "value": product_ids,
+                    "unit": "code",
+                    "strength": "locked",
+                },
+            ],
+            "ranking": [],
+            "projection": projection,
+            "limit": 2,
+            "intent_payload": {
+                "comparison_fields": comparison_fields,
+                "group_by": [],
+                "aggregations": [],
+                "explain_product_ids": [],
+            },
+            "ambiguities": [],
+            "unsupported_conditions": [],
+        }
+    )
+
+
 class MockProvider:
     @property
     def provider_name(self) -> Literal["mock"]:

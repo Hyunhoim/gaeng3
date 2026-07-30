@@ -250,6 +250,11 @@ class QueryPlan(ContractModel):
         _require_unique(self.intent_payload.comparison_fields, "comparison_fields")
         _require_unique(self.intent_payload.group_by, "group_by")
         _require_unique(self.intent_payload.explain_product_ids, "explain_product_ids")
+        aggregation_keys = [
+            f"{aggregation.function.value}:{aggregation.field}"
+            for aggregation in self.intent_payload.aggregations
+        ]
+        _require_unique(aggregation_keys, "aggregations")
 
         for constraint in self.constraints:
             definition = registry.require_field(constraint.field, families)
@@ -303,15 +308,34 @@ class QueryPlan(ContractModel):
             ):
                 raise ValueError("search requires an empty intent_payload")
         elif self.intent is Intent.COMPARE:
-            if not payload.comparison_fields:
+            blocked = bool(self.ambiguities or self.unsupported_conditions)
+            if not payload.comparison_fields and not blocked:
                 raise ValueError("compare requires comparison_fields")
             if payload.group_by or payload.aggregations or payload.explain_product_ids:
                 raise ValueError("compare contains fields for another intent")
+            if self.ranking:
+                raise ValueError("compare preserves requested product order and forbids ranking")
+            missing_projection = set(payload.comparison_fields) - set(self.projection)
+            if missing_projection:
+                raise ValueError(
+                    f"compare projection omits comparison fields: {sorted(missing_projection)}"
+                )
         elif self.intent is Intent.AGGREGATE:
             if not payload.aggregations:
                 raise ValueError("aggregate requires aggregations")
             if payload.comparison_fields or payload.explain_product_ids:
                 raise ValueError("aggregate contains fields for another intent")
+            if self.ranking:
+                raise ValueError("aggregate groups use deterministic ordering and forbid ranking")
+            required_projection = {
+                *payload.group_by,
+                *(aggregation.field for aggregation in payload.aggregations),
+            }
+            missing_projection = required_projection - set(self.projection)
+            if missing_projection:
+                raise ValueError(
+                    f"aggregate projection omits execution fields: {sorted(missing_projection)}"
+                )
         elif self.intent is Intent.EXPLAIN:
             if not payload.explain_product_ids:
                 raise ValueError("explain requires explain_product_ids")

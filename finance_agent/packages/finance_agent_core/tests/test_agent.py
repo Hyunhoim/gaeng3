@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from finance_agent_core.agent import FinanceAgent
+from finance_agent_core.agent import FinanceAgent, RoutedFinanceAgent
 from finance_agent_core.agent.providers import (
     LocalProviderError,
     LocalTestProvider,
@@ -11,6 +11,7 @@ from finance_agent_core.agent.providers import (
     MockProvider,
     first_vertical_slice_plan,
 )
+from finance_agent_core.answering import ExpectedGroundedAnswerProvider
 from finance_agent_core.domain import DatabaseManifest, NormalizedOverseasEtpRecord
 
 
@@ -34,6 +35,108 @@ def test_mock_agent_completes_verified_vertical_slice(
     ]
     assert "수익을 보장" in response.answer
     assert len(response.warnings) == 3
+
+
+def test_routed_agent_completes_server_compiled_grounded_path(
+    sample_database: tuple[Path, list[NormalizedOverseasEtpRecord], DatabaseManifest],
+) -> None:
+    path, _, _ = sample_database
+    agent = RoutedFinanceAgent(
+        {"overseas_etp": path},
+        answer_provider=ExpectedGroundedAnswerProvider(),
+    )
+
+    result = agent.answer(
+        "미국 채권형 해외 ETF 중 현재 거래 가능한 상품에서 "
+        "총보수 0.20% 이하를 AUM 높은 순으로 5개 보여줘",
+        "routed-001",
+    )
+
+    assert result.status == "executed"
+    assert result.decision.draft.intent.value == "search"
+    assert result.query_plan is not None
+    assert result.query_plan.question_id == "routed-001"
+    assert result.candidate_count == 6
+    assert [product.ticker for product in result.products] == [
+        "B6",
+        "B5",
+        "B4",
+        "B2",
+        "B3",
+    ]
+    assert result.answer_composition is not None
+    assert result.answer_composition.mode == "llm_grounded"
+    assert result.answer_composition.verification.passed
+
+
+@pytest.mark.parametrize("intent_word", ["상세 정보를 조회해줘", "총보수를 설명해줘"])
+def test_routed_agent_lowers_exact_detail_and_explain_to_search(
+    sample_database: tuple[Path, list[NormalizedOverseasEtpRecord], DatabaseManifest],
+    intent_word: str,
+) -> None:
+    path, _, _ = sample_database
+    result = RoutedFinanceAgent({"overseas_etp": path}).answer(
+        f"종목코드 B2인 해외 ETF의 {intent_word}",
+        f"routed-{intent_word[:2]}",
+    )
+
+    assert result.status == "executed"
+    assert result.query_plan is not None
+    assert result.query_plan.intent.value == "search"
+    assert result.query_plan.limit == 1
+    assert len(result.products) == 1
+    assert result.products[0].ticker == "B2"
+
+
+def test_routed_agent_never_touches_tools_for_control_route() -> None:
+    agent = RoutedFinanceAgent({})
+
+    unsupported = agent.answer(
+        "내일 가장 오를 해외 ETF를 예측하고 매수 추천해줘",
+        "routed-control-001",
+    )
+    clarify = agent.answer(
+        "안전한 국내채권을 찾아줘",
+        "routed-control-002",
+    )
+
+    assert unsupported.status == "unsupported"
+    assert unsupported.query_plan is None
+    assert unsupported.products == []
+    assert clarify.status == "clarify"
+    assert clarify.query_plan is None
+
+
+def test_routed_agent_falls_back_when_answer_provider_fails(
+    sample_database: tuple[Path, list[NormalizedOverseasEtpRecord], DatabaseManifest],
+) -> None:
+    path, _, _ = sample_database
+
+    class FailingAnswerProvider:
+        @property
+        def provider_name(self) -> str:
+            return "failing_test"
+
+        @property
+        def model_name(self) -> str:
+            return "failing-model"
+
+        def generate_grounded_answer(self, context):
+            raise RuntimeError("simulated provider failure")
+
+    result = RoutedFinanceAgent(
+        {"overseas_etp": path},
+        answer_provider=FailingAnswerProvider(),
+    ).answer(
+        "미국 채권형 해외 ETF 중 총보수 0.20% 이하를 AUM 높은 순으로 3개 보여줘",
+        "routed-fallback-001",
+    )
+
+    assert result.status == "executed"
+    assert result.answer_composition is not None
+    assert result.answer_composition.mode == "deterministic_fallback"
+    assert not result.answer_composition.verification.passed
+    assert "검증된 후보" in result.answer
 
 
 def test_local_settings_require_double_opt_in() -> None:

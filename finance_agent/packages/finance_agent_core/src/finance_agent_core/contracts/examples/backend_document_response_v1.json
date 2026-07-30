@@ -1,0 +1,48 @@
+{
+  "schema_version": "1.0",
+  "request_id": "web-20260730-0003",
+  "status": "success",
+  "intent": "explain",
+  "product_families": [],
+  "answer": "위험등급은 제공 데이터에서 상품별 위험 분류를 나타냅니다.",
+  "query_plan": null,
+  "candidate_count": null,
+  "products": [],
+  "aggregates": [],
+  "documents": [
+    {
+      "evidence_id": "provided-terms:0000",
+      "document_id": "provided-terms",
+      "chunk_ordinal": 0,
+      "title": "금융상품 용어집",
+      "text": "위험등급은 제공 데이터에서 상품별 위험 분류를 나타냅니다.",
+      "source_uri": "approved://provided-terms",
+      "source_kind": "provided",
+      "as_of": "2026-07-11",
+      "document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "metadata": {
+        "category": "glossary"
+      },
+      "relevance_score": 0.125
+    }
+  ],
+  "citations": [
+    {
+      "citation_id": "document:provided-terms:0000",
+      "kind": "document_chunk",
+      "label": "금융상품 용어집",
+      "source_id": "provided-terms",
+      "source_locator": "approved://provided-terms · chunk 0",
+      "as_of": "2026-07-11",
+      "evidence_refs": ["provided-terms:0000"]
+    }
+  ],
+  "as_of_dates": ["2026-07-11"],
+  "warnings": [],
+  "answer_mode": "deterministic",
+  "fallback_used": false,
+  "provider_model": null,
+  "clarification": null,
+  "error": null,
+  "source_manifest": null
+}

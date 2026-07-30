@@ -1,0 +1,475 @@
+{
+  "suite_id": "fund-compare-parser-core-24",
+  "suite_version": "1.0",
+  "dataset": "fund",
+  "database_sha256": "99fac786e5be0ec5a7a53e11e1bd3bbccd5b37ab15243ecbf8b864a85b375ca4",
+  "manifest_sha256": "be83a616d033db2328d231499d1f0492323d02bace4f153ad3da4860a0d10bcd",
+  "cases": [
+    {
+      "id": "fund-compare-parser-001",
+      "split": "development",
+      "category": "quoted_full_name",
+      "question": "\"미래에셋국공채MMF투자신탁 제1호[국공채] C클래스\"와 \"미래에셋국공채MMF 투자신탁제H3호 [국공채]\"의 위험등급과 AUM을 비교해줘",
+      "expected": {
+        "draft": {
+          "target_mentions": [
+            "미래에셋국공채MMF투자신탁 제1호[국공채] C클래스",
+            "미래에셋국공채MMF 투자신탁제H3호 [국공채]"
+          ],
+          "comparison_fields": ["risk_level", "aum"]
+        },
+        "resolution_statuses": ["resolved", "resolved"],
+        "resolved_product_ids": ["KR5010101702", "KR5010101714"],
+        "comparison_fields": ["risk_level", "aum"],
+        "disposition": "execute",
+        "blocker": null
+      }
+    },
+    {
+      "id": "fund-compare-parser-002",
+      "split": "development",
+      "category": "quoted_short_name",
+      "question": "\"미래에셋국공채MMF투자신탁1호[국공채]C\"와 \"미래에셋국공채MMF 투자신탁제H3[국공채]\"의 3개월 수익률과 순자산을 비교해줘",
+      "expected": {
+        "draft": {
+          "target_mentions": [
+            "미래에셋국공채MMF투자신탁1호[국공채]C",
+            "미래에셋국공채MMF 투자신탁제H3[국공채]"
+          ],
+          "comparison_fields": ["three_month_return_pct", "aum"]
+        },
+        "resolution_statuses": ["resolved", "resolved"],
+        "resolved_product_ids": ["KR5010101702", "KR5010101714"],
+        "comparison_fields": ["three_month_return_pct", "aum"],
+        "disposition": "execute",
+        "blocker": null
+      }
+    },
+    {
+      "id": "fund-compare-parser-003",
+      "split": "development",
+      "category": "explicit_product_id",
+      "question": "KR5010101714와 KR5010101702의 1개월 수익률, 위험도를 비교해줘",
+      "expected": {
+        "draft": {
+          "target_mentions": ["KR5010101714", "KR5010101702"],
+          "comparison_fields": ["one_month_return_pct", "risk_level"]
+        },
+        "resolution_statuses": ["resolved", "resolved"],
+        "resolved_product_ids": ["KR5010101714", "KR5010101702"],
+        "comparison_fields": ["one_month_return_pct", "risk_level"],
+        "disposition": "execute",
+        "blocker": null
+      }
+    },
+    {
+      "id": "fund-compare-parser-004",
+      "split": "development",
+      "category": "spacing_normalization",
+      "question": "\"미래에셋 국공채 MMF 투자신탁 제1호 [국공채] C클래스\"와 \"미래에셋국공채 MMF 투자신탁 제1호 [국공채]종류 Cw\"의 거래 통화와 당사 판매 여부를 비교해줘",
+      "expected": {
+        "draft": {
+          "target_mentions": [
+            "미래에셋 국공채 MMF 투자신탁 제1호 [국공채] C클래스",
+            "미래에셋국공채 MMF 투자신탁 제1호 [국공채]종류 Cw"
+          ],
+          "comparison_fields": ["trading_currency", "company_sellable"]
+        },
+        "resolution_statuses": ["resolved", "resolved"],
+        "resolved_product_ids": ["KR5010101702", "KR5010101703"],
+        "comparison_fields": ["trading_currency", "company_sellable"],
+        "disposition": "execute",
+        "blocker": null
+      }
+    },
+    {
+      "id": "fund-compare-parser-005",
+      "split": "development",
+      "category": "nfkc_normalization",
+      "question": "\"한국투자법인용달러MMF（USD）（C）\"와 \"한국투자법인용달러MMF（USD）（C-e）\"의 AUM과 6개월 수익률을 비교해줘",
+      "expected": {
+        "draft": {
+          "target_mentions": [
+            "한국투자법인용달러MMF（USD）（C）",
+            "한국투자법인용달러MMF（USD）（C-e）"
+          ],
+          "comparison_fields": ["aum", "six_month_return_pct"]
+        },
+        "resolution_statuses": ["resolved", "resolved"],
+        "resolved_product_ids": ["KR5013101461", "KR5013101466"],
+        "comparison_fields": ["aum", "six_month_return_pct"],
+        "disposition": "execute",
+        "blocker": null
+      }
+    },
+    {
+      "id": "fund-compare-parser-006",
+      "split": "development",
+      "category": "korean_quotes",
+      "question": "「서울신종MMF2」와 『서울신종MMF1』의 정식 상품명과 짧은 이름을 비교해줘",
+      "expected": {
+        "draft": {
+          "target_mentions": ["서울신종MMF2", "서울신종MMF1"],
+          "comparison_fields": ["product_name", "short_name"]
+        },
+        "resolution_statuses": ["resolved", "resolved"],
+        "resolved_product_ids": ["KR5010101402", "KR5010101401"],
+        "comparison_fields": ["product_name", "short_name"],
+        "disposition": "execute",
+        "blocker": null
+      }
+    },
+    {
+      "id": "fund-compare-parser-007",
+      "split": "development",
+      "category": "unquoted_short_name",
+      "question": "미래에셋국공채MMF투자신탁1호[국공채]C와 미래에셋국공채MMF 투자신탁제H3[국공채]의 위험등급을 비교해줘",
+      "expected": {
+        "draft": {
+          "target_mentions": [
+            "미래에셋국공채MMF투자신탁1호[국공채]C",
+            "미래에셋국공채MMF 투자신탁제H3[국공채]"
+          ],
+          "comparison_fields": ["risk_level"]
+        },
+        "resolution_statuses": ["resolved", "resolved"],
+        "resolved_product_ids": ["KR5010101702", "KR5010101714"],
+        "comparison_fields": ["risk_level"],
+        "disposition": "execute",
+        "blocker": null
+      }
+    },
+    {
+      "id": "fund-compare-parser-008",
+      "split": "development",
+      "category": "unquoted_simple_name",
+      "question": "서울신종MMF1과 서울신종MMF2의 1주 수익률과 1개월 수익률을 비교해줘",
+      "expected": {
+        "draft": {
+          "target_mentions": ["서울신종MMF1", "서울신종MMF2"],
+          "comparison_fields": ["one_week_return_pct", "one_month_return_pct"]
+        },
+        "resolution_statuses": ["resolved", "resolved"],
+        "resolved_product_ids": ["KR5010101401", "KR5010101402"],
+        "comparison_fields": ["one_week_return_pct", "one_month_return_pct"],
+        "disposition": "execute",
+        "blocker": null
+      }
+    },
+    {
+      "id": "fund-compare-parser-009",
+      "split": "development",
+      "category": "mixed_name_and_id",
+      "question": "\"미래에셋국공채MMF투자신탁 제1호[국공채] C클래스\"와 KR5010101703의 펀드 유형과 투자 지역을 비교해줘",
+      "expected": {
+        "draft": {
+          "target_mentions": [
+            "미래에셋국공채MMF투자신탁 제1호[국공채] C클래스",
+            "KR5010101703"
+          ],
+          "comparison_fields": ["fund_management_attribute", "investment_region"]
+        },
+        "resolution_statuses": ["resolved", "resolved"],
+        "resolved_product_ids": ["KR5010101702", "KR5010101703"],
+        "comparison_fields": ["fund_management_attribute", "investment_region"],
+        "disposition": "execute",
+        "blocker": null
+      }
+    },
+    {
+      "id": "fund-compare-parser-010",
+      "split": "development",
+      "category": "same_currency_aum",
+      "question": "\"한국투자법인용달러MMF(USD)(C)\"와 \"한국투자법인용달러MMF(USD)(C-e)\"의 운용자산과 거래 통화를 비교해줘",
+      "expected": {
+        "draft": {
+          "target_mentions": [
+            "한국투자법인용달러MMF(USD)(C)",
+            "한국투자법인용달러MMF(USD)(C-e)"
+          ],
+          "comparison_fields": ["aum", "trading_currency"]
+        },
+        "resolution_statuses": ["resolved", "resolved"],
+        "resolved_product_ids": ["KR5013101461", "KR5013101466"],
+        "comparison_fields": ["aum", "trading_currency"],
+        "disposition": "execute",
+        "blocker": null
+      }
+    },
+    {
+      "id": "fund-compare-parser-011",
+      "split": "development",
+      "category": "cross_currency_aum",
+      "question": "\"미래에셋국공채MMF투자신탁1호[국공채]C\"와 \"한국투자법인용달러MMF(USD)(C)\"의 AUM과 환헤지 여부를 비교해줘",
+      "expected": {
+        "draft": {
+          "target_mentions": [
+            "미래에셋국공채MMF투자신탁1호[국공채]C",
+            "한국투자법인용달러MMF(USD)(C)"
+          ],
+          "comparison_fields": ["aum", "currency_hedged"]
+        },
+        "resolution_statuses": ["resolved", "resolved"],
+        "resolved_product_ids": ["KR5010101702", "KR5013101461"],
+        "comparison_fields": ["aum", "currency_hedged"],
+        "disposition": "execute",
+        "blocker": null
+      }
+    },
+    {
+      "id": "fund-compare-parser-012",
+      "split": "development",
+      "category": "sale_scope",
+      "question": "\"미래에셋국공채MMF투자신탁1호[국공채]C\"와 \"미래에셋국공채MMF1호[국공채]Cw\"의 판매 여부와 당사 판매 여부를 비교해줘",
+      "expected": {
+        "draft": {
+          "target_mentions": [
+            "미래에셋국공채MMF투자신탁1호[국공채]C",
+            "미래에셋국공채MMF1호[국공채]Cw"
+          ],
+          "comparison_fields": ["sellable", "company_sellable"]
+        },
+        "resolution_statuses": ["resolved", "resolved"],
+        "resolved_product_ids": ["KR5010101702", "KR5010101703"],
+        "comparison_fields": ["sellable", "company_sellable"],
+        "disposition": "execute",
+        "blocker": null
+      }
+    },
+    {
+      "id": "fund-compare-parser-013",
+      "split": "development",
+      "category": "classification_fields",
+      "question": "\"미래에셋국공채MMF투자신탁 제1호[국공채] C클래스\"와 \"미래에셋국공채 MMF  투자신탁 제1호 [국공채]종류 Cw\"의 국내외 구분, 펀드 유형, 투자자 유형을 비교해줘",
+      "expected": {
+        "draft": {
+          "target_mentions": [
+            "미래에셋국공채MMF투자신탁 제1호[국공채] C클래스",
+            "미래에셋국공채 MMF  투자신탁 제1호 [국공채]종류 Cw"
+          ],
+          "comparison_fields": [
+            "fund_geography_scope",
+            "fund_management_attribute",
+            "investor_type"
+          ]
+        },
+        "resolution_statuses": ["resolved", "resolved"],
+        "resolved_product_ids": ["KR5010101702", "KR5010101703"],
+        "comparison_fields": [
+          "fund_geography_scope",
+          "fund_management_attribute",
+          "investor_type"
+        ],
+        "disposition": "execute",
+        "blocker": null
+      }
+    },
+    {
+      "id": "fund-compare-parser-014",
+      "split": "development",
+      "category": "return_synonyms",
+      "question": "\"미래에셋국공채MMF 투자신탁제H3[국공채]\"와 \"미래에셋국공채MMF1호[국공채]Cw\"의 반년 성과와 한 달 수익률을 비교해줘",
+      "expected": {
+        "draft": {
+          "target_mentions": [
+            "미래에셋국공채MMF 투자신탁제H3[국공채]",
+            "미래에셋국공채MMF1호[국공채]Cw"
+          ],
+          "comparison_fields": ["six_month_return_pct", "one_month_return_pct"]
+        },
+        "resolution_statuses": ["resolved", "resolved"],
+        "resolved_product_ids": ["KR5010101714", "KR5010101703"],
+        "comparison_fields": ["six_month_return_pct", "one_month_return_pct"],
+        "disposition": "execute",
+        "blocker": null
+      }
+    },
+    {
+      "id": "fund-compare-parser-015",
+      "split": "development",
+      "category": "ambiguous_short_name",
+      "question": "\"삼성KODEX중국CSI300\"과 \"서울신종MMF1\"의 위험등급을 비교해줘",
+      "expected": {
+        "draft": {
+          "target_mentions": ["삼성KODEX중국CSI300", "서울신종MMF1"],
+          "comparison_fields": ["risk_level"]
+        },
+        "resolution_statuses": ["ambiguous", "resolved"],
+        "resolved_product_ids": ["KR5010101401"],
+        "comparison_fields": ["risk_level"],
+        "disposition": "block",
+        "blocker": "ambiguity"
+      }
+    },
+    {
+      "id": "fund-compare-parser-016",
+      "split": "development",
+      "category": "private_out_of_scope",
+      "question": "\"흥국브랜드C46\"과 \"서울신종MMF1\"의 위험등급을 비교해줘",
+      "expected": {
+        "draft": {
+          "target_mentions": ["흥국브랜드C46", "서울신종MMF1"],
+          "comparison_fields": ["risk_level"]
+        },
+        "resolution_statuses": ["out_of_scope", "resolved"],
+        "resolved_product_ids": ["KR5010101401"],
+        "comparison_fields": ["risk_level"],
+        "disposition": "block",
+        "blocker": "ambiguity"
+      }
+    },
+    {
+      "id": "fund-compare-parser-017",
+      "split": "development",
+      "category": "unknown_product",
+      "question": "\"존재하지않는공모펀드X\"와 \"서울신종MMF1\"의 3개월 수익률을 비교해줘",
+      "expected": {
+        "draft": {
+          "target_mentions": ["존재하지않는공모펀드X", "서울신종MMF1"],
+          "comparison_fields": ["three_month_return_pct"]
+        },
+        "resolution_statuses": ["not_found", "resolved"],
+        "resolved_product_ids": ["KR5010101401"],
+        "comparison_fields": ["three_month_return_pct"],
+        "disposition": "block",
+        "blocker": "ambiguity"
+      }
+    },
+    {
+      "id": "fund-compare-parser-018",
+      "split": "development",
+      "category": "duplicate_target",
+      "question": "\"미래에셋국공채MMF투자신탁 제1호[국공채] C클래스\"와 \"미래에셋국공채MMF투자신탁1호[국공채]C\"의 AUM을 비교해줘",
+      "expected": {
+        "draft": {
+          "target_mentions": [
+            "미래에셋국공채MMF투자신탁 제1호[국공채] C클래스",
+            "미래에셋국공채MMF투자신탁1호[국공채]C"
+          ],
+          "comparison_fields": ["aum"]
+        },
+        "resolution_statuses": ["resolved", "resolved"],
+        "resolved_product_ids": ["KR5010101702", "KR5010101702"],
+        "comparison_fields": ["aum"],
+        "disposition": "block",
+        "blocker": "ambiguity"
+      }
+    },
+    {
+      "id": "fund-compare-parser-019",
+      "split": "holdout",
+      "category": "unquoted_parenthesized_names",
+      "question": "한국투자법인용달러MMF(USD)(C)와 한국투자법인용달러MMF(USD)(C-e)의 1주 수익률과 위험등급을 비교해줘",
+      "expected": {
+        "draft": {
+          "target_mentions": [
+            "한국투자법인용달러MMF(USD)(C)",
+            "한국투자법인용달러MMF(USD)(C-e)"
+          ],
+          "comparison_fields": ["one_week_return_pct", "risk_level"]
+        },
+        "resolution_statuses": ["resolved", "resolved"],
+        "resolved_product_ids": ["KR5013101461", "KR5013101466"],
+        "comparison_fields": ["one_week_return_pct", "risk_level"],
+        "disposition": "execute",
+        "blocker": null
+      }
+    },
+    {
+      "id": "fund-compare-parser-020",
+      "split": "holdout",
+      "category": "alternate_quotes_and_order",
+      "question": "‘미래에셋국공채MMF1호[국공채]Cw’와 “미래에셋국공채MMF 투자신탁제H3[국공채]”의 단축 상품명, 1W 수익률, 3M 수익률을 비교해줘",
+      "expected": {
+        "draft": {
+          "target_mentions": [
+            "미래에셋국공채MMF1호[국공채]Cw",
+            "미래에셋국공채MMF 투자신탁제H3[국공채]"
+          ],
+          "comparison_fields": [
+            "short_name",
+            "one_week_return_pct",
+            "three_month_return_pct"
+          ]
+        },
+        "resolution_statuses": ["resolved", "resolved"],
+        "resolved_product_ids": ["KR5010101703", "KR5010101714"],
+        "comparison_fields": [
+          "short_name",
+          "one_week_return_pct",
+          "three_month_return_pct"
+        ],
+        "disposition": "execute",
+        "blocker": null
+      }
+    },
+    {
+      "id": "fund-compare-parser-021",
+      "split": "holdout",
+      "category": "single_target",
+      "question": "\"서울신종MMF1\"의 위험등급을 비교해줘",
+      "expected": {
+        "draft": {
+          "target_mentions": ["서울신종MMF1"],
+          "comparison_fields": ["risk_level"]
+        },
+        "resolution_statuses": ["resolved"],
+        "resolved_product_ids": ["KR5010101401"],
+        "comparison_fields": ["risk_level"],
+        "disposition": "block",
+        "blocker": "ambiguity"
+      }
+    },
+    {
+      "id": "fund-compare-parser-022",
+      "split": "holdout",
+      "category": "unsupported_fee",
+      "question": "\"서울신종MMF1\"과 \"서울신종MMF2\"의 총보수를 비교해줘",
+      "expected": {
+        "draft": {
+          "target_mentions": ["서울신종MMF1", "서울신종MMF2"],
+          "comparison_fields": []
+        },
+        "resolution_statuses": ["resolved", "resolved"],
+        "resolved_product_ids": ["KR5010101401", "KR5010101402"],
+        "comparison_fields": [],
+        "disposition": "block",
+        "blocker": "unsupported"
+      }
+    },
+    {
+      "id": "fund-compare-parser-023",
+      "split": "holdout",
+      "category": "missing_comparison_field",
+      "question": "\"서울신종MMF1\"과 \"서울신종MMF2\"를 비교해줘",
+      "expected": {
+        "draft": {
+          "target_mentions": ["서울신종MMF1", "서울신종MMF2"],
+          "comparison_fields": []
+        },
+        "resolution_statuses": ["resolved", "resolved"],
+        "resolved_product_ids": ["KR5010101401", "KR5010101402"],
+        "comparison_fields": [],
+        "disposition": "block",
+        "blocker": "ambiguity"
+      }
+    },
+    {
+      "id": "fund-compare-parser-024",
+      "split": "holdout",
+      "category": "missing_compare_intent",
+      "question": "\"서울신종MMF1\"과 \"서울신종MMF2\"의 위험등급을 알려줘",
+      "expected": {
+        "draft": {
+          "target_mentions": ["서울신종MMF1", "서울신종MMF2"],
+          "comparison_fields": ["risk_level"]
+        },
+        "resolution_statuses": ["resolved", "resolved"],
+        "resolved_product_ids": ["KR5010101401", "KR5010101402"],
+        "comparison_fields": ["risk_level"],
+        "disposition": "block",
+        "blocker": "ambiguity"
+      }
+    }
+  ]
+}

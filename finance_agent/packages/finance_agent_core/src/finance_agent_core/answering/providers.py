@@ -49,7 +49,9 @@ def _generation_payload(context: GroundedAnswerContext) -> dict[str, Any]:
             }
         )
     return {
+        "intent": context.query_plan.intent.value,
         "ranking": [ranking.model_dump(mode="json") for ranking in context.query_plan.ranking],
+        "comparison_fields": context.query_plan.intent_payload.comparison_fields,
         "products": products,
         "required_warning_codes": [warning.code for warning in context.warnings],
     }
@@ -63,7 +65,7 @@ def _answer_system_prompt(context: GroundedAnswerContext) -> str:
         separators=(",", ":"),
     )
     return f"""
-당신은 검증된 금융상품 검색 결과를 설명하는 grounded answer planner다.
+당신은 검증된 금융상품 검색·비교 결과를 설명하는 grounded answer planner다.
 반드시 JSON 하나만 출력하고 제공된 근거 밖의 사실을 만들지 않는다.
 
 출력 규칙:
@@ -75,9 +77,9 @@ def _answer_system_prompt(context: GroundedAnswerContext) -> str:
   label 자체에 포함된 기간 표현은 그대로 쓸 수 있다. 정확한 값과 식별자는
   서버가 검증된 근거로 별도 컴파일한다.
 - 과거 성과를 미래 성과처럼 표현하거나 매수·매도·수익 보장 표현을 쓰지 않는다.
-- 상품별 explanation은 선택한 evidence_fields가 정렬 또는 식별 근거로
-  사용됐다는 사실만 짧게 설명한다. 좋음·나쁨·유리함·수익성·전망·예측·추천
-  같은 평가나 투자 해석을 추가하지 않는다.
+- 상품별 explanation은 선택한 evidence_fields가 정렬·식별 또는 비교 근거로
+  사용됐다는 사실만 짧게 설명한다. 비교 우열이나 추천을 판단하지 않는다.
+  좋음·나쁨·유리함·수익성·전망·예측 같은 평가나 투자 해석을 추가하지 않는다.
 - acknowledged_warning_codes는 required_warning_codes를 같은 순서로 정확히 복사한다.
 - 입력에 없는 경고 코드나 evidence field를 추가하지 않는다.
 

@@ -21,15 +21,21 @@ finance-agent-answer = "finance_agent_core.agent.cli:main"
 finance-evaluate-core = "finance_agent_core.evaluation.cli:main"
 finance-evaluate-answers = "finance_agent_core.evaluation.answer_cli:main"
 finance-evaluate-fund-blind = "finance_agent_core.evaluation.blind_cli:main"
+finance-evaluate-fund-compare = "finance_agent_core.evaluation.comparison_cli:main"
+finance-evaluate-fund-compare-e2e = "finance_agent_core.evaluation.comparison_e2e_cli:main"
+finance-evaluate-fund-compare-parser = "finance_agent_core.evaluation.comparison_parser_cli:main"
+finance-pre-hcx = "finance_agent_core.evaluation.pre_hcx_cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
 "finance_agent_core.audit" = ["expectations.json"]
-"finance_agent_core.config" = ["field_registry.yaml"]
+"finance_agent_core.config" = ["field_registry.yaml", "capability_matrix.json"]
 "finance_agent_core.contracts" = ["queryplan.hcx.schema.json"]
-"finance_agent_core.evaluation.suites" = ["*_core_50.json"]
+"finance_agent_core.contracts.examples" = ["*.json"]
+"finance_agent_core.evaluation.suites" = ["*.json"]
+"finance_agent_core.evaluation.rubrics" = ["*.json"]
 
 [tool.pytest.ini_options]
 addopts = "-ra"

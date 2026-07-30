@@ -405,6 +405,18 @@ def build_lexical_hints(
             match = re.search(pattern, question)
             if match:
                 add(field, match.group(1).strip(), operator)
+    if family == "overseas_etp":
+        lookup_patterns = [
+            (r"(?:종목코드|티커)\s*[:：]?\s*([A-Z0-9._-]+)(?:인|의|$|\s)", "ticker"),
+            (
+                r"상품번호\s*[:：]?\s*([A-Z]{2,5}:[A-Z0-9._-]+)(?:인|의|$|\s)",
+                "product_id",
+            ),
+        ]
+        for pattern, field in lookup_patterns:
+            match = re.search(pattern, question, flags=re.IGNORECASE)
+            if match:
+                add(field, match.group(1).strip(), "eq")
 
     if family == "bond":
         numeric_fields = [

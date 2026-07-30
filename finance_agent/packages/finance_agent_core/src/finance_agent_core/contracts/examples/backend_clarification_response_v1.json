@@ -1,0 +1,27 @@
+{
+  "schema_version": "1.0",
+  "request_id": "web-20260730-0002",
+  "status": "clarification",
+  "intent": "detail",
+  "product_families": ["overseas_etp"],
+  "answer": "상세 조회할 해외 ETF의 종목코드나 상품번호를 알려주세요.",
+  "query_plan": null,
+  "candidate_count": null,
+  "products": [],
+  "aggregates": [],
+  "documents": [],
+  "citations": [],
+  "as_of_dates": [],
+  "warnings": [],
+  "answer_mode": "control",
+  "fallback_used": false,
+  "provider_model": null,
+  "clarification": {
+    "code": "missing_product_identity",
+    "message": "상세 조회에는 정확한 상품 식별자가 필요합니다.",
+    "required_fields": ["product_identity"],
+    "options": []
+  },
+  "error": null,
+  "source_manifest": null
+}

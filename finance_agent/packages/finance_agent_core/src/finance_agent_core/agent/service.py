@@ -8,12 +8,15 @@ from finance_agent_core.answering import (
     GroundedAnswerProvider,
     compose_grounded_answer,
 )
+from finance_agent_core.contracts.queryplan import Intent
 from finance_agent_core.domain import AgentResponse
 from finance_agent_core.execution import (
     ResultVerifier,
     SQLiteOracle,
+    build_fund_comparison,
     build_product_evidence,
     render_verified_search,
+    require_executable_comparison,
     require_executable_search,
 )
 from finance_agent_core.storage import connect_read_only, load_all_records
@@ -48,13 +51,20 @@ class FinanceAgent:
         plan = self.provider.generate_query_plan(question, request_id)
         if plan.question_id != request_id:
             raise ValueError("provider changed the trusted request_id")
-        require_executable_search(plan)
+        if plan.intent is Intent.COMPARE:
+            require_executable_comparison(plan)
+        else:
+            require_executable_search(plan)
         executed = self.oracle.execute(plan)
         with connect_read_only(self.database_path) as connection:
             universe = load_all_records(connection)
         verified = self.verifier.verify(plan, executed, universe)
         products = build_product_evidence(plan, verified)
-        answer, warnings = render_verified_search(plan, verified)
+        if plan.intent is Intent.COMPARE:
+            comparison = build_fund_comparison(plan, verified, products)
+            verified = comparison.verified
+            products = list(comparison.products)
+        answer, warnings = render_verified_search(plan, verified, products)
         composition: AnswerComposition | None = None
         if self.answer_provider is not None:
             composition = compose_grounded_answer(

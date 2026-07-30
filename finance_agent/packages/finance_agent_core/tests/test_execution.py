@@ -2,11 +2,14 @@ from pathlib import Path
 
 import pytest
 
+from finance_agent_core.agent import RoutedFinanceAgent
 from finance_agent_core.agent.providers import first_vertical_slice_plan
 from finance_agent_core.domain import DatabaseManifest, NormalizedOverseasEtpRecord
 from finance_agent_core.execution import (
+    AggregateResultVerifier,
     ResultVerificationError,
     ResultVerifier,
+    SQLiteAggregateOracle,
     SQLiteOracle,
     build_product_evidence,
 )
@@ -67,3 +70,46 @@ def test_field_evidence_contains_raw_source_and_field_date(
     assert aum.normalized_value == "6000"
     assert aum.as_of.isoformat() == "2026-06-16"
     assert aum.quality.value == "VALID"
+
+
+def test_overseas_aggregate_executes_with_missing_value_disclosure(
+    sample_database: tuple[Path, list[NormalizedOverseasEtpRecord], DatabaseManifest],
+) -> None:
+    path, _, _ = sample_database
+    result = RoutedFinanceAgent({"overseas_etp": path}).answer(
+        "해외 ETF의 총보수율 평균과 최댓값을 집계해줘",
+        "aggregate-overseas-001",
+    )
+
+    assert result.status == "executed"
+    assert result.query_plan is not None
+    assert result.query_plan.intent.value == "aggregate"
+    assert result.candidate_count == 10
+    assert [(item.function.value, item.field, item.value) for item in result.aggregates] == [
+        ("avg", "total_expense_ratio_pct", "0.138888888889"),
+        ("max", "total_expense_ratio_pct", "0.25"),
+    ]
+    assert all(item.valid_count == 9 for item in result.aggregates)
+    assert all(item.missing_count == 1 for item in result.aggregates)
+    assert "결측·UNKNOWN·INVALID 값은 0으로 바꾸지 않고" in result.answer
+
+
+def test_aggregate_verifier_rejects_tampered_metric(
+    sample_database: tuple[Path, list[NormalizedOverseasEtpRecord], DatabaseManifest],
+) -> None:
+    path, _, _ = sample_database
+    agent = RoutedFinanceAgent({"overseas_etp": path})
+    decision = agent.router.route(
+        "해외 ETF의 총보수율 평균을 집계해줘",
+        "aggregate-overseas-002",
+    )
+    plan = agent.compiler.compile(decision)
+    executed = SQLiteAggregateOracle(path).execute(plan)
+    metric = executed.groups[0].metrics[0].model_copy(update={"value": "999"})
+    group = executed.groups[0].model_copy(update={"metrics": [metric]})
+    tampered = executed.model_copy(update={"groups": [group]})
+    with connect_read_only(path) as connection:
+        universe = load_all_records(connection)
+
+    with pytest.raises(ResultVerificationError, match="groups or metrics differ"):
+        AggregateResultVerifier().verify(plan, tampered, universe)
