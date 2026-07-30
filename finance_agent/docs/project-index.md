@@ -59,7 +59,7 @@
 | [네 상품군 공통 COMPARE 엔진 설계](comparison-engine-design.md) | 상품군별 비교 필드·식별·통화·기준일·결측·공통 evidence 설계 | v1.0 구현 |
 | [네 상품군 자연어 COMPARE 공개 회귀](evaluation-product-comparison.md) | 세 상품군 신규 30문항과 기존 공모펀드 24문항의 비교 배선·안전 경계 | v1.0 정본 |
 | [SEARCH·AGGREGATE 성능 기준선](evaluation-search-aggregate-performance.md) | 네 상품군 8문항의 결과 지문·새 프로세스 지연·RSS와 projected verifier 전후 비교 | v1.0 정본 |
-| [HyperCLOVA X provider 계약](hyperclova-provider.md) | 세 LLM 역할의 요청·응답·오류·관측 계약과 API 없는 fake transport 검증 | 계약·fake 완료·실제 HTTP 대기 |
+| [HyperCLOVA X provider 계약](hyperclova-provider.md) | 세 LLM 역할의 요청·응답·오류·관측 계약과 API 없는 전체 Agent E2E | 계약·E2E 8/8 완료·실제 HTTP 대기 |
 | [BM25/SQLite FTS 문서 RAG](document-rag.md) | 승인 문서 적재·BM25 검색·필터·근거·기준일·not-found 계약 | 최소 기능 완료 |
 | [Backend 전달용 Agent DTO](backend-contract.md) | 프레임워크 독립 request·response·citation·fallback 계약과 JSON 예시 | v1.0 |
 | [금융상품 Agent 사람 평가 rubric](human-evaluation.md) | 6개 평가 축·critical gate·독립 reviewer·집계 계약 | rubric 완료·실평가 대기 |
@@ -125,7 +125,9 @@
   p50 308.749ms, 최대 추가 RSS 51,000KiB, 결과 지문 100% 일치
 - HyperCLOVA X 경계: QueryPlan·공모펀드 비교 초안·근거 답변의 semantic
   structured request, 공식 mode/provider gate, HCX schema 검사, token·latency
-  call record와 fake transport 오류 계약 완료, 실제 HTTP transport는 대기
+  call record와 fake transport 오류 계약 완료
+- HyperCLOVA X API 없는 전체 경로: 해외·국내 ETP·국내채권 SEARCH와
+  fallback·timeout·무호출 정책·서버 계획 guard 8/8, 실제 HTTP transport는 대기
 - 공모펀드 평가 경계: 동결 expected QueryPlan의 SEARCH·COMPARE 답변 격리
   회귀와 공개 24문항 자연어 통합 E2E까지 완료, 독립 blind E2E·사람 rubric·
   HyperCLOVA X 실제 HTTP 재현 미완료, 공식 Agent 실행 비활성
@@ -134,7 +136,7 @@
   금액 통화 gate, 결측·기준일 공개, SQL 후보와 독립 Python 재검산
 - 문서 검색 기준: BM25/SQLite FTS synthetic 적재·필터·근거·not-found 통과
 - 팀 계약 기준: Backend DTO JSON 예시·schema, 사람 rubric validator 통과
-- 코드 회귀 기준: 전체 pytest 285개, Ruff lint·format, pip dependency check,
+- 코드 회귀 기준: 전체 pytest 293개, Ruff lint·format, pip dependency check,
   wheel과 필수 package data 검사
 - 로컬 Qwen 평가 기준: 동결 50문항에서 최초 미사용 holdout 9/10,
   오류 수정 후 전체 회귀 50/50을 연속 2회 재현

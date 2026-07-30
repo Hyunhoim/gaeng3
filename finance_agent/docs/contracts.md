@@ -41,6 +41,7 @@
 | [`product_comparison_runner.py`](../packages/finance_agent_core/src/finance_agent_core/evaluation/product_comparison_runner.py) | 세 상품군 자연어 비교의 실제 DB·결정론적 답변·Backend 계약 공개 회귀 |
 | [`product_comparison_cli.py`](../packages/finance_agent_core/src/finance_agent_core/evaluation/product_comparison_cli.py) | DB·manifest hash 검증 후 30문항 공통 비교 실행 |
 | [`search_aggregate_benchmark.py`](../packages/finance_agent_core/src/finance_agent_core/evaluation/search_aggregate_benchmark.py) | 새 프로세스 8문항의 결과 지문·지연·RSS 회귀 |
+| [`routed_service.py`](../packages/finance_agent_core/src/finance_agent_core/agent/routed_service.py) | SEARCH의 서버 기준계획·선택적 HCX 계획 완전 일치 guard와 공통 실행 |
 
 ## 2. 두 스키마를 분리하는 이유
 

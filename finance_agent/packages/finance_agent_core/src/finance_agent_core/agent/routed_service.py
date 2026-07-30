@@ -9,6 +9,7 @@ from finance_agent_core.agent.compiler import (
     PlanCompilationBlockedError,
     ServerQueryPlanCompiler,
 )
+from finance_agent_core.agent.providers import QueryPlanProvider
 from finance_agent_core.agent.router import IntentRouter
 from finance_agent_core.answering import (
     AnswerComposition,
@@ -114,6 +115,7 @@ class RoutedFinanceAgent:
         database_paths: dict[ProductFamily | str, str | Path],
         *,
         router: IntentRouter | None = None,
+        query_plan_provider: QueryPlanProvider | None = None,
         answer_provider: GroundedAnswerProvider | None = None,
         allow_internal_disabled_dataset: bool = False,
         record_cache: RecordSnapshotCache | None = None,
@@ -130,6 +132,7 @@ class RoutedFinanceAgent:
             max_entries=max(1, len(self.database_paths))
         )
         self.router = router or IntentRouter()
+        self.query_plan_provider = query_plan_provider
         self.compiler = ServerQueryPlanCompiler(
             self.database_paths,
             record_cache=self.record_cache,
@@ -171,6 +174,16 @@ class RoutedFinanceAgent:
                 reason=f"{answer} {error}",
                 plan=plan,
             )
+        if self.query_plan_provider is not None and plan.intent is Intent.SEARCH:
+            try:
+                plan = self._provider_search_plan(decision, plan)
+            except PlanCompilationBlockedError as error:
+                return self._control_result(
+                    decision,
+                    disposition=RouteDisposition.CLARIFY,
+                    reason=str(error),
+                    plan=plan,
+                )
 
         family = plan.product_families[0]
         try:
@@ -248,6 +261,23 @@ class RoutedFinanceAgent:
             source_manifest=verified.manifest,
             answer_composition=composition,
         )
+
+    def _provider_search_plan(
+        self,
+        decision: RouteDecision,
+        server_plan: QueryPlan,
+    ) -> QueryPlan:
+        if self.query_plan_provider is None:
+            return server_plan
+        provider_plan = self.query_plan_provider.generate_query_plan(
+            decision.draft.question,
+            decision.draft.request_id,
+        )
+        if provider_plan != server_plan:
+            raise PlanCompilationBlockedError(
+                "model QueryPlan differs from the server-compiled execution contract"
+            )
+        return provider_plan
 
     def _require_execution(self, plan: QueryPlan) -> None:
         if plan.intent is Intent.AGGREGATE:

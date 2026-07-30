@@ -307,3 +307,15 @@ transport로 정상 응답, 401·403·429·500, timeout, 연결 실패와 잘못
 검증한다. 실제 API 호출 완료로 오해하지 않도록
 [HyperCLOVA X provider 계약](hyperclova-provider.md)에 완료 범위와 외부
 게이트를 분리해 기록한다.
+
+API 없는 전체 경로는 다음 명령으로 재현한다.
+
+```bash
+/home/haeyeongcho/miniforge3/envs/gaeng3-dev/bin/python \
+  scripts/run-hcx-contract-e2e.py \
+  --require-perfect
+```
+
+세 실행 상품군 SEARCH의 QueryPlan→Oracle→Evidence→답변→Backend DTO와
+fallback·timeout·Router 무호출·비활성 공모펀드·서버 계획 guard를 8개
+시나리오로 검사한다. 현재 8/8이며 실제 네트워크 호출은 없다.

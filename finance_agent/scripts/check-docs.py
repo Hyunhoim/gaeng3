@@ -75,6 +75,7 @@ REQUIRED_BASELINES = {
     "public-fund-compare-parser-v1.json",
     "product-compare-v1.json",
     "search-aggregate-performance-v1.json",
+    "hcx-contract-e2e-v1.json",
     "pre-hcx-route-diagnostic-initial-v1.json",
     "pre-hcx-route-diagnostic-improved-v1.json",
     "pre-hcx-route-diagnostic-initial-v2.json",
@@ -221,6 +222,7 @@ def _check_baseline(path: Path) -> list[str]:
         "grounded_answer",
         "intent_route",
         "system_performance",
+        "system_contract",
     }:
         errors.append(f"{name}: invalid evaluation_layer")
     if payload["provider"].get("official_submission_provider") is not False:
@@ -251,6 +253,17 @@ def _check_baseline(path: Path) -> list[str]:
         )
         if not data.get("not_applicable_reason"):
             errors.append(f"{name}: route baseline requires data not-applicable reason")
+    elif payload["evaluation_layer"] == "system_contract":
+        _require_sha256(
+            errors,
+            name,
+            "data.fixture_definition_sha256",
+            data.get("fixture_definition_sha256"),
+        )
+        if not data.get("not_applicable_reason"):
+            errors.append(
+                f"{name}: system contract baseline requires data not-applicable reason"
+            )
     else:
         for field_name in ("database_sha256", "manifest_sha256", "source_file_sha256"):
             _require_sha256(errors, name, f"data.{field_name}", data.get(field_name))
@@ -356,6 +369,7 @@ def _readiness_files() -> list[Path]:
         PROJECT_ROOT / "environment.local-llm.yml",
         PROJECT_ROOT / "evaluation" / "README.md",
         PROJECT_ROOT / "scripts" / "check-docs.py",
+        PROJECT_ROOT / "scripts" / "run-hcx-contract-e2e.py",
         package_root / "README.md",
         package_root / "pyproject.toml",
     }
@@ -416,7 +430,7 @@ def _check_readiness_manifest() -> list[str]:
     if not payload.get("external_gates"):
         errors.append("pre-HCX source manifest must preserve external gates")
     qa = payload.get("qa", {})
-    if qa.get("pytest_passed") != 285:
+    if qa.get("pytest_passed") != 293:
         errors.append("pre-HCX source manifest pytest count differs from frozen QA")
     if qa.get("documentation_baselines") != len(REQUIRED_BASELINES):
         errors.append("pre-HCX source manifest baseline count differs")

@@ -6,8 +6,8 @@
   "git_commit": null,
   "generated_from_dirty_worktree": true,
   "hash_algorithm": "sha256(sorted(relative_path + NUL + file_sha256 + LF))",
-  "file_count": 215,
-  "tree_sha256": "867fa3411d729de018efd63adf9dabed4a92841fe652dca6a262b13d2fbff687",
+  "file_count": 219,
+  "tree_sha256": "b31aa810f0676c52b90b5e6bbdc2dd016bb133c1c4d0d5c1a4c248e66e872bef",
   "included_scope": [
     "README.md",
     "environment*.yml",
@@ -20,7 +20,8 @@
     "packages/finance_agent_core/pyproject.toml",
     "packages/finance_agent_core/src/**/*.{py,json,yaml}",
     "packages/finance_agent_core/tests/**/*.py",
-    "scripts/check-docs.py"
+    "scripts/check-docs.py",
+    "scripts/run-hcx-contract-e2e.py"
   ],
   "diagnostic": {
     "suite_sha256": "8bab9b0f4fd3e40782c591e2e3aea2f9d76b94a2d31d846d8b957604af0313b0",
@@ -32,12 +33,12 @@
     "limitation": "self_authored_internal_diagnostic_not_independent_blind"
   },
   "qa": {
-    "pytest_passed": 285,
+    "pytest_passed": 293,
     "ruff_lint": "passed",
     "ruff_format": "passed",
     "pip_check": "passed",
     "documentation_markdown": 35,
-    "documentation_baselines": 20,
+    "documentation_baselines": 21,
     "wheel_build_no_isolation": "passed",
     "wheel_required_package_data": "passed",
     "git_diff_check": "passed"

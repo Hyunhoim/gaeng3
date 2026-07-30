@@ -19,7 +19,7 @@
 | SEARCH·AGGREGATE 성능 | 네 상품군 8문항 결과 지문 8/8, projected verifier, 새 프로세스 p50 308.749ms·최대 추가 RSS 51,000KiB |
 | 문서 RAG | caller-fed BM25/SQLite FTS 적재·필터·근거·기준일·not-found 최소 기능 |
 | 팀 통합 계약 | 프레임워크 독립 Backend DTO·JSON Schema/예시, 사람 평가 rubric v1 |
-| HyperCLOVA X | 세 provider의 요청·응답·오류 계약과 fake transport 완료, 실제 HTTP 연결 대기 |
+| HyperCLOVA X | 세 provider 계약·fake transport·SEARCH 전체 경로 E2E 8/8 완료, 실제 HTTP 연결 대기 |
 
 로컬 Qwen은 개발 전용 테스트 대역이다. 평가·제출 경로의 LLM은 공식 규칙에
 따라 HyperCLOVA X로 제한하며, 로컬 provider는 세 가지 명시적 opt-in 없이는

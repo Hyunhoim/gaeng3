@@ -45,7 +45,7 @@
 | 4 | BM25/SQLite FTS 문서 RAG | 적재·필터·top-k·근거·기준일·not-found 테스트 | 최소 기능 완료·실제 corpus 승인 대기 |
 | 5 | 사람 rubric·Backend DTO | JSON 예시·schema·contract test 포함 | 계약 완료·사람 평가 대기 |
 | 6 | baseline 동결·전체 QA | 회귀·wheel·문서·hash 검증과 외부 게이트 명시 | 내부 완료 |
-| 7 | HyperCLOVA X provider 경계 | 세 operation·주입형 transport·오류·관측 fake test | 계약 완료·실제 HTTP 대기 |
+| 7 | HyperCLOVA X provider 경계 | 세 operation·주입형 transport·오류·관측·전체 경로 E2E | 내부 8/8 완료·실제 HTTP 대기 |
 
 ## 2. 평가 해석 원칙
 
@@ -93,6 +93,15 @@ HyperCLOVA X provider 경계 결과:
 - prompt와 오류 본문을 제외한 token·latency·상태 call record 계약 완료
 - 실제 endpoint·credential·인증 header·HTTP transport는 공식 계약 확인 후 구현
 
+HyperCLOVA X API 없는 전체 경로 결과:
+
+- 해외 ETP·국내 ETP·국내채권 SEARCH가 QueryPlan부터 Backend DTO까지 통과
+- HCX QueryPlan은 서버 기준계획과 완전히 일치할 때만 Oracle 실행
+- 잘못된 답변 순서는 Answer Verifier가 결정론적 fallback으로 전환
+- timeout·금지 질의·비활성 공모펀드·계획 불일치를 호출 단계에 맞춰 차단
+- 동결 `hcx-contract-e2e-8` 8개 시나리오 8/8, 네트워크 호출 0건
+- 실제 HCX 품질·비용·latency·API 호환성 점수로 해석하지 않음
+
 ## 3. 외부 완료 게이트
 
 다음 항목은 저장소 코드만으로 완료할 수 없으며 최종 baseline과 분리해 관리한다.
@@ -109,9 +118,9 @@ HyperCLOVA X provider 경계 결과:
 
 ## 4. 내부 완료 QA
 
-- pytest `285 passed`
+- pytest `293 passed`
 - Ruff lint와 format 통과
-- 문서 검사 `35 Markdown files`, `20 evaluation baselines` 통과
+- 문서 검사 `35 Markdown files`, `21 evaluation baselines` 통과
 - `pip check` 통과
 - build isolation 없이 wheel 생성과 신규 JSON package data 포함 여부 통과
 - `git diff --check` 통과

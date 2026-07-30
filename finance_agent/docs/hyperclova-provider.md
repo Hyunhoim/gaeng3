@@ -40,6 +40,12 @@ provider는 API URL, 인증 header, SDK 응답 구조를 직접 알지 못한다
 서비스 형식으로 변환하도록 분리했다. 따라서 공식 API 계약이 확인되면 transport만
 추가하고 상위 Agent와 verifier는 그대로 유지할 수 있다.
 
+공통 `RoutedFinanceAgent`의 SEARCH 경로에는 QueryPlan provider를 선택적으로
+주입할 수 있다. 서버가 같은 질문으로 먼저 만든 기준 QueryPlan과 모델
+QueryPlan이 완전히 일치할 때만 Oracle을 실행한다. 모델이 조건·정렬·상품군·
+limit·projection을 추가하거나 누락하면 역질문으로 종료한다. AGGREGATE와
+COMPARE는 현재 서버 결정론적 compiler를 그대로 사용한다.
+
 ## 3. HyperCLOVA X가 맡는 세 가지 역할
 
 | operation | provider | 입력과 출력 |
@@ -115,7 +121,7 @@ token usage만 기록하고 prompt와 응답 content는 기록하지 않는다. 
 `success`는 transport와 content 계약 통과를 뜻하며, 이후 도메인 검증 결과와는
 별도로 해석한다.
 
-## 7. API 없이 검증한 항목
+## 7. API 없이 검증한 provider 계약
 
 테스트의 `FakeHyperClovaXTransport`는 네트워크를 전혀 사용하지 않고 정상 응답과
 실패를 순서대로 재생한다. 현재 자동 테스트는 다음을 확인한다.
@@ -134,13 +140,39 @@ fake 응답이 통과한다는 사실은 HyperCLOVA X의 실제 생성 품질이
 호환성을 뜻하지 않는다. 상위 Agent 배선이 예상 응답과 실패를 안전하게 처리한다는
 계약 테스트다.
 
-## 8. 실제 API 확보 후 남은 작업
+## 8. API 없는 전체 경로 E2E
+
+provider 단위 계약과 별도로 `hcx-contract-e2e-8`을 동결했다.
+
+```bash
+/home/haeyeongcho/miniforge3/envs/gaeng3-dev/bin/python \
+  scripts/run-hcx-contract-e2e.py \
+  --require-perfect
+```
+
+8개 시나리오의 현재 결과는 8/8이다.
+
+- 해외 ETP·국내 ETP·국내채권 SEARCH가 HCX QueryPlan부터 Oracle·Result
+  Verifier·field-level evidence·HCX 답변·Answer Verifier·Backend DTO까지 통과
+- 모델 답변의 상품 순서가 다르면 결정론적 답변으로 fallback
+- QueryPlan timeout은 Oracle과 답변 provider 실행 전에 예외로 종료
+- 금지 질의는 Router가 모델 호출 없이 거절
+- 비활성 공모펀드는 모델과 데이터베이스 호출 없이 차단
+- 모델 QueryPlan과 서버 기준계획이 다르면 Oracle 전에 역질문
+- 모든 fake transport 요청에서 실제 네트워크와 credential 사용 0건
+
+재현 집계는
+[`hcx-contract-e2e-v1.json`](../evaluation/baselines/hcx-contract-e2e-v1.json)에
+보존한다. 이 결과는 합성 SQLite와 fake 응답을 사용한 시스템 계약 회귀이며,
+실제 HyperCLOVA X 생성 성능이나 API 호환성 점수가 아니다.
+
+## 9. 실제 API 확보 후 남은 작업
 
 1. 허용 모델명과 Structured Outputs 지원 범위 재확인
 2. 공식 endpoint·인증 header·요청·응답 body를 구현하는 HTTP transport 추가
 3. credential을 환경변수 또는 secret store에서 읽고 로그 마스킹 검증
 4. 공식 timeout·QPS·retry-after 정책을 반영한 제한적 retry 구현
-5. 세 operation의 실제 API smoke test와 고정 fixture 재현
+5. 세 operation의 실제 API smoke test와 `hcx-contract-e2e-8` 재현
 6. token·latency·오류·fallback 비율 측정
 7. 로컬 Qwen 결과와 분리된 HyperCLOVA X 평가 baseline 기록
 8. Backend 공식 `/answer` adapter에서 provider를 선택하고 E2E 검증

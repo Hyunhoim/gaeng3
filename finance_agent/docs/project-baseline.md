@@ -113,11 +113,16 @@
   mode/provider gate, HCX schema subset, token·latency 관측, 인증·rate limit·
   timeout·서비스·응답 오류를 fake transport로 검증했다. 실제 endpoint·인증
   header·HTTP transport와 공식 재현은 아직 외부 게이트다.
+- SEARCH는 공통 Router와 서버 기준 QueryPlan을 먼저 통과한 뒤 HCX QueryPlan이
+  완전히 일치할 때만 Oracle을 실행하도록 선택 주입했다. API 없는 전체 경로
+  8개 시나리오에서 세 실행 상품군 Backend DTO, Answer Verifier fallback,
+  timeout, 금지 질의·비활성 공모펀드 무호출, 계획 불일치를 8/8 검증했다.
+  AGGREGATE·COMPARE는 서버 결정론적 compiler를 유지한다.
 - caller-fed BM25/SQLite FTS 문서 검색은 chunk·필터·top-k·출처·기준일·
   provided 우선순위·not-found를 검증했다. 실제 corpus는 승인 전이다.
 - 사람 평가 rubric v1과 프레임워크 독립 Backend DTO·JSON 예시를 구현했다.
   실제 사람 평가는 외부 게이트다.
-- 전체 코드 회귀는 pytest 285개, Ruff lint·format, pip dependency check와
+- 전체 코드 회귀는 pytest 293개, Ruff lint·format, pip dependency check와
   wheel 빌드를 통과했다.
 
 ## 3. 변경할 수 없는 공식 제약
@@ -284,6 +289,8 @@ QueryPlan에는 최소한 intent, 상품군, 필수 조건, 완화 전 확인이
   공통 ComparisonEvidence·독립 verifier를 연결한다.
 - [x] HyperCLOVA X provider의 세 operation, 주입형 transport, 오류·timeout
   계약과 API 없는 fake 테스트를 구현한다.
+- [x] 세 실행 상품군 SEARCH를 공통 Router·서버 계획 guard·Oracle·Evidence·
+  Answer Verifier·Backend DTO까지 API 없는 E2E로 검증한다.
 - [ ] 공식 endpoint·인증 계약에 맞는 HTTP transport와 `/answer` adapter를
   연결하고 실제 API로 재현한다.
 

@@ -303,6 +303,20 @@ HCX_TIMEOUT_SECONDS=60
 없다. 자세한 범위와 남은 작업은
 [HyperCLOVA X provider 계약](../../docs/hyperclova-provider.md)을 따른다.
 
+SEARCH에서는 `RoutedFinanceAgent(query_plan_provider=...)`로 provider를
+선택 주입할 수 있다. 서버가 독립적으로 만든 QueryPlan과 모델 QueryPlan이
+완전히 일치해야만 Oracle을 실행한다. API 없는 전체 Agent 경로는 다음 명령으로
+재현한다.
+
+```bash
+/home/haeyeongcho/miniforge3/envs/gaeng3-dev/bin/python \
+  scripts/run-hcx-contract-e2e.py \
+  --require-perfect
+```
+
+해외·국내 ETP와 국내채권 정상 경로, Answer Verifier fallback, timeout,
+Router 제어, 비활성 공모펀드, 계획 불일치 총 8개 시나리오를 검사한다.
+
 ## 검증
 
 ```bash
