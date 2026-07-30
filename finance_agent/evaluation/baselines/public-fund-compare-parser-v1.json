@@ -1,0 +1,88 @@
+{
+  "schema_version": "1.0",
+  "baseline_id": "public-fund-compare-parser-v1",
+  "recorded_on": "2026-07-30",
+  "dataset": "fund",
+  "evaluation_layer": "query_plan",
+  "status": "public_compare_parser_regression",
+  "provider": {
+    "name": "local_test",
+    "official_submission_provider": false
+  },
+  "model": {
+    "repository": "Qwen/Qwen3-30B-A3B-Instruct-2507-FP8",
+    "served_name": "qwen3-local-test",
+    "revision": "5a5a776300a41aaa681dd7ff0106608ef2bc90db"
+  },
+  "suite": {
+    "id": "fund-compare-parser-core-24",
+    "version": "1.0",
+    "path": "packages/finance_agent_core/src/finance_agent_core/evaluation/suites/fund_compare_parser_core_24.json",
+    "sha256": "9e2bd72c001f6384a08111ae195de0bf1a962fe6aafa46b52df012917c1b4c9c",
+    "development_cases": 18,
+    "holdout_cases": 6
+  },
+  "data": {
+    "database_sha256": "99fac786e5be0ec5a7a53e11e1bd3bbccd5b37ab15243ecbf8b864a85b375ca4",
+    "manifest_sha256": "be83a616d033db2328d231499d1f0492323d02bace4f153ad3da4860a0d10bcd",
+    "source_file_sha256": "140d1ef0cec918d0b3f7c52c107cb123395594eb089b0cd70bb305709b0f44eb"
+  },
+  "metrics": {
+    "total": 24,
+    "passed": 24,
+    "strict_accuracy": 1.0,
+    "executable_cases": 16,
+    "blocked_cases": 8,
+    "draft_target_exact_rate": 1.0,
+    "draft_field_exact_rate": 1.0,
+    "mention_grounding_rate": 1.0,
+    "resolution_exact_rate": 1.0,
+    "plan_exact_rate": 1.0,
+    "oracle_exact_rate": 1.0,
+    "safety_block_rate": 1.0,
+    "latency_ms": {
+      "p50": 569.018,
+      "p95": 796.637,
+      "max": 889.169
+    }
+  },
+  "resolution_contract": {
+    "normalization": "unicode_nfkc_casefold_whitespace_and_balanced_outer_quotes",
+    "aliases": [
+      "itm_no",
+      "product_name",
+      "short_name"
+    ],
+    "scope": "public_fund_only",
+    "collision_policy": "clarify_without_guessing",
+    "unknown_policy": "clarify_without_oracle_execution",
+    "question_identity_policy": "require_complete_ordered_surface_sequence_and_atomic_quoted_spans",
+    "target_role_policy": "block_exclusion_substitution_and_inclusion_roles",
+    "question_residual_policy": "block_unknown_residual_text_and_unapproved_punctuation_across_whole_question",
+    "question_quote_policy": "require_valid_whole_question_quote_structure",
+    "target_structure_policy": "require_ordered_identity_spans_exact_connectors_and_position_aware_punctuation",
+    "model_role": "copy_explicit_mentions_and_field_labels_only",
+    "server_role": "resolve_identity_compile_plan_and_verify_execution",
+    "plan_verification": "independent_frozen_case_contract"
+  },
+  "reports": [
+    {
+      "role": "expected_all",
+      "artifact_name": "fund-compare-parser-expected-all.json",
+      "sha256": "579283ec3ccd67574a70c4bce387819c0247922458bd3e9688fa2fd8ccdfe7dd"
+    },
+    {
+      "role": "local_qwen_all_final",
+      "artifact_name": "fund-compare-parser-local_test-all.json",
+      "sha256": "c886abd61861abc10bca7ae727c8c7f32caf4390e9e2b4ceccc4dbb8fc4fdfea"
+    }
+  ],
+  "reproduce": "python -m finance_agent_core.evaluation.comparison_parser_cli --provider local_test --split all --workers 4 --require-perfect",
+  "limitations": [
+    "같은 개발자가 작성한 공개 24문항 회귀 세트이므로 독립 blind 일반화 성능으로 해석하지 않는다.",
+    "상품번호·정식명·짧은 이름의 정확 정규화 일치만 허용하며 오탈자나 부분 이름을 fuzzy match로 추측하지 않는다.",
+    "동일한 짧은 이름이 여러 클래스에 연결되면 후보를 제시하고 역질문하며 임의로 하나를 선택하지 않는다.",
+    "로컬 Qwen은 질문의 대상 표현과 필드 이름만 추출하고 상품 선택·수치·SQL·비교 계산에는 관여하지 않는다.",
+    "fund 공식 Agent 실행은 계속 비활성화되어 있고 HyperCLOVA X 또는 공식 공모전 평가 결과가 아니다."
+  ]
+}

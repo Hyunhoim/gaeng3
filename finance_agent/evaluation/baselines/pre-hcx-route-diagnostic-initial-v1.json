@@ -1,0 +1,45 @@
+{
+  "schema_version": "1.0",
+  "baseline_id": "pre-hcx-route-diagnostic-initial-v1",
+  "recorded_on": "2026-07-30",
+  "dataset": "four-product-families",
+  "evaluation_layer": "intent_route",
+  "status": "diagnostic_initial_observed",
+  "provider": {
+    "name": "pre_router_snapshot",
+    "official_submission_provider": false
+  },
+  "model": null,
+  "suite": {
+    "id": "pre-hcx-route-diagnostic-28",
+    "version": "1.0",
+    "path": "packages/finance_agent_core/src/finance_agent_core/evaluation/suites/pre_hcx_route_diagnostic_28.json",
+    "sha256": "9ced15b98eaa312c5032af3f2adc60833a619e6c4019f77489f7d94553d363e5"
+  },
+  "data": {
+    "not_applicable_reason": "라우팅 진단은 상품 DB를 조회하지 않음",
+    "capability_matrix_sha256": "0fb58cefd0a2fd5b94149bb8454bfdcaaadeef736fb2d6fe1e2313c7eee68211"
+  },
+  "metrics": {
+    "total": 28,
+    "passed": 4,
+    "strict_accuracy": 0.142857,
+    "product_family_coverage": 4,
+    "intent_coverage": 7
+  },
+  "reports": [
+    {
+      "artifact_name": "pre-hcx-route-diagnostic-initial-v1.json",
+      "sha256": "dba6eae357495c21bc9388299c6cc8196b2b707f93a32f6af66c05a76bc809a1"
+    }
+  ],
+  "reproduce": [
+    "python -m finance_agent_core.evaluation.pre_hcx_cli diagnostic --profile pre_router_snapshot --generated-at-utc 2026-07-30T00:00:00Z --output artifacts/evaluation/pre-hcx-route-diagnostic-initial-v1.json"
+  ],
+  "limitations": [
+    "기존 공통 linker의 search 강제 동작을 실행 가능한 adapter로 재생한 초기 진단",
+    "AI 담당자가 작성한 공개 internal diagnostic이며 독립 blind가 아님",
+    "DB Oracle과 최종 답변 품질을 측정하지 않음",
+    "HyperCLOVA X 성능이 아님"
+  ]
+}

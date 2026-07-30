@@ -1,0 +1,81 @@
+{
+  "schema_version": "1.0",
+  "baseline_id": "public-fund-compare-v1",
+  "recorded_on": "2026-07-29",
+  "dataset": "fund",
+  "evaluation_layer": "grounded_answer",
+  "status": "public_compare_regression_first_run",
+  "provider": {
+    "name": "local_test",
+    "official_submission_provider": false
+  },
+  "model": {
+    "repository": "Qwen/Qwen3-30B-A3B-Instruct-2507-FP8",
+    "served_name": "qwen3-local-test",
+    "revision": "5a5a776300a41aaa681dd7ff0106608ef2bc90db"
+  },
+  "suite": {
+    "id": "fund-compare-core-20",
+    "version": "1.0",
+    "path": "packages/finance_agent_core/src/finance_agent_core/evaluation/suites/fund_compare_core_20.json",
+    "sha256": "2f22ca18150016845b1ef7a9c4b77d028721ebcae85e8ff196d0cab6612e4b6d",
+    "development_cases": 16,
+    "holdout_cases": 4
+  },
+  "data": {
+    "database_sha256": "99fac786e5be0ec5a7a53e11e1bd3bbccd5b37ab15243ecbf8b864a85b375ca4",
+    "manifest_sha256": "be83a616d033db2328d231499d1f0492323d02bace4f153ad3da4860a0d10bcd",
+    "source_file_sha256": "140d1ef0cec918d0b3f7c52c107cb123395594eb089b0cd70bb305709b0f44eb"
+  },
+  "metrics": {
+    "total": 20,
+    "passed": 20,
+    "strict_accuracy": 1.0,
+    "complete_cases": 18,
+    "incomplete_cases": 2,
+    "llm_grounded_cases": 18,
+    "deterministic_cases": 2,
+    "fallback_cases": 0,
+    "fallback_rate": 0.0,
+    "field_status_accuracy": 1.0,
+    "numeric_delta_accuracy": 1.0,
+    "evidence_citation_rate": 1.0,
+    "source_date_coverage_rate": 1.0,
+    "latency_ms": {
+      "p50": 1522.937,
+      "p95": 4447.683,
+      "max": 4447.683
+    }
+  },
+  "comparison_contract": {
+    "intent": "compare",
+    "dataset_scope": "public_fund_only",
+    "target_count": 2,
+    "target_resolution": "exact_itm_no",
+    "delta_direction": "second_minus_first",
+    "mixed_currency_aum": "values_only_without_delta",
+    "missing_value": "unavailable_without_delta",
+    "missing_target": "deterministic_without_llm"
+  },
+  "reports": [
+    {
+      "role": "expected_all",
+      "artifact_name": "fund-compare-answer-expected-all-v1.json",
+      "sha256": "d4b76c1743963b45673c63436f210d9975bcf74c7ce74a1de95f5eb7bbb86d85"
+    },
+    {
+      "role": "local_qwen_all_first",
+      "artifact_name": "fund-compare-answer-local-all-v1.json",
+      "sha256": "fc64cffa4f920af752ea0c6948cf40691980072a5c073ed7f2aab0f1c25dfd8f"
+    }
+  ],
+  "reproduce": "python -m finance_agent_core.evaluation.comparison_cli --provider local_test --split all --workers 4 --require-perfect",
+  "limitations": [
+    "공개된 20문항의 expected COMPARE QueryPlan을 직접 사용해 비교 실행과 답변 계층을 격리했으며 자연어 parser를 평가하지 않았다.",
+    "두 공모펀드를 정확한 itm_no로 지정하는 클래스 단위 비교만 지원하며 상품명 entity resolution은 아직 연결하지 않았다.",
+    "차이는 서버가 두 번째 값에서 첫 번째 값을 빼서 계산하고 LLM은 계산·상품명·수치·날짜·근거를 생성하지 않는다.",
+    "AUM은 실제 거래 통화가 같을 때만 차이를 계산하며 통화가 다르거나 값이 없으면 원천값 또는 확인 불가 상태만 표시한다.",
+    "개발 중 작성해 공개한 회귀 세트이므로 blind 일반화 성능이나 사람 기준의 자연스러움·선호도로 해석하지 않는다.",
+    "fund 공식 Agent 실행은 계속 비활성화되어 있고 HyperCLOVA X 또는 공식 공모전 평가 결과가 아니다."
+  ]
+}

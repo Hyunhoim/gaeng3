@@ -1,0 +1,59 @@
+{
+  "schema_version": "1.0",
+  "baseline_id": "pre-hcx-readiness-v1",
+  "recorded_on": "2026-07-30",
+  "status": "internal_ready_external_gates_pending",
+  "git_commit": null,
+  "generated_from_dirty_worktree": true,
+  "hash_algorithm": "sha256(sorted(relative_path + NUL + file_sha256 + LF))",
+  "file_count": 186,
+  "tree_sha256": "a2ac66a1cfd1c2a2dc51ef2a1eddfbc61eda65f5ec3540dc800c003401a2c319",
+  "included_scope": [
+    "README.md",
+    "environment*.yml",
+    "requirements/**/*.txt",
+    "docs/**/*.md",
+    "evaluation/README.md",
+    "evaluation/baselines/*.json",
+    "evaluation/protocols/*.json except this manifest",
+    "packages/finance_agent_core/README.md",
+    "packages/finance_agent_core/pyproject.toml",
+    "packages/finance_agent_core/src/**/*.{py,json,yaml}",
+    "packages/finance_agent_core/tests/**/*.py",
+    "scripts/check-docs.py"
+  ],
+  "diagnostic": {
+    "suite_sha256": "ef35437ac3b9a02c2438ef664b49c339a631c249f53784b43fb2c1050d86e271",
+    "initial_report_sha256": "297a9a8ed62f7058f7f33ffead90615cc24acc249d32441afd083bc1a7aa5fe6",
+    "improved_report_sha256": "37220c8513858e42ac58f58743f78bf8051ee609d14ffabb008dcd5b186ba530",
+    "initial_passed": 4,
+    "improved_passed": 28,
+    "total": 28,
+    "limitation": "self_authored_internal_diagnostic_not_independent_blind"
+  },
+  "qa": {
+    "pytest_passed": 239,
+    "ruff_lint": "passed",
+    "ruff_format": "passed",
+    "pip_check": "passed",
+    "documentation_markdown": 31,
+    "documentation_baselines": 16,
+    "wheel_build_no_isolation": "passed",
+    "wheel_required_package_data": "passed",
+    "git_diff_check": "passed"
+  },
+  "external_gates": [
+    "금융 도메인 담당자의 external blind 100문항과 비공개 정답키 작성",
+    "봉인 이후 최초 blind E2E 단일 실행",
+    "승인된 실제 비정형 문서 corpus와 활용 범위 확인",
+    "최소 2명의 독립 reviewer가 수행한 실제 사람 평가",
+    "HyperCLOVA X 모델·API·Structured Outputs 계약 확인과 공식 재현",
+    "공식 /answer adapter와 주최 측 실행 환경 통합"
+  ],
+  "limitations": [
+    "commit을 만들지 말라는 작업 조건에 따라 git_commit은 null",
+    "source tree hash는 현재 보존된 dirty worktree 전체를 기준으로 계산",
+    "로컬 Qwen과 공개 회귀 결과는 HyperCLOVA X 공식 성능이 아님",
+    "external gate 완료 전 최종 일반화 성능 또는 제출 준비 완료를 주장하지 않음"
+  ]
+}
