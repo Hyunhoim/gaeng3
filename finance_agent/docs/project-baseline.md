@@ -260,6 +260,8 @@ QueryPlan에는 최소한 intent, 상품군, 필수 조건, 완화 전 확인이
 - [x] grounded answer 생성·후검증·결정론적 폴백과 답변 평가를 연결한다.
 - [x] 네 상품군 공통 AGGREGATE의 함수·그룹·통화·결측·기준일 계약,
   결정론적 실행·독립 verifier·Backend evidence를 연결한다.
+- [ ] 네 상품군 공통 COMPARE의 exact identity·필드·통화·기준일 계약과
+  공통 ComparisonEvidence·독립 verifier를 연결한다.
 - [ ] HyperCLOVA X provider와 공식 `/answer` adapter·오류·timeout 계약을 연결한다.
 
 ### P3 — 평가 확장

@@ -24,10 +24,11 @@
 16. [연결 전 진단·외부 blind 프로토콜](evaluation-pre-hcx-diagnostic.md)
 17. [금융상품 Agent capability matrix](capability-matrix.md)
 18. [네 상품군 공통 AGGREGATE 엔진](aggregate-engine.md)
-19. [BM25/SQLite FTS 문서 RAG](document-rag.md)
-20. [Backend 전달용 Agent DTO](backend-contract.md)
-21. [금융상품 Agent 사람 평가 rubric](human-evaluation.md)
-22. [저장소 부트스트랩 작업 명세](prompts/01-repository-bootstrap.md)
+19. [네 상품군 공통 COMPARE 엔진 설계](comparison-engine-design.md)
+20. [BM25/SQLite FTS 문서 RAG](document-rag.md)
+21. [Backend 전달용 Agent DTO](backend-contract.md)
+22. [금융상품 Agent 사람 평가 rubric](human-evaluation.md)
+23. [저장소 부트스트랩 작업 명세](prompts/01-repository-bootstrap.md)
 
 ## 문서 지도
 
@@ -52,6 +53,7 @@
 | [연결 전 진단·외부 blind 프로토콜](evaluation-pre-hcx-diagnostic.md) | 네 상품군·일곱 intent 내부 진단과 금융 도메인 담당자 external blind 봉인 | v1.0 |
 | [금융상품 Agent capability matrix](capability-matrix.md) | 네 상품군·일곱 intent 실행·역질문·미지원 범위와 자동 정합성 검사 | v1.0 |
 | [네 상품군 공통 AGGREGATE 엔진](aggregate-engine.md) | 함수·그룹·통화·결측·기준일·독립 verifier·Backend evidence 계약 | v1.0 |
+| [네 상품군 공통 COMPARE 엔진 설계](comparison-engine-design.md) | 상품군별 비교 필드·식별·통화·기준일·결측·공통 evidence 설계 | v0.1 설계 |
 | [BM25/SQLite FTS 문서 RAG](document-rag.md) | 승인 문서 적재·BM25 검색·필터·근거·기준일·not-found 계약 | 최소 기능 완료 |
 | [Backend 전달용 Agent DTO](backend-contract.md) | 프레임워크 독립 request·response·citation·fallback 계약과 JSON 예시 | v1.0 |
 | [금융상품 Agent 사람 평가 rubric](human-evaluation.md) | 6개 평가 축·critical gate·독립 reviewer·집계 계약 | rubric 완료·실평가 대기 |

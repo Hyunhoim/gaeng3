@@ -34,6 +34,7 @@ REQUIRED_INDEX_TARGETS = {
     "pre-hcx-readiness.md",
     "capability-matrix.md",
     "aggregate-engine.md",
+    "comparison-engine-design.md",
     "document-rag.md",
     "backend-contract.md",
     "human-evaluation.md",

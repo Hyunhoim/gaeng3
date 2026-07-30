@@ -39,6 +39,11 @@ verifier가 모두 갖춰져 `executable`로 전환했다. 금액은 한 통화 
 여전히 구현되지 않았으므로 QueryPlan enum에 이름이 있다는 이유만으로 실행
 가능하다고 표시하지 않는다.
 
+세 상품군 COMPARE를 활성화하기 전 필드·식별자·통화·기준일 계약은
+[네 상품군 공통 COMPARE 엔진 설계](comparison-engine-design.md)를 따른다.
+`selectable`은 표시 가능 여부일 뿐 비교 가능 여부가 아니므로, 구현 단계에서
+비교 전용 capability를 field registry에 추가한다.
+
 ## 자동 정합성 검사
 
 loader는 다음 오류를 시작 단계에서 차단한다.
