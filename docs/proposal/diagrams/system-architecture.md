@@ -22,10 +22,11 @@ flowchart LR
     TOOLS --> DB["정규화 SQLite<br/>채권 · 국내/해외 ETP · 공모펀드"]
     DB --> RV["Result Verifier"]
     RV --> EVIDENCE["Field-level Evidence<br/>비교 · 집계 · 문서 citation"]
-    EVIDENCE --> ANSWER["Grounded Answer /<br/>Deterministic Renderer"]
-    ANSWER --> AV["Answer Verifier"]
-    AV --> DTO["BackendAgentResponse"]
-    AV --> FALLBACK["검증 실패 시<br/>Deterministic Fallback"]
+    EVIDENCE --> FAMILY_ANSWER["상품군별 evidence-only 답변<br/>또는 deterministic renderer"]
+    FAMILY_ANSWER --> AV["상품군별 Answer Verifier"]
+    AV --> COMPOSE["서버 답변 조합<br/>Cross-Family Verifier"]
+    COMPOSE --> DTO["BackendAgentResponse"]
+    COMPOSE --> FALLBACK["하나라도 실패하면<br/>전체 Deterministic Fallback"]
     FALLBACK --> DTO
 
     DTO -.-> API
@@ -42,7 +43,7 @@ flowchart LR
 - SEARCH·same-family COMPARE·AGGREGATE
 - 복수 상품군 독립 SEARCH와 부분 결과 보존
 - 독립 Result Verifier와 field-level evidence
-- grounded answer·Answer Verifier·deterministic fallback
+- 상품군별 evidence-only grounded answer·Answer Verifier·교차 검증·전체 deterministic fallback
 - 프레임워크 독립 Backend DTO와 service adapter
 - HyperCLOVA X fake transport·오류 계약
 

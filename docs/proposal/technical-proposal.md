@@ -65,9 +65,10 @@ field-level evidence와 기준일을 갖추며, 검증에 실패하면 근거 �
 
 - 독립 Result Verifier가 Oracle 결과를 별도 Python 경로로 재계산
 - field-level evidence가 값·품질·원천·기준일을 보존
-- LLM은 검증된 evidence만 입력받아 설명 초안을 생성
+- LLM은 상품군별 질문·계획·검증된 evidence만 입력받아 설명 초안을 생성
+- 서버가 상품군별 답변 섹션을 조합하고, 교차 상품군 문구·비교·집계를 다시 검증
 - Answer Verifier가 상품명·수치·순위·근거·기준일을 다시 확인
-- 실패하면 deterministic fallback, 데이터 부족이면 역질문, 금지 요청이면 거절
+- 하나라도 검증에 실패하면 전체 답변을 deterministic fallback으로 전환하며, 데이터 부족이면 역질문, 금지 요청이면 거절
 
 ### 3.5 문서 설명
 
@@ -80,6 +81,7 @@ BM25/SQLite FTS 기반 문서 검색의 적재·필터·출처·기준일 계약
 [시스템 구성도 정본](diagrams/system-architecture.md)은 다음 두 범위를 분리한다.
 
 - 현재 검증 완료: Agent Core, SQLite Oracle, Verifier, evidence, Backend DTO
+- 교차 상품군 SEARCH의 family별 근거 격리·답변 검증·전체 fallback
 - 외부 통합 대기: Next.js·FastAPI, 실제 HyperCLOVA X transport, 공개 API 서버
 
 목표 구조를 현재 구현 완료 상태로 오해하지 않도록 실선과 점선으로 구분한다.
@@ -90,7 +92,7 @@ BM25/SQLite FTS 기반 문서 검색의 적재·필터·출처·기준일 계약
 
 | 기능 | 현재 범위 | 안전 경계 |
 | --- | --- | --- |
-| SEARCH | 네 상품군 조건 검색·상세 조회, 복수 상품군 독립 검색 | 공통 조건만 상품군별 실행·직접 비교 금지 |
+| SEARCH | 네 상품군 조건 검색·상세 조회, 복수 상품군 독립 검색과 family별 grounded answer | 공통 조건만 상품군별 실행·근거를 family별로 격리·직접 비교 금지 |
 | COMPARE | 같은 상품군의 정확한 두 상품 | 통화·기준일·결측 불일치 차단 |
 | AGGREGATE | 네 상품군 COUNT·MIN·MAX·AVG·제한 SUM | 독립 Python 재검산 |
 | EXPLAIN | 정형 evidence 설명, 문서 RAG 최소 계약 | 실제 corpus 승인 대기 |
@@ -108,7 +110,7 @@ BM25/SQLite FTS 기반 문서 검색의 적재·필터·출처·기준일 계약
 2. 국내채권 상세 조회와 오래된 동적 값 경고
 3. 국내 ETF 또는 공모펀드의 조건 집계
 4. 같은 상품군 두 상품 비교
-5. 국내·해외 ETP 교차 검색과 부분 결과 보존
+5. 국내·해외 ETP 교차 검색과 family별 근거 답변
 6. 모호한 조건 역질문과 단정적 추천 거절
 
 최종 화면 시나리오는 Next.js 통합 후 실제 캡처와 API 응답으로 교체한다.
@@ -120,6 +122,7 @@ BM25/SQLite FTS 기반 문서 검색의 적재·필터·출처·기준일 계약
 - 상품 선택 근거를 dataset·row·column·기준일까지 추적 가능
 - 모델 오류가 곧바로 잘못된 SQL·답변으로 이어지지 않는 다중 검증 경계
 - 결측·stale·통화 불일치를 숨기지 않아 금융 답변의 리스크 감소
+- 복수 상품군에서도 다른 상품군의 근거가 섞이지 않고, 검증 실패 시 전체를 안전하게 fallback
 - 새로운 모델을 연결해도 Oracle·Verifier·평가 기준을 재사용 가능
 - 로컬 개발 모델로 반복 검증하고 공식 경로는 HyperCLOVA X로 제한해 비용 통제
 
@@ -141,8 +144,9 @@ BM25/SQLite FTS 기반 문서 검색의 적재·필터·출처·기준일 계약
 현재 대표 근거:
 
 - 4종 원천 145,393행 감사, 핵심 expectation 65/65
-- Agent Core 전체 pytest 320개 통과
+- Agent Core 전체 pytest 330개 통과
 - 국내·해외 ETP 교차 SEARCH 공개 실제 데이터 회귀 4/4
+- 교차 상품군 grounded answer 공개 회귀 expected·로컬 Qwen 각각 4/4, 생성 대상 2문항 모두 grounded, 모델 호출 3회, fallback 0
 - 내부 red-team 40문항 수정 후 strict·safety·evidence 40/40
 - HyperCLOVA X API 없는 provider·Agent 계약 8/8
 - Backend service adapter 오류·fallback·비노출 계약 12/12

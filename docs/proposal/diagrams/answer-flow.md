@@ -35,9 +35,11 @@ flowchart TD
     F --> V
 
     V --> EV["Field-level Evidence"]
-    EV --> AV["Answer Verifier"]
-    AV --> OK["근거·기준일 포함 답변"]
-    AV --> FB["검증 실패<br/>Deterministic Fallback"]
+    EV --> FA["상품군별 evidence-only 답변<br/>또는 deterministic renderer"]
+    FA --> AV["상품군별 Answer Verifier"]
+    AV --> XF["서버 답변 조합·Cross-Family 검증<br/>(복수 검색 시)"]
+    XF --> OK["근거·기준일 포함 답변"]
+    XF --> FB["하나라도 실패<br/>전체 Deterministic Fallback"]
 
     CL --> CONTROL["실행 없이 제어 응답"]
     U --> CONTROL
@@ -47,6 +49,8 @@ flowchart TD
 
 - SEARCH는 지원 조건·정렬·limit만 실행
 - 복수 상품군 SEARCH는 각 상품군을 독립 검증하고 부분 결과를 보존
+- 복수 상품군 답변 생성에는 해당 family의 질문·계획·evidence·manifest만 전달
+- 서버가 family별 답변을 조합하고 교차 상품군 문구·비교·집계를 검증
 - 상품군 간 직접 수치 비교·합산·우열 판단과 서로 다른 family 조건은 차단
 - COMPARE는 같은 상품군의 정확한 두 상품과 승인 필드만 실행
 - AGGREGATE는 허용 함수·그룹·통화 정책을 서버가 결정
