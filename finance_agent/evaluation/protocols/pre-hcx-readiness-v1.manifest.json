@@ -3,12 +3,12 @@
   "baseline_id": "pre-hcx-readiness-v1",
   "recorded_on": "2026-07-31",
   "status": "internal_ready_external_gates_pending",
-  "git_commit": "239839e330bc0cbbebfda385e304ac62a22057d1",
-  "last_committed_source_commit": "239839e330bc0cbbebfda385e304ac62a22057d1",
+  "git_commit": "1bb9cf1cc7da5f66040f036b72c728133b30ba52",
+  "last_committed_source_commit": "1bb9cf1cc7da5f66040f036b72c728133b30ba52",
   "generated_from_dirty_worktree": false,
   "hash_algorithm": "sha256(sorted(relative_path + NUL + file_sha256 + LF))",
-  "file_count": 237,
-  "tree_sha256": "71b5da4cf01c37b23952221eb3cbbdc74fbeb29f6a6e5f05a8459327ff3392d4",
+  "file_count": 240,
+  "tree_sha256": "d27c8e403a66d497dacb3891b5b2022f1f74fd11c91499efc1333f7018ee346a",
   "included_scope": [
     "README.md",
     "environment*.yml",
@@ -35,12 +35,12 @@
     "limitation": "self_authored_internal_diagnostic_not_independent_blind"
   },
   "qa": {
-    "pytest_passed": 320,
+    "pytest_passed": 326,
     "ruff_lint": "passed",
     "ruff_format": "passed",
     "pip_check": "passed",
     "documentation_markdown": 45,
-    "documentation_baselines": 24,
+    "documentation_baselines": 25,
     "wheel_build_no_isolation": "passed",
     "wheel_required_package_data": "passed",
     "git_diff_check": "passed"
