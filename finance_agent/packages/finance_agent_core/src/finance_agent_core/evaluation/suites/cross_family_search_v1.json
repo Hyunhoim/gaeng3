@@ -1,0 +1,99 @@
+{
+  "schema_version": "1.0",
+  "suite_id": "cross-family-search-v1-4",
+  "suite_version": "1.0",
+  "status": "public_deterministic_regression_not_blind",
+  "data": {
+    "domestic_etp": {
+      "database_sha256": "a91bfc713b88e9ba1e7da27508857cbe5ea200c4d7821d0b4fee7d9922684484",
+      "manifest_sha256": "2e52b161a260fa19eab50e8281f04f8617ee1ee69d618b19bd624af4635fca97",
+      "source_file_sha256": "0f5706d45f93284bcaac2fa8eaed04db920a7043abaa859e455f06e246d54723"
+    },
+    "overseas_etp": {
+      "database_sha256": "eee9009ca741713a9a61e498cd5ed8366836d754c7d0c2dbd74ed7e456a2ebbe",
+      "manifest_sha256": "5dd159ade2353154ed8d3d32068dd512cb2b3becba39972aa0dabff0edd50771",
+      "source_file_sha256": "3cec19043f742771e0016d56fe806f19ad78f4295d1ae59192740a78feb2253b"
+    }
+  },
+  "cases": [
+    {
+      "id": "cross-family-search-v1-001",
+      "category": "all_success",
+      "question": "국내 ETF와 해외 ETF를 각각 3개 보여줘",
+      "expected_disposition": "execute",
+      "expected_backend_status": "success",
+      "expected_reason_code": "cross_family_search_executable",
+      "expected_candidate_count": 6778,
+      "expected_families": [
+        {
+          "product_family": "domestic_etp",
+          "status": "success",
+          "candidate_count": 1201,
+          "top_product_ids": ["KR70000D0009", "KR70000H0005", "KR70000J0003"]
+        },
+        {
+          "product_family": "overseas_etp",
+          "status": "success",
+          "candidate_count": 5577,
+          "top_product_ids": ["101:IVEG.O", "101:IWTR.O", "101:MNTL.O"]
+        }
+      ]
+    },
+    {
+      "id": "cross-family-search-v1-002",
+      "category": "partial_success",
+      "question": "국내 ETF와 해외 ETF 중 총보수 0.01% 이하인 상품을 각각 3개 보여줘",
+      "expected_disposition": "execute",
+      "expected_backend_status": "success",
+      "expected_reason_code": "cross_family_search_executable",
+      "expected_candidate_count": 4,
+      "expected_families": [
+        {
+          "product_family": "domestic_etp",
+          "status": "not_found",
+          "candidate_count": 0,
+          "top_product_ids": []
+        },
+        {
+          "product_family": "overseas_etp",
+          "status": "success",
+          "candidate_count": 4,
+          "top_product_ids": ["AMX:AAAD.K", "AMX:VEXC.K", "NAS:IFLO.O"]
+        }
+      ]
+    },
+    {
+      "id": "cross-family-search-v1-003",
+      "category": "all_not_found",
+      "question": "국내 ETF와 해외 ETF 중 총보수 0.001% 이하인 상품을 각각 3개 보여줘",
+      "expected_disposition": "execute",
+      "expected_backend_status": "not_found",
+      "expected_reason_code": "cross_family_search_executable",
+      "expected_candidate_count": 0,
+      "expected_families": [
+        {
+          "product_family": "domestic_etp",
+          "status": "not_found",
+          "candidate_count": 0,
+          "top_product_ids": []
+        },
+        {
+          "product_family": "overseas_etp",
+          "status": "not_found",
+          "candidate_count": 0,
+          "top_product_ids": []
+        }
+      ]
+    },
+    {
+      "id": "cross-family-search-v1-004",
+      "category": "forbidden_cross_family_comparison",
+      "question": "국내 ETF와 해외 ETF의 수익률을 비교해줘",
+      "expected_disposition": "clarify",
+      "expected_backend_status": "clarification",
+      "expected_reason_code": "ambiguous_product_family",
+      "expected_candidate_count": null,
+      "expected_families": []
+    }
+  ]
+}

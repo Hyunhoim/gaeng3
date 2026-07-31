@@ -1,6 +1,6 @@
 # Backend 전달용 Agent DTO v1
 
-마지막 갱신: 2026-07-30
+마지막 갱신: 2026-07-31
 
 ## 1. 목적
 
@@ -40,6 +40,13 @@ Pydantic request·response 계약이다. FastAPI route나 Next.js 타입은 이 
 
 응답은 원래 intent, 상품군, 서버 QueryPlan, 후보 수, 상품·비교·집계·문서 evidence,
 구조화 citation, 기준일, warning, 답변 mode와 fallback 여부를 분리해 제공한다.
+
+복수 상품군 SEARCH에서는 최상위 `query_plan`·`source_manifest` 대신
+`family_searches`와 `source_manifests`를 사용한다. 각 family item은
+상품군·status·단일-family QueryPlan·후보 수·반환 상품 ID·warning·manifest를
+보존한다. 한 상품군이 0건이어도 다른 family 결과를 유지하고, 전부 0건일 때만
+최상위 status가 `not_found`다. 최상위 products와 citation은 family 순서대로
+펼쳐 화면에서 공통 렌더링할 수 있다.
 
 ## 4. 근거와 fallback
 
@@ -124,6 +131,9 @@ package에 다음 예시를 포함하고 contract test에서 매번 검증한다
 COMPARE 응답은 같은 schema의 `comparisons`와 `comparison_field` citation으로
 전달한다. `product-compare-core-30` 공개 회귀가 실행·차단 30문항에서
 Backend response 검증과 비교 citation 수를 함께 확인한다.
+
+교차 상품군 SEARCH는 `cross-family-search-v1-4` 공개 회귀에서 양쪽 성공,
+부분 성공, 전체 빈 결과와 직접 비교 차단을 4/4 검증한다.
 
 오류 경계는 다음 명령으로 네트워크 없이 재현한다.
 

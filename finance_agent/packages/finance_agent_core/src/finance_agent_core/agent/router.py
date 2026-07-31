@@ -4,7 +4,7 @@ import re
 from collections.abc import Iterable
 
 from finance_agent_core.config.capability import CapabilityMatrix, load_capability_matrix
-from finance_agent_core.contracts.queryplan import ProductFamily
+from finance_agent_core.contracts.queryplan import Intent, ProductFamily
 from finance_agent_core.contracts.routing import (
     InteractionIntent,
     MinimalQueryDraft,
@@ -56,25 +56,46 @@ def _product_mentions(question: str) -> list[str]:
 
 
 def _product_families(question: str) -> list[ProductFamily]:
-    families: list[ProductFamily] = []
-    if re.search(r"공모\s*펀드|공모펀드", question, re.IGNORECASE):
-        families.append(ProductFamily.FUND)
+    mentions: list[tuple[int, ProductFamily]] = []
 
-    etp_mentioned = (
-        re.search(r"(?<![A-Z])(?:ETF|ETN|ETP)(?![A-Z])", question, re.IGNORECASE) is not None
-    )
-    if etp_mentioned:
-        if re.search(r"국내|한국|코스피|코스닥", question):
-            families.append(ProductFamily.DOMESTIC_ETP)
-        if re.search(r"해외|미국|글로벌|NYSE|NASDAQ|AMEX", question, re.IGNORECASE):
-            families.append(ProductFamily.OVERSEAS_ETP)
-    elif re.search(
+    def add_matches(pattern: str, family: ProductFamily, *, flags: int = 0) -> None:
+        mentions.extend((match.start(), family) for match in re.finditer(pattern, question, flags))
+
+    add_matches(r"공모\s*펀드|공모펀드", ProductFamily.FUND, flags=re.IGNORECASE)
+    add_matches(
         r"국내\s*채권|국내채권|회사채|국채|국공채|국고채|특수채|금융채|"
         r"지역개발채|도시철도공채|채권\s*상품",
-        question,
-    ):
-        families.append(ProductFamily.BOND)
-    return list(dict.fromkeys(families))
+        ProductFamily.BOND,
+    )
+
+    etp_token = r"(?<![A-Z])(?:ETF|ETN|ETP)(?![A-Z])"
+    domestic_pattern = (
+        rf"(?:국내|한국|코스피|코스닥)(?!\s*채권)[^와과,\n]{{0,20}}?{etp_token}|"
+        rf"{etp_token}\s*(?:국내|한국)"
+    )
+    overseas_pattern = (
+        rf"(?:해외|글로벌)[^와과,\n]{{0,20}}?{etp_token}|"
+        rf"{etp_token}\s*해외"
+    )
+    domestic_matches = list(re.finditer(domestic_pattern, question, re.IGNORECASE))
+    overseas_matches = list(re.finditer(overseas_pattern, question, re.IGNORECASE))
+    mentions.extend((match.start(), ProductFamily.DOMESTIC_ETP) for match in domestic_matches)
+    mentions.extend((match.start(), ProductFamily.OVERSEAS_ETP) for match in overseas_matches)
+
+    if re.search(etp_token, question, re.IGNORECASE):
+        explicit_etp_family = domestic_matches or overseas_matches
+        if not explicit_etp_family:
+            if re.search(r"NYSE|NASDAQ|AMEX", question, re.IGNORECASE):
+                match = re.search(r"NYSE|NASDAQ|AMEX", question, re.IGNORECASE)
+                assert match is not None
+                mentions.append((match.start(), ProductFamily.OVERSEAS_ETP))
+            elif re.search(r"미국", question):
+                match = re.search(r"미국", question)
+                assert match is not None
+                mentions.append((match.start(), ProductFamily.OVERSEAS_ETP))
+
+    ordered = [family for _, family in sorted(mentions, key=lambda item: item[0])]
+    return list(dict.fromkeys(ordered))
 
 
 def _requested_limit(question: str) -> int | None:
@@ -140,12 +161,47 @@ class IntentRouter:
                 "subjective_condition",
                 "판단 기준이나 임계값이 명시되지 않은 주관적 조건",
             )
-        if len(families) != 1:
+        if not families:
             return self._control(
                 draft,
                 RouteDisposition.CLARIFY,
                 "ambiguous_product_family",
-                "실행할 상품군을 하나로 확정할 수 없음",
+                "실행할 상품군을 확정할 수 없음",
+            )
+        if len(families) > 1:
+            if intent is not InteractionIntent.SEARCH:
+                return self._control(
+                    draft,
+                    RouteDisposition.CLARIFY,
+                    "ambiguous_product_family",
+                    "복수 상품군은 현재 상품군별 독립 검색만 지원",
+                )
+            capabilities = [
+                self.matrix.require(family, InteractionIntent.SEARCH) for family in families
+            ]
+            blocked = next(
+                (
+                    capability
+                    for capability in capabilities
+                    if capability.status != "executable"
+                    or capability.query_plan_intent is not Intent.SEARCH
+                ),
+                None,
+            )
+            if blocked is not None:
+                return self._control(
+                    draft,
+                    RouteDisposition.UNSUPPORTED,
+                    "capability_not_implemented",
+                    blocked.reason,
+                )
+            return RouteDecision(
+                draft=draft,
+                disposition=RouteDisposition.EXECUTE,
+                reason_code="cross_family_search_executable",
+                reason="복수 상품군을 각각 독립적으로 검색하고 검증",
+                query_plan_intent=Intent.SEARCH,
+                capability_matrix_version=self.matrix.matrix_version,
             )
         if intent in {InteractionIntent.DETAIL, InteractionIntent.EXPLAIN} and not mentions:
             return self._control(

@@ -16,7 +16,8 @@ Next.js·FastAPI 애플리케이션 통합과 HyperCLOVA X 연결을 준비하�
 - 여러 금융 조건이 포함된 자연어 상품 검색
 - 상품 상세 정보 조회
 - 같은 상품군의 정확한 두 상품 비교
-- 상품군 간 질문은 의미·단위가 검증된 범위부터 단계적으로 확장
+- 복수 상품군을 한 질문에서 상품군별로 독립 검색
+- 상품군 간 직접 수치 비교는 의미·단위가 검증된 범위부터 단계적으로 확장
 - 정렬, 순위, 집계와 계산
 - 검색 결과와 금융 용어 설명
 - 모호하거나 데이터로 확인할 수 없는 조건에 대한 역질문
@@ -39,13 +40,14 @@ Next.js·FastAPI 애플리케이션 통합과 HyperCLOVA X 연결을 준비하�
 | 국내 ETF·ETN | 정규화, SQLite, Oracle, Verifier, 50문항 평가 구현 |
 | 국내채권 | 날짜·stale·신용등급 계약, Oracle, Verifier, 50문항 평가 구현 |
 | 공모펀드 | parser development 40/40·최초 holdout 9/10, grounded answer 50/50, 공식 실행 비활성 |
+| 교차 상품군 SEARCH | 국내·해외 ETP 병렬 Oracle·Verifier, 성공·부분·빈 결과·비교 차단 공개 회귀 4/4 |
 | 근거 기반 답변 | 공모펀드 44개 grounded·6개 안전 차단, 폴백 0, 핵심 검증률 100% |
 | 로컬 LLM | 격리된 Qwen/vLLM 개발 테스트 완료, 평가·제출 사용 금지 |
 | HyperCLOVA X | 세 provider·fake transport·API 없는 전체 경로 8/8, 실제 HTTP 연결 대기 |
 | Web·API | 프레임워크 독립 `/answer` 오류 adapter 12/12, FastAPI route 통합 대기 |
 | 내부 red-team | 네 상품군 40문항, 수정 후 strict·safety·evidence 40/40 |
 
-현재 AI Core 회귀 기준은 pytest 312개, Ruff lint·format과 문서 검사를 모두
+현재 AI Core 회귀 기준은 pytest 320개, Ruff lint·format과 문서 검사를 모두
 통과한 상태
 
 ## 3. 아키텍처
@@ -53,7 +55,7 @@ Next.js·FastAPI 애플리케이션 통합과 HyperCLOVA X 연결을 준비하�
 ```mermaid
 flowchart LR
     APP["Next.js · FastAPI<br/>통합 예정"] -. "/answer" .-> Q["사용자 자연어 질문"]
-    Q --> P["Lexical · Schema Linker<br/>Typed QueryPlan"]
+    Q --> P["Intent Router · Schema Linker<br/>상품군별 Typed QueryPlan"]
     P --> C["Registry · Pydantic<br/>지원 범위 검증"]
     C --> O["상품군별 SQLite Oracle<br/>검색 · 비교 · 연산"]
     O --> V["Result Verifier"]
@@ -67,8 +69,9 @@ flowchart LR
 
 ```text
 질문
-→ QueryPlan
-→ 상품군별 결정론적 도구
+→ 단일 또는 복수 상품군 route
+→ 상품군별 단일-family QueryPlan
+→ 상품군별 결정론적 도구 병렬 실행
 → Result Verifier
 → Field-level Evidence
 → Answer Verifier
@@ -157,6 +160,7 @@ Git에 포함하지 않음
 - [기술 제안서 작성 허브](docs/proposal/README.md)
 - [데이터 감사 기준](finance_agent/docs/data-audit.md)
 - [Field Registry와 QueryPlan 계약](finance_agent/docs/contracts.md)
+- [교차 상품군 병렬 SEARCH v1](finance_agent/docs/cross-family-search.md)
 - [재현 가능한 평가 기준선](finance_agent/evaluation/README.md)
 
 ## 10. 담당

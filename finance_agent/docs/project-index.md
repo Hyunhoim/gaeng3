@@ -1,6 +1,6 @@
 # gaeng3 프로젝트 문서
 
-마지막 갱신: 2026-07-30
+마지막 갱신: 2026-07-31
 
 이 디렉터리는 금융상품 Agent 구현에 직접 사용하는 문서의 정본이다. 연구 요청·외부 모델 답변·감사 산출물은 근거 자료로 보존하되, 실제 구현 판단은 `project-baseline.md`와 `data-audit.md`를 우선한다.
 
@@ -27,13 +27,14 @@
 19. [네 상품군 공통 COMPARE 엔진 설계](comparison-engine-design.md)
 20. [네 상품군 자연어 COMPARE 공개 회귀](evaluation-product-comparison.md)
 21. [SEARCH·AGGREGATE 성능 기준선](evaluation-search-aggregate-performance.md)
-22. [HyperCLOVA X provider 계약](hyperclova-provider.md)
-23. [internal-red-team-v1 전체 E2E 평가](evaluation-internal-red-team.md)
-24. [BM25/SQLite FTS 문서 RAG](document-rag.md)
-25. [Backend 전달용 Agent DTO](backend-contract.md)
-26. [금융상품 Agent 사람 평가 rubric](human-evaluation.md)
-27. [저장소 부트스트랩 작업 명세](prompts/01-repository-bootstrap.md)
-28. [팀 기술 제안서 작성 허브](../../docs/proposal/README.md)
+22. [교차 상품군 병렬 SEARCH v1](cross-family-search.md)
+23. [HyperCLOVA X provider 계약](hyperclova-provider.md)
+24. [internal-red-team-v1 전체 E2E 평가](evaluation-internal-red-team.md)
+25. [BM25/SQLite FTS 문서 RAG](document-rag.md)
+26. [Backend 전달용 Agent DTO](backend-contract.md)
+27. [금융상품 Agent 사람 평가 rubric](human-evaluation.md)
+28. [저장소 부트스트랩 작업 명세](prompts/01-repository-bootstrap.md)
+29. [팀 기술 제안서 작성 허브](../../docs/proposal/README.md)
 
 ## 문서 지도
 
@@ -61,6 +62,7 @@
 | [네 상품군 공통 COMPARE 엔진 설계](comparison-engine-design.md) | 상품군별 비교 필드·식별·통화·기준일·결측·공통 evidence 설계 | v1.0 구현 |
 | [네 상품군 자연어 COMPARE 공개 회귀](evaluation-product-comparison.md) | 세 상품군 신규 30문항과 기존 공모펀드 24문항의 비교 배선·안전 경계 | v1.0 정본 |
 | [SEARCH·AGGREGATE 성능 기준선](evaluation-search-aggregate-performance.md) | 네 상품군 8문항의 결과 지문·새 프로세스 지연·RSS와 projected verifier 전후 비교 | v1.0 정본 |
+| [교차 상품군 병렬 SEARCH v1](cross-family-search.md) | 상품군별 QueryPlan·병렬 Oracle·독립 verifier·부분 결과·직접 비교 금지 계약 | v1.0 정본 |
 | [HyperCLOVA X provider 계약](hyperclova-provider.md) | 세 LLM 역할의 요청·응답·오류·관측 계약과 API 없는 전체 Agent E2E | 계약·E2E 8/8 완료·실제 HTTP 대기 |
 | [internal-red-team-v1 전체 E2E 평가](evaluation-internal-red-team.md) | 네 상품군 40문항의 공격 유형·전체 `/answer` 경로·최초 실패·수정 후 회귀 | v1.0 정본 |
 | [BM25/SQLite FTS 문서 RAG](document-rag.md) | 승인 문서 적재·BM25 검색·필터·근거·기준일·not-found 계약 | 최소 기능 완료 |
@@ -127,6 +129,8 @@
 - 네 상품군 비교 공개 문항: 위 30문항과 기존 공모펀드 24문항을 합쳐 54문항
 - 네 상품군 SEARCH·AGGREGATE 실제 데이터 성능 회귀: 새 프로세스 8문항 8/8,
   p50 308.749ms, 최대 추가 RSS 51,000KiB, 결과 지문 100% 일치
+- 교차 상품군 SEARCH 실제 데이터 회귀: 국내·해외 ETP 성공·부분 성공·전체
+  빈 결과·교차 비교 차단 4/4, 모델 호출 0, 상품군별 plan·manifest 보존
 - HyperCLOVA X 경계: QueryPlan·공모펀드 비교 초안·근거 답변의 semantic
   structured request, 공식 mode/provider gate, HCX schema 검사, token·latency
   call record와 fake transport 오류 계약 완료
@@ -144,7 +148,7 @@
 - 팀 계약 기준: Backend DTO JSON 예시·schema·오류 adapter, 사람 rubric validator 통과
 - 내부 red-team 기준: 네 상품군 40문항 expected·수정 후 로컬 Qwen 40/40,
   safety·evidence 40/40, 최초 36/40과 수정 이력 별도 보존
-- 코드 회귀 기준: 전체 pytest 312개, Ruff lint·format, pip dependency check,
+- 코드 회귀 기준: 전체 pytest 320개, Ruff lint·format, pip dependency check,
   wheel과 필수 package data 검사
 - 로컬 Qwen 평가 기준: 동결 50문항에서 최초 미사용 holdout 9/10,
   오류 수정 후 전체 회귀 50/50을 연속 2회 재현

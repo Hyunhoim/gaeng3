@@ -25,6 +25,7 @@ finance-evaluate-fund-compare = "finance_agent_core.evaluation.comparison_cli:ma
 finance-evaluate-fund-compare-e2e = "finance_agent_core.evaluation.comparison_e2e_cli:main"
 finance-evaluate-fund-compare-parser = "finance_agent_core.evaluation.comparison_parser_cli:main"
 finance-evaluate-product-compare = "finance_agent_core.evaluation.product_comparison_cli:main"
+finance-evaluate-cross-family-search = "finance_agent_core.evaluation.cross_family_search_cli:main"
 finance-benchmark-search-aggregate = "finance_agent_core.evaluation.search_aggregate_benchmark_cli:main"
 finance-pre-hcx = "finance_agent_core.evaluation.pre_hcx_cli:main"
 finance-evaluate-internal-red-team = "finance_agent_core.evaluation.red_team_cli:main"

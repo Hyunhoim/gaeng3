@@ -108,6 +108,13 @@
   실제 데이터 8문항 결과 지문은 8/8 일치했고 p50 308.749ms, 최대 추가 RSS
   51,000KiB다. 변경 전 대비 국내채권은 약 92~93%, 공모펀드는 약 94~95%
   메모리 증가량이 감소했다. 단일 장비·단일 실행의 방향성 기준선이다.
+- 복수 상품군 SEARCH는 Router가 확인한 각 상품군을 단일-family QueryPlan으로
+  분리하고 SQLite Oracle·Result Verifier를 병렬 실행한다. 한 상품군의 0건
+  결과가 다른 상품군 결과를 지우지 않으며, 상품군별 plan·후보 수·evidence·
+  manifest를 Backend DTO에 별도 보존한다. 국내·해외 ETP 실제 데이터 공개
+  회귀는 양쪽 성공·부분 성공·전체 0건·교차 비교 차단 4/4다. 상품군 간 직접
+  수치 비교·합산·우열 판단, 서로 다른 상품군별 조건과 모델 호출은 v1에서
+  차단한다. 공모펀드 공식 실행 비활성 정책도 유지한다.
 - HyperCLOVA X QueryPlan·공모펀드 비교 초안·근거 답변 provider가 공유하는
   semantic structured request와 주입형 transport 계약을 구현했다. 공식
   mode/provider gate, HCX schema subset, token·latency 관측, 인증·rate limit·
@@ -132,7 +139,7 @@
   provided 우선순위·not-found를 검증했다. 실제 corpus는 승인 전이다.
 - 사람 평가 rubric v1과 프레임워크 독립 Backend DTO·JSON 예시를 구현했다.
   실제 사람 평가는 외부 게이트다.
-- 전체 코드 회귀는 pytest 312개, Ruff lint·format, pip dependency check와
+- 전체 코드 회귀는 pytest 320개, Ruff lint·format, pip dependency check와
   wheel 빌드를 통과했다.
 
 ## 3. 변경할 수 없는 공식 제약
@@ -302,6 +309,8 @@ QueryPlan에는 최소한 intent, 상품군, 필수 조건, 완화 전 확인이
   계약과 API 없는 fake 테스트를 구현한다.
 - [x] 세 실행 상품군 SEARCH를 공통 Router·서버 계획 guard·Oracle·Evidence·
   Answer Verifier·Backend DTO까지 API 없는 E2E로 검증한다.
+- [x] 복수 상품군 SEARCH를 상품군별 단일 계획·병렬 Oracle·독립 verifier로
+  실행하고 부분 결과·manifest·Backend family DTO와 직접 비교 차단을 검증한다.
 - [x] 프레임워크 독립 `/answer` service adapter에 HTTP status·ERROR DTO·
   fallback·민감정보 비노출 계약을 연결한다.
 - [ ] 공식 endpoint·인증 계약에 맞는 HTTP transport와 FastAPI `/answer`

@@ -25,6 +25,10 @@ group, 금액 통화 gate, 결측·기준일 보존, 별도 Python verifier와
 `comparable` capability, 통화·기준일·stale·결측 정책을 적용한다.
 `ComparisonEvidence`와 별도 `ComparisonResultVerifier`, Backend
 `comparison_field` citation까지 연결했다.
+복수 상품군 SEARCH v1은 상품군별 단일 QueryPlan·SQLite Oracle·Result
+Verifier를 병렬 실행하고 부분 결과와 manifest를 Backend family DTO에
+보존한다. 상품군 간 직접 비교·합산·우열 판단과 서로 다른 family 조건은
+계속 차단한다.
 최종 답변은 evidence만 입력받는 최소권한 GroundedAnswerDraft, draft·compiled
 Answer Verifier, 결정론적 evidence compiler와 safe fallback으로 구성한다.
 공식 Agent 실행은 HCX schema·서버 계약 승인 전까지 비활성화 상태다.
@@ -71,6 +75,7 @@ Answer Verifier, 결정론적 evidence compiler와 safe fallback으로 구성한
 - [문서 RAG 계약](../../docs/document-rag.md): 승인 문서 BM25/SQLite FTS 검색
 - [공통 AGGREGATE 계약](../../docs/aggregate-engine.md): 함수·그룹·통화·결측·근거
 - [공통 COMPARE 계약](../../docs/comparison-engine-design.md): exact identity·필드·통화·기준일·stale
+- [교차 상품군 SEARCH 계약](../../docs/cross-family-search.md): 상품군별 계획·병렬 실행·부분 결과·안전 경계
 - [사람 평가 rubric](../../docs/human-evaluation.md): 독립 reviewer·critical gate
 - [internal-red-team-v1](../../docs/evaluation-internal-red-team.md): 네 상품군 전체 E2E·안전 회귀
 
@@ -155,6 +160,14 @@ expected QueryPlan 기반 SEARCH·COMPARE 답변 격리 평가를 지원한다.
 수행한다. 분포·정답 계약, hash commitment, 최초 1회 실행과 상태 파일은
 [연결 전 진단·external blind 프로토콜](../../docs/evaluation-pre-hcx-diagnostic.md)과
 `finance-pre-hcx` 도구를 따른다.
+
+교차 상품군 SEARCH 공개 회귀는 모델과 네트워크 없이 실행한다.
+
+```bash
+/home/haeyeongcho/miniforge3/envs/gaeng3-dev/bin/python \
+  -m finance_agent_core.evaluation.cross_family_search_cli \
+  --require-perfect
+```
 
 `--provider local_test`는 로컬 Qwen 서버와 세 가지 명시적 opt-in이 모두
 필요하다. 최초 holdout과 사후 회귀를 구분한 결과와 재현 절차는

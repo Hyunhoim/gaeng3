@@ -34,6 +34,7 @@ DB, 원천 XLSX, 전체 report, 모델 가중치는 계속 `artifacts/` 또는 �
 | [공모펀드 자연어 비교 E2E](baselines/public-fund-compare-e2e-v1.json) | 자연어 parser·resolver·Oracle·검증 답변·안전 차단 통합 |
 | [세 상품군 자연어 비교](baselines/product-compare-v1.json) | 해외·국내 ETP·국내채권 30문항의 결정론적 비교·Backend 계약·안전 차단 |
 | [SEARCH·AGGREGATE 성능](baselines/search-aggregate-performance-v1.json) | 네 상품군 8문항의 결과 지문·새 프로세스 지연·RSS·경량 verifier 전후 비교 |
+| [교차 상품군 SEARCH](baselines/cross-family-search-v1.json) | 국내·해외 ETP 양쪽 성공·부분 성공·전체 빈 결과·직접 비교 차단 4문항 |
 | [HyperCLOVA X API 없는 계약 E2E](baselines/hcx-contract-e2e-v1.json) | 세 실행 상품군 SEARCH·fallback·timeout·정책 차단·계획 guard 8개 |
 | [Backend answer adapter 계약](baselines/answer-adapter-contract-v1.json) | HTTP status·안전한 ERROR DTO·fallback·민감정보 비노출 12개 |
 | [내부 red-team 전체 E2E](baselines/internal-red-team-v1.json) | 네 상품군 40문항의 Router→Qwen→Oracle→Verifier→Backend DTO와 공격 유형 회귀 |
@@ -56,6 +57,11 @@ COMPARE 공개 회귀 54문항을 구성한다.
 `search-aggregate-performance-8`은 네 상품군에서 SEARCH와 AGGREGATE를 하나씩
 새 프로세스로 실행한다. 후보 수와 결과 지문이 모두 일치해야 통과하며 지연과
 추가 RSS는 같은 장비의 방향성 기준선으로만 사용한다.
+
+`cross-family-search-v1-4`는 국내·해외 ETP를 상품군별 단일 QueryPlan과
+독립 Oracle·Verifier로 실행한다. 한쪽 0건 보존, 전체 `not_found`, family별
+manifest와 직접 비교 차단을 실제 데이터 hash와 함께 4/4 고정한다. 모델과
+네트워크는 호출하지 않는다.
 
 `hcx-contract-e2e-8`은 네트워크 없이 HCX semantic transport를 재생한다.
 세 실행 상품군의 QueryPlan→Oracle→Verifier→Evidence→답변→Backend DTO와

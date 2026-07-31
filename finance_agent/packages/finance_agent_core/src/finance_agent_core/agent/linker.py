@@ -156,8 +156,14 @@ def _date_hint(
 def build_lexical_hints(
     question: str,
     product_family_hint: str | None = None,
+    *,
+    force_product_family_hint: bool = False,
 ) -> dict[str, Any]:
-    family = _product_family(question)
+    family = (
+        product_family_hint
+        if force_product_family_hint and product_family_hint in SEARCH_PROJECTION_BY_FAMILY
+        else _product_family(question)
+    )
     if family is None and product_family_hint in SEARCH_PROJECTION_BY_FAMILY:
         family = product_family_hint
     required: list[dict[str, Any]] = []
@@ -717,6 +723,8 @@ def _hint_constraints(
 def canonicalize_query_plan_payload(
     question: str,
     payload: dict[str, Any],
+    *,
+    force_product_family_hint: bool = False,
 ) -> dict[str, Any]:
     raw_families = payload.get("product_families")
     product_family_hint = (
@@ -726,7 +734,11 @@ def canonicalize_query_plan_payload(
         and isinstance(raw_families[0], str)
         else None
     )
-    hints = build_lexical_hints(question, product_family_hint)
+    hints = build_lexical_hints(
+        question,
+        product_family_hint,
+        force_product_family_hint=force_product_family_hint,
+    )
     family = hints["product_family"]
     if family is None:
         family = "overseas_etp"

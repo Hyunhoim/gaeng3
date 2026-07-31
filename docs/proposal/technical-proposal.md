@@ -48,6 +48,7 @@ field-level evidence와 기준일을 갖추며, 검증에 실패하면 근거 �
 
 - fail-closed Intent Router가 SEARCH·COMPARE·AGGREGATE·EXPLAIN·CLARIFY를 구분
 - 서버 compiler가 상품군 capability, 필드, 연산자, 정렬과 limit의 기준계획 생성
+- 복수 상품군 SEARCH는 상품군별 단일 QueryPlan으로 나눠 독립 실행
 - LLM을 사용하는 SEARCH의 출력은 축소된 schema의 typed QueryPlan으로 제한
 - SEARCH 모델 계획과 서버 기준계획이 다르면 Oracle을 실행하지 않고 역질문
 - COMPARE·AGGREGATE는 현재 서버의 결정론적 compiler를 유지
@@ -55,6 +56,7 @@ field-level evidence와 기준일을 갖추며, 검증에 실패하면 근거 �
 ### 3.3 결정론적 검색·연산
 
 - parameterized SQLite Oracle이 필터·정렬·순위와 후보 수 계산
+- 복수 상품군 SEARCH는 Oracle·Verifier를 병렬 실행하고 부분 결과를 보존
 - 비교는 같은 상품군의 정확한 두 상품과 승인 필드에 한정
 - 집계는 Decimal 기반 COUNT·MIN·MAX·AVG와 제한된 SUM을 지원
 - 통화·단위·기준일이 호환되지 않으면 차이 또는 합산을 차단
@@ -88,7 +90,7 @@ BM25/SQLite FTS 기반 문서 검색의 적재·필터·출처·기준일 계약
 
 | 기능 | 현재 범위 | 안전 경계 |
 | --- | --- | --- |
-| SEARCH | 네 상품군 조건 검색·상세 조회 | 지원 필드·연산자만 실행 |
+| SEARCH | 네 상품군 조건 검색·상세 조회, 복수 상품군 독립 검색 | 공통 조건만 상품군별 실행·직접 비교 금지 |
 | COMPARE | 같은 상품군의 정확한 두 상품 | 통화·기준일·결측 불일치 차단 |
 | AGGREGATE | 네 상품군 COUNT·MIN·MAX·AVG·제한 SUM | 독립 Python 재검산 |
 | EXPLAIN | 정형 evidence 설명, 문서 RAG 최소 계약 | 실제 corpus 승인 대기 |
@@ -106,7 +108,8 @@ BM25/SQLite FTS 기반 문서 검색의 적재·필터·출처·기준일 계약
 2. 국내채권 상세 조회와 오래된 동적 값 경고
 3. 국내 ETF 또는 공모펀드의 조건 집계
 4. 같은 상품군 두 상품 비교
-5. 모호한 조건 역질문과 단정적 추천 거절
+5. 국내·해외 ETP 교차 검색과 부분 결과 보존
+6. 모호한 조건 역질문과 단정적 추천 거절
 
 최종 화면 시나리오는 Next.js 통합 후 실제 캡처와 API 응답으로 교체한다.
 
@@ -138,7 +141,8 @@ BM25/SQLite FTS 기반 문서 검색의 적재·필터·출처·기준일 계약
 현재 대표 근거:
 
 - 4종 원천 145,393행 감사, 핵심 expectation 65/65
-- Agent Core 전체 pytest 312개 통과
+- Agent Core 전체 pytest 320개 통과
+- 국내·해외 ETP 교차 SEARCH 공개 실제 데이터 회귀 4/4
 - 내부 red-team 40문항 수정 후 strict·safety·evidence 40/40
 - HyperCLOVA X API 없는 provider·Agent 계약 8/8
 - Backend service adapter 오류·fallback·비노출 계약 12/12

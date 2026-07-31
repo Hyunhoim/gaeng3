@@ -21,7 +21,11 @@ from finance_agent_core.agent.fund_resolver import (
     FundResolutionCandidate,
     normalize_fund_mention,
 )
-from finance_agent_core.agent.routed_service import RoutedAgentResult, RoutedFinanceAgent
+from finance_agent_core.agent.routed_service import (
+    FamilySearchResult,
+    RoutedAgentResult,
+    RoutedFinanceAgent,
+)
 from finance_agent_core.agent.router import IntentRouter
 from finance_agent_core.agent.service import FinanceAgent
 
@@ -29,6 +33,7 @@ __all__ = [
     "AnswerAdapterResult",
     "CompiledFundComparisonPlan",
     "FinanceAgent",
+    "FamilySearchResult",
     "IntentRouter",
     "PlanCompilationBlockedError",
     "FundComparisonDraft",

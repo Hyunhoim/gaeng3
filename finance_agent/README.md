@@ -16,6 +16,7 @@
 | 공통 Router | 네 상품군·7 intent 공개 진단: 도입 전 4/28, fail-closed Router 28/28 |
 | 공통 AGGREGATE | 네 상품군 COUNT·MIN·MAX·AVG·허용 SUM, 최대 2개 group, 통화·결측·기준일·독립 verifier |
 | 공통 COMPARE | 같은 상품군의 정확한 두 상품, 필드 allowlist·통화·기준일·stale·독립 verifier·Backend evidence, 공개 자연어 54문항 |
+| 교차 상품군 SEARCH | 상품군별 단일 QueryPlan·병렬 Oracle·독립 verifier·부분 결과 보존·직접 비교 금지, 국내·해외 ETP 공개 회귀 4/4 |
 | SEARCH·AGGREGATE 성능 | 네 상품군 8문항 결과 지문 8/8, projected verifier, 새 프로세스 p50 308.749ms·최대 추가 RSS 51,000KiB |
 | 문서 RAG | caller-fed BM25/SQLite FTS 적재·필터·근거·기준일·not-found 최소 기능 |
 | 팀 통합 계약 | 프레임워크 독립 Backend DTO·HTTP 오류 adapter 12/12, JSON Schema/예시, 사람 평가 rubric v1 |
@@ -36,6 +37,10 @@
 → 정확 일치 상품 identity resolver
 → typed QueryPlan
 → registry·Pydantic 검증
+├─ 복수 상품군 SEARCH
+│  → 상품군별 단일 QueryPlan·SQLite Oracle 병렬 실행
+│  → 상품군별 Result Verifier·field evidence·manifest
+│  → 부분 결과 보존·직접 비교 없는 deterministic answer
 ├─ SEARCH·DETAIL·COMPARE·EXPLAIN
 │  → parameterized SQLite Oracle
 │  → 독립 Python Result Verifier
@@ -129,6 +134,7 @@ conda run -n gaeng3-dev \
 - [Capability matrix](docs/capability-matrix.md)
 - [네 상품군 공통 AGGREGATE 엔진](docs/aggregate-engine.md)
 - [네 상품군 자연어 COMPARE 공개 회귀](docs/evaluation-product-comparison.md)
+- [교차 상품군 병렬 SEARCH v1](docs/cross-family-search.md)
 - [문서 RAG](docs/document-rag.md)
 - [Backend DTO](docs/backend-contract.md)
 - [사람 평가 rubric](docs/human-evaluation.md)
@@ -169,7 +175,12 @@ field-level evidence, Qwen grounded answer, Answer Verifier·fallback까지 한
 이 결과는 공개 회귀 문항의 전체 배선 검증이며 독립 blind 일반화 평가나 실제
 사람 rubric 결과는 아니다. 내부 구현으로는 네 상품군 Router, BM25 문서 검색,
 공통 AGGREGATE, rubric·Backend DTO와 안전한 오류 adapter까지 준비했다. 남은
-우선순위는 금융 도메인 담당자의
+교차 상품군 SEARCH v1도 국내·해외 ETP 실제 데이터 공개 회귀 4/4를 통과했다.
+각 상품군은 별도 QueryPlan·Oracle·Verifier·manifest를 유지하며, 한쪽이 0건이어도
+다른 쪽 결과를 보존한다. 상품군 간 직접 수치 비교·합산·우열 판단과 서로 다른
+상품군별 조건은 계속 차단한다.
+
+남은 우선순위는 금융 도메인 담당자의
 external blind 100문항·비공개 정답키 작성, 승인된 실제 문서 corpus와 사람
 평가, HyperCLOVA X 실제 HTTP transport, FastAPI `/answer` route다. 최초 SEARCH parser
 holdout 실패 1건은 회귀 수정했지만 9/10 기록은 그대로 유지한다. 공모펀드

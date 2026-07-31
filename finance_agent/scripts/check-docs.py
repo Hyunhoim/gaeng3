@@ -35,7 +35,7 @@ PRODUCT_COMPARE_SUITE = (
 
 LINK_PATTERN = re.compile(r"!?\[[^\]]*]\((?:<(?P<angle>[^>]+)>|(?P<plain>[^)\s]+))\)")
 SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
-FROZEN_PYTEST_PASSED = 312
+FROZEN_PYTEST_PASSED = 320
 
 REQUIRED_INDEX_TARGETS = {
     "project-baseline.md",
@@ -49,6 +49,7 @@ REQUIRED_INDEX_TARGETS = {
     "evaluation-grounded-answers.md",
     "evaluation-product-comparison.md",
     "evaluation-search-aggregate-performance.md",
+    "cross-family-search.md",
     "evaluation-internal-red-team.md",
     "hyperclova-provider.md",
     "evaluation-pre-hcx-diagnostic.md",
@@ -79,6 +80,7 @@ REQUIRED_BASELINES = {
     "public-fund-compare-parser-v1.json",
     "product-compare-v1.json",
     "search-aggregate-performance-v1.json",
+    "cross-family-search-v1.json",
     "hcx-contract-e2e-v1.json",
     "answer-adapter-contract-v1.json",
     "internal-red-team-v1.json",
@@ -294,6 +296,7 @@ def _check_baseline(path: Path) -> list[str]:
         "intent_route",
         "system_performance",
         "system_contract",
+        "system_regression",
     }:
         errors.append(f"{name}: invalid evaluation_layer")
     if payload["provider"].get("official_submission_provider") is not False:

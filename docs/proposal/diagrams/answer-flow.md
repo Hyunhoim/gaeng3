@@ -15,7 +15,10 @@ flowchart TD
     R --> CL["CLARIFY<br/>모호한 조건 역질문"]
     R --> U["UNSUPPORTED<br/>예측·추천·미지원 요청"]
 
-    S --> P["서버 QueryPlan 검증"]
+    S --> MF{"복수 상품군?"}
+    MF -->|"아니오"| P["서버 QueryPlan 검증"]
+    MF -->|"예"| MP["상품군별 단일 QueryPlan<br/>공통 조건만 허용"]
+    MP --> T
     C --> P
     A --> P
     E --> P
@@ -43,6 +46,8 @@ flowchart TD
 ## 실행 원칙
 
 - SEARCH는 지원 조건·정렬·limit만 실행
+- 복수 상품군 SEARCH는 각 상품군을 독립 검증하고 부분 결과를 보존
+- 상품군 간 직접 수치 비교·합산·우열 판단과 서로 다른 family 조건은 차단
 - COMPARE는 같은 상품군의 정확한 두 상품과 승인 필드만 실행
 - AGGREGATE는 허용 함수·그룹·통화 정책을 서버가 결정
 - EXPLAIN은 검증된 정형 evidence를 사용하며 실제 문서 corpus는 승인 대기

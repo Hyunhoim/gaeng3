@@ -15,7 +15,7 @@
 | 문제 정의 | 네 상품군의 grain·필드·결측·기준일이 서로 다름 | [데이터 감사](../../finance_agent/docs/data-audit.md) | 검증 완료 |
 | 제안 방법 | typed QueryPlan·Oracle·Verifier·field evidence·Answer Verifier | [계약](../../finance_agent/docs/contracts.md) | 검증 완료 |
 | 시스템 구성도 | Agent Core 검증 완료, FastAPI·HCX 실제 연결 대기 | [연결 전 readiness](../../finance_agent/docs/pre-hcx-readiness.md) | 부분 완료 |
-| 주요 기능 흐름 | SEARCH·COMPARE·AGGREGATE·제어 응답 | [capability matrix](../../finance_agent/docs/capability-matrix.md) | 검증 완료 |
+| 주요 기능 흐름 | SEARCH·교차 상품군 독립 검색·COMPARE·AGGREGATE·제어 응답 | [교차 SEARCH](../../finance_agent/docs/cross-family-search.md) | 검증 완료 |
 | 사용자 시나리오 | 검색·비교·집계·역질문·거절 | [사용자 시나리오](user-scenarios.md) | 금융·화면 검수 대기 |
 | 기대효과·확장성 | 근거 추적·안전 fallback·상품군 adapter·평가 재사용 | [Backend 계약](../../finance_agent/docs/backend-contract.md) | 내부 계약 완료 |
 
@@ -34,7 +34,8 @@
 | 주장 | 값 | 정본 | 해석 제한 |
 | --- | ---: | --- | --- |
 | 원천 감사 | 4종 145,393행, 65/65 | [데이터 감사](../../finance_agent/docs/data-audit.md) | 제공 스냅샷 기준 |
-| 전체 코드 회귀 | pytest 312개 | [readiness](../../finance_agent/docs/pre-hcx-readiness.md) | Agent Core 범위 |
+| 전체 코드 회귀 | pytest 320개 | [readiness](../../finance_agent/docs/pre-hcx-readiness.md) | Agent Core 범위 |
+| 교차 상품군 SEARCH | 국내·해외 ETP 4/4 | [교차 SEARCH](../../finance_agent/docs/cross-family-search.md) | 공개 회귀, not blind |
 | 내부 red-team | 수정 후 40/40 | [red-team 평가](../../finance_agent/docs/evaluation-internal-red-team.md) | self-authored, not blind |
 | 네 상품군 자연어 비교 공개 회귀 | 54문항 | [비교 평가](../../finance_agent/docs/evaluation-product-comparison.md) | 공개 회귀 |
 | SEARCH·AGGREGATE 결과 지문 | 8/8 | [성능 기준선](../../finance_agent/docs/evaluation-search-aggregate-performance.md) | 단일 개발 장비 |

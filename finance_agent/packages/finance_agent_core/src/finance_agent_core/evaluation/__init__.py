@@ -32,6 +32,16 @@ from finance_agent_core.evaluation.comparison_runner import (
     build_fund_comparison_report,
     load_fund_comparison_suite,
 )
+from finance_agent_core.evaluation.cross_family_search import (
+    CrossFamilyCaseResult,
+    CrossFamilySearchCase,
+    CrossFamilySearchReport,
+    CrossFamilySearchSuite,
+    LoadedCrossFamilySearchSuite,
+    evaluate_cross_family_case,
+    load_cross_family_search_suite,
+    run_cross_family_search_suite,
+)
 from finance_agent_core.evaluation.models import (
     CANONICAL_SEARCH_PROJECTION,
     EvaluationCase,
@@ -88,6 +98,10 @@ from finance_agent_core.evaluation.suite import (
 
 __all__ = [
     "CANONICAL_SEARCH_PROJECTION",
+    "CrossFamilyCaseResult",
+    "CrossFamilySearchCase",
+    "CrossFamilySearchReport",
+    "CrossFamilySearchSuite",
     "EvaluationCase",
     "EvaluationSplit",
     "EvaluationSuite",
@@ -113,6 +127,7 @@ __all__ = [
     "FundComparisonReport",
     "FundComparisonSuite",
     "LoadedEvaluationSuite",
+    "LoadedCrossFamilySearchSuite",
     "LoadedFundComparisonE2ESuite",
     "LoadedFundComparisonParserSuite",
     "LoadedFundComparisonSuite",
@@ -147,13 +162,16 @@ __all__ = [
     "build_red_team_report",
     "build_search_aggregate_benchmark_report",
     "evaluate_product_comparison_result",
+    "evaluate_cross_family_case",
     "load_core_evaluation_suite",
+    "load_cross_family_search_suite",
     "load_fund_comparison_e2e_suite",
     "load_fund_comparison_suite",
     "load_fund_comparison_parser_suite",
     "load_product_comparison_suite",
     "load_internal_red_team_suite",
     "load_search_aggregate_benchmark_suite",
+    "run_cross_family_search_suite",
     "verify_red_team_databases",
     "InstrumentedAnswerProvider",
     "InstrumentedQueryPlanProvider",

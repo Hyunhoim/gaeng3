@@ -17,7 +17,8 @@ flowchart LR
     PLAN -.->|"선택적 SEARCH 계획·근거 설명"| HCX["HyperCLOVA X<br/>실제 transport 대기"]
     HCX -.->|"서버 계획 exact-match gate"| PLAN
 
-    PLAN --> TOOLS["상품군별 결정론적 도구"]
+    PLAN --> SPLIT["단일 또는 복수 상품군<br/>단일-family 계획 분리"]
+    SPLIT --> TOOLS["상품군별 결정론적 도구<br/>복수 SEARCH 병렬 실행"]
     TOOLS --> DB["정규화 SQLite<br/>채권 · 국내/해외 ETP · 공모펀드"]
     DB --> RV["Result Verifier"]
     RV --> EVIDENCE["Field-level Evidence<br/>비교 · 집계 · 문서 citation"]
@@ -39,6 +40,7 @@ flowchart LR
 - 네 상품군 원천 감사·정규화 SQLite
 - fail-closed Router와 capability matrix
 - SEARCH·same-family COMPARE·AGGREGATE
+- 복수 상품군 독립 SEARCH와 부분 결과 보존
 - 독립 Result Verifier와 field-level evidence
 - grounded answer·Answer Verifier·deterministic fallback
 - 프레임워크 독립 Backend DTO와 service adapter
