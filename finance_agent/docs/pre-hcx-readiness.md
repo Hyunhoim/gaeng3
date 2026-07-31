@@ -46,6 +46,8 @@
 | 5 | 사람 rubric·Backend DTO | JSON 예시·schema·contract test 포함 | 계약 완료·사람 평가 대기 |
 | 6 | baseline 동결·전체 QA | 회귀·wheel·문서·hash 검증과 외부 게이트 명시 | 내부 완료 |
 | 7 | HyperCLOVA X provider 경계 | 세 operation·주입형 transport·오류·관측·전체 경로 E2E | 내부 8/8 완료·실제 HTTP 대기 |
+| 8 | `/answer` service adapter | HTTP status·안전한 ERROR DTO·fallback·비노출 계약 | 프레임워크 독립 12/12 완료·FastAPI route 대기 |
+| 9 | `internal-red-team-v1` | 네 상품군 40문항·10개 공격 유형·전체 `/answer` E2E | expected·수정 후 로컬 Qwen 40/40 |
 
 ## 2. 평가 해석 원칙
 
@@ -102,6 +104,25 @@ HyperCLOVA X API 없는 전체 경로 결과:
 - 동결 `hcx-contract-e2e-8` 8개 시나리오 8/8, 네트워크 호출 0건
 - 실제 HCX 품질·비용·latency·API 호환성 점수로 해석하지 않음
 
+Backend `/answer` service adapter 결과:
+
+- 정상·control·not-found·검증된 fallback은 의미 있는 Agent 응답이므로 HTTP 200
+- QueryPlan provider 설정·인증·rate limit·서비스·timeout·transport·응답
+  장애는 안전한 `provider_unavailable`과 HTTP 502·503·504로 변환
+- SQLite·dataset I/O와 알 수 없는 내부 예외는 evidence 없는 `error` DTO로 변환
+- grounded answer provider 장애는 검증된 evidence를 사용한 결정론적 fallback
+- 질문·credential·provider 본문·파일 경로 비노출 포함 동결 12개 시나리오 12/12
+- 실제 FastAPI route·request 인증·네트워크 transport 품질 점수가 아님
+
+`internal-red-team-v1` 전체 E2E 결과:
+
+- 네 상품군 각 10문항, 10개 공격 유형을 Router부터 Backend DTO까지 실행
+- expected provider 40/40, 최초 로컬 Qwen strict 36/40·안전 차단 40/40
+- 최초 네 실패는 모두 `3건`을 lexical linker가 limit 5로 해석한 `$.limit` 불일치
+- Router와 linker의 단위 문법을 맞춘 뒤 로컬 Qwen strict·safety·evidence 40/40
+- QueryPlan 12회·grounded answer 12회, provider 오류·verifier fallback 0건
+- 공개 내부 red-team이므로 독립 blind나 HyperCLOVA X 품질 점수가 아님
+
 ## 3. 외부 완료 게이트
 
 다음 항목은 저장소 코드만으로 완료할 수 없으며 최종 baseline과 분리해 관리한다.
@@ -118,9 +139,9 @@ HyperCLOVA X API 없는 전체 경로 결과:
 
 ## 4. 내부 완료 QA
 
-- pytest `293 passed`
+- pytest `312 passed`
 - Ruff lint와 format 통과
-- 문서 검사 `35 Markdown files`, `21 evaluation baselines` 통과
+- 문서 검사 `36 Markdown files`, `23 evaluation baselines` 통과
 - `pip check` 통과
 - build isolation 없이 wheel 생성과 신규 JSON package data 포함 여부 통과
 - `git diff --check` 통과

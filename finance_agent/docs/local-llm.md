@@ -112,6 +112,25 @@ E2E는 다음을 모두 검사한다.
 서버는 `Ctrl-C`로 종료한다. loopback 이외의 host를 지정하면 실행 스크립트가
 거절한다.
 
+네 상품군 전체 E2E red-team은 같은 서버를 켠 상태에서 별도로 실행한다.
+
+```bash
+FINANCE_AGENT_LLM_MODE=local_test \
+ENABLE_NON_HCX_TEST_LLM=1 \
+LLM_PROVIDER=local_test \
+LOCAL_TEST_LLM_BASE_URL=http://127.0.0.1:18000/v1 \
+LOCAL_TEST_LLM_MODEL=qwen3-local-test \
+/home/haeyeongcho/miniforge3/envs/gaeng3-dev/bin/python \
+  -m finance_agent_core.evaluation.red_team_cli \
+  --provider local_test \
+  --require-perfect \
+  --require-no-fallback
+```
+
+질문 구성, 최초 실패와 수정 후 결과는
+[internal-red-team-v1 전체 E2E 평가](evaluation-internal-red-team.md)에
+보존한다.
+
 ## 2026-07-28 실제 검증 결과
 
 - 모델 cache 14개 파일의 누락·checksum 검증 통과

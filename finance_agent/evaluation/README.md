@@ -35,6 +35,8 @@ DB, 원천 XLSX, 전체 report, 모델 가중치는 계속 `artifacts/` 또는 �
 | [세 상품군 자연어 비교](baselines/product-compare-v1.json) | 해외·국내 ETP·국내채권 30문항의 결정론적 비교·Backend 계약·안전 차단 |
 | [SEARCH·AGGREGATE 성능](baselines/search-aggregate-performance-v1.json) | 네 상품군 8문항의 결과 지문·새 프로세스 지연·RSS·경량 verifier 전후 비교 |
 | [HyperCLOVA X API 없는 계약 E2E](baselines/hcx-contract-e2e-v1.json) | 세 실행 상품군 SEARCH·fallback·timeout·정책 차단·계획 guard 8개 |
+| [Backend answer adapter 계약](baselines/answer-adapter-contract-v1.json) | HTTP status·안전한 ERROR DTO·fallback·민감정보 비노출 12개 |
+| [내부 red-team 전체 E2E](baselines/internal-red-team-v1.json) | 네 상품군 40문항의 Router→Qwen→Oracle→Verifier→Backend DTO와 공격 유형 회귀 |
 | [연결 전 라우팅 초기 진단 v1](baselines/pre-hcx-route-diagnostic-initial-v1.json) | AGGREGATE 미지원 시점의 Router 도입 전 search 강제 동작 4/28 |
 | [연결 전 라우팅 개선 진단 v1](baselines/pre-hcx-route-diagnostic-improved-v1.json) | AGGREGATE 미지원 시점의 네 상품군·일곱 intent 라우팅 28/28 |
 | [연결 전 라우팅 초기 진단 v2](baselines/pre-hcx-route-diagnostic-initial-v2.json) | 현재 AGGREGATE 기대값을 적용한 도입 전 replay 4/28 |
@@ -59,6 +61,17 @@ COMPARE 공개 회귀 54문항을 구성한다.
 세 실행 상품군의 QueryPlan→Oracle→Verifier→Evidence→답변→Backend DTO와
 fallback·timeout·무호출 정책 차단·서버 계획 일치 guard를 8개 시나리오로
 검증한다. 실제 HyperCLOVA X 생성 품질이나 API 호환성 평가는 아니다.
+
+`answer-adapter-contract-12`는 프레임워크 독립 `/answer` service adapter의
+정상 응답, provider 설정·인증·rate limit·서비스·timeout·transport·응답 오류,
+dataset 장애, 알 수 없는 내부 오류와 grounded answer fallback을 검사한다.
+질문·credential·provider 오류 본문·파일 경로는 공개 ERROR DTO에 포함하지
+않는다. 실제 FastAPI route나 네트워크 품질 평가는 아니다.
+
+`internal-red-team-v1`은 네 상품군에 같은 10개 공격 유형을 적용한 공개
+40문항이다. expected 하네스 40/40 이후 로컬 Qwen 최초 관측은 `3건` limit
+handoff 불일치로 36/40이었고, 원인을 수정한 사후 회귀는 40/40이다. 최초
+관측 report를 덮어쓰지 않으며 독립 blind 성능으로 주장하지 않는다.
 
 이 수치는 HyperCLOVA X나 공식 공모전 평가 결과가 아니다. 동결된 개발 질문에서
 로컬 LLM, 결정론적 linker, 계약, Oracle과 Verifier를 합친 시스템의 회귀

@@ -14,7 +14,9 @@ evidence, 동결 50문항 계약, 개발 전용 로컬 parser와 grounded answer
 네 상품군·일곱 intent의 fail-closed Router와 서버 QueryPlan compiler를
 구현했다. 상품 검색·비교는 Oracle→Result Verifier→field evidence→Answer
 Verifier 경로를 사용한다. BM25/SQLite FTS 문서 검색, 프레임워크 독립
-Backend DTO와 사람 평가 rubric은 별도 계약으로 제공한다.
+Backend DTO·`/answer` service adapter와 사람 평가 rubric은 별도 계약으로
+제공한다. 네 상품군 40문항의 공개 `internal-red-team-v1`은 Router부터
+로컬 Qwen·Oracle·Verifier·Backend DTO까지 한 경로로 회귀 검증한다.
 네 상품군 공통 AGGREGATE는 COUNT·MIN·MAX·AVG·허용 SUM, 최대 두 범주
 group, 금액 통화 gate, 결측·기준일 보존, 별도 Python verifier와
 `AggregateEvidence`까지 구현했다. 집계 답변은 현재 LLM 없이 결정론적으로
@@ -63,12 +65,14 @@ Answer Verifier, 결정론적 evidence compiler와 safe fallback으로 구성한
 - [`queryplan.hcx.schema.json`](src/finance_agent_core/contracts/queryplan.hcx.schema.json): HyperCLOVA X Structured Outputs용 보수적 schema
 - [`capability_matrix.json`](src/finance_agent_core/config/capability_matrix.json): 상품군·intent별 실행·통제 범위
 - [`backend.py`](src/finance_agent_core/contracts/backend.py): Backend request·response·citation·fallback DTO
+- [`backend_adapter.py`](src/finance_agent_core/agent/backend_adapter.py): HTTP status·안전한 ERROR DTO·fallback service 경계
 - [계약 설명](../../docs/contracts.md): 설계 근거, 첫 vertical slice 예시, 확장 규칙
 - [공모펀드 계약](../../docs/public-fund-contract.md): product grain, capability, 품질 규칙, 실행 승인 조건
 - [문서 RAG 계약](../../docs/document-rag.md): 승인 문서 BM25/SQLite FTS 검색
 - [공통 AGGREGATE 계약](../../docs/aggregate-engine.md): 함수·그룹·통화·결측·근거
 - [공통 COMPARE 계약](../../docs/comparison-engine-design.md): exact identity·필드·통화·기준일·stale
 - [사람 평가 rubric](../../docs/human-evaluation.md): 독립 reviewer·critical gate
+- [internal-red-team-v1](../../docs/evaluation-internal-red-team.md): 네 상품군 전체 E2E·안전 회귀
 
 ## 상품군 vertical slice
 
@@ -316,6 +320,39 @@ SEARCH에서는 `RoutedFinanceAgent(query_plan_provider=...)`로 provider를
 
 해외·국내 ETP와 국내채권 정상 경로, Answer Verifier fallback, timeout,
 Router 제어, 비활성 공모펀드, 계획 불일치 총 8개 시나리오를 검사한다.
+
+## Backend `/answer` service adapter
+
+FastAPI route가 연결되기 전에도 framework-neutral adapter를 호출해 권장 HTTP
+status와 schema 검증된 응답 DTO를 함께 받을 수 있다.
+
+```python
+from finance_agent_core.agent import execute_answer_request
+from finance_agent_core.contracts.backend import BackendAgentRequest
+
+request = BackendAgentRequest(
+    request_id="request-001",
+    question="미국 주식형 해외 ETF 중 총보수가 낮은 3개를 보여줘",
+)
+result = execute_answer_request(agent, request)
+
+result.http_status_code
+result.response.model_dump(mode="json")
+```
+
+정상·control·not-found·검증된 fallback은 HTTP 200이다. QueryPlan provider,
+dataset과 내부 장애는 원문 예외를 노출하지 않는 `error` DTO와 HTTP
+500·502·503·504로 변환한다. grounded answer provider 장애는 이미 검증된
+evidence가 있으므로 결정론적 fallback과 HTTP 200으로 복구한다.
+
+```bash
+/home/haeyeongcho/miniforge3/envs/gaeng3-dev/bin/python \
+  scripts/run-answer-adapter-contract.py \
+  --require-perfect
+```
+
+동결된 12개 시나리오 결과는 12/12다. 실제 FastAPI route와 HTTP 인증은
+application shell 통합 시 이 반환값 위에 추가한다.
 
 ## 검증
 

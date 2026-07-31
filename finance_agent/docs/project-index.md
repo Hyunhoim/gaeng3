@@ -28,10 +28,11 @@
 20. [네 상품군 자연어 COMPARE 공개 회귀](evaluation-product-comparison.md)
 21. [SEARCH·AGGREGATE 성능 기준선](evaluation-search-aggregate-performance.md)
 22. [HyperCLOVA X provider 계약](hyperclova-provider.md)
-23. [BM25/SQLite FTS 문서 RAG](document-rag.md)
-24. [Backend 전달용 Agent DTO](backend-contract.md)
-25. [금융상품 Agent 사람 평가 rubric](human-evaluation.md)
-26. [저장소 부트스트랩 작업 명세](prompts/01-repository-bootstrap.md)
+23. [internal-red-team-v1 전체 E2E 평가](evaluation-internal-red-team.md)
+24. [BM25/SQLite FTS 문서 RAG](document-rag.md)
+25. [Backend 전달용 Agent DTO](backend-contract.md)
+26. [금융상품 Agent 사람 평가 rubric](human-evaluation.md)
+27. [저장소 부트스트랩 작업 명세](prompts/01-repository-bootstrap.md)
 
 ## 문서 지도
 
@@ -60,8 +61,9 @@
 | [네 상품군 자연어 COMPARE 공개 회귀](evaluation-product-comparison.md) | 세 상품군 신규 30문항과 기존 공모펀드 24문항의 비교 배선·안전 경계 | v1.0 정본 |
 | [SEARCH·AGGREGATE 성능 기준선](evaluation-search-aggregate-performance.md) | 네 상품군 8문항의 결과 지문·새 프로세스 지연·RSS와 projected verifier 전후 비교 | v1.0 정본 |
 | [HyperCLOVA X provider 계약](hyperclova-provider.md) | 세 LLM 역할의 요청·응답·오류·관측 계약과 API 없는 전체 Agent E2E | 계약·E2E 8/8 완료·실제 HTTP 대기 |
+| [internal-red-team-v1 전체 E2E 평가](evaluation-internal-red-team.md) | 네 상품군 40문항의 공격 유형·전체 `/answer` 경로·최초 실패·수정 후 회귀 | v1.0 정본 |
 | [BM25/SQLite FTS 문서 RAG](document-rag.md) | 승인 문서 적재·BM25 검색·필터·근거·기준일·not-found 계약 | 최소 기능 완료 |
-| [Backend 전달용 Agent DTO](backend-contract.md) | 프레임워크 독립 request·response·citation·fallback 계약과 JSON 예시 | v1.0 |
+| [Backend 전달용 Agent DTO](backend-contract.md) | 프레임워크 독립 request·response·citation·fallback·HTTP 오류 adapter와 JSON 예시 | v1.0·adapter 12/12 |
 | [금융상품 Agent 사람 평가 rubric](human-evaluation.md) | 6개 평가 축·critical gate·독립 reviewer·집계 계약 | rubric 완료·실평가 대기 |
 | [저장소 부트스트랩 작업 명세](prompts/01-repository-bootstrap.md) | 최초 Agent Core를 구현할 때 Codex에 전달한 실행 명세 | 완료 기록 |
 | [Agent 전략 연구 요청](prompts/02-agent-strategy-research.md) | GPT Pro에 전달했던 질문과 당시 제약 | 과거 입력 기록 |
@@ -128,6 +130,8 @@
   call record와 fake transport 오류 계약 완료
 - HyperCLOVA X API 없는 전체 경로: 해외·국내 ETP·국내채권 SEARCH와
   fallback·timeout·무호출 정책·서버 계획 guard 8/8, 실제 HTTP transport는 대기
+- `/answer` service adapter: 정상·fallback·provider·dataset·내부 오류의
+  HTTP status와 안전한 ERROR DTO, 민감정보 비노출 계약 12/12
 - 공모펀드 평가 경계: 동결 expected QueryPlan의 SEARCH·COMPARE 답변 격리
   회귀와 공개 24문항 자연어 통합 E2E까지 완료, 독립 blind E2E·사람 rubric·
   HyperCLOVA X 실제 HTTP 재현 미완료, 공식 Agent 실행 비활성
@@ -135,8 +139,10 @@
 - 네 상품군 공통 집계: COUNT·MIN·MAX·AVG·허용 SUM, 최대 두 그룹,
   금액 통화 gate, 결측·기준일 공개, SQL 후보와 독립 Python 재검산
 - 문서 검색 기준: BM25/SQLite FTS synthetic 적재·필터·근거·not-found 통과
-- 팀 계약 기준: Backend DTO JSON 예시·schema, 사람 rubric validator 통과
-- 코드 회귀 기준: 전체 pytest 293개, Ruff lint·format, pip dependency check,
+- 팀 계약 기준: Backend DTO JSON 예시·schema·오류 adapter, 사람 rubric validator 통과
+- 내부 red-team 기준: 네 상품군 40문항 expected·수정 후 로컬 Qwen 40/40,
+  safety·evidence 40/40, 최초 36/40과 수정 이력 별도 보존
+- 코드 회귀 기준: 전체 pytest 312개, Ruff lint·format, pip dependency check,
   wheel과 필수 package data 검사
 - 로컬 Qwen 평가 기준: 동결 50문항에서 최초 미사용 holdout 9/10,
   오류 수정 후 전체 회귀 50/50을 연속 2회 재현
@@ -150,7 +156,7 @@
 - 다음 외부 게이트: 금융 도메인 담당자의 external blind 100문항·비공개 정답키,
   승인 corpus, 실제 사람 평가
 - 다음 기술 통합: 공식 endpoint·인증 계약 기반 HyperCLOVA X HTTP transport와
-  공식 `/answer` adapter
+  FastAPI `/answer` route
 
 ## 저장소 밖의 근거 자료
 

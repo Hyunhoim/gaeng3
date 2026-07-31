@@ -112,8 +112,8 @@ SOURCE_DATE_EPOCH=1785283200 \
 - 공모펀드 전용 내부 schema와 lexical/schema linker를 구현했고 로컬 Qwen
   hybrid parser의 development 최초 실행은 40/40이다. commit `32e12fa`
   이후 최초 holdout은 9/10이며 실패 1건을 그대로 보존했다.
-- 공모펀드 공식 Agent 실행은 실제 HyperCLOVA X HTTP transport와 공식
-  `/answer` adapter를 검증할 때까지 `execution_enabled: false`로 유지한다.
+- 공모펀드 공식 Agent 실행은 실제 HyperCLOVA X HTTP transport와 FastAPI
+  `/answer` route를 검증할 때까지 `execution_enabled: false`로 유지한다.
 - 국내 DB와 manifest를 임시 경로에 재구축했을 때 원본 artifact와 SHA-256이
   byte 단위로 일치했다.
 - 공모펀드 SQLite를 두 임시 경로에서 재구축했을 때 DB와 manifest가 각각
@@ -271,7 +271,7 @@ fake 테스트까지만 완료했다. 실제 endpoint·인증 header·HTTP trans
 네 상품군·일곱 intent Router, capability matrix, BM25/SQLite FTS 문서 검색,
 사람 rubric validator와 Backend DTO까지 구현했다. 다음 평가는 금융 도메인
 담당자의 external blind 100문항 parser→답변 E2E와 실제 사람 평가이며, 이후
-공식 API 계약에 맞는 HyperCLOVA X HTTP transport와 adapter를 연결한다.
+공식 API 계약에 맞는 HyperCLOVA X HTTP transport와 FastAPI route를 연결한다.
 
 같은 상품군의 정확한 두 상품 COMPARE도 네 상품군 공통 경로로 일반화했다.
 해외·국내 ETP·국내채권 exact resolver, registry 비교 capability,
@@ -319,3 +319,16 @@ API 없는 전체 경로는 다음 명령으로 재현한다.
 세 실행 상품군 SEARCH의 QueryPlan→Oracle→Evidence→답변→Backend DTO와
 fallback·timeout·Router 무호출·비활성 공모펀드·서버 계획 guard를 8개
 시나리오로 검사한다. 현재 8/8이며 실제 네트워크 호출은 없다.
+
+프레임워크 독립 `/answer` service adapter의 HTTP status·ERROR DTO·fallback·
+민감정보 비노출 계약은 다음 명령으로 재현한다.
+
+```bash
+/home/haeyeongcho/miniforge3/envs/gaeng3-dev/bin/python \
+  scripts/run-answer-adapter-contract.py \
+  --require-perfect
+```
+
+정상·provider 설정·인증·rate limit·서비스·timeout·transport·응답 오류,
+dataset 장애, 알 수 없는 내부 오류와 grounded answer fallback을 포함한
+12개 시나리오가 12/12다. 실제 FastAPI route나 네트워크 호출은 포함하지 않는다.

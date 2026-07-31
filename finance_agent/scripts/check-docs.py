@@ -46,6 +46,7 @@ REQUIRED_INDEX_TARGETS = {
     "evaluation-grounded-answers.md",
     "evaluation-product-comparison.md",
     "evaluation-search-aggregate-performance.md",
+    "evaluation-internal-red-team.md",
     "hyperclova-provider.md",
     "evaluation-pre-hcx-diagnostic.md",
     "development.md",
@@ -76,6 +77,8 @@ REQUIRED_BASELINES = {
     "product-compare-v1.json",
     "search-aggregate-performance-v1.json",
     "hcx-contract-e2e-v1.json",
+    "answer-adapter-contract-v1.json",
+    "internal-red-team-v1.json",
     "pre-hcx-route-diagnostic-initial-v1.json",
     "pre-hcx-route-diagnostic-improved-v1.json",
     "pre-hcx-route-diagnostic-initial-v2.json",
@@ -370,6 +373,7 @@ def _readiness_files() -> list[Path]:
         PROJECT_ROOT / "evaluation" / "README.md",
         PROJECT_ROOT / "scripts" / "check-docs.py",
         PROJECT_ROOT / "scripts" / "run-hcx-contract-e2e.py",
+        PROJECT_ROOT / "scripts" / "run-answer-adapter-contract.py",
         package_root / "README.md",
         package_root / "pyproject.toml",
     }
@@ -430,7 +434,7 @@ def _check_readiness_manifest() -> list[str]:
     if not payload.get("external_gates"):
         errors.append("pre-HCX source manifest must preserve external gates")
     qa = payload.get("qa", {})
-    if qa.get("pytest_passed") != 293:
+    if qa.get("pytest_passed") != 312:
         errors.append("pre-HCX source manifest pytest count differs from frozen QA")
     if qa.get("documentation_baselines") != len(REQUIRED_BASELINES):
         errors.append("pre-HCX source manifest baseline count differs")

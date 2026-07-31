@@ -26,6 +26,7 @@
 | [`answering/providers.py`](../packages/finance_agent_core/src/finance_agent_core/answering/providers.py) | expected·로컬 provider와 evidence-only HyperCLOVA X 답변 provider |
 | [`answering/verifier.py`](../packages/finance_agent_core/src/finance_agent_core/answering/verifier.py) | draft와 최종 compiled answer의 결과 순서·evidence·숫자·식별자·기준일·경고 후검증 |
 | [`answering/composer.py`](../packages/finance_agent_core/src/finance_agent_core/answering/composer.py) | evidence-only 생성, 검증된 결정론적 core 결합, 실패 시 safe fallback |
+| [`agent/backend_adapter.py`](../packages/finance_agent_core/src/finance_agent_core/agent/backend_adapter.py) | Agent 결과·provider·dataset·내부 오류를 HTTP status와 안전한 Backend DTO로 변환 |
 | [`evaluation/answer_cli.py`](../packages/finance_agent_core/src/finance_agent_core/evaluation/answer_cli.py) | expected QueryPlan 기반 상품군별 답변 격리 회귀 평가 |
 | [`fund_resolver.py`](../packages/finance_agent_core/src/finance_agent_core/agent/fund_resolver.py) | 공모 범위의 `itm_no`·정식명·짧은 이름 exact resolution |
 | [`fund_comparison_parser.py`](../packages/finance_agent_core/src/finance_agent_core/agent/fund_comparison_parser.py) | 최소권한 자연어 비교 초안과 서버 검증 COMPARE QueryPlan |
@@ -428,6 +429,8 @@ DETAIL과 EXPLAIN은 정확한 상품번호·종목코드가 서버 linker에서
 15. 네 상품군 COUNT·MIN·MAX·AVG·허용 SUM과 최대 두 범주 group의
     Decimal 집계, 통화 gate, 독립 AggregateResultVerifier, AggregateEvidence
 16. BM25/SQLite FTS 문서 RAG 최소 기능, 사람 평가 rubric, Backend DTO·JSON 예시
+17. 프레임워크 독립 `/answer` service adapter, 안전한 ERROR DTO·HTTP status·
+    fallback·민감정보 비노출 12문항 계약
 
 다음:
 
@@ -436,6 +439,6 @@ DETAIL과 EXPLAIN은 정확한 상품번호·종목코드가 서버 linker에서
 3. 승인된 실제 문서 corpus를 적재하고 출처·활용 범위를 검수한다.
 4. 최소 두 명의 reviewer가 사람 평가 rubric을 실제로 수행한다.
 5. HCX schema에 fund를 노출하고 공식 HyperCLOVA X provider에서 같은 fixture를 재사용한다.
-6. 공식 `/answer` adapter와 오류·timeout 계약을 연결한다.
+6. FastAPI `/answer` route에 service adapter, 인증과 request validation을 연결한다.
 
 다른 상품군을 추가할 때는 HCX enum만 늘리지 않는다. 데이터 감사, logical grain, sentinel, 단위, 기준일, field capability, 계약 테스트를 함께 추가해야 한다.

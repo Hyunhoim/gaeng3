@@ -6,8 +6,8 @@
   "git_commit": null,
   "generated_from_dirty_worktree": true,
   "hash_algorithm": "sha256(sorted(relative_path + NUL + file_sha256 + LF))",
-  "file_count": 219,
-  "tree_sha256": "b31aa810f0676c52b90b5e6bbdc2dd016bb133c1c4d0d5c1a4c248e66e872bef",
+  "file_count": 231,
+  "tree_sha256": "ac9965b4d8e62bb12f309f6cca81071263ef2b2f76b693e3fa9cbf906bb518c7",
   "included_scope": [
     "README.md",
     "environment*.yml",
@@ -21,7 +21,8 @@
     "packages/finance_agent_core/src/**/*.{py,json,yaml}",
     "packages/finance_agent_core/tests/**/*.py",
     "scripts/check-docs.py",
-    "scripts/run-hcx-contract-e2e.py"
+    "scripts/run-hcx-contract-e2e.py",
+    "scripts/run-answer-adapter-contract.py"
   ],
   "diagnostic": {
     "suite_sha256": "8bab9b0f4fd3e40782c591e2e3aea2f9d76b94a2d31d846d8b957604af0313b0",
@@ -33,12 +34,12 @@
     "limitation": "self_authored_internal_diagnostic_not_independent_blind"
   },
   "qa": {
-    "pytest_passed": 293,
+    "pytest_passed": 312,
     "ruff_lint": "passed",
     "ruff_format": "passed",
     "pip_check": "passed",
-    "documentation_markdown": 35,
-    "documentation_baselines": 21,
+    "documentation_markdown": 36,
+    "documentation_baselines": 23,
     "wheel_build_no_isolation": "passed",
     "wheel_required_package_data": "passed",
     "git_diff_check": "passed"
@@ -49,7 +50,7 @@
     "승인된 실제 비정형 문서 corpus와 활용 범위 확인",
     "최소 2명의 독립 reviewer가 수행한 실제 사람 평가",
     "HyperCLOVA X 모델·Structured Outputs·endpoint·인증 계약 확인, 실제 HTTP transport와 공식 재현",
-    "공식 /answer adapter와 주최 측 실행 환경 통합"
+    "FastAPI /answer route와 주최 측 실행 환경 통합"
   ],
   "limitations": [
     "commit을 만들지 말라는 작업 조건에 따라 git_commit은 null",

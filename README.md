@@ -29,21 +29,21 @@ Next.js·FastAPI 애플리케이션 통합과 HyperCLOVA X 연결을 준비하�
 
 ## 2. 현재 구현 상태
 
-기준일: 2026-07-29
+기준일: 2026-07-30
 
 | 영역 | 상태 |
 | --- | --- |
-| 데이터 감사 | 4종 마스터 145,393행, 회귀 expectation 49/49 통과 |
+| 데이터 감사 | 4종 마스터 145,393행, 핵심 expectation 65/65 통과 |
 | 해외 ETF·ETN | 정규화, SQLite, Oracle, Verifier, 50문항 평가 구현 |
 | 국내 ETF·ETN | 정규화, SQLite, Oracle, Verifier, 50문항 평가 구현 |
 | 국내채권 | 날짜·stale·신용등급 계약, Oracle, Verifier, 50문항 평가 구현 |
 | 공모펀드 | parser development 40/40·최초 holdout 9/10, grounded answer 50/50, 공식 실행 비활성 |
 | 근거 기반 답변 | 공모펀드 44개 grounded·6개 안전 차단, 폴백 0, 핵심 검증률 100% |
 | 로컬 LLM | 격리된 Qwen/vLLM 개발 테스트 완료, 평가·제출 사용 금지 |
-| HyperCLOVA X | 공식 API 확보 후 연결 예정 |
-| Web·API | Next.js·FastAPI 템플릿 통합 예정 |
+| HyperCLOVA X | 세 provider·fake transport·API 없는 전체 경로 8/8, 실제 HTTP 연결 대기 |
+| Web·API | 프레임워크 독립 `/answer` 오류 adapter 12/12, FastAPI route 통합 대기 |
 
-현재 AI Core 회귀 기준은 pytest 96개, Ruff lint·format과 문서 검사를 모두
+현재 AI Core 회귀 기준은 pytest 305개, Ruff lint·format과 문서 검사를 모두
 통과한 상태
 
 ## 3. 아키텍처
@@ -143,8 +143,8 @@ Git에 포함하지 않음
 - 공모펀드 true COMPARE intent의 생성·검증·폴백 평가
 - 다른 작성자가 만든 blind 평가 문항 추가
 - Next.js·FastAPI 애플리케이션 템플릿 통합
-- `AgentRequest`, `AgentResponse`, Evidence와 오류·timeout 계약 동결
-- HyperCLOVA X provider와 공식 `/answer` adapter 연결
+- 확정된 Backend DTO·오류 adapter를 Next.js·FastAPI shell에 연결
+- HyperCLOVA X 실제 HTTP transport와 FastAPI `/answer` route 연결
 - 허용 범위를 확인한 외부 비정형 금융 데이터와 문서 RAG 검토
 
 ## 9. 문서

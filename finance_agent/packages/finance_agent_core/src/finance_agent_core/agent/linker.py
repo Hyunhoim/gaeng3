@@ -645,7 +645,7 @@ def build_lexical_hints(
     ):
         rankings.append({"field": "product_name", "direction": "asc", "nulls": "last"})
 
-    limit_matches = re.findall(r"(\d+)\s*개(?!월)", question)
+    limit_matches = re.findall(r"(\d+)\s*(?:개(?!월)|건)", question)
     limit = int(limit_matches[-1]) if limit_matches else (1 if exact_lookup else 5)
     unsupported_spans = [phrase for phrase in unsupported_patterns if phrase in question]
     if family == "fund" and unsupported_spans:

@@ -244,6 +244,30 @@ def write_comparison_fund_database(
     return path, result, manifest
 
 
+def test_routed_fund_comparison_accepts_required_family_prefix(
+    tmp_path: Path,
+) -> None:
+    path, _, _ = write_comparison_fund_database(tmp_path)
+
+    result = RoutedFinanceAgent(
+        {"fund": path},
+        allow_internal_disabled_dataset=True,
+    ).answer(
+        ("공모펀드 KR0000000001과 KR0000000002의 3개월 수익률과 AUM을 비교해줘"),
+        "routed-fund-compare-001",
+    )
+
+    assert result.status == "executed"
+    assert [product.product_id for product in result.products] == [
+        "KR0000000001",
+        "KR0000000002",
+    ]
+    assert [item.canonical_field for item in result.comparisons] == [
+        "three_month_return_pct",
+        "aum",
+    ]
+
+
 def test_fund_aggregate_groups_risk_levels_in_public_scope(tmp_path: Path) -> None:
     path, _, _ = write_comparison_fund_database(tmp_path)
     result = RoutedFinanceAgent(

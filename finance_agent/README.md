@@ -18,8 +18,9 @@
 | 공통 COMPARE | 같은 상품군의 정확한 두 상품, 필드 allowlist·통화·기준일·stale·독립 verifier·Backend evidence, 공개 자연어 54문항 |
 | SEARCH·AGGREGATE 성능 | 네 상품군 8문항 결과 지문 8/8, projected verifier, 새 프로세스 p50 308.749ms·최대 추가 RSS 51,000KiB |
 | 문서 RAG | caller-fed BM25/SQLite FTS 적재·필터·근거·기준일·not-found 최소 기능 |
-| 팀 통합 계약 | 프레임워크 독립 Backend DTO·JSON Schema/예시, 사람 평가 rubric v1 |
+| 팀 통합 계약 | 프레임워크 독립 Backend DTO·HTTP 오류 adapter 12/12, JSON Schema/예시, 사람 평가 rubric v1 |
 | HyperCLOVA X | 세 provider 계약·fake transport·SEARCH 전체 경로 E2E 8/8 완료, 실제 HTTP 연결 대기 |
+| 내부 red-team E2E | 네 상품군 40문항, 최초 로컬 Qwen 36/40·안전 차단 100%, `3건` handoff 수정 후 40/40·fallback 0 |
 
 로컬 Qwen은 개발 전용 테스트 대역이다. 평가·제출 경로의 LLM은 공식 규칙에
 따라 HyperCLOVA X로 제한하며, 로컬 provider는 세 가지 명시적 opt-in 없이는
@@ -111,7 +112,7 @@ conda run -n gaeng3-dev \
 
 `--dataset`은 `overseas_etp`, `domestic_etp`, `bond`, `fund` 중에서 선택한다.
 `fund`는 정규화 SQLite 생성과 동결 50문항의 내부 Oracle·Verifier 회귀를
-지원한다. 실제 HyperCLOVA X HTTP transport와 공식 `/answer` adapter를
+지원한다. 실제 HyperCLOVA X HTTP transport와 FastAPI `/answer` route를
 검증할 때까지 공식 Agent 실행은 fail-closed로 비활성화되어 있다.
 
 ## 문서
@@ -142,7 +143,8 @@ conda run -n gaeng3-dev \
 
 `packages/finance_agent_core`는 Next.js·FastAPI application shell과 독립적이다.
 동료의 템플릿 작업과 합칠 때는 v1 Backend DTO와 JSON Schema 예시를 사용하고,
-FastAPI adapter에는 HTTP status·인증·timeout만 추가한다.
+`execute_answer_request()`가 반환하는 HTTP status와 DTO를 그대로 사용한다.
+FastAPI route에는 인증·request validation·transport lifecycle만 추가한다.
 
 공모펀드 grounded answer 평가는 SEARCH 50문항과 별도의 true COMPARE
 20문항을 모두 통과했다. 비교는 정확한 `itm_no` 두 개를 요청 순서대로 조회하고,
@@ -166,8 +168,9 @@ field-level evidence, Qwen grounded answer, Answer Verifier·fallback까지 한
 
 이 결과는 공개 회귀 문항의 전체 배선 검증이며 독립 blind 일반화 평가나 실제
 사람 rubric 결과는 아니다. 내부 구현으로는 네 상품군 Router, BM25 문서 검색,
-공통 AGGREGATE, rubric·Backend DTO까지 준비했다. 남은 우선순위는 금융 도메인 담당자의
+공통 AGGREGATE, rubric·Backend DTO와 안전한 오류 adapter까지 준비했다. 남은
+우선순위는 금융 도메인 담당자의
 external blind 100문항·비공개 정답키 작성, 승인된 실제 문서 corpus와 사람
-평가, HyperCLOVA X 실제 HTTP transport, 공식 `/answer` adapter다. 최초 SEARCH parser
+평가, HyperCLOVA X 실제 HTTP transport, FastAPI `/answer` route다. 최초 SEARCH parser
 holdout 실패 1건은 회귀 수정했지만 9/10 기록은 그대로 유지한다. 공모펀드
 공식 Agent 실행도 계속 비활성화한다.

@@ -170,6 +170,12 @@ def test_domestic_hints_parse_family_amount_return_and_ranking() -> None:
     assert hints["limit"] == 3
 
 
+def test_lexical_limit_matches_router_for_result_counter() -> None:
+    hints = build_lexical_hints("연금 거래 가능한 국내 ETF를 AUM 큰 순으로 3건 보여줘")
+
+    assert hints["limit"] == 3
+
+
 def test_prelink_overrides_wrong_model_family_with_domestic_contract() -> None:
     payload = first_vertical_slice_plan("wrong-family").model_dump(mode="json")
     linked = canonicalize_query_plan_payload(

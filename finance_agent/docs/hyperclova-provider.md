@@ -166,7 +166,27 @@ provider 단위 계약과 별도로 `hcx-contract-e2e-8`을 동결했다.
 보존한다. 이 결과는 합성 SQLite와 fake 응답을 사용한 시스템 계약 회귀이며,
 실제 HyperCLOVA X 생성 성능이나 API 호환성 점수가 아니다.
 
-## 9. 실제 API 확보 후 남은 작업
+## 9. Backend `/answer` 오류 adapter
+
+provider 예외를 그대로 웹 계층에 올리지 않도록 프레임워크 독립
+`execute_answer_request()`를 추가했다. QueryPlan 생성 단계의 provider 오류는
+Oracle 실행 전이므로 안전한 `error` DTO와 HTTP 502·503·504로 변환한다.
+grounded answer 단계의 provider 오류는 이미 검증된 evidence가 있으므로
+결정론적 fallback으로 복구해 HTTP 200을 유지한다.
+
+```bash
+/home/haeyeongcho/miniforge3/envs/gaeng3-dev/bin/python \
+  scripts/run-answer-adapter-contract.py \
+  --require-perfect
+```
+
+`answer-adapter-contract-12`는 provider 설정·인증·rate limit·서비스·timeout·
+transport·응답 오류, dataset 장애, 알 수 없는 예외와 answer fallback을
+12/12 통과한다. 질문·credential·provider 오류 본문·파일 경로는 공개 오류에
+포함하지 않는다. 실제 FastAPI route, request 인증과 실제 네트워크 transport는
+이 계약의 바깥이며 아직 구현하지 않았다.
+
+## 10. 실제 API 확보 후 남은 작업
 
 1. 허용 모델명과 Structured Outputs 지원 범위 재확인
 2. 공식 endpoint·인증 header·요청·응답 body를 구현하는 HTTP transport 추가
@@ -175,6 +195,7 @@ provider 단위 계약과 별도로 `hcx-contract-e2e-8`을 동결했다.
 5. 세 operation의 실제 API smoke test와 `hcx-contract-e2e-8` 재현
 6. token·latency·오류·fallback 비율 측정
 7. 로컬 Qwen 결과와 분리된 HyperCLOVA X 평가 baseline 기록
-8. Backend 공식 `/answer` adapter에서 provider를 선택하고 E2E 검증
+8. FastAPI 공식 `/answer` route에서 provider 선택·인증·request validation 연결
+9. framework-neutral adapter와 실제 route를 합친 HTTP E2E 검증
 
 이 작업이 완료되기 전에는 “HyperCLOVA X API 연결 완료”라고 표현하지 않는다.

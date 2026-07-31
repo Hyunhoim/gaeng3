@@ -27,6 +27,7 @@ finance-evaluate-fund-compare-parser = "finance_agent_core.evaluation.comparison
 finance-evaluate-product-compare = "finance_agent_core.evaluation.product_comparison_cli:main"
 finance-benchmark-search-aggregate = "finance_agent_core.evaluation.search_aggregate_benchmark_cli:main"
 finance-pre-hcx = "finance_agent_core.evaluation.pre_hcx_cli:main"
+finance-evaluate-internal-red-team = "finance_agent_core.evaluation.red_team_cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

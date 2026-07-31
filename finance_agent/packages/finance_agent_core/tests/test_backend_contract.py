@@ -28,12 +28,15 @@ def test_backend_json_examples_validate_without_fastapi() -> None:
     clarification = BackendAgentResponse.model_validate(
         _example("backend_clarification_response_v1.json")
     )
+    error = BackendAgentResponse.model_validate(_example("backend_error_response_v1.json"))
     document = BackendAgentResponse.model_validate(_example("backend_document_response_v1.json"))
     aggregate = BackendAgentResponse.model_validate(_example("backend_aggregate_response_v1.json"))
 
     assert request.locale == "ko-KR"
     assert clarification.status is BackendStatus.CLARIFICATION
     assert clarification.clarification is not None
+    assert error.status is BackendStatus.ERROR
+    assert error.error is not None
     assert document.status is BackendStatus.SUCCESS
     assert document.documents[0].source_kind.value == "provided"
     assert aggregate.status is BackendStatus.SUCCESS

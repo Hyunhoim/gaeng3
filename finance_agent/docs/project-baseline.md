@@ -118,11 +118,21 @@
   8개 시나리오에서 세 실행 상품군 Backend DTO, Answer Verifier fallback,
   timeout, 금지 질의·비활성 공모펀드 무호출, 계획 불일치를 8/8 검증했다.
   AGGREGATE·COMPARE는 서버 결정론적 compiler를 유지한다.
+- 프레임워크 독립 `/answer` service adapter를 구현했다. 정상·control·not-found·
+  검증된 fallback은 HTTP 200으로 유지하고, QueryPlan provider·dataset·내부
+  장애는 evidence 없는 안전한 ERROR DTO와 HTTP 502·503·504·500으로 변환한다.
+  질문·credential·provider 본문·파일 경로 비노출을 포함한 12개 계약을 통과했다.
+- 네 상품군 각 10문항과 10개 공격 유형으로 구성한 공개
+  `internal-red-team-v1`을 Router부터 `/answer` service adapter까지 실행했다.
+  최초 로컬 Qwen은 strict 36/40이었지만 네 실패 모두 Oracle 전 안전 차단됐다.
+  `3건` limit handoff를 수정한 뒤 strict·safety·evidence 40/40, QueryPlan·
+  grounded answer 각 12회, provider 오류·fallback 0건을 기록했다. 독립 blind나
+  HyperCLOVA X 품질 점수는 아니다.
 - caller-fed BM25/SQLite FTS 문서 검색은 chunk·필터·top-k·출처·기준일·
   provided 우선순위·not-found를 검증했다. 실제 corpus는 승인 전이다.
 - 사람 평가 rubric v1과 프레임워크 독립 Backend DTO·JSON 예시를 구현했다.
   실제 사람 평가는 외부 게이트다.
-- 전체 코드 회귀는 pytest 293개, Ruff lint·format, pip dependency check와
+- 전체 코드 회귀는 pytest 312개, Ruff lint·format, pip dependency check와
   wheel 빌드를 통과했다.
 
 ## 3. 변경할 수 없는 공식 제약
@@ -158,8 +168,9 @@
   `ENABLE_NON_HCX_TEST_LLM=1`, `LLM_PROVIDER=local_test`를 모두 설정해야만
   활성화한다.
 - 로컬 endpoint는 기본적으로 `http://127.0.0.1:18000/v1`에만 노출한다.
-- 평가·production adapter를 연결할 때는 provider가 HyperCLOVA X가 아니면 시작
-  단계에서 실패하도록 구현한다. 현재는 해당 adapter 자체가 아직 없다.
+- evaluation·production 설정은 provider가 HyperCLOVA X가 아니면 시작 단계에서
+  실패한다. service adapter는 이 설정 오류를 안전한 비재시도 ERROR DTO로 변환한다.
+  실제 FastAPI route와 네트워크 transport는 아직 없다.
 - 로컬 모델의 응답·로그·캐시·가중치는 Git과 제출물에서 제외한다.
 - 로컬 모델이 만든 결과는 정답 데이터로 자동 승격하지 않고, 결정론적 oracle 또는 사람 검토를 거친다.
 - 애플리케이션 환경과 GPU 추론 환경은 각각 `gaeng3-dev`, `gaeng3-llm-local` Conda 환경으로 분리하고 pip 의존성도 나눈다.
@@ -291,8 +302,10 @@ QueryPlan에는 최소한 intent, 상품군, 필수 조건, 완화 전 확인이
   계약과 API 없는 fake 테스트를 구현한다.
 - [x] 세 실행 상품군 SEARCH를 공통 Router·서버 계획 guard·Oracle·Evidence·
   Answer Verifier·Backend DTO까지 API 없는 E2E로 검증한다.
-- [ ] 공식 endpoint·인증 계약에 맞는 HTTP transport와 `/answer` adapter를
-  연결하고 실제 API로 재현한다.
+- [x] 프레임워크 독립 `/answer` service adapter에 HTTP status·ERROR DTO·
+  fallback·민감정보 비노출 계약을 연결한다.
+- [ ] 공식 endpoint·인증 계약에 맞는 HTTP transport와 FastAPI `/answer`
+  route를 연결하고 실제 API로 재현한다.
 
 ### P3 — 평가 확장
 

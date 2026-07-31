@@ -161,8 +161,26 @@ class BackendAgentResponse(BackendContractModel):
                 raise ValueError("unsupported response cannot contain error or evidence")
             if self.candidate_count is not None:
                 raise ValueError("unsupported response cannot contain candidate_count")
-        elif self.error is None:
-            raise ValueError("error response requires an error object")
+        elif self.status is BackendStatus.ERROR:
+            if self.error is None:
+                raise ValueError("error response requires an error object")
+            if (
+                self.query_plan is not None
+                or self.candidate_count is not None
+                or self.products
+                or self.comparisons
+                or self.aggregates
+                or self.documents
+                or self.citations
+                or self.as_of_dates
+                or self.warnings
+                or self.clarification is not None
+                or self.provider_model is not None
+                or self.source_manifest is not None
+            ):
+                raise ValueError("error response cannot contain executed or control evidence")
+            if self.answer_mode is not BackendAnswerMode.CONTROL or self.fallback_used:
+                raise ValueError("error response requires control mode without fallback")
         if self.status is not BackendStatus.ERROR and self.error is not None:
             raise ValueError("non-error response cannot contain an error object")
         if self.fallback_used != (self.answer_mode is BackendAnswerMode.DETERMINISTIC_FALLBACK):

@@ -1,3 +1,7 @@
+from finance_agent_core.agent.backend_adapter import (
+    AnswerAdapterResult,
+    execute_answer_request,
+)
 from finance_agent_core.agent.compiler import (
     PlanCompilationBlockedError,
     ServerQueryPlanCompiler,
@@ -22,6 +26,7 @@ from finance_agent_core.agent.router import IntentRouter
 from finance_agent_core.agent.service import FinanceAgent
 
 __all__ = [
+    "AnswerAdapterResult",
     "CompiledFundComparisonPlan",
     "FinanceAgent",
     "IntentRouter",
@@ -36,6 +41,7 @@ __all__ = [
     "RuleFundComparisonDraftProvider",
     "ServerQueryPlanCompiler",
     "compile_fund_comparison_query_plan",
+    "execute_answer_request",
     "extract_explicit_fund_comparison_draft",
     "extract_fund_comparison_fields",
     "normalize_fund_mention",

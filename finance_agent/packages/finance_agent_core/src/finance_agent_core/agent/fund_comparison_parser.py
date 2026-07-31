@@ -168,6 +168,8 @@ _ALLOWED_TARGET_PREFIX_FORMS = frozenset(
         "비교대상:",
         "비교대상은",
         "비교대상은:",
+        "공모펀드",
+        "공모펀드:",
         "두상품",
         "두상품을",
         "두펀드",
@@ -627,6 +629,8 @@ def _question_has_unrecognized_text(masked_question: str) -> bool:
         return True
     for index, token in enumerate(tokens):
         if token not in _TARGET_NOUN_TOKENS:
+            continue
+        if token == "공모펀드" and index == 0:
             continue
         previous = tokens[index - 1] if index else None
         if previous not in _TARGET_NOUN_COUNT_MODIFIERS:
