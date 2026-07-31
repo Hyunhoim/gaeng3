@@ -1,6 +1,6 @@
 # HyperCLOVA X 연결 전 준비 기준
 
-마지막 갱신: 2026-07-30
+마지막 갱신: 2026-07-31
 
 이 문서는 HyperCLOVA X API를 연결하기 전에 Agent Core에서 끝내야 할 구현,
 평가, 계약과 외부 확인 게이트를 추적하는 정본이다. 완료 표시는 코드·테스트·
@@ -49,6 +49,7 @@
 | 8 | `/answer` service adapter | HTTP status·안전한 ERROR DTO·fallback·비노출 계약 | 프레임워크 독립 12/12 완료·FastAPI route 대기 |
 | 9 | `internal-red-team-v1` | 네 상품군 40문항·10개 공격 유형·전체 `/answer` E2E | expected·수정 후 로컬 Qwen 40/40 |
 | 10 | 교차 상품군 grounded answer | family evidence 격리·교차 문구 검증·전체 fallback·무호출 | expected·로컬 Qwen 각각 4/4 |
+| 11 | 금융 도메인 QA 실험 | 담당자 작성 40문항 hash 검증·단계별 E2E·최초 관측 보존 | 최초 strict 1/40·safety 32/40, 개선 대기 |
 
 ## 2. 평가 해석 원칙
 
@@ -133,6 +134,15 @@ Backend `/answer` service adapter 결과:
 - 다른 상품군 언급·교차 비교·합산 또는 family 하나의 실패 시 전체 결정론 fallback
 - 공개 기존 문항의 배선 회귀이며 독립 blind나 HyperCLOVA X 품질 점수가 아님
 
+금융 도메인 QA 최초 관측:
+
+- 금융 도메인 담당자 작성·AI 담당자 검토 40문항을 원본 수정 없이 hash로 고정
+- SEARCH 1·CLARIFY 9·UNSUPPORTED 17·문서 RAG 9·외부 정책 2·외부 데이터 2
+- 현재 결정론적 `/answer` 경로 strict 1/40, route 1/40, safety·evidence 32/40
+- control이어야 할 7문항 검색 실행과 1문항 오류를 수정 전 baseline으로 보존
+- 문서·외부 dependency 13문항과 Oracle gold 미완성 1문항을 별도 pending 처리
+- 개발 MFT 세트이며 독립 blind·LLM 생성 품질·공식 평가 점수가 아님
+
 ## 3. 외부 완료 게이트
 
 다음 항목은 저장소 코드만으로 완료할 수 없으며 최종 baseline과 분리해 관리한다.
@@ -149,9 +159,9 @@ Backend `/answer` service adapter 결과:
 
 ## 4. 내부 완료 QA
 
-- pytest `326 passed`
+- pytest `330 passed`
 - Ruff lint와 format 통과
-- 문서 검사 `45 Markdown files`, `25 evaluation baselines` 통과
+- 문서 검사 `46 Markdown files`, `26 evaluation baselines` 통과
 - `pip check` 통과
 - build isolation 없이 wheel 생성과 신규 JSON package data 포함 여부 통과
 - `git diff --check` 통과

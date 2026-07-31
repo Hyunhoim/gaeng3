@@ -39,6 +39,7 @@ DB, 원천 XLSX, 전체 report, 모델 가중치는 계속 `artifacts/` 또는 �
 | [HyperCLOVA X API 없는 계약 E2E](baselines/hcx-contract-e2e-v1.json) | 세 실행 상품군 SEARCH·fallback·timeout·정책 차단·계획 guard 8개 |
 | [Backend answer adapter 계약](baselines/answer-adapter-contract-v1.json) | HTTP status·안전한 ERROR DTO·fallback·민감정보 비노출 12개 |
 | [내부 red-team 전체 E2E](baselines/internal-red-team-v1.json) | 네 상품군 40문항의 Router→Qwen→Oracle→Verifier→Backend DTO와 공격 유형 회귀 |
+| [금융 도메인 QA 최초 관측](baselines/domain-qa-e2e-v1.json) | 금융 도메인 담당자 40문항의 route·safety·evidence·answer 단계별 최초 관측 |
 | [연결 전 라우팅 초기 진단 v1](baselines/pre-hcx-route-diagnostic-initial-v1.json) | AGGREGATE 미지원 시점의 Router 도입 전 search 강제 동작 4/28 |
 | [연결 전 라우팅 개선 진단 v1](baselines/pre-hcx-route-diagnostic-improved-v1.json) | AGGREGATE 미지원 시점의 네 상품군·일곱 intent 라우팅 28/28 |
 | [연결 전 라우팅 초기 진단 v2](baselines/pre-hcx-route-diagnostic-initial-v2.json) | 현재 AGGREGATE 기대값을 적용한 도입 전 replay 4/28 |
@@ -92,8 +93,14 @@ handoff 불일치로 36/40이었고, 원인을 수정한 사후 회귀는 40/40�
 기준선이다.
 
 대부분의 baseline은 완전 통과한 회귀 기준이다. `holdout_first_run_observed`
-상태는 최초 실행 결과가 완전하지 않아도 수정하거나 숨기지 않고 관측값 그대로
-보존한다.
+또는 `domain_qa_initial_observed` 상태는 최초 실행 결과가 완전하지 않아도
+수정하거나 숨기지 않고 관측값 그대로 보존한다.
+
+`domain-qa-dev-v1-40`은 금융 도메인 담당자가 작성하고 AI 담당자가 검토한
+개발 QA다. 40문항을 route·plan·retrieval·evidence·answer·safety·contract로
+분해해 최초 strict 1/40, safety 32/40을 기록했다. 모델 성능이나 독립 blind
+점수가 아니라 기존 상품군별 회귀가 포착하지 못한 자연어 경계의 개선 출발점이다.
+설계와 해석은 [금융 도메인 QA 실험](../docs/evaluation-domain-qa.md)을 따른다.
 
 라우팅 v1은 AGGREGATE 미지원, v2는 COMPARE가 공모펀드에만 열렸던 당시의
 봉인 이력이다. 현재 capability 정본은 원본을 수정하지 않고 별도

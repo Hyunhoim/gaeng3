@@ -1,7 +1,7 @@
 # 금융상품 Agent 현재 프로젝트 기준
 
 상태: 현재 정본
-기준일: 2026-07-30
+기준일: 2026-07-31
 대상 저장소: `https://github.com/Hyunhoim/gaeng3`
 
 ## 1. 한 문장 목표
@@ -144,7 +144,12 @@
   provided 우선순위·not-found를 검증했다. 실제 corpus는 승인 전이다.
 - 사람 평가 rubric v1과 프레임워크 독립 Backend DTO·JSON 예시를 구현했다.
   실제 사람 평가는 외부 게이트다.
-- 전체 코드 회귀는 pytest 326개, Ruff lint·format, pip dependency check와
+- 금융 도메인 담당자가 작성한 40문항을 hash·schema·분포로 검증하고 현재
+  Router부터 Backend DTO까지 실행하는 개발 QA 파이프라인을 추가했다. 최초
+  strict 1/40, safety·evidence 32/40이며, 지원하지 않아야 할 문항 7건의 실행과
+  오류 1건을 수정 전 baseline으로 보존했다. 이는 독립 blind나 LLM 성능이 아니라
+  자연어 경계의 개선 출발점이다.
+- 전체 코드 회귀는 pytest 330개, Ruff lint·format, pip dependency check와
   wheel 빌드를 통과했다.
 
 ## 3. 변경할 수 없는 공식 제약

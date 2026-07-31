@@ -17,6 +17,8 @@ Verifier 경로를 사용한다. BM25/SQLite FTS 문서 검색, 프레임워크 
 Backend DTO·`/answer` service adapter와 사람 평가 rubric은 별도 계약으로
 제공한다. 네 상품군 40문항의 공개 `internal-red-team-v1`은 Router부터
 로컬 Qwen·Oracle·Verifier·Backend DTO까지 한 경로로 회귀 검증한다.
+금융 도메인 담당자 작성 40문항은 별도 개발 QA로 hash를 고정하고 route·
+safety·evidence·answer 단계별 현재 상태를 측정한다.
 네 상품군 공통 AGGREGATE는 COUNT·MIN·MAX·AVG·허용 SUM, 최대 두 범주
 group, 금액 통화 gate, 결측·기준일 보존, 별도 Python verifier와
 `AggregateEvidence`까지 구현했다. 집계 답변은 현재 LLM 없이 결정론적으로
@@ -76,6 +78,7 @@ Answer Verifier, 결정론적 evidence compiler와 safe fallback으로 구성한
 - [공통 AGGREGATE 계약](../../docs/aggregate-engine.md): 함수·그룹·통화·결측·근거
 - [공통 COMPARE 계약](../../docs/comparison-engine-design.md): exact identity·필드·통화·기준일·stale
 - [교차 상품군 SEARCH·답변 계약](../../docs/cross-family-search.md): 상품군별 계획·병렬 실행·evidence 격리 생성·전체 fallback
+- [금융 도메인 QA 실험](../../docs/evaluation-domain-qa.md): 담당자 작성 40문항의 hash 검증·행동 기능·단계별 E2E 채점
 - [사람 평가 rubric](../../docs/human-evaluation.md): 독립 reviewer·critical gate
 - [internal-red-team-v1](../../docs/evaluation-internal-red-team.md): 네 상품군 전체 E2E·안전 회귀
 
@@ -318,6 +321,29 @@ projection으로 읽어 독립 재검산한다. 네 상품군 실제 데이터 8
 
 설치된 console script는 `finance-benchmark-search-aggregate`다. 이 평가는 공개된
 고정 문항의 회귀·개발 장비 성능 기준선이며 독립 blind나 운영 SLO가 아니다.
+
+## 금융 도메인 QA 실험
+
+질문 CSV와 검토 CSV를 원본 수정 없이 검증하고 현재 Router부터 Backend DTO까지
+실행한다.
+
+```bash
+python -m finance_agent_core.evaluation.domain_qa_cli validate \
+  --questions-csv "<questions.csv>" \
+  --review-csv "<review.csv>"
+
+python -m finance_agent_core.evaluation.domain_qa_cli run \
+  --questions-csv "<questions.csv>" \
+  --review-csv "<review.csv>" \
+  --database-dir artifacts/normalized \
+  --report-id domain-qa-dev-v1-post-fix-01 \
+  --output artifacts/evaluation/domain-qa-dev-v1-post-fix-01.json
+```
+
+설치된 console script는 `finance-evaluate-domain-qa`다. 현재 40문항은 개발
+MFT 세트이며 독립 blind나 모델 생성 품질 점수가 아니다.
+최초 관측을 보존하려면 사후 실행마다 새로운 `--report-id`와 출력 파일명을
+사용한다.
 
 ## HyperCLOVA X provider 경계
 
