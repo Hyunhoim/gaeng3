@@ -75,7 +75,7 @@ Answer Verifier, 결정론적 evidence compiler와 safe fallback으로 구성한
 - [문서 RAG 계약](../../docs/document-rag.md): 승인 문서 BM25/SQLite FTS 검색
 - [공통 AGGREGATE 계약](../../docs/aggregate-engine.md): 함수·그룹·통화·결측·근거
 - [공통 COMPARE 계약](../../docs/comparison-engine-design.md): exact identity·필드·통화·기준일·stale
-- [교차 상품군 SEARCH 계약](../../docs/cross-family-search.md): 상품군별 계획·병렬 실행·부분 결과·안전 경계
+- [교차 상품군 SEARCH·답변 계약](../../docs/cross-family-search.md): 상품군별 계획·병렬 실행·evidence 격리 생성·전체 fallback
 - [사람 평가 rubric](../../docs/human-evaluation.md): 독립 reviewer·critical gate
 - [internal-red-team-v1](../../docs/evaluation-internal-red-team.md): 네 상품군 전체 E2E·안전 회귀
 
@@ -161,12 +161,28 @@ expected QueryPlan 기반 SEARCH·COMPARE 답변 격리 평가를 지원한다.
 [연결 전 진단·external blind 프로토콜](../../docs/evaluation-pre-hcx-diagnostic.md)과
 `finance-pre-hcx` 도구를 따른다.
 
-교차 상품군 SEARCH 공개 회귀는 모델과 네트워크 없이 실행한다.
+교차 상품군의 결정론적 SEARCH 공개 회귀는 모델과 네트워크 없이 실행한다.
 
 ```bash
 /home/haeyeongcho/miniforge3/envs/gaeng3-dev/bin/python \
   -m finance_agent_core.evaluation.cross_family_search_cli \
   --require-perfect
+```
+
+같은 4문항에서 family별 grounded answer까지 평가하려면 answer provider를
+명시한다.
+
+```bash
+FINANCE_AGENT_LLM_MODE=local_test \
+ENABLE_NON_HCX_TEST_LLM=1 \
+LLM_PROVIDER=local_test \
+LOCAL_TEST_LLM_BASE_URL=http://127.0.0.1:18000/v1 \
+LOCAL_TEST_LLM_MODEL=qwen3-local-test \
+/home/haeyeongcho/miniforge3/envs/gaeng3-dev/bin/python \
+  -m finance_agent_core.evaluation.cross_family_answer_cli \
+  --provider local_test \
+  --require-perfect \
+  --require-zero-fallback
 ```
 
 `--provider local_test`는 로컬 Qwen 서버와 세 가지 명시적 opt-in이 모두

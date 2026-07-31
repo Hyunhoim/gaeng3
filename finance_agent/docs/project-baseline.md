@@ -135,11 +135,16 @@
   `3건` limit handoff를 수정한 뒤 strict·safety·evidence 40/40, QueryPlan·
   grounded answer 각 12회, provider 오류·fallback 0건을 기록했다. 독립 blind나
   HyperCLOVA X 품질 점수는 아니다.
+- 국내·해외 ETP 교차 SEARCH는 상품군별 evidence-only grounded answer까지
+  확장했다. expected·로컬 Qwen 공개 회귀는 각각 4/4, 생성 대상 2문항
+  grounded, 실제 모델 호출 3회, fallback 0이며 전체 빈 결과와 control은
+  모델을 호출하지 않았다. 다른 상품군 언급이나 교차 연산 문구, 한 family의
+  실패가 있으면 전체를 결정론적 답변으로 교체한다.
 - caller-fed BM25/SQLite FTS 문서 검색은 chunk·필터·top-k·출처·기준일·
   provided 우선순위·not-found를 검증했다. 실제 corpus는 승인 전이다.
 - 사람 평가 rubric v1과 프레임워크 독립 Backend DTO·JSON 예시를 구현했다.
   실제 사람 평가는 외부 게이트다.
-- 전체 코드 회귀는 pytest 320개, Ruff lint·format, pip dependency check와
+- 전체 코드 회귀는 pytest 326개, Ruff lint·format, pip dependency check와
   wheel 빌드를 통과했다.
 
 ## 3. 변경할 수 없는 공식 제약

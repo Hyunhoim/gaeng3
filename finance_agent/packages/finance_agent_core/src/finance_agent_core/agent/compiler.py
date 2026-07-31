@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 from pathlib import Path
 
 from finance_agent_core.agent.aggregate_parser import (
@@ -32,6 +33,14 @@ from finance_agent_core.storage import (
 
 class PlanCompilationBlockedError(ValueError):
     """Raised when a routed draft cannot be compiled without guessing."""
+
+
+@dataclass(frozen=True)
+class CompiledFamilySearch:
+    """One server-owned plan and its isolated answer-generation question."""
+
+    grounded_question: str
+    plan: QueryPlan
 
 
 class ServerQueryPlanCompiler:
@@ -68,6 +77,12 @@ class ServerQueryPlanCompiler:
         )
 
     def compile_search_plans(self, decision: RouteDecision) -> list[QueryPlan]:
+        return [item.plan for item in self.compile_family_searches(decision)]
+
+    def compile_family_searches(
+        self,
+        decision: RouteDecision,
+    ) -> list[CompiledFamilySearch]:
         if (
             decision.disposition is not RouteDisposition.EXECUTE
             or decision.query_plan_intent is not Intent.SEARCH
@@ -81,7 +96,11 @@ class ServerQueryPlanCompiler:
             decision.draft.question,
             decision.draft.product_families,
         )
-        plans: list[QueryPlan] = []
+        grounded_questions = _scope_grounded_answer_questions(
+            decision.draft.question,
+            decision.draft.product_families,
+        )
+        searches: list[CompiledFamilySearch] = []
         for family in decision.draft.product_families:
             scoped_question = _scope_cross_family_question(
                 decision.draft.question,
@@ -94,8 +113,13 @@ class ServerQueryPlanCompiler:
                 }
             )
             single_decision = decision.model_copy(update={"draft": single_draft})
-            plans.append(self._compile_search_lowering(single_decision))
-        return plans
+            searches.append(
+                CompiledFamilySearch(
+                    grounded_question=grounded_questions[family],
+                    plan=self._compile_search_lowering(single_decision),
+                )
+            )
+        return searches
 
     def _compile_search_lowering(self, decision: RouteDecision) -> QueryPlan:
         family = decision.draft.product_families[0]
@@ -241,6 +265,28 @@ def _scope_cross_family_question(
     if target_family is not ProductFamily.BOND:
         scoped = _BOND_MENTION.sub(" ", scoped)
     return " ".join(scoped.split())
+
+
+def _scope_grounded_answer_questions(
+    question: str,
+    families: list[ProductFamily],
+) -> dict[ProductFamily, str]:
+    """Keep only one named family and the shared condition for answer planning."""
+
+    mentions: dict[ProductFamily, re.Match[str]] = {
+        family: _SIMPLE_FAMILY_MENTIONS[family].search(question) for family in families
+    }
+    if any(match is None for match in mentions.values()):
+        raise PlanCompilationBlockedError(
+            "교차 상품군 grounded answer 질문을 상품군별로 분리할 수 없습니다."
+        )
+    resolved = {family: match for family, match in mentions.items() if match is not None}
+    shared_suffix = question[max(match.end() for match in resolved.values()) :]
+    shared_suffix = re.sub(r"\b각각\b", "", shared_suffix)
+    return {
+        family: " ".join(f"{question[match.start() : match.end()]}{shared_suffix}".split())
+        for family, match in resolved.items()
+    }
 
 
 def _validate_cross_family_scope(

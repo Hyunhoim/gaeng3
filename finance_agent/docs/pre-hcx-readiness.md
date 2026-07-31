@@ -48,6 +48,7 @@
 | 7 | HyperCLOVA X provider 경계 | 세 operation·주입형 transport·오류·관측·전체 경로 E2E | 내부 8/8 완료·실제 HTTP 대기 |
 | 8 | `/answer` service adapter | HTTP status·안전한 ERROR DTO·fallback·비노출 계약 | 프레임워크 독립 12/12 완료·FastAPI route 대기 |
 | 9 | `internal-red-team-v1` | 네 상품군 40문항·10개 공격 유형·전체 `/answer` E2E | expected·수정 후 로컬 Qwen 40/40 |
+| 10 | 교차 상품군 grounded answer | family evidence 격리·교차 문구 검증·전체 fallback·무호출 | expected·로컬 Qwen 각각 4/4 |
 
 ## 2. 평가 해석 원칙
 
@@ -123,6 +124,15 @@ Backend `/answer` service adapter 결과:
 - QueryPlan 12회·grounded answer 12회, provider 오류·verifier fallback 0건
 - 공개 내부 red-team이므로 독립 blind나 HyperCLOVA X 품질 점수가 아님
 
+교차 상품군 grounded answer 결과:
+
+- 국내·해외 ETP를 별도 QueryPlan·Oracle·Verifier·evidence 경계로 유지
+- Answer provider에는 한 번에 한 상품군 evidence만 전달하고 서버가 최종 조합
+- expected·로컬 Qwen 공개 4문항 각각 4/4, 생성 대상 2문항 grounded
+- 실제 로컬 모델 호출 3회, fallback 0, 전체 빈 결과·control 모델 무호출
+- 다른 상품군 언급·교차 비교·합산 또는 family 하나의 실패 시 전체 결정론 fallback
+- 공개 기존 문항의 배선 회귀이며 독립 blind나 HyperCLOVA X 품질 점수가 아님
+
 ## 3. 외부 완료 게이트
 
 다음 항목은 저장소 코드만으로 완료할 수 없으며 최종 baseline과 분리해 관리한다.
@@ -139,9 +149,9 @@ Backend `/answer` service adapter 결과:
 
 ## 4. 내부 완료 QA
 
-- pytest `320 passed`
+- pytest `326 passed`
 - Ruff lint와 format 통과
-- 문서 검사 `45 Markdown files`, `24 evaluation baselines` 통과
+- 문서 검사 `45 Markdown files`, `25 evaluation baselines` 통과
 - `pip check` 통과
 - build isolation 없이 wheel 생성과 신규 JSON package data 포함 여부 통과
 - `git diff --check` 통과

@@ -1,6 +1,6 @@
-# 교차 상품군 병렬 SEARCH v1
+# 교차 상품군 병렬 SEARCH와 grounded answer v2
 
-상태: v1.0 구현·공개 실데이터 회귀 4/4
+상태: v2.0 구현·expected/로컬 Qwen 공개 실데이터 회귀 각각 4/4
 
 기준일: 2026-07-31
 
@@ -31,7 +31,10 @@
 → 상품군별 SQLite Oracle 병렬 실행
 → 상품군별 Result Verifier
 → 상품군별 field-level evidence
-→ 결과 순서를 유지한 결정론적 답변
+→ 상품군별 evidence-only grounded answer
+→ 상품군별 Answer Verifier
+→ 서버의 섹션 조합·교차 답변 검증
+→ 검증 실패 시 전체 결정론적 fallback
 ```
 
 각 QueryPlan은 계속 한 상품군만 포함한다. 최상위 route와 Backend 응답만 여러
@@ -49,7 +52,11 @@
 - 모든 상품군이 0건일 때만 Backend status를 `not_found`로 변환
 - 요청한 DB가 하나라도 없거나 실행 비활성 상품군이면 부분 실행 전에 전체 차단
 - 상품군 간 수치 직접 비교·합산·우열 판단을 수행하지 않았음을 답변에 명시
-- v1은 QueryPlan provider와 answer provider를 호출하지 않는 결정론적 경로
+- 복수 상품군 QueryPlan은 모델에 맡기지 않고 서버가 단일-family 계획으로 분해
+- Answer provider에는 한 번에 한 상품군의 질문·QueryPlan·evidence·manifest만 전달
+- 다른 상품군 언급 또는 교차 비교·합산·우열 표현이 생성되면 최종 답변에 사용하지 않음
+- 한 상품군의 provider 오류나 Answer Verifier 실패도 전체 결정론적 fallback으로 전환
+- 전체 빈 결과와 control route는 Answer provider를 호출하지 않음
 
 공모펀드는 정규화·내부 회귀가 완료됐지만 공식 registry의
 `execution_enabled=false`가 유지된다. 따라서 공모펀드가 포함된 교차 검색은
@@ -76,13 +83,23 @@ family_searches[]
 `family_searches` 순서대로 펼친 화면 표시용 목록이다. Backend는
 `source_manifests`도 같은 순서로 제공한다.
 
+grounded answer가 활성화되면 최상위 `answer_mode`는 다음처럼 정해진다.
+
+- 하나 이상의 비어 있지 않은 family 답변이 모두 검증됨: `llm_grounded`
+- 모든 family가 빈 결과여서 생성 호출이 없음: `deterministic`
+- family 생성·검증 또는 교차 답변 검증 중 하나라도 실패: `deterministic_fallback`
+
+fallback에서는 부분적으로 성공한 모델 문장도 최종 답변에서 제거한다. 화면에는
+항상 같은 상품군 섹션과 field-level citation을 유지하므로 Frontend가 문자열을
+분석해 안전 상태를 추측할 필요가 없다.
+
 ## 5. 회귀 평가
 
 공개 suite:
 
 - `cross_family_search_v1.json`
 - 국내 ETP·해외 ETP SQLite와 manifest SHA-256 고정
-- 모델·네트워크 호출 없음
+- 기존 4문항을 결정론적 검색과 grounded answer 배선에 함께 사용
 
 | 범주 | 기대 동작 | 결과 |
 | --- | --- | ---: |
@@ -91,8 +108,14 @@ family_searches[]
 | 전체 빈 결과 | 두 family 0건, Backend `not_found` | 1/1 |
 | 교차 비교 | Oracle 없이 clarification | 1/1 |
 
-총 4/4, strict accuracy 1.0이다. 공개 고정 문항의 회귀 결과이며 독립 blind
-일반화 성능은 아니다.
+결정론적 검색 v1과 grounded answer v2 expected provider는 각각 4/4다.
+로컬 Qwen도 4/4, 생성 대상 2문항 모두 `llm_grounded`, fallback 0이다.
+양쪽 성공은 family별 2회, 부분 성공은 비어 있지 않은 family 1회만 생성해
+실제 모델 호출은 총 3회다. 전체 빈 결과와 교차 비교 control은 0회다.
+
+로컬 Qwen의 세 생성 호출 지연 합계는 5,572.617ms다. RTX 5090 두 장의 단일
+개발 실행값이며 운영 SLO가 아니다. 공개 고정 문항의 회귀 결과이므로 독립 blind
+일반화 성능도 아니다.
 
 재현:
 
@@ -101,8 +124,21 @@ python -m finance_agent_core.evaluation.cross_family_search_cli \
   --require-perfect
 ```
 
-합성 fixture 계약 테스트는 동시 실행, 모델 무호출, DB 누락 선차단,
-비대칭 조건 역질문까지 별도로 검증한다.
+```bash
+FINANCE_AGENT_LLM_MODE=local_test \
+ENABLE_NON_HCX_TEST_LLM=1 \
+LLM_PROVIDER=local_test \
+LOCAL_TEST_LLM_BASE_URL=http://127.0.0.1:18000/v1 \
+LOCAL_TEST_LLM_MODEL=qwen3-local-test \
+python -m finance_agent_core.evaluation.cross_family_answer_cli \
+  --provider local_test \
+  --require-perfect \
+  --require-zero-fallback
+```
+
+합성 fixture 계약 테스트는 Oracle 병렬 실행, QueryPlan provider 무호출,
+상품군별 질문·evidence 격리, provider 장애 전체 fallback, 교차 비교 문구 제거,
+control 무호출, DB 누락 선차단과 비대칭 조건 역질문까지 별도로 검증한다.
 
 ## 6. 다음 확장 조건
 
@@ -116,3 +152,7 @@ allowlist로 연다.
 - 숫자 차이를 사용자에게 어떤 의미로 설명할지
 
 그 전까지 교차 질문의 최선 경로는 상품군별 독립 검색과 근거 표시다.
+
+현재 v2의 생성 기능은 비교 기능을 추가한 것이 아니다. LLM은 이미 검증된 각
+상품군 결과를 읽기 쉽게 설명할 뿐이며, 상품군 사이의 수치 의미를 연결하거나
+차이를 계산할 권한이 없다.

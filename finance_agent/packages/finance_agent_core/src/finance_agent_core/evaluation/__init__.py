@@ -32,6 +32,14 @@ from finance_agent_core.evaluation.comparison_runner import (
     build_fund_comparison_report,
     load_fund_comparison_suite,
 )
+from finance_agent_core.evaluation.cross_family_answer import (
+    CountingGroundedAnswerProvider,
+    CrossFamilyAnswerCaseResult,
+    CrossFamilyAnswerReport,
+    CrossFamilyAnswerSummary,
+    evaluate_cross_family_answer_case,
+    run_cross_family_answer_suite,
+)
 from finance_agent_core.evaluation.cross_family_search import (
     CrossFamilyCaseResult,
     CrossFamilySearchCase,
@@ -98,6 +106,10 @@ from finance_agent_core.evaluation.suite import (
 
 __all__ = [
     "CANONICAL_SEARCH_PROJECTION",
+    "CountingGroundedAnswerProvider",
+    "CrossFamilyAnswerCaseResult",
+    "CrossFamilyAnswerReport",
+    "CrossFamilyAnswerSummary",
     "CrossFamilyCaseResult",
     "CrossFamilySearchCase",
     "CrossFamilySearchReport",
@@ -162,6 +174,7 @@ __all__ = [
     "build_red_team_report",
     "build_search_aggregate_benchmark_report",
     "evaluate_product_comparison_result",
+    "evaluate_cross_family_answer_case",
     "evaluate_cross_family_case",
     "load_core_evaluation_suite",
     "load_cross_family_search_suite",
@@ -172,6 +185,7 @@ __all__ = [
     "load_internal_red_team_suite",
     "load_search_aggregate_benchmark_suite",
     "run_cross_family_search_suite",
+    "run_cross_family_answer_suite",
     "verify_red_team_databases",
     "InstrumentedAnswerProvider",
     "InstrumentedQueryPlanProvider",

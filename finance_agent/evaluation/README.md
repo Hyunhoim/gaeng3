@@ -35,6 +35,7 @@ DB, 원천 XLSX, 전체 report, 모델 가중치는 계속 `artifacts/` 또는 �
 | [세 상품군 자연어 비교](baselines/product-compare-v1.json) | 해외·국내 ETP·국내채권 30문항의 결정론적 비교·Backend 계약·안전 차단 |
 | [SEARCH·AGGREGATE 성능](baselines/search-aggregate-performance-v1.json) | 네 상품군 8문항의 결과 지문·새 프로세스 지연·RSS·경량 verifier 전후 비교 |
 | [교차 상품군 SEARCH](baselines/cross-family-search-v1.json) | 국내·해외 ETP 양쪽 성공·부분 성공·전체 빈 결과·직접 비교 차단 4문항 |
+| [교차 상품군 grounded answer](baselines/cross-family-answer-v1.json) | family별 evidence-only Qwen 생성·교차 문구 검증·전체 fallback·무호출 계약 |
 | [HyperCLOVA X API 없는 계약 E2E](baselines/hcx-contract-e2e-v1.json) | 세 실행 상품군 SEARCH·fallback·timeout·정책 차단·계획 guard 8개 |
 | [Backend answer adapter 계약](baselines/answer-adapter-contract-v1.json) | HTTP status·안전한 ERROR DTO·fallback·민감정보 비노출 12개 |
 | [내부 red-team 전체 E2E](baselines/internal-red-team-v1.json) | 네 상품군 40문항의 Router→Qwen→Oracle→Verifier→Backend DTO와 공격 유형 회귀 |
@@ -60,8 +61,15 @@ COMPARE 공개 회귀 54문항을 구성한다.
 
 `cross-family-search-v1-4`는 국내·해외 ETP를 상품군별 단일 QueryPlan과
 독립 Oracle·Verifier로 실행한다. 한쪽 0건 보존, 전체 `not_found`, family별
-manifest와 직접 비교 차단을 실제 데이터 hash와 함께 4/4 고정한다. 모델과
-네트워크는 호출하지 않는다.
+manifest와 직접 비교 차단을 실제 데이터 hash와 함께 4/4 고정한다. 결정론적
+검색 baseline은 모델과 네트워크를 호출하지 않는다.
+
+같은 공개 4문항의 grounded answer baseline은 각 family의 evidence만 로컬
+Qwen에 전달하고 서버가 섹션을 조합하는 v2 배선을 검증한다. 생성 대상 2문항은
+모두 `llm_grounded`, fallback 0이며 실제 호출은 양쪽 성공 2회와 부분 성공
+1회로 총 3회다. 전체 빈 결과와 교차 비교 control은 모델을 호출하지 않는다.
+다른 상품군 언급, 교차 비교·합산 문구 또는 family 하나의 provider·검증 실패가
+발생하면 부분 모델 문장을 남기지 않고 전체 결정론적 답변으로 교체한다.
 
 `hcx-contract-e2e-8`은 네트워크 없이 HCX semantic transport를 재생한다.
 세 실행 상품군의 QueryPlan→Oracle→Verifier→Evidence→답변→Backend DTO와

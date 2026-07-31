@@ -48,6 +48,12 @@ Pydantic request·response 계약이다. FastAPI route나 Next.js 타입은 이 
 최상위 status가 `not_found`다. 최상위 products와 citation은 family 순서대로
 펼쳐 화면에서 공통 렌더링할 수 있다.
 
+grounded answer provider가 있으면 각 family evidence를 서로 격리해 생성한 뒤
+서버가 같은 순서의 섹션으로 조합한다. 최상위 `answer_mode`·`provider_model`·
+`fallback_used`는 이 조합 결과를 표현한다. 한 family의 생성·검증이 실패하거나
+다른 상품군 언급·교차 비교·합산 문구가 검출되면 부분 모델 문장을 남기지 않고
+전체 응답을 `deterministic_fallback`으로 바꾼다.
+
 ## 4. 근거와 fallback
 
 상품 citation은 `product_id:canonical_field` evidence를 원천 dataset·row·column·
@@ -133,7 +139,9 @@ COMPARE 응답은 같은 schema의 `comparisons`와 `comparison_field` citation�
 Backend response 검증과 비교 citation 수를 함께 확인한다.
 
 교차 상품군 SEARCH는 `cross-family-search-v1-4` 공개 회귀에서 양쪽 성공,
-부분 성공, 전체 빈 결과와 직접 비교 차단을 4/4 검증한다.
+부분 성공, 전체 빈 결과와 직접 비교 차단을 4/4 검증한다. 같은 suite의
+grounded answer v2는 expected·로컬 Qwen 각각 4/4, 생성 대상 2문항
+`llm_grounded`, fallback 0, 전체 빈 결과·control 모델 무호출을 확인한다.
 
 오류 경계는 다음 명령으로 네트워크 없이 재현한다.
 

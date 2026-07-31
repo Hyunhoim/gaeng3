@@ -35,7 +35,7 @@ PRODUCT_COMPARE_SUITE = (
 
 LINK_PATTERN = re.compile(r"!?\[[^\]]*]\((?:<(?P<angle>[^>]+)>|(?P<plain>[^)\s]+))\)")
 SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
-FROZEN_PYTEST_PASSED = 320
+FROZEN_PYTEST_PASSED = 326
 
 REQUIRED_INDEX_TARGETS = {
     "project-baseline.md",
@@ -81,6 +81,7 @@ REQUIRED_BASELINES = {
     "product-compare-v1.json",
     "search-aggregate-performance-v1.json",
     "cross-family-search-v1.json",
+    "cross-family-answer-v1.json",
     "hcx-contract-e2e-v1.json",
     "answer-adapter-contract-v1.json",
     "internal-red-team-v1.json",

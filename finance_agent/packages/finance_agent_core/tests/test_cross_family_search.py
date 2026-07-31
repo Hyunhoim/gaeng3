@@ -4,7 +4,16 @@ from pathlib import Path
 from threading import Barrier, Lock, get_ident
 
 from finance_agent_core.agent import IntentRouter, RoutedFinanceAgent
-from finance_agent_core.contracts.backend import BackendStatus, routed_result_to_backend
+from finance_agent_core.answering import (
+    ExpectedGroundedAnswerProvider,
+    GroundedAnswerContext,
+    GroundedAnswerDraft,
+)
+from finance_agent_core.contracts.backend import (
+    BackendAnswerMode,
+    BackendStatus,
+    routed_result_to_backend,
+)
 from finance_agent_core.contracts.queryplan import Intent, ProductFamily
 from finance_agent_core.contracts.routing import RouteDisposition
 from finance_agent_core.domain import (
@@ -39,6 +48,27 @@ def _cross_family_agent(
         },
         **kwargs,
     )
+
+
+class RecordingAnswerProvider:
+    def __init__(self) -> None:
+        self.contexts: list[GroundedAnswerContext] = []
+        self._delegate = ExpectedGroundedAnswerProvider()
+
+    @property
+    def provider_name(self) -> str:
+        return "recording_expected"
+
+    @property
+    def model_name(self) -> str:
+        return "qwen-test"
+
+    def generate_grounded_answer(
+        self,
+        context: GroundedAnswerContext,
+    ) -> GroundedAnswerDraft:
+        self.contexts.append(context)
+        return self._delegate.generate_grounded_answer(context)
 
 
 def test_cross_family_public_regression_suite_covers_safety_states() -> None:
@@ -207,7 +237,63 @@ def test_cross_family_search_returns_not_found_only_when_every_family_is_empty(
     assert response.citations == []
 
 
-def test_cross_family_search_skips_model_providers_and_executes_concurrently(
+def test_cross_family_partial_success_calls_only_non_empty_family_provider(
+    sample_database: tuple[
+        Path,
+        list[NormalizedOverseasEtpRecord],
+        DatabaseManifest,
+    ],
+    domestic_sample_database: tuple[
+        Path,
+        list[NormalizedDomesticEtpRecord],
+        DatabaseManifest,
+    ],
+) -> None:
+    provider = RecordingAnswerProvider()
+    result = _cross_family_agent(
+        sample_database,
+        domestic_sample_database,
+        answer_provider=provider,
+    ).answer(
+        "국내 ETF와 해외 ETF 중 채권형 상품을 각각 3개 보여줘",
+        "cross-grounded-partial",
+    )
+
+    assert [context.source_manifest.dataset for context in provider.contexts] == ["overseas_etp"]
+    assert result.answer_composition is not None
+    assert result.answer_composition.mode == "llm_grounded"
+    assert result.answer.count("상품별 근거 해설:") == 1
+
+
+def test_cross_family_all_empty_skips_answer_provider(
+    sample_database: tuple[
+        Path,
+        list[NormalizedOverseasEtpRecord],
+        DatabaseManifest,
+    ],
+    domestic_sample_database: tuple[
+        Path,
+        list[NormalizedDomesticEtpRecord],
+        DatabaseManifest,
+    ],
+) -> None:
+    provider = RecordingAnswerProvider()
+    result = _cross_family_agent(
+        sample_database,
+        domestic_sample_database,
+        answer_provider=provider,
+    ).answer(
+        "국내 ETF와 해외 ETF 중 유럽 상품을 각각 3개 보여줘",
+        "cross-grounded-empty",
+    )
+
+    assert provider.contexts == []
+    assert result.answer_composition is not None
+    assert result.answer_composition.mode == "deterministic"
+    assert result.answer_composition.verification.passed
+
+
+def test_cross_family_search_skips_query_plan_provider_and_executes_concurrently(
     sample_database: tuple[
         Path,
         list[NormalizedOverseasEtpRecord],
@@ -221,21 +307,12 @@ def test_cross_family_search_skips_model_providers_and_executes_concurrently(
 ) -> None:
     class ForbiddenQueryPlanProvider:
         def generate_query_plan(self, question: str, question_id: str):
-            raise AssertionError("multi-family v1 must not call the QueryPlan provider")
-
-    class ForbiddenAnswerProvider:
-        @property
-        def model_name(self) -> str:
-            return "forbidden"
-
-        def generate_grounded_answer(self, context):
-            raise AssertionError("multi-family v1 must not call the answer provider")
+            raise AssertionError("multi-family SEARCH must not call the QueryPlan provider")
 
     agent = _cross_family_agent(
         sample_database,
         domestic_sample_database,
         query_plan_provider=ForbiddenQueryPlanProvider(),
-        answer_provider=ForbiddenAnswerProvider(),
     )
     original = agent._execute_family_search
     barrier = Barrier(2)
@@ -256,7 +333,155 @@ def test_cross_family_search_skips_model_providers_and_executes_concurrently(
 
     assert result.status == "executed"
     assert len(thread_ids) == 2
-    assert any("모델 호출 없이" in warning for warning in result.warnings)
+    assert any("QueryPlan 모델을 호출하지 않고" in warning for warning in result.warnings)
+
+
+def test_cross_family_search_generates_only_from_isolated_family_evidence(
+    sample_database: tuple[
+        Path,
+        list[NormalizedOverseasEtpRecord],
+        DatabaseManifest,
+    ],
+    domestic_sample_database: tuple[
+        Path,
+        list[NormalizedDomesticEtpRecord],
+        DatabaseManifest,
+    ],
+) -> None:
+    provider = RecordingAnswerProvider()
+    result = _cross_family_agent(
+        sample_database,
+        domestic_sample_database,
+        answer_provider=provider,
+    ).answer(
+        "국내 ETF와 해외 ETF를 각각 2개 보여줘",
+        "cross-grounded-001",
+    )
+    response = routed_result_to_backend(result)
+
+    assert [context.source_manifest.dataset for context in provider.contexts] == [
+        "domestic_etp",
+        "overseas_etp",
+    ]
+    assert provider.contexts[0].question == "국내 ETF를 2개 보여줘"
+    assert provider.contexts[1].question == "해외 ETF를 2개 보여줘"
+    assert [context.query_plan.product_families[0].value for context in provider.contexts] == [
+        context.source_manifest.dataset for context in provider.contexts
+    ]
+    assert result.answer_composition is not None
+    assert result.answer_composition.mode == "llm_grounded"
+    assert result.answer_composition.verification.passed
+    assert result.answer.count("상품별 근거 해설:") == 2
+    assert response.answer_mode is BackendAnswerMode.LLM_GROUNDED
+    assert response.provider_model == "qwen-test"
+    assert not response.fallback_used
+
+
+def test_cross_family_search_falls_back_entire_answer_on_provider_failure(
+    sample_database: tuple[
+        Path,
+        list[NormalizedOverseasEtpRecord],
+        DatabaseManifest,
+    ],
+    domestic_sample_database: tuple[
+        Path,
+        list[NormalizedDomesticEtpRecord],
+        DatabaseManifest,
+    ],
+) -> None:
+    class SecondCallFails(RecordingAnswerProvider):
+        def generate_grounded_answer(
+            self,
+            context: GroundedAnswerContext,
+        ) -> GroundedAnswerDraft:
+            if self.contexts:
+                raise RuntimeError("second family unavailable")
+            return super().generate_grounded_answer(context)
+
+    provider = SecondCallFails()
+    result = _cross_family_agent(
+        sample_database,
+        domestic_sample_database,
+        answer_provider=provider,
+    ).answer(
+        "국내 ETF와 해외 ETF를 각각 2개 보여줘",
+        "cross-grounded-002",
+    )
+    response = routed_result_to_backend(result)
+
+    assert result.answer_composition is not None
+    assert result.answer_composition.mode == "deterministic_fallback"
+    assert not result.answer_composition.verification.passed
+    assert "상품별 근거 해설:" not in result.answer
+    assert any(
+        "second family unavailable" in violation
+        for violation in result.answer_composition.verification.violations
+    )
+    assert response.answer_mode is BackendAnswerMode.DETERMINISTIC_FALLBACK
+    assert response.fallback_used
+
+
+def test_cross_family_search_rejects_cross_family_language_from_model(
+    sample_database: tuple[
+        Path,
+        list[NormalizedOverseasEtpRecord],
+        DatabaseManifest,
+    ],
+    domestic_sample_database: tuple[
+        Path,
+        list[NormalizedDomesticEtpRecord],
+        DatabaseManifest,
+    ],
+) -> None:
+    class CrossFamilyLanguageProvider(RecordingAnswerProvider):
+        def generate_grounded_answer(
+            self,
+            context: GroundedAnswerContext,
+        ) -> GroundedAnswerDraft:
+            draft = super().generate_grounded_answer(context)
+            return draft.model_copy(update={"lead": "해외 ETF보다 국내 ETF가 더 높은 결과입니다."})
+
+    result = _cross_family_agent(
+        sample_database,
+        domestic_sample_database,
+        answer_provider=CrossFamilyLanguageProvider(),
+    ).answer(
+        "국내 ETF와 해외 ETF를 각각 2개 보여줘",
+        "cross-grounded-003",
+    )
+
+    assert result.answer_composition is not None
+    assert result.answer_composition.mode == "deterministic_fallback"
+    assert not result.answer_composition.verification.checks["family_prose_isolated"]
+    assert not result.answer_composition.verification.checks["no_cross_family_operation"]
+    assert "해외 ETF보다" not in result.answer
+
+
+def test_cross_family_control_route_never_calls_answer_provider(
+    sample_database: tuple[
+        Path,
+        list[NormalizedOverseasEtpRecord],
+        DatabaseManifest,
+    ],
+    domestic_sample_database: tuple[
+        Path,
+        list[NormalizedDomesticEtpRecord],
+        DatabaseManifest,
+    ],
+) -> None:
+    provider = RecordingAnswerProvider()
+    result = _cross_family_agent(
+        sample_database,
+        domestic_sample_database,
+        answer_provider=provider,
+    ).answer(
+        "국내 ETF와 해외 ETF의 수익률을 비교해줘",
+        "cross-grounded-004",
+    )
+
+    assert result.status == "clarify"
+    assert provider.contexts == []
+    assert result.answer_composition is None
 
 
 def test_cross_family_search_fails_closed_before_execution_when_database_is_missing(

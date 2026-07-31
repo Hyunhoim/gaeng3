@@ -40,14 +40,14 @@ Next.js·FastAPI 애플리케이션 통합과 HyperCLOVA X 연결을 준비하�
 | 국내 ETF·ETN | 정규화, SQLite, Oracle, Verifier, 50문항 평가 구현 |
 | 국내채권 | 날짜·stale·신용등급 계약, Oracle, Verifier, 50문항 평가 구현 |
 | 공모펀드 | parser development 40/40·최초 holdout 9/10, grounded answer 50/50, 공식 실행 비활성 |
-| 교차 상품군 SEARCH | 국내·해외 ETP 병렬 Oracle·Verifier, 성공·부분·빈 결과·비교 차단 공개 회귀 4/4 |
+| 교차 상품군 SEARCH | 국내·해외 ETP 병렬 Oracle·Verifier·family별 grounded answer, expected·로컬 Qwen 각각 4/4·fallback 0 |
 | 근거 기반 답변 | 공모펀드 44개 grounded·6개 안전 차단, 폴백 0, 핵심 검증률 100% |
 | 로컬 LLM | 격리된 Qwen/vLLM 개발 테스트 완료, 평가·제출 사용 금지 |
 | HyperCLOVA X | 세 provider·fake transport·API 없는 전체 경로 8/8, 실제 HTTP 연결 대기 |
 | Web·API | 프레임워크 독립 `/answer` 오류 adapter 12/12, FastAPI route 통합 대기 |
 | 내부 red-team | 네 상품군 40문항, 수정 후 strict·safety·evidence 40/40 |
 
-현재 AI Core 회귀 기준은 pytest 320개, Ruff lint·format과 문서 검사를 모두
+현재 AI Core 회귀 기준은 pytest 326개, Ruff lint·format과 문서 검사를 모두
 통과한 상태
 
 ## 3. 아키텍처
@@ -60,9 +60,10 @@ flowchart LR
     C --> O["상품군별 SQLite Oracle<br/>검색 · 비교 · 연산"]
     O --> V["Result Verifier"]
     V --> E["Field-level Evidence"]
-    E --> A["Answer Verifier"]
-    A --> R["근거 · 기준일 포함 답변"]
-    A --> F["검증 실패 시<br/>Deterministic Fallback"]
+    E --> A["Family별 Answer Verifier"]
+    A --> X["서버 조합 · 교차 문구 검증"]
+    X --> R["근거 · 기준일 포함 답변"]
+    X --> F["하나라도 실패 시<br/>전체 Deterministic Fallback"]
 ```
 
 상품군마다 원천 스키마와 품질 규칙은 다르지만 다음 계약을 공통으로 사용
@@ -160,7 +161,7 @@ Git에 포함하지 않음
 - [기술 제안서 작성 허브](docs/proposal/README.md)
 - [데이터 감사 기준](finance_agent/docs/data-audit.md)
 - [Field Registry와 QueryPlan 계약](finance_agent/docs/contracts.md)
-- [교차 상품군 병렬 SEARCH v1](finance_agent/docs/cross-family-search.md)
+- [교차 상품군 병렬 SEARCH와 grounded answer v2](finance_agent/docs/cross-family-search.md)
 - [재현 가능한 평가 기준선](finance_agent/evaluation/README.md)
 
 ## 10. 담당

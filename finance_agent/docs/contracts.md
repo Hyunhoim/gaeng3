@@ -391,8 +391,12 @@ products는 family 순서를 유지해 펼친다.
 한 상품군이 0건이면 해당 family status만 `not_found`이고 다른 결과를
 보존한다. 모든 family가 0건일 때만 최상위 Backend status를 `not_found`로
 바꾼다. DB 누락·실행 비활성·미지원 조건은 병렬 실행 전에 전체 차단한다.
-v1 답변은 모델 provider를 호출하지 않고 상품군 간 직접 수치 비교·합산·우열
-판단을 수행하지 않았음을 표시한다.
+v2 답변은 각 family의 질문·QueryPlan·evidence·manifest만 Answer provider에
+전달하고 서버가 섹션을 조합한다. family별 Answer Verifier와 교차 답변
+Verifier를 모두 통과해야 `llm_grounded`다. 다른 상품군 언급·직접 비교·합산·
+우열 문구, provider 오류 또는 한 family의 검증 실패가 있으면 부분 모델 문장을
+남기지 않고 전체를 `deterministic_fallback`으로 교체한다. 전체 빈 결과와
+control route는 Answer provider를 호출하지 않는다.
 
 ## 8. 검증
 
@@ -423,8 +427,9 @@ v1 답변은 모델 provider를 호출하지 않고 상품군 간 직접 수치 
 - AggregateResultVerifier가 후보 수·그룹·값·유효/제외 개수 변조를 놓치는 변경
 - 공통 COMPARE가 요청 상품·필드 순서, field status·delta 또는 Backend
   comparison citation을 바꾸는 변경
-- 교차 상품군 SEARCH가 family 순서·plan·manifest·부분 결과를 잃거나 모델을
-  호출하고 직접 비교 문구를 만드는 변경
+- 교차 상품군 SEARCH가 family 순서·plan·manifest·부분 결과를 잃거나, family
+  evidence 경계를 넘겨 모델에 전달하거나, 교차 연산 문구를 최종 답변에 남기거나,
+  한 family 실패 후 전체 결정론 fallback을 거치지 않는 변경
 
 ## 9. 연결 상태와 다음 순서
 
@@ -455,6 +460,8 @@ v1 답변은 모델 provider를 호출하지 않고 상품군 간 직접 수치 
     fallback·민감정보 비노출 12문항 계약
 18. 교차 상품군 SEARCH의 상품군별 QueryPlan·병렬 Oracle·독립 verifier,
     부분 결과·Backend family DTO와 공개 실제 데이터 회귀 4/4
+19. 교차 상품군 family별 evidence-only grounded answer, 교차 문구 verifier,
+    전체 결정론 fallback과 expected·로컬 Qwen 공개 회귀 각각 4/4
 
 다음:
 
