@@ -1,13 +1,14 @@
 {
   "schema_version": "1.0",
   "baseline_id": "pre-hcx-readiness-v1",
-  "recorded_on": "2026-07-30",
+  "recorded_on": "2026-07-31",
   "status": "internal_ready_external_gates_pending",
   "git_commit": null,
+  "last_committed_source_commit": "f9660e1b7655a896f4cc18c34a45614d3311385d",
   "generated_from_dirty_worktree": true,
   "hash_algorithm": "sha256(sorted(relative_path + NUL + file_sha256 + LF))",
   "file_count": 231,
-  "tree_sha256": "ac9965b4d8e62bb12f309f6cca81071263ef2b2f76b693e3fa9cbf906bb518c7",
+  "tree_sha256": "2f8ec6244798b8685907c06da137cf266303a34289f4249d4b6dc000542e5c4f",
   "included_scope": [
     "README.md",
     "environment*.yml",
@@ -38,7 +39,7 @@
     "ruff_lint": "passed",
     "ruff_format": "passed",
     "pip_check": "passed",
-    "documentation_markdown": 36,
+    "documentation_markdown": 44,
     "documentation_baselines": 23,
     "wheel_build_no_isolation": "passed",
     "wheel_required_package_data": "passed",
@@ -53,8 +54,8 @@
     "FastAPI /answer route와 주최 측 실행 환경 통합"
   ],
   "limitations": [
-    "commit을 만들지 말라는 작업 조건에 따라 git_commit은 null",
-    "source tree hash는 현재 보존된 dirty worktree 전체를 기준으로 계산",
+    "last_committed_source_commit은 직전 Agent 마일스톤이며 현재 제안서 문서 후속 변경은 아직 커밋하지 않음",
+    "git_commit은 다음 검토·커밋 시 확정하고 현재 source tree hash는 dirty worktree를 기준으로 계산",
     "로컬 Qwen과 공개 회귀 결과는 HyperCLOVA X 공식 성능이 아님",
     "external gate 완료 전 최종 일반화 성능 또는 제출 준비 완료를 주장하지 않음"
   ]

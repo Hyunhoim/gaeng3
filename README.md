@@ -15,7 +15,8 @@ Next.js·FastAPI 애플리케이션 통합과 HyperCLOVA X 연결을 준비하�
 
 - 여러 금융 조건이 포함된 자연어 상품 검색
 - 상품 상세 정보 조회
-- 같은 상품군과 서로 다른 상품군 간 비교
+- 같은 상품군의 정확한 두 상품 비교
+- 상품군 간 질문은 의미·단위가 검증된 범위부터 단계적으로 확장
 - 정렬, 순위, 집계와 계산
 - 검색 결과와 금융 용어 설명
 - 모호하거나 데이터로 확인할 수 없는 조건에 대한 역질문
@@ -42,8 +43,9 @@ Next.js·FastAPI 애플리케이션 통합과 HyperCLOVA X 연결을 준비하�
 | 로컬 LLM | 격리된 Qwen/vLLM 개발 테스트 완료, 평가·제출 사용 금지 |
 | HyperCLOVA X | 세 provider·fake transport·API 없는 전체 경로 8/8, 실제 HTTP 연결 대기 |
 | Web·API | 프레임워크 독립 `/answer` 오류 adapter 12/12, FastAPI route 통합 대기 |
+| 내부 red-team | 네 상품군 40문항, 수정 후 strict·safety·evidence 40/40 |
 
-현재 AI Core 회귀 기준은 pytest 305개, Ruff lint·format과 문서 검사를 모두
+현재 AI Core 회귀 기준은 pytest 312개, Ruff lint·format과 문서 검사를 모두
 통과한 상태
 
 ## 3. 아키텍처
@@ -152,6 +154,7 @@ Git에 포함하지 않음
 - [개발 협업 가이드](CONTRIBUTING.md)
 - [AI Agent 작업공간](finance_agent/README.md)
 - [프로젝트 문서 인덱스](finance_agent/docs/project-index.md)
+- [기술 제안서 작성 허브](docs/proposal/README.md)
 - [데이터 감사 기준](finance_agent/docs/data-audit.md)
 - [Field Registry와 QueryPlan 계약](finance_agent/docs/contracts.md)
 - [재현 가능한 평가 기준선](finance_agent/evaluation/README.md)

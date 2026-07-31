@@ -8,7 +8,9 @@ from typing import Any
 from urllib.parse import unquote
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+REPOSITORY_ROOT = PROJECT_ROOT.parent
 DOCS_ROOT = PROJECT_ROOT / "docs"
+PROPOSAL_ROOT = REPOSITORY_ROOT / "docs" / "proposal"
 BASELINE_ROOT = PROJECT_ROOT / "evaluation" / "baselines"
 EVALUATION_ARTIFACT_ROOT = PROJECT_ROOT / "artifacts" / "evaluation"
 READINESS_MANIFEST = (
@@ -33,6 +35,7 @@ PRODUCT_COMPARE_SUITE = (
 
 LINK_PATTERN = re.compile(r"!?\[[^\]]*]\((?:<(?P<angle>[^>]+)>|(?P<plain>[^)\s]+))\)")
 SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
+FROZEN_PYTEST_PASSED = 312
 
 REQUIRED_INDEX_TARGETS = {
     "project-baseline.md",
@@ -110,6 +113,30 @@ FORBIDDEN_BASELINE_KEYS = {
     "raw_values",
     "results",
 }
+REQUIRED_PROPOSAL_TARGETS = {
+    "technical-proposal.md",
+    "evidence-map.md",
+    "user-scenarios.md",
+    "submission-checklist.md",
+    "diagrams/system-architecture.md",
+    "diagrams/answer-flow.md",
+}
+REQUIRED_PROPOSAL_SECTIONS = {
+    "## 1. 제안 요약",
+    "## 2. 문제 정의",
+    "## 3. 제안 방법",
+    "## 4. 시스템 구성도",
+    "## 5. 주요 기능 흐름도",
+    "## 6. 사용자 시나리오",
+    "## 7. 기대효과·확장성",
+}
+REQUIRED_PROPOSAL_EVALUATION_AXES = {
+    "문제정의",
+    "기술완성도·성능",
+    "창의성·확장성",
+    "답변 정확성·완결성",
+    "현업 활용성·리스크 관리",
+}
 
 
 def _sha256(path: Path) -> str:
@@ -126,11 +153,13 @@ def _is_within(path: Path, parent: Path) -> bool:
 
 def _markdown_files() -> list[Path]:
     files = [
+        REPOSITORY_ROOT / "README.md",
         PROJECT_ROOT / "README.md",
         PROJECT_ROOT / "packages" / "finance_agent_core" / "README.md",
         PROJECT_ROOT / "evaluation" / "README.md",
     ]
     files.extend(DOCS_ROOT.rglob("*.md"))
+    files.extend(PROPOSAL_ROOT.rglob("*.md"))
     return sorted(set(files))
 
 
@@ -159,7 +188,7 @@ def _check_markdown_links() -> list[str]:
             if _is_allowed_local_only_link(source, target):
                 continue
             resolved = (source.parent / target).resolve()
-            if not _is_within(resolved, PROJECT_ROOT):
+            if not _is_within(resolved, REPOSITORY_ROOT):
                 continue
             if not resolved.exists():
                 errors.append(
@@ -174,9 +203,48 @@ def _check_document_index() -> list[str]:
     for target in sorted(REQUIRED_INDEX_TARGETS):
         if f"]({target})" not in index:
             errors.append(f"project-index.md does not link to {target}")
-    root_readme = (PROJECT_ROOT / "README.md").read_text(encoding="utf-8")
-    if "](docs/project-index.md)" not in root_readme:
-        errors.append("root README.md does not link to docs/project-index.md")
+    finance_readme = (PROJECT_ROOT / "README.md").read_text(encoding="utf-8")
+    if "](docs/project-index.md)" not in finance_readme:
+        errors.append("finance_agent/README.md does not link to docs/project-index.md")
+    repository_readme = (REPOSITORY_ROOT / "README.md").read_text(encoding="utf-8")
+    if "](docs/proposal/README.md)" not in repository_readme:
+        errors.append("repository README.md does not link to docs/proposal/README.md")
+    if f"pytest {FROZEN_PYTEST_PASSED}개" not in repository_readme:
+        errors.append("repository README.md pytest count differs from frozen QA")
+    if "](../../docs/proposal/README.md)" not in index:
+        errors.append("project-index.md does not link to the proposal documentation")
+    proposal_index_path = PROPOSAL_ROOT / "README.md"
+    if not proposal_index_path.is_file():
+        errors.append("missing docs/proposal/README.md")
+        return errors
+    proposal_index = proposal_index_path.read_text(encoding="utf-8")
+    for target in sorted(REQUIRED_PROPOSAL_TARGETS):
+        if f"]({target})" not in proposal_index:
+            errors.append(f"docs/proposal/README.md does not link to {target}")
+    return errors
+
+
+def _check_proposal_content() -> list[str]:
+    errors: list[str] = []
+    technical_proposal_path = PROPOSAL_ROOT / "technical-proposal.md"
+    proposal_index_path = PROPOSAL_ROOT / "README.md"
+    if not technical_proposal_path.is_file() or not proposal_index_path.is_file():
+        return ["proposal content files are missing"]
+    technical_proposal = technical_proposal_path.read_text(encoding="utf-8")
+    for section in sorted(REQUIRED_PROPOSAL_SECTIONS):
+        if section not in technical_proposal:
+            errors.append(f"technical-proposal.md is missing section: {section}")
+    proposal_index = proposal_index_path.read_text(encoding="utf-8")
+    for axis in sorted(REQUIRED_PROPOSAL_EVALUATION_AXES):
+        if axis not in proposal_index:
+            errors.append(f"docs/proposal/README.md is missing evaluation axis: {axis}")
+    readiness = (DOCS_ROOT / "pre-hcx-readiness.md").read_text(encoding="utf-8")
+    expected_documentation_count = (
+        f"`{len(_markdown_files())} Markdown files`, "
+        f"`{len(REQUIRED_BASELINES)} evaluation baselines`"
+    )
+    if expected_documentation_count not in readiness:
+        errors.append("pre-hcx-readiness.md documentation counts differ")
     return errors
 
 
@@ -434,7 +502,7 @@ def _check_readiness_manifest() -> list[str]:
     if not payload.get("external_gates"):
         errors.append("pre-HCX source manifest must preserve external gates")
     qa = payload.get("qa", {})
-    if qa.get("pytest_passed") != 312:
+    if qa.get("pytest_passed") != FROZEN_PYTEST_PASSED:
         errors.append("pre-HCX source manifest pytest count differs from frozen QA")
     if qa.get("documentation_baselines") != len(REQUIRED_BASELINES):
         errors.append("pre-HCX source manifest baseline count differs")
@@ -445,6 +513,7 @@ def main() -> int:
     errors = [
         *_check_markdown_links(),
         *_check_document_index(),
+        *_check_proposal_content(),
         *_check_baselines(),
         *_check_product_comparison_commitment(),
         *_check_readiness_manifest(),

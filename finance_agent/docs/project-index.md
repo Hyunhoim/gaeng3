@@ -33,6 +33,7 @@
 25. [Backend 전달용 Agent DTO](backend-contract.md)
 26. [금융상품 Agent 사람 평가 rubric](human-evaluation.md)
 27. [저장소 부트스트랩 작업 명세](prompts/01-repository-bootstrap.md)
+28. [팀 기술 제안서 작성 허브](../../docs/proposal/README.md)
 
 ## 문서 지도
 
@@ -68,6 +69,7 @@
 | [저장소 부트스트랩 작업 명세](prompts/01-repository-bootstrap.md) | 최초 Agent Core를 구현할 때 Codex에 전달한 실행 명세 | 완료 기록 |
 | [Agent 전략 연구 요청](prompts/02-agent-strategy-research.md) | GPT Pro에 전달했던 질문과 당시 제약 | 과거 입력 기록 |
 | [GPT Pro 연구 기록](research/2026-07-28-gpt-pro/README.md) | GPT Pro 원문 답변, 감사 번들, 검토 결과, 원본 ZIP 위치 | 연구·감사 기록 |
+| [팀 기술 제안서 작성 허브](../../docs/proposal/README.md) | 공식 7개 항목, 평가 근거, 사용자 시나리오, 제출 체크리스트를 한곳에서 관리 | 초안 v0.1 |
 
 ## 현재 구현
 
