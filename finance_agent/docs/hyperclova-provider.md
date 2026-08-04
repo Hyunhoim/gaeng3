@@ -1,10 +1,15 @@
 # HyperCLOVA X provider 계약
 
-마지막 갱신: 2026-07-30
+마지막 갱신: 2026-08-04
 
 이 문서는 실제 API credential 없이 먼저 동결한 HyperCLOVA X provider 경계와
 fake transport 테스트 범위를 설명한다. 현재 완료된 것은 요청·응답·오류 계약이며,
 NAVER Cloud endpoint에 실제 HTTP 요청을 보내는 transport는 아직 구현하지 않았다.
+
+2026-08-06 오프라인 설명회에서 공식 사용법이 공지될 예정이므로,
+그전까지는 endpoint·credential·header·실제 HTTP 연결을 시도하지
+않는다. 현재 범위는 네트워크 없이 재생하는 계약·오류·fallback
+검증까지다.
 
 ## 1. 왜 API 연결보다 계약을 먼저 만드는가
 
@@ -186,9 +191,9 @@ transport·응답 오류, dataset 장애, 알 수 없는 예외와 answer fallba
 포함하지 않는다. 실제 FastAPI route, request 인증과 실제 네트워크 transport는
 이 계약의 바깥이며 아직 구현하지 않았다.
 
-## 10. 실제 API 확보 후 남은 작업
+## 10. 8월 6일 공식 안내 후 남은 작업
 
-1. 허용 모델명과 Structured Outputs 지원 범위 재확인
+1. 허용 모델명과 Structured Outputs 지원 범위·제출 범위 재확인
 2. 공식 endpoint·인증 header·요청·응답 body를 구현하는 HTTP transport 추가
 3. credential을 환경변수 또는 secret store에서 읽고 로그 마스킹 검증
 4. 공식 timeout·QPS·retry-after 정책을 반영한 제한적 retry 구현
@@ -197,5 +202,7 @@ transport·응답 오류, dataset 장애, 알 수 없는 예외와 answer fallba
 7. 로컬 Qwen 결과와 분리된 HyperCLOVA X 평가 baseline 기록
 8. FastAPI 공식 `/answer` route에서 provider 선택·인증·request validation 연결
 9. framework-neutral adapter와 실제 route를 합친 HTTP E2E 검증
+10. 공식 답변에 따라 제출 후보에서 로컬 LLM provider·설정·
+    스크립트·의존성을 제거하고 clean checkout에서 재검증
 
 이 작업이 완료되기 전에는 “HyperCLOVA X API 연결 완료”라고 표현하지 않는다.

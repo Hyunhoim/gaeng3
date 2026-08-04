@@ -1,6 +1,6 @@
 # 금융 도메인 QA 실험 파이프라인
 
-기준일: 2026-08-01
+기준일: 2026-08-04
 
 ## 0. 요약
 
@@ -12,6 +12,8 @@
 - 현재 세트는 독립 blind가 아니며 40문항 모두 최소 기능 시험
 - v1 최초 관측에서 pending이었던 `Q002` SEARCH 정답을 v1.1에서
   QueryPlan·Oracle 결과·evidence 지문으로 완성
+- v1.2에서 Router·linker 안전 경계를 개선해 strict·route·
+  safety·evidence·answer contract `40/40`, 잘못된 실행·오류 `0건`을 달성
 - 문서·외부 정책·외부 데이터가 필요한 13문항은 별도 pending으로 공개
 
 이 실험의 목적은 좋은 점수를 즉시 만드는 것이 아니라, 지금까지 상품군별
@@ -176,6 +178,34 @@ v1.1 실행도 strict `1/40`, safety `32/40`이며 이 수치는 E2 개선
 - suite SHA-256: `1e0979069654fd1d6b43d7107a3a85fe9f455ce0bbeead44c32c40073a4ef758`
 - baseline: [v1.1 SEARCH gold 관측](../evaluation/baselines/domain-qa-e2e-v1.1-gold.json)
 
+### v1.2 Router·linker 사후 회귀
+
+| 지표 | v1.1 개선 전 | v1.2 개선 후 |
+| --- | ---: | ---: |
+| 전체 strict | 1/40 | 40/40 |
+| route | 1/40 | 40/40 |
+| safety | 32/40 | 40/40 |
+| evidence | 32/40 | 40/40 |
+| answer contract | 40/40 | 40/40 |
+| control 잘못된 실행·오류 | 8 | 0 |
+
+개선 내용:
+
+- 추천·전망·세금·외부 시세·문서 필요 질문을 Oracle 실행 전에 차단
+- 모호한 위험·기간·추천 조건은 안전한 역질문으로 분리
+- `만기가 1년 이하`를 기준일 기준 잔존일수 `0~365일`로 연결해
+  `Q002` QueryPlan·Oracle·evidence 정답과 일치
+- 질문 본문에 국내·해외 단서가 없는 10문항은 stateless Router에게
+  상품군 exact match를 요구하지 않도록 채점 계약을 바로잡음
+
+- suite: `domain-qa-dev-v1.2-40`
+- suite SHA-256: `a93f3be835aec372c0f038d6ced49099ef210b3f4c95d0b341f7f47cce26e120`
+- baseline: [v1.2 Router 사후 회귀](../evaluation/baselines/domain-qa-e2e-v1.2-router.json)
+
+이 40/40은 독립 blind 결과가 아님. 같은 개발 문항을 보며 규칙과
+채점 계약을 개선한 사후 회귀이며, 새 질문의 일반화 성능은 별도
+blind 세트로 측정해야 함
+
 ## 7. 실험 순서
 
 ### E0 — 최초 관측
@@ -191,9 +221,10 @@ v1.1 실행도 strict `1/40`, safety `32/40`이며 이 수치는 E2 개선
 
 ### E2 — 안전 경로 개선
 
-- Router가 `CLARIFY`, `UNSUPPORTED`, `DOCUMENT_RAG`, 외부 dependency를
-  명시적으로 구분하도록 수정
-- 8개 safety 실패를 먼저 0으로 줄이고 strict 결과를 사후 회귀로 기록
+- 완료: Router가 `CLARIFY`, `UNSUPPORTED`, `DOCUMENT_RAG`, 외부
+  dependency를 명시적으로 구분
+- 완료: 8개 safety 실패를 0으로 줄이고 strict 40/40 사후 회귀를
+  v1.2 baseline으로 기록
 
 ### E3 — 행동 시험 증강
 
@@ -231,8 +262,10 @@ python -m finance_agent_core.evaluation.domain_qa_cli run \
   --questions-csv "<questions.csv>" \
   --review-csv "<review.csv>" \
   --database-dir artifacts/normalized \
-  --report-id domain-qa-dev-v1-1-post-router-01 \
-  --output artifacts/evaluation/domain-qa-dev-v1-1-post-router-01.json
+  --report-id domain-qa-dev-v1-2-router-e2 \
+  --output artifacts/evaluation/domain-qa-dev-v1-2-router-e2.json \
+  --require-safe \
+  --require-perfect
 ```
 
 `--require-safe`는 safety가 하나라도 실패하면 종료 코드 1,
@@ -253,7 +286,7 @@ python -m finance_agent_core.evaluation.domain_qa_cli schema \
 - 현재 40문항은 금융 도메인 담당자가 작성했지만 AI 담당자가 검토하고
   시스템 상태를 확인한 개발 세트
 - 실제 사용자 질문 분포나 공모전 비공개 평가를 대표하지 않음
-- 최초 strict 2.5%를 LLM 성능으로 해석할 수 없음
+- 최초 strict 2.5%와 사후 회귀 100% 모두 LLM 성능으로 해석할 수 없음
 - 답변의 자연스러움·명확성·금융 유용성은 별도 사람 rubric 필요
 - local Qwen 결과는 HyperCLOVA X 또는 공식 제출 성능이 아님
 - 승인된 문서 corpus와 외부 데이터가 없는 문항은 검색 품질 평가 대상이 아님

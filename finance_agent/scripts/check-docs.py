@@ -159,6 +159,10 @@ def _is_within(path: Path, parent: Path) -> bool:
     return True
 
 
+def _is_local_research_artifact(path: Path) -> bool:
+    return _is_within(path, DOCS_ROOT / "research") and "audit-bundle" in path.parts
+
+
 def _markdown_files() -> list[Path]:
     files = [
         REPOSITORY_ROOT / "README.md",
@@ -166,7 +170,11 @@ def _markdown_files() -> list[Path]:
         PROJECT_ROOT / "packages" / "finance_agent_core" / "README.md",
         PROJECT_ROOT / "evaluation" / "README.md",
     ]
-    files.extend(DOCS_ROOT.rglob("*.md"))
+    files.extend(
+        path
+        for path in DOCS_ROOT.rglob("*.md")
+        if not _is_local_research_artifact(path)
+    )
     files.extend(PROPOSAL_ROOT.rglob("*.md"))
     return sorted(set(files))
 
@@ -457,7 +465,11 @@ def _readiness_files() -> list[Path]:
         package_root / "README.md",
         package_root / "pyproject.toml",
     }
-    files.update(DOCS_ROOT.rglob("*.md"))
+    files.update(
+        path
+        for path in DOCS_ROOT.rglob("*.md")
+        if not _is_local_research_artifact(path)
+    )
     files.update(
         path
         for path in (package_root / "src").rglob("*")

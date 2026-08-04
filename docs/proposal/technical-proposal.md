@@ -82,7 +82,8 @@ BM25/SQLite FTS 기반 문서 검색의 적재·필터·출처·기준일 계약
 
 - 현재 검증 완료: Agent Core, SQLite Oracle, Verifier, evidence, Backend DTO
 - 교차 상품군 SEARCH의 family별 근거 격리·답변 검증·전체 fallback
-- 외부 통합 대기: Next.js·FastAPI, 실제 HyperCLOVA X transport, 공개 API 서버
+- 외부 통합 대기: Next.js·FastAPI, 8월 6일 공식 안내 후
+  HyperCLOVA X transport, 공개 API 서버
 
 목표 구조를 현재 구현 완료 상태로 오해하지 않도록 실선과 점선으로 구분한다.
 
@@ -144,10 +145,12 @@ BM25/SQLite FTS 기반 문서 검색의 적재·필터·출처·기준일 계약
 현재 대표 근거:
 
 - 4종 원천 145,393행 감사, 핵심 expectation 65/65
-- Agent Core 전체 pytest 331개 통과
+- Agent Core 전체 pytest 333개 통과
 - 국내·해외 ETP 교차 SEARCH 공개 실제 데이터 회귀 4/4
 - 교차 상품군 grounded answer 공개 회귀 expected·로컬 Qwen 각각 4/4, 생성 대상 2문항 모두 grounded, 모델 호출 3회, fallback 0
 - 내부 red-team 40문항 수정 후 strict·safety·evidence 40/40
+- 금융 도메인 개발 QA 40문항 Router 사후 회귀 40/40,
+  잘못된 control 실행·오류 0건
 - HyperCLOVA X API 없는 provider·Agent 계약 8/8
 - Backend service adapter 오류·fallback·비노출 계약 12/12
 

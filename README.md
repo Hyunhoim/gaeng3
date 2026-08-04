@@ -43,7 +43,7 @@ Next.js·FastAPI 애플리케이션 통합과 HyperCLOVA X 연결을 준비하�
 | 교차 상품군 SEARCH | 국내·해외 ETP 병렬 Oracle·Verifier·family별 grounded answer, expected·로컬 Qwen 각각 4/4·fallback 0 |
 | 근거 기반 답변 | 공모펀드 44개 grounded·6개 안전 차단, 폴백 0, 핵심 검증률 100% |
 | 로컬 LLM | 격리된 Qwen/vLLM 개발 테스트 완료, 평가·제출 사용 금지 |
-| HyperCLOVA X | 세 provider·fake transport·API 없는 전체 경로 8/8, 실제 HTTP 연결 대기 |
+| HyperCLOVA X | 세 provider·fake transport·API 없는 전체 경로 8/8, 8월 6일 공식 안내 전까지 실연결 보류 |
 | Web·API | 프레임워크 독립 `/answer` 오류 adapter 12/12, FastAPI route 통합 대기 |
 | 내부 red-team | 네 상품군 40문항, 수정 후 strict·safety·evidence 40/40 |
 | 금융 도메인 QA 실험 | 담당자 작성 40문항, 최초 1/40 보존·Router 사후 회귀 40/40·잘못된 실행 0건 |
@@ -135,6 +135,8 @@ Git에 포함하지 않음
 
 - 평가와 제출 경로의 LLM은 HyperCLOVA X만 사용
 - 로컬 Qwen은 HyperCLOVA X 연결 전 개발 파이프라인 검증에만 사용
+- 8월 6일 설명회 후 공식 범위를 확인하고, 제출 후보에서 로컬
+  provider·설정·스크립트·의존성을 제거한 뒤 기계적으로 검수
 - 다른 생성형 LLM 또는 VLM은 평가·제출 경로에서 사용 금지
 - 답변의 수치, 조건, 순위와 출처는 코드가 검색·연산·검증
 - 공식 제공 데이터와 외부 데이터가 충돌하면 공식 데이터를 우선
@@ -147,11 +149,13 @@ Git에 포함하지 않음
 
 - 금융 도메인 담당자의 공모펀드 blind 100문항 독립 작성과 hash 봉인
 - 사람 rubric으로 공모펀드 답변의 명확성·중복·비교 용이성 평가
-- 공모펀드 true COMPARE intent의 생성·검증·폴백 평가
-- 다른 작성자가 만든 blind 평가 문항 추가
+- 다른 작성자가 만든 blind 문항으로 SEARCH·COMPARE·AGGREGATE
+  일반화 성능 평가
 - Next.js·FastAPI 애플리케이션 템플릿 통합
 - 확정된 Backend DTO·오류 adapter를 Next.js·FastAPI shell에 연결
-- HyperCLOVA X 실제 HTTP transport와 FastAPI `/answer` route 연결
+- 8월 6일 오프라인 설명회에서 HyperCLOVA X 공식 사용법·제출 범위 확인
+- 설명회 후 HyperCLOVA X 실제 HTTP transport 연결
+- 동료의 Backend 코드 합류 후 FastAPI `/answer` route 연결
 - 허용 범위를 확인한 외부 비정형 금융 데이터와 문서 RAG 검토
 
 ## 9. 문서
@@ -165,6 +169,7 @@ Git에 포함하지 않음
 - [Field Registry와 QueryPlan 계약](finance_agent/docs/contracts.md)
 - [교차 상품군 병렬 SEARCH와 grounded answer v2](finance_agent/docs/cross-family-search.md)
 - [금융 도메인 QA 실험 파이프라인](finance_agent/docs/evaluation-domain-qa.md)
+- [제출용 모델 경계와 로컬 LLM 정리 메모](finance_agent/docs/submission-model-boundary.md)
 - [재현 가능한 평가 기준선](finance_agent/evaluation/README.md)
 
 ## 10. 담당

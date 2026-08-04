@@ -3,12 +3,12 @@
   "baseline_id": "pre-hcx-readiness-v1",
   "recorded_on": "2026-08-04",
   "status": "internal_ready_external_gates_pending",
-  "git_commit": "881bceb43efa4218e3510571f090327e1755037d",
-  "last_committed_source_commit": "881bceb43efa4218e3510571f090327e1755037d",
+  "git_commit": "4c5acfd89218646e2189118d7ec23a48d1153836",
+  "last_committed_source_commit": "4c5acfd89218646e2189118d7ec23a48d1153836",
   "generated_from_dirty_worktree": true,
   "hash_algorithm": "sha256(sorted(relative_path + NUL + file_sha256 + LF))",
   "file_count": 250,
-  "tree_sha256": "20c13c07b76d632b9ed10a6bbfd19c8b55c6c3cede0a5cb53a9ee1599d8b75e0",
+  "tree_sha256": "3a3609c61c28a8e1d8a069649ff9b5bbccf484a4b618b867249c98aa632bc19c",
   "included_scope": [
     "README.md",
     "environment*.yml",
@@ -50,7 +50,8 @@
     "봉인 이후 최초 blind E2E 단일 실행",
     "승인된 실제 비정형 문서 corpus와 활용 범위 확인",
     "최소 2명의 독립 reviewer가 수행한 실제 사람 평가",
-    "HyperCLOVA X 모델·Structured Outputs·endpoint·인증 계약 확인, 실제 HTTP transport와 공식 재현",
+    "2026-08-06 오프라인 설명회의 HyperCLOVA X 모델·Structured Outputs·endpoint·인증·제출 범위 확인",
+    "공식 안내 후 HyperCLOVA X 실제 HTTP transport·공식 재현·제출 후보의 로컬 LLM 구성 제거 검수",
     "FastAPI /answer route와 주최 측 실행 환경 통합"
   ],
   "limitations": [

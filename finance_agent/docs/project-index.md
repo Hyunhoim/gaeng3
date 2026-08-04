@@ -98,7 +98,8 @@
 | [교차 상품군 병렬 SEARCH와 grounded answer v2](cross-family-search.md) | 상품군별 QueryPlan·병렬 Oracle·evidence 격리 생성·교차 문구 검증·전체 fallback 계약 | v2.0 정본 |
 | [HyperCLOVA X provider 계약](hyperclova-provider.md) | 세 LLM 역할의 요청·응답·오류·관측 계약과 API 없는 전체 Agent E2E | 계약·E2E 8/8 완료·실제 HTTP 대기 |
 | [internal-red-team-v1 전체 E2E 평가](evaluation-internal-red-team.md) | 네 상품군 40문항의 공격 유형·전체 `/answer` 경로·최초 실패·수정 후 회귀 | v1.0 정본 |
-| [금융 도메인 QA 실험 파이프라인](evaluation-domain-qa.md) | 금융 도메인 담당자 40문항의 hash 검증·단계별 채점·Q002 QueryPlan·Oracle·evidence gold | v1.1 SEARCH gold 완성 |
+| [금융 도메인 QA 실험 파이프라인](evaluation-domain-qa.md) | 금융 도메인 담당자 40문항의 hash 검증·단계별 채점·Q002 QueryPlan·Oracle·evidence gold | v1.2 Router 회귀 40/40 |
+| [제출용 모델 경계와 로컬 LLM 정리 메모](submission-model-boundary.md) | 8월 6일 공식 확인, 제출 후보의 로컬 provider·설정·의존성 제거, 투명한 개발·제출 경계 | release gate |
 | [BM25/SQLite FTS 문서 RAG](document-rag.md) | 승인 문서 적재·BM25 검색·필터·근거·기준일·not-found 계약 | 최소 기능 완료 |
 | [Backend 전달용 Agent DTO](backend-contract.md) | 프레임워크 독립 request·response·citation·fallback·HTTP 오류 adapter와 JSON 예시 | v1.0·adapter 12/12 |
 | [금융상품 Agent 사람 평가 rubric](human-evaluation.md) | 6개 평가 축·critical gate·독립 reviewer·집계 계약 | rubric 완료·실평가 대기 |
@@ -185,9 +186,9 @@
 - 내부 red-team 기준: 네 상품군 40문항 expected·수정 후 로컬 Qwen 40/40,
   safety·evidence 40/40, 최초 36/40과 수정 이력 별도 보존
 - 금융 도메인 QA: v1 개발 40문항 최초 strict 1/40,
-  safety·evidence 각각 32/40을 보존하고 v1.1에서 Q002 QueryPlan·Oracle·
-  evidence gold 1건 완성, dependency pending 13건은 유지
-- 코드 회귀 기준: 전체 pytest 331개, Ruff lint·format, pip dependency check,
+  safety·evidence 각각 32/40을 보존하고 v1.2 Router·linker 회귀에서
+  모든 계약 40/40·잘못된 실행 0건, dependency pending 13건은 유지
+- 코드 회귀 기준: 전체 pytest 333개, Ruff lint·format, pip dependency check,
   wheel과 필수 package data 검사
 - 로컬 Qwen 평가 기준: 동결 50문항에서 최초 미사용 holdout 9/10,
   오류 수정 후 전체 회귀 50/50을 연속 2회 재현
@@ -200,8 +201,9 @@
   전체 50/50, 폴백 0
 - 다음 외부 게이트: 금융 도메인 담당자의 external blind 100문항·비공개 정답키,
   승인 corpus, 실제 사람 평가
-- 다음 기술 통합: 공식 endpoint·인증 계약 기반 HyperCLOVA X HTTP transport와
-  FastAPI `/answer` route
+- 다음 기술 통합: 2026-08-06 설명회 공지 후 공식 endpoint·인증
+  계약 기반 HyperCLOVA X HTTP transport, 동료의 Backend 합류 후 FastAPI
+  `/answer` route
 
 ## 6. 저장소 밖의 근거 자료
 

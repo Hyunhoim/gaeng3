@@ -156,8 +156,11 @@ Backend `/answer` service adapter 결과:
 - 봉인 이후 단 한 번 수행하는 최초 blind 실행
 - 금융 도메인 담당자와 팀원이 수행한 사람 평가 점수
 - 주최 측이 허용한 외부 비정형 문서 corpus와 사용 범위 확인
-- HyperCLOVA X 모델명·Structured Outputs 범위, endpoint·인증·실제 HTTP
-  transport 확인과 공식 재현
+- 2026-08-06 오프라인 설명회의 HyperCLOVA X 모델명·
+  Structured Outputs 범위·endpoint·인증·제출 범위 확인
+- 위 공지 후의 실제 HTTP transport 연결과 공식 재현
+- 공식 답변에 따른 제출 후보의 로컬 LLM provider·설정·
+  스크립트·의존성 제거와 정적·기계적 검수
 
 이 게이트가 남아 있는 동안 저장소는 “HyperCLOVA X 연결 전 내부 준비 완료”까지만
 주장할 수 있고, 최종 평가 준비 완료나 일반화 성능 완료를 주장하지 않는다.

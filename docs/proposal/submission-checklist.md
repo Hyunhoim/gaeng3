@@ -9,6 +9,7 @@
 ## 0. 일정
 
 - [ ] 2026-08-06 설명회 질문 확정 및 공식 답변 기록
+- [ ] 2026-08-06 공지 전 HyperCLOVA X endpoint·credential 연결 보류
 - [ ] 2026-09-06 이전 최종 source commit·제안서·API 문서 동결
 - [ ] 평가 기간 동안 공지된 기간 내 API 활성 상태 유지
 - [ ] 마감 이후 금지되는 commit·push·서버 변경 범위 재확인
@@ -25,6 +26,8 @@
 - [ ] 원천 데이터·DB 생성과 애플리케이션 시작 순서 문서화
 - [ ] clean checkout에서 build·test·start 재현
 - [ ] 비밀정보, 로컬 경로, 모델 weight, `artifacts/`가 Git에 없는지 확인
+- [ ] 공식 제출 범위 확정 후 로컬 LLM provider·설정·스크립트·의존성 제거
+- [ ] Git 이력을 재작성하지 않고 개발 이력과 제출 경로를 투명하게 분리
 
 현재 상태: Conda·pip와 Agent Core wheel은 재현 가능. 통합 Docker·FastAPI·
 Next.js 실행은 애플리케이션 템플릿 병합 후 완료해야 한다.
@@ -83,6 +86,7 @@ Next.js 실행은 애플리케이션 템플릿 병합 후 완료해야 한다.
 - [ ] Docker·DB·외부 데이터·네트워크 제약
 - [ ] 평가 질의 분포와 정확성·지연·정성평가 배점
 - [ ] 임베딩·re-ranker·NER·번역 모델의 LLM 해당 여부
+- [ ] 로컬 LLM을 개발 단계에 사용한 코드·문서·Git 이력의 제출 허용 범위
 - [ ] 보수 0·수익률 0·판매 가능 상태·공모펀드 grain의 공식 의미
 
 ## 5. 최종 동결
@@ -90,6 +94,7 @@ Next.js 실행은 애플리케이션 템플릿 병합 후 완료해야 한다.
 - [ ] source commit SHA 기록
 - [ ] 데이터·suite·baseline·제안서 PDF SHA-256 기록
 - [ ] 공식 provider 외 모델이 평가 mode에서 fail-closed인지 확인
+- [ ] 제출 후보에 `local_test`, `Qwen`, `vLLM`, `ENABLE_NON_HCX_TEST_LLM` 미포함 확인
 - [ ] external blind 최초 실행 결과와 사후 수정 결과 분리
 - [ ] 최소 2명 사람 평가 완료
 - [ ] API smoke·contract·load·장애 복구 테스트 완료

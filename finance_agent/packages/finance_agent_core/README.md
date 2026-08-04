@@ -336,13 +336,17 @@ python -m finance_agent_core.evaluation.domain_qa_cli run \
   --questions-csv "<questions.csv>" \
   --review-csv "<review.csv>" \
   --database-dir artifacts/normalized \
-  --report-id domain-qa-dev-v1-1-post-router-01 \
-  --output artifacts/evaluation/domain-qa-dev-v1-1-post-router-01.json
+  --report-id domain-qa-dev-v1-2-router-e2 \
+  --output artifacts/evaluation/domain-qa-dev-v1-2-router-e2.json \
+  --require-safe \
+  --require-perfect
 ```
 
 설치된 console script는 `finance-evaluate-domain-qa`다. 현재 40문항은 개발
 MFT 세트이며 v1.1에서 SEARCH 1문항의 QueryPlan·Oracle·evidence
-gold를 완성했다. 독립 blind나 모델 생성 품질 점수가 아니다.
+gold를 완성했다. v1.2 Router·linker 사후 회귀는 모든 계약
+40/40, control 잘못된 실행·오류 0건이다. 개선에 사용한 세트이므로
+독립 blind나 모델 생성 품질 점수가 아니다.
 최초 관측을 보존하려면 사후 실행마다 새로운 `--report-id`와 출력 파일명을
 사용한다.
 
@@ -358,7 +362,8 @@ HCX_MODEL=HCX-로 시작하는 공식 확인 모델 ID
 HCX_TIMEOUT_SECONDS=60
 ```
 
-현재 구현은 주입형 transport와 fake transport 테스트까지다. endpoint·credential·
+현재 구현은 주입형 transport와 fake transport 테스트까지다. 2026-08-06
+오프라인 설명회의 공식 안내 전에는 실제 연결을 시도하지 않는다. endpoint·credential·
 인증 header를 추측하지 않았고 실제 API 호출용 transport나 CLI 선택지는 아직
 없다. 자세한 범위와 남은 작업은
 [HyperCLOVA X provider 계약](../../docs/hyperclova-provider.md)을 따른다.

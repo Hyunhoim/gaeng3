@@ -20,13 +20,15 @@
 | SEARCH·AGGREGATE 성능 | 네 상품군 8문항 결과 지문 8/8, projected verifier, 새 프로세스 p50 308.749ms·최대 추가 RSS 51,000KiB |
 | 문서 RAG | caller-fed BM25/SQLite FTS 적재·필터·근거·기준일·not-found 최소 기능 |
 | 팀 통합 계약 | 프레임워크 독립 Backend DTO·HTTP 오류 adapter 12/12, JSON Schema/예시, 사람 평가 rubric v1 |
-| HyperCLOVA X | 세 provider 계약·fake transport·SEARCH 전체 경로 E2E 8/8 완료, 실제 HTTP 연결 대기 |
+| HyperCLOVA X | 세 provider 계약·fake transport·SEARCH 전체 경로 E2E 8/8 완료, 8월 6일 공식 안내 전까지 실연결 보류 |
 | 내부 red-team E2E | 네 상품군 40문항, 최초 로컬 Qwen 36/40·안전 차단 100%, `3건` handoff 수정 후 40/40·fallback 0 |
-| 금융 도메인 QA 실험 | 담당자 작성 40문항, Q002 QueryPlan·Oracle·evidence gold 완성, strict 1/40·safety 32/40은 Router 개선 전 baseline으로 보존 |
+| 금융 도메인 QA 실험 | 담당자 작성 40문항, 최초 strict 1/40 보존·Router 사후 회귀 40/40·잘못된 실행 0건 |
 
 로컬 Qwen은 개발 전용 테스트 대역이다. 평가·제출 경로의 LLM은 공식 규칙에
 따라 HyperCLOVA X로 제한하며, 로컬 provider는 세 가지 명시적 opt-in 없이는
-활성화되지 않는다.
+활성화되지 않는다. 8월 6일 설명회 후 공식 제출 범위를 확인한 뒤
+제출 후보에서 로컬 provider·설정·스크립트·의존성을 제거하고 별도로
+검수한다. 상세 순서는 [제출용 모델 경계](docs/submission-model-boundary.md)에서 관리한다.
 
 ## 아키텍처
 
@@ -138,6 +140,7 @@ conda run -n gaeng3-dev \
 - [네 상품군 자연어 COMPARE 공개 회귀](docs/evaluation-product-comparison.md)
 - [교차 상품군 병렬 SEARCH와 grounded answer v2](docs/cross-family-search.md)
 - [금융 도메인 QA 실험 파이프라인](docs/evaluation-domain-qa.md)
+- [제출용 모델 경계와 로컬 LLM 정리 메모](docs/submission-model-boundary.md)
 - [문서 RAG](docs/document-rag.md)
 - [Backend DTO](docs/backend-contract.md)
 - [사람 평가 rubric](docs/human-evaluation.md)
@@ -188,6 +191,7 @@ field-level evidence, Qwen grounded answer, Answer Verifier·fallback까지 한
 
 남은 우선순위는 금융 도메인 담당자의
 external blind 100문항·비공개 정답키 작성, 승인된 실제 문서 corpus와 사람
-평가, HyperCLOVA X 실제 HTTP transport, FastAPI `/answer` route다. 최초 SEARCH parser
+평가, 8월 6일 공식 안내 후 HyperCLOVA X 실제 HTTP transport, 동료의
+Backend 합류 후 FastAPI `/answer` route다. 최초 SEARCH parser
 holdout 실패 1건은 회귀 수정했지만 9/10 기록은 그대로 유지한다. 공모펀드
 공식 Agent 실행도 계속 비활성화한다.
