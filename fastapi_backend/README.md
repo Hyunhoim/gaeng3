@@ -16,6 +16,68 @@
 Docker 이미지는 Python 3.12를 사용하고, 실행 시에는 권한이 제한된 비-root 사용자로
 동작한다. Uvicorn은 개발용 자동 재시작 없이 production 방식으로 실행된다.
 
+## 협업 경계
+
+| 영역 | 담당 | 원칙 |
+| --- | --- | --- |
+| FastAPI·Docker·배포 | 임현호 | `fastapi_backend/`, `docker-compose.yml` 관리 |
+| Agent·검색·검증 | 조해영 | `finance_agent/`의 Core와 평가 기준 관리 |
+| 금융 질의 평가 | 박재모 | 독립 질의·정답 기준·사람 평가 결과 관리 |
+
+Backend는 Agent 내부의 SQL·검색·검증 로직을 다시 구현하지 않는다. 다음 공개 계약만
+사용한다.
+
+- 요청: `BackendAgentRequest`
+- 응답: `BackendAgentResponse`
+- 실행: `RoutedFinanceAgent`
+- HTTP 변환: `execute_answer_request()`
+
+Backend는 `execute_answer_request()`가 반환한 HTTP 상태와 DTO 필드를 삭제하거나
+재해석하지 않는다. 위 계약을 바꿔야 하면 Backend와 Agent 담당자가 먼저 합의하고,
+계약 테스트와 [Backend DTO 문서](../finance_agent/docs/backend-contract.md)를 함께
+수정한다.
+
+## 현재 구현 상태
+
+| 항목 | 상태 |
+| --- | --- |
+| `GET /health` | 구현 완료; 네 SQLite manifest와 상품군 일치 검증 |
+| `POST /answer` | 구현 완료; 기존 Agent adapter 연결 |
+| HTTP 계약 테스트 | 구현 완료; SSH 환경 실행 검증 대기 |
+| Dockerfile·Compose | 구현 완료; SSH 서버 build·smoke test 대기 |
+| HyperCLOVA X 실제 HTTP | 미연결; endpoint·인증 계약 확정 후 연결 |
+| 사용자 인증·Frontend | 현재 예선 API 범위에서 제외 |
+
+검증 전 항목을 완료로 기록하지 않는다. SSH 서버 검증이 끝나면 사용한 commit,
+Docker 명령, health·answer 결과와 발견한 제약을 이 문서에 추가한다.
+
+## API 계약 빠른 확인
+
+요청 예시:
+
+```json
+{
+  "schema_version": "1.0",
+  "request_id": "manual-001",
+  "question": "매수 가능한 국내채권을 매수수익률 높은 순으로 3개 보여줘.",
+  "locale": "ko-KR"
+}
+```
+
+Docker 실행 후 호출 예시:
+
+```bash
+curl --fail-with-body \
+  --request POST \
+  --header 'Content-Type: application/json' \
+  --data '{"schema_version":"1.0","request_id":"manual-001","question":"매수 가능한 국내채권을 매수수익률 높은 순으로 3개 보여줘.","locale":"ko-KR"}' \
+  http://127.0.0.1:18001/answer
+```
+
+응답의 `status`는 `success`, `clarification`, `unsupported`, `not_found`, `error` 중
+하나다. `answer_mode`, `fallback_used`, `citations`, `as_of_dates`를 별도 필드로
+확인하며, 답변 문자열만 보고 성공 여부를 판단하지 않는다.
+
 ## 1. 사전 준비
 
 Ubuntu 서버에 Docker Engine과 Docker Compose v2가 있어야 한다.
