@@ -156,6 +156,7 @@ Git에 포함하지 않음
 
 ## 9. 문서
 
+- [저장소 문서 안내](docs/README.md)
 - [개발 협업 가이드](CONTRIBUTING.md)
 - [AI Agent 작업공간](finance_agent/README.md)
 - [프로젝트 문서 인덱스](finance_agent/docs/project-index.md)

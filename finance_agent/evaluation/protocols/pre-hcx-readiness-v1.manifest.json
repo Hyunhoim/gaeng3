@@ -1,14 +1,14 @@
 {
   "schema_version": "1.0",
   "baseline_id": "pre-hcx-readiness-v1",
-  "recorded_on": "2026-08-01",
+  "recorded_on": "2026-08-04",
   "status": "internal_ready_external_gates_pending",
   "git_commit": "199d8ecdeed98703df77efb27d7405799d3095f6",
   "last_committed_source_commit": "199d8ecdeed98703df77efb27d7405799d3095f6",
   "generated_from_dirty_worktree": false,
   "hash_algorithm": "sha256(sorted(relative_path + NUL + file_sha256 + LF))",
   "file_count": 248,
-  "tree_sha256": "632b84610fa5cf1747d13b16ca3a856f679a2f21386428409a70712f36f313fa",
+  "tree_sha256": "fafae93894d2193dccd63fd413f0684c6c67c74c5413eb239d566272712c7230",
   "included_scope": [
     "README.md",
     "environment*.yml",

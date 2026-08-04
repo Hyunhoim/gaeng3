@@ -1,43 +1,75 @@
 # gaeng3 프로젝트 문서
 
-마지막 갱신: 2026-07-31
+마지막 갱신: 2026-08-04
 
 이 디렉터리는 금융상품 Agent 구현에 직접 사용하는 문서의 정본이다. 연구 요청·외부 모델 답변·감사 산출물은 근거 자료로 보존하되, 실제 구현 판단은 `project-baseline.md`와 `data-audit.md`를 우선한다.
 
-## 먼저 읽을 문서
+## 1. 빠른 시작
 
-1. [현재 프로젝트 기준](project-baseline.md)
-2. [데이터 감사 기준](data-audit.md)
-3. [공모펀드 원천 데이터 계약](public-fund-contract.md)
-4. [Field Registry와 QueryPlan 계약](contracts.md)
-5. [해외 ETP 핵심 평가 기준선](evaluation.md)
-6. [국내 ETP 핵심 평가 기준선](evaluation-domestic-etp.md)
-7. [국내채권 핵심 평가 기준선](evaluation-domestic-bond.md)
-8. [공모펀드 핵심 평가 기준선](evaluation-public-fund.md)
-9. [공모펀드 blind v1.1 평가 설계](evaluation-public-fund-blind-v1.1.md)
-10. [근거 기반 최종 답변 평가](evaluation-grounded-answers.md)
-11. [개발 환경과 현재 구현 상태](development.md)
-12. [로컬 LLM 테스트 런타임](local-llm.md)
-13. [Agent Core v0.1 마일스톤](milestones/2026-07-29-agent-core-v0.1.md)
-14. [재현 가능한 평가 baseline](../evaluation/README.md)
-15. [HyperCLOVA X 연결 전 준비 기준](pre-hcx-readiness.md)
-16. [연결 전 진단·외부 blind 프로토콜](evaluation-pre-hcx-diagnostic.md)
-17. [금융상품 Agent capability matrix](capability-matrix.md)
-18. [네 상품군 공통 AGGREGATE 엔진](aggregate-engine.md)
-19. [네 상품군 공통 COMPARE 엔진 설계](comparison-engine-design.md)
-20. [네 상품군 자연어 COMPARE 공개 회귀](evaluation-product-comparison.md)
-21. [SEARCH·AGGREGATE 성능 기준선](evaluation-search-aggregate-performance.md)
-22. [교차 상품군 병렬 SEARCH와 grounded answer v2](cross-family-search.md)
-23. [HyperCLOVA X provider 계약](hyperclova-provider.md)
-24. [internal-red-team-v1 전체 E2E 평가](evaluation-internal-red-team.md)
-25. [금융 도메인 QA 실험 파이프라인](evaluation-domain-qa.md)
-26. [BM25/SQLite FTS 문서 RAG](document-rag.md)
-27. [Backend 전달용 Agent DTO](backend-contract.md)
-28. [금융상품 Agent 사람 평가 rubric](human-evaluation.md)
-29. [저장소 부트스트랩 작업 명세](prompts/01-repository-bootstrap.md)
-30. [팀 기술 제안서 작성 허브](../../docs/proposal/README.md)
+모든 문서를 순서대로 읽을 필요는 없다. 처음에는 다음 네 문서만 확인한다.
 
-## 문서 지도
+1. [현재 프로젝트 기준](project-baseline.md) — 목표, 공식 제약, 역할과 현재 상태
+2. [금융상품 Agent capability matrix](capability-matrix.md) — 지금 가능한 질문과 불가능한 질문
+3. [HyperCLOVA X 연결 전 준비 기준](pre-hcx-readiness.md) — 완료된 일과 남은 게이트
+4. [재현 가능한 평가 baseline](../evaluation/README.md) — 성능 수치와 실험 해석
+
+## 2. 역할별 읽기 경로
+
+| 독자·목적 | 먼저 읽기 | 이어서 읽기 |
+| --- | --- | --- |
+| 새 AI 개발자 | [현재 프로젝트 기준](project-baseline.md) | [개발 환경](development.md) → [계약](contracts.md) → [Agent Core README](../packages/finance_agent_core/README.md) |
+| Backend 담당 | [Backend DTO](backend-contract.md) | [capability matrix](capability-matrix.md) → [HyperCLOVA X provider](hyperclova-provider.md) |
+| 금융 도메인 담당 | [capability matrix](capability-matrix.md) | [데이터 감사](data-audit.md) → [사람 평가 rubric](human-evaluation.md) → [금융 도메인 QA 평가](evaluation-domain-qa.md) |
+| 기술 제안서 작성자 | [기술 제안서 허브](../../docs/proposal/README.md) | [현재 프로젝트 기준](project-baseline.md) → [평가 baseline](../evaluation/README.md) |
+| 제출 전 검수자 | [제출 체크리스트](../../docs/proposal/submission-checklist.md) | [모델 경계](submission-model-boundary.md) → [연결 전 준비 기준](pre-hcx-readiness.md) |
+
+## 3. 목적별 문서 분류
+
+### 현재 상태와 운영 기준
+
+- [현재 프로젝트 기준](project-baseline.md)
+- [개발 환경과 구현 상태](development.md)
+- [HyperCLOVA X 연결 전 준비 기준](pre-hcx-readiness.md)
+- [제출용 모델 경계](submission-model-boundary.md)
+
+### 데이터와 실행 계약
+
+- [데이터 감사 기준](data-audit.md)
+- [공모펀드 원천 데이터 계약](public-fund-contract.md)
+- [Field Registry와 QueryPlan 계약](contracts.md)
+- [capability matrix](capability-matrix.md)
+- [Backend DTO](backend-contract.md)
+- [HyperCLOVA X provider 계약](hyperclova-provider.md)
+
+### Agent 기능과 아키텍처
+
+- [네 상품군 공통 AGGREGATE](aggregate-engine.md)
+- [네 상품군 공통 COMPARE](comparison-engine-design.md)
+- [교차 상품군 SEARCH](cross-family-search.md)
+- [BM25/SQLite FTS 문서 RAG](document-rag.md)
+- [근거 기반 최종 답변](evaluation-grounded-answers.md)
+
+### 평가와 품질
+
+- [해외 ETP](evaluation.md) · [국내 ETP](evaluation-domestic-etp.md) · [국내채권](evaluation-domestic-bond.md) · [공모펀드](evaluation-public-fund.md)
+- [공모펀드 blind 설계](evaluation-public-fund-blind-v1.1.md)
+- [COMPARE 공개 회귀](evaluation-product-comparison.md)
+- [SEARCH·AGGREGATE 성능](evaluation-search-aggregate-performance.md)
+- [internal red-team](evaluation-internal-red-team.md)
+- [금융 도메인 QA](evaluation-domain-qa.md)
+- [사람 평가 rubric](human-evaluation.md)
+- [전체 평가 baseline](../evaluation/README.md)
+
+### 과거 기록과 연구 근거
+
+- [Agent Core v0.1 마일스톤](milestones/2026-07-29-agent-core-v0.1.md)
+- [저장소 부트스트랩 작업 명세](prompts/01-repository-bootstrap.md)
+- [Agent 전략 연구 요청](prompts/02-agent-strategy-research.md)
+- [GPT Pro 연구 기록](research/2026-07-28-gpt-pro/README.md)
+
+과거 기록과 연구 문서는 설계 배경을 설명하지만 현재 구현 요구사항은 아니다.
+
+## 4. 전체 문서 지도
 
 | 문서 | 역할 | 상태 |
 | --- | --- | --- |
@@ -75,7 +107,7 @@
 | [GPT Pro 연구 기록](research/2026-07-28-gpt-pro/README.md) | GPT Pro 원문 답변, 감사 번들, 검토 결과, 원본 ZIP 위치 | 연구·감사 기록 |
 | [팀 기술 제안서 작성 허브](../../docs/proposal/README.md) | 공식 7개 항목, 평가 근거, 사용자 시나리오, 제출 체크리스트를 한곳에서 관리 | 초안 v0.1 |
 
-## 현재 구현
+## 5. 현재 구현
 
 - [finance_agent_core](../packages/finance_agent_core/README.md): 네 상품군 감사·정규화·SQLite
   적재, 해외·국내 ETP·국내채권 QueryPlan·oracle·verifier·evidence·Agent
@@ -171,15 +203,16 @@
 - 다음 기술 통합: 공식 endpoint·인증 계약 기반 HyperCLOVA X HTTP transport와
   FastAPI `/answer` route
 
-## 저장소 밖의 근거 자료
+## 6. 저장소 밖의 근거 자료
 
 - [공식 과제 소개자료](<../../../../0. Official Materials/(배표용)과제소개자료_금융상품Agent.pdf>)
 - [공식 공지 정리](<../../../../0. Official Materials/07-28(화) - 공지사항 정리하기.md>)
 - [원천 데이터](<../../../../2. Data/1. Raw/1.금융상품/>)
 - [원천 데이터 ZIP](<../../../../2. Data/0. Source Archive/1.금융상품.zip>)
-- [프로젝트 허브](<../../../../26-07 미래에셋증권AI공모전.md>)
+- [프로젝트 시작 안내](<../../../../README.md>)
+- [과거 프로젝트 허브·결정 로그](<../../../../26-07 미래에셋증권AI공모전.md>)
 
-## 판단 우선순위
+## 7. 판단 우선순위
 
 내용이 충돌하면 다음 순서로 판단한다.
 
@@ -191,7 +224,7 @@
 
 연구 문서의 설계 제안은 자동으로 요구사항이 되지 않는다. 정본 문서로 승격한 결정만 구현 범위로 간주한다.
 
-## 문서 운영 규칙
+## 8. 문서 운영 규칙
 
 - 공식 원본과 원천 데이터는 수정하지 않는다.
 - 외부 모델의 원문 답변과 원본 번들은 재현성을 위해 보존한다.
@@ -200,3 +233,14 @@
 - 평가 질문을 튜닝에 사용한 뒤에는 기존 holdout 성능으로 주장하지 않고 새
   미사용 split을 만든다.
 - 2026-08-06 설명회 이후 공식 답변과 참고 질의 세트를 반영하고 모델·API·데이터 정책을 다시 동결한다.
+
+새 문서를 만들 때는 다음 위치를 사용한다.
+
+| 문서 유형 | 위치 |
+| --- | --- |
+| 현재 기준·계약·설계 | `finance_agent/docs/` |
+| 재현 가능한 평가 수치 | `finance_agent/evaluation/` |
+| 코드 사용법 | 해당 package의 `README.md` |
+| 팀 기술 제안서 | 저장소 루트 `docs/proposal/` |
+| 외부 연구 원문 | `finance_agent/docs/research/` |
+| 더 이상 활성화되지 않는 프롬프트 | `finance_agent/docs/prompts/archive/` |
