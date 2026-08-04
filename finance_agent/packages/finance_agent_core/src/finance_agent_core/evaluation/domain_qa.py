@@ -31,7 +31,7 @@ from finance_agent_core.execution.verifier_projection import (
     load_projected_verifier_records,
 )
 
-DOMAIN_QA_SPEC_RESOURCE = "domain_qa_dev_v1_1.json"
+DOMAIN_QA_SPEC_RESOURCE = "domain_qa_dev_v1_2.json"
 _QUESTION_HEADERS = {
     "번호",
     "상품군",
@@ -150,8 +150,8 @@ class DomainQACountContract(DomainQAModel):
 
 class DomainQASpec(DomainQAModel):
     schema_version: Literal["1.0"]
-    suite_id: Literal["domain-qa-dev-v1.1-40"]
-    suite_version: Literal["1.1"]
+    suite_id: Literal["domain-qa-dev-v1.2-40"]
+    suite_version: Literal["1.2"]
     status: Literal["financial_domain_development_not_blind"]
     author_role: Literal["financial_domain"]
     reviewer_role: Literal["ai_engineering"]

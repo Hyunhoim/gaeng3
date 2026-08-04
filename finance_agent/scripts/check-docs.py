@@ -35,7 +35,7 @@ PRODUCT_COMPARE_SUITE = (
 
 LINK_PATTERN = re.compile(r"!?\[[^\]]*]\((?:<(?P<angle>[^>]+)>|(?P<plain>[^)\s]+))\)")
 SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
-FROZEN_PYTEST_PASSED = 331
+FROZEN_PYTEST_PASSED = 333
 
 REQUIRED_INDEX_TARGETS = {
     "project-baseline.md",
@@ -52,6 +52,7 @@ REQUIRED_INDEX_TARGETS = {
     "cross-family-search.md",
     "evaluation-internal-red-team.md",
     "evaluation-domain-qa.md",
+    "submission-model-boundary.md",
     "hyperclova-provider.md",
     "evaluation-pre-hcx-diagnostic.md",
     "development.md",
@@ -94,6 +95,7 @@ REQUIRED_BASELINES = {
     "pre-hcx-route-diagnostic-improved-v3.json",
     "domain-qa-e2e-v1.json",
     "domain-qa-e2e-v1.1-gold.json",
+    "domain-qa-e2e-v1.2-router.json",
 }
 REQUIRED_BASELINE_KEYS = {
     "schema_version",
@@ -381,6 +383,7 @@ def _check_baseline(path: Path) -> list[str]:
         "diagnostic_initial_observed",
         "domain_qa_initial_observed",
         "domain_qa_gold_observed",
+        "domain_qa_router_improved",
     }:
         if (
             not isinstance(total, int)

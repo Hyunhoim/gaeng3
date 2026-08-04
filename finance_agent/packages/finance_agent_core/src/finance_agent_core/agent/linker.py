@@ -411,6 +411,22 @@ def build_lexical_hints(
             match = re.search(pattern, question)
             if match:
                 add(field, match.group(1).strip(), operator)
+        maturity_years = re.search(
+            r"(?:잔존\s*)?만기(?:가|는|를|는\s*기간)?\s*(\d+)\s*년\s*"
+            r"(이하|미만|이상|초과)",
+            question,
+        )
+        if maturity_years:
+            days = int(maturity_years.group(1)) * 365
+            boundary = maturity_years.group(2)
+            if boundary == "이하":
+                add("remaining_days", [0, days], "between")
+            elif boundary == "미만":
+                add("remaining_days", [0, max(0, days - 1)], "between")
+            elif boundary == "이상":
+                add("remaining_days", days, "gte")
+            else:
+                add("remaining_days", days, "gt")
     if family == "overseas_etp":
         lookup_patterns = [
             (r"(?:종목코드|티커)\s*[:：]?\s*([A-Z0-9._-]+)(?:인|의|$|\s)", "ticker"),

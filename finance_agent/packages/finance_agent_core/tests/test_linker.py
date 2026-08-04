@@ -209,6 +209,16 @@ def test_bond_hints_lock_availability_remaining_days_and_yield_ranking() -> None
     assert hints["limit"] == 3
 
 
+def test_bond_plain_maturity_years_are_normalized_to_remaining_days() -> None:
+    hints = build_lexical_hints("만기가 1년 이하인 채권 찾아줘")
+
+    assert hints["product_family"] == "bond"
+    assert {
+        (item["field"], item["operator"], tuple(item["value"]))
+        for item in hints["required_constraints"]
+    } == {("remaining_days", "between", (0, 365))}
+
+
 def test_bond_ordered_credit_rating_is_blocked_without_guessing_scale() -> None:
     payload = first_vertical_slice_plan("wrong-family").model_dump(mode="json")
     linked = canonicalize_query_plan_payload(

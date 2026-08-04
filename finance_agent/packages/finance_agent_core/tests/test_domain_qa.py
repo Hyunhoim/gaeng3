@@ -150,8 +150,8 @@ def _mini_bundle(tmp_path: Path) -> tuple[DomainQASpec, Path, Path]:
     spec = DomainQASpec.model_validate(
         {
             "schema_version": "1.0",
-            "suite_id": "domain-qa-dev-v1.1-40",
-            "suite_version": "1.1",
+            "suite_id": "domain-qa-dev-v1.2-40",
+            "suite_version": "1.2",
             "status": "financial_domain_development_not_blind",
             "author_role": "financial_domain",
             "reviewer_role": "ai_engineering",
@@ -266,8 +266,8 @@ def test_domain_qa_spec_is_explicitly_development_not_blind() -> None:
     spec, digest = load_domain_qa_spec()
 
     assert spec.status == "financial_domain_development_not_blind"
-    assert spec.suite_id == "domain-qa-dev-v1.1-40"
-    assert spec.suite_version == "1.1"
+    assert spec.suite_id == "domain-qa-dev-v1.2-40"
+    assert spec.suite_version == "1.2"
     assert spec.case_count == 40
     assert len(digest) == 64
     assert spec.expected_counts.evaluation_path == {

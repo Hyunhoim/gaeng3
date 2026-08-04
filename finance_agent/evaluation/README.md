@@ -41,6 +41,7 @@ DB, 원천 XLSX, 전체 report, 모델 가중치는 계속 `artifacts/` 또는 �
 | [내부 red-team 전체 E2E](baselines/internal-red-team-v1.json) | 네 상품군 40문항의 Router→Qwen→Oracle→Verifier→Backend DTO와 공격 유형 회귀 |
 | [금융 도메인 QA 최초 관측](baselines/domain-qa-e2e-v1.json) | 금융 도메인 담당자 40문항의 route·safety·evidence·answer 단계별 최초 관측 |
 | [금융 도메인 QA SEARCH gold](baselines/domain-qa-e2e-v1.1-gold.json) | Q002 QueryPlan·Oracle 후보·상위 ID·evidence 지문 동결 후 Router 개선 전 관측 |
+| [금융 도메인 QA Router 회귀](baselines/domain-qa-e2e-v1.2-router.json) | Router·linker 안전 경계 개선 후 strict·route·safety·evidence·answer 40/40 |
 | [연결 전 라우팅 초기 진단 v1](baselines/pre-hcx-route-diagnostic-initial-v1.json) | AGGREGATE 미지원 시점의 Router 도입 전 search 강제 동작 4/28 |
 | [연결 전 라우팅 개선 진단 v1](baselines/pre-hcx-route-diagnostic-improved-v1.json) | AGGREGATE 미지원 시점의 네 상품군·일곱 intent 라우팅 28/28 |
 | [연결 전 라우팅 초기 진단 v2](baselines/pre-hcx-route-diagnostic-initial-v2.json) | 현재 AGGREGATE 기대값을 적용한 도입 전 replay 4/28 |
@@ -107,6 +108,12 @@ v1 최초 관측은 SEARCH gold pending 상태를 그대로 보존하고,
 `domain-qa-dev-v1.1-40`은 Q002의 잔존일수 0~365일 QueryPlan·Oracle·
 evidence 지문을 추가한다. 정답은 완성됐지만 Router 수정 전이므로
 strict 1/40·safety 32/40은 유지되며 E2 사후 회귀의 비교점이다.
+
+`domain-qa-dev-v1.2-40`은 만기 표현 정규화와 예측·정책·
+외부 시세·문서 dependency의 fail-closed Router 경계를 개선한 사후
+회귀다. strict·route·safety·evidence·answer를 40/40, control의
+잘못된 실행·오류를 0건으로 기록했다. 개선에 사용한 개발 세트이므로
+독립 blind·LLM 생성 품질·공식 평가 점수로 해석하지 않는다.
 
 라우팅 v1은 AGGREGATE 미지원, v2는 COMPARE가 공모펀드에만 열렸던 당시의
 봉인 이력이다. 현재 capability 정본은 원본을 수정하지 않고 별도
