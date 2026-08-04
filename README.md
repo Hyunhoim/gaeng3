@@ -6,8 +6,8 @@
 조회·비교·연산하고, 사용한 데이터 근거와 기준일을 함께 제공하는 금융상품
 AI Agent를 개발함
 
-현재 저장소는 검증 가능한 AI Agent Core를 먼저 구축한 상태이며,
-Next.js·FastAPI 애플리케이션 통합과 HyperCLOVA X 연결을 준비하고 있음
+현재 저장소는 검증 가능한 AI Agent Core와 이를 노출하는 FastAPI 백엔드 골격을
+구축한 상태이며, Ubuntu Docker 실행 검증과 HyperCLOVA X 실제 연결을 준비하고 있음
 
 ## 1. 목표
 
@@ -29,7 +29,7 @@ Next.js·FastAPI 애플리케이션 통합과 HyperCLOVA X 연결을 준비하�
 
 ## 2. 현재 구현 상태
 
-기준일: 2026-07-30
+기준일: 2026-08-04
 
 | 영역 | 상태 |
 | --- | --- |
@@ -41,7 +41,7 @@ Next.js·FastAPI 애플리케이션 통합과 HyperCLOVA X 연결을 준비하�
 | 근거 기반 답변 | 공모펀드 44개 grounded·6개 안전 차단, 폴백 0, 핵심 검증률 100% |
 | 로컬 LLM | 격리된 Qwen/vLLM 개발 테스트 완료, 평가·제출 사용 금지 |
 | HyperCLOVA X | 세 provider·fake transport·API 없는 전체 경로 8/8, 실제 HTTP 연결 대기 |
-| Web·API | 프레임워크 독립 `/answer` 오류 adapter 12/12, FastAPI route 통합 대기 |
+| Web·API | `/health`·`/answer`, Backend DTO 연결, Docker·Compose 구현, SSH 실행 검증 대기 |
 
 현재 AI Core 회귀 기준은 pytest 305개, Ruff lint·format과 문서 검사를 모두
 통과한 상태
@@ -50,7 +50,7 @@ Next.js·FastAPI 애플리케이션 통합과 HyperCLOVA X 연결을 준비하�
 
 ```mermaid
 flowchart LR
-    APP["Next.js · FastAPI<br/>통합 예정"] -. "/answer" .-> Q["사용자 자연어 질문"]
+    APP["FastAPI<br/>/answer"] --> Q["사용자 자연어 질문"]
     Q --> P["Lexical · Schema Linker<br/>Typed QueryPlan"]
     P --> C["Registry · Pydantic<br/>지원 범위 검증"]
     C --> O["상품군별 SQLite Oracle<br/>검색 · 비교 · 연산"]
@@ -77,6 +77,8 @@ flowchart LR
 
 ```text
 gaeng3/
+├── fastapi_backend/                 # FastAPI route·설정·HTTP 계약 테스트
+├── docker-compose.yml               # 백엔드와 읽기 전용 SQLite 연결
 ├── finance_agent/
 │   ├── packages/finance_agent_core/  # Agent Core Python package
 │   ├── evaluation/                   # 재현 가능한 평가 기준선
@@ -86,10 +88,11 @@ gaeng3/
 │   ├── environment.yml               # Conda 개발 환경
 │   └── README.md                     # AI 작업공간 상세 안내
 ├── CONTRIBUTING.md                   # 개발 협업·커밋·PR 규칙
+├── THIRD_PARTY_NOTICES.md             # 사용한 템플릿 출처와 라이선스
 └── README.md
 ```
 
-`finance_agent/`는 애플리케이션 템플릿과 독립적으로 개발하며, 향후 FastAPI가
+`finance_agent/`는 애플리케이션 영역과 독립적으로 개발하며, `fastapi_backend/`가
 `finance_agent_core`를 명시적인 요청·응답 계약으로 연결
 
 ## 5. AI Agent 개발 환경
@@ -121,6 +124,9 @@ conda run -n gaeng3-dev python -m ruff format --check .
 conda run -n gaeng3-dev python scripts/check-docs.py
 ```
 
+FastAPI 설치·테스트와 Docker 실행 방법은
+[백엔드 README](fastapi_backend/README.md)를 따름
+
 공식 원천 데이터, 생성된 SQLite DB, 평가 응답, 로그와 로컬 모델 가중치는
 Git에 포함하지 않음
 
@@ -142,14 +148,15 @@ Git에 포함하지 않음
 - 사람 rubric으로 공모펀드 답변의 명확성·중복·비교 용이성 평가
 - 공모펀드 true COMPARE intent의 생성·검증·폴백 평가
 - 다른 작성자가 만든 blind 평가 문항 추가
-- Next.js·FastAPI 애플리케이션 템플릿 통합
-- 확정된 Backend DTO·오류 adapter를 Next.js·FastAPI shell에 연결
-- HyperCLOVA X 실제 HTTP transport와 FastAPI `/answer` route 연결
+- Ubuntu SSH 서버에서 FastAPI Docker build·health·`/answer` smoke test
+- HyperCLOVA X 실제 HTTP transport를 FastAPI `/answer` 경로에 연결
+- 필요 시 Next.js 시연 화면을 Backend DTO와 연결
 - 허용 범위를 확인한 외부 비정형 금융 데이터와 문서 RAG 검토
 
 ## 9. 문서
 
 - [개발 협업 가이드](CONTRIBUTING.md)
+- [FastAPI 백엔드와 Docker 실행](fastapi_backend/README.md)
 - [AI Agent 작업공간](finance_agent/README.md)
 - [프로젝트 문서 인덱스](finance_agent/docs/project-index.md)
 - [데이터 감사 기준](finance_agent/docs/data-audit.md)

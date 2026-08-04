@@ -158,8 +158,15 @@ conda run -n gaeng3-dev python -m ruff format --check .
 conda run -n gaeng3-dev python scripts/check-docs.py
 ```
 
-Frontend와 Backend 검사 명령은 애플리케이션 템플릿이 통합된 후 해당
-`README`와 패키지 스크립트를 기준으로 추가
+Backend 변경은 저장소 루트에서 다음 검사를 추가로 실행
+
+```bash
+python -m pytest fastapi_backend/tests
+docker compose --env-file fastapi_backend/.env config --quiet
+```
+
+Docker가 없는 환경에서는 Compose 검증을 실행하지 못한 사실을 PR에 명시하고,
+Ubuntu 서버에서 build·health·`/answer` smoke test를 수행
 
 ## 7. Pull Request 작성
 
