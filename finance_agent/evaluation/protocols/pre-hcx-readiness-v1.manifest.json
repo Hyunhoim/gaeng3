@@ -3,9 +3,9 @@
   "baseline_id": "pre-hcx-readiness-v1",
   "recorded_on": "2026-08-01",
   "status": "internal_ready_external_gates_pending",
-  "git_commit": "397a1763518540f1518821957a54f79fe1c9f840",
-  "last_committed_source_commit": "397a1763518540f1518821957a54f79fe1c9f840",
-  "generated_from_dirty_worktree": true,
+  "git_commit": "199d8ecdeed98703df77efb27d7405799d3095f6",
+  "last_committed_source_commit": "199d8ecdeed98703df77efb27d7405799d3095f6",
+  "generated_from_dirty_worktree": false,
   "hash_algorithm": "sha256(sorted(relative_path + NUL + file_sha256 + LF))",
   "file_count": 248,
   "tree_sha256": "632b84610fa5cf1747d13b16ca3a856f679a2f21386428409a70712f36f313fa",
@@ -54,8 +54,8 @@
     "FastAPI /answer route와 주최 측 실행 환경 통합"
   ],
   "limitations": [
-    "git_commit은 현재 미커밋 readiness tree의 직전 커밋을 가리킴",
-    "source tree hash는 readiness manifest 자체를 제외한 현재 미커밋 파일 상태와 일치함",
+    "git_commit은 readiness manifest 자체를 제외한 source tree가 동결된 커밋을 가리킴",
+    "source tree hash는 git_commit의 readiness 포함 범위와 일치함",
     "로컬 Qwen과 공개 회귀 결과는 HyperCLOVA X 공식 성능이 아님",
     "external gate 완료 전 최종 일반화 성능 또는 제출 준비 완료를 주장하지 않음"
   ]
