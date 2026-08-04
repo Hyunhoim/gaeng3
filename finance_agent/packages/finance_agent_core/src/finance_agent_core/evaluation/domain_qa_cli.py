@@ -15,6 +15,7 @@ from finance_agent_core.evaluation.domain_qa import (
     DomainQASuite,
     load_domain_qa_suite,
     verify_domain_qa_databases,
+    verify_domain_qa_search_gold,
 )
 from finance_agent_core.storage import ProductIdentitySnapshotCache, RecordSnapshotCache
 
@@ -61,6 +62,7 @@ def _run(args: argparse.Namespace) -> int:
     loaded = load_domain_qa_suite(args.questions_csv, args.review_csv)
     database_paths = _database_paths(args.database_dir)
     database_hashes = verify_domain_qa_databases(loaded.spec, database_paths)
+    verify_domain_qa_search_gold(loaded.suite, database_paths)
     service = RoutedFinanceAgent(
         database_paths,
         allow_internal_disabled_dataset=True,
@@ -90,6 +92,7 @@ def _run(args: argparse.Namespace) -> int:
                 "safety_pass_rate": report.summary.safety_pass_rate,
                 "dependency_pending": report.summary.dependency_pending,
                 "oracle_gold_pending": report.summary.oracle_gold_pending,
+                "search_gold_complete": report.summary.search_gold_complete,
                 "perfect": report.summary.perfect,
             },
             ensure_ascii=False,

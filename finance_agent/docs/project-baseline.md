@@ -149,7 +149,11 @@
   strict 1/40, safety·evidence 32/40이며, 지원하지 않아야 할 문항 7건의 실행과
   오류 1건을 수정 전 baseline으로 보존했다. 이는 독립 blind나 LLM 성능이 아니라
   자연어 경계의 개선 출발점이다.
-- 전체 코드 회귀는 pytest 330개, Ruff lint·format, pip dependency check와
+- 같은 개발 QA의 Q002는 2026-07-11 기준 채권 잔존일수 0~365일,
+  기본 5건으로 해석한 gold QueryPlan·Oracle 후보 9,164건·상위 ID·
+  evidence 지문을 v1.1에서 동결했다. 현재 Router가 상품군을 확정하지
+  못하는 간극은 E2 개선 대상이다.
+- 전체 코드 회귀는 pytest 331개, Ruff lint·format, pip dependency check와
   wheel 빌드를 통과했다.
 
 ## 3. 변경할 수 없는 공식 제약

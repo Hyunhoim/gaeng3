@@ -35,7 +35,7 @@ PRODUCT_COMPARE_SUITE = (
 
 LINK_PATTERN = re.compile(r"!?\[[^\]]*]\((?:<(?P<angle>[^>]+)>|(?P<plain>[^)\s]+))\)")
 SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
-FROZEN_PYTEST_PASSED = 330
+FROZEN_PYTEST_PASSED = 331
 
 REQUIRED_INDEX_TARGETS = {
     "project-baseline.md",
@@ -93,6 +93,7 @@ REQUIRED_BASELINES = {
     "pre-hcx-route-diagnostic-initial-v3.json",
     "pre-hcx-route-diagnostic-improved-v3.json",
     "domain-qa-e2e-v1.json",
+    "domain-qa-e2e-v1.1-gold.json",
 }
 REQUIRED_BASELINE_KEYS = {
     "schema_version",
@@ -379,6 +380,7 @@ def _check_baseline(path: Path) -> list[str]:
         "holdout_first_run_observed",
         "diagnostic_initial_observed",
         "domain_qa_initial_observed",
+        "domain_qa_gold_observed",
     }:
         if (
             not isinstance(total, int)

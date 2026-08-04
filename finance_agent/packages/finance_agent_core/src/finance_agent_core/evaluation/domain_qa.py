@@ -8,6 +8,7 @@ import re
 import time
 from collections import Counter
 from collections.abc import Mapping, Sequence
+from datetime import date
 from enum import StrEnum
 from importlib.resources import files
 from pathlib import Path
@@ -22,10 +23,15 @@ from finance_agent_core.contracts.backend import (
     BackendAnswerMode,
     BackendStatus,
 )
-from finance_agent_core.contracts.queryplan import ProductFamily
+from finance_agent_core.contracts.queryplan import Intent as QueryPlanIntent
+from finance_agent_core.contracts.queryplan import ProductFamily, QueryPlan
 from finance_agent_core.contracts.routing import InteractionIntent
+from finance_agent_core.execution import ResultVerifier, SQLiteOracle, build_product_evidence
+from finance_agent_core.execution.verifier_projection import (
+    load_projected_verifier_records,
+)
 
-DOMAIN_QA_SPEC_RESOURCE = "domain_qa_dev_v1.json"
+DOMAIN_QA_SPEC_RESOURCE = "domain_qa_dev_v1_1.json"
 _QUESTION_HEADERS = {
     "번호",
     "상품군",
@@ -94,11 +100,43 @@ class DomainQAGoldLevel(StrEnum):
     ROUTE_ONLY = "route_only"
     ORACLE_PENDING = "oracle_pending"
     DEPENDENCY_PENDING = "dependency_pending"
+    QUERY_PLAN_ORACLE_EVIDENCE = "query_plan_oracle_evidence"
 
 
 class DomainQADataReference(DomainQAModel):
     database_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     manifest_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
+class DomainQASearchGold(DomainQAModel):
+    query_plan: QueryPlan
+    query_plan_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    candidate_count: int = Field(ge=0)
+    top_product_ids: list[str] = Field(max_length=100)
+    evidence_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    evidence_field_count: int = Field(ge=0)
+    as_of_dates: list[date]
+
+    @model_validator(mode="after")
+    def validate_search_gold(self) -> DomainQASearchGold:
+        if self.query_plan.intent is not QueryPlanIntent.SEARCH:
+            raise ValueError("domain QA search gold requires a search QueryPlan")
+        if len(self.query_plan.product_families) != 1:
+            raise ValueError("domain QA search gold requires one product family")
+        if self.query_plan.ambiguities or self.query_plan.unsupported_conditions:
+            raise ValueError("domain QA search gold must be executable")
+        if len(self.top_product_ids) > self.query_plan.limit:
+            raise ValueError("gold top products cannot exceed QueryPlan limit")
+        if len(self.top_product_ids) > self.candidate_count:
+            raise ValueError("gold top products cannot exceed candidate count")
+        if len(self.top_product_ids) != len(set(self.top_product_ids)):
+            raise ValueError("gold top products must be unique")
+        if self.as_of_dates != sorted(set(self.as_of_dates)):
+            raise ValueError("gold as_of_dates must be unique and ordered")
+        payload = self.query_plan.model_dump(mode="json")
+        if self.query_plan_sha256 != _canonical_sha256(payload):
+            raise ValueError("gold QueryPlan SHA-256 differs from its payload")
+        return self
 
 
 class DomainQACountContract(DomainQAModel):
@@ -112,8 +150,8 @@ class DomainQACountContract(DomainQAModel):
 
 class DomainQASpec(DomainQAModel):
     schema_version: Literal["1.0"]
-    suite_id: Literal["domain-qa-dev-v1-40"]
-    suite_version: Literal["1.0"]
+    suite_id: Literal["domain-qa-dev-v1.1-40"]
+    suite_version: Literal["1.1"]
     status: Literal["financial_domain_development_not_blind"]
     author_role: Literal["financial_domain"]
     reviewer_role: Literal["ai_engineering"]
@@ -122,6 +160,7 @@ class DomainQASpec(DomainQAModel):
     case_count: int = Field(gt=0)
     expected_counts: DomainQACountContract
     family_overrides: dict[str, list[ProductFamily] | None]
+    search_gold: dict[str, DomainQASearchGold]
     data: dict[ProductFamily, DomainQADataReference]
 
     @model_validator(mode="after")
@@ -133,6 +172,18 @@ class DomainQASpec(DomainQAModel):
         ]
         if invalid_overrides:
             raise ValueError(f"invalid family override IDs: {invalid_overrides}")
+        expected_search_count = self.expected_counts.evaluation_path.get("SEARCH", 0)
+        if len(self.search_gold) != expected_search_count:
+            raise ValueError("every SEARCH path requires exactly one gold contract")
+        invalid_gold_ids = [
+            case_id for case_id in self.search_gold if re.fullmatch(r"Q\d{3}", case_id) is None
+        ]
+        if invalid_gold_ids:
+            raise ValueError(f"invalid search gold IDs: {invalid_gold_ids}")
+        if any(
+            gold.query_plan.question_id != case_id for case_id, gold in self.search_gold.items()
+        ):
+            raise ValueError("search gold QueryPlan question_id must match its case ID")
         return self
 
 
@@ -158,6 +209,7 @@ class DomainQACase(DomainQAModel):
     expected_product_families: list[ProductFamily] | None
     require_control: bool
     gold_level: DomainQAGoldLevel
+    search_gold: DomainQASearchGold | None = None
 
     @model_validator(mode="after")
     def validate_behavioral_contract(self) -> DomainQACase:
@@ -175,6 +227,16 @@ class DomainQACase(DomainQAModel):
             raise ValueError("executable cases require success or not_found")
         if self.gold_level is DomainQAGoldLevel.DEPENDENCY_PENDING and not self.require_control:
             raise ValueError("dependency-pending cases must remain control-only")
+        if self.evaluation_path is DomainQAEvaluationPath.SEARCH:
+            if self.search_gold is None:
+                raise ValueError("SEARCH cases require QueryPlan·Oracle·evidence gold")
+            if self.gold_level is not DomainQAGoldLevel.QUERY_PLAN_ORACLE_EVIDENCE:
+                raise ValueError("SEARCH cases require complete gold level")
+            expected_families = self.expected_product_families
+            if expected_families != self.search_gold.query_plan.product_families:
+                raise ValueError("SEARCH gold family differs from expected route family")
+        elif self.search_gold is not None:
+            raise ValueError("non-SEARCH cases cannot contain search gold")
         return self
 
 
@@ -226,6 +288,7 @@ class DomainQACaseResult(DomainQAModel):
     citation_count: int = Field(ge=0)
     latency_ms: float = Field(ge=0)
     plan_sha256: str | None
+    evidence_sha256: str | None
     checks: dict[str, bool]
     violations: list[str]
     route_passed: bool
@@ -249,6 +312,7 @@ class DomainQASummary(DomainQAModel):
     answer_pass_rate: float
     dependency_pending: int
     oracle_gold_pending: int
+    search_gold_complete: int
     actual_status_counts: dict[str, int]
     test_type_counts: dict[str, int]
     by_evaluation_path: dict[str, dict[str, int | float]]
@@ -342,7 +406,7 @@ def _path_contract(
             [InteractionIntent.SEARCH],
             [BackendStatus.SUCCESS, BackendStatus.NOT_FOUND],
             False,
-            DomainQAGoldLevel.ORACLE_PENDING,
+            DomainQAGoldLevel.QUERY_PLAN_ORACLE_EVIDENCE,
             "structured_search",
         ),
         DomainQAEvaluationPath.CLARIFY: (
@@ -467,6 +531,7 @@ def build_domain_qa_suite(
                 ),
                 require_control=require_control,
                 gold_level=gold_level,
+                search_gold=spec.search_gold.get(source["번호"]),
             )
         )
 
@@ -552,6 +617,44 @@ def verify_domain_qa_databases(
     return observed
 
 
+def verify_domain_qa_search_gold(
+    suite: DomainQASuite,
+    database_paths: Mapping[ProductFamily | str, str | Path],
+) -> dict[str, str]:
+    normalized = {ProductFamily(family): Path(path) for family, path in database_paths.items()}
+    observed: dict[str, str] = {}
+    for case in suite.cases:
+        gold = case.search_gold
+        if gold is None:
+            continue
+        family = gold.query_plan.product_families[0]
+        try:
+            database_path = normalized[family]
+        except KeyError as error:
+            raise ValueError(f"{case.id}: gold database is not configured") from error
+        executed = SQLiteOracle(database_path).execute(gold.query_plan)
+        universe = load_projected_verifier_records(database_path, gold.query_plan)
+        verified = ResultVerifier().verify(gold.query_plan, executed, universe)
+        evidence = build_product_evidence(gold.query_plan, verified)
+        top_product_ids = [record.product_id for record in verified.records]
+        evidence_payload = [item.model_dump(mode="json") for item in evidence]
+        evidence_sha256 = _canonical_sha256(evidence_payload)
+        evidence_field_count = sum(len(item.fields) for item in evidence)
+        as_of_dates = sorted({field.as_of for item in evidence for field in item.fields})
+        mismatches = {
+            "candidate_count": verified.candidate_count != gold.candidate_count,
+            "top_product_ids": top_product_ids != gold.top_product_ids,
+            "evidence_sha256": evidence_sha256 != gold.evidence_sha256,
+            "evidence_field_count": evidence_field_count != gold.evidence_field_count,
+            "as_of_dates": as_of_dates != gold.as_of_dates,
+        }
+        failed = [name for name, differs in mismatches.items() if differs]
+        if failed:
+            raise ValueError(f"{case.id}: search gold differs for {failed}")
+        observed[case.id] = evidence_sha256
+    return observed
+
+
 def _evidence_count(response: BackendAgentResponse) -> int:
     return (
         len(response.products)
@@ -601,6 +704,23 @@ def evaluate_domain_qa_case(
         execution_evidence = False
 
     answer_casefold = response.answer.casefold()
+    plan_payload = (
+        None if response.query_plan is None else response.query_plan.model_dump(mode="json")
+    )
+    plan_sha256 = None if plan_payload is None else _canonical_sha256(plan_payload)
+    evidence_payload = [item.model_dump(mode="json") for item in response.products]
+    evidence_sha256 = None if not evidence_payload else _canonical_sha256(evidence_payload)
+    gold = case.search_gold
+    gold_plan_exact = gold is None or plan_sha256 == gold.query_plan_sha256
+    gold_candidate_exact = gold is None or response.candidate_count == gold.candidate_count
+    gold_top_products_exact = (
+        gold is None or [item.product_id for item in response.products] == gold.top_product_ids
+    )
+    gold_evidence_exact = gold is None or (
+        evidence_sha256 == gold.evidence_sha256
+        and sum(len(item.fields) for item in response.products) == gold.evidence_field_count
+        and sorted(response.as_of_dates) == gold.as_of_dates
+    )
     checks = {
         "transport.http_status_200": adapter.http_status_code == 200,
         "route.backend_status_allowed": response.status in case.allowed_backend_statuses,
@@ -609,14 +729,18 @@ def evaluate_domain_qa_case(
         "plan.execution_boundary": (
             control_boundary if case.require_control else execution_evidence
         ),
+        "plan.gold_query_plan_exact": gold_plan_exact,
         "retrieval.evidence_shape_valid": (
             evidence_count == 0 if case.require_control else execution_evidence
         ),
+        "retrieval.gold_candidate_count_exact": gold_candidate_exact,
+        "retrieval.gold_top_product_ids_exact": gold_top_products_exact,
         "evidence.citations_and_dates_valid": (
             not response.citations and not response.as_of_dates
             if case.require_control
             else execution_evidence
         ),
+        "evidence.gold_fingerprint_exact": gold_evidence_exact,
         "answer.forbidden_fragments_absent": not any(
             fragment.casefold() in answer_casefold
             for fragment in _GLOBAL_FORBIDDEN_ANSWER_FRAGMENTS
@@ -637,11 +761,6 @@ def evaluate_domain_qa_case(
     safety_passed = stage(("transport.", "safety.", "contract."))
     evidence_passed = stage(("plan.", "retrieval.", "evidence."))
     answer_passed = stage(("answer.",))
-    plan_sha256 = (
-        None
-        if response.query_plan is None
-        else _canonical_sha256(response.query_plan.model_dump(mode="json"))
-    )
     return DomainQACaseResult(
         id=case.id,
         source_product_group=case.source_product_group,
@@ -664,6 +783,7 @@ def evaluate_domain_qa_case(
         citation_count=len(response.citations),
         latency_ms=latency_ms,
         plan_sha256=plan_sha256,
+        evidence_sha256=evidence_sha256,
         checks=checks,
         violations=violations,
         route_passed=route_passed,
@@ -753,6 +873,7 @@ def build_domain_qa_report(
         oracle_gold_pending=sum(
             case.gold_level is DomainQAGoldLevel.ORACLE_PENDING for case in cases
         ),
+        search_gold_complete=sum(case.search_gold is not None for case in cases),
         actual_status_counts=dict(
             sorted(Counter(result.actual_backend_status.value for result in results).items())
         ),
@@ -788,8 +909,8 @@ def build_domain_qa_report(
             "금융 도메인 담당자가 작성하고 AI 담당자가 검토한 개발 세트이며 독립 blind가 아니다.",
             "현재 40문항은 CheckList minimum-functionality test이며 invariance와 "
             "directional-expectation 증강은 아직 없다.",
-            "SEARCH 한 문항의 gold QueryPlan·Oracle denotation은 아직 확정되지 않아 "
-            "정확한 상품 집합과 순위를 채점하지 않는다.",
+            "SEARCH 한 문항은 gold QueryPlan·Oracle 후보 수·상위 상품·field evidence "
+            "fingerprint를 실제 고정 DB에서 검증한다.",
             "문서 RAG·외부 정책·외부 데이터 13문항은 승인된 dependency가 없어 "
             "현재는 안전한 control 경계만 평가한다.",
             "이번 최초 관측은 Router와 Backend 경로의 공백을 측정하며 발견된 실패를 "

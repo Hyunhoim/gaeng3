@@ -31,7 +31,7 @@ Next.js·FastAPI 애플리케이션 통합과 HyperCLOVA X 연결을 준비하�
 
 ## 2. 현재 구현 상태
 
-기준일: 2026-07-31
+기준일: 2026-08-01
 
 | 영역 | 상태 |
 | --- | --- |
@@ -46,9 +46,9 @@ Next.js·FastAPI 애플리케이션 통합과 HyperCLOVA X 연결을 준비하�
 | HyperCLOVA X | 세 provider·fake transport·API 없는 전체 경로 8/8, 실제 HTTP 연결 대기 |
 | Web·API | 프레임워크 독립 `/answer` 오류 adapter 12/12, FastAPI route 통합 대기 |
 | 내부 red-team | 네 상품군 40문항, 수정 후 strict·safety·evidence 40/40 |
-| 금융 도메인 QA 실험 | 담당자 작성 40문항 최초 strict 1/40·safety 32/40을 개선 전 baseline으로 보존 |
+| 금융 도메인 QA 실험 | 담당자 작성 40문항, Q002 SEARCH gold 완성, strict 1/40·safety 32/40은 Router 개선 전 baseline으로 보존 |
 
-현재 AI Core 회귀 기준은 pytest 330개, Ruff lint·format과 문서 검사를 모두
+현재 AI Core 회귀 기준은 pytest 331개, Ruff lint·format과 문서 검사를 모두
 통과한 상태
 
 ## 3. 아키텍처

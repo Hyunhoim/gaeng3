@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import csv
+import hashlib
+import json
 from pathlib import Path
 
 import pytest
@@ -56,6 +58,16 @@ def _write_csv(path: Path, headers: list[str], rows: list[dict[str, str]]) -> No
         writer = csv.DictWriter(handle, fieldnames=headers)
         writer.writeheader()
         writer.writerows(rows)
+
+
+def _canonical_sha256(payload: object) -> str:
+    encoded = json.dumps(
+        payload,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode()
+    return hashlib.sha256(encoded).hexdigest()
 
 
 def _mini_bundle(tmp_path: Path) -> tuple[DomainQASpec, Path, Path]:
@@ -116,11 +128,30 @@ def _mini_bundle(tmp_path: Path) -> tuple[DomainQASpec, Path, Path]:
         }
         for index, family in enumerate(ProductFamily, start=1)
     }
+    search_plan = QueryPlan(
+        schema_version="1.0",
+        question_id="Q001",
+        intent=Intent.SEARCH,
+        product_families=[ProductFamily.BOND],
+        constraints=[],
+        ranking=[],
+        projection=SEARCH_PROJECTION_BY_FAMILY["bond"],
+        limit=5,
+        intent_payload=IntentPayload(
+            comparison_fields=[],
+            group_by=[],
+            aggregations=[],
+            explain_product_ids=[],
+        ),
+        ambiguities=[],
+        unsupported_conditions=[],
+    )
+    search_plan_payload = search_plan.model_dump(mode="json")
     spec = DomainQASpec.model_validate(
         {
             "schema_version": "1.0",
-            "suite_id": "domain-qa-dev-v1-40",
-            "suite_version": "1.0",
+            "suite_id": "domain-qa-dev-v1.1-40",
+            "suite_version": "1.1",
             "status": "financial_domain_development_not_blind",
             "author_role": "financial_domain",
             "reviewer_role": "ai_engineering",
@@ -139,6 +170,17 @@ def _mini_bundle(tmp_path: Path) -> tuple[DomainQASpec, Path, Path]:
                 "severity": {"낮음": 2},
             },
             "family_overrides": {},
+            "search_gold": {
+                "Q001": {
+                    "query_plan": search_plan_payload,
+                    "query_plan_sha256": _canonical_sha256(search_plan_payload),
+                    "candidate_count": 0,
+                    "top_product_ids": [],
+                    "evidence_sha256": "a" * 64,
+                    "evidence_field_count": 0,
+                    "as_of_dates": [],
+                }
+            },
             "data": data,
         }
     )
@@ -224,6 +266,8 @@ def test_domain_qa_spec_is_explicitly_development_not_blind() -> None:
     spec, digest = load_domain_qa_spec()
 
     assert spec.status == "financial_domain_development_not_blind"
+    assert spec.suite_id == "domain-qa-dev-v1.1-40"
+    assert spec.suite_version == "1.1"
     assert spec.case_count == 40
     assert len(digest) == 64
     assert spec.expected_counts.evaluation_path == {
@@ -242,7 +286,8 @@ def test_domain_qa_csv_bundle_builds_behavioral_contract(tmp_path: Path) -> None
     suite = build_domain_qa_suite(spec, questions, reviews)
 
     assert len(suite.cases) == 2
-    assert suite.cases[0].gold_level.value == "oracle_pending"
+    assert suite.cases[0].gold_level.value == "query_plan_oracle_evidence"
+    assert suite.cases[0].search_gold is not None
     assert suite.cases[1].require_control
     assert suite.cases[1].expected_interaction_intents == [InteractionIntent.CLARIFY]
 
@@ -256,6 +301,17 @@ def test_domain_qa_csv_bundle_rejects_source_mutation(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="source question CSV SHA-256 differs"):
         build_domain_qa_suite(spec, questions, reviews)
+
+
+def test_domain_qa_spec_rejects_search_gold_plan_hash_mismatch(
+    tmp_path: Path,
+) -> None:
+    spec, _, _ = _mini_bundle(tmp_path)
+    payload = spec.model_dump(mode="json")
+    payload["search_gold"]["Q001"]["query_plan_sha256"] = "f" * 64
+
+    with pytest.raises(ValueError, match="gold QueryPlan SHA-256 differs"):
+        DomainQASpec.model_validate(payload)
 
 
 def test_domain_qa_case_scores_safe_control_and_unsafe_execution(

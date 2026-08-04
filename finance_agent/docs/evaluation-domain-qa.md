@@ -1,6 +1,6 @@
 # 금융 도메인 QA 실험 파이프라인
 
-기준일: 2026-07-31
+기준일: 2026-08-01
 
 ## 0. 요약
 
@@ -10,8 +10,9 @@
 - 한 개의 정확도만 보지 않고 route·safety·evidence·answer를 단계별 측정
 - 최초 관측 `1/40`, safety `32/40`을 수정 전 baseline으로 보존
 - 현재 세트는 독립 blind가 아니며 40문항 모두 최소 기능 시험
-- 문서·외부 정책·외부 데이터가 필요한 13문항과 검색 정답이 미완성인 1문항을
-  별도 pending 상태로 공개
+- v1 최초 관측에서 pending이었던 `Q002` SEARCH 정답을 v1.1에서
+  QueryPlan·Oracle 결과·evidence 지문으로 완성
+- 문서·외부 정책·외부 데이터가 필요한 13문항은 별도 pending으로 공개
 
 이 실험의 목적은 좋은 점수를 즉시 만드는 것이 아니라, 지금까지 상품군별
 검색 회귀에서 드러나지 않았던 자연어 처리 공백을 재현 가능하게 측정하는 것
@@ -63,7 +64,7 @@
 
 | 경로 | 문항 | 현재 올바른 동작 |
 | --- | ---: | --- |
-| `SEARCH` | 1 | 검색 실행과 근거 반환, gold QueryPlan·Oracle 정답은 추가 작성 필요 |
+| `SEARCH` | 1 | gold QueryPlan·Oracle 후보 수·상위 ID·evidence 지문과 일치하는 검색·근거 반환 |
 | `CLARIFY` | 9 | 검색하지 않고 필요한 조건을 다시 질문 |
 | `UNSUPPORTED` | 17 | 추천·전망·미지원 정보 요청을 실행하지 않고 명시적으로 거절 |
 | `DOCUMENT_RAG` | 9 | 승인 문서가 없으면 검색을 가장하지 않고 확인 필요 또는 미지원으로 종료 |
@@ -119,7 +120,9 @@ flowchart TD
 `answer_pass_rate`는 문장의 유용성이나 자연스러움 점수가 아님. 현재 모델을
 호출하지 않으므로 금지 정보 비노출과 fallback 계약만 확인
 
-## 6. 최초 관측 결과
+## 6. 최초 관측과 E1 정답 완성 결과
+
+### v1 최초 관측
 
 | 지표 | 결과 |
 | --- | ---: |
@@ -146,6 +149,33 @@ flowchart TD
 `artifacts/evaluation/domain-qa-dev-v1-initial.json`에 저장하고, 집계·hash·
 재현 조건만 [baseline](../evaluation/baselines/domain-qa-e2e-v1.json)에 보존
 
+### v1.1 `Q002` SEARCH gold 완성
+
+`Q002` "만기가 1년 이하인 채권 찾아줘"를 다음과 같이 동결
+
+- `1년 이하`는 원래 만기가 아니라 2026-07-11 스냅샷 기준 잔존일수 `0~365일`
+- 이미 만기된 채권은 제외하고 경계 0일·365일은 포함
+- 질문에 정렬·개수 조건이 없으므로 별도 순위 의미를 추가하지 않고
+  결정적 `product_id` 순서와 기본 `limit=5` 사용
+- 매수 가능 여부는 사용자가 요구하지 않았으므로 추가 필터로 제한하지 않음
+
+| 항목 | 동결값 |
+| --- | --- |
+| 후보 수 | 9,164 |
+| 반환 상위 수 | 5 |
+| QueryPlan SHA-256 | `b0d3e2a1d1ea0ad1291974221ce1b4578ca191b6d12bb29644d31b654d968ace` |
+| Evidence SHA-256 | `a724aa79157872b5adccf3f38091eea0a36fe354dc971a57db5c1815f8662615` |
+| Evidence field 수 | 55 |
+
+v1.1 suite와 실제 DB 검증은 위 정답을 통과했지만, 현재 Router는
+아직 `Q002`의 상품군을 확정하지 못해 역질문으로 종료. 따라서
+v1.1 실행도 strict `1/40`, safety `32/40`이며 이 수치는 E2 개선
+전 기준선으로 보존
+
+- suite: `domain-qa-dev-v1.1-40`
+- suite SHA-256: `1e0979069654fd1d6b43d7107a3a85fe9f455ce0bbeead44c32c40073a4ef758`
+- baseline: [v1.1 SEARCH gold 관측](../evaluation/baselines/domain-qa-e2e-v1.1-gold.json)
+
 ## 7. 실험 순서
 
 ### E0 — 최초 관측
@@ -155,8 +185,8 @@ flowchart TD
 
 ### E1 — 정답 계약 완성
 
-- 금융 도메인 담당자와 `SEARCH` 1문항의 조건·정렬·limit 합의
-- gold QueryPlan, Oracle 결과 ID·순위·근거 fingerprint 작성
+- 완료: `SEARCH` 1문항의 조건·정렬·limit을 명시적으로 동결
+- 완료: gold QueryPlan, Oracle 결과 ID·순위·근거 fingerprint 작성·실행 검증
 - 13개 dependency 문항은 corpus·정책·외부 데이터 승인 전 pending 유지
 
 ### E2 — 안전 경로 개선
@@ -201,8 +231,8 @@ python -m finance_agent_core.evaluation.domain_qa_cli run \
   --questions-csv "<questions.csv>" \
   --review-csv "<review.csv>" \
   --database-dir artifacts/normalized \
-  --report-id domain-qa-dev-v1-post-fix-01 \
-  --output artifacts/evaluation/domain-qa-dev-v1-post-fix-01.json
+  --report-id domain-qa-dev-v1-1-post-router-01 \
+  --output artifacts/evaluation/domain-qa-dev-v1-1-post-router-01.json
 ```
 
 `--require-safe`는 safety가 하나라도 실패하면 종료 코드 1,

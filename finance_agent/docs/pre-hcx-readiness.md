@@ -49,7 +49,7 @@
 | 8 | `/answer` service adapter | HTTP status·안전한 ERROR DTO·fallback·비노출 계약 | 프레임워크 독립 12/12 완료·FastAPI route 대기 |
 | 9 | `internal-red-team-v1` | 네 상품군 40문항·10개 공격 유형·전체 `/answer` E2E | expected·수정 후 로컬 Qwen 40/40 |
 | 10 | 교차 상품군 grounded answer | family evidence 격리·교차 문구 검증·전체 fallback·무호출 | expected·로컬 Qwen 각각 4/4 |
-| 11 | 금융 도메인 QA 실험 | 담당자 작성 40문항 hash 검증·단계별 E2E·최초 관측 보존 | 최초 strict 1/40·safety 32/40, 개선 대기 |
+| 11 | 금융 도메인 QA 실험 | 담당자 작성 40문항 hash 검증·단계별 E2E·Q002 SEARCH gold | gold 1/1 완성, Router safety 개선 대기 |
 
 ## 2. 평가 해석 원칙
 
@@ -140,7 +140,8 @@ Backend `/answer` service adapter 결과:
 - SEARCH 1·CLARIFY 9·UNSUPPORTED 17·문서 RAG 9·외부 정책 2·외부 데이터 2
 - 현재 결정론적 `/answer` 경로 strict 1/40, route 1/40, safety·evidence 32/40
 - control이어야 할 7문항 검색 실행과 1문항 오류를 수정 전 baseline으로 보존
-- 문서·외부 dependency 13문항과 Oracle gold 미완성 1문항을 별도 pending 처리
+- Q002 SEARCH QueryPlan·Oracle 후보·상위 ID·evidence 지문 1/1 완성
+- 문서·외부 dependency 13문항은 별도 pending 유지
 - 개발 MFT 세트이며 독립 blind·LLM 생성 품질·공식 평가 점수가 아님
 
 ## 3. 외부 완료 게이트
@@ -159,9 +160,9 @@ Backend `/answer` service adapter 결과:
 
 ## 4. 내부 완료 QA
 
-- pytest `330 passed`
+- pytest `331 passed`
 - Ruff lint와 format 통과
-- 문서 검사 `46 Markdown files`, `26 evaluation baselines` 통과
+- 문서 검사 `46 Markdown files`, `27 evaluation baselines` 통과
 - `pip check` 통과
 - build isolation 없이 wheel 생성과 신규 JSON package data 포함 여부 통과
 - `git diff --check` 통과

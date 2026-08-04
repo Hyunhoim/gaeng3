@@ -58,6 +58,7 @@ from finance_agent_core.evaluation.domain_qa import (
     DomainQAGoldLevel,
     DomainQAReport,
     DomainQARunner,
+    DomainQASearchGold,
     DomainQASpec,
     DomainQASuite,
     DomainQASummary,
@@ -68,6 +69,7 @@ from finance_agent_core.evaluation.domain_qa import (
     load_domain_qa_spec,
     load_domain_qa_suite,
     verify_domain_qa_databases,
+    verify_domain_qa_search_gold,
 )
 from finance_agent_core.evaluation.models import (
     CANONICAL_SEARCH_PROJECTION,
@@ -140,6 +142,7 @@ __all__ = [
     "DomainQAGoldLevel",
     "DomainQAReport",
     "DomainQARunner",
+    "DomainQASearchGold",
     "DomainQASpec",
     "DomainQASuite",
     "DomainQASummary",
@@ -223,6 +226,7 @@ __all__ = [
     "run_cross_family_answer_suite",
     "verify_red_team_databases",
     "verify_domain_qa_databases",
+    "verify_domain_qa_search_gold",
     "InstrumentedAnswerProvider",
     "InstrumentedQueryPlanProvider",
     "InternalRedTeamRunner",

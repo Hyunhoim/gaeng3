@@ -22,7 +22,7 @@
 | 팀 통합 계약 | 프레임워크 독립 Backend DTO·HTTP 오류 adapter 12/12, JSON Schema/예시, 사람 평가 rubric v1 |
 | HyperCLOVA X | 세 provider 계약·fake transport·SEARCH 전체 경로 E2E 8/8 완료, 실제 HTTP 연결 대기 |
 | 내부 red-team E2E | 네 상품군 40문항, 최초 로컬 Qwen 36/40·안전 차단 100%, `3건` handoff 수정 후 40/40·fallback 0 |
-| 금융 도메인 QA 실험 | 담당자 작성 40문항 hash 검증·단계별 채점, 최초 strict 1/40·safety 32/40을 개선 전 baseline으로 보존 |
+| 금융 도메인 QA 실험 | 담당자 작성 40문항, Q002 QueryPlan·Oracle·evidence gold 완성, strict 1/40·safety 32/40은 Router 개선 전 baseline으로 보존 |
 
 로컬 Qwen은 개발 전용 테스트 대역이다. 평가·제출 경로의 LLM은 공식 규칙에
 따라 HyperCLOVA X로 제한하며, 로컬 provider는 세 가지 명시적 opt-in 없이는
