@@ -75,6 +75,9 @@ Next.js 실행은 애플리케이션 템플릿 병합 후 완료해야 한다.
 
 ## 4. 2026-08-06 설명회 질문
 
+현장 질문과 공식 답변 원문은
+[8월 6일 설명회 질문·답변 기록지](briefing-2026-08-06.md)에 기록한다.
+
 - [ ] 허용 HyperCLOVA X 모델명·버전
 - [ ] Structured Outputs 또는 JSON schema 지원 범위
 - [ ] endpoint·인증 header·요청·응답 body

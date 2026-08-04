@@ -43,6 +43,7 @@ AI 구현 세부사항은 `finance_agent/docs/`에 유지하고, 이곳에서는
 | [제출 체크리스트](submission-checklist.md) | 소스·제안서·API·동결 절차 점검 | 활성 |
 | [시스템 구성도](diagrams/system-architecture.md) | 현재 검증 범위와 목표 통합 범위 구분 | 초안 |
 | [답변 기능 흐름도](diagrams/answer-flow.md) | intent별 실행·검증·제어 흐름 | 초안 |
+| [8월 6일 설명회 질문·답변 기록지](briefing-2026-08-06.md) | HCX·평가 API·모델·데이터 공식 답변과 후속 결정 추적 | 질문 확정·답변 대기 |
 
 ## 작성 원칙
 
