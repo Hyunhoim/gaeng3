@@ -178,6 +178,9 @@ def validate_answer(
     case: SmokeCase,
     http_status: int,
     body: dict[str, Any],
+    *,
+    success_answer_mode: str = "deterministic",
+    provider_model: str | None = None,
 ) -> list[str]:
     errors: list[str] = []
     _expect(
@@ -194,9 +197,21 @@ def validate_answer(
         body.get("product_families") == list(case.expected_families),
         "product families differ",
     )
-    _expect(errors, body.get("answer_mode") == case.expected_answer_mode, "answer mode differs")
-    _expect(errors, body.get("fallback_used") is False, "unexpected fallback")
-    _expect(errors, body.get("provider_model") is None, "unexpected model provider")
+    success_expected = case.expected_status == "success"
+    expected_answer_mode = success_answer_mode if success_expected else case.expected_answer_mode
+    expected_fallback = success_expected and success_answer_mode == "deterministic_fallback"
+    expected_provider_model = provider_model if success_expected else None
+    _expect(errors, body.get("answer_mode") == expected_answer_mode, "answer mode differs")
+    _expect(
+        errors,
+        body.get("fallback_used") is expected_fallback,
+        "fallback flag differs",
+    )
+    _expect(
+        errors,
+        body.get("provider_model") == expected_provider_model,
+        "model provider differs",
+    )
 
     products = body.get("products")
     citations = body.get("citations")
@@ -287,17 +302,26 @@ def _case_summary(
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        description="Run the real Docker HTTP smoke contract without an LLM provider."
-    )
+    parser = argparse.ArgumentParser(description="Run the real Docker HTTP smoke contract.")
     parser.add_argument("--base-url", default="http://127.0.0.1:18001")
     parser.add_argument("--timeout", type=float, default=30.0)
+    parser.add_argument(
+        "--success-answer-mode",
+        choices=("deterministic", "llm_grounded", "deterministic_fallback"),
+        default="deterministic",
+    )
+    parser.add_argument("--provider-model")
     parser.add_argument("--output", type=Path)
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
-    arguments = build_parser().parse_args(argv)
+    parser = build_parser()
+    arguments = parser.parse_args(argv)
+    if arguments.success_answer_mode == "deterministic" and arguments.provider_model is not None:
+        parser.error("--provider-model is not valid for deterministic answers")
+    if arguments.success_answer_mode != "deterministic" and not arguments.provider_model:
+        parser.error("LLM answer modes require --provider-model")
     base_url = arguments.base_url.rstrip("/")
     started_at = datetime.now(UTC)
     try:
@@ -320,7 +344,13 @@ def main(argv: list[str] | None = None) -> int:
                     body=body,
                     response_bytes=response_bytes,
                     duration_ms=duration_ms,
-                    errors=validate_answer(case, http_status, body),
+                    errors=validate_answer(
+                        case,
+                        http_status,
+                        body,
+                        success_answer_mode=arguments.success_answer_mode,
+                        provider_model=arguments.provider_model,
+                    ),
                 )
             )
     except (OSError, RuntimeError, TypeError, URLError) as error:
@@ -333,7 +363,9 @@ def main(argv: list[str] | None = None) -> int:
         "suite_id": "docker-http-smoke-v1",
         "started_at": started_at.isoformat(),
         "base_url": base_url,
-        "llm_provider_expected": False,
+        "llm_provider_expected": arguments.provider_model is not None,
+        "expected_success_answer_mode": arguments.success_answer_mode,
+        "expected_provider_model": arguments.provider_model,
         "health": {
             "passed": not health_errors,
             "http_status": health_status,

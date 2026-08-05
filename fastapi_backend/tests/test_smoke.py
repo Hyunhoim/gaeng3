@@ -61,6 +61,59 @@ def test_validate_answer_checks_success_evidence() -> None:
     assert "citations are missing" in validate_answer(case, 200, body)
 
 
+def test_validate_answer_accepts_grounded_local_model() -> None:
+    case = SmokeCase(
+        case_id="smoke-qwen",
+        question="해외 ETF를 보여줘.",
+        expected_http_status=200,
+        expected_status="success",
+        expected_intent="search",
+        expected_families=("overseas_etp",),
+        expected_product_count=1,
+        expected_dataset="overseas_etp",
+    )
+    body = {
+        "request_id": "smoke-qwen",
+        "status": "success",
+        "intent": "search",
+        "product_families": ["overseas_etp"],
+        "answer_mode": "llm_grounded",
+        "fallback_used": False,
+        "provider_model": "qwen3-local-test",
+        "products": [{"product_id": "ONE"}],
+        "citations": [{"citation_id": "ONE:name"}],
+        "candidate_count": 2,
+        "as_of_dates": ["2026-07-11"],
+        "source_manifest": {"dataset": "overseas_etp"},
+        "clarification": None,
+        "error": None,
+    }
+
+    assert (
+        validate_answer(
+            case,
+            200,
+            body,
+            success_answer_mode="llm_grounded",
+            provider_model="qwen3-local-test",
+        )
+        == []
+    )
+
+    body["answer_mode"] = "deterministic_fallback"
+    body["fallback_used"] = True
+    assert (
+        validate_answer(
+            case,
+            200,
+            body,
+            success_answer_mode="deterministic_fallback",
+            provider_model="qwen3-local-test",
+        )
+        == []
+    )
+
+
 def test_validate_answer_accepts_locked_fund_control() -> None:
     case = SmokeCase(
         case_id="smoke-fund",

@@ -45,8 +45,9 @@ Backend는 `execute_answer_request()`가 반환한 HTTP 상태와 DTO 필드를 
 | --- | --- |
 | `GET /health` | 구현 완료; 네 SQLite manifest와 상품군 일치 검증 |
 | `POST /answer` | 구현 완료; 기존 Agent adapter 연결 |
-| HTTP 계약 테스트 | Backend 10/10 및 실제 Docker HTTP 7/7 통과 |
+| HTTP 계약 테스트 | Backend 17/17 및 실제 Docker HTTP 7/7 통과 |
 | Dockerfile·Compose | Ubuntu SSH 서버 build·health·`/answer` 검증 완료 |
+| 로컬 Qwen 개발 연결 | grounded answer 7/7, Qwen 장애 fallback 7/7 통과 |
 | HyperCLOVA X 실제 HTTP | 미연결; endpoint·인증 계약 확정 후 연결 |
 | 사용자 인증·Frontend | 현재 예선 API 범위에서 제외 |
 
@@ -214,7 +215,69 @@ python fastapi_backend/scripts/smoke.py \
 공모펀드는 `execution_enabled=false` 정책을 유지했다. 단일 스모크의 지연시간은
 운영 성능이나 SLO로 해석하지 않는다.
 
-## 5. Docker 없이 개발할 때
+## 5. 개발 전용 로컬 Qwen 연결
+
+이 절차는 HyperCLOVA X 연결 전 내부 개발에만 사용한다. 평가·제출·운영 절차가
+아니며 `docker-compose.local-llm.yml`도 제출 후보에서 제거할 대상이다.
+
+현재 Backend에서 Qwen이 맡는 일은 검증된 검색 결과와 field-level evidence를 보고
+자연스러운 설명 초안을 만드는 단계뿐이다. 질문 분류, 조건 검색, 정렬, 후보 수 계산,
+Result Verifier와 Answer Verifier는 기존 결정론적 경로를 유지한다.
+
+터미널 1에서 loopback Qwen을 실행한다.
+
+```bash
+cd finance_agent
+scripts/local-llm/serve-qwen.sh
+```
+
+터미널 2에서 저장소 루트로 이동한 뒤 개발 전용 Compose override로 Backend를
+재기동한다. Linux host network를 사용해 컨테이너가 호스트의 loopback Qwen에만
+접속하며, Backend도 `127.0.0.1:${BACKEND_PORT}`에만 바인딩된다.
+
+```bash
+./fastapi_backend/compose.sh build-image
+./fastapi_backend/compose.sh \
+  -f docker-compose.yml \
+  -f fastapi_backend/docker-compose.local-llm.yml \
+  up --no-build --detach backend
+```
+
+Qwen 생성 성공 경로를 검사한다.
+
+```bash
+python fastapi_backend/scripts/smoke.py \
+  --base-url http://127.0.0.1:18002 \
+  --timeout 180 \
+  --success-answer-mode llm_grounded \
+  --provider-model qwen3-local-test
+```
+
+Backend가 실행된 상태에서 터미널 1의 Qwen만 `Ctrl-C`로 종료한 뒤 같은 검색이
+추측 없는 답변으로 대체되는지 검사한다.
+
+```bash
+python fastapi_backend/scripts/smoke.py \
+  --base-url http://127.0.0.1:18002 \
+  --timeout 30 \
+  --success-answer-mode deterministic_fallback \
+  --provider-model qwen3-local-test
+```
+
+테스트가 끝나면 반드시 기본 Compose 구성으로 복구한다.
+
+```bash
+./fastapi_backend/compose.sh \
+  up --no-build --detach --force-recreate backend
+```
+
+2026-08-05 실제 검증에서 Qwen 연결 상태는 7/7, Qwen 종료 후 fallback 상태도
+7/7, 기본 결정론적 모드 복구 후에도 7/7을 통과했다. 생성 성공 시 세 검색 응답은
+모두 `answer_mode=llm_grounded`, `fallback_used=false`였고, 장애 시에는 모두
+`answer_mode=deterministic_fallback`, `fallback_used=true`였다. 제어·차단 요청은
+두 상태 모두 모델을 호출하지 않았다.
+
+## 6. Docker 없이 개발할 때
 
 Python 3.12 가상환경을 활성화한 뒤 로컬 Agent core와 백엔드를 차례대로 설치한다.
 `finance-agent-core`라는 이름의 별도 PyPI 패키지를 설치하면 안 된다.
@@ -231,7 +294,7 @@ uvicorn app.main:app --app-dir fastapi_backend --host 127.0.0.1 --port 18001 --r
 python -m pytest fastapi_backend/tests
 ```
 
-## 6. 주요 환경변수
+## 7. 주요 환경변수
 
 | 변수 | 기본값 | 의미 |
 | --- | --- | --- |
@@ -243,6 +306,12 @@ python -m pytest fastapi_backend/tests
 | `FINANCE_DB_BOND` | `/data/bond.sqlite3` | 채권 DB의 컨테이너 경로 |
 | `FINANCE_DB_FUND` | `/data/fund.sqlite3` | 펀드 DB의 컨테이너 경로 |
 | `WEB_CONCURRENCY` | `1` | Uvicorn worker 수; 초기에는 1 유지 권장 |
+| `FINANCE_BACKEND_ANSWER_PROVIDER` | `deterministic` | `local_test`는 development와 전용 override에서만 허용 |
+
+`local_test`는 위 변수 하나만으로 켜지지 않는다. Core가 요구하는
+`FINANCE_AGENT_LLM_MODE=local_test`, `ENABLE_NON_HCX_TEST_LLM=1`,
+`LLM_PROVIDER=local_test` 세 조건과 loopback endpoint·모델명이 모두 있어야 한다.
+또한 `APP_ENV=test`, `evaluation`, `production`에서는 설정 검증 단계에서 거절된다.
 
 ## 템플릿 출처
 

@@ -131,6 +131,37 @@ LOCAL_TEST_LLM_MODEL=qwen3-local-test \
 [internal-red-team-v1 전체 E2E 평가](evaluation-internal-red-team.md)에
 보존한다.
 
+### Docker Backend grounded answer 스모크
+
+로컬 Qwen은 개발 전용 Compose override를 통해 실제 FastAPI Backend의 최종 설명
+단계에도 연결할 수 있다. Qwen은 검증된 evidence만 받고, 검색·계산·검증은 기존
+결정론적 Core가 담당한다. 다음 명령은 저장소 루트에서 실행한다.
+
+```bash
+./fastapi_backend/compose.sh \
+  -f docker-compose.yml \
+  -f fastapi_backend/docker-compose.local-llm.yml \
+  up --no-build --detach backend
+
+python fastapi_backend/scripts/smoke.py \
+  --base-url http://127.0.0.1:18002 \
+  --timeout 180 \
+  --success-answer-mode llm_grounded \
+  --provider-model qwen3-local-test
+```
+
+Qwen을 종료한 상태에서는 `--success-answer-mode deterministic_fallback`으로 같은
+7개 요청을 검사한다. 2026-08-05 실제 Docker HTTP 결과는 Qwen 정상 7/7, 장애
+fallback 7/7, 기본 결정론적 구성 복구 후 7/7이었다. 테스트가 끝나면 다음 명령으로
+개발 전용 override를 제거한 기본 컨테이너를 다시 만든다.
+
+```bash
+./fastapi_backend/compose.sh \
+  up --no-build --detach --force-recreate backend
+```
+
+이 override와 로컬 provider 설정은 평가·제출·운영에 포함하지 않는다.
+
 ## 2026-07-28 실제 검증 결과
 
 - 모델 cache 14개 파일의 누락·checksum 검증 통과

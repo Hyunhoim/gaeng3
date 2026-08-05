@@ -45,7 +45,7 @@ AI Agent를 개발함
 | 근거 기반 답변 | 공모펀드 44개 grounded·6개 안전 차단, 폴백 0, 핵심 검증률 100% |
 | 로컬 LLM | 격리된 Qwen/vLLM 개발 테스트 완료, 평가·제출 사용 금지 |
 | HyperCLOVA X | 세 provider·fake transport·API 없는 전체 경로 8/8, 8월 6일 공식 안내 전까지 실연결 보류 |
-| Web·API | `/health`·`/answer`, Backend DTO, Docker·Compose 및 SSH HTTP 스모크 7/7 완료 |
+| Web·API | `/health`·`/answer`, Backend DTO, Docker·Compose 및 SSH HTTP 스모크 7/7 완료; 개발 전용 Qwen·장애 fallback도 각각 7/7 |
 | 내부 red-team | 네 상품군 40문항, 수정 후 strict·safety·evidence 40/40 |
 | 금융 도메인 QA 실험 | 담당자 작성 40문항, 최초 1/40 보존·Router 사후 회귀 40/40·잘못된 실행 0건 |
 
