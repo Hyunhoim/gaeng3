@@ -78,6 +78,10 @@ curl --fail-with-body \
 하나다. `answer_mode`, `fallback_used`, `citations`, `as_of_dates`를 별도 필드로
 확인하며, 답변 문자열만 보고 성공 여부를 판단하지 않는다.
 
+입력 JSON이 DTO 규칙을 위반하면 HTTP 422와 같은 `BackendAgentResponse` 형식의
+`status=error`, `error.code=invalid_request`를 반환한다. 검증 오류의 내부 위치나
+입력값은 공개 응답에 반사하지 않으며, 유효한 `request_id`만 추적용으로 보존한다.
+
 ## 1. 사전 준비
 
 Ubuntu 서버에 Docker Engine과 Docker Compose v2가 있어야 한다.
@@ -101,6 +105,11 @@ finance_agent/artifacts/normalized/
 지정한다. Compose는 이 디렉터리를 컨테이너의 `/data`에 읽기 전용으로 연결하므로,
 API가 원본 DB를 수정할 수 없다.
 
+정규화 도구가 보안을 위해 `0700` 디렉터리와 `0600` SQLite를 만들 수 있다.
+`compose.sh`는 컨테이너 Backend를 현재 호스트 사용자와 같은 UID/GID로 실행해 이
+권한을 그대로 유지하면서 DB를 읽는다. 데이터 권한을 `777` 또는 `666`으로 넓히지
+말고 Docker 명령은 `sudo` 없이 아래 wrapper로 실행한다.
+
 ## 2. 환경 설정
 
 저장소 루트에서 예시 파일을 복사한다.
@@ -116,8 +125,8 @@ cp fastapi_backend/.env.example fastapi_backend/.env
 저장소 루트에서 실행한다.
 
 ```bash
-docker compose --env-file fastapi_backend/.env up --build --detach backend
-docker compose --env-file fastapi_backend/.env ps
+./fastapi_backend/compose.sh up --build --detach backend
+./fastapi_backend/compose.sh ps
 ```
 
 기본 포트는 서버 내부의 `127.0.0.1:18001`이다. API 상태와 문서는 다음 주소에서
@@ -151,8 +160,8 @@ ssh -L 18001:127.0.0.1:18001 infolab_hyunhoim
 로그 확인과 종료 명령은 다음과 같다.
 
 ```bash
-docker compose --env-file fastapi_backend/.env logs --follow backend
-docker compose --env-file fastapi_backend/.env down
+./fastapi_backend/compose.sh logs --follow backend
+./fastapi_backend/compose.sh down
 ```
 
 ## 4. Docker 없이 개발할 때

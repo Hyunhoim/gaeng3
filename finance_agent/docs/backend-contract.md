@@ -1,6 +1,6 @@
 # Backend 전달용 Agent DTO v1
 
-마지막 갱신: 2026-07-31
+마지막 갱신: 2026-08-05
 
 ## 1. 목적
 
@@ -120,9 +120,13 @@ grounded answer provider가 실패한 경우에는 이미 Oracle과 Result Verif
 `fallback_used=true`로 반환한다. provider rate limit이어도 클라이언트가
 잘못한 요청은 아니므로 HTTP 429로 재해석하지 않는다.
 
-입력 JSON의 형식 오류와 인증은 실제 FastAPI route의 request validation·
-middleware 책임이다. 프레임워크 adapter는 `AnswerAdapterResult`의 status와
-response를 그대로 직렬화하고 내부 예외를 다시 노출하지 않는다.
+입력 JSON의 형식 오류는 FastAPI request validation 경계에서 HTTP 422,
+`status=error`, `error.code=invalid_request`, `retryable=false`인 같은
+`BackendAgentResponse`로 변환한다. 유효한 `request_id`는 보존하고 누락·공백·길이
+초과 ID는 `invalid-request`로 대체한다. validation 상세 위치·원문 입력값은 공개
+응답에 반사하지 않는다. 인증은 이후 middleware 책임이다. 프레임워크 adapter는
+`AnswerAdapterResult`의 status와 response를 그대로 직렬화하고 내부 예외를 다시
+노출하지 않는다.
 
 ## 6. JSON 예시
 
@@ -156,6 +160,7 @@ timeout·transport·응답 오류, dataset 장애, 알 수 없는 내부 오류,
 answer fallback과 민감정보 비노출을 12/12 검증한다. 이는 실제 HTTP route나
 HyperCLOVA X API 호환성 평가가 아니다.
 
-실제 FastAPI route가 추가되면 JSON Schema에서 OpenAPI·TypeScript 타입을
-생성하거나 동일 필드를 수동 매핑할 수 있다. route는 DTO 필드를 삭제·재해석하지
-않고 HTTP 인증, request parsing과 transport lifecycle만 추가한다.
+현재 FastAPI `/answer` route는 같은 DTO를 response model로 사용한다. 이후
+JSON Schema에서 OpenAPI·TypeScript 타입을 생성하거나 동일 필드를 수동 매핑한다.
+route는 DTO 필드를 삭제·재해석하지 않고 HTTP 인증, request parsing과 transport
+lifecycle만 추가한다.

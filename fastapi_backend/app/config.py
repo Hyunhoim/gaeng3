@@ -2,10 +2,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from finance_agent_core.contracts.queryplan import ProductFamily
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
-
-from finance_agent_core.contracts.queryplan import ProductFamily
 
 
 class Settings(BaseSettings):

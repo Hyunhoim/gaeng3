@@ -4,7 +4,6 @@ from collections.abc import Iterator
 
 import pytest
 from fastapi.testclient import TestClient
-
 from finance_agent_core.agent import IntentRouter, RoutedFinanceAgent
 
 from app.config import Settings

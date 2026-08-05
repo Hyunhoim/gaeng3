@@ -3,7 +3,6 @@ from __future__ import annotations
 from typing import Protocol, cast
 
 from fastapi import Request
-
 from finance_agent_core.agent import IntentRouter, RoutedAgentResult, RoutedFinanceAgent
 
 from app.config import Settings

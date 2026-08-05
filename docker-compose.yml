@@ -4,6 +4,9 @@ services:
       context: .
       dockerfile: fastapi_backend/Dockerfile
     init: true
+    # Match the host artifact owner so 0700 directories and 0600 SQLite files
+    # remain private while still being readable from the bind mount.
+    user: "${BACKEND_HOST_UID:-10001}:${BACKEND_HOST_GID:-10001}"
     environment:
       APP_ENV: ${APP_ENV:-development}
       LOG_LEVEL: ${LOG_LEVEL:-info}

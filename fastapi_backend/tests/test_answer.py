@@ -1,5 +1,4 @@
 from fastapi.testclient import TestClient
-
 from finance_agent_core.contracts.backend import BackendAgentResponse
 
 from app.config import Settings
@@ -64,4 +63,44 @@ def test_answer_rejects_invalid_input_before_calling_agent(
     )
 
     assert response.status_code == 422
+    body = BackendAgentResponse.model_validate(response.json())
+    assert body.request_id == "http-invalid-001"
+    assert body.status.value == "error"
+    assert body.intent.value == "unsupported"
+    assert body.error is not None
+    assert body.error.code.value == "invalid_request"
+    assert body.error.retryable is False
+    assert "detail" not in response.json()
     assert fake_agent.calls == []
+
+
+def test_answer_uses_safe_request_id_for_malformed_identifier(
+    client: TestClient,
+    fake_agent: FakeAgentService,
+) -> None:
+    response = client.post(
+        "/answer",
+        json={
+            "request_id": "   ",
+            "question": "해외 ETF를 알려 주세요.",
+        },
+    )
+
+    assert response.status_code == 422
+    body = BackendAgentResponse.model_validate(response.json())
+    assert body.request_id == "invalid-request"
+    assert body.error is not None
+    assert body.error.code.value == "invalid_request"
+    assert fake_agent.calls == []
+
+
+def test_answer_openapi_documents_validation_error_dto(
+    fake_agent: FakeAgentService,
+) -> None:
+    application = create_app(settings=Settings(), agent=fake_agent)
+
+    response_schema = application.openapi()["paths"]["/answer"]["post"]["responses"]["422"]
+
+    assert response_schema["content"]["application/json"]["schema"] == {
+        "$ref": "#/components/schemas/BackendAgentResponse"
+    }
