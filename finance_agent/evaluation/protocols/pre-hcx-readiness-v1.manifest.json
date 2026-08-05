@@ -3,12 +3,12 @@
   "baseline_id": "pre-hcx-readiness-v1",
   "recorded_on": "2026-08-05",
   "status": "internal_ready_external_gates_pending",
-  "git_commit": "3c865514b5f810bce3d5a098ce0d72bfb7b6c99a",
-  "last_committed_source_commit": "3c865514b5f810bce3d5a098ce0d72bfb7b6c99a",
+  "git_commit": "88c57263ec552b71f66494cc2aec378e006207fe",
+  "last_committed_source_commit": "88c57263ec552b71f66494cc2aec378e006207fe",
   "generated_from_dirty_worktree": false,
   "hash_algorithm": "sha256(sorted(relative_path + NUL + file_sha256 + LF))",
-  "file_count": 250,
-  "tree_sha256": "4df457eae62f18908541c3683c070c91acbac6ee2eae47cc81b2e21ec12c0052",
+  "file_count": 252,
+  "tree_sha256": "913269d83407e465f17fb23543475ab586598e561a2a5ee3cc8c5d579d417d64",
   "included_scope": [
     "README.md",
     "environment*.yml",
@@ -35,7 +35,7 @@
     "limitation": "self_authored_internal_diagnostic_not_independent_blind"
   },
   "qa": {
-    "pytest_passed": 333,
+    "pytest_passed": 338,
     "ruff_lint": "passed",
     "ruff_format": "passed",
     "pip_check": "passed",
@@ -50,6 +50,7 @@
     "backend_compose_config": "passed",
     "backend_local_http_smoke": "health_validation_bond_cross_family_passed",
     "backend_ssh_docker_http_smoke": "health_four_families_and_7_cases_passed",
+    "backend_data_init": "official_xlsx_four_databases_built_validated_and_reused",
     "backend_local_qwen_http_smoke": "grounded_7_of_7_fallback_7_of_7_default_restored_7_of_7"
   },
   "external_gates": [
