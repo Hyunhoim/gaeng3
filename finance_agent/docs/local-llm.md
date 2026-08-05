@@ -138,7 +138,7 @@ LOCAL_TEST_LLM_MODEL=qwen3-local-test \
 결정론적 Core가 담당한다. 다음 명령은 저장소 루트에서 실행한다.
 
 ```bash
-./fastapi_backend/compose.sh \
+./compose.sh \
   -f docker-compose.yml \
   -f fastapi_backend/docker-compose.local-llm.yml \
   up --no-build --detach backend
@@ -156,7 +156,7 @@ fallback 7/7, 기본 결정론적 구성 복구 후 7/7이었다. 테스트가 �
 개발 전용 override를 제거한 기본 컨테이너를 다시 만든다.
 
 ```bash
-./fastapi_backend/compose.sh \
+./compose.sh \
   up --no-build --detach --force-recreate backend
 ```
 

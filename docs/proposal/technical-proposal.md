@@ -145,7 +145,8 @@ BM25/SQLite FTS 기반 문서 검색의 적재·필터·출처·기준일 계약
 현재 대표 근거:
 
 - 4종 원천 145,393행 감사, 핵심 expectation 65/65
-- Agent Core 전체 pytest 333개 통과
+- Agent Core 전체 pytest 338개 통과
+- 공식 XLSX에서 SQLite 4개를 자동 생성·검증한 뒤 Backend를 시작하는 Docker 경로 완료
 - 국내·해외 ETP 교차 SEARCH 공개 실제 데이터 회귀 4/4
 - 교차 상품군 grounded answer 공개 회귀 expected·로컬 Qwen 각각 4/4, 생성 대상 2문항 모두 grounded, 모델 호출 3회, fallback 0
 - 내부 red-team 40문항 수정 후 strict·safety·evidence 40/40

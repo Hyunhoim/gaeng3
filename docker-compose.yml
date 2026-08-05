@@ -1,13 +1,55 @@
+x-backend-image: &backend-image
+  image: gaeng3-backend:local
+  build:
+    context: .
+    dockerfile: fastapi_backend/Dockerfile
+
 services:
+  data-init:
+    <<: *backend-image
+    # The one-shot initializer needs ownership privileges only for the private
+    # named volume. Raw competition workbooks remain read-only.
+    user: "0:0"
+    command:
+      - python
+      - -m
+      - finance_agent_core.storage.prepare
+      - --data-dir
+      - /raw
+      - --output-dir
+      - /data
+      - --owner-uid
+      - "${BACKEND_HOST_UID:-10001}"
+      - --owner-gid
+      - "${BACKEND_HOST_GID:-10001}"
+    volumes:
+      - type: bind
+        source: ${FINANCE_RAW_DATA_DIR:-../../2. Data/1. Raw/1.금융상품}
+        target: /raw
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: volume
+        source: finance-data
+        target: /data
+    network_mode: none
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+    security_opt:
+      - no-new-privileges:true
+    restart: "no"
+
   backend:
-    image: gaeng3-backend:local
-    build:
-      context: .
-      dockerfile: fastapi_backend/Dockerfile
+    <<: *backend-image
     init: true
-    # Match the host artifact owner so 0700 directories and 0600 SQLite files
-    # remain private while still being readable from the bind mount.
+    # Match the data volume owner so 0700 directories and 0600 SQLite files
+    # remain private while still being readable by the Backend.
     user: "${BACKEND_HOST_UID:-10001}:${BACKEND_HOST_GID:-10001}"
+    depends_on:
+      data-init:
+        condition: service_completed_successfully
+        restart: true
     environment:
       APP_ENV: ${APP_ENV:-development}
       LOG_LEVEL: ${LOG_LEVEL:-info}
@@ -19,8 +61,8 @@ services:
     ports:
       - "${BACKEND_BIND_ADDRESS:-127.0.0.1}:${BACKEND_PORT:-18001}:8000"
     volumes:
-      - type: bind
-        source: ${FINANCE_ARTIFACTS_DIR:-./finance_agent/artifacts/normalized}
+      - type: volume
+        source: finance-data
         target: /data
         read_only: true
     healthcheck:
@@ -41,3 +83,6 @@ services:
       - /tmp:rw,noexec,nosuid,size=64m
     security_opt:
       - no-new-privileges:true
+
+volumes:
+  finance-data:

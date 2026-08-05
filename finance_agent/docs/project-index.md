@@ -188,7 +188,7 @@
 - 금융 도메인 QA: v1 개발 40문항 최초 strict 1/40,
   safety·evidence 각각 32/40을 보존하고 v1.2 Router·linker 회귀에서
   모든 계약 40/40·잘못된 실행 0건, dependency pending 13건은 유지
-- 코드 회귀 기준: 전체 pytest 333개, Ruff lint·format, pip dependency check,
+- 코드 회귀 기준: 전체 pytest 338개, Ruff lint·format, pip dependency check,
   wheel과 필수 package data 검사
 - 로컬 Qwen 평가 기준: 동결 50문항에서 최초 미사용 holdout 9/10,
   오류 수정 후 전체 회귀 50/50을 연속 2회 재현
@@ -203,6 +203,8 @@
   승인 corpus, 실제 사람 평가
 - Ubuntu SSH Docker 통합: 실제 이미지 build, 네 DB health, 채권·국내 ETP·
   해외 ETP 실행, 공모펀드 잠금, 역질문·미지원·HTTP 422 스모크 7/7 완료
+- Docker 데이터 준비: 읽기 전용 공식 XLSX에서 네 SQLite를 자동 생성·검증하고
+  두 번째 실행에서 네 DB 모두 재사용, 성공 후에만 Backend 시작
 - 다음 기술 통합: 2026-08-06 설명회 공지 후 공식 endpoint·인증
   계약 기반 HyperCLOVA X HTTP transport와 Next.js 화면 연결. 주최 측 실행
   환경의 포트·인증·네트워크 정책은 별도 재현 필요
