@@ -1,0 +1,6 @@
+# Runtime dependencies. Pydantic and PyYAML match finance_agent_core/base.txt.
+fastapi==0.116.1
+pydantic-settings==2.10.1
+pydantic==2.13.4
+PyYAML==6.0.3
+uvicorn[standard]==0.35.0
