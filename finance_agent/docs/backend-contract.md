@@ -1,6 +1,6 @@
 # Backend 전달용 Agent DTO v1
 
-마지막 갱신: 2026-07-30
+마지막 갱신: 2026-08-05
 
 ## 1. 목적
 
@@ -40,6 +40,19 @@ Pydantic request·response 계약이다. FastAPI route나 Next.js 타입은 이 
 
 응답은 원래 intent, 상품군, 서버 QueryPlan, 후보 수, 상품·비교·집계·문서 evidence,
 구조화 citation, 기준일, warning, 답변 mode와 fallback 여부를 분리해 제공한다.
+
+복수 상품군 SEARCH에서는 최상위 `query_plan`·`source_manifest` 대신
+`family_searches`와 `source_manifests`를 사용한다. 각 family item은
+상품군·status·단일-family QueryPlan·후보 수·반환 상품 ID·warning·manifest를
+보존한다. 한 상품군이 0건이어도 다른 family 결과를 유지하고, 전부 0건일 때만
+최상위 status가 `not_found`다. 최상위 products와 citation은 family 순서대로
+펼쳐 화면에서 공통 렌더링할 수 있다.
+
+grounded answer provider가 있으면 각 family evidence를 서로 격리해 생성한 뒤
+서버가 같은 순서의 섹션으로 조합한다. 최상위 `answer_mode`·`provider_model`·
+`fallback_used`는 이 조합 결과를 표현한다. 한 family의 생성·검증이 실패하거나
+다른 상품군 언급·교차 비교·합산 문구가 검출되면 부분 모델 문장을 남기지 않고
+전체 응답을 `deterministic_fallback`으로 바꾼다.
 
 ## 4. 근거와 fallback
 
@@ -107,9 +120,13 @@ grounded answer provider가 실패한 경우에는 이미 Oracle과 Result Verif
 `fallback_used=true`로 반환한다. provider rate limit이어도 클라이언트가
 잘못한 요청은 아니므로 HTTP 429로 재해석하지 않는다.
 
-입력 JSON의 형식 오류와 인증은 실제 FastAPI route의 request validation·
-middleware 책임이다. 프레임워크 adapter는 `AnswerAdapterResult`의 status와
-response를 그대로 직렬화하고 내부 예외를 다시 노출하지 않는다.
+입력 JSON의 형식 오류는 FastAPI request validation 경계에서 HTTP 422,
+`status=error`, `error.code=invalid_request`, `retryable=false`인 같은
+`BackendAgentResponse`로 변환한다. 유효한 `request_id`는 보존하고 누락·공백·길이
+초과 ID는 `invalid-request`로 대체한다. validation 상세 위치·원문 입력값은 공개
+응답에 반사하지 않는다. 인증은 이후 middleware 책임이다. 프레임워크 adapter는
+`AnswerAdapterResult`의 status와 response를 그대로 직렬화하고 내부 예외를 다시
+노출하지 않는다.
 
 ## 6. JSON 예시
 
@@ -125,6 +142,11 @@ COMPARE 응답은 같은 schema의 `comparisons`와 `comparison_field` citation�
 전달한다. `product-compare-core-30` 공개 회귀가 실행·차단 30문항에서
 Backend response 검증과 비교 citation 수를 함께 확인한다.
 
+교차 상품군 SEARCH는 `cross-family-search-v1-4` 공개 회귀에서 양쪽 성공,
+부분 성공, 전체 빈 결과와 직접 비교 차단을 4/4 검증한다. 같은 suite의
+grounded answer v2는 expected·로컬 Qwen 각각 4/4, 생성 대상 2문항
+`llm_grounded`, fallback 0, 전체 빈 결과·control 모델 무호출을 확인한다.
+
 오류 경계는 다음 명령으로 네트워크 없이 재현한다.
 
 ```bash
@@ -138,6 +160,7 @@ timeout·transport·응답 오류, dataset 장애, 알 수 없는 내부 오류,
 answer fallback과 민감정보 비노출을 12/12 검증한다. 이는 실제 HTTP route나
 HyperCLOVA X API 호환성 평가가 아니다.
 
-실제 FastAPI route가 추가되면 JSON Schema에서 OpenAPI·TypeScript 타입을
-생성하거나 동일 필드를 수동 매핑할 수 있다. route는 DTO 필드를 삭제·재해석하지
-않고 HTTP 인증, request parsing과 transport lifecycle만 추가한다.
+현재 FastAPI `/answer` route는 같은 DTO를 response model로 사용한다. 이후
+JSON Schema에서 OpenAPI·TypeScript 타입을 생성하거나 동일 필드를 수동 매핑한다.
+route는 DTO 필드를 삭제·재해석하지 않고 HTTP 인증, request parsing과 transport
+lifecycle만 추가한다.

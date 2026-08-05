@@ -6,8 +6,9 @@
 조회·비교·연산하고, 사용한 데이터 근거와 기준일을 함께 제공하는 금융상품
 AI Agent를 개발함
 
-현재 저장소는 검증 가능한 AI Agent Core와 이를 노출하는 FastAPI 백엔드 골격을
-구축한 상태이며, Ubuntu Docker 실행 검증과 HyperCLOVA X 실제 연결을 준비하고 있음
+현재 저장소는 검증 가능한 AI Agent Core와 이를 노출하는 FastAPI 백엔드를
+통합한 상태이며, Next.js 화면·Ubuntu Docker 실행 검증·HyperCLOVA X 실제 연결을
+준비하고 있음
 
 ## 1. 목표
 
@@ -15,7 +16,9 @@ AI Agent를 개발함
 
 - 여러 금융 조건이 포함된 자연어 상품 검색
 - 상품 상세 정보 조회
-- 같은 상품군과 서로 다른 상품군 간 비교
+- 같은 상품군의 정확한 두 상품 비교
+- 복수 상품군을 한 질문에서 상품군별로 독립 검색
+- 상품군 간 직접 수치 비교는 의미·단위가 검증된 범위부터 단계적으로 확장
 - 정렬, 순위, 집계와 계산
 - 검색 결과와 금융 용어 설명
 - 모호하거나 데이터로 확인할 수 없는 조건에 대한 역질문
@@ -29,7 +32,7 @@ AI Agent를 개발함
 
 ## 2. 현재 구현 상태
 
-기준일: 2026-08-04
+기준일: 2026-08-05
 
 | 영역 | 상태 |
 | --- | --- |
@@ -38,35 +41,41 @@ AI Agent를 개발함
 | 국내 ETF·ETN | 정규화, SQLite, Oracle, Verifier, 50문항 평가 구현 |
 | 국내채권 | 날짜·stale·신용등급 계약, Oracle, Verifier, 50문항 평가 구현 |
 | 공모펀드 | parser development 40/40·최초 holdout 9/10, grounded answer 50/50, 공식 실행 비활성 |
+| 교차 상품군 SEARCH | 국내·해외 ETP 병렬 Oracle·Verifier·family별 grounded answer, expected·로컬 Qwen 각각 4/4·fallback 0 |
 | 근거 기반 답변 | 공모펀드 44개 grounded·6개 안전 차단, 폴백 0, 핵심 검증률 100% |
 | 로컬 LLM | 격리된 Qwen/vLLM 개발 테스트 완료, 평가·제출 사용 금지 |
-| HyperCLOVA X | 세 provider·fake transport·API 없는 전체 경로 8/8, 실제 HTTP 연결 대기 |
-| Web·API | `/health`·`/answer`, Backend DTO 연결, Docker·Compose 구현, SSH 실행 검증 대기 |
+| HyperCLOVA X | 세 provider·fake transport·API 없는 전체 경로 8/8, 8월 6일 공식 안내 전까지 실연결 보류 |
+| Web·API | `/health`·`/answer`, Backend DTO, Docker·Compose 및 SSH HTTP 스모크 7/7 완료; 개발 전용 Qwen·장애 fallback도 각각 7/7 |
+| 내부 red-team | 네 상품군 40문항, 수정 후 strict·safety·evidence 40/40 |
+| 금융 도메인 QA 실험 | 담당자 작성 40문항, 최초 1/40 보존·Router 사후 회귀 40/40·잘못된 실행 0건 |
 
-현재 AI Core 회귀 기준은 pytest 305개, Ruff lint·format과 문서 검사를 모두
+현재 AI Core 회귀 기준은 pytest 333개, Ruff lint·format과 문서 검사를 모두
 통과한 상태
 
 ## 3. 아키텍처
 
 ```mermaid
 flowchart LR
-    APP["FastAPI<br/>/answer"] --> Q["사용자 자연어 질문"]
-    Q --> P["Lexical · Schema Linker<br/>Typed QueryPlan"]
+    WEB["Next.js 화면<br/>통합 예정"] -.-> APP["FastAPI<br/>/answer"]
+    APP --> Q["사용자 자연어 질문"]
+    Q --> P["Intent Router · Schema Linker<br/>상품군별 Typed QueryPlan"]
     P --> C["Registry · Pydantic<br/>지원 범위 검증"]
     C --> O["상품군별 SQLite Oracle<br/>검색 · 비교 · 연산"]
     O --> V["Result Verifier"]
     V --> E["Field-level Evidence"]
-    E --> A["Answer Verifier"]
-    A --> R["근거 · 기준일 포함 답변"]
-    A --> F["검증 실패 시<br/>Deterministic Fallback"]
+    E --> A["Family별 Answer Verifier"]
+    A --> X["서버 조합 · 교차 문구 검증"]
+    X --> R["근거 · 기준일 포함 답변"]
+    X --> F["하나라도 실패 시<br/>전체 Deterministic Fallback"]
 ```
 
 상품군마다 원천 스키마와 품질 규칙은 다르지만 다음 계약을 공통으로 사용
 
 ```text
 질문
-→ QueryPlan
-→ 상품군별 결정론적 도구
+→ 단일 또는 복수 상품군 route
+→ 상품군별 단일-family QueryPlan
+→ 상품군별 결정론적 도구 병렬 실행
 → Result Verifier
 → Field-level Evidence
 → Answer Verifier
@@ -88,7 +97,7 @@ gaeng3/
 │   ├── environment.yml               # Conda 개발 환경
 │   └── README.md                     # AI 작업공간 상세 안내
 ├── CONTRIBUTING.md                   # 개발 협업·커밋·PR 규칙
-├── THIRD_PARTY_NOTICES.md             # 사용한 템플릿 출처와 라이선스
+├── THIRD_PARTY_NOTICES.md            # 사용한 템플릿 출처와 라이선스
 └── README.md
 ```
 
@@ -134,6 +143,8 @@ Git에 포함하지 않음
 
 - 평가와 제출 경로의 LLM은 HyperCLOVA X만 사용
 - 로컬 Qwen은 HyperCLOVA X 연결 전 개발 파이프라인 검증에만 사용
+- 8월 6일 설명회 후 공식 범위를 확인하고, 제출 후보에서 로컬
+  provider·설정·스크립트·의존성을 제거한 뒤 기계적으로 검수
 - 다른 생성형 LLM 또는 VLM은 평가·제출 경로에서 사용 금지
 - 답변의 수치, 조건, 순위와 출처는 코드가 검색·연산·검증
 - 공식 제공 데이터와 외부 데이터가 충돌하면 공식 데이터를 우선
@@ -146,21 +157,27 @@ Git에 포함하지 않음
 
 - 금융 도메인 담당자의 공모펀드 blind 100문항 독립 작성과 hash 봉인
 - 사람 rubric으로 공모펀드 답변의 명확성·중복·비교 용이성 평가
+- 다른 작성자가 만든 blind 문항으로 SEARCH·COMPARE·AGGREGATE
+  일반화 성능 평가
 - 공모펀드 true COMPARE intent의 생성·검증·폴백 평가
-- 다른 작성자가 만든 blind 평가 문항 추가
-- Ubuntu SSH 서버에서 FastAPI Docker build·health·`/answer` smoke test
-- HyperCLOVA X 실제 HTTP transport를 FastAPI `/answer` 경로에 연결
-- 필요 시 Next.js 시연 화면을 Backend DTO와 연결
+- Next.js 화면을 확정된 Backend DTO와 연결
+- 8월 6일 오프라인 설명회에서 HyperCLOVA X 공식 사용법·제출 범위 확인
+- 설명회 후 HyperCLOVA X 실제 HTTP transport 연결
 - 허용 범위를 확인한 외부 비정형 금융 데이터와 문서 RAG 검토
 
 ## 9. 문서
 
+- [저장소 문서 안내](docs/README.md)
 - [개발 협업 가이드](CONTRIBUTING.md)
 - [FastAPI 백엔드와 Docker 실행](fastapi_backend/README.md)
 - [AI Agent 작업공간](finance_agent/README.md)
 - [프로젝트 문서 인덱스](finance_agent/docs/project-index.md)
+- [기술 제안서 작성 허브](docs/proposal/README.md)
 - [데이터 감사 기준](finance_agent/docs/data-audit.md)
 - [Field Registry와 QueryPlan 계약](finance_agent/docs/contracts.md)
+- [교차 상품군 병렬 SEARCH와 grounded answer v2](finance_agent/docs/cross-family-search.md)
+- [금융 도메인 QA 실험 파이프라인](finance_agent/docs/evaluation-domain-qa.md)
+- [제출용 모델 경계와 로컬 LLM 정리 메모](finance_agent/docs/submission-model-boundary.md)
 - [재현 가능한 평가 기준선](finance_agent/evaluation/README.md)
 
 ## 10. 담당

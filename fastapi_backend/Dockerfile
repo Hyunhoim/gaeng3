@@ -36,8 +36,14 @@ RUN python -m pip install \
         /tmp/core-constraints.txt \
         /tmp/backend-requirements.txt
 
-COPY --chown=app:app fastapi_backend/ /app/
-RUN chmod 0755 /app/start.sh
+# Copy only runtime files. Source worktrees may use a private umask (0700/0600),
+# so normalize image permissions explicitly for the host-UID runtime override.
+# Local .env files, tests and deployment helpers never enter the image.
+COPY --chown=app:app fastapi_backend/app /app/app
+COPY --chown=app:app fastapi_backend/start.sh /app/start.sh
+RUN find /app/app -type d -exec chmod 0755 {} + \
+    && find /app/app -type f -exec chmod 0644 {} + \
+    && chmod 0755 /app/start.sh
 
 USER app
 

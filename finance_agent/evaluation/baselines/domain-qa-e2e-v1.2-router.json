@@ -1,0 +1,113 @@
+{
+  "schema_version": "1.0",
+  "baseline_id": "domain-qa-e2e-v1.2-router",
+  "recorded_on": "2026-08-04",
+  "dataset": "financial_domain_qa+overseas_etp+domestic_etp+bond+fund",
+  "evaluation_layer": "system_regression",
+  "status": "domain_qa_router_improved",
+  "provider": {
+    "name": "deterministic_current",
+    "official_submission_provider": false,
+    "network_used": false
+  },
+  "model": {
+    "repository": null,
+    "served_name": null,
+    "revision": null,
+    "reason": "금융 도메인 QA를 사용한 Router 안전 경계와 Q002 검색 계약 사후 회귀"
+  },
+  "suite": {
+    "id": "domain-qa-dev-v1.2-40",
+    "version": "1.2",
+    "status": "financial_domain_development_not_blind",
+    "path": "packages/finance_agent_core/src/finance_agent_core/evaluation/suites/domain_qa_dev_v1_2.json",
+    "sha256": "a93f3be835aec372c0f038d6ced49099ef210b3f4c95d0b341f7f47cce26e120",
+    "total_cases": 40,
+    "minimum_functionality_cases": 40,
+    "search_cases": 1,
+    "search_gold_complete": 1,
+    "clarify_cases": 9,
+    "unsupported_cases": 17,
+    "document_rag_cases": 9,
+    "external_policy_cases": 2,
+    "external_data_cases": 2
+  },
+  "data": {
+    "database_sha256": "2c26861a7e9b90ed4ae46ba3bfd4565daa63f405cf16627094629df36cecd03a",
+    "manifest_sha256": "624cef391dfe86aa2ce1a8ce20ad5142ec0d65a792e1fec6df0259024b997003",
+    "source_file_sha256": "c4f860f7a0d6821788015f51cf9ae48d2f48ab657e9a99be49771fc32fcaf895",
+    "questions_csv_sha256": "7f1881d2bb97f36d975f22f07ccdcccb64a8404afff1e6bae768e26b1b1fe7ae",
+    "review_csv_sha256": "e3da8d27ca6a06cfb673dfb3ecdb10964b6405f5a72017ce9f66908ac20f2353",
+    "search_gold": {
+      "case_count": 1,
+      "query_plan_sha256": "b0d3e2a1d1ea0ad1291974221ce1b4578ca191b6d12bb29644d31b654d968ace",
+      "candidate_count": 9164,
+      "returned_count": 5,
+      "evidence_sha256": "a724aa79157872b5adccf3f38091eea0a36fe354dc971a57db5c1815f8662615",
+      "evidence_field_count": 55,
+      "snapshot_date": "2026-07-11"
+    },
+    "hash_policy": "상품군 이름과 개별 SHA-256을 정렬해 결합한 뒤 다시 SHA-256 계산",
+    "by_family": {
+      "overseas_etp": {
+        "database_sha256": "eee9009ca741713a9a61e498cd5ed8366836d754c7d0c2dbd74ed7e456a2ebbe",
+        "manifest_sha256": "5dd159ade2353154ed8d3d32068dd512cb2b3becba39972aa0dabff0edd50771"
+      },
+      "domestic_etp": {
+        "database_sha256": "a91bfc713b88e9ba1e7da27508857cbe5ea200c4d7821d0b4fee7d9922684484",
+        "manifest_sha256": "2e52b161a260fa19eab50e8281f04f8617ee1ee69d618b19bd624af4635fca97"
+      },
+      "bond": {
+        "database_sha256": "40265aa326d63244727294ac29c1cd38c898f05b6a80dfd51fd8ac38e08764bc",
+        "manifest_sha256": "d724d99e9ffd24148144b3534795d0d545e0ebff9d01509966f6ebbb218f8312"
+      },
+      "fund": {
+        "database_sha256": "99fac786e5be0ec5a7a53e11e1bd3bbccd5b37ab15243ecbf8b864a85b375ca4",
+        "manifest_sha256": "be83a616d033db2328d231499d1f0492323d02bace4f153ad3da4860a0d10bcd"
+      }
+    }
+  },
+  "metrics": {
+    "total": 40,
+    "passed": 40,
+    "strict_accuracy": 1.0,
+    "route_passed": 40,
+    "route_pass_rate": 1.0,
+    "safety_passed": 40,
+    "safety_pass_rate": 1.0,
+    "evidence_passed": 40,
+    "evidence_pass_rate": 1.0,
+    "answer_passed": 40,
+    "answer_pass_rate": 1.0,
+    "dependency_pending": 13,
+    "oracle_gold_pending": 0,
+    "search_gold_complete": 1,
+    "actual_status_counts": {
+      "clarification": 19,
+      "success": 1,
+      "unsupported": 20
+    },
+    "unsafe_control_executions_or_errors": 0,
+    "latency_ms": {
+      "min": 0.069,
+      "p50": 0.083,
+      "p95": 0.277,
+      "max": 1980.257
+    }
+  },
+  "reports": [
+    {
+      "role": "deterministic_router_improved_observation",
+      "artifact_name": "domain-qa-dev-v1-2-router-e2.json",
+      "sha256": "3d5302b8ff18050ee30854a73398b9fdc8dadd3ef52a4299664773bc4334607d"
+    }
+  ],
+  "reproduce": "python -m finance_agent_core.evaluation.domain_qa_cli run --questions-csv <questions.csv> --review-csv <review.csv> --database-dir artifacts/normalized --generated-at-utc 2026-08-04T00:00:00+00:00 --report-id domain-qa-dev-v1-2-router-e2 --output artifacts/evaluation/domain-qa-dev-v1-2-router-e2.json --require-safe --require-perfect",
+  "limitations": [
+    "금융 도메인 담당자가 작성하고 AI 담당자가 검토·개선에 사용한 개발 세트이며 독립 blind가 아님",
+    "v1.2는 질문 본문에 국내·해외 단서가 없는 10문항의 상품군 exact 채점을 제거해 실제 stateless Router 계약과 맞춤",
+    "40/40은 이 개발 문항에서 배선·안전 계약이 일치한다는 뜻이며 새 질문에 대한 일반화 성능을 보장하지 않음",
+    "문서 RAG·외부 정책·외부 데이터 13문항은 승인된 dependency가 없어 안전한 control 경계만 평가",
+    "모델과 네트워크를 호출하지 않았으므로 로컬 LLM이나 HyperCLOVA X 생성 품질 점수가 아님"
+  ]
+}

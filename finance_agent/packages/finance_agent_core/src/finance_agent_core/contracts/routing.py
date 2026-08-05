@@ -60,8 +60,13 @@ class RouteDecision(RoutingModel):
         if self.disposition is RouteDisposition.EXECUTE:
             if self.query_plan_intent is None:
                 raise ValueError("executable routes require a QueryPlan intent")
-            if len(self.draft.product_families) != 1:
-                raise ValueError("executable routes require exactly one product family")
+            if not self.draft.product_families:
+                raise ValueError("executable routes require at least one product family")
+            if len(self.draft.product_families) > 1 and (
+                self.draft.intent is not InteractionIntent.SEARCH
+                or self.query_plan_intent is not Intent.SEARCH
+            ):
+                raise ValueError("multi-family execution is limited to independent SEARCH routes")
         elif self.query_plan_intent is not None:
             raise ValueError("non-executable routes must not expose a QueryPlan intent")
         if self.disposition is RouteDisposition.CLARIFY:

@@ -4,7 +4,6 @@ from datetime import date
 from pathlib import Path
 
 from fastapi.testclient import TestClient
-
 from finance_agent_core.contracts.queryplan import ProductFamily
 from finance_agent_core.domain import DatabaseManifest
 

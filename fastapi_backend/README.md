@@ -14,7 +14,9 @@
 ```
 
 Docker 이미지는 Python 3.12를 사용하고, 실행 시에는 권한이 제한된 비-root 사용자로
-동작한다. Uvicorn은 개발용 자동 재시작 없이 production 방식으로 실행된다.
+동작한다. 이미지에는 `app/`과 `start.sh`만 복사하며 로컬 `.env`, 테스트, Compose
+helper는 포함하지 않는다. Uvicorn은 개발용 자동 재시작 없이 production 방식으로
+실행된다.
 
 ## 협업 경계
 
@@ -43,13 +45,14 @@ Backend는 `execute_answer_request()`가 반환한 HTTP 상태와 DTO 필드를 
 | --- | --- |
 | `GET /health` | 구현 완료; 네 SQLite manifest와 상품군 일치 검증 |
 | `POST /answer` | 구현 완료; 기존 Agent adapter 연결 |
-| HTTP 계약 테스트 | 구현 완료; SSH 환경 실행 검증 대기 |
-| Dockerfile·Compose | 구현 완료; SSH 서버 build·smoke test 대기 |
+| HTTP 계약 테스트 | Backend 17/17 및 실제 Docker HTTP 7/7 통과 |
+| Dockerfile·Compose | Ubuntu SSH 서버 build·health·`/answer` 검증 완료 |
+| 로컬 Qwen 개발 연결 | grounded answer 7/7, Qwen 장애 fallback 7/7 통과 |
 | HyperCLOVA X 실제 HTTP | 미연결; endpoint·인증 계약 확정 후 연결 |
 | 사용자 인증·Frontend | 현재 예선 API 범위에서 제외 |
 
-검증 전 항목을 완료로 기록하지 않는다. SSH 서버 검증이 끝나면 사용한 commit,
-Docker 명령, health·answer 결과와 발견한 제약을 이 문서에 추가한다.
+검증 전 항목을 완료로 기록하지 않는다. 주최 측 실행 환경과 HyperCLOVA X 실제
+연결은 별도 외부 게이트로 유지한다.
 
 ## API 계약 빠른 확인
 
@@ -78,6 +81,10 @@ curl --fail-with-body \
 하나다. `answer_mode`, `fallback_used`, `citations`, `as_of_dates`를 별도 필드로
 확인하며, 답변 문자열만 보고 성공 여부를 판단하지 않는다.
 
+입력 JSON이 DTO 규칙을 위반하면 HTTP 422와 같은 `BackendAgentResponse` 형식의
+`status=error`, `error.code=invalid_request`를 반환한다. 검증 오류의 내부 위치나
+입력값은 공개 응답에 반사하지 않으며, 유효한 `request_id`만 추적용으로 보존한다.
+
 ## 1. 사전 준비
 
 Ubuntu 서버에 Docker Engine과 Docker Compose v2가 있어야 한다.
@@ -101,6 +108,11 @@ finance_agent/artifacts/normalized/
 지정한다. Compose는 이 디렉터리를 컨테이너의 `/data`에 읽기 전용으로 연결하므로,
 API가 원본 DB를 수정할 수 없다.
 
+정규화 도구가 보안을 위해 `0700` 디렉터리와 `0600` SQLite를 만들 수 있다.
+`compose.sh`는 컨테이너 Backend를 현재 호스트 사용자와 같은 UID/GID로 실행해 이
+권한을 그대로 유지하면서 DB를 읽는다. 데이터 권한을 `777` 또는 `666`으로 넓히지
+말고 Docker 명령은 `sudo` 없이 아래 wrapper로 실행한다.
+
 ## 2. 환경 설정
 
 저장소 루트에서 예시 파일을 복사한다.
@@ -116,9 +128,20 @@ cp fastapi_backend/.env.example fastapi_backend/.env
 저장소 루트에서 실행한다.
 
 ```bash
-docker compose --env-file fastapi_backend/.env up --build --detach backend
-docker compose --env-file fastapi_backend/.env ps
+./fastapi_backend/compose.sh build-image
+./fastapi_backend/compose.sh up --no-build --detach backend
+./fastapi_backend/compose.sh ps
 ```
+
+이미지를 만드는 명령과 컨테이너를 띄우는 명령을 분리했다. `build-image`는 Docker
+Compose를 거치지 않고 현재 경로를 그대로 Docker에 전달하므로, 한글 경로의 Unicode
+표현 방식이 달라 일부 Compose 버전에서 build context를 찾지 못하는 문제를 피한다.
+생성되는 로컬 이미지 이름은 `gaeng3-backend:local`이다.
+
+Docker API의 `permission denied`가 나오면 현재 계정이 `docker` 그룹에 포함됐는지
+확인한다. 계정을 방금 그룹에 추가했다면 기존 터미널에는 권한이 반영되지 않으므로
+로그아웃 후 다시 로그인하거나 새 셸에서 `newgrp docker`를 한 번 실행한다. 데이터
+파일 권한을 넓히거나 매번 `sudo`로 실행하는 방식은 사용하지 않는다.
 
 기본 포트는 서버 내부의 `127.0.0.1:18001`이다. API 상태와 문서는 다음 주소에서
 확인한다.
@@ -151,11 +174,110 @@ ssh -L 18001:127.0.0.1:18001 infolab_hyunhoim
 로그 확인과 종료 명령은 다음과 같다.
 
 ```bash
-docker compose --env-file fastapi_backend/.env logs --follow backend
-docker compose --env-file fastapi_backend/.env down
+./fastapi_backend/compose.sh logs --follow backend
+./fastapi_backend/compose.sh down
 ```
 
-## 4. Docker 없이 개발할 때
+## 4. Docker HTTP 스모크
+
+컨테이너를 실행한 뒤 다음 명령으로 네 상품군과 제어 경로를 한 번에 확인한다.
+
+```bash
+python fastapi_backend/scripts/smoke.py \
+  --base-url http://127.0.0.1:18001
+```
+
+다른 사용자가 기본 포트를 사용 중이면 개인 `.env`의 `BACKEND_PORT`를 바꾸고 같은
+포트를 `--base-url`에 전달한다. JSON 결과를 보존해야 할 때만 `--output`을 추가한다.
+
+```bash
+python fastapi_backend/scripts/smoke.py \
+  --base-url http://127.0.0.1:18002 \
+  --output /tmp/gaeng3-docker-http-smoke-v1.json
+```
+
+검증 항목:
+
+| 경로 | 기대 결과 |
+| --- | --- |
+| `/health` | 네 SQLite가 모두 `ready`인 HTTP 200 |
+| 국내채권 SEARCH | 상품 3개와 citation·기준일·manifest가 있는 `success` |
+| 국내 ETP SEARCH | 상품 5개와 citation·기준일·manifest가 있는 `success` |
+| 해외 ETP SEARCH | 상품 5개와 citation·기준일·manifest가 있는 `success` |
+| 공모펀드 SEARCH | DB는 ready지만 공식 실행 잠금으로 안전한 `clarification` |
+| 주관적 조건 | Oracle을 실행하지 않는 `clarification` |
+| 예측·단정 추천 | Oracle을 실행하지 않는 `unsupported` |
+| 잘못된 JSON DTO | HTTP 422 `invalid_request` |
+
+2026-08-05 Ubuntu SSH 서버에서 `gaeng3-backend:local` 이미지를 loopback 포트
+`18002`로 실행해 health와 7개 요청을 모두 통과했다. 세 실행 상품군은
+`answer_mode=deterministic`, `fallback_used=false`, `provider_model=null`이었고,
+공모펀드는 `execution_enabled=false` 정책을 유지했다. 단일 스모크의 지연시간은
+운영 성능이나 SLO로 해석하지 않는다.
+
+## 5. 개발 전용 로컬 Qwen 연결
+
+이 절차는 HyperCLOVA X 연결 전 내부 개발에만 사용한다. 평가·제출·운영 절차가
+아니며 `docker-compose.local-llm.yml`도 제출 후보에서 제거할 대상이다.
+
+현재 Backend에서 Qwen이 맡는 일은 검증된 검색 결과와 field-level evidence를 보고
+자연스러운 설명 초안을 만드는 단계뿐이다. 질문 분류, 조건 검색, 정렬, 후보 수 계산,
+Result Verifier와 Answer Verifier는 기존 결정론적 경로를 유지한다.
+
+터미널 1에서 loopback Qwen을 실행한다.
+
+```bash
+cd finance_agent
+scripts/local-llm/serve-qwen.sh
+```
+
+터미널 2에서 저장소 루트로 이동한 뒤 개발 전용 Compose override로 Backend를
+재기동한다. Linux host network를 사용해 컨테이너가 호스트의 loopback Qwen에만
+접속하며, Backend도 `127.0.0.1:${BACKEND_PORT}`에만 바인딩된다.
+
+```bash
+./fastapi_backend/compose.sh build-image
+./fastapi_backend/compose.sh \
+  -f docker-compose.yml \
+  -f fastapi_backend/docker-compose.local-llm.yml \
+  up --no-build --detach backend
+```
+
+Qwen 생성 성공 경로를 검사한다.
+
+```bash
+python fastapi_backend/scripts/smoke.py \
+  --base-url http://127.0.0.1:18002 \
+  --timeout 180 \
+  --success-answer-mode llm_grounded \
+  --provider-model qwen3-local-test
+```
+
+Backend가 실행된 상태에서 터미널 1의 Qwen만 `Ctrl-C`로 종료한 뒤 같은 검색이
+추측 없는 답변으로 대체되는지 검사한다.
+
+```bash
+python fastapi_backend/scripts/smoke.py \
+  --base-url http://127.0.0.1:18002 \
+  --timeout 30 \
+  --success-answer-mode deterministic_fallback \
+  --provider-model qwen3-local-test
+```
+
+테스트가 끝나면 반드시 기본 Compose 구성으로 복구한다.
+
+```bash
+./fastapi_backend/compose.sh \
+  up --no-build --detach --force-recreate backend
+```
+
+2026-08-05 실제 검증에서 Qwen 연결 상태는 7/7, Qwen 종료 후 fallback 상태도
+7/7, 기본 결정론적 모드 복구 후에도 7/7을 통과했다. 생성 성공 시 세 검색 응답은
+모두 `answer_mode=llm_grounded`, `fallback_used=false`였고, 장애 시에는 모두
+`answer_mode=deterministic_fallback`, `fallback_used=true`였다. 제어·차단 요청은
+두 상태 모두 모델을 호출하지 않았다.
+
+## 6. Docker 없이 개발할 때
 
 Python 3.12 가상환경을 활성화한 뒤 로컬 Agent core와 백엔드를 차례대로 설치한다.
 `finance-agent-core`라는 이름의 별도 PyPI 패키지를 설치하면 안 된다.
@@ -172,7 +294,7 @@ uvicorn app.main:app --app-dir fastapi_backend --host 127.0.0.1 --port 18001 --r
 python -m pytest fastapi_backend/tests
 ```
 
-## 5. 주요 환경변수
+## 7. 주요 환경변수
 
 | 변수 | 기본값 | 의미 |
 | --- | --- | --- |
@@ -184,6 +306,12 @@ python -m pytest fastapi_backend/tests
 | `FINANCE_DB_BOND` | `/data/bond.sqlite3` | 채권 DB의 컨테이너 경로 |
 | `FINANCE_DB_FUND` | `/data/fund.sqlite3` | 펀드 DB의 컨테이너 경로 |
 | `WEB_CONCURRENCY` | `1` | Uvicorn worker 수; 초기에는 1 유지 권장 |
+| `FINANCE_BACKEND_ANSWER_PROVIDER` | `deterministic` | `local_test`는 development와 전용 override에서만 허용 |
+
+`local_test`는 위 변수 하나만으로 켜지지 않는다. Core가 요구하는
+`FINANCE_AGENT_LLM_MODE=local_test`, `ENABLE_NON_HCX_TEST_LLM=1`,
+`LLM_PROVIDER=local_test` 세 조건과 loopback endpoint·모델명이 모두 있어야 한다.
+또한 `APP_ENV=test`, `evaluation`, `production`에서는 설정 검증 단계에서 거절된다.
 
 ## 템플릿 출처
 

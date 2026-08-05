@@ -1,0 +1,145 @@
+{
+  "schema_version": "1.0",
+  "suite_id": "domain-qa-dev-v1.1-40",
+  "suite_version": "1.1",
+  "status": "financial_domain_development_not_blind",
+  "author_role": "financial_domain",
+  "reviewer_role": "ai_engineering",
+  "source_questions_sha256": "7f1881d2bb97f36d975f22f07ccdcccb64a8404afff1e6bae768e26b1b1fe7ae",
+  "review_csv_sha256": "e3da8d27ca6a06cfb673dfb3ecdb10964b6405f5a72017ce9f66908ac20f2353",
+  "case_count": 40,
+  "expected_counts": {
+    "product_group": {
+      "국내채권": 9,
+      "해외 ETF·ETN": 11,
+      "국내 ETF·ETN": 10,
+      "공모펀드": 4,
+      "잘 모르겠음": 4,
+      "여러 상품군": 2
+    },
+    "review_class": {
+      "채택 후보": 17,
+      "문서 RAG 후보": 9,
+      "외부 기준 확인": 4,
+      "라벨 수정 후 채택": 10
+    },
+    "recommended_action": {
+      "조건을 다시 질문": 11,
+      "바로 답변": 1,
+      "데이터로 답변 불가": 17,
+      "확인 필요": 11
+    },
+    "data_support": {
+      "부분 지원": 11,
+      "지원": 2,
+      "미지원": 13,
+      "승인 문서 필요": 9,
+      "외부 정책 필요": 2,
+      "범위 밖": 3
+    },
+    "evaluation_path": {
+      "CLARIFY": 9,
+      "SEARCH": 1,
+      "UNSUPPORTED": 17,
+      "DOCUMENT_RAG": 9,
+      "EXTERNAL_POLICY": 2,
+      "EXTERNAL_DATA": 2
+    },
+    "severity": {
+      "낮음": 17,
+      "중간": 13,
+      "높음": 10
+    }
+  },
+  "family_overrides": {
+    "Q035": [],
+    "Q036": null,
+    "Q037": [],
+    "Q038": null,
+    "Q039": [
+      "domestic_etp",
+      "overseas_etp"
+    ],
+    "Q040": []
+  },
+  "search_gold": {
+    "Q002": {
+      "query_plan": {
+        "schema_version": "1.0",
+        "question_id": "Q002",
+        "intent": "search",
+        "product_families": [
+          "bond"
+        ],
+        "constraints": [
+          {
+            "field": "remaining_days",
+            "operator": "between",
+            "value": [
+              0,
+              365
+            ],
+            "unit": "day",
+            "strength": "locked"
+          }
+        ],
+        "ranking": [],
+        "projection": [
+          "product_id",
+          "product_name",
+          "ticker",
+          "issuer",
+          "bond_type",
+          "maturity_date",
+          "remaining_days",
+          "coupon_rate_pct",
+          "buy_yield_pct",
+          "buyable_quantity",
+          "dynamic_as_of"
+        ],
+        "limit": 5,
+        "intent_payload": {
+          "comparison_fields": [],
+          "group_by": [],
+          "aggregations": [],
+          "explain_product_ids": []
+        },
+        "ambiguities": [],
+        "unsupported_conditions": []
+      },
+      "query_plan_sha256": "b0d3e2a1d1ea0ad1291974221ce1b4578ca191b6d12bb29644d31b654d968ace",
+      "candidate_count": 9164,
+      "top_product_ids": [
+        "KR101501DB72",
+        "KR101501DB80",
+        "KR101501DB98",
+        "KR101501DBA5",
+        "KR101501DBB3"
+      ],
+      "evidence_sha256": "a724aa79157872b5adccf3f38091eea0a36fe354dc971a57db5c1815f8662615",
+      "evidence_field_count": 55,
+      "as_of_dates": [
+        "2026-02-24",
+        "2026-07-11"
+      ]
+    }
+  },
+  "data": {
+    "overseas_etp": {
+      "database_sha256": "eee9009ca741713a9a61e498cd5ed8366836d754c7d0c2dbd74ed7e456a2ebbe",
+      "manifest_sha256": "5dd159ade2353154ed8d3d32068dd512cb2b3becba39972aa0dabff0edd50771"
+    },
+    "domestic_etp": {
+      "database_sha256": "a91bfc713b88e9ba1e7da27508857cbe5ea200c4d7821d0b4fee7d9922684484",
+      "manifest_sha256": "2e52b161a260fa19eab50e8281f04f8617ee1ee69d618b19bd624af4635fca97"
+    },
+    "bond": {
+      "database_sha256": "40265aa326d63244727294ac29c1cd38c898f05b6a80dfd51fd8ac38e08764bc",
+      "manifest_sha256": "d724d99e9ffd24148144b3534795d0d545e0ebff9d01509966f6ebbb218f8312"
+    },
+    "fund": {
+      "database_sha256": "99fac786e5be0ec5a7a53e11e1bd3bbccd5b37ab15243ecbf8b864a85b375ca4",
+      "manifest_sha256": "be83a616d033db2328d231499d1f0492323d02bace4f153ad3da4860a0d10bcd"
+    }
+  }
+}

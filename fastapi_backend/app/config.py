@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 from pathlib import Path
-
-from pydantic import Field
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from typing import Literal
 
 from finance_agent_core.contracts.queryplan import ProductFamily
+from pydantic import Field, model_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -26,6 +26,14 @@ class Settings(BaseSettings):
         default="0.1.0",
         validation_alias="FINANCE_APP_VERSION",
     )
+    app_env: Literal["development", "test", "evaluation", "production"] = Field(
+        default="development",
+        validation_alias="APP_ENV",
+    )
+    answer_provider: Literal["deterministic", "local_test"] = Field(
+        default="deterministic",
+        validation_alias="FINANCE_BACKEND_ANSWER_PROVIDER",
+    )
     overseas_etp_db: Path | None = Field(
         default=None,
         validation_alias="FINANCE_DB_OVERSEAS_ETP",
@@ -42,6 +50,16 @@ class Settings(BaseSettings):
         default=None,
         validation_alias="FINANCE_DB_FUND",
     )
+
+    @model_validator(mode="after")
+    def require_development_for_local_provider(self) -> Settings:
+        """Keep the non-HCX provider outside evaluation and production."""
+
+        if self.answer_provider == "local_test" and self.app_env != "development":
+            raise ValueError(
+                "FINANCE_BACKEND_ANSWER_PROVIDER=local_test is allowed only in development"
+            )
+        return self
 
     @property
     def database_paths(self) -> dict[ProductFamily, Path]:

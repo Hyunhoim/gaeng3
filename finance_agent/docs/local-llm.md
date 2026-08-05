@@ -1,7 +1,7 @@
 # 로컬 LLM 테스트 런타임
 
-상태: 개발 전용 · 기존 상품군 회귀와 공모펀드 SEARCH·COMPARE·상품명 resolution·검증 답변 E2E 완료
-기준일: 2026-07-30
+상태: 개발 전용 · 단일·교차 상품군 검색과 검증 답변 E2E 완료
+기준일: 2026-07-31
 
 ## 경계
 
@@ -130,6 +130,37 @@ LOCAL_TEST_LLM_MODEL=qwen3-local-test \
 질문 구성, 최초 실패와 수정 후 결과는
 [internal-red-team-v1 전체 E2E 평가](evaluation-internal-red-team.md)에
 보존한다.
+
+### Docker Backend grounded answer 스모크
+
+로컬 Qwen은 개발 전용 Compose override를 통해 실제 FastAPI Backend의 최종 설명
+단계에도 연결할 수 있다. Qwen은 검증된 evidence만 받고, 검색·계산·검증은 기존
+결정론적 Core가 담당한다. 다음 명령은 저장소 루트에서 실행한다.
+
+```bash
+./fastapi_backend/compose.sh \
+  -f docker-compose.yml \
+  -f fastapi_backend/docker-compose.local-llm.yml \
+  up --no-build --detach backend
+
+python fastapi_backend/scripts/smoke.py \
+  --base-url http://127.0.0.1:18002 \
+  --timeout 180 \
+  --success-answer-mode llm_grounded \
+  --provider-model qwen3-local-test
+```
+
+Qwen을 종료한 상태에서는 `--success-answer-mode deterministic_fallback`으로 같은
+7개 요청을 검사한다. 2026-08-05 실제 Docker HTTP 결과는 Qwen 정상 7/7, 장애
+fallback 7/7, 기본 결정론적 구성 복구 후 7/7이었다. 테스트가 끝나면 다음 명령으로
+개발 전용 override를 제거한 기본 컨테이너를 다시 만든다.
+
+```bash
+./fastapi_backend/compose.sh \
+  up --no-build --detach --force-recreate backend
+```
+
+이 override와 로컬 provider 설정은 평가·제출·운영에 포함하지 않는다.
 
 ## 2026-07-28 실제 검증 결과
 
@@ -274,6 +305,35 @@ LOCAL_TEST_LLM_MODEL=qwen3-local-test \
 [국내채권 핵심 평가 기준선](evaluation-domestic-bond.md)에 기록한다.
 
 실행 후 서버를 종료했고 GPU는 74MiB·18MiB, utilization 0%로 복귀했으며
+18000 포트가 해제됐다.
+
+## 교차 상품군 grounded answer 평가
+
+국내·해외 ETP를 한 질문에서 독립 검색한 뒤 각 family evidence만 보고 답변을
+생성하는 경로는 다음 명령으로 재현한다.
+
+```bash
+FINANCE_AGENT_LLM_MODE=local_test \
+ENABLE_NON_HCX_TEST_LLM=1 \
+LLM_PROVIDER=local_test \
+LOCAL_TEST_LLM_BASE_URL=http://127.0.0.1:18000/v1 \
+LOCAL_TEST_LLM_MODEL=qwen3-local-test \
+/home/haeyeongcho/miniforge3/envs/gaeng3-dev/bin/python \
+  -m finance_agent_core.evaluation.cross_family_answer_cli \
+  --provider local_test \
+  --require-perfect \
+  --require-zero-fallback
+```
+
+2026-07-31 공개 4문항 결과는 4/4다. 생성 대상 2문항은 모두
+`llm_grounded`, fallback 0이며, 양쪽 성공 2회와 부분 성공 1회로 모델을 총
+3회 호출했다. 전체 빈 결과와 교차 비교 control은 모델 호출 0회다. 세 호출의
+생성 지연 합계는 5,572.617ms였다.
+
+각 호출은 한 상품군의 질문·단일-family QueryPlan·field evidence·manifest만
+받는다. 다른 상품군 언급이나 교차 비교·합산 문구, provider 오류 또는 family
+검증 실패가 하나라도 있으면 최종 답변 전체를 결정론적 섹션으로 교체한다.
+평가 후 서버를 종료했고 GPU는 71MiB·15MiB, utilization 0%로 복귀했으며
 18000 포트가 해제됐다.
 
 ## 공모펀드 QueryPlan development 평가

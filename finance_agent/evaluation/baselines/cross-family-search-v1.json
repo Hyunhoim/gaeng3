@@ -1,0 +1,74 @@
+{
+  "schema_version": "1.0",
+  "baseline_id": "cross-family-search-v1",
+  "recorded_on": "2026-07-31",
+  "dataset": "domestic_etp+overseas_etp",
+  "evaluation_layer": "system_regression",
+  "status": "public_deterministic_regression",
+  "provider": {
+    "name": "deterministic_server",
+    "official_submission_provider": false,
+    "network_used": false
+  },
+  "model": {
+    "repository": null,
+    "served_name": null,
+    "revision": null,
+    "reason": "교차 상품군 SEARCH v1은 QueryPlan·답변 provider를 호출하지 않는 결정론적 경로"
+  },
+  "suite": {
+    "id": "cross-family-search-v1-4",
+    "version": "1.0",
+    "path": "packages/finance_agent_core/src/finance_agent_core/evaluation/suites/cross_family_search_v1.json",
+    "sha256": "6ee492fa535b0f15e9ce61ccba0c3938312542255901e14c7514f9e2d56b0bbc",
+    "total_cases": 4,
+    "all_success_cases": 1,
+    "partial_success_cases": 1,
+    "all_not_found_cases": 1,
+    "blocked_comparison_cases": 1
+  },
+  "data": {
+    "database_sha256": "030c532305352817fbb0ba7b2f5e509e34b45a3b628317e76fb848ff79fc4384",
+    "manifest_sha256": "089204c9db83f5f287efc753401f125b9eb99af76152d59f1ab574645675fe3e",
+    "source_file_sha256": "9d44a847bd633a0d8c6fa6251f041d10632b984ac708ac9c633fc8658cb18888",
+    "hash_policy": "상품군 이름, NUL, 개별 SHA-256, LF를 상품군 이름순으로 결합한 뒤 다시 SHA-256 계산",
+    "by_family": {
+      "domestic_etp": {
+        "database_sha256": "a91bfc713b88e9ba1e7da27508857cbe5ea200c4d7821d0b4fee7d9922684484",
+        "manifest_sha256": "2e52b161a260fa19eab50e8281f04f8617ee1ee69d618b19bd624af4635fca97",
+        "source_file_sha256": "0f5706d45f93284bcaac2fa8eaed04db920a7043abaa859e455f06e246d54723"
+      },
+      "overseas_etp": {
+        "database_sha256": "eee9009ca741713a9a61e498cd5ed8366836d754c7d0c2dbd74ed7e456a2ebbe",
+        "manifest_sha256": "5dd159ade2353154ed8d3d32068dd512cb2b3becba39972aa0dabff0edd50771",
+        "source_file_sha256": "3cec19043f742771e0016d56fe806f19ad78f4295d1ae59192740a78feb2253b"
+      }
+    }
+  },
+  "metrics": {
+    "total": 4,
+    "passed": 4,
+    "strict_accuracy": 1.0,
+    "all_success": 1,
+    "partial_success": 1,
+    "all_not_found": 1,
+    "blocked_cross_family_comparison": 1,
+    "network_calls": 0,
+    "model_calls": 0
+  },
+  "reports": [
+    {
+      "role": "cross_family_search_public_regression",
+      "artifact_name": "cross-family-search-v1.json",
+      "sha256": "b4354f31fb2214548c9692b8ab4c0720aff866bcdb54eac80075fc9708eee104"
+    }
+  ],
+  "reproduce": "python -m finance_agent_core.evaluation.cross_family_search_cli --require-perfect",
+  "limitations": [
+    "공개된 고정 4문항의 실제 데이터 회귀이며 독립 blind 또는 일반화 성능이 아님",
+    "공식 실행이 활성화된 국내 ETP·해외 ETP 조합만 측정",
+    "상품군별 공통 조건의 독립 검색만 지원하고 직접 수치 비교·합산·우열 판단은 하지 않음",
+    "상품군별 서로 다른 조건, AGGREGATE, 환율 환산과 생성형 통합 답변은 v1 범위가 아님",
+    "API·네트워크·HyperCLOVA X 생성 품질과 지연은 포함하지 않음"
+  ]
+}

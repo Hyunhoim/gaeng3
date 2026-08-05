@@ -85,6 +85,26 @@ class SourceCitation(BackendContractModel):
     evidence_refs: list[str] = Field(min_length=1, max_length=20)
 
 
+class BackendFamilySearch(BackendContractModel):
+    product_family: ProductFamily
+    status: Literal["success", "not_found"]
+    query_plan: QueryPlan
+    candidate_count: int = Field(ge=0)
+    returned_product_ids: list[str]
+    warnings: list[str]
+    source_manifest: DatabaseManifest
+
+    @model_validator(mode="after")
+    def validate_family_search(self) -> BackendFamilySearch:
+        if self.query_plan.product_families != [self.product_family]:
+            raise ValueError("family search and QueryPlan family differ")
+        if (self.status == "not_found") != (self.candidate_count == 0):
+            raise ValueError("family search status and candidate count disagree")
+        if self.status == "not_found" and self.returned_product_ids:
+            raise ValueError("not_found family search cannot return product IDs")
+        return self
+
+
 class BackendAgentResponse(BackendContractModel):
     schema_version: Literal["1.0"] = "1.0"
     request_id: str = Field(min_length=1, max_length=128)
@@ -107,6 +127,8 @@ class BackendAgentResponse(BackendContractModel):
     clarification: BackendClarification | None
     error: BackendError | None
     source_manifest: DatabaseManifest | None
+    family_searches: list[BackendFamilySearch] = Field(default_factory=list, max_length=4)
+    source_manifests: list[DatabaseManifest] = Field(default_factory=list, max_length=4)
 
     @model_validator(mode="after")
     def validate_state(self) -> BackendAgentResponse:
@@ -116,6 +138,29 @@ class BackendAgentResponse(BackendContractModel):
             raise ValueError("citation IDs must be unique")
         if len(self.as_of_dates) != len(set(self.as_of_dates)):
             raise ValueError("as_of_dates must be unique")
+        if self.family_searches:
+            if len(self.family_searches) < 2:
+                raise ValueError("multi-family response requires at least two family searches")
+            if self.query_plan is not None or self.source_manifest is not None:
+                raise ValueError(
+                    "multi-family response keeps plans and manifests in family_searches"
+                )
+            if self.product_families != [item.product_family for item in self.family_searches]:
+                raise ValueError("family search order must match product_families")
+            if self.candidate_count != sum(item.candidate_count for item in self.family_searches):
+                raise ValueError("candidate_count must equal the family search sum")
+            if [manifest for manifest in self.source_manifests] != [
+                item.source_manifest for item in self.family_searches
+            ]:
+                raise ValueError("source_manifests must match family_searches")
+            if [product.product_id for product in self.products] != [
+                product_id
+                for item in self.family_searches
+                for product_id in item.returned_product_ids
+            ]:
+                raise ValueError("products must preserve family search result order")
+        elif self.source_manifests:
+            raise ValueError("source_manifests require family_searches")
         if self.status is BackendStatus.SUCCESS:
             if (
                 not self.products
@@ -177,6 +222,8 @@ class BackendAgentResponse(BackendContractModel):
                 or self.clarification is not None
                 or self.provider_model is not None
                 or self.source_manifest is not None
+                or self.family_searches
+                or self.source_manifests
             ):
                 raise ValueError("error response cannot contain executed or control evidence")
             if self.answer_mode is not BackendAnswerMode.CONTROL or self.fallback_used:
@@ -334,6 +381,18 @@ def routed_result_to_backend(result: RoutedAgentResult) -> BackendAgentResponse:
             required_fields=required_fields,
             options=[],
         )
+    family_searches = [
+        BackendFamilySearch(
+            product_family=item.product_family,
+            status=item.status,
+            query_plan=item.query_plan,
+            candidate_count=item.candidate_count,
+            returned_product_ids=[product.product_id for product in item.products],
+            warnings=item.warnings,
+            source_manifest=item.source_manifest,
+        )
+        for item in result.family_searches
+    ]
     return BackendAgentResponse(
         request_id=result.request_id,
         status=status,
@@ -355,6 +414,8 @@ def routed_result_to_backend(result: RoutedAgentResult) -> BackendAgentResponse:
         clarification=clarification,
         error=None,
         source_manifest=result.source_manifest,
+        family_searches=family_searches,
+        source_manifests=[item.source_manifest for item in family_searches],
     )
 
 

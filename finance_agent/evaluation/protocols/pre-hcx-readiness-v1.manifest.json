@@ -1,13 +1,14 @@
 {
   "schema_version": "1.0",
   "baseline_id": "pre-hcx-readiness-v1",
-  "recorded_on": "2026-07-30",
+  "recorded_on": "2026-08-05",
   "status": "internal_ready_external_gates_pending",
-  "git_commit": null,
-  "generated_from_dirty_worktree": true,
+  "git_commit": "3c865514b5f810bce3d5a098ce0d72bfb7b6c99a",
+  "last_committed_source_commit": "3c865514b5f810bce3d5a098ce0d72bfb7b6c99a",
+  "generated_from_dirty_worktree": false,
   "hash_algorithm": "sha256(sorted(relative_path + NUL + file_sha256 + LF))",
-  "file_count": 231,
-  "tree_sha256": "ac9965b4d8e62bb12f309f6cca81071263ef2b2f76b693e3fa9cbf906bb518c7",
+  "file_count": 250,
+  "tree_sha256": "4df457eae62f18908541c3683c070c91acbac6ee2eae47cc81b2e21ec12c0052",
   "included_scope": [
     "README.md",
     "environment*.yml",
@@ -34,27 +35,35 @@
     "limitation": "self_authored_internal_diagnostic_not_independent_blind"
   },
   "qa": {
-    "pytest_passed": 312,
+    "pytest_passed": 333,
     "ruff_lint": "passed",
     "ruff_format": "passed",
     "pip_check": "passed",
-    "documentation_markdown": 36,
-    "documentation_baselines": 23,
+    "documentation_markdown": 47,
+    "documentation_baselines": 28,
     "wheel_build_no_isolation": "passed",
     "wheel_required_package_data": "passed",
-    "git_diff_check": "passed"
+    "git_diff_check": "passed",
+    "backend_pytest_passed": 17,
+    "backend_ruff_lint": "passed",
+    "backend_ruff_format": "passed",
+    "backend_compose_config": "passed",
+    "backend_local_http_smoke": "health_validation_bond_cross_family_passed",
+    "backend_ssh_docker_http_smoke": "health_four_families_and_7_cases_passed",
+    "backend_local_qwen_http_smoke": "grounded_7_of_7_fallback_7_of_7_default_restored_7_of_7"
   },
   "external_gates": [
     "금융 도메인 담당자의 external blind 100문항과 비공개 정답키 작성",
     "봉인 이후 최초 blind E2E 단일 실행",
     "승인된 실제 비정형 문서 corpus와 활용 범위 확인",
     "최소 2명의 독립 reviewer가 수행한 실제 사람 평가",
-    "HyperCLOVA X 모델·Structured Outputs·endpoint·인증 계약 확인, 실제 HTTP transport와 공식 재현",
-    "FastAPI /answer route와 주최 측 실행 환경 통합"
+    "2026-08-06 오프라인 설명회의 HyperCLOVA X 모델·Structured Outputs·endpoint·인증·제출 범위 확인",
+    "공식 안내 후 HyperCLOVA X 실제 HTTP transport·공식 재현·제출 후보의 로컬 LLM 구성 제거 검수",
+    "주최 측 실행 환경의 Docker·포트·인증·네트워크 정책 최종 재현"
   ],
   "limitations": [
-    "commit을 만들지 말라는 작업 조건에 따라 git_commit은 null",
-    "source tree hash는 현재 보존된 dirty worktree 전체를 기준으로 계산",
+    "git_commit은 readiness manifest 자체를 제외한 source tree가 동결된 커밋을 가리킴",
+    "source tree hash는 git_commit의 readiness 포함 범위와 일치함",
     "로컬 Qwen과 공개 회귀 결과는 HyperCLOVA X 공식 성능이 아님",
     "external gate 완료 전 최종 일반화 성능 또는 제출 준비 완료를 주장하지 않음"
   ]

@@ -2,7 +2,7 @@
 set -eu
 
 exec uvicorn app.main:app \
-    --host "0.0.0.0" \
+    --host "${BACKEND_PROCESS_HOST:-0.0.0.0}" \
     --port "${PORT:-8000}" \
     --workers "${WEB_CONCURRENCY:-1}" \
     --log-level "${LOG_LEVEL:-info}"

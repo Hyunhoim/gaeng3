@@ -1,0 +1,80 @@
+{
+  "schema_version": "1.0",
+  "baseline_id": "cross-family-answer-v1",
+  "recorded_on": "2026-07-31",
+  "dataset": "domestic_etp+overseas_etp",
+  "evaluation_layer": "grounded_answer",
+  "status": "public_grounded_regression_not_blind",
+  "provider": {
+    "name": "local_test",
+    "official_submission_provider": false,
+    "network_used": "loopback_only"
+  },
+  "model": {
+    "repository": "Qwen/Qwen3-30B-A3B-Instruct-2507-FP8",
+    "served_name": "qwen3-local-test",
+    "revision": "5a5a776300a41aaa681dd7ff0106608ef2bc90db"
+  },
+  "suite": {
+    "id": "cross-family-search-v1-4",
+    "version": "1.0",
+    "path": "packages/finance_agent_core/src/finance_agent_core/evaluation/suites/cross_family_search_v1.json",
+    "sha256": "6ee492fa535b0f15e9ce61ccba0c3938312542255901e14c7514f9e2d56b0bbc",
+    "total_cases": 4,
+    "generation_eligible_cases": 2,
+    "all_not_found_cases": 1,
+    "control_no_call_cases": 1
+  },
+  "data": {
+    "database_sha256": "030c532305352817fbb0ba7b2f5e509e34b45a3b628317e76fb848ff79fc4384",
+    "manifest_sha256": "089204c9db83f5f287efc753401f125b9eb99af76152d59f1ab574645675fe3e",
+    "source_file_sha256": "9d44a847bd633a0d8c6fa6251f041d10632b984ac708ac9c633fc8658cb18888",
+    "hash_policy": "상품군 이름, NUL, 개별 SHA-256, LF를 상품군 이름순으로 결합한 뒤 다시 SHA-256 계산",
+    "by_family": {
+      "domestic_etp": {
+        "database_sha256": "a91bfc713b88e9ba1e7da27508857cbe5ea200c4d7821d0b4fee7d9922684484",
+        "manifest_sha256": "2e52b161a260fa19eab50e8281f04f8617ee1ee69d618b19bd624af4635fca97",
+        "source_file_sha256": "0f5706d45f93284bcaac2fa8eaed04db920a7043abaa859e455f06e246d54723"
+      },
+      "overseas_etp": {
+        "database_sha256": "eee9009ca741713a9a61e498cd5ed8366836d754c7d0c2dbd74ed7e456a2ebbe",
+        "manifest_sha256": "5dd159ade2353154ed8d3d32068dd512cb2b3becba39972aa0dabff0edd50771",
+        "source_file_sha256": "3cec19043f742771e0016d56fe806f19ad78f4295d1ae59192740a78feb2253b"
+      }
+    }
+  },
+  "metrics": {
+    "total": 4,
+    "passed": 4,
+    "strict_accuracy": 1.0,
+    "generation_eligible": 2,
+    "llm_grounded": 2,
+    "fallback_count": 0,
+    "fallback_rate": 0.0,
+    "model_calls": 3,
+    "control_model_calls": 0,
+    "all_not_found_model_calls": 0,
+    "generation_latency_ms": 5572.617
+  },
+  "reports": [
+    {
+      "role": "deterministic_expected",
+      "artifact_name": "cross-family-answer-expected-v1.json",
+      "sha256": "6bf11696e5c3e49ae9bb78ee95a98cc77b2a3d5f40b185a8f28eeb8ed135b300"
+    },
+    {
+      "role": "local_qwen",
+      "artifact_name": "cross-family-answer-local-qwen-v1.json",
+      "sha256": "fa80bffc455cd6b043c7d74f10b66205e474dc40603810226d61afd0f938394d"
+    }
+  ],
+  "reproduce": "FINANCE_AGENT_LLM_MODE=local_test ENABLE_NON_HCX_TEST_LLM=1 LLM_PROVIDER=local_test LOCAL_TEST_LLM_MODEL=qwen3-local-test python -m finance_agent_core.evaluation.cross_family_answer_cli --provider local_test --require-perfect --require-zero-fallback",
+  "limitations": [
+    "기존 공개 4문항을 재사용한 배선·안전 회귀이며 독립 blind 또는 일반화 성능이 아님",
+    "공식 실행이 활성화된 국내 ETP·해외 ETP 조합만 측정",
+    "로컬 Qwen은 개발 전용이며 HyperCLOVA X 또는 공식 공모전 성능이 아님",
+    "생성 지연은 RTX 5090 두 장의 단일 순차 실행 합계이며 운영 Backend SLO가 아님",
+    "교차 상품군 직접 비교·합산·우열 판단은 여전히 실행하지 않음",
+    "공모펀드와 승인 전 외부 문서 RAG는 포함하지 않음"
+  ]
+}

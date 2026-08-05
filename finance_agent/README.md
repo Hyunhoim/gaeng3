@@ -16,15 +16,19 @@
 | 공통 Router | 네 상품군·7 intent 공개 진단: 도입 전 4/28, fail-closed Router 28/28 |
 | 공통 AGGREGATE | 네 상품군 COUNT·MIN·MAX·AVG·허용 SUM, 최대 2개 group, 통화·결측·기준일·독립 verifier |
 | 공통 COMPARE | 같은 상품군의 정확한 두 상품, 필드 allowlist·통화·기준일·stale·독립 verifier·Backend evidence, 공개 자연어 54문항 |
+| 교차 상품군 SEARCH | 단일-family 계획·병렬 Oracle·evidence 격리 Qwen 설명·교차 검증·전체 fallback, expected·로컬 Qwen 각각 4/4 |
 | SEARCH·AGGREGATE 성능 | 네 상품군 8문항 결과 지문 8/8, projected verifier, 새 프로세스 p50 308.749ms·최대 추가 RSS 51,000KiB |
 | 문서 RAG | caller-fed BM25/SQLite FTS 적재·필터·근거·기준일·not-found 최소 기능 |
 | 팀 통합 계약 | 프레임워크 독립 Backend DTO·HTTP 오류 adapter 12/12, JSON Schema/예시, 사람 평가 rubric v1 |
-| HyperCLOVA X | 세 provider 계약·fake transport·SEARCH 전체 경로 E2E 8/8 완료, 실제 HTTP 연결 대기 |
+| HyperCLOVA X | 세 provider 계약·fake transport·SEARCH 전체 경로 E2E 8/8 완료, 8월 6일 공식 안내 전까지 실연결 보류 |
 | 내부 red-team E2E | 네 상품군 40문항, 최초 로컬 Qwen 36/40·안전 차단 100%, `3건` handoff 수정 후 40/40·fallback 0 |
+| 금융 도메인 QA 실험 | 담당자 작성 40문항, 최초 strict 1/40 보존·Router 사후 회귀 40/40·잘못된 실행 0건 |
 
 로컬 Qwen은 개발 전용 테스트 대역이다. 평가·제출 경로의 LLM은 공식 규칙에
 따라 HyperCLOVA X로 제한하며, 로컬 provider는 세 가지 명시적 opt-in 없이는
-활성화되지 않는다.
+활성화되지 않는다. 8월 6일 설명회 후 공식 제출 범위를 확인한 뒤
+제출 후보에서 로컬 provider·설정·스크립트·의존성을 제거하고 별도로
+검수한다. 상세 순서는 [제출용 모델 경계](docs/submission-model-boundary.md)에서 관리한다.
 
 ## 아키텍처
 
@@ -36,6 +40,11 @@
 → 정확 일치 상품 identity resolver
 → typed QueryPlan
 → registry·Pydantic 검증
+├─ 복수 상품군 SEARCH
+│  → 상품군별 단일 QueryPlan·SQLite Oracle 병렬 실행
+│  → 상품군별 Result Verifier·field evidence·manifest
+│  → family별 evidence-only answer·Answer Verifier
+│  → 서버 섹션 조합·교차 문구 검사·전체 deterministic fallback
 ├─ SEARCH·DETAIL·COMPARE·EXPLAIN
 │  → parameterized SQLite Oracle
 │  → 독립 Python Result Verifier
@@ -129,6 +138,9 @@ conda run -n gaeng3-dev \
 - [Capability matrix](docs/capability-matrix.md)
 - [네 상품군 공통 AGGREGATE 엔진](docs/aggregate-engine.md)
 - [네 상품군 자연어 COMPARE 공개 회귀](docs/evaluation-product-comparison.md)
+- [교차 상품군 병렬 SEARCH와 grounded answer v2](docs/cross-family-search.md)
+- [금융 도메인 QA 실험 파이프라인](docs/evaluation-domain-qa.md)
+- [제출용 모델 경계와 로컬 LLM 정리 메모](docs/submission-model-boundary.md)
 - [문서 RAG](docs/document-rag.md)
 - [Backend DTO](docs/backend-contract.md)
 - [사람 평가 rubric](docs/human-evaluation.md)
@@ -169,8 +181,18 @@ field-level evidence, Qwen grounded answer, Answer Verifier·fallback까지 한
 이 결과는 공개 회귀 문항의 전체 배선 검증이며 독립 blind 일반화 평가나 실제
 사람 rubric 결과는 아니다. 내부 구현으로는 네 상품군 Router, BM25 문서 검색,
 공통 AGGREGATE, rubric·Backend DTO와 안전한 오류 adapter까지 준비했다. 남은
-우선순위는 금융 도메인 담당자의
+교차 상품군 SEARCH도 국내·해외 ETP 실제 데이터 공개 회귀 4/4를 통과했다.
+각 상품군은 별도 QueryPlan·Oracle·Verifier·manifest를 유지하며, 한쪽이 0건이어도
+다른 쪽 결과를 보존한다. 상품군 간 직접 수치 비교·합산·우열 판단과 서로 다른
+상품군별 조건은 계속 차단한다. v2 grounded answer는 각 family evidence만
+로컬 Qwen에 전달하고 서버가 답변을 조합한다. expected·로컬 Qwen 각각 4/4,
+생성 대상 2문항 grounded, 실제 호출 3회, fallback 0이며 빈 결과·control은
+모델을 호출하지 않았다.
+
+남은 우선순위는 금융 도메인 담당자의
 external blind 100문항·비공개 정답키 작성, 승인된 실제 문서 corpus와 사람
-평가, HyperCLOVA X 실제 HTTP transport, FastAPI `/answer` route다. 최초 SEARCH parser
+평가, 8월 6일 공식 안내 후 HyperCLOVA X 실제 HTTP transport, Ubuntu SSH
+Docker 재현과 Next.js 화면 연결이다. FastAPI `/health`·`/answer`는 실제 네 DB의
+단일·교차 상품군 로컬 HTTP smoke test를 통과했다. 최초 SEARCH parser
 holdout 실패 1건은 회귀 수정했지만 9/10 기록은 그대로 유지한다. 공모펀드
 공식 Agent 실행도 계속 비활성화한다.

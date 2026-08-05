@@ -1,0 +1,25 @@
+services:
+  backend:
+    # Development only: share the host network so the container can reach the
+    # loopback-only vLLM endpoint without exposing Qwen outside this server.
+    network_mode: host
+    ports: !reset []
+    environment:
+      APP_ENV: development
+      PORT: ${BACKEND_PORT:-18002}
+      BACKEND_PROCESS_HOST: 127.0.0.1
+      FINANCE_BACKEND_ANSWER_PROVIDER: local_test
+      FINANCE_AGENT_LLM_MODE: local_test
+      ENABLE_NON_HCX_TEST_LLM: "1"
+      LLM_PROVIDER: local_test
+      LOCAL_TEST_LLM_BASE_URL: http://127.0.0.1:18000/v1
+      LOCAL_TEST_LLM_MODEL: ${LOCAL_TEST_LLM_MODEL:-qwen3-local-test}
+      LOCAL_TEST_LLM_TIMEOUT_SECONDS: ${LOCAL_TEST_LLM_TIMEOUT_SECONDS:-180}
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - >-
+          import os, urllib.request;
+          urllib.request.urlopen('http://127.0.0.1:' + os.environ['PORT'] + '/health', timeout=3).read()

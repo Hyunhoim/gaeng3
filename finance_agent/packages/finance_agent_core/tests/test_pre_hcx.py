@@ -116,6 +116,54 @@ def test_router_fails_closed_for_missing_identity_and_cross_family_question() ->
     assert cross_family.query_plan_intent is None
 
 
+def test_router_generalizes_financial_safety_boundaries() -> None:
+    router = IntentRouter()
+    cases = [
+        (
+            "오늘 기관 순매수가 가장 많은 채권을 보여줘",
+            InteractionIntent.UNSUPPORTED,
+            RouteDisposition.UNSUPPORTED,
+            [ProductFamily.BOND],
+        ),
+        (
+            "미국 우주항공 ETF 중 수익률이 제일 높은 걸 찾아줘",
+            InteractionIntent.UNSUPPORTED,
+            RouteDisposition.UNSUPPORTED,
+            [ProductFamily.OVERSEAS_ETP],
+        ),
+        (
+            "국내 ETF 세율은 종목마다 달라?",
+            InteractionIntent.UNSUPPORTED,
+            RouteDisposition.UNSUPPORTED,
+            [ProductFamily.DOMESTIC_ETP],
+        ),
+        (
+            "국내 ETF와 ETN 중 운용보수가 낮은 상품을 알려줘",
+            InteractionIntent.CLARIFY,
+            RouteDisposition.CLARIFY,
+            [ProductFamily.DOMESTIC_ETP],
+        ),
+        (
+            "만기가 1년 이하인 채권을 찾아줘",
+            InteractionIntent.SEARCH,
+            RouteDisposition.EXECUTE,
+            [ProductFamily.BOND],
+        ),
+        (
+            "ETF와 ETN은 뭐고 어떤 차이가 있어?",
+            InteractionIntent.EXPLAIN,
+            RouteDisposition.CLARIFY,
+            [],
+        ),
+    ]
+
+    for index, (question, intent, disposition, families) in enumerate(cases, start=1):
+        decision = router.route(question, f"safety-boundary-{index:02d}")
+        assert decision.draft.intent is intent
+        assert decision.disposition is disposition
+        assert decision.draft.product_families == families
+
+
 def test_diagnostic_commitment_detects_tampering(tmp_path: Path) -> None:
     suite_resource = (
         Path(__file__).parents[1]

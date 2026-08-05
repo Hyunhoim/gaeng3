@@ -17,6 +17,8 @@ Verifier 경로를 사용한다. BM25/SQLite FTS 문서 검색, 프레임워크 
 Backend DTO·`/answer` service adapter와 사람 평가 rubric은 별도 계약으로
 제공한다. 네 상품군 40문항의 공개 `internal-red-team-v1`은 Router부터
 로컬 Qwen·Oracle·Verifier·Backend DTO까지 한 경로로 회귀 검증한다.
+금융 도메인 담당자 작성 40문항은 별도 개발 QA로 hash를 고정하고 route·
+safety·evidence·answer 단계별 현재 상태를 측정한다.
 네 상품군 공통 AGGREGATE는 COUNT·MIN·MAX·AVG·허용 SUM, 최대 두 범주
 group, 금액 통화 gate, 결측·기준일 보존, 별도 Python verifier와
 `AggregateEvidence`까지 구현했다. 집계 답변은 현재 LLM 없이 결정론적으로
@@ -25,6 +27,10 @@ group, 금액 통화 gate, 결측·기준일 보존, 별도 Python verifier와
 `comparable` capability, 통화·기준일·stale·결측 정책을 적용한다.
 `ComparisonEvidence`와 별도 `ComparisonResultVerifier`, Backend
 `comparison_field` citation까지 연결했다.
+복수 상품군 SEARCH v1은 상품군별 단일 QueryPlan·SQLite Oracle·Result
+Verifier를 병렬 실행하고 부분 결과와 manifest를 Backend family DTO에
+보존한다. 상품군 간 직접 비교·합산·우열 판단과 서로 다른 family 조건은
+계속 차단한다.
 최종 답변은 evidence만 입력받는 최소권한 GroundedAnswerDraft, draft·compiled
 Answer Verifier, 결정론적 evidence compiler와 safe fallback으로 구성한다.
 공식 Agent 실행은 HCX schema·서버 계약 승인 전까지 비활성화 상태다.
@@ -71,6 +77,8 @@ Answer Verifier, 결정론적 evidence compiler와 safe fallback으로 구성한
 - [문서 RAG 계약](../../docs/document-rag.md): 승인 문서 BM25/SQLite FTS 검색
 - [공통 AGGREGATE 계약](../../docs/aggregate-engine.md): 함수·그룹·통화·결측·근거
 - [공통 COMPARE 계약](../../docs/comparison-engine-design.md): exact identity·필드·통화·기준일·stale
+- [교차 상품군 SEARCH·답변 계약](../../docs/cross-family-search.md): 상품군별 계획·병렬 실행·evidence 격리 생성·전체 fallback
+- [금융 도메인 QA 실험](../../docs/evaluation-domain-qa.md): 담당자 작성 40문항의 hash 검증·행동 기능·단계별 E2E 채점
 - [사람 평가 rubric](../../docs/human-evaluation.md): 독립 reviewer·critical gate
 - [internal-red-team-v1](../../docs/evaluation-internal-red-team.md): 네 상품군 전체 E2E·안전 회귀
 
@@ -155,6 +163,30 @@ expected QueryPlan 기반 SEARCH·COMPARE 답변 격리 평가를 지원한다.
 수행한다. 분포·정답 계약, hash commitment, 최초 1회 실행과 상태 파일은
 [연결 전 진단·external blind 프로토콜](../../docs/evaluation-pre-hcx-diagnostic.md)과
 `finance-pre-hcx` 도구를 따른다.
+
+교차 상품군의 결정론적 SEARCH 공개 회귀는 모델과 네트워크 없이 실행한다.
+
+```bash
+/home/haeyeongcho/miniforge3/envs/gaeng3-dev/bin/python \
+  -m finance_agent_core.evaluation.cross_family_search_cli \
+  --require-perfect
+```
+
+같은 4문항에서 family별 grounded answer까지 평가하려면 answer provider를
+명시한다.
+
+```bash
+FINANCE_AGENT_LLM_MODE=local_test \
+ENABLE_NON_HCX_TEST_LLM=1 \
+LLM_PROVIDER=local_test \
+LOCAL_TEST_LLM_BASE_URL=http://127.0.0.1:18000/v1 \
+LOCAL_TEST_LLM_MODEL=qwen3-local-test \
+/home/haeyeongcho/miniforge3/envs/gaeng3-dev/bin/python \
+  -m finance_agent_core.evaluation.cross_family_answer_cli \
+  --provider local_test \
+  --require-perfect \
+  --require-zero-fallback
+```
 
 `--provider local_test`는 로컬 Qwen 서버와 세 가지 명시적 opt-in이 모두
 필요하다. 최초 holdout과 사후 회귀를 구분한 결과와 재현 절차는
@@ -290,6 +322,34 @@ projection으로 읽어 독립 재검산한다. 네 상품군 실제 데이터 8
 설치된 console script는 `finance-benchmark-search-aggregate`다. 이 평가는 공개된
 고정 문항의 회귀·개발 장비 성능 기준선이며 독립 blind나 운영 SLO가 아니다.
 
+## 금융 도메인 QA 실험
+
+질문 CSV와 검토 CSV를 원본 수정 없이 검증하고 현재 Router부터 Backend DTO까지
+실행한다.
+
+```bash
+python -m finance_agent_core.evaluation.domain_qa_cli validate \
+  --questions-csv "<questions.csv>" \
+  --review-csv "<review.csv>"
+
+python -m finance_agent_core.evaluation.domain_qa_cli run \
+  --questions-csv "<questions.csv>" \
+  --review-csv "<review.csv>" \
+  --database-dir artifacts/normalized \
+  --report-id domain-qa-dev-v1-2-router-e2 \
+  --output artifacts/evaluation/domain-qa-dev-v1-2-router-e2.json \
+  --require-safe \
+  --require-perfect
+```
+
+설치된 console script는 `finance-evaluate-domain-qa`다. 현재 40문항은 개발
+MFT 세트이며 v1.1에서 SEARCH 1문항의 QueryPlan·Oracle·evidence
+gold를 완성했다. v1.2 Router·linker 사후 회귀는 모든 계약
+40/40, control 잘못된 실행·오류 0건이다. 개선에 사용한 세트이므로
+독립 blind나 모델 생성 품질 점수가 아니다.
+최초 관측을 보존하려면 사후 실행마다 새로운 `--report-id`와 출력 파일명을
+사용한다.
+
 ## HyperCLOVA X provider 경계
 
 실제 API 없이 QueryPlan, 공모펀드 비교 초안, 근거 답변의 공통 요청·응답·오류
@@ -302,7 +362,8 @@ HCX_MODEL=HCX-로 시작하는 공식 확인 모델 ID
 HCX_TIMEOUT_SECONDS=60
 ```
 
-현재 구현은 주입형 transport와 fake transport 테스트까지다. endpoint·credential·
+현재 구현은 주입형 transport와 fake transport 테스트까지다. 2026-08-06
+오프라인 설명회의 공식 안내 전에는 실제 연결을 시도하지 않는다. endpoint·credential·
 인증 header를 추측하지 않았고 실제 API 호출용 transport나 CLI 선택지는 아직
 없다. 자세한 범위와 남은 작업은
 [HyperCLOVA X provider 계약](../../docs/hyperclova-provider.md)을 따른다.

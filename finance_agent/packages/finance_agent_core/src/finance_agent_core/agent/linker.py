@@ -156,8 +156,14 @@ def _date_hint(
 def build_lexical_hints(
     question: str,
     product_family_hint: str | None = None,
+    *,
+    force_product_family_hint: bool = False,
 ) -> dict[str, Any]:
-    family = _product_family(question)
+    family = (
+        product_family_hint
+        if force_product_family_hint and product_family_hint in SEARCH_PROJECTION_BY_FAMILY
+        else _product_family(question)
+    )
     if family is None and product_family_hint in SEARCH_PROJECTION_BY_FAMILY:
         family = product_family_hint
     required: list[dict[str, Any]] = []
@@ -405,6 +411,22 @@ def build_lexical_hints(
             match = re.search(pattern, question)
             if match:
                 add(field, match.group(1).strip(), operator)
+        maturity_years = re.search(
+            r"(?:잔존\s*)?만기(?:가|는|를|는\s*기간)?\s*(\d+)\s*년\s*"
+            r"(이하|미만|이상|초과)",
+            question,
+        )
+        if maturity_years:
+            days = int(maturity_years.group(1)) * 365
+            boundary = maturity_years.group(2)
+            if boundary == "이하":
+                add("remaining_days", [0, days], "between")
+            elif boundary == "미만":
+                add("remaining_days", [0, max(0, days - 1)], "between")
+            elif boundary == "이상":
+                add("remaining_days", days, "gte")
+            else:
+                add("remaining_days", days, "gt")
     if family == "overseas_etp":
         lookup_patterns = [
             (r"(?:종목코드|티커)\s*[:：]?\s*([A-Z0-9._-]+)(?:인|의|$|\s)", "ticker"),
@@ -717,6 +739,8 @@ def _hint_constraints(
 def canonicalize_query_plan_payload(
     question: str,
     payload: dict[str, Any],
+    *,
+    force_product_family_hint: bool = False,
 ) -> dict[str, Any]:
     raw_families = payload.get("product_families")
     product_family_hint = (
@@ -726,7 +750,11 @@ def canonicalize_query_plan_payload(
         and isinstance(raw_families[0], str)
         else None
     )
-    hints = build_lexical_hints(question, product_family_hint)
+    hints = build_lexical_hints(
+        question,
+        product_family_hint,
+        force_product_family_hint=force_product_family_hint,
+    )
     family = hints["product_family"]
     if family is None:
         family = "overseas_etp"

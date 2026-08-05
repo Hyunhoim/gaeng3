@@ -34,9 +34,14 @@ DB, 원천 XLSX, 전체 report, 모델 가중치는 계속 `artifacts/` 또는 �
 | [공모펀드 자연어 비교 E2E](baselines/public-fund-compare-e2e-v1.json) | 자연어 parser·resolver·Oracle·검증 답변·안전 차단 통합 |
 | [세 상품군 자연어 비교](baselines/product-compare-v1.json) | 해외·국내 ETP·국내채권 30문항의 결정론적 비교·Backend 계약·안전 차단 |
 | [SEARCH·AGGREGATE 성능](baselines/search-aggregate-performance-v1.json) | 네 상품군 8문항의 결과 지문·새 프로세스 지연·RSS·경량 verifier 전후 비교 |
+| [교차 상품군 SEARCH](baselines/cross-family-search-v1.json) | 국내·해외 ETP 양쪽 성공·부분 성공·전체 빈 결과·직접 비교 차단 4문항 |
+| [교차 상품군 grounded answer](baselines/cross-family-answer-v1.json) | family별 evidence-only Qwen 생성·교차 문구 검증·전체 fallback·무호출 계약 |
 | [HyperCLOVA X API 없는 계약 E2E](baselines/hcx-contract-e2e-v1.json) | 세 실행 상품군 SEARCH·fallback·timeout·정책 차단·계획 guard 8개 |
 | [Backend answer adapter 계약](baselines/answer-adapter-contract-v1.json) | HTTP status·안전한 ERROR DTO·fallback·민감정보 비노출 12개 |
 | [내부 red-team 전체 E2E](baselines/internal-red-team-v1.json) | 네 상품군 40문항의 Router→Qwen→Oracle→Verifier→Backend DTO와 공격 유형 회귀 |
+| [금융 도메인 QA 최초 관측](baselines/domain-qa-e2e-v1.json) | 금융 도메인 담당자 40문항의 route·safety·evidence·answer 단계별 최초 관측 |
+| [금융 도메인 QA SEARCH gold](baselines/domain-qa-e2e-v1.1-gold.json) | Q002 QueryPlan·Oracle 후보·상위 ID·evidence 지문 동결 후 Router 개선 전 관측 |
+| [금융 도메인 QA Router 회귀](baselines/domain-qa-e2e-v1.2-router.json) | Router·linker 안전 경계 개선 후 strict·route·safety·evidence·answer 40/40 |
 | [연결 전 라우팅 초기 진단 v1](baselines/pre-hcx-route-diagnostic-initial-v1.json) | AGGREGATE 미지원 시점의 Router 도입 전 search 강제 동작 4/28 |
 | [연결 전 라우팅 개선 진단 v1](baselines/pre-hcx-route-diagnostic-improved-v1.json) | AGGREGATE 미지원 시점의 네 상품군·일곱 intent 라우팅 28/28 |
 | [연결 전 라우팅 초기 진단 v2](baselines/pre-hcx-route-diagnostic-initial-v2.json) | 현재 AGGREGATE 기대값을 적용한 도입 전 replay 4/28 |
@@ -56,6 +61,18 @@ COMPARE 공개 회귀 54문항을 구성한다.
 `search-aggregate-performance-8`은 네 상품군에서 SEARCH와 AGGREGATE를 하나씩
 새 프로세스로 실행한다. 후보 수와 결과 지문이 모두 일치해야 통과하며 지연과
 추가 RSS는 같은 장비의 방향성 기준선으로만 사용한다.
+
+`cross-family-search-v1-4`는 국내·해외 ETP를 상품군별 단일 QueryPlan과
+독립 Oracle·Verifier로 실행한다. 한쪽 0건 보존, 전체 `not_found`, family별
+manifest와 직접 비교 차단을 실제 데이터 hash와 함께 4/4 고정한다. 결정론적
+검색 baseline은 모델과 네트워크를 호출하지 않는다.
+
+같은 공개 4문항의 grounded answer baseline은 각 family의 evidence만 로컬
+Qwen에 전달하고 서버가 섹션을 조합하는 v2 배선을 검증한다. 생성 대상 2문항은
+모두 `llm_grounded`, fallback 0이며 실제 호출은 양쪽 성공 2회와 부분 성공
+1회로 총 3회다. 전체 빈 결과와 교차 비교 control은 모델을 호출하지 않는다.
+다른 상품군 언급, 교차 비교·합산 문구 또는 family 하나의 provider·검증 실패가
+발생하면 부분 모델 문장을 남기지 않고 전체 결정론적 답변으로 교체한다.
 
 `hcx-contract-e2e-8`은 네트워크 없이 HCX semantic transport를 재생한다.
 세 실행 상품군의 QueryPlan→Oracle→Verifier→Evidence→답변→Backend DTO와
@@ -77,9 +94,26 @@ handoff 불일치로 36/40이었고, 원인을 수정한 사후 회귀는 40/40�
 로컬 LLM, 결정론적 linker, 계약, Oracle과 Verifier를 합친 시스템의 회귀
 기준선이다.
 
-대부분의 baseline은 완전 통과한 회귀 기준이다. `holdout_first_run_observed`
-상태는 최초 실행 결과가 완전하지 않아도 수정하거나 숨기지 않고 관측값 그대로
-보존한다.
+대부분의 baseline은 완전 통과한 회귀 기준이다. `holdout_first_run_observed`,
+`domain_qa_initial_observed`, `domain_qa_gold_observed` 상태는 최초 실행
+결과가 완전하지 않아도
+수정하거나 숨기지 않고 관측값 그대로 보존한다.
+
+`domain-qa-dev-v1-40`은 금융 도메인 담당자가 작성하고 AI 담당자가 검토한
+개발 QA다. 40문항을 route·plan·retrieval·evidence·answer·safety·contract로
+분해해 최초 strict 1/40, safety 32/40을 기록했다. 모델 성능이나 독립 blind
+점수가 아니라 기존 상품군별 회귀가 포착하지 못한 자연어 경계의 개선 출발점이다.
+설계와 해석은 [금융 도메인 QA 실험](../docs/evaluation-domain-qa.md)을 따른다.
+v1 최초 관측은 SEARCH gold pending 상태를 그대로 보존하고,
+`domain-qa-dev-v1.1-40`은 Q002의 잔존일수 0~365일 QueryPlan·Oracle·
+evidence 지문을 추가한다. 정답은 완성됐지만 Router 수정 전이므로
+strict 1/40·safety 32/40은 유지되며 E2 사후 회귀의 비교점이다.
+
+`domain-qa-dev-v1.2-40`은 만기 표현 정규화와 예측·정책·
+외부 시세·문서 dependency의 fail-closed Router 경계를 개선한 사후
+회귀다. strict·route·safety·evidence·answer를 40/40, control의
+잘못된 실행·오류를 0건으로 기록했다. 개선에 사용한 개발 세트이므로
+독립 blind·LLM 생성 품질·공식 평가 점수로 해석하지 않는다.
 
 라우팅 v1은 AGGREGATE 미지원, v2는 COMPARE가 공모펀드에만 열렸던 당시의
 봉인 이력이다. 현재 capability 정본은 원본을 수정하지 않고 별도

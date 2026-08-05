@@ -162,7 +162,10 @@ Backend 변경은 저장소 루트에서 다음 검사를 추가로 실행
 
 ```bash
 python -m pytest fastapi_backend/tests
-docker compose --env-file fastapi_backend/.env config --quiet
+python -m ruff check fastapi_backend
+python -m ruff format --check fastapi_backend
+BACKEND_ENV_FILE=fastapi_backend/.env.example \
+  ./fastapi_backend/compose.sh config --quiet
 ```
 
 Docker가 없는 환경에서는 Compose 검증을 실행하지 못한 사실을 PR에 명시하고,

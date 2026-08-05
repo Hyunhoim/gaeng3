@@ -4,7 +4,7 @@ import re
 from collections.abc import Iterable
 
 from finance_agent_core.config.capability import CapabilityMatrix, load_capability_matrix
-from finance_agent_core.contracts.queryplan import ProductFamily
+from finance_agent_core.contracts.queryplan import Intent, ProductFamily
 from finance_agent_core.contracts.routing import (
     InteractionIntent,
     MinimalQueryDraft,
@@ -19,12 +19,46 @@ _AGGREGATE = re.compile(
     r"(?:AUM|보수율|수익률|이율|잔존일수|듀레이션)\s*(?:최대|최소)",
     re.IGNORECASE,
 )
-_EXPLAIN = re.compile(r"설명|무슨\s*뜻|의미|왜\s|알려")
+_EXPLAIN = re.compile(r"설명|무슨\s*뜻|뭐(?:야|고)|의미|장점|요소|왜\s|알려")
+_DEFINITION = re.compile(r"무슨\s*뜻|뭐(?:야|고)|의미")
 _DETAIL = re.compile(r"상세|세부|정보\s*조회|상품번호|종목코드|티커")
-_AMBIGUOUS = re.compile(r"적당한|괜찮은|안전한|좋은\s*상품|추천할\s*만한")
+_AMBIGUOUS = re.compile(
+    r"적당한|괜찮은|안전한|좋은\s*상품|추천(?:해|하|받|할\s*만한)|"
+    r"좀\s*낮아도|많이\s*주는|제일\s*수익률|리스크.*신경\s*안|"
+    r"뭐가\s*더\s*좋|어느.*더\s*좋|"
+    r"(?:ETF|ETN).*(?:ETF|ETN).*(?:보수|수수료|비용)|"
+    r"(?:가격.*왜|왜.*가격)",
+    re.IGNORECASE,
+)
 _UNSUPPORTED = re.compile(
     r"전망|예측|예상\s*수익|수익\s*보장|원금\s*보장|"
-    r"매수\s*추천|투자\s*추천|사야\s*할|가장\s*좋은|오를\s*것"
+    r"매수\s*추천|투자\s*추천|사야\s*할|사면\s*좋|가장\s*좋은|"
+    r"기대되는\s*(?:고)?수익|오를\s*것|오를까|호재|악재|"
+    r"유상증자|유상감자|사모\s*CB|"
+    r"기관.*(?:구매|순매수|매매량)|"
+    r"오늘.*가장.*(?:오른|상승)|"
+    r"국내주식.*해외주식|해외주식.*국내주식",
+    re.IGNORECASE,
+)
+_EXTERNAL_POLICY = re.compile(r"세율|세금|과세|거래\s*수수료", re.IGNORECASE)
+_UNAVAILABLE_MARKET_DATA = re.compile(
+    r"거래량|괴리율|배당.*(?:가장|최대)|"
+    r"최근\s*[2-9]\s*년.*수익률|[2-9]\s*년간.*수익률|"
+    r"우주항공.*수익률|하락장.*잘\s*버티|"
+    r"변동성.*(?:낮|높|제일|가장)",
+    re.IGNORECASE,
+)
+_MIXED_ETP_COST = re.compile(
+    r"(?=.*ETF)(?=.*ETN)(?=.*(?:보수|수수료|비용))",
+    re.IGNORECASE,
+)
+_OVERSEAS_UNAVAILABLE_METRIC = re.compile(
+    r"수익률|변동성|하락장|오른|S&P\s*500",
+    re.IGNORECASE,
+)
+_FUND_UNAVAILABLE_DETAIL = re.compile(
+    r"최근\s*3\s*년.*수익률|언제든.*(?:꺼내|환매)",
+    re.IGNORECASE,
 )
 _QUOTED = (
     re.compile(r'"([^"\n]+)"'),
@@ -56,25 +90,64 @@ def _product_mentions(question: str) -> list[str]:
 
 
 def _product_families(question: str) -> list[ProductFamily]:
-    families: list[ProductFamily] = []
-    if re.search(r"공모\s*펀드|공모펀드", question, re.IGNORECASE):
-        families.append(ProductFamily.FUND)
+    mentions: list[tuple[int, ProductFamily]] = []
 
-    etp_mentioned = (
-        re.search(r"(?<![A-Z])(?:ETF|ETN|ETP)(?![A-Z])", question, re.IGNORECASE) is not None
-    )
-    if etp_mentioned:
-        if re.search(r"국내|한국|코스피|코스닥", question):
-            families.append(ProductFamily.DOMESTIC_ETP)
-        if re.search(r"해외|미국|글로벌|NYSE|NASDAQ|AMEX", question, re.IGNORECASE):
-            families.append(ProductFamily.OVERSEAS_ETP)
-    elif re.search(
+    def add_matches(pattern: str, family: ProductFamily, *, flags: int = 0) -> None:
+        mentions.extend((match.start(), family) for match in re.finditer(pattern, question, flags))
+
+    add_matches(r"공모\s*펀드|공모펀드", ProductFamily.FUND, flags=re.IGNORECASE)
+    add_matches(
         r"국내\s*채권|국내채권|회사채|국채|국공채|국고채|특수채|금융채|"
-        r"지역개발채|도시철도공채|채권\s*상품",
+        r"지역개발채|도시철도공채|채권\s*상품|채권(?!형)",
+        ProductFamily.BOND,
+    )
+
+    etp_token = r"(?<![A-Z])(?:ETF|ETN|ETP)(?![A-Z])"
+    domestic_pattern = (
+        rf"(?:국내|한국|코스피|코스닥)(?!\s*채권)[^와과,\n]{{0,20}}?{etp_token}|"
+        rf"{etp_token}\s*(?:국내|한국)"
+    )
+    overseas_pattern = (
+        rf"(?:해외|글로벌)[^와과,\n]{{0,20}}?{etp_token}|"
+        rf"{etp_token}\s*해외"
+    )
+    domestic_matches = list(re.finditer(domestic_pattern, question, re.IGNORECASE))
+    overseas_matches = list(re.finditer(overseas_pattern, question, re.IGNORECASE))
+    mentions.extend((match.start(), ProductFamily.DOMESTIC_ETP) for match in domestic_matches)
+    mentions.extend((match.start(), ProductFamily.OVERSEAS_ETP) for match in overseas_matches)
+
+    if re.search(etp_token, question, re.IGNORECASE):
+        explicit_etp_family = domestic_matches or overseas_matches
+        if not explicit_etp_family:
+            if re.search(r"NYSE|NASDAQ|AMEX", question, re.IGNORECASE):
+                match = re.search(r"NYSE|NASDAQ|AMEX", question, re.IGNORECASE)
+                assert match is not None
+                mentions.append((match.start(), ProductFamily.OVERSEAS_ETP))
+            elif re.search(r"미국", question):
+                match = re.search(r"미국", question)
+                assert match is not None
+                mentions.append((match.start(), ProductFamily.OVERSEAS_ETP))
+
+    domestic_brand = re.search(r"\b(?:TIGER|ACE)\b", question, re.IGNORECASE)
+    if domestic_brand is not None:
+        mentions.append((domestic_brand.start(), ProductFamily.DOMESTIC_ETP))
+    domestic_underlying = re.search(
+        r"(?:삼성전자.*하이닉스|하이닉스.*삼성전자).*레버리지",
         question,
-    ):
-        families.append(ProductFamily.BOND)
-    return list(dict.fromkeys(families))
+        re.IGNORECASE,
+    )
+    if domestic_underlying is not None:
+        mentions.append((domestic_underlying.start(), ProductFamily.DOMESTIC_ETP))
+    overseas_ticker = re.search(r"(?<![A-Z])SOXL(?![A-Z])", question, re.IGNORECASE)
+    if overseas_ticker is not None:
+        mentions.append((overseas_ticker.start(), ProductFamily.OVERSEAS_ETP))
+
+    fund = re.search(r"(?<!사모)\s*펀드", question, re.IGNORECASE)
+    if fund is not None:
+        mentions.append((fund.start(), ProductFamily.FUND))
+
+    ordered = [family for _, family in sorted(mentions, key=lambda item: item[0])]
+    return list(dict.fromkeys(ordered))
 
 
 def _requested_limit(question: str) -> int | None:
@@ -85,11 +158,23 @@ def _requested_limit(question: str) -> int | None:
     return value if 1 <= value <= 100 else None
 
 
-def _intent(question: str) -> InteractionIntent:
-    if _UNSUPPORTED.search(question):
+def _intent(question: str, families: list[ProductFamily]) -> InteractionIntent:
+    if (
+        _UNSUPPORTED.search(question)
+        or _EXTERNAL_POLICY.search(question)
+        or _UNAVAILABLE_MARKET_DATA.search(question)
+        or (
+            families == [ProductFamily.OVERSEAS_ETP]
+            and _OVERSEAS_UNAVAILABLE_METRIC.search(question)
+            and not _COMPARE.search(question)
+        )
+        or (ProductFamily.FUND in families and _FUND_UNAVAILABLE_DETAIL.search(question))
+    ):
         return InteractionIntent.UNSUPPORTED
-    if _AMBIGUOUS.search(question):
+    if _AMBIGUOUS.search(question) or _MIXED_ETP_COST.search(question):
         return InteractionIntent.CLARIFY
+    if _DEFINITION.search(question):
+        return InteractionIntent.EXPLAIN
     if _COMPARE.search(question):
         return InteractionIntent.COMPARE
     if _AGGREGATE.search(question):
@@ -114,8 +199,8 @@ class IntentRouter:
         if not request_id.strip():
             raise ValueError("request_id cannot be blank")
 
-        intent = _intent(stripped)
         families = _product_families(stripped)
+        intent = _intent(stripped, families)
         mentions = _product_mentions(stripped)
         draft = MinimalQueryDraft(
             request_id=request_id,
@@ -140,12 +225,47 @@ class IntentRouter:
                 "subjective_condition",
                 "판단 기준이나 임계값이 명시되지 않은 주관적 조건",
             )
-        if len(families) != 1:
+        if not families:
             return self._control(
                 draft,
                 RouteDisposition.CLARIFY,
                 "ambiguous_product_family",
-                "실행할 상품군을 하나로 확정할 수 없음",
+                "실행할 상품군을 확정할 수 없음",
+            )
+        if len(families) > 1:
+            if intent is not InteractionIntent.SEARCH:
+                return self._control(
+                    draft,
+                    RouteDisposition.CLARIFY,
+                    "ambiguous_product_family",
+                    "복수 상품군은 현재 상품군별 독립 검색만 지원",
+                )
+            capabilities = [
+                self.matrix.require(family, InteractionIntent.SEARCH) for family in families
+            ]
+            blocked = next(
+                (
+                    capability
+                    for capability in capabilities
+                    if capability.status != "executable"
+                    or capability.query_plan_intent is not Intent.SEARCH
+                ),
+                None,
+            )
+            if blocked is not None:
+                return self._control(
+                    draft,
+                    RouteDisposition.UNSUPPORTED,
+                    "capability_not_implemented",
+                    blocked.reason,
+                )
+            return RouteDecision(
+                draft=draft,
+                disposition=RouteDisposition.EXECUTE,
+                reason_code="cross_family_search_executable",
+                reason="복수 상품군을 각각 독립적으로 검색하고 검증",
+                query_plan_intent=Intent.SEARCH,
+                capability_matrix_version=self.matrix.matrix_version,
             )
         if intent in {InteractionIntent.DETAIL, InteractionIntent.EXPLAIN} and not mentions:
             return self._control(

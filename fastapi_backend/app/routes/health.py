@@ -6,10 +6,9 @@ from pathlib import Path
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Response, status
-from pydantic import BaseModel, ConfigDict
-
 from finance_agent_core.contracts.queryplan import ProductFamily
 from finance_agent_core.storage import connect_read_only, load_manifest
+from pydantic import BaseModel, ConfigDict
 
 from app.config import Settings
 from app.dependencies import get_settings

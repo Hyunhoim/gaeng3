@@ -1,7 +1,7 @@
 # 금융상품 Agent 현재 프로젝트 기준
 
 상태: 현재 정본
-기준일: 2026-07-30
+기준일: 2026-08-04
 대상 저장소: `https://github.com/Hyunhoim/gaeng3`
 
 ## 1. 한 문장 목표
@@ -108,6 +108,13 @@
   실제 데이터 8문항 결과 지문은 8/8 일치했고 p50 308.749ms, 최대 추가 RSS
   51,000KiB다. 변경 전 대비 국내채권은 약 92~93%, 공모펀드는 약 94~95%
   메모리 증가량이 감소했다. 단일 장비·단일 실행의 방향성 기준선이다.
+- 복수 상품군 SEARCH는 Router가 확인한 각 상품군을 단일-family QueryPlan으로
+  분리하고 SQLite Oracle·Result Verifier를 병렬 실행한다. 한 상품군의 0건
+  결과가 다른 상품군 결과를 지우지 않으며, 상품군별 plan·후보 수·evidence·
+  manifest를 Backend DTO에 별도 보존한다. 국내·해외 ETP 실제 데이터 공개
+  회귀는 양쪽 성공·부분 성공·전체 0건·교차 비교 차단 4/4다. 상품군 간 직접
+  수치 비교·합산·우열 판단, 서로 다른 상품군별 조건과 모델 호출은 v1에서
+  차단한다. 공모펀드 공식 실행 비활성 정책도 유지한다.
 - HyperCLOVA X QueryPlan·공모펀드 비교 초안·근거 답변 provider가 공유하는
   semantic structured request와 주입형 transport 계약을 구현했다. 공식
   mode/provider gate, HCX schema subset, token·latency 관측, 인증·rate limit·
@@ -122,17 +129,39 @@
   검증된 fallback은 HTTP 200으로 유지하고, QueryPlan provider·dataset·내부
   장애는 evidence 없는 안전한 ERROR DTO와 HTTP 502·503·504·500으로 변환한다.
   질문·credential·provider 본문·파일 경로 비노출을 포함한 12개 계약을 통과했다.
+- FastAPI `/health`·`/answer` route를 Backend DTO에 직접 연결했다. 입력 검증
+  실패도 내부 위치와 값을 노출하지 않는 HTTP 422 `invalid_request` DTO로
+  통일했다. Backend 단위·계약 테스트 10/10과 Ubuntu SSH Docker 실제 HTTP
+  스모크 7/7을 통과했다. health에서 네 DB ready, 채권·국내 ETP·해외 ETP 실행,
+  공모펀드 실행 잠금, 역질문·미지원·HTTP 422를 각각 검증했다. 주최 측 실행
+  환경의 포트·인증·네트워크 정책 재현은 외부 게이트로 유지한다.
 - 네 상품군 각 10문항과 10개 공격 유형으로 구성한 공개
   `internal-red-team-v1`을 Router부터 `/answer` service adapter까지 실행했다.
   최초 로컬 Qwen은 strict 36/40이었지만 네 실패 모두 Oracle 전 안전 차단됐다.
   `3건` limit handoff를 수정한 뒤 strict·safety·evidence 40/40, QueryPlan·
   grounded answer 각 12회, provider 오류·fallback 0건을 기록했다. 독립 blind나
   HyperCLOVA X 품질 점수는 아니다.
+- 국내·해외 ETP 교차 SEARCH는 상품군별 evidence-only grounded answer까지
+  확장했다. expected·로컬 Qwen 공개 회귀는 각각 4/4, 생성 대상 2문항
+  grounded, 실제 모델 호출 3회, fallback 0이며 전체 빈 결과와 control은
+  모델을 호출하지 않았다. 다른 상품군 언급이나 교차 연산 문구, 한 family의
+  실패가 있으면 전체를 결정론적 답변으로 교체한다.
 - caller-fed BM25/SQLite FTS 문서 검색은 chunk·필터·top-k·출처·기준일·
   provided 우선순위·not-found를 검증했다. 실제 corpus는 승인 전이다.
 - 사람 평가 rubric v1과 프레임워크 독립 Backend DTO·JSON 예시를 구현했다.
   실제 사람 평가는 외부 게이트다.
-- 전체 코드 회귀는 pytest 312개, Ruff lint·format, pip dependency check와
+- 금융 도메인 담당자가 작성한 40문항을 hash·schema·분포로 검증하고 현재
+  Router부터 Backend DTO까지 실행하는 개발 QA 파이프라인을 추가했다. 최초
+  strict 1/40, safety·evidence 32/40이며, 지원하지 않아야 할 문항 7건의 실행과
+  오류 1건을 수정 전 baseline으로 보존했다. 이는 독립 blind나 LLM 성능이 아니라
+  자연어 경계의 개선 출발점이다.
+- 같은 개발 QA의 Q002는 2026-07-11 기준 채권 잔존일수 0~365일,
+  기본 5건으로 해석한 gold QueryPlan·Oracle 후보 9,164건·상위 ID·
+  evidence 지문을 v1.1에서 동결했다. v1.2에서 Router·linker 안전
+  경계를 개선해 strict·route·safety·evidence·answer 40/40,
+  control 잘못된 실행·오류 0건을 기록했다. 개발 세트 사후 회귀이므로
+  독립 blind 성능으로 해석하지 않는다.
+- 전체 코드 회귀는 pytest 333개, Ruff lint·format, pip dependency check와
   wheel 빌드를 통과했다.
 
 ## 3. 변경할 수 없는 공식 제약
@@ -149,7 +178,7 @@
 
 | 구성요소 | 개발 단계 | 평가·제출 경로 | 현재 결정 |
 | --- | --- | --- | --- |
-| HyperCLOVA X | 요청·응답·오류 계약과 fake transport 완료 | 허용·필수 | 실제 HTTP transport 대기 |
+| HyperCLOVA X | 요청·응답·오류 계약과 fake transport 완료 | 허용·필수 | 8월 6일 공식 안내 전까지 실연결 보류 |
 | Mock/fixture provider | 기본 테스트와 CI | 실제 답변 생성에 사용하지 않음 | 항상 유지 |
 | `Qwen/Qwen3-30B-A3B-Instruct-2507-FP8` | 명시적으로 켠 로컬 실험만 | 금지 | 임시 개발 provider |
 | 다른 생성형 LLM/VLM | 사용하지 않음 | 금지 | 제외 |
@@ -172,6 +201,10 @@
   실패한다. service adapter는 이 설정 오류를 안전한 비재시도 ERROR DTO로 변환한다.
   실제 FastAPI route와 네트워크 transport는 아직 없다.
 - 로컬 모델의 응답·로그·캐시·가중치는 Git과 제출물에서 제외한다.
+- 2026-08-06 설명회 후 공식 제출 범위를 확인한 뒤 제출 후보의
+  로컬 provider·설정·스크립트·의존성을 제거하고 자동 검사한다.
+- 과거 Git 이력을 재작성해 개발 이력을 숨기지 않고, 내부 개발 저장소와
+  공식 제출 후보의 경계를 투명하게 관리한다.
 - 로컬 모델이 만든 결과는 정답 데이터로 자동 승격하지 않고, 결정론적 oracle 또는 사람 검토를 거친다.
 - 애플리케이션 환경과 GPU 추론 환경은 각각 `gaeng3-dev`, `gaeng3-llm-local` Conda 환경으로 분리하고 pip 의존성도 나눈다.
 
@@ -302,10 +335,16 @@ QueryPlan에는 최소한 intent, 상품군, 필수 조건, 완화 전 확인이
   계약과 API 없는 fake 테스트를 구현한다.
 - [x] 세 실행 상품군 SEARCH를 공통 Router·서버 계획 guard·Oracle·Evidence·
   Answer Verifier·Backend DTO까지 API 없는 E2E로 검증한다.
+- [x] 복수 상품군 SEARCH를 상품군별 단일 계획·병렬 Oracle·독립 verifier로
+  실행하고 부분 결과·manifest·Backend family DTO와 직접 비교 차단을 검증한다.
 - [x] 프레임워크 독립 `/answer` service adapter에 HTTP status·ERROR DTO·
   fallback·민감정보 비노출 계약을 연결한다.
-- [ ] 공식 endpoint·인증 계약에 맞는 HTTP transport와 FastAPI `/answer`
-  route를 연결하고 실제 API로 재현한다.
+- [x] FastAPI `/health`·`/answer` route와 입력 검증 오류 DTO를 연결하고 실제
+  SQLite 로컬 HTTP 경로로 재현한다.
+- [x] Ubuntu SSH Docker에서 이미지 build·health·네 상품군 정책·제어 응답을
+  실제 HTTP 7개 요청으로 재현한다.
+- [ ] 공식 endpoint·인증 계약에 맞는 HyperCLOVA X HTTP transport를 연결하고
+  주최 측 실행 환경에서 재현한다.
 
 ### P3 — 평가 확장
 
@@ -332,6 +371,8 @@ QueryPlan에는 최소한 intent, 상품군, 필수 조건, 완화 전 확인이
 - [x] BM25/SQLite FTS 문서 검색 최소 기능과 synthetic contract test를 구현한다.
 - [x] 사람 평가 rubric·집계 validator와 Backend DTO·JSON 예시를 확정한다.
 - [ ] 금융 도메인 담당자가 새 blind 100문항과 비공개 정답키를 독립 작성한다.
+- [x] 금융 도메인 개발 QA 40문항의 Router·linker 안전 경계를 개선하고
+  v1.2 사후 회귀 40/40과 잘못된 실행 0건을 동결한다.
 - [ ] 독립 blind 질문으로 자연어 COMPARE 전체 E2E 일반화 성능을 평가한다.
 - [ ] 완성된 rubric으로 명확성·근거·안전·비교 용이성과 deterministic 대비
   선호를 실제 팀원이 측정한다.

@@ -18,13 +18,17 @@ from finance_agent_core.answering.providers import (
     HyperClovaXGroundedAnswerProvider,
     LocalGroundedAnswerProvider,
 )
-from finance_agent_core.answering.verifier import AnswerVerifier
+from finance_agent_core.answering.verifier import (
+    AnswerVerifier,
+    CrossFamilyAnswerVerifier,
+)
 
 __all__ = [
     "AnswerComposition",
     "AnswerVerification",
     "AnswerVerifier",
     "AnswerWarning",
+    "CrossFamilyAnswerVerifier",
     "ExpectedGroundedAnswerProvider",
     "GroundedAnswerContext",
     "GroundedAnswerDraft",

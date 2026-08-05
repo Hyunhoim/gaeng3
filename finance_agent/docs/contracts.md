@@ -227,9 +227,10 @@ QueryPlan을 직접 재사용한 답변 계층 평가이므로 parser를 다시 
 
 이 계획이 유효하다는 것은 데이터가 실제로 조건을 만족한다는 뜻이 아니다. 다음 계층에서 정규화된 행에 적용하고, 보수 0의 `UNKNOWN`, 결측, sparse 행을 제외·경고한 뒤 독립 verifier가 반환 결과를 재검사해야 한다.
 
-QueryPlan은 현재 한 번에 한 상품군만 실행한다. schema에는 세 상품군이
-있지만 교차 상품군 검색·비교는 별도 통화·날짜·field 정합성 계약 전까지
-oracle이 거절한다.
+QueryPlan은 한 번에 한 상품군만 실행한다. 복수 상품군 SEARCH v1은 하나의
+다중-family QueryPlan을 만들지 않고, Router가 확정한 상품군마다 별도
+QueryPlan을 컴파일해 Oracle·Verifier를 병렬 실행한다. 상품군 간 비교·집계는
+별도 통화·날짜·field 정합성 계약 전까지 계속 거절한다.
 
 ### 7.1 공모펀드 내부 COMPARE 계약
 
@@ -374,6 +375,29 @@ DETAIL과 EXPLAIN은 정확한 상품번호·종목코드가 서버 linker에서
 `execution_enabled: false`를 유지한다. 공통 서비스에서 내부 평가 flag를
 명시한 경우에만 기존 internal evaluation policy로 실행할 수 있다.
 
+### 7.5 교차 상품군 SEARCH DTO 계약
+
+복수 상품군은 `InteractionIntent.SEARCH`와 `QueryPlan Intent.SEARCH`일 때만
+실행한다. 상품군 사이에 별도 조건이 들어가면 compiler가 역질문하며, 상품군을
+먼저 나열하고 뒤에 한 번 적은 공통 조건만 각 계획에 적용한다.
+
+`RoutedAgentResult.family_searches`는 각 상품군의 `query_plan`,
+`candidate_count`, 반환 상품, warning과 manifest를 보존한다. Backend의
+`family_searches`는 반환 product ID를, `source_manifests`는 같은 순서의
+manifest를 제공한다. 복수 상품군 응답의 최상위 `query_plan`과
+`source_manifest`는 `null`이다. 후보 수는 상품군별 합이며 화면용 최상위
+products는 family 순서를 유지해 펼친다.
+
+한 상품군이 0건이면 해당 family status만 `not_found`이고 다른 결과를
+보존한다. 모든 family가 0건일 때만 최상위 Backend status를 `not_found`로
+바꾼다. DB 누락·실행 비활성·미지원 조건은 병렬 실행 전에 전체 차단한다.
+v2 답변은 각 family의 질문·QueryPlan·evidence·manifest만 Answer provider에
+전달하고 서버가 섹션을 조합한다. family별 Answer Verifier와 교차 답변
+Verifier를 모두 통과해야 `llm_grounded`다. 다른 상품군 언급·직접 비교·합산·
+우열 문구, provider 오류 또는 한 family의 검증 실패가 있으면 부분 모델 문장을
+남기지 않고 전체를 `deterministic_fallback`으로 교체한다. 전체 빈 결과와
+control route는 Answer provider를 호출하지 않는다.
+
 ## 8. 검증
 
 `finance_agent/` 디렉터리에서 실행한다.
@@ -403,6 +427,9 @@ DETAIL과 EXPLAIN은 정확한 상품번호·종목코드가 서버 linker에서
 - AggregateResultVerifier가 후보 수·그룹·값·유효/제외 개수 변조를 놓치는 변경
 - 공통 COMPARE가 요청 상품·필드 순서, field status·delta 또는 Backend
   comparison citation을 바꾸는 변경
+- 교차 상품군 SEARCH가 family 순서·plan·manifest·부분 결과를 잃거나, family
+  evidence 경계를 넘겨 모델에 전달하거나, 교차 연산 문구를 최종 답변에 남기거나,
+  한 family 실패 후 전체 결정론 fallback을 거치지 않는 변경
 
 ## 9. 연결 상태와 다음 순서
 
@@ -431,6 +458,10 @@ DETAIL과 EXPLAIN은 정확한 상품번호·종목코드가 서버 linker에서
 16. BM25/SQLite FTS 문서 RAG 최소 기능, 사람 평가 rubric, Backend DTO·JSON 예시
 17. 프레임워크 독립 `/answer` service adapter, 안전한 ERROR DTO·HTTP status·
     fallback·민감정보 비노출 12문항 계약
+18. 교차 상품군 SEARCH의 상품군별 QueryPlan·병렬 Oracle·독립 verifier,
+    부분 결과·Backend family DTO와 공개 실제 데이터 회귀 4/4
+19. 교차 상품군 family별 evidence-only grounded answer, 교차 문구 verifier,
+    전체 결정론 fallback과 expected·로컬 Qwen 공개 회귀 각각 4/4
 
 다음:
 
