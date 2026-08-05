@@ -3,12 +3,12 @@
   "baseline_id": "pre-hcx-readiness-v1",
   "recorded_on": "2026-08-05",
   "status": "internal_ready_external_gates_pending",
-  "git_commit": "129cdb1ecc0b4bea298974a9e8117470e0eba247",
-  "last_committed_source_commit": "129cdb1ecc0b4bea298974a9e8117470e0eba247",
+  "git_commit": "3c865514b5f810bce3d5a098ce0d72bfb7b6c99a",
+  "last_committed_source_commit": "3c865514b5f810bce3d5a098ce0d72bfb7b6c99a",
   "generated_from_dirty_worktree": false,
   "hash_algorithm": "sha256(sorted(relative_path + NUL + file_sha256 + LF))",
   "file_count": 250,
-  "tree_sha256": "20dc95c100e9f2be7d913220b06fd5a12c5ce5354a52dee4b263c3d0c1c246c9",
+  "tree_sha256": "4df457eae62f18908541c3683c070c91acbac6ee2eae47cc81b2e21ec12c0052",
   "included_scope": [
     "README.md",
     "environment*.yml",
@@ -44,12 +44,13 @@
     "wheel_build_no_isolation": "passed",
     "wheel_required_package_data": "passed",
     "git_diff_check": "passed",
-    "backend_pytest_passed": 10,
+    "backend_pytest_passed": 17,
     "backend_ruff_lint": "passed",
     "backend_ruff_format": "passed",
     "backend_compose_config": "passed",
     "backend_local_http_smoke": "health_validation_bond_cross_family_passed",
-    "backend_ssh_docker_http_smoke": "health_four_families_and_7_cases_passed"
+    "backend_ssh_docker_http_smoke": "health_four_families_and_7_cases_passed",
+    "backend_local_qwen_http_smoke": "grounded_7_of_7_fallback_7_of_7_default_restored_7_of_7"
   },
   "external_gates": [
     "금융 도메인 담당자의 external blind 100문항과 비공개 정답키 작성",
