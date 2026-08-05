@@ -1,14 +1,14 @@
 {
   "schema_version": "1.0",
   "baseline_id": "pre-hcx-readiness-v1",
-  "recorded_on": "2026-08-04",
+  "recorded_on": "2026-08-05",
   "status": "internal_ready_external_gates_pending",
-  "git_commit": "e659d808034119dd0b807cf3bb17cca45647dd9e",
-  "last_committed_source_commit": "e659d808034119dd0b807cf3bb17cca45647dd9e",
-  "generated_from_dirty_worktree": true,
+  "git_commit": "3a0ff5e663c19373542364c7a0ef34bc4fe20820",
+  "last_committed_source_commit": "3a0ff5e663c19373542364c7a0ef34bc4fe20820",
+  "generated_from_dirty_worktree": false,
   "hash_algorithm": "sha256(sorted(relative_path + NUL + file_sha256 + LF))",
   "file_count": 250,
-  "tree_sha256": "2a3e4db0ae2633f93690c173902b8f5e3199a3796742050468d7ad051fed844c",
+  "tree_sha256": "32d68d856e54860b8e56d1452ea142e94a9bbdc6f3025d574fe0a5762e45530b",
   "included_scope": [
     "README.md",
     "environment*.yml",
@@ -43,7 +43,12 @@
     "documentation_baselines": 28,
     "wheel_build_no_isolation": "passed",
     "wheel_required_package_data": "passed",
-    "git_diff_check": "passed"
+    "git_diff_check": "passed",
+    "backend_pytest_passed": 7,
+    "backend_ruff_lint": "passed",
+    "backend_ruff_format": "passed",
+    "backend_compose_config": "passed",
+    "backend_local_http_smoke": "health_validation_bond_cross_family_passed"
   },
   "external_gates": [
     "금융 도메인 담당자의 external blind 100문항과 비공개 정답키 작성",
@@ -52,7 +57,7 @@
     "최소 2명의 독립 reviewer가 수행한 실제 사람 평가",
     "2026-08-06 오프라인 설명회의 HyperCLOVA X 모델·Structured Outputs·endpoint·인증·제출 범위 확인",
     "공식 안내 후 HyperCLOVA X 실제 HTTP transport·공식 재현·제출 후보의 로컬 LLM 구성 제거 검수",
-    "FastAPI /answer route와 주최 측 실행 환경 통합"
+    "Ubuntu SSH 서버의 Docker build·권한·health·/answer 재현과 주최 측 실행 환경 통합"
   ],
   "limitations": [
     "git_commit은 readiness manifest 자체를 제외한 source tree가 동결된 커밋을 가리킴",
