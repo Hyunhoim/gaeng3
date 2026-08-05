@@ -16,6 +16,7 @@ finance_agent/evaluation/
 finance_agent/notebooks/
 finance_agent/reports/
 finance_agent/scripts/
+fastapi_backend/scripts/
 fastapi_backend/tests/
 **/.venv/
 **/__pycache__/

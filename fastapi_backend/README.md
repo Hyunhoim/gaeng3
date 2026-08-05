@@ -45,13 +45,13 @@ Backend는 `execute_answer_request()`가 반환한 HTTP 상태와 DTO 필드를 
 | --- | --- |
 | `GET /health` | 구현 완료; 네 SQLite manifest와 상품군 일치 검증 |
 | `POST /answer` | 구현 완료; 기존 Agent adapter 연결 |
-| HTTP 계약 테스트 | 구현 완료; SSH 환경 실행 검증 대기 |
-| Dockerfile·Compose | 구현 완료; SSH 서버 build·smoke test 대기 |
+| HTTP 계약 테스트 | Backend 10/10 및 실제 Docker HTTP 7/7 통과 |
+| Dockerfile·Compose | Ubuntu SSH 서버 build·health·`/answer` 검증 완료 |
 | HyperCLOVA X 실제 HTTP | 미연결; endpoint·인증 계약 확정 후 연결 |
 | 사용자 인증·Frontend | 현재 예선 API 범위에서 제외 |
 
-검증 전 항목을 완료로 기록하지 않는다. SSH 서버 검증이 끝나면 사용한 commit,
-Docker 명령, health·answer 결과와 발견한 제약을 이 문서에 추가한다.
+검증 전 항목을 완료로 기록하지 않는다. 주최 측 실행 환경과 HyperCLOVA X 실제
+연결은 별도 외부 게이트로 유지한다.
 
 ## API 계약 빠른 확인
 
@@ -177,7 +177,44 @@ ssh -L 18001:127.0.0.1:18001 infolab_hyunhoim
 ./fastapi_backend/compose.sh down
 ```
 
-## 4. Docker 없이 개발할 때
+## 4. Docker HTTP 스모크
+
+컨테이너를 실행한 뒤 다음 명령으로 네 상품군과 제어 경로를 한 번에 확인한다.
+
+```bash
+python fastapi_backend/scripts/smoke.py \
+  --base-url http://127.0.0.1:18001
+```
+
+다른 사용자가 기본 포트를 사용 중이면 개인 `.env`의 `BACKEND_PORT`를 바꾸고 같은
+포트를 `--base-url`에 전달한다. JSON 결과를 보존해야 할 때만 `--output`을 추가한다.
+
+```bash
+python fastapi_backend/scripts/smoke.py \
+  --base-url http://127.0.0.1:18002 \
+  --output /tmp/gaeng3-docker-http-smoke-v1.json
+```
+
+검증 항목:
+
+| 경로 | 기대 결과 |
+| --- | --- |
+| `/health` | 네 SQLite가 모두 `ready`인 HTTP 200 |
+| 국내채권 SEARCH | 상품 3개와 citation·기준일·manifest가 있는 `success` |
+| 국내 ETP SEARCH | 상품 5개와 citation·기준일·manifest가 있는 `success` |
+| 해외 ETP SEARCH | 상품 5개와 citation·기준일·manifest가 있는 `success` |
+| 공모펀드 SEARCH | DB는 ready지만 공식 실행 잠금으로 안전한 `clarification` |
+| 주관적 조건 | Oracle을 실행하지 않는 `clarification` |
+| 예측·단정 추천 | Oracle을 실행하지 않는 `unsupported` |
+| 잘못된 JSON DTO | HTTP 422 `invalid_request` |
+
+2026-08-05 Ubuntu SSH 서버에서 `gaeng3-backend:local` 이미지를 loopback 포트
+`18002`로 실행해 health와 7개 요청을 모두 통과했다. 세 실행 상품군은
+`answer_mode=deterministic`, `fallback_used=false`, `provider_model=null`이었고,
+공모펀드는 `execution_enabled=false` 정책을 유지했다. 단일 스모크의 지연시간은
+운영 성능이나 SLO로 해석하지 않는다.
+
+## 5. Docker 없이 개발할 때
 
 Python 3.12 가상환경을 활성화한 뒤 로컬 Agent core와 백엔드를 차례대로 설치한다.
 `finance-agent-core`라는 이름의 별도 PyPI 패키지를 설치하면 안 된다.
@@ -194,7 +231,7 @@ uvicorn app.main:app --app-dir fastapi_backend --host 127.0.0.1 --port 18001 --r
 python -m pytest fastapi_backend/tests
 ```
 
-## 5. 주요 환경변수
+## 6. 주요 환경변수
 
 | 변수 | 기본값 | 의미 |
 | --- | --- | --- |

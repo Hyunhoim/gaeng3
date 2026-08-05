@@ -201,9 +201,11 @@
   전체 50/50, 폴백 0
 - 다음 외부 게이트: 금융 도메인 담당자의 external blind 100문항·비공개 정답키,
   승인 corpus, 실제 사람 평가
+- Ubuntu SSH Docker 통합: 실제 이미지 build, 네 DB health, 채권·국내 ETP·
+  해외 ETP 실행, 공모펀드 잠금, 역질문·미지원·HTTP 422 스모크 7/7 완료
 - 다음 기술 통합: 2026-08-06 설명회 공지 후 공식 endpoint·인증
-  계약 기반 HyperCLOVA X HTTP transport, Ubuntu SSH Docker 재현과 Next.js 화면
-  연결. FastAPI `/health`·`/answer` 로컬 실제 데이터 경로는 통합 완료
+  계약 기반 HyperCLOVA X HTTP transport와 Next.js 화면 연결. 주최 측 실행
+  환경의 포트·인증·네트워크 정책은 별도 재현 필요
 
 ## 6. 저장소 밖의 근거 자료
 

@@ -1,0 +1,362 @@
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+import time
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
+
+EXPECTED_FAMILIES = ["bond", "domestic_etp", "overseas_etp", "fund"]
+
+
+@dataclass(frozen=True)
+class SmokeCase:
+    case_id: str
+    question: str | None
+    expected_http_status: int
+    expected_status: str
+    expected_intent: str
+    expected_families: tuple[str, ...] = ()
+    expected_answer_mode: str = "control"
+    expected_product_count: int = 0
+    expected_dataset: str | None = None
+    expected_clarification_code: str | None = None
+    expected_error_code: str | None = None
+
+    def payload(self) -> dict[str, str]:
+        if self.question is None:
+            return {}
+        return {
+            "schema_version": "1.0",
+            "request_id": self.case_id,
+            "question": self.question,
+            "locale": "ko-KR",
+        }
+
+
+CASES = (
+    SmokeCase(
+        case_id="docker-smoke-bond-001",
+        question="매수 가능한 국내채권을 매수수익률 높은 순으로 3개 보여줘.",
+        expected_http_status=200,
+        expected_status="success",
+        expected_intent="search",
+        expected_families=("bond",),
+        expected_answer_mode="deterministic",
+        expected_product_count=3,
+        expected_dataset="bond",
+    ),
+    SmokeCase(
+        case_id="docker-smoke-domestic-etp-001",
+        question="미국 주식형 국내 ETF를 1개월 수익률 높은 순으로 5개 보여줘.",
+        expected_http_status=200,
+        expected_status="success",
+        expected_intent="search",
+        expected_families=("domestic_etp",),
+        expected_answer_mode="deterministic",
+        expected_product_count=5,
+        expected_dataset="domestic_etp",
+    ),
+    SmokeCase(
+        case_id="docker-smoke-overseas-etp-001",
+        question=(
+            "미국 채권형 해외 ETF 중 현재 거래 가능한 상품에서 총보수 0.20% 이하인 "
+            "상품을 AUM 순으로 5개 보여줘."
+        ),
+        expected_http_status=200,
+        expected_status="success",
+        expected_intent="search",
+        expected_families=("overseas_etp",),
+        expected_answer_mode="deterministic",
+        expected_product_count=5,
+        expected_dataset="overseas_etp",
+    ),
+    SmokeCase(
+        case_id="docker-smoke-fund-locked-001",
+        question=(
+            "당사에서 판매 중인 해외 주식형 공모펀드 중 3개월 수익률이 높은 상품 5개 보여줘."
+        ),
+        expected_http_status=200,
+        expected_status="clarification",
+        expected_intent="search",
+        expected_families=("fund",),
+        expected_clarification_code="capability_executable",
+    ),
+    SmokeCase(
+        case_id="docker-smoke-clarification-001",
+        question="안전한 상품을 추천해 주세요.",
+        expected_http_status=200,
+        expected_status="clarification",
+        expected_intent="clarify",
+        expected_clarification_code="subjective_condition",
+    ),
+    SmokeCase(
+        case_id="docker-smoke-unsupported-001",
+        question="내일 가장 오를 해외 ETF를 예측해서 매수 추천해줘.",
+        expected_http_status=200,
+        expected_status="unsupported",
+        expected_intent="unsupported",
+        expected_families=("overseas_etp",),
+    ),
+    SmokeCase(
+        case_id="docker-smoke-invalid-001",
+        question=None,
+        expected_http_status=422,
+        expected_status="error",
+        expected_intent="unsupported",
+        expected_error_code="invalid_request",
+    ),
+)
+
+
+def _request_json(
+    url: str,
+    *,
+    timeout: float,
+    payload: dict[str, str] | None = None,
+) -> tuple[int, dict[str, Any], int, float]:
+    data = None
+    headers: dict[str, str] = {}
+    method = "GET"
+    if payload is not None:
+        data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        headers["Content-Type"] = "application/json"
+        method = "POST"
+    request = Request(url, data=data, headers=headers, method=method)
+    started = time.perf_counter()
+    try:
+        with urlopen(request, timeout=timeout) as response:
+            status = response.status
+            raw = response.read()
+    except HTTPError as error:
+        status = error.code
+        raw = error.read()
+    duration_ms = (time.perf_counter() - started) * 1000
+    try:
+        body = json.loads(raw)
+    except json.JSONDecodeError as error:
+        raise RuntimeError(f"{url} returned invalid JSON: {error}") from error
+    if not isinstance(body, dict):
+        raise TypeError(f"{url} returned a non-object JSON response")
+    return status, body, len(raw), duration_ms
+
+
+def _expect(errors: list[str], condition: bool, message: str) -> None:
+    if not condition:
+        errors.append(message)
+
+
+def validate_health(http_status: int, body: dict[str, Any]) -> list[str]:
+    errors: list[str] = []
+    _expect(errors, http_status == 200, f"expected HTTP 200, got {http_status}")
+    _expect(errors, body.get("status") == "ok", "health status must be ok")
+    _expect(
+        errors,
+        body.get("configured_product_families") == EXPECTED_FAMILIES,
+        "configured product families differ",
+    )
+    _expect(
+        errors,
+        body.get("ready_product_families") == EXPECTED_FAMILIES,
+        "ready product families differ",
+    )
+    _expect(errors, body.get("missing_product_families") == [], "missing families are present")
+    _expect(
+        errors,
+        body.get("unavailable_product_families") == [],
+        "unavailable families are present",
+    )
+    return errors
+
+
+def validate_answer(
+    case: SmokeCase,
+    http_status: int,
+    body: dict[str, Any],
+) -> list[str]:
+    errors: list[str] = []
+    _expect(
+        errors,
+        http_status == case.expected_http_status,
+        f"expected HTTP {case.expected_http_status}, got {http_status}",
+    )
+    expected_request_id = "invalid-request" if case.question is None else case.case_id
+    _expect(errors, body.get("request_id") == expected_request_id, "request_id differs")
+    _expect(errors, body.get("status") == case.expected_status, "status differs")
+    _expect(errors, body.get("intent") == case.expected_intent, "intent differs")
+    _expect(
+        errors,
+        body.get("product_families") == list(case.expected_families),
+        "product families differ",
+    )
+    _expect(errors, body.get("answer_mode") == case.expected_answer_mode, "answer mode differs")
+    _expect(errors, body.get("fallback_used") is False, "unexpected fallback")
+    _expect(errors, body.get("provider_model") is None, "unexpected model provider")
+
+    products = body.get("products")
+    citations = body.get("citations")
+    if case.expected_status == "success":
+        _expect(errors, isinstance(products, list), "products must be an array")
+        if isinstance(products, list):
+            _expect(
+                errors,
+                len(products) == case.expected_product_count,
+                f"expected {case.expected_product_count} products, got {len(products)}",
+            )
+        candidate_count = body.get("candidate_count")
+        _expect(errors, isinstance(candidate_count, int), "candidate_count must be an integer")
+        if isinstance(candidate_count, int):
+            _expect(
+                errors,
+                candidate_count >= case.expected_product_count,
+                "candidate_count is smaller than returned products",
+            )
+        _expect(errors, isinstance(citations, list) and bool(citations), "citations are missing")
+        _expect(errors, bool(body.get("as_of_dates")), "as_of_dates are missing")
+        manifest = body.get("source_manifest")
+        _expect(errors, isinstance(manifest, dict), "source_manifest is missing")
+        if isinstance(manifest, dict):
+            _expect(errors, manifest.get("dataset") == case.expected_dataset, "dataset differs")
+        _expect(errors, body.get("error") is None, "success response contains an error")
+        _expect(
+            errors,
+            body.get("clarification") is None,
+            "success response contains clarification",
+        )
+    else:
+        _expect(errors, products == [], "control response contains products")
+        _expect(errors, citations == [], "control response contains citations")
+        _expect(errors, body.get("candidate_count") is None, "control response was executed")
+
+    clarification = body.get("clarification")
+    if case.expected_clarification_code is not None:
+        _expect(errors, isinstance(clarification, dict), "clarification details are missing")
+        if isinstance(clarification, dict):
+            _expect(
+                errors,
+                clarification.get("code") == case.expected_clarification_code,
+                "clarification code differs",
+            )
+    else:
+        _expect(errors, clarification is None, "unexpected clarification details")
+
+    error = body.get("error")
+    if case.expected_error_code is not None:
+        _expect(errors, isinstance(error, dict), "error details are missing")
+        if isinstance(error, dict):
+            _expect(errors, error.get("code") == case.expected_error_code, "error code differs")
+            _expect(errors, error.get("retryable") is False, "invalid input cannot be retryable")
+    else:
+        _expect(errors, error is None, "unexpected error details")
+    return errors
+
+
+def _case_summary(
+    case: SmokeCase,
+    *,
+    http_status: int,
+    body: dict[str, Any],
+    response_bytes: int,
+    duration_ms: float,
+    errors: list[str],
+) -> dict[str, Any]:
+    products = body.get("products")
+    citations = body.get("citations")
+    return {
+        "case_id": case.case_id,
+        "passed": not errors,
+        "http_status": http_status,
+        "status": body.get("status"),
+        "intent": body.get("intent"),
+        "product_families": body.get("product_families"),
+        "candidate_count": body.get("candidate_count"),
+        "product_count": len(products) if isinstance(products, list) else None,
+        "citation_count": len(citations) if isinstance(citations, list) else None,
+        "answer_mode": body.get("answer_mode"),
+        "fallback_used": body.get("fallback_used"),
+        "provider_model": body.get("provider_model"),
+        "response_bytes": response_bytes,
+        "duration_ms": round(duration_ms, 3),
+        "errors": errors,
+    }
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description="Run the real Docker HTTP smoke contract without an LLM provider."
+    )
+    parser.add_argument("--base-url", default="http://127.0.0.1:18001")
+    parser.add_argument("--timeout", type=float, default=30.0)
+    parser.add_argument("--output", type=Path)
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    arguments = build_parser().parse_args(argv)
+    base_url = arguments.base_url.rstrip("/")
+    started_at = datetime.now(UTC)
+    try:
+        health_status, health_body, health_bytes, health_duration = _request_json(
+            f"{base_url}/health",
+            timeout=arguments.timeout,
+        )
+        health_errors = validate_health(health_status, health_body)
+        results = []
+        for case in CASES:
+            http_status, body, response_bytes, duration_ms = _request_json(
+                f"{base_url}/answer",
+                timeout=arguments.timeout,
+                payload=case.payload(),
+            )
+            results.append(
+                _case_summary(
+                    case,
+                    http_status=http_status,
+                    body=body,
+                    response_bytes=response_bytes,
+                    duration_ms=duration_ms,
+                    errors=validate_answer(case, http_status, body),
+                )
+            )
+    except (OSError, RuntimeError, TypeError, URLError) as error:
+        print(f"Docker HTTP smoke failed before completion: {error}", file=sys.stderr)
+        return 2
+
+    passed_cases = sum(item["passed"] for item in results)
+    report = {
+        "schema_version": "1.0",
+        "suite_id": "docker-http-smoke-v1",
+        "started_at": started_at.isoformat(),
+        "base_url": base_url,
+        "llm_provider_expected": False,
+        "health": {
+            "passed": not health_errors,
+            "http_status": health_status,
+            "ready_product_families": health_body.get("ready_product_families"),
+            "response_bytes": health_bytes,
+            "duration_ms": round(health_duration, 3),
+            "errors": health_errors,
+        },
+        "metrics": {
+            "passed": passed_cases,
+            "failed": len(results) - passed_cases,
+            "total": len(results),
+        },
+        "cases": results,
+        "passed": not health_errors and passed_cases == len(results),
+    }
+    rendered = json.dumps(report, ensure_ascii=False, indent=2) + "\n"
+    if arguments.output is not None:
+        arguments.output.parent.mkdir(parents=True, exist_ok=True)
+        arguments.output.write_text(rendered, encoding="utf-8")
+    print(rendered, end="")
+    return 0 if report["passed"] else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

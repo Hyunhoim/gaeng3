@@ -1,6 +1,6 @@
 # HyperCLOVA X 연결 전 준비 기준
 
-마지막 갱신: 2026-08-04
+마지막 갱신: 2026-08-05
 
 이 문서는 HyperCLOVA X API를 연결하기 전에 Agent Core에서 끝내야 할 구현,
 평가, 계약과 외부 확인 게이트를 추적하는 정본이다. 완료 표시는 코드·테스트·
@@ -46,7 +46,7 @@
 | 5 | 사람 rubric·Backend DTO | JSON 예시·schema·contract test 포함 | 계약 완료·사람 평가 대기 |
 | 6 | baseline 동결·전체 QA | 회귀·wheel·문서·hash 검증과 외부 게이트 명시 | 내부 완료 |
 | 7 | HyperCLOVA X provider 경계 | 세 operation·주입형 transport·오류·관측·전체 경로 E2E | 내부 8/8 완료·실제 HTTP 대기 |
-| 8 | `/answer` service adapter·FastAPI route | HTTP status·안전한 ERROR DTO·fallback·비노출·입력 검증 계약 | adapter 12/12·Backend 7/7·로컬 HTTP 완료, SSH Docker 대기 |
+| 8 | `/answer` service adapter·FastAPI route | HTTP status·안전한 ERROR DTO·fallback·비노출·입력 검증 계약 | adapter 12/12·Backend 10/10·Ubuntu Docker HTTP 7/7 |
 | 9 | `internal-red-team-v1` | 네 상품군 40문항·10개 공격 유형·전체 `/answer` E2E | expected·수정 후 로컬 Qwen 40/40 |
 | 10 | 교차 상품군 grounded answer | family evidence 격리·교차 문구 검증·전체 fallback·무호출 | expected·로컬 Qwen 각각 4/4 |
 | 11 | 금융 도메인 QA 실험 | 담당자 작성 40문항 hash 검증·단계별 E2E·Q002 SEARCH gold | v1.2 사후 회귀 40/40·잘못된 실행 0건 |
@@ -115,7 +115,10 @@ Backend `/answer` service adapter 결과:
 - SQLite·dataset I/O와 알 수 없는 내부 예외는 evidence 없는 `error` DTO로 변환
 - grounded answer provider 장애는 검증된 evidence를 사용한 결정론적 fallback
 - 질문·credential·provider 본문·파일 경로 비노출 포함 동결 12개 시나리오 12/12
-- 실제 FastAPI route·request 인증·네트워크 transport 품질 점수가 아님
+- Ubuntu SSH Docker에서 health와 채권·국내 ETP·해외 ETP 실행, 공모펀드 잠금,
+  역질문·미지원·HTTP 422의 7개 실제 요청 7/7
+- Backend 단위·계약 테스트 10/10
+- 실제 HyperCLOVA X·request 인증·주최 측 네트워크 transport 품질 점수가 아님
 
 `internal-red-team-v1` 전체 E2E 결과:
 
@@ -161,6 +164,7 @@ Backend `/answer` service adapter 결과:
 - 위 공지 후의 실제 HTTP transport 연결과 공식 재현
 - 공식 답변에 따른 제출 후보의 로컬 LLM provider·설정·
   스크립트·의존성 제거와 정적·기계적 검수
+- 주최 측 실행 환경에서 Docker·포트·인증·네트워크 정책 최종 재현
 
 이 게이트가 남아 있는 동안 저장소는 “HyperCLOVA X 연결 전 내부 준비 완료”까지만
 주장할 수 있고, 최종 평가 준비 완료나 일반화 성능 완료를 주장하지 않는다.

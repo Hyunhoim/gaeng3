@@ -131,9 +131,10 @@
   질문·credential·provider 본문·파일 경로 비노출을 포함한 12개 계약을 통과했다.
 - FastAPI `/health`·`/answer` route를 Backend DTO에 직접 연결했다. 입력 검증
   실패도 내부 위치와 값을 노출하지 않는 HTTP 422 `invalid_request` DTO로
-  통일했다. 네 SQLite health, 국내채권 단일 검색, 국내·해외 ETP 교차 검색의
-  로컬 HTTP smoke test와 Backend 계약 7/7을 통과했다. Ubuntu SSH Docker 재현은
-  외부 게이트로 유지한다.
+  통일했다. Backend 단위·계약 테스트 10/10과 Ubuntu SSH Docker 실제 HTTP
+  스모크 7/7을 통과했다. health에서 네 DB ready, 채권·국내 ETP·해외 ETP 실행,
+  공모펀드 실행 잠금, 역질문·미지원·HTTP 422를 각각 검증했다. 주최 측 실행
+  환경의 포트·인증·네트워크 정책 재현은 외부 게이트로 유지한다.
 - 네 상품군 각 10문항과 10개 공격 유형으로 구성한 공개
   `internal-red-team-v1`을 Router부터 `/answer` service adapter까지 실행했다.
   최초 로컬 Qwen은 strict 36/40이었지만 네 실패 모두 Oracle 전 안전 차단됐다.
@@ -340,8 +341,10 @@ QueryPlan에는 최소한 intent, 상품군, 필수 조건, 완화 전 확인이
   fallback·민감정보 비노출 계약을 연결한다.
 - [x] FastAPI `/health`·`/answer` route와 입력 검증 오류 DTO를 연결하고 실제
   SQLite 로컬 HTTP 경로로 재현한다.
+- [x] Ubuntu SSH Docker에서 이미지 build·health·네 상품군 정책·제어 응답을
+  실제 HTTP 7개 요청으로 재현한다.
 - [ ] 공식 endpoint·인증 계약에 맞는 HyperCLOVA X HTTP transport를 연결하고
-  Ubuntu SSH Docker·주최 측 실행 환경에서 재현한다.
+  주최 측 실행 환경에서 재현한다.
 
 ### P3 — 평가 확장
 
