@@ -1,0 +1,59 @@
+{
+  "schema_version": "1.0",
+  "baseline_id": "hcx-contract-e2e-v1",
+  "recorded_on": "2026-07-30",
+  "dataset": "overseas_etp+domestic_etp+bond+fund_policy",
+  "evaluation_layer": "system_contract",
+  "status": "api_free_contract_regression",
+  "provider": {
+    "name": "hyperclova_fake_transport",
+    "official_submission_provider": false,
+    "network_used": false
+  },
+  "model": {
+    "repository": null,
+    "served_name": "HCX-CONTRACT-E2E",
+    "revision": null,
+    "reason": "실제 모델 생성이 아니라 HyperCLOVA X semantic transport 경계와 전체 Agent 배선 검증"
+  },
+  "suite": {
+    "id": "hcx-contract-e2e-8",
+    "version": "1.0",
+    "path": "packages/finance_agent_core/src/finance_agent_core/evaluation/suites/hcx_contract_e2e_8.json",
+    "sha256": "b97e523f27d069f9a9f0b3db0105b4b3aa7e41d950e1f878e1cc3c934b03aaae",
+    "total_cases": 8,
+    "success_paths": 3,
+    "fallback_paths": 1,
+    "fail_closed_paths": 4
+  },
+  "data": {
+    "fixture_definition_sha256": "335458c8de9eca26bbe21a4dffd9bcd22daba4683552a51293c37a5e1192badb",
+    "not_applicable_reason": "실제 원천 데이터 성능 평가가 아니라 테스트가 생성한 합성 SQLite와 비활성 상품군 정책을 사용하는 시스템 계약 평가"
+  },
+  "metrics": {
+    "total": 8,
+    "passed": 8,
+    "strict_accuracy": 1.0,
+    "verified_backend_success_paths": 3,
+    "answer_verifier_fallback_paths": 1,
+    "query_timeout_fail_closed_paths": 1,
+    "zero_model_call_control_paths": 2,
+    "server_plan_mismatch_blocked_paths": 1,
+    "network_calls": 0
+  },
+  "reports": [
+    {
+      "role": "api_free_hcx_contract_e2e",
+      "artifact_name": "hcx-contract-e2e-v1.json",
+      "sha256": "7df9045f83253b0a8cb7b269edc1a9a2ba8359e0ed0fb793697794e3bad5c054"
+    }
+  ],
+  "reproduce": "python scripts/run-hcx-contract-e2e.py --require-perfect",
+  "limitations": [
+    "fake transport만 사용하며 NAVER Cloud endpoint·credential·네트워크를 호출하지 않음",
+    "실제 HyperCLOVA X의 생성 품질·token 비용·latency·Structured Outputs 호환성을 측정하지 않음",
+    "HCX QueryPlan 주입은 현재 SEARCH에만 적용하고 AGGREGATE·COMPARE는 서버 결정론적 compiler를 유지",
+    "공모펀드는 execution_enabled=false 정책을 검증하며 공식 실행을 활성화하지 않음",
+    "세 실행 상품군은 테스트가 생성한 소규모 합성 SQLite를 사용하므로 실제 데이터 성능 기준선이 아님"
+  ]
+}

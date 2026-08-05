@@ -1,0 +1,519 @@
+{
+  "schema_version": "1.0",
+  "suite_id": "fund-compare-e2e-core-24",
+  "suite_version": "1.0",
+  "source_suite_id": "fund-compare-parser-core-24",
+  "source_suite_version": "1.0",
+  "source_suite_sha256": "9e2bd72c001f6384a08111ae195de0bf1a962fe6aafa46b52df012917c1b4c9c",
+  "dataset": "fund",
+  "database_sha256": "99fac786e5be0ec5a7a53e11e1bd3bbccd5b37ab15243ecbf8b864a85b375ca4",
+  "manifest_sha256": "be83a616d033db2328d231499d1f0492323d02bace4f153ad3da4860a0d10bcd",
+  "cases": [
+    {
+      "case_id": "fund-compare-parser-001",
+      "field_statuses": {
+        "risk_level": "value_only",
+        "aum": "numeric_delta"
+      },
+      "deltas": {
+        "risk_level": null,
+        "aum": "-111135679840"
+      },
+      "cell_value_fingerprints": {
+        "risk_level": [
+          "274cf28bb88207be27602cf2f2be61ec245467b9d525376f5dd2867d29570ec3",
+          "54fa6d1dde162ee5f332368de909ad8455485ea74ffe01c3ee4e39e016e7ca87"
+        ],
+        "aum": [
+          "2448ca8ed7dd9d456924e8ce3206d4ee286c1594c0ff71b14a956ab9fd6df5c2",
+          "1da871b1d4a16dfa0566a6c96b57478d7c1f565515428e3175b00f19844ca8d9"
+        ]
+      },
+      "evidence_fingerprints": {
+        "risk_level": [
+          "dcbb41180d0eb0fcbc5699057ea312815ac8f792fec6f4f91f3248528474439b",
+          "6d3fa4997334db0e3cb89acf4f898e5cdeba6fa9c25aedea679ab930a02da3c6"
+        ],
+        "aum": [
+          "656a884997549982898f94b91f5aae57aa39414fdb593ebb89069f02f78fb7c6",
+          "408a758c6c51f1a10f9f3ee26578fafc4017d3ce6ce642a5bc00508b227ea788"
+        ]
+      }
+    },
+    {
+      "case_id": "fund-compare-parser-002",
+      "field_statuses": {
+        "three_month_return_pct": "numeric_delta",
+        "aum": "numeric_delta"
+      },
+      "deltas": {
+        "three_month_return_pct": "0.03",
+        "aum": "-111135679840"
+      },
+      "cell_value_fingerprints": {
+        "three_month_return_pct": [
+          "99463cf9d65432ac5b2ed61838863fcf3b292f9a48d6c59c72c761f049e8e3be",
+          "bffea1bc10dd1789786dfc48f908d7a91652558dfbd6781b72f0eecce5f881c3"
+        ],
+        "aum": [
+          "2448ca8ed7dd9d456924e8ce3206d4ee286c1594c0ff71b14a956ab9fd6df5c2",
+          "1da871b1d4a16dfa0566a6c96b57478d7c1f565515428e3175b00f19844ca8d9"
+        ]
+      },
+      "evidence_fingerprints": {
+        "three_month_return_pct": [
+          "2ab087368a4bf75e6704245457e21621a5fcd405f43f2ff76fb11c6dadc6c48e",
+          "79f505675d4fd1815df88dddb90fd04b01b7efbdd5522416c8391ebb6d09ade4"
+        ],
+        "aum": [
+          "656a884997549982898f94b91f5aae57aa39414fdb593ebb89069f02f78fb7c6",
+          "408a758c6c51f1a10f9f3ee26578fafc4017d3ce6ce642a5bc00508b227ea788"
+        ]
+      }
+    },
+    {
+      "case_id": "fund-compare-parser-003",
+      "field_statuses": {
+        "one_month_return_pct": "numeric_delta",
+        "risk_level": "value_only"
+      },
+      "deltas": {
+        "one_month_return_pct": "-0.01",
+        "risk_level": null
+      },
+      "cell_value_fingerprints": {
+        "one_month_return_pct": [
+          "0d6197755304f3f5f2a05e553455cb13e04b6e033979a76efd162249295462db",
+          "2062a3492b07d419e617c1d2ae66418759b69db62599a96ef94d0e4631ef05e9"
+        ],
+        "risk_level": [
+          "0d9d9341786c3c9f117b9af130fdd293e40fc1d029e1b02961478cefece14a98",
+          "1a2211541b004ce5726439cd63a6bb6c83e86218e6c434b3b3664cead30600bc"
+        ]
+      },
+      "evidence_fingerprints": {
+        "one_month_return_pct": [
+          "3df40fe2cbc3edb3790c9a435deb456479384acfc431b914befa25e7d1080dbd",
+          "d50b73abc41d6d93e27f73eeaa8118729d53bd79c8f1a7fd624132a590c08453"
+        ],
+        "risk_level": [
+          "456da32982630af517d47a357dc35820c1dc9f8251cf9dcf11cfa6e53ae88a9f",
+          "5b5c21d4cf6bf06844e4c6c95ac4d876caa4c0cb56cd0b800ceda852886d6ace"
+        ]
+      }
+    },
+    {
+      "case_id": "fund-compare-parser-004",
+      "field_statuses": {
+        "trading_currency": "value_only",
+        "company_sellable": "value_only"
+      },
+      "deltas": {
+        "trading_currency": null,
+        "company_sellable": null
+      },
+      "cell_value_fingerprints": {
+        "trading_currency": [
+          "3b6f389e0a457b75da58a60982476dcf76dd7a6ad1db25e1d4b446d3944023d1",
+          "dc37a5f7e679744d069914d126fed18385452b190c26141ee6a99d42b9a2ea47"
+        ],
+        "company_sellable": [
+          "92fb481311fc8c3baf50c6a25aecbee69db22718f113418934cd8c709f624868",
+          "7ab9f91cc3e93eecfabe734a5bfc50d47165e8626d824265283fbfcdab9fb187"
+        ]
+      },
+      "evidence_fingerprints": {
+        "trading_currency": [
+          "7410cfceab6a8e5b369495eff4f8ad9c0224377af4a5e81544001a23fc8fc983",
+          "25b75766bbec3c038f18752c81ab0ade52fc67acc20818ed6101e0de8942d188"
+        ],
+        "company_sellable": [
+          "144fe0f667fa34fde0282e3889929ff3ab169474ccaf4c94478ba624361a9cd4",
+          "95e9d979487f973fa107924238309e27752d2da5d3eeee01b1f122ef1fcd4219"
+        ]
+      }
+    },
+    {
+      "case_id": "fund-compare-parser-005",
+      "field_statuses": {
+        "aum": "numeric_delta",
+        "six_month_return_pct": "numeric_delta"
+      },
+      "deltas": {
+        "aum": "0",
+        "six_month_return_pct": "0.05"
+      },
+      "cell_value_fingerprints": {
+        "aum": [
+          "3515ffef0cac693645b1842cc770f2a521cd5dd53ff5538cef57595011385685",
+          "555b02c087ba2d22796b915d7d4a6c822d305a8c7a5d4cadeee9b21e6dff1dd1"
+        ],
+        "six_month_return_pct": [
+          "de00854cb3c685b7529e3129cb2f9cede77f6c4d5ecf5b53b4730b9dfc720eb0",
+          "05751c0d6b907758f76aa4d70d5bd39ea21eb74bdbed181e150cfa2eb4d9523c"
+        ]
+      },
+      "evidence_fingerprints": {
+        "aum": [
+          "2637474b4d9db06f1df79eabbc64907265dd5403146bcdcd6b63cfdbd1d266f4",
+          "a661db06ac1f7b5089d3404c45e509e3540ea11eb61b9f85a5584a164a754292"
+        ],
+        "six_month_return_pct": [
+          "20471e15a0e00479cbe19b48b72f16fe873da8bf06c93f91b93174b88f0cf6a8",
+          "8436fe509ff1b32cb19c27f5241406af2a4a7c87fa42c9a62b18bad1b8ce6466"
+        ]
+      }
+    },
+    {
+      "case_id": "fund-compare-parser-006",
+      "field_statuses": {
+        "product_name": "value_only",
+        "short_name": "value_only"
+      },
+      "deltas": {
+        "product_name": null,
+        "short_name": null
+      },
+      "cell_value_fingerprints": {
+        "product_name": [
+          "a4538e1edacd2307aca331b8ca9ef1fbea8ac9f52c66f9dc1a45719b2093e191",
+          "703530ddcc14634fc7ef96078dec16bdad52e05aa092d70ed1e8ef20e386ea7d"
+        ],
+        "short_name": [
+          "63caea9212f2d33d557a6cda062820f0772b697a4e7dbb9821a7f679ffca5eae",
+          "5efe708571b4888ab9fc13e6dbcbc37233e780acc211282d6ce8462f8fd8c158"
+        ]
+      },
+      "evidence_fingerprints": {
+        "product_name": [
+          "c6323eb7c8730c2db58cc629dc43bc3402e41dd0e122e3f4bae59c934645e203",
+          "d3b3dcf8ed7f24402cda7e0538c192d857ac31a6ac985df14cef31ec520231f9"
+        ],
+        "short_name": [
+          "6398bd278be420576b3de367adc9015fba8e8eb6fe2f86a4a773b8acffbba103",
+          "0745efe89ac7caee8815846958b66a4f2d844fdaf12127a3957c47997c19adc0"
+        ]
+      }
+    },
+    {
+      "case_id": "fund-compare-parser-007",
+      "field_statuses": {
+        "risk_level": "value_only"
+      },
+      "deltas": {
+        "risk_level": null
+      },
+      "cell_value_fingerprints": {
+        "risk_level": [
+          "274cf28bb88207be27602cf2f2be61ec245467b9d525376f5dd2867d29570ec3",
+          "54fa6d1dde162ee5f332368de909ad8455485ea74ffe01c3ee4e39e016e7ca87"
+        ]
+      },
+      "evidence_fingerprints": {
+        "risk_level": [
+          "dcbb41180d0eb0fcbc5699057ea312815ac8f792fec6f4f91f3248528474439b",
+          "6d3fa4997334db0e3cb89acf4f898e5cdeba6fa9c25aedea679ab930a02da3c6"
+        ]
+      }
+    },
+    {
+      "case_id": "fund-compare-parser-008",
+      "field_statuses": {
+        "one_week_return_pct": "unavailable",
+        "one_month_return_pct": "unavailable"
+      },
+      "deltas": {
+        "one_week_return_pct": null,
+        "one_month_return_pct": null
+      },
+      "cell_value_fingerprints": {
+        "one_week_return_pct": [
+          "c6116c929f3f4694cd70d3e705239e9f3b68b56e92e410f6643fcb9b7e225e03",
+          "31d1f63f7fcf56e3b8663e92c5f8b33b241e5cc8481ade0b45d12352d082a673"
+        ],
+        "one_month_return_pct": [
+          "6b1399cdeb347b6ba5e0b85b2a9018e68c80f629c1f99c7b725cc24d7e7a8a68",
+          "953c43ac46da6c3e965778d47d8cbde15b6263ab20c0b3f849330316177d5b3b"
+        ]
+      },
+      "evidence_fingerprints": {
+        "one_week_return_pct": [
+          "2657c7b2969c14806e1df1a56912d26fca741987ad01e094b60175630a050de6",
+          "97e65b50cbd984dad6c0f9259d265d687f346c8cfef4013ac7d2a22796a44d21"
+        ],
+        "one_month_return_pct": [
+          "ef670a8e7f501282927eaf1fe55df9a85cf6a37a7370d0d9822b69926f07aac3",
+          "1501c5950f9e28fe43623edc517d4dd17417b0ca0e02ac6b73a4b588e7b7352e"
+        ]
+      }
+    },
+    {
+      "case_id": "fund-compare-parser-009",
+      "field_statuses": {
+        "fund_management_attribute": "value_only",
+        "investment_region": "value_only"
+      },
+      "deltas": {
+        "fund_management_attribute": null,
+        "investment_region": null
+      },
+      "cell_value_fingerprints": {
+        "fund_management_attribute": [
+          "9e2a4c6622c3ceb1fddb7bf5220c4f95c9e3799eb0ab812f930182bf3cd1fefd",
+          "55ed5a7dd729c9fae66274b45cf59cc45df2c461bd904d9b84b6a39f9551ac3d"
+        ],
+        "investment_region": [
+          "1011b1f8794489e46ca6e8bb4e3a2737dc3717e2d46ccdb817bd4b3f5f0fd1e4",
+          "10ca693f43a4331ad1401ff6e61c70beee45982665793e2eeebc55e6f3acfca4"
+        ]
+      },
+      "evidence_fingerprints": {
+        "fund_management_attribute": [
+          "e9aa202178dacbab439d0104d1c4df6e68cf17612e9b761b4c12c1c5c153ec2d",
+          "c307875a961e6e4f4ce1e4bece2f9c4881541c5efd9ca348313d30661643cdd8"
+        ],
+        "investment_region": [
+          "ccc5d9b7fe2c546898decc1db4f94cb77ba46671081403773abadad879652ab5",
+          "150c2f8ce7bc3a591713baf5b2a241fd0d31c3dd0ddb4bb1ea59761c45743fc2"
+        ]
+      }
+    },
+    {
+      "case_id": "fund-compare-parser-010",
+      "field_statuses": {
+        "aum": "numeric_delta",
+        "trading_currency": "value_only"
+      },
+      "deltas": {
+        "aum": "0",
+        "trading_currency": null
+      },
+      "cell_value_fingerprints": {
+        "aum": [
+          "3515ffef0cac693645b1842cc770f2a521cd5dd53ff5538cef57595011385685",
+          "555b02c087ba2d22796b915d7d4a6c822d305a8c7a5d4cadeee9b21e6dff1dd1"
+        ],
+        "trading_currency": [
+          "3e418e9723b182175ffb3001c55b2c908fdadd2e027aa975eefffa6240b80c48",
+          "de61b7ad329b6818fa8a78f31e8ad551a6fccce5a4a7aaffca36c4ee90e89230"
+        ]
+      },
+      "evidence_fingerprints": {
+        "aum": [
+          "2637474b4d9db06f1df79eabbc64907265dd5403146bcdcd6b63cfdbd1d266f4",
+          "a661db06ac1f7b5089d3404c45e509e3540ea11eb61b9f85a5584a164a754292"
+        ],
+        "trading_currency": [
+          "ca6fff48dde49b657557689ce3c309e537775e4caf61121e05178e9494351c4b",
+          "9662d2e444db644718b41b7c342a1d41e97fc61f3a0d1164419b6c8389b68af5"
+        ]
+      }
+    },
+    {
+      "case_id": "fund-compare-parser-011",
+      "field_statuses": {
+        "aum": "currency_mismatch",
+        "currency_hedged": "unavailable"
+      },
+      "deltas": {
+        "aum": null,
+        "currency_hedged": null
+      },
+      "cell_value_fingerprints": {
+        "aum": [
+          "2448ca8ed7dd9d456924e8ce3206d4ee286c1594c0ff71b14a956ab9fd6df5c2",
+          "2d0cdcbfc73e03475c30899687eae31396b599d7d0f595f8e392444d1be21171"
+        ],
+        "currency_hedged": [
+          "fe52f1f19ec5900d6cd72dcf55b74886d36b0662f0b8bbc2ae3828406f4d533a",
+          "4fab32a3fe1ee2653ca62a8fc172d8e6a282ffe5c168d9959b765fa6eb0d81e5"
+        ]
+      },
+      "evidence_fingerprints": {
+        "aum": [
+          "656a884997549982898f94b91f5aae57aa39414fdb593ebb89069f02f78fb7c6",
+          "c6c1a58c6327385f93670f39beacb6cb051f4d8034799bded3f7e3f80c6a3e9a"
+        ],
+        "currency_hedged": [
+          "657f95f0d77fbef1292d567ba041ca3d345635acdae01264cd52ae2b4db9ecbc",
+          "a202a245fe7c1c616dca9ae01d16e637ad27c2395851759de8d02bbfe3d0057d"
+        ]
+      }
+    },
+    {
+      "case_id": "fund-compare-parser-012",
+      "field_statuses": {
+        "sellable": "value_only",
+        "company_sellable": "value_only"
+      },
+      "deltas": {
+        "sellable": null,
+        "company_sellable": null
+      },
+      "cell_value_fingerprints": {
+        "sellable": [
+          "92eadeb9b82db42ee6f0cfec90ab6a2cb571c7f643fcfa32c9c7170a61cf9721",
+          "13dc97ab9e4beecb9cab8ab8fc25573c1c66fe89a246a1c49e84335df34eefc6"
+        ],
+        "company_sellable": [
+          "92fb481311fc8c3baf50c6a25aecbee69db22718f113418934cd8c709f624868",
+          "7ab9f91cc3e93eecfabe734a5bfc50d47165e8626d824265283fbfcdab9fb187"
+        ]
+      },
+      "evidence_fingerprints": {
+        "sellable": [
+          "5247338228dd8451541df0533ba78c4903e234d893e19dccb8a3e251e8787eec",
+          "4980d37fc15a5f42b75f6e1bab99d32cc1c6f65a903d2276be64de83af989b10"
+        ],
+        "company_sellable": [
+          "144fe0f667fa34fde0282e3889929ff3ab169474ccaf4c94478ba624361a9cd4",
+          "95e9d979487f973fa107924238309e27752d2da5d3eeee01b1f122ef1fcd4219"
+        ]
+      }
+    },
+    {
+      "case_id": "fund-compare-parser-013",
+      "field_statuses": {
+        "fund_geography_scope": "value_only",
+        "fund_management_attribute": "value_only",
+        "investor_type": "value_only"
+      },
+      "deltas": {
+        "fund_geography_scope": null,
+        "fund_management_attribute": null,
+        "investor_type": null
+      },
+      "cell_value_fingerprints": {
+        "fund_geography_scope": [
+          "41ce791c8740f36459756aa96462f299c077c7d08f1f3370e546ea59c8c781f3",
+          "40990b695c58bc4e27c32986985fe84dddfad73cafad312860a73435b371c488"
+        ],
+        "fund_management_attribute": [
+          "9e2a4c6622c3ceb1fddb7bf5220c4f95c9e3799eb0ab812f930182bf3cd1fefd",
+          "55ed5a7dd729c9fae66274b45cf59cc45df2c461bd904d9b84b6a39f9551ac3d"
+        ],
+        "investor_type": [
+          "7bf09865199b51d00bc2adcf1c9d264481255f491b76198a7cf93c0cac979e8b",
+          "ae5ab9f5e62e549c4930fc66febbf902a727eeed2596af89fe61acd9af478df8"
+        ]
+      },
+      "evidence_fingerprints": {
+        "fund_geography_scope": [
+          "7b6f67aff305c8adff9cadead5975f07731207956f1f5091fbde713f99604bf7",
+          "836d011ea7cef5ac98425d51e23b7637d540790b12f2e3dba42813333dab9099"
+        ],
+        "fund_management_attribute": [
+          "e9aa202178dacbab439d0104d1c4df6e68cf17612e9b761b4c12c1c5c153ec2d",
+          "c307875a961e6e4f4ce1e4bece2f9c4881541c5efd9ca348313d30661643cdd8"
+        ],
+        "investor_type": [
+          "517f1b54786844ae67b3bd76be75f606cc9fc20edaaf780a49c06de0072876a9",
+          "d6d7cbe1265047598b7b36063628fed4c1595473cdc7a4da9f30a6df53cbbb12"
+        ]
+      }
+    },
+    {
+      "case_id": "fund-compare-parser-014",
+      "field_statuses": {
+        "six_month_return_pct": "unavailable",
+        "one_month_return_pct": "unavailable"
+      },
+      "deltas": {
+        "six_month_return_pct": null,
+        "one_month_return_pct": null
+      },
+      "cell_value_fingerprints": {
+        "six_month_return_pct": [
+          "c607a161101bf6187e33e77a220b8a58ad7909a1e40f5f58934641dd3992350f",
+          "b526dbce1b2f5b1186af2dbb827801782d8d399c36668f17978fced2fdbf5c2a"
+        ],
+        "one_month_return_pct": [
+          "0d6197755304f3f5f2a05e553455cb13e04b6e033979a76efd162249295462db",
+          "d82e54b3ba181d5d0fd7485ce0bd63347acda1a5904b003d8f40b0dde661e8a1"
+        ]
+      },
+      "evidence_fingerprints": {
+        "six_month_return_pct": [
+          "cce9b7e059393147615d2e02598f16736dec2ec67020fee68fde590bff894447",
+          "f3f4757bfc6ad932e62b3c329499310e0f177410879b5bf8babdfb5bd2abfd15"
+        ],
+        "one_month_return_pct": [
+          "3df40fe2cbc3edb3790c9a435deb456479384acfc431b914befa25e7d1080dbd",
+          "a6e226b4b591d2c5e9ddf5668f811a6d9fabd9b1d2d3e0b811c16d055a11728f"
+        ]
+      }
+    },
+    {
+      "case_id": "fund-compare-parser-019",
+      "field_statuses": {
+        "one_week_return_pct": "numeric_delta",
+        "risk_level": "value_only"
+      },
+      "deltas": {
+        "one_week_return_pct": "0",
+        "risk_level": null
+      },
+      "cell_value_fingerprints": {
+        "one_week_return_pct": [
+          "1b7b20b221dddf9b68389e4e871c9bd4c4da39fcf11c5a1f8361e7d6b7cf91eb",
+          "85e7ab0f2f1cd5f7678ad01e32a7b7d741a7b3dcdc76ced97047bb71e3e41f98"
+        ],
+        "risk_level": [
+          "e53c634341ead071d82f1bb29201bcd604207e5f7c0a3ace2433309fe05d78bb",
+          "be425050c2a36367e00860273fee1e30727181555a8fc63179cad76d1d8193cb"
+        ]
+      },
+      "evidence_fingerprints": {
+        "one_week_return_pct": [
+          "6d4708a4af6c2b696bb6428830f1237b136f8854fd5c0c50f2b9b02a1ceacf82",
+          "f0b03498a28068133b6ef26ce6807ec449cbfd3dab9035aad6e73cf9c48ac767"
+        ],
+        "risk_level": [
+          "9b6ffa4cc049059bb436fec0c2b234eb4a415f36f9d0e0aae68fb07cfee1d98a",
+          "771a8faa13d4a203a82e8dda35182f7680f463c05b420abdf15468da4f7375b0"
+        ]
+      }
+    },
+    {
+      "case_id": "fund-compare-parser-020",
+      "field_statuses": {
+        "short_name": "value_only",
+        "one_week_return_pct": "unavailable",
+        "three_month_return_pct": "unavailable"
+      },
+      "deltas": {
+        "short_name": null,
+        "one_week_return_pct": null,
+        "three_month_return_pct": null
+      },
+      "cell_value_fingerprints": {
+        "short_name": [
+          "4ed4cc20e16f8bffe06586faa8bb0c7faea7fab4614c046fee0ae71fe87670f3",
+          "9b2966dafebe905fa48d3d6c545d9546375d4823581aca05d308e083b7809f17"
+        ],
+        "one_week_return_pct": [
+          "394ae2eb0f1b8445d64d7b658a76078f0ebad26ba8d02b7e810782d4ebbe0ed5",
+          "b11a578180a6b0e9562a4ad49c142f34c5f87b2e6e623a672e56e74c4c9e0336"
+        ],
+        "three_month_return_pct": [
+          "3e849b9eef4ad958dbc54f855e6e0fe4b3fdfcc0b5701aec8ff7f2b0777c312f",
+          "bffea1bc10dd1789786dfc48f908d7a91652558dfbd6781b72f0eecce5f881c3"
+        ]
+      },
+      "evidence_fingerprints": {
+        "short_name": [
+          "1dad649a1690f4b5dc52c668dec5307f5ed9928f39df07f54cf32eeb6140b30b",
+          "ae4fbbd554647f841ee95520b2e7c82c9c6daee2c52bf7b80b7afe2174dba272"
+        ],
+        "one_week_return_pct": [
+          "b68fffe2aa4e1c13b3eaddd073ae463762f4a53224cdf898fd106558a570173f",
+          "b4ecd6ba995cdef0eaf82b9ac7a531617c9e64faa58a983bb7d1d0bfcb0dc7c4"
+        ],
+        "three_month_return_pct": [
+          "e296c4177d3cb8021c054555f842804bcd656c1197313d83459e026aaec259e3",
+          "79f505675d4fd1815df88dddb90fd04b01b7efbdd5522416c8391ebb6d09ade4"
+        ]
+      }
+    }
+  ]
+}

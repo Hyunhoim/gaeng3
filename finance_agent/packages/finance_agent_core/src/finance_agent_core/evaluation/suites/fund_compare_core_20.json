@@ -1,0 +1,352 @@
+{
+  "suite_id": "fund-compare-core-20",
+  "suite_version": "1.0",
+  "dataset": "fund",
+  "database_sha256": "99fac786e5be0ec5a7a53e11e1bd3bbccd5b37ab15243ecbf8b864a85b375ca4",
+  "manifest_sha256": "be83a616d033db2328d231499d1f0492323d02bace4f153ad3da4860a0d10bcd",
+  "cases": [
+    {
+      "id": "fund-compare-001",
+      "split": "development",
+      "category": "categorical",
+      "question": "KR5010101702와 KR5010101714의 위험등급을 비교해줘",
+      "product_ids": ["KR5010101702", "KR5010101714"],
+      "comparison_fields": ["risk_level"],
+      "expected": {
+        "found_product_ids": ["KR5010101702", "KR5010101714"],
+        "missing_product_ids": [],
+        "field_statuses": {"risk_level": "value_only"},
+        "deltas": {"risk_level": null},
+        "answer_mode": "llm_grounded"
+      }
+    },
+    {
+      "id": "fund-compare-002",
+      "split": "development",
+      "category": "return_delta",
+      "question": "KR5010101702와 KR5010101714의 1주 수익률 차이를 비교해줘",
+      "product_ids": ["KR5010101702", "KR5010101714"],
+      "comparison_fields": ["one_week_return_pct"],
+      "expected": {
+        "found_product_ids": ["KR5010101702", "KR5010101714"],
+        "missing_product_ids": [],
+        "field_statuses": {"one_week_return_pct": "numeric_delta"},
+        "deltas": {"one_week_return_pct": "0"},
+        "answer_mode": "llm_grounded"
+      }
+    },
+    {
+      "id": "fund-compare-003",
+      "split": "development",
+      "category": "return_delta",
+      "question": "KR5010101702와 KR5010101714의 1개월 수익률을 비교해줘",
+      "product_ids": ["KR5010101702", "KR5010101714"],
+      "comparison_fields": ["one_month_return_pct"],
+      "expected": {
+        "found_product_ids": ["KR5010101702", "KR5010101714"],
+        "missing_product_ids": [],
+        "field_statuses": {"one_month_return_pct": "numeric_delta"},
+        "deltas": {"one_month_return_pct": "0.01"},
+        "answer_mode": "llm_grounded"
+      }
+    },
+    {
+      "id": "fund-compare-004",
+      "split": "development",
+      "category": "return_delta",
+      "question": "KR5010101702와 KR5010101714의 3개월 수익률을 비교해줘",
+      "product_ids": ["KR5010101702", "KR5010101714"],
+      "comparison_fields": ["three_month_return_pct"],
+      "expected": {
+        "found_product_ids": ["KR5010101702", "KR5010101714"],
+        "missing_product_ids": [],
+        "field_statuses": {"three_month_return_pct": "numeric_delta"},
+        "deltas": {"three_month_return_pct": "0.03"},
+        "answer_mode": "llm_grounded"
+      }
+    },
+    {
+      "id": "fund-compare-005",
+      "split": "development",
+      "category": "return_delta",
+      "question": "KR5010101702와 KR5010101714의 6개월 수익률을 비교해줘",
+      "product_ids": ["KR5010101702", "KR5010101714"],
+      "comparison_fields": ["six_month_return_pct"],
+      "expected": {
+        "found_product_ids": ["KR5010101702", "KR5010101714"],
+        "missing_product_ids": [],
+        "field_statuses": {"six_month_return_pct": "numeric_delta"},
+        "deltas": {"six_month_return_pct": "0.07"},
+        "answer_mode": "llm_grounded"
+      }
+    },
+    {
+      "id": "fund-compare-006",
+      "split": "development",
+      "category": "aum_delta",
+      "question": "KR5010101702와 KR5010101714의 AUM을 비교해줘",
+      "product_ids": ["KR5010101702", "KR5010101714"],
+      "comparison_fields": ["aum"],
+      "expected": {
+        "found_product_ids": ["KR5010101702", "KR5010101714"],
+        "missing_product_ids": [],
+        "field_statuses": {"aum": "numeric_delta"},
+        "deltas": {"aum": "-111135679840"},
+        "answer_mode": "llm_grounded"
+      }
+    },
+    {
+      "id": "fund-compare-007",
+      "split": "development",
+      "category": "multi_field",
+      "question": "KR5010101702와 KR5010101714의 위험등급, 1개월·3개월 수익률과 AUM을 비교해줘",
+      "product_ids": ["KR5010101702", "KR5010101714"],
+      "comparison_fields": [
+        "risk_level",
+        "one_month_return_pct",
+        "three_month_return_pct",
+        "aum"
+      ],
+      "expected": {
+        "found_product_ids": ["KR5010101702", "KR5010101714"],
+        "missing_product_ids": [],
+        "field_statuses": {
+          "risk_level": "value_only",
+          "one_month_return_pct": "numeric_delta",
+          "three_month_return_pct": "numeric_delta",
+          "aum": "numeric_delta"
+        },
+        "deltas": {
+          "risk_level": null,
+          "one_month_return_pct": "0.01",
+          "three_month_return_pct": "0.03",
+          "aum": "-111135679840"
+        },
+        "answer_mode": "llm_grounded"
+      }
+    },
+    {
+      "id": "fund-compare-008",
+      "split": "development",
+      "category": "request_order",
+      "question": "KR5010101714를 첫 번째, KR5010101702를 두 번째로 두고 3개월 수익률과 AUM을 비교해줘",
+      "product_ids": ["KR5010101714", "KR5010101702"],
+      "comparison_fields": ["three_month_return_pct", "aum"],
+      "expected": {
+        "found_product_ids": ["KR5010101714", "KR5010101702"],
+        "missing_product_ids": [],
+        "field_statuses": {
+          "three_month_return_pct": "numeric_delta",
+          "aum": "numeric_delta"
+        },
+        "deltas": {
+          "three_month_return_pct": "-0.03",
+          "aum": "111135679840"
+        },
+        "answer_mode": "llm_grounded"
+      }
+    },
+    {
+      "id": "fund-compare-009",
+      "split": "development",
+      "category": "usd_delta",
+      "question": "KR5013101461과 KR5013101466의 1개월 수익률을 비교해줘",
+      "product_ids": ["KR5013101461", "KR5013101466"],
+      "comparison_fields": ["one_month_return_pct"],
+      "expected": {
+        "found_product_ids": ["KR5013101461", "KR5013101466"],
+        "missing_product_ids": [],
+        "field_statuses": {"one_month_return_pct": "numeric_delta"},
+        "deltas": {"one_month_return_pct": "0.01"},
+        "answer_mode": "llm_grounded"
+      }
+    },
+    {
+      "id": "fund-compare-010",
+      "split": "development",
+      "category": "usd_delta",
+      "question": "KR5013101461과 KR5013101466의 3개월 수익률을 비교해줘",
+      "product_ids": ["KR5013101461", "KR5013101466"],
+      "comparison_fields": ["three_month_return_pct"],
+      "expected": {
+        "found_product_ids": ["KR5013101461", "KR5013101466"],
+        "missing_product_ids": [],
+        "field_statuses": {"three_month_return_pct": "numeric_delta"},
+        "deltas": {"three_month_return_pct": "0.03"},
+        "answer_mode": "llm_grounded"
+      }
+    },
+    {
+      "id": "fund-compare-011",
+      "split": "development",
+      "category": "usd_delta",
+      "question": "KR5013101461과 KR5013101466의 6개월 수익률을 비교해줘",
+      "product_ids": ["KR5013101461", "KR5013101466"],
+      "comparison_fields": ["six_month_return_pct"],
+      "expected": {
+        "found_product_ids": ["KR5013101461", "KR5013101466"],
+        "missing_product_ids": [],
+        "field_statuses": {"six_month_return_pct": "numeric_delta"},
+        "deltas": {"six_month_return_pct": "0.05"},
+        "answer_mode": "llm_grounded"
+      }
+    },
+    {
+      "id": "fund-compare-012",
+      "split": "development",
+      "category": "usd_delta",
+      "question": "KR5013101461과 KR5013101466의 AUM 차이를 비교해줘",
+      "product_ids": ["KR5013101461", "KR5013101466"],
+      "comparison_fields": ["aum"],
+      "expected": {
+        "found_product_ids": ["KR5013101461", "KR5013101466"],
+        "missing_product_ids": [],
+        "field_statuses": {"aum": "numeric_delta"},
+        "deltas": {"aum": "0"},
+        "answer_mode": "llm_grounded"
+      }
+    },
+    {
+      "id": "fund-compare-013",
+      "split": "development",
+      "category": "categorical",
+      "question": "KR5013101461과 KR5013101466의 환헤지 여부를 비교해줘",
+      "product_ids": ["KR5013101461", "KR5013101466"],
+      "comparison_fields": ["currency_hedged"],
+      "expected": {
+        "found_product_ids": ["KR5013101461", "KR5013101466"],
+        "missing_product_ids": [],
+        "field_statuses": {"currency_hedged": "value_only"},
+        "deltas": {"currency_hedged": null},
+        "answer_mode": "llm_grounded"
+      }
+    },
+    {
+      "id": "fund-compare-014",
+      "split": "development",
+      "category": "cross_currency",
+      "question": "KR5010101702와 KR5013101461의 국내외 구분과 3개월 수익률을 비교해줘",
+      "product_ids": ["KR5010101702", "KR5013101461"],
+      "comparison_fields": ["fund_geography_scope", "three_month_return_pct"],
+      "expected": {
+        "found_product_ids": ["KR5010101702", "KR5013101461"],
+        "missing_product_ids": [],
+        "field_statuses": {
+          "fund_geography_scope": "value_only",
+          "three_month_return_pct": "numeric_delta"
+        },
+        "deltas": {
+          "fund_geography_scope": null,
+          "three_month_return_pct": "0.26"
+        },
+        "answer_mode": "llm_grounded"
+      }
+    },
+    {
+      "id": "fund-compare-015",
+      "split": "development",
+      "category": "cross_currency",
+      "question": "KR5010101702와 KR5013101461의 AUM을 통화 변환 없이 비교해줘",
+      "product_ids": ["KR5010101702", "KR5013101461"],
+      "comparison_fields": ["aum"],
+      "expected": {
+        "found_product_ids": ["KR5010101702", "KR5013101461"],
+        "missing_product_ids": [],
+        "field_statuses": {"aum": "currency_mismatch"},
+        "deltas": {"aum": null},
+        "answer_mode": "llm_grounded"
+      }
+    },
+    {
+      "id": "fund-compare-016",
+      "split": "development",
+      "category": "missing_value",
+      "question": "KR5010101401과 KR5010101402의 위험등급, 3개월 수익률과 AUM을 비교해줘",
+      "product_ids": ["KR5010101401", "KR5010101402"],
+      "comparison_fields": ["risk_level", "three_month_return_pct", "aum"],
+      "expected": {
+        "found_product_ids": ["KR5010101401", "KR5010101402"],
+        "missing_product_ids": [],
+        "field_statuses": {
+          "risk_level": "unavailable",
+          "three_month_return_pct": "unavailable",
+          "aum": "unavailable"
+        },
+        "deltas": {
+          "risk_level": null,
+          "three_month_return_pct": null,
+          "aum": null
+        },
+        "answer_mode": "llm_grounded"
+      }
+    },
+    {
+      "id": "fund-compare-017",
+      "split": "holdout",
+      "category": "partial_value",
+      "question": "KR5010101702와 KR5010101703의 위험등급, 3개월 수익률과 AUM을 비교해줘",
+      "product_ids": ["KR5010101702", "KR5010101703"],
+      "comparison_fields": ["risk_level", "three_month_return_pct", "aum"],
+      "expected": {
+        "found_product_ids": ["KR5010101702", "KR5010101703"],
+        "missing_product_ids": [],
+        "field_statuses": {
+          "risk_level": "value_only",
+          "three_month_return_pct": "unavailable",
+          "aum": "numeric_delta"
+        },
+        "deltas": {
+          "risk_level": null,
+          "three_month_return_pct": null,
+          "aum": "53949482831"
+        },
+        "answer_mode": "llm_grounded"
+      }
+    },
+    {
+      "id": "fund-compare-018",
+      "split": "holdout",
+      "category": "missing_product",
+      "question": "KR5010100999와 KR5010101702의 3개월 수익률을 비교해줘",
+      "product_ids": ["KR5010100999", "KR5010101702"],
+      "comparison_fields": ["three_month_return_pct"],
+      "expected": {
+        "found_product_ids": ["KR5010101702"],
+        "missing_product_ids": ["KR5010100999"],
+        "field_statuses": {"three_month_return_pct": "incomplete"},
+        "deltas": {"three_month_return_pct": null},
+        "answer_mode": "deterministic"
+      }
+    },
+    {
+      "id": "fund-compare-019",
+      "split": "holdout",
+      "category": "missing_product",
+      "question": "KR5010100998과 KR5010100999의 3개월 수익률을 비교해줘",
+      "product_ids": ["KR5010100998", "KR5010100999"],
+      "comparison_fields": ["three_month_return_pct"],
+      "expected": {
+        "found_product_ids": [],
+        "missing_product_ids": ["KR5010100998", "KR5010100999"],
+        "field_statuses": {"three_month_return_pct": "incomplete"},
+        "deltas": {"three_month_return_pct": null},
+        "answer_mode": "deterministic"
+      }
+    },
+    {
+      "id": "fund-compare-020",
+      "split": "holdout",
+      "category": "identity",
+      "question": "KR5010101702와 KR5010101714의 정확한 상품명을 나란히 비교해줘",
+      "product_ids": ["KR5010101702", "KR5010101714"],
+      "comparison_fields": ["product_name"],
+      "expected": {
+        "found_product_ids": ["KR5010101702", "KR5010101714"],
+        "missing_product_ids": [],
+        "field_statuses": {"product_name": "value_only"},
+        "deltas": {"product_name": null},
+        "answer_mode": "llm_grounded"
+      }
+    }
+  ]
+}

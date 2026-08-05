@@ -1,0 +1,60 @@
+{
+  "schema_version": "1.0",
+  "baseline_id": "public-fund-local-holdout-first-run-v1",
+  "recorded_on": "2026-07-29",
+  "dataset": "fund",
+  "evaluation_layer": "query_plan",
+  "status": "holdout_first_run_observed",
+  "provider": {
+    "name": "local_test",
+    "official_submission_provider": false
+  },
+  "model": {
+    "repository": "Qwen/Qwen3-30B-A3B-Instruct-2507-FP8",
+    "served_name": "qwen3-local-test",
+    "revision": "5a5a776300a41aaa681dd7ff0106608ef2bc90db"
+  },
+  "suite": {
+    "id": "fund-core-50",
+    "version": "1.0",
+    "path": "packages/finance_agent_core/src/finance_agent_core/evaluation/suites/fund_core_50.json",
+    "sha256": "77d9be9ca86d9654fb61a52290ca08eadff6b618f861b985367b05d195c582b2",
+    "development_cases": 40,
+    "holdout_cases": 10
+  },
+  "data": {
+    "database_sha256": "99fac786e5be0ec5a7a53e11e1bd3bbccd5b37ab15243ecbf8b864a85b375ca4",
+    "manifest_sha256": "be83a616d033db2328d231499d1f0492323d02bace4f153ad3da4860a0d10bcd",
+    "source_file_sha256": "140d1ef0cec918d0b3f7c52c107cb123395594eb089b0cd70bb305709b0f44eb"
+  },
+  "metrics": {
+    "total": 10,
+    "passed": 9,
+    "strict_accuracy": 0.9,
+    "valid_plan_rate": 1.0,
+    "plan_exact_rate": 0.9,
+    "constraint_exact_rate": 0.9,
+    "oracle_exact_rate": 1.0,
+    "safety_block_rate": 1.0,
+    "latency_ms": {
+      "p50": 3900.262,
+      "p95": 8786.938,
+      "max": 8786.938
+    }
+  },
+  "reports": [
+    {
+      "role": "holdout_first_run",
+      "artifact_name": "fund-local-qwen-holdout-first-run.json",
+      "sha256": "4bc96ecd7278bbbefe299a0ccea9bff94d14784621b91b2e7a71b414f945846f"
+    }
+  ],
+  "reproduce": "python -m finance_agent_core.evaluation --dataset fund --provider local_test --split holdout --unlock-fund-holdout --workers 4",
+  "limitations": [
+    "holdout은 commit 32e12fa 이후 로컬 Qwen에 최초 1회 노출했고 재실행하지 않았다.",
+    "fund-050 한 건은 실행 차단됐지만 기대한 미지원 클래스 합산이 아니라 AUM 통화 모호성 때문에 차단되어 strict failure로 기록했다.",
+    "같은 개발자가 질문과 정답 규칙을 작성했으므로 완전한 blind 또는 unbiased 일반화 성능이 아니다.",
+    "Qwen 단독 성능이 아니라 로컬 모델, 결정론적 linker, 계약, Oracle과 Verifier를 합친 시스템 점수다.",
+    "fund 공식 Agent 실행은 계속 비활성화되어 있고 HyperCLOVA X 또는 공식 공모전 평가 결과가 아니다."
+  ]
+}

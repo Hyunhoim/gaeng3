@@ -1,0 +1,66 @@
+{
+  "schema_version": "1.0",
+  "baseline_id": "domestic-etp-answer-v1",
+  "recorded_on": "2026-07-29",
+  "dataset": "domestic_etp",
+  "evaluation_layer": "grounded_answer",
+  "status": "post_tuning_regression",
+  "provider": {
+    "name": "local_test",
+    "official_submission_provider": false
+  },
+  "model": {
+    "repository": "Qwen/Qwen3-30B-A3B-Instruct-2507-FP8",
+    "served_name": "qwen3-local-test",
+    "revision": "5a5a776300a41aaa681dd7ff0106608ef2bc90db"
+  },
+  "suite": {
+    "id": "domestic-etp-core-50",
+    "version": "1.0",
+    "path": "packages/finance_agent_core/src/finance_agent_core/evaluation/suites/domestic_etp_core_50.json",
+    "sha256": "c407cca721e1087ef1cab16368352c21cd7df75ea2b5a6f051e3ba978a6ce098",
+    "development_cases": 40,
+    "holdout_cases": 10
+  },
+  "data": {
+    "database_sha256": "a91bfc713b88e9ba1e7da27508857cbe5ea200c4d7821d0b4fee7d9922684484",
+    "manifest_sha256": "2e52b161a260fa19eab50e8281f04f8617ee1ee69d618b19bd624af4635fca97",
+    "source_file_sha256": "0f5706d45f93284bcaac2fa8eaed04db920a7043abaa859e455f06e246d54723"
+  },
+  "metrics": {
+    "total": 50,
+    "passed": 50,
+    "strict_accuracy": 1.0,
+    "executable_cases": 47,
+    "blocked_cases": 3,
+    "llm_grounded_cases": 47,
+    "deterministic_empty_cases": 0,
+    "fallback_cases": 0,
+    "safe_answer_rate": 1.0,
+    "product_order_accuracy": 1.0,
+    "evidence_reference_accuracy": 1.0,
+    "field_evidence_citation_rate": 1.0,
+    "numeric_fidelity_rate": 1.0,
+    "warning_coverage_rate": 1.0,
+    "source_date_coverage_rate": 1.0,
+    "unsupported_claim_case_rate": 0.0,
+    "latency_ms": {
+      "p50": 2361.045,
+      "p95": 4509.885,
+      "max": 4852.754
+    }
+  },
+  "reports": [
+    {
+      "role": "final_all",
+      "artifact_name": "domestic-etp-answer-local-qwen-final-all.json",
+      "sha256": "5e4374adb5427ae2e195c592f5bc2f6b57ed60a836d32ff60bd5643ebcbae2ec"
+    }
+  ],
+  "reproduce": "python -m finance_agent_core.evaluation.answer_cli --dataset domestic_etp --provider local_test --split all --workers 4 --require-perfect",
+  "limitations": [
+    "답변 계층을 분리하기 위해 동결된 expected QueryPlan을 사용했다.",
+    "실제 값과 상품 식별자는 LLM이 아니라 서버 evidence compiler가 작성한다.",
+    "자유 형식 금융 답변 능력이나 HyperCLOVA X 성능을 의미하지 않는다."
+  ]
+}

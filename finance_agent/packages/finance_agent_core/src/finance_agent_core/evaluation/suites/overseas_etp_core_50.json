@@ -1,0 +1,713 @@
+{
+  "suite_id": "overseas-etp-core-50",
+  "suite_version": "1.0",
+  "dataset": "overseas_etp",
+  "database_sha256": "eee9009ca741713a9a61e498cd5ed8366836d754c7d0c2dbd74ed7e456a2ebbe",
+  "manifest_sha256": "5dd159ade2353154ed8d3d32068dd512cb2b3becba39972aa0dabff0edd50771",
+  "cases": [
+    {
+      "id": "etp-core-001",
+      "split": "development",
+      "category": "compound",
+      "question": "미국 채권형 해외 ETF 중 현재 거래 가능한 상품에서 총보수 0.20% 이하인 상품을 AUM 순으로 5개 보여줘.",
+      "constraints": [
+        {"field": "product_type", "operator": "eq", "value": "ETF"},
+        {"field": "investment_region", "operator": "eq", "value": "United States of America"},
+        {"field": "asset_type", "operator": "eq", "value": "Bond"},
+        {"field": "sellable", "operator": "eq", "value": true},
+        {"field": "trading_suspended", "operator": "eq", "value": false},
+        {"field": "total_expense_ratio_pct", "operator": "lte", "value": 0.2}
+      ],
+      "ranking": [{"field": "aum", "direction": "desc", "nulls": "last"}],
+      "limit": 5,
+      "disposition": "execute",
+      "oracle": {"candidate_count": 440, "top_product_ids": ["NAS:BND.O", "AMX:AGG", "NYS:SGOV.K", "NAS:VCIT.O", "AMX:BIL"]}
+    },
+    {
+      "id": "etp-core-002",
+      "split": "development",
+      "category": "compound",
+      "question": "거래 중지가 아니고 판매 가능한 미국 채권 ETF를 총보수 0.2퍼센트 이하로 걸러 순자산 큰 순서 상위 다섯 종목 알려줘.",
+      "constraints": [
+        {"field": "product_type", "operator": "eq", "value": "ETF"},
+        {"field": "investment_region", "operator": "eq", "value": "United States of America"},
+        {"field": "asset_type", "operator": "eq", "value": "Bond"},
+        {"field": "sellable", "operator": "eq", "value": true},
+        {"field": "trading_suspended", "operator": "eq", "value": false},
+        {"field": "total_expense_ratio_pct", "operator": "lte", "value": 0.2}
+      ],
+      "ranking": [{"field": "aum", "direction": "desc", "nulls": "last"}],
+      "limit": 5,
+      "disposition": "execute",
+      "oracle": {"candidate_count": 440, "top_product_ids": ["NAS:BND.O", "AMX:AGG", "NYS:SGOV.K", "NAS:VCIT.O", "AMX:BIL"]}
+    },
+    {
+      "id": "etp-core-003",
+      "split": "development",
+      "category": "compound",
+      "question": "미국 주식형 해외 ETF 가운데 보수가 0.10% 이하인 상품을 AUM 큰 순으로 10개 보여줘.",
+      "constraints": [
+        {"field": "product_type", "operator": "eq", "value": "ETF"},
+        {"field": "investment_region", "operator": "eq", "value": "United States of America"},
+        {"field": "asset_type", "operator": "eq", "value": "Equity"},
+        {"field": "total_expense_ratio_pct", "operator": "lte", "value": 0.1}
+      ],
+      "ranking": [{"field": "aum", "direction": "desc", "nulls": "last"}],
+      "limit": 10,
+      "disposition": "execute",
+      "oracle": {"candidate_count": 181, "top_product_ids": ["AMX:VOO", "AMX:IVV", "AMX:SPY", "AMX:VTI", "AMX:VUG", "AMX:VTV", "AMX:VGT", "AMX:SPYM.K", "AMX:IJH", "AMX:XLK"]}
+    },
+    {
+      "id": "etp-core-004",
+      "split": "development",
+      "category": "compound",
+      "question": "Global Ex US 지역의 주식형 해외 ETF 중 총보수 0.15% 미만을 AUM 내림차순으로 7개 찾아줘.",
+      "constraints": [
+        {"field": "product_type", "operator": "eq", "value": "ETF"},
+        {"field": "investment_region", "operator": "eq", "value": "Global Ex US"},
+        {"field": "asset_type", "operator": "eq", "value": "Equity"},
+        {"field": "total_expense_ratio_pct", "operator": "lt", "value": 0.15}
+      ],
+      "ranking": [{"field": "aum", "direction": "desc", "nulls": "last"}],
+      "limit": 7,
+      "disposition": "execute",
+      "oracle": {"candidate_count": 37, "top_product_ids": ["AMX:VEA", "AMX:IEFA.K", "NAS:VXUS.O", "AMX:SCHF.K", "NAS:IXUS.O", "AMX:SPDW.K", "AMX:IDEV.K"]}
+    },
+    {
+      "id": "etp-core-005",
+      "split": "holdout",
+      "category": "compound",
+      "question": "일본 주식형 해외 ETF 중 총보수가 0.5% 이하인 상품을 보수가 낮은 순서로 5개 보여줘.",
+      "constraints": [
+        {"field": "product_type", "operator": "eq", "value": "ETF"},
+        {"field": "investment_region", "operator": "eq", "value": "Japan"},
+        {"field": "asset_type", "operator": "eq", "value": "Equity"},
+        {"field": "total_expense_ratio_pct", "operator": "lte", "value": 0.5}
+      ],
+      "ranking": [{"field": "total_expense_ratio_pct", "direction": "asc", "nulls": "last"}],
+      "limit": 5,
+      "disposition": "execute",
+      "oracle": {"candidate_count": 11, "top_product_ids": ["AMX:MJSC.K", "AMX:FLJH.K", "AMX:FLJP.K", "NAS:EWJV.O", "AMX:BBJP.K"]}
+    },
+    {
+      "id": "etp-core-006",
+      "split": "development",
+      "category": "product_type",
+      "question": "해외 ETF를 AUM이 큰 순서로 5개 보여줘.",
+      "constraints": [{"field": "product_type", "operator": "eq", "value": "ETF"}],
+      "ranking": [{"field": "aum", "direction": "desc", "nulls": "last"}],
+      "limit": 5,
+      "disposition": "execute",
+      "oracle": {"candidate_count": 5577, "top_product_ids": ["AMX:VOO", "AMX:IVV", "AMX:SPY", "AMX:VTI", "NAS:QQQ.O"]}
+    },
+    {
+      "id": "etp-core-007",
+      "split": "development",
+      "category": "product_type",
+      "question": "해외 ETN을 AUM 내림차순으로 10개 조회해줘.",
+      "constraints": [{"field": "product_type", "operator": "eq", "value": "ETN"}],
+      "ranking": [{"field": "aum", "direction": "desc", "nulls": "last"}],
+      "limit": 10,
+      "disposition": "execute",
+      "oracle": {"candidate_count": 59, "top_product_ids": ["AMX:BULZ.K", "AMX:FNGU.K", "AMX:DJP", "AMX:GDXU.K", "AMX:AMJB.K", "AMX:ATMP.K", "AMX:FNGO.K", "AMX:FNGS.K", "NAS:SLVO.O", "NAS:USOI.O"]}
+    },
+    {
+      "id": "etp-core-008",
+      "split": "development",
+      "category": "asset_type",
+      "question": "채권형 해외 ETF를 총보수가 낮은 순으로 10개 알려줘.",
+      "constraints": [
+        {"field": "product_type", "operator": "eq", "value": "ETF"},
+        {"field": "asset_type", "operator": "eq", "value": "Bond"}
+      ],
+      "ranking": [{"field": "total_expense_ratio_pct", "direction": "asc", "nulls": "last"}],
+      "limit": 10,
+      "disposition": "execute",
+      "oracle": {"candidate_count": 1084, "top_product_ids": ["AMX:AAAD.K", "AMX:BIV", "AMX:BLV", "AMX:BSV", "AMX:CBON.K", "AMX:TSEC.K", "AMX:VGHY.K", "AMX:VTEB.K", "AMX:VTEI.K", "NAS:BND.O"]}
+    },
+    {
+      "id": "etp-core-009",
+      "split": "development",
+      "category": "asset_type",
+      "question": "원자재형 해외 ETF 가운데 AUM 상위 5개를 보여줘.",
+      "constraints": [
+        {"field": "product_type", "operator": "eq", "value": "ETF"},
+        {"field": "asset_type", "operator": "eq", "value": "Commodity"}
+      ],
+      "ranking": [{"field": "aum", "direction": "desc", "nulls": "last"}],
+      "limit": 5,
+      "disposition": "execute",
+      "oracle": {"candidate_count": 96, "top_product_ids": ["AMX:IAU", "AMX:SLV", "AMX:GLDM.K", "AMX:SGOL.K", "AMX:IAUM.K"]}
+    },
+    {
+      "id": "etp-core-010",
+      "split": "holdout",
+      "category": "asset_type",
+      "question": "머니마켓 유형 해외 ETF를 순자산 규모가 큰 순서로 5개 찾아줘.",
+      "constraints": [
+        {"field": "product_type", "operator": "eq", "value": "ETF"},
+        {"field": "asset_type", "operator": "eq", "value": "Money Market"}
+      ],
+      "ranking": [{"field": "aum", "direction": "desc", "nulls": "last"}],
+      "limit": 5,
+      "disposition": "execute",
+      "oracle": {"candidate_count": 9, "top_product_ids": ["AMX:IQMM.K", "AMX:SBIL.K", "AMX:SGVT.K", "NYS:PMMF.K", "NYS:GMMF.K"]}
+    },
+    {
+      "id": "etp-core-011",
+      "split": "development",
+      "category": "asset_type",
+      "question": "대체자산형 해외 ETF를 보수가 낮은 순으로 5개 보여줘.",
+      "constraints": [
+        {"field": "product_type", "operator": "eq", "value": "ETF"},
+        {"field": "asset_type", "operator": "eq", "value": "Alternatives"}
+      ],
+      "ranking": [{"field": "total_expense_ratio_pct", "direction": "asc", "nulls": "last"}],
+      "limit": 5,
+      "disposition": "execute",
+      "oracle": {"candidate_count": 1760, "top_product_ids": ["AMX:GQI", "AMX:ABUF.K", "AMX:ALDB.K", "AMX:ARP", "AMX:SPBU.K"]}
+    },
+    {
+      "id": "etp-core-012",
+      "split": "development",
+      "category": "asset_type",
+      "question": "혼합자산형 해외 ETF의 AUM 상위 5개를 조회해줘.",
+      "constraints": [
+        {"field": "product_type", "operator": "eq", "value": "ETF"},
+        {"field": "asset_type", "operator": "eq", "value": "Mixed Assets"}
+      ],
+      "ranking": [{"field": "aum", "direction": "desc", "nulls": "last"}],
+      "limit": 5,
+      "disposition": "execute",
+      "oracle": {"candidate_count": 137, "top_product_ids": ["AMX:CGBL.K", "AMX:AOR", "AMX:AOA", "AMX:AOM", "AMX:INCM.K"]}
+    },
+    {
+      "id": "etp-core-013",
+      "split": "development",
+      "category": "region",
+      "question": "중국 투자 해외 ETF를 AUM 기준으로 큰 순서 5개 보여줘.",
+      "constraints": [
+        {"field": "product_type", "operator": "eq", "value": "ETF"},
+        {"field": "investment_region", "operator": "eq", "value": "China"}
+      ],
+      "ranking": [{"field": "aum", "direction": "desc", "nulls": "last"}],
+      "limit": 5,
+      "disposition": "execute",
+      "oracle": {"candidate_count": 46, "top_product_ids": ["NAS:MCHI.O", "AMX:KWEB.K", "AMX:FXI", "AMX:CQQQ.K", "AMX:YINN.K"]}
+    },
+    {
+      "id": "etp-core-014",
+      "split": "development",
+      "category": "region",
+      "question": "유럽 주식형 해외 ETF를 총보수 오름차순으로 10개 알려줘.",
+      "constraints": [
+        {"field": "product_type", "operator": "eq", "value": "ETF"},
+        {"field": "investment_region", "operator": "eq", "value": "Europe"},
+        {"field": "asset_type", "operator": "eq", "value": "Equity"}
+      ],
+      "ranking": [{"field": "total_expense_ratio_pct", "direction": "asc", "nulls": "last"}],
+      "limit": 10,
+      "disposition": "execute",
+      "oracle": {"candidate_count": 30, "top_product_ids": ["AMX:HEZU.K", "AMX:EUAD.K", "AMX:VGK", "AMX:SPEU.K", "AMX:BBEU.K", "AMX:FLEE.K", "AMX:FLEU.K", "AMX:IEUR.K", "NAS:PBEU.O", "AMX:GSEU.K"]}
+    },
+    {
+      "id": "etp-core-015",
+      "split": "holdout",
+      "category": "region",
+      "question": "글로벌 신흥국 주식형 해외 ETF를 AUM 내림차순으로 5개 찾아줘.",
+      "constraints": [
+        {"field": "product_type", "operator": "eq", "value": "ETF"},
+        {"field": "investment_region", "operator": "eq", "value": "Global Emerging Markets"},
+        {"field": "asset_type", "operator": "eq", "value": "Equity"}
+      ],
+      "ranking": [{"field": "aum", "direction": "desc", "nulls": "last"}],
+      "limit": 5,
+      "disposition": "execute",
+      "oracle": {"candidate_count": 126, "top_product_ids": ["AMX:IEMG.K", "AMX:VWO", "AMX:EEM", "AMX:AVEM.K", "NAS:EMXC.O"]}
+    },
+    {
+      "id": "etp-core-016",
+      "split": "development",
+      "category": "region",
+      "question": "투자 지역이 미국 또는 Global인 해외 ETF를 AUM 큰 순으로 5개 보여줘.",
+      "constraints": [
+        {"field": "product_type", "operator": "eq", "value": "ETF"},
+        {"field": "investment_region", "operator": "in", "value": ["United States of America", "Global"]}
+      ],
+      "ranking": [{"field": "aum", "direction": "desc", "nulls": "last"}],
+      "limit": 5,
+      "disposition": "execute",
+      "oracle": {"candidate_count": 4855, "top_product_ids": ["AMX:VOO", "AMX:IVV", "AMX:SPY", "AMX:VTI", "NAS:QQQ.O"]}
+    },
+    {
+      "id": "etp-core-017",
+      "split": "development",
+      "category": "exchange",
+      "question": "NASDAQ 거래소 코드의 해외 ETF를 AUM 내림차순으로 5개 조회해줘.",
+      "constraints": [
+        {"field": "product_type", "operator": "eq", "value": "ETF"},
+        {"field": "exchange_code", "operator": "eq", "value": "NAS"}
+      ],
+      "ranking": [{"field": "aum", "direction": "desc", "nulls": "last"}],
+      "limit": 5,
+      "disposition": "execute",
+      "oracle": {"candidate_count": 1293, "top_product_ids": ["NAS:QQQ.O", "NAS:BND.O", "NAS:VXUS.O", "NAS:QQQM.O", "NAS:BNDX.O"]}
+    },
+    {
+      "id": "etp-core-018",
+      "split": "development",
+      "category": "exchange",
+      "question": "NYSE 거래소 코드의 해외 ETF를 총보수가 낮은 순으로 5개 보여줘.",
+      "constraints": [
+        {"field": "product_type", "operator": "eq", "value": "ETF"},
+        {"field": "exchange_code", "operator": "eq", "value": "NYS"}
+      ],
+      "ranking": [{"field": "total_expense_ratio_pct", "direction": "asc", "nulls": "last"}],
+      "limit": 5,
+      "disposition": "execute",
+      "oracle": {"candidate_count": 78, "top_product_ids": ["NYS:STRV.K", "NYS:STXF.K", "NYS:SGOV.K", "NYS:SHV", "NYS:MMK"]}
+    },
+    {
+      "id": "etp-core-019",
+      "split": "development",
+      "category": "exchange",
+      "question": "AMEX나 NASDAQ에 있는 해외 ETF를 AUM 상위 순으로 5개 찾아줘.",
+      "constraints": [
+        {"field": "product_type", "operator": "eq", "value": "ETF"},
+        {"field": "exchange_code", "operator": "in", "value": ["AMX", "NAS"]}
+      ],
+      "ranking": [{"field": "aum", "direction": "desc", "nulls": "last"}],
+      "limit": 5,
+      "disposition": "execute",
+      "oracle": {"candidate_count": 5468, "top_product_ids": ["AMX:VOO", "AMX:IVV", "AMX:SPY", "AMX:VTI", "NAS:QQQ.O"]}
+    },
+    {
+      "id": "etp-core-020",
+      "split": "holdout",
+      "category": "identifier",
+      "question": "티커가 QQQ.O인 해외 ETF를 찾아줘.",
+      "constraints": [
+        {"field": "product_type", "operator": "eq", "value": "ETF"},
+        {"field": "ticker", "operator": "eq", "value": "QQQ.O"}
+      ],
+      "ranking": [],
+      "limit": 1,
+      "disposition": "execute",
+      "oracle": {"candidate_count": 1, "top_product_ids": ["NAS:QQQ.O"]}
+    },
+    {
+      "id": "etp-core-021",
+      "split": "development",
+      "category": "identifier",
+      "question": "상품 ID가 AMX:VOO인 해외 ETP를 조회해줘.",
+      "constraints": [{"field": "product_id", "operator": "eq", "value": "AMX:VOO"}],
+      "ranking": [],
+      "limit": 1,
+      "disposition": "execute",
+      "oracle": {"candidate_count": 1, "top_product_ids": ["AMX:VOO"]}
+    },
+    {
+      "id": "etp-core-022",
+      "split": "development",
+      "category": "identifier",
+      "question": "ISIN이 US4642872000인 해외 ETP를 찾아줘.",
+      "constraints": [{"field": "isin", "operator": "eq", "value": "US4642872000"}],
+      "ranking": [],
+      "limit": 1,
+      "disposition": "execute",
+      "oracle": {"candidate_count": 1, "top_product_ids": ["AMX:IVV"]}
+    },
+    {
+      "id": "etp-core-023",
+      "split": "development",
+      "category": "name",
+      "question": "상품명에 Vanguard가 들어간 해외 ETF를 AUM 큰 순으로 5개 보여줘.",
+      "constraints": [
+        {"field": "product_type", "operator": "eq", "value": "ETF"},
+        {"field": "product_name", "operator": "contains", "value": "Vanguard"}
+      ],
+      "ranking": [{"field": "aum", "direction": "desc", "nulls": "last"}],
+      "limit": 5,
+      "disposition": "execute",
+      "oracle": {"candidate_count": 116, "top_product_ids": ["AMX:VOO", "AMX:VTI", "AMX:VUG", "AMX:VEA", "AMX:VTV"]}
+    },
+    {
+      "id": "etp-core-024",
+      "split": "development",
+      "category": "name",
+      "question": "이름에 iShares Core가 포함된 해외 ETF를 보수가 낮은 순으로 10개 찾아줘.",
+      "constraints": [
+        {"field": "product_type", "operator": "eq", "value": "ETF"},
+        {"field": "product_name", "operator": "contains", "value": "iShares Core"}
+      ],
+      "ranking": [{"field": "total_expense_ratio_pct", "direction": "asc", "nulls": "last"}],
+      "limit": 10,
+      "disposition": "execute",
+      "oracle": {"candidate_count": 26, "top_product_ids": ["AMX:AGG", "AMX:ITOT.K", "AMX:IVV", "AMX:IDEV.K", "NAS:IUSG.O", "NAS:IUSV.O", "AMX:DIVB.K", "AMX:IJH", "AMX:IMTB.K", "NAS:IUSB.O"]}
+    },
+    {
+      "id": "etp-core-025",
+      "split": "holdout",
+      "category": "name",
+      "question": "상품명이 정확히 Invesco QQQ Trust, Series 1인 해외 ETF를 조회해줘.",
+      "constraints": [
+        {"field": "product_type", "operator": "eq", "value": "ETF"},
+        {"field": "product_name", "operator": "eq", "value": "Invesco QQQ Trust, Series 1"}
+      ],
+      "ranking": [],
+      "limit": 1,
+      "disposition": "execute",
+      "oracle": {"candidate_count": 1, "top_product_ids": ["NAS:QQQ.O"]}
+    },
+    {
+      "id": "etp-core-026",
+      "split": "development",
+      "category": "fee",
+      "question": "총보수 0.05% 이하인 해외 ETF를 AUM 내림차순으로 10개 보여줘.",
+      "constraints": [
+        {"field": "product_type", "operator": "eq", "value": "ETF"},
+        {"field": "total_expense_ratio_pct", "operator": "lte", "value": 0.05}
+      ],
+      "ranking": [{"field": "aum", "direction": "desc", "nulls": "last"}],
+      "limit": 10,
+      "disposition": "execute",
+      "oracle": {"candidate_count": 191, "top_product_ids": ["AMX:VOO", "AMX:IVV", "AMX:SPY", "AMX:VTI", "AMX:VUG", "AMX:VEA", "AMX:VTV", "NAS:BND.O", "NAS:VXUS.O", "AMX:SPYM.K"]}
+    },
+    {
+      "id": "etp-core-027",
+      "split": "development",
+      "category": "fee",
+      "question": "미국 주식형 해외 ETF 중 총보수가 0.1% 미만인 상품을 보수 오름차순으로 10개 알려줘.",
+      "constraints": [
+        {"field": "product_type", "operator": "eq", "value": "ETF"},
+        {"field": "investment_region", "operator": "eq", "value": "United States of America"},
+        {"field": "asset_type", "operator": "eq", "value": "Equity"},
+        {"field": "total_expense_ratio_pct", "operator": "lt", "value": 0.1}
+      ],
+      "ranking": [{"field": "total_expense_ratio_pct", "direction": "asc", "nulls": "last"}],
+      "limit": 10,
+      "disposition": "execute",
+      "oracle": {"candidate_count": 162, "top_product_ids": ["AMX:BBUS.K", "AMX:GXLC.K", "AMX:SPLG.K", "AMX:SPYM.K", "AMX:VOO", "AMX:VTI", "AMX:ILCB.K", "AMX:ITOT.K", "AMX:IVV", "AMX:SCHA.K"]}
+    },
+    {
+      "id": "etp-core-028",
+      "split": "development",
+      "category": "fee",
+      "question": "총보수가 1.0% 이상인 해외 ETF를 보수가 높은 순으로 5개 보여줘.",
+      "constraints": [
+        {"field": "product_type", "operator": "eq", "value": "ETF"},
+        {"field": "total_expense_ratio_pct", "operator": "gte", "value": 1.0}
+      ],
+      "ranking": [{"field": "total_expense_ratio_pct", "direction": "desc", "nulls": "last"}],
+      "limit": 5,
+      "disposition": "execute",
+      "oracle": {"candidate_count": 303, "top_product_ids": ["AMX:SURI.K", "AMX:XBNB.K", "AMX:XXRP.K", "NAS:TXXD.O", "NAS:TXXH.O"]}
+    },
+    {
+      "id": "etp-core-029",
+      "split": "development",
+      "category": "fee",
+      "question": "총보수가 0.1%에서 0.2% 사이인 해외 ETF를 AUM 큰 순으로 5개 찾아줘.",
+      "constraints": [
+        {"field": "product_type", "operator": "eq", "value": "ETF"},
+        {"field": "total_expense_ratio_pct", "operator": "between", "value": [0.1, 0.2]}
+      ],
+      "ranking": [{"field": "aum", "direction": "desc", "nulls": "last"}],
+      "limit": 5,
+      "disposition": "execute",
+      "oracle": {"candidate_count": 643, "top_product_ids": ["NAS:QQQ.O", "AMX:IWF", "NAS:QQQM.O", "AMX:RSP", "AMX:IWM"]}
+    },
+    {
+      "id": "etp-core-030",
+      "split": "holdout",
+      "category": "fee",
+      "question": "미국 채권형 해외 ETF 중 총보수 0.1% 이상 0.3% 미만을 보수가 낮은 순으로 10개 보여줘.",
+      "constraints": [
+        {"field": "product_type", "operator": "eq", "value": "ETF"},
+        {"field": "investment_region", "operator": "eq", "value": "United States of America"},
+        {"field": "asset_type", "operator": "eq", "value": "Bond"},
+        {"field": "total_expense_ratio_pct", "operator": "gte", "value": 0.1},
+        {"field": "total_expense_ratio_pct", "operator": "lt", "value": 0.3}
+      ],
+      "ranking": [{"field": "total_expense_ratio_pct", "direction": "asc", "nulls": "last"}],
+      "limit": 10,
+      "disposition": "execute",
+      "oracle": {"candidate_count": 377, "top_product_ids": ["102:AGIH.K", "AMX:AGRH.K", "AMX:EAGG.K", "AMX:EVIM.K", "AMX:GOVZ.K", "AMX:IBCA.K", "AMX:IBCB.K", "AMX:IBDQ.K", "AMX:IBDR.K", "AMX:IBDS.K"]}
+    },
+    {
+      "id": "etp-core-031",
+      "split": "development",
+      "category": "quality_gate",
+      "question": "총보수가 정확히 0%인 해외 ETF를 AUM 큰 순으로 5개 보여줘.",
+      "constraints": [
+        {"field": "product_type", "operator": "eq", "value": "ETF"},
+        {"field": "total_expense_ratio_pct", "operator": "eq", "value": 0}
+      ],
+      "ranking": [{"field": "aum", "direction": "desc", "nulls": "last"}],
+      "limit": 5,
+      "disposition": "execute",
+      "oracle": {"candidate_count": 0, "top_product_ids": []}
+    },
+    {
+      "id": "etp-core-032",
+      "split": "development",
+      "category": "aum",
+      "question": "AUM이 1,000억 USD 이상인 해외 ETF를 AUM 내림차순으로 10개 보여줘.",
+      "constraints": [
+        {"field": "product_type", "operator": "eq", "value": "ETF"},
+        {"field": "aum", "operator": "gte", "value": 100000000000}
+      ],
+      "ranking": [{"field": "aum", "direction": "desc", "nulls": "last"}],
+      "limit": 10,
+      "disposition": "execute",
+      "oracle": {"candidate_count": 22, "top_product_ids": ["AMX:VOO", "AMX:IVV", "AMX:SPY", "AMX:VTI", "NAS:QQQ.O", "AMX:VUG", "AMX:VEA", "AMX:IEFA.K", "AMX:VTV", "AMX:IEMG.K"]}
+    },
+    {
+      "id": "etp-core-033",
+      "split": "development",
+      "category": "aum",
+      "question": "AUM이 100억 USD에서 500억 USD 사이인 채권형 해외 ETF를 AUM 큰 순으로 5개 찾아줘.",
+      "constraints": [
+        {"field": "product_type", "operator": "eq", "value": "ETF"},
+        {"field": "asset_type", "operator": "eq", "value": "Bond"},
+        {"field": "aum", "operator": "between", "value": [10000000000, 50000000000]}
+      ],
+      "ranking": [{"field": "aum", "direction": "desc", "nulls": "last"}],
+      "limit": 5,
+      "disposition": "execute",
+      "oracle": {"candidate_count": 55, "top_product_ids": ["AMX:BIL", "NAS:IEF.O", "AMX:BSV", "AMX:MUB", "AMX:VTEB.K"]}
+    },
+    {
+      "id": "etp-core-034",
+      "split": "development",
+      "category": "aum",
+      "question": "AUM이 100만 USD 미만인 해외 ETF를 AUM 오름차순으로 10개 보여줘.",
+      "constraints": [
+        {"field": "product_type", "operator": "eq", "value": "ETF"},
+        {"field": "aum", "operator": "lt", "value": 1000000}
+      ],
+      "ranking": [{"field": "aum", "direction": "asc", "nulls": "last"}],
+      "limit": 10,
+      "disposition": "execute",
+      "oracle": {"candidate_count": 183, "top_product_ids": ["AMX:QDWN.K", "AMX:MDCR.K", "AMX:MJUN.K", "AMX:MMAR.K", "AMX:MSEP.K", "AMX:VCHY.K", "NAS:ORLG.O", "AMX:COIO.K", "AMX:ONG", "AMX:SMQ"]}
+    },
+    {
+      "id": "etp-core-035",
+      "split": "holdout",
+      "category": "quality_gate",
+      "question": "AUM이 정확히 0인 해외 ETF를 상품명 순서로 5개 보여줘.",
+      "constraints": [
+        {"field": "product_type", "operator": "eq", "value": "ETF"},
+        {"field": "aum", "operator": "eq", "value": 0}
+      ],
+      "ranking": [{"field": "product_name", "direction": "asc", "nulls": "last"}],
+      "limit": 5,
+      "disposition": "execute",
+      "oracle": {"candidate_count": 0, "top_product_ids": []}
+    },
+    {
+      "id": "etp-core-036",
+      "split": "development",
+      "category": "status",
+      "question": "판매 가능하고 거래 중지가 아닌 해외 ETF를 티커 오름차순으로 10개 보여줘.",
+      "constraints": [
+        {"field": "product_type", "operator": "eq", "value": "ETF"},
+        {"field": "sellable", "operator": "eq", "value": true},
+        {"field": "trading_suspended", "operator": "eq", "value": false}
+      ],
+      "ranking": [{"field": "ticker", "direction": "asc", "nulls": "last"}],
+      "limit": 10,
+      "disposition": "execute",
+      "oracle": {"candidate_count": 5577, "top_product_ids": ["AMX:AAA", "AMX:AAAA.K", "AMX:AAAC.K", "AMX:AAAD.K", "AMX:AAAU.K", "NAS:AADR.O", "NAS:AAEQ.O", "NAS:AALG.O", "AMX:AAOG.K", "AMX:AAOX.K"]}
+    },
+    {
+      "id": "etp-core-037",
+      "split": "development",
+      "category": "status",
+      "question": "판매할 수 없는 해외 ETF를 AUM 큰 순으로 5개 보여줘.",
+      "constraints": [
+        {"field": "product_type", "operator": "eq", "value": "ETF"},
+        {"field": "sellable", "operator": "eq", "value": false}
+      ],
+      "ranking": [{"field": "aum", "direction": "desc", "nulls": "last"}],
+      "limit": 5,
+      "disposition": "execute",
+      "oracle": {"candidate_count": 0, "top_product_ids": []}
+    },
+    {
+      "id": "etp-core-038",
+      "split": "development",
+      "category": "status",
+      "question": "거래가 중지된 해외 ETF를 AUM 내림차순으로 5개 조회해줘.",
+      "constraints": [
+        {"field": "product_type", "operator": "eq", "value": "ETF"},
+        {"field": "trading_suspended", "operator": "eq", "value": true}
+      ],
+      "ranking": [{"field": "aum", "direction": "desc", "nulls": "last"}],
+      "limit": 5,
+      "disposition": "execute",
+      "oracle": {"candidate_count": 0, "top_product_ids": []}
+    },
+    {
+      "id": "etp-core-039",
+      "split": "development",
+      "category": "date",
+      "question": "AUM 업데이트 기준일이 2026-06-16인 해외 ETF를 AUM 큰 순으로 5개 보여줘.",
+      "constraints": [
+        {"field": "product_type", "operator": "eq", "value": "ETF"},
+        {"field": "dynamic_as_of", "operator": "eq", "value": "2026-06-16"}
+      ],
+      "ranking": [{"field": "aum", "direction": "desc", "nulls": "last"}],
+      "limit": 5,
+      "disposition": "execute",
+      "oracle": {"candidate_count": 4906, "top_product_ids": ["AMX:VOO", "AMX:IVV", "AMX:VTI", "NAS:QQQ.O", "AMX:VUG"]}
+    },
+    {
+      "id": "etp-core-040",
+      "split": "holdout",
+      "category": "date",
+      "question": "동적 지표 기준일이 2026-01-01보다 이전인 해외 ETF를 최신 기준일 순으로 5개 보여줘.",
+      "constraints": [
+        {"field": "product_type", "operator": "eq", "value": "ETF"},
+        {"field": "dynamic_as_of", "operator": "lt", "value": "2026-01-01"}
+      ],
+      "ranking": [{"field": "dynamic_as_of", "direction": "desc", "nulls": "last"}],
+      "limit": 5,
+      "disposition": "execute",
+      "oracle": {"candidate_count": 123, "top_product_ids": ["AMX:AWEG.K", "NAS:JPX.O", "NAS:VIXI.O", "NAS:XPM.O", "NAS:ZYN.O"]}
+    },
+    {
+      "id": "etp-core-041",
+      "split": "development",
+      "category": "date",
+      "question": "AUM 업데이트일이 2026-06-13부터 2026-06-16 사이인 해외 ETF를 AUM 내림차순으로 5개 보여줘.",
+      "constraints": [
+        {"field": "product_type", "operator": "eq", "value": "ETF"},
+        {"field": "dynamic_as_of", "operator": "between", "value": ["2026-06-13", "2026-06-16"]}
+      ],
+      "ranking": [{"field": "aum", "direction": "desc", "nulls": "last"}],
+      "limit": 5,
+      "disposition": "execute",
+      "oracle": {"candidate_count": 5320, "top_product_ids": ["AMX:VOO", "AMX:IVV", "AMX:SPY", "AMX:VTI", "NAS:QQQ.O"]}
+    },
+    {
+      "id": "etp-core-042",
+      "split": "development",
+      "category": "date",
+      "question": "정적 속성 기준일이 2026-06-14인 해외 ETN을 티커 오름차순으로 10개 보여줘.",
+      "constraints": [
+        {"field": "product_type", "operator": "eq", "value": "ETN"},
+        {"field": "static_as_of", "operator": "eq", "value": "2026-06-14"}
+      ],
+      "ranking": [{"field": "ticker", "direction": "asc", "nulls": "last"}],
+      "limit": 10,
+      "disposition": "execute",
+      "oracle": {"candidate_count": 59, "top_product_ids": ["AMX:AIQD.K", "AMX:AIQU.K", "AMX:AMJB.K", "AMX:AMUB.K", "AMX:ATMP.K", "AMX:BDCX.K", "AMX:BDCZ.K", "AMX:BERZ.K", "AMX:BNKD.K", "AMX:BNKU.K"]}
+    },
+    {
+      "id": "etp-core-043",
+      "split": "development",
+      "category": "unsupported",
+      "question": "최근 1일 수익률이 높은 해외 ETF를 5개 추천해줘.",
+      "constraints": [{"field": "product_type", "operator": "eq", "value": "ETF"}],
+      "ranking": [],
+      "limit": 5,
+      "disposition": "block",
+      "blocker": "unsupported",
+      "oracle": null
+    },
+    {
+      "id": "etp-core-044",
+      "split": "development",
+      "category": "unsupported",
+      "question": "배당수익률이 5% 이상인 미국 해외 ETF를 찾아줘.",
+      "constraints": [
+        {"field": "product_type", "operator": "eq", "value": "ETF"},
+        {"field": "investment_region", "operator": "eq", "value": "United States of America"}
+      ],
+      "ranking": [],
+      "limit": 5,
+      "disposition": "block",
+      "blocker": "unsupported",
+      "oracle": null
+    },
+    {
+      "id": "etp-core-045",
+      "split": "holdout",
+      "category": "ambiguity",
+      "question": "총보수가 적당한 미국 해외 ETF를 5개 보여줘.",
+      "constraints": [
+        {"field": "product_type", "operator": "eq", "value": "ETF"},
+        {"field": "investment_region", "operator": "eq", "value": "United States of America"}
+      ],
+      "ranking": [],
+      "limit": 5,
+      "disposition": "block",
+      "blocker": "ambiguity",
+      "oracle": null
+    },
+    {
+      "id": "etp-core-046",
+      "split": "development",
+      "category": "unsupported",
+      "question": "해외 ETF의 AUM을 원화로 환산해서 큰 순서로 5개 보여줘.",
+      "constraints": [{"field": "product_type", "operator": "eq", "value": "ETF"}],
+      "ranking": [{"field": "aum", "direction": "desc", "nulls": "last"}],
+      "limit": 5,
+      "disposition": "block",
+      "blocker": "unsupported",
+      "oracle": null
+    },
+    {
+      "id": "etp-core-047",
+      "split": "development",
+      "category": "ambiguity",
+      "question": "안전한 채권형 해외 ETF를 5개 추천해줘.",
+      "constraints": [
+        {"field": "product_type", "operator": "eq", "value": "ETF"},
+        {"field": "asset_type", "operator": "eq", "value": "Bond"}
+      ],
+      "ranking": [],
+      "limit": 5,
+      "disposition": "block",
+      "blocker": "ambiguity",
+      "oracle": null
+    },
+    {
+      "id": "etp-core-048",
+      "split": "development",
+      "category": "unsupported",
+      "question": "국내 ETF를 AUM 큰 순으로 5개 보여줘.",
+      "constraints": [{"field": "product_type", "operator": "eq", "value": "ETF"}],
+      "ranking": [{"field": "aum", "direction": "desc", "nulls": "last"}],
+      "limit": 5,
+      "disposition": "block",
+      "blocker": "unsupported",
+      "oracle": null
+    },
+    {
+      "id": "etp-core-049",
+      "split": "development",
+      "category": "unsupported",
+      "question": "최근 3개월 수익률이 10% 이상인 해외 ETF를 찾아줘.",
+      "constraints": [{"field": "product_type", "operator": "eq", "value": "ETF"}],
+      "ranking": [],
+      "limit": 5,
+      "disposition": "block",
+      "blocker": "unsupported",
+      "oracle": null
+    },
+    {
+      "id": "etp-core-050",
+      "split": "holdout",
+      "category": "ambiguity",
+      "question": "요즘 괜찮은 해외 ETF를 5개 추천해줘.",
+      "constraints": [{"field": "product_type", "operator": "eq", "value": "ETF"}],
+      "ranking": [],
+      "limit": 5,
+      "disposition": "block",
+      "blocker": "ambiguity",
+      "oracle": null
+    }
+  ]
+}

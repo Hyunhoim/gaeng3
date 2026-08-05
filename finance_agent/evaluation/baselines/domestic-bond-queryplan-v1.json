@@ -1,0 +1,58 @@
+{
+  "schema_version": "1.0",
+  "baseline_id": "domestic-bond-queryplan-v1",
+  "recorded_on": "2026-07-29",
+  "dataset": "bond",
+  "evaluation_layer": "query_plan",
+  "status": "developer_authored_regression",
+  "provider": {
+    "name": "local_test",
+    "official_submission_provider": false
+  },
+  "model": {
+    "repository": "Qwen/Qwen3-30B-A3B-Instruct-2507-FP8",
+    "served_name": "qwen3-local-test",
+    "revision": "5a5a776300a41aaa681dd7ff0106608ef2bc90db"
+  },
+  "suite": {
+    "id": "bond-core-50",
+    "version": "1.0",
+    "path": "packages/finance_agent_core/src/finance_agent_core/evaluation/suites/bond_core_50.json",
+    "sha256": "b2d19e3af43fb8d6d4be03895088380b263bb8aca2c53c29b32de622a29c4178",
+    "development_cases": 40,
+    "holdout_cases": 10
+  },
+  "data": {
+    "database_sha256": "40265aa326d63244727294ac29c1cd38c898f05b6a80dfd51fd8ac38e08764bc",
+    "manifest_sha256": "d724d99e9ffd24148144b3534795d0d545e0ebff9d01509966f6ebbb218f8312",
+    "source_file_sha256": "728f44a567a986d21cf843d711c6c4dfa1a24d05b39c7da0541b981b57ecccf8"
+  },
+  "metrics": {
+    "total": 50,
+    "passed": 50,
+    "strict_accuracy": 1.0,
+    "valid_plan_rate": 1.0,
+    "plan_exact_rate": 1.0,
+    "constraint_exact_rate": 1.0,
+    "oracle_exact_rate": 1.0,
+    "safety_block_rate": 1.0,
+    "latency_ms": {
+      "p50": 3762.371,
+      "p95": 4431.741,
+      "max": 8903.089
+    }
+  },
+  "reports": [
+    {
+      "role": "all",
+      "artifact_name": "bond-local-qwen-all-v1.json",
+      "sha256": "d5efc17f4332dd5fa69007a732f9fdd7a7ce72b9fbe17b68f8290791f44de314"
+    }
+  ],
+  "reproduce": "python -m finance_agent_core.evaluation --dataset bond --provider local_test --split all --workers 4 --require-perfect",
+  "limitations": [
+    "같은 개발자가 질문과 정답 규칙을 작성했고 전체 suite로 linker 정합성을 확인했다.",
+    "완전한 blind 또는 unbiased 일반화 성능으로 주장하지 않는다.",
+    "HyperCLOVA X 또는 공식 공모전 평가 결과가 아니다."
+  ]
+}

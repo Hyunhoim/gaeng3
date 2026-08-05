@@ -1,0 +1,52 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "finance-agent-core"
+version = "0.1.0"
+description = "Deterministic data and agent core for the Mirae Asset Product Finder"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "pydantic>=2.13,<3",
+    "PyYAML>=6,<7",
+]
+
+[project.scripts]
+finance-data-audit = "finance_agent_core.audit.cli:main"
+finance-build-overseas-etp = "finance_agent_core.storage.cli:main"
+finance-build-etp = "finance_agent_core.storage.cli:main"
+finance-agent-answer = "finance_agent_core.agent.cli:main"
+finance-evaluate-core = "finance_agent_core.evaluation.cli:main"
+finance-evaluate-answers = "finance_agent_core.evaluation.answer_cli:main"
+finance-evaluate-fund-blind = "finance_agent_core.evaluation.blind_cli:main"
+finance-evaluate-fund-compare = "finance_agent_core.evaluation.comparison_cli:main"
+finance-evaluate-fund-compare-e2e = "finance_agent_core.evaluation.comparison_e2e_cli:main"
+finance-evaluate-fund-compare-parser = "finance_agent_core.evaluation.comparison_parser_cli:main"
+finance-evaluate-product-compare = "finance_agent_core.evaluation.product_comparison_cli:main"
+finance-benchmark-search-aggregate = "finance_agent_core.evaluation.search_aggregate_benchmark_cli:main"
+finance-pre-hcx = "finance_agent_core.evaluation.pre_hcx_cli:main"
+finance-evaluate-internal-red-team = "finance_agent_core.evaluation.red_team_cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"finance_agent_core.audit" = ["expectations.json"]
+"finance_agent_core.config" = ["field_registry.yaml", "capability_matrix.json"]
+"finance_agent_core.contracts" = ["queryplan.hcx.schema.json"]
+"finance_agent_core.contracts.examples" = ["*.json"]
+"finance_agent_core.evaluation.suites" = ["*.json"]
+"finance_agent_core.evaluation.rubrics" = ["*.json"]
+
+[tool.pytest.ini_options]
+addopts = "-ra"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]

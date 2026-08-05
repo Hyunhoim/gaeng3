@@ -1,0 +1,191 @@
+{
+  "schema_version": "1.0",
+  "suite_id": "search-aggregate-performance-8",
+  "suite_version": "1.0",
+  "status": "public_performance_regression_not_blind",
+  "data": {
+    "overseas_etp": {
+      "database_sha256": "eee9009ca741713a9a61e498cd5ed8366836d754c7d0c2dbd74ed7e456a2ebbe",
+      "manifest_sha256": "5dd159ade2353154ed8d3d32068dd512cb2b3becba39972aa0dabff0edd50771",
+      "source_file_sha256": "3cec19043f742771e0016d56fe806f19ad78f4295d1ae59192740a78feb2253b"
+    },
+    "domestic_etp": {
+      "database_sha256": "a91bfc713b88e9ba1e7da27508857cbe5ea200c4d7821d0b4fee7d9922684484",
+      "manifest_sha256": "2e52b161a260fa19eab50e8281f04f8617ee1ee69d618b19bd624af4635fca97",
+      "source_file_sha256": "0f5706d45f93284bcaac2fa8eaed04db920a7043abaa859e455f06e246d54723"
+    },
+    "bond": {
+      "database_sha256": "40265aa326d63244727294ac29c1cd38c898f05b6a80dfd51fd8ac38e08764bc",
+      "manifest_sha256": "d724d99e9ffd24148144b3534795d0d545e0ebff9d01509966f6ebbb218f8312",
+      "source_file_sha256": "728f44a567a986d21cf843d711c6c4dfa1a24d05b39c7da0541b981b57ecccf8"
+    },
+    "fund": {
+      "database_sha256": "99fac786e5be0ec5a7a53e11e1bd3bbccd5b37ab15243ecbf8b864a85b375ca4",
+      "manifest_sha256": "be83a616d033db2328d231499d1f0492323d02bace4f153ad3da4860a0d10bcd",
+      "source_file_sha256": "140d1ef0cec918d0b3f7c52c107cb123395594eb089b0cd70bb305709b0f44eb"
+    }
+  },
+  "cases": [
+    {
+      "id": "search-aggregate-perf-overseas-etp-search",
+      "product_family": "overseas_etp",
+      "intent": "search",
+      "executor": "routed",
+      "question": "미국 채권형 해외 ETF 중 현재 거래 가능한 상품에서 총보수 0.20% 이하인 상품을 AUM 순으로 5개 보여줘.",
+      "expected": {
+        "candidate_count": 440,
+        "top_product_ids": ["NAS:BND.O", "AMX:AGG", "NYS:SGOV.K", "NAS:VCIT.O", "AMX:BIL"],
+        "aggregates": []
+      }
+    },
+    {
+      "id": "search-aggregate-perf-domestic-etp-search",
+      "product_family": "domestic_etp",
+      "intent": "search",
+      "executor": "domestic_mock",
+      "question": "미국 주식형 국내 ETF 중 연금 거래 가능한 상품을 1개월 수익률 순으로 보여줘",
+      "expected": {
+        "candidate_count": 211,
+        "top_product_ids": ["KR70181B0002", "KR7442580007", "KR70176P0003", "KR7469060008", "KR7491830006"],
+        "aggregates": []
+      }
+    },
+    {
+      "id": "search-aggregate-perf-bond-search",
+      "product_family": "bond",
+      "intent": "search",
+      "executor": "routed",
+      "question": "원화 매수 가능한 국내채권을 매수수익률 높은 순으로 5개 보여줘",
+      "expected": {
+        "candidate_count": 254,
+        "top_product_ids": ["KR6157181C34", "KR6138041C26", "KR6138041B92", "KR6042662G24", "KR6214346EB9"],
+        "aggregates": []
+      }
+    },
+    {
+      "id": "search-aggregate-perf-fund-search",
+      "product_family": "fund",
+      "intent": "search",
+      "executor": "routed",
+      "question": "현재 판매 중인 공모펀드를 3개월 수익률 높은 순으로 5개 보여줘",
+      "expected": {
+        "candidate_count": 8445,
+        "top_product_ids": ["KR5129470016", "KR5129470015", "KR5129470013", "KR5129470010", "KR5129470012"],
+        "aggregates": []
+      }
+    },
+    {
+      "id": "search-aggregate-perf-overseas-etp-aggregate",
+      "product_family": "overseas_etp",
+      "intent": "aggregate",
+      "executor": "routed",
+      "question": "해외 ETF의 총보수율 평균과 최댓값을 집계해줘",
+      "expected": {
+        "candidate_count": 5577,
+        "top_product_ids": [],
+        "aggregates": [
+          {
+            "function": "avg",
+            "field": "total_expense_ratio_pct",
+            "group_values": {},
+            "value": "0.535631607888",
+            "row_count": 5577,
+            "valid_count": 5274,
+            "missing_count": 303
+          },
+          {
+            "function": "max",
+            "field": "total_expense_ratio_pct",
+            "group_values": {},
+            "value": "2.5",
+            "row_count": 5577,
+            "valid_count": 5274,
+            "missing_count": 303
+          }
+        ]
+      }
+    },
+    {
+      "id": "search-aggregate-perf-domestic-etp-aggregate",
+      "product_family": "domestic_etp",
+      "intent": "aggregate",
+      "executor": "routed",
+      "question": "국내 ETP의 상품유형별 분포를 집계해줘",
+      "expected": {
+        "candidate_count": 1733,
+        "top_product_ids": [],
+        "aggregates": [
+          {
+            "function": "count",
+            "field": "product_id",
+            "group_values": {"product_type": "ETF"},
+            "value": 1201,
+            "row_count": 1201,
+            "valid_count": 1201,
+            "missing_count": 0
+          },
+          {
+            "function": "count",
+            "field": "product_id",
+            "group_values": {"product_type": "ETN"},
+            "value": 532,
+            "row_count": 532,
+            "valid_count": 532,
+            "missing_count": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "search-aggregate-perf-bond-aggregate",
+      "product_family": "bond",
+      "intent": "aggregate",
+      "executor": "routed",
+      "question": "현재 매수 가능한 국내채권의 매수수익률 평균과 최댓값을 집계해줘",
+      "expected": {
+        "candidate_count": 254,
+        "top_product_ids": [],
+        "aggregates": [
+          {
+            "function": "avg",
+            "field": "buy_yield_pct",
+            "group_values": {},
+            "value": "3.178460629921",
+            "row_count": 254,
+            "valid_count": 254,
+            "missing_count": 0
+          },
+          {
+            "function": "max",
+            "field": "buy_yield_pct",
+            "group_values": {},
+            "value": "5.146",
+            "row_count": 254,
+            "valid_count": 254,
+            "missing_count": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "search-aggregate-perf-fund-aggregate",
+      "product_family": "fund",
+      "intent": "aggregate",
+      "executor": "routed",
+      "question": "공모펀드의 위험등급별 분포를 집계해줘",
+      "expected": {
+        "candidate_count": 11115,
+        "top_product_ids": [],
+        "aggregates": [
+          {"function": "count", "field": "product_id", "group_values": {"risk_level": "높은위험(2등급)"}, "value": 3301, "row_count": 3301, "valid_count": 3301, "missing_count": 0},
+          {"function": "count", "field": "product_id", "group_values": {"risk_level": null}, "value": 2551, "row_count": 2551, "valid_count": 2551, "missing_count": 0},
+          {"function": "count", "field": "product_id", "group_values": {"risk_level": "다소높은위험(3등급)"}, "value": 1663, "row_count": 1663, "valid_count": 1663, "missing_count": 0},
+          {"function": "count", "field": "product_id", "group_values": {"risk_level": "보통위험(4등급)"}, "value": 1394, "row_count": 1394, "valid_count": 1394, "missing_count": 0},
+          {"function": "count", "field": "product_id", "group_values": {"risk_level": "낮은위험(5등급)"}, "value": 1198, "row_count": 1198, "valid_count": 1198, "missing_count": 0},
+          {"function": "count", "field": "product_id", "group_values": {"risk_level": "매우높은위험(1등급)"}, "value": 670, "row_count": 670, "valid_count": 670, "missing_count": 0},
+          {"function": "count", "field": "product_id", "group_values": {"risk_level": "매우낮은위험(6등급)"}, "value": 338, "row_count": 338, "valid_count": 338, "missing_count": 0}
+        ]
+      }
+    }
+  ]
+}

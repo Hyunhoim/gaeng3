@@ -1,0 +1,100 @@
+{
+  "schema_version": "1.0",
+  "request_id": "web-20260730-0004",
+  "status": "success",
+  "intent": "aggregate",
+  "product_families": ["overseas_etp"],
+  "answer": "해외 ETF 10개 중 유효한 총보수율 9개의 평균은 0.138888888889%입니다.",
+  "query_plan": {
+    "schema_version": "1.0",
+    "question_id": "web-20260730-0004",
+    "intent": "aggregate",
+    "product_families": ["overseas_etp"],
+    "constraints": [
+      {
+        "field": "product_type",
+        "operator": "eq",
+        "value": "ETF",
+        "unit": "code",
+        "strength": "locked"
+      }
+    ],
+    "ranking": [],
+    "projection": ["product_id", "total_expense_ratio_pct"],
+    "limit": 1,
+    "intent_payload": {
+      "comparison_fields": [],
+      "group_by": [],
+      "aggregations": [
+        {
+          "function": "avg",
+          "field": "total_expense_ratio_pct"
+        }
+      ],
+      "explain_product_ids": []
+    },
+    "ambiguities": [],
+    "unsupported_conditions": []
+  },
+  "candidate_count": 10,
+  "products": [],
+  "aggregates": [
+    {
+      "evidence_id": "aggregate_1_1_avg_total_expense_ratio_pct",
+      "function": "avg",
+      "field": "total_expense_ratio_pct",
+      "label": "총보수율",
+      "value": "0.138888888889",
+      "unit": "pct_point",
+      "group_values": {},
+      "group_source_columns": {},
+      "row_count": 10,
+      "valid_count": 9,
+      "missing_count": 1,
+      "source_dataset": "overseas_etp",
+      "source_id": "PREF02N001",
+      "source_columns": ["cu_charge_rt"],
+      "source_snapshot_date": "2026-07-11",
+      "as_of_start": "2026-06-14",
+      "as_of_end": "2026-06-14",
+      "quality": "PARTIAL",
+      "quality_reason": "missing_or_unusable_values_excluded=1"
+    }
+  ],
+  "documents": [],
+  "citations": [
+    {
+      "citation_id": "aggregate:aggregate_1_1_avg_total_expense_ratio_pct",
+      "kind": "aggregate_field",
+      "label": "총보수율 · avg · valid=9, missing=1",
+      "source_id": "PREF02N001",
+      "source_locator": "overseas_etp aggregate · rows=10 · cu_charge_rt",
+      "as_of": "2026-06-14",
+      "evidence_refs": ["aggregate_1_1_avg_total_expense_ratio_pct"]
+    }
+  ],
+  "as_of_dates": ["2026-06-14", "2026-07-11"],
+  "warnings": [
+    "집계 필드의 결측·UNKNOWN·INVALID 값은 0으로 바꾸지 않고 계산에서 제외했습니다."
+  ],
+  "answer_mode": "deterministic",
+  "fallback_used": false,
+  "provider_model": null,
+  "clarification": null,
+  "error": null,
+  "source_manifest": {
+    "schema_version": "1.0",
+    "dataset": "overseas_etp",
+    "registry_schema_version": "1.0",
+    "source_file_name": "synthetic_overseas_etp.xlsx",
+    "source_file_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "source_file_size_bytes": 1234,
+    "source_snapshot_date": "2026-07-11",
+    "total_rows": 12,
+    "searchable_rows": 11,
+    "quarantined_rows": 1,
+    "logical_product_rows": null,
+    "attribute_rows": null,
+    "scope_excluded_rows": null
+  }
+}

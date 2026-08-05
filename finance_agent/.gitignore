@@ -1,0 +1,25 @@
+# Raw and generated financial data
+*.xlsx
+*.xls
+*.zip
+data/raw/
+data/processed/
+artifacts/
+
+# Local research material pending redistribution review
+docs/research/**/audit-bundle/
+
+# Databases, caches, and logs
+*.db
+*.sqlite
+*.sqlite3
+cache/
+
+# Local model weights and caches
+*.safetensors
+*.gguf
+pytorch_model*.bin
+models/
+.cache/huggingface/
+hf-cache/
+vllm-cache/

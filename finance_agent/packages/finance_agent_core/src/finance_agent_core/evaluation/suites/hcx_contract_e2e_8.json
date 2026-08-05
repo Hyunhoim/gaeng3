@@ -1,0 +1,64 @@
+{
+  "schema_version": "1.0",
+  "suite_id": "hcx-contract-e2e-8",
+  "suite_version": "1.0",
+  "evaluation_layer": "system_contract",
+  "cases": [
+    {
+      "id": "hcx-contract-overseas-search",
+      "test_name": "test_hcx_offline_overseas_search_reaches_verified_backend",
+      "product_family": "overseas_etp",
+      "expected_operations": ["query_plan", "grounded_answer"],
+      "expected_outcome": "llm_grounded"
+    },
+    {
+      "id": "hcx-contract-domestic-search",
+      "test_name": "test_hcx_offline_domestic_search_reaches_verified_backend",
+      "product_family": "domestic_etp",
+      "expected_operations": ["query_plan", "grounded_answer"],
+      "expected_outcome": "llm_grounded"
+    },
+    {
+      "id": "hcx-contract-bond-search",
+      "test_name": "test_hcx_offline_bond_search_reaches_verified_backend",
+      "product_family": "bond",
+      "expected_operations": ["query_plan", "grounded_answer"],
+      "expected_outcome": "llm_grounded"
+    },
+    {
+      "id": "hcx-contract-answer-fallback",
+      "test_name": "test_hcx_offline_answer_verifier_falls_back_on_reordered_results",
+      "product_family": "overseas_etp",
+      "expected_operations": ["query_plan", "grounded_answer"],
+      "expected_outcome": "deterministic_fallback"
+    },
+    {
+      "id": "hcx-contract-query-timeout",
+      "test_name": "test_hcx_offline_query_timeout_stops_before_oracle_and_answer",
+      "product_family": "overseas_etp",
+      "expected_operations": ["query_plan"],
+      "expected_outcome": "timeout_fail_closed"
+    },
+    {
+      "id": "hcx-contract-router-control",
+      "test_name": "test_hcx_offline_router_control_skips_all_model_calls",
+      "product_family": "overseas_etp",
+      "expected_operations": [],
+      "expected_outcome": "unsupported_without_model_call"
+    },
+    {
+      "id": "hcx-contract-disabled-fund",
+      "test_name": "test_hcx_offline_disabled_fund_stops_before_model_and_database",
+      "product_family": "fund",
+      "expected_operations": [],
+      "expected_outcome": "clarify_without_model_call"
+    },
+    {
+      "id": "hcx-contract-plan-mismatch",
+      "test_name": "test_hcx_offline_server_guard_blocks_mismatched_provider_plan",
+      "product_family": "overseas_etp",
+      "expected_operations": [],
+      "expected_outcome": "clarify_before_oracle"
+    }
+  ]
+}

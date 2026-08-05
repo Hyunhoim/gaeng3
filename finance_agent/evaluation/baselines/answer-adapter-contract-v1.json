@@ -1,0 +1,63 @@
+{
+  "schema_version": "1.0",
+  "baseline_id": "answer-adapter-contract-v1",
+  "recorded_on": "2026-07-30",
+  "dataset": "backend_contract+provider_failures+synthetic_overseas_etp",
+  "evaluation_layer": "system_contract",
+  "status": "framework_neutral_answer_adapter_regression",
+  "provider": {
+    "name": "hyperclova_fake_transport",
+    "official_submission_provider": false,
+    "network_used": false
+  },
+  "model": {
+    "repository": null,
+    "served_name": "HCX-ANSWER-ADAPTER-TEST",
+    "revision": null,
+    "reason": "실제 모델 생성이 아니라 provider 예외를 HTTP 의미와 Backend ERROR DTO로 변환하는 계약 검증"
+  },
+  "suite": {
+    "id": "answer-adapter-contract-12",
+    "version": "1.0",
+    "path": "packages/finance_agent_core/src/finance_agent_core/evaluation/suites/answer_adapter_contract_12.json",
+    "sha256": "b972f070e03126d9cd24b5123d7d085ba31113d21f5e4e641ea53a2ac8dafc9d",
+    "total_cases": 12,
+    "normal_success_cases": 1,
+    "provider_error_cases": 7,
+    "grounded_fallback_cases": 1,
+    "dataset_error_cases": 1,
+    "internal_error_cases": 1,
+    "invalid_state_cases": 1
+  },
+  "data": {
+    "fixture_definition_sha256": "1332eaa575c4268d64985bf9757d45fc06450818f0a77e3551a49139a814e4d1",
+    "not_applicable_reason": "실제 데이터나 모델 성능 평가가 아니라 합성 SQLite와 scripted provider 실패를 사용하는 application boundary 계약 평가"
+  },
+  "metrics": {
+    "total": 12,
+    "passed": 12,
+    "strict_accuracy": 1.0,
+    "http_200_success_cases": 2,
+    "http_502_cases": 1,
+    "http_503_cases": 7,
+    "http_504_cases": 1,
+    "http_500_cases": 1,
+    "sensitive_detail_exposure_cases": 0,
+    "network_calls": 0
+  },
+  "reports": [
+    {
+      "role": "framework_neutral_answer_adapter_contract",
+      "artifact_name": "answer-adapter-contract-v1.json",
+      "sha256": "bc4e3d89c3743b9fd1f40a8f5b5095d11f35c17dcb80ed0ab77f5fd21f05fe46"
+    }
+  ],
+  "reproduce": "python scripts/run-answer-adapter-contract.py --require-perfect",
+  "limitations": [
+    "FastAPI route를 생성하지 않고 framework-neutral adapter의 HTTP status와 body 계약만 검증",
+    "fake transport와 합성 데이터만 사용하며 실제 endpoint·credential·네트워크 호출 없음",
+    "실제 HyperCLOVA X retry-after·request ID header·오류 body 형식은 공식 API 확인 후 transport에서 처리",
+    "입력 JSON·query parameter validation과 인증은 향후 Backend framework adapter 책임",
+    "답변 provider 실패는 검증된 결정론적 답변이 있으므로 error가 아니라 HTTP 200 fallback으로 유지"
+  ]
+}

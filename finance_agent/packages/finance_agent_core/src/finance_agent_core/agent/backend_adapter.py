@@ -1,0 +1,175 @@
+from __future__ import annotations
+
+import sqlite3
+from dataclasses import dataclass
+from typing import Literal, Protocol
+
+from pydantic import BaseModel, ConfigDict, model_validator
+
+from finance_agent_core.agent.providers import (
+    HyperClovaXAuthenticationError,
+    HyperClovaXConfigurationError,
+    HyperClovaXProviderError,
+    HyperClovaXRateLimitError,
+    HyperClovaXResponseError,
+    HyperClovaXServiceError,
+    HyperClovaXTimeoutError,
+    HyperClovaXTransportError,
+)
+from finance_agent_core.agent.router import IntentRouter
+from finance_agent_core.contracts.backend import (
+    BackendAgentRequest,
+    BackendAgentResponse,
+    BackendAnswerMode,
+    BackendError,
+    BackendErrorCode,
+    BackendStatus,
+    routed_result_to_backend,
+)
+from finance_agent_core.contracts.routing import RouteDecision
+
+
+class RoutedAnswerService(Protocol):
+    router: IntentRouter
+
+    def answer(self, question: str, request_id: str): ...
+
+
+class AnswerAdapterResult(BaseModel):
+    """Framework-neutral result consumed by a future FastAPI /answer route."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    http_status_code: Literal[200, 500, 502, 503, 504]
+    response: BackendAgentResponse
+
+    @model_validator(mode="after")
+    def validate_http_and_body_status(self) -> AnswerAdapterResult:
+        is_error = self.response.status is BackendStatus.ERROR
+        if is_error == (self.http_status_code == 200):
+            raise ValueError("HTTP status and Backend error status differ")
+        return self
+
+
+@dataclass(frozen=True, slots=True)
+class _ErrorMapping:
+    http_status_code: Literal[500, 502, 503, 504]
+    code: BackendErrorCode
+    message: str
+    retryable: bool
+
+
+_PROVIDER_UNAVAILABLE = "현재 AI provider를 사용할 수 없습니다. 잠시 후 다시 시도해 주세요."
+_PROVIDER_TIMEOUT = "AI provider 응답 시간이 초과되었습니다. 잠시 후 다시 시도해 주세요."
+_PROVIDER_INVALID_RESPONSE = (
+    "AI provider 응답을 안전하게 검증하지 못했습니다. 잠시 후 다시 시도해 주세요."
+)
+_DATASET_UNAVAILABLE = "금융상품 데이터에 접근할 수 없습니다. 잠시 후 다시 시도해 주세요."
+_INTERNAL_ERROR = "요청 처리 중 내부 오류가 발생했습니다."
+
+
+def _map_error(error: Exception) -> _ErrorMapping:
+    if isinstance(
+        error,
+        (HyperClovaXConfigurationError, HyperClovaXAuthenticationError),
+    ):
+        return _ErrorMapping(
+            http_status_code=503,
+            code=BackendErrorCode.PROVIDER_UNAVAILABLE,
+            message=_PROVIDER_UNAVAILABLE,
+            retryable=False,
+        )
+    if isinstance(error, HyperClovaXTimeoutError):
+        return _ErrorMapping(
+            http_status_code=504,
+            code=BackendErrorCode.PROVIDER_UNAVAILABLE,
+            message=_PROVIDER_TIMEOUT,
+            retryable=True,
+        )
+    if isinstance(error, HyperClovaXResponseError):
+        return _ErrorMapping(
+            http_status_code=502,
+            code=BackendErrorCode.PROVIDER_UNAVAILABLE,
+            message=_PROVIDER_INVALID_RESPONSE,
+            retryable=True,
+        )
+    if isinstance(
+        error,
+        (
+            HyperClovaXRateLimitError,
+            HyperClovaXServiceError,
+            HyperClovaXTransportError,
+            HyperClovaXProviderError,
+        ),
+    ):
+        return _ErrorMapping(
+            http_status_code=503,
+            code=BackendErrorCode.PROVIDER_UNAVAILABLE,
+            message=_PROVIDER_UNAVAILABLE,
+            retryable=True,
+        )
+    if isinstance(error, (sqlite3.Error, OSError)):
+        return _ErrorMapping(
+            http_status_code=503,
+            code=BackendErrorCode.DATASET_UNAVAILABLE,
+            message=_DATASET_UNAVAILABLE,
+            retryable=True,
+        )
+    return _ErrorMapping(
+        http_status_code=500,
+        code=BackendErrorCode.INTERNAL_ERROR,
+        message=_INTERNAL_ERROR,
+        retryable=False,
+    )
+
+
+def _error_response(
+    request: BackendAgentRequest,
+    decision: RouteDecision,
+    mapping: _ErrorMapping,
+) -> BackendAgentResponse:
+    return BackendAgentResponse(
+        request_id=request.request_id,
+        status=BackendStatus.ERROR,
+        intent=decision.draft.intent,
+        product_families=decision.draft.product_families,
+        answer=mapping.message,
+        query_plan=None,
+        candidate_count=None,
+        products=[],
+        comparisons=[],
+        aggregates=[],
+        documents=[],
+        citations=[],
+        as_of_dates=[],
+        warnings=[],
+        answer_mode=BackendAnswerMode.CONTROL,
+        fallback_used=False,
+        provider_model=None,
+        clarification=None,
+        error=BackendError(
+            code=mapping.code,
+            message=mapping.message,
+            retryable=mapping.retryable,
+        ),
+        source_manifest=None,
+    )
+
+
+def execute_answer_request(
+    service: RoutedAnswerService,
+    request: BackendAgentRequest,
+) -> AnswerAdapterResult:
+    """Run one validated request and normalize safe HTTP/body semantics."""
+
+    decision = service.router.route(request.question, request.request_id)
+    try:
+        routed = service.answer(request.question, request.request_id)
+        response = routed_result_to_backend(routed)
+        return AnswerAdapterResult(http_status_code=200, response=response)
+    except Exception as error:  # noqa: BLE001 - this is the outer application boundary
+        mapping = _map_error(error)
+        return AnswerAdapterResult(
+            http_status_code=mapping.http_status_code,
+            response=_error_response(request, decision, mapping),
+        )

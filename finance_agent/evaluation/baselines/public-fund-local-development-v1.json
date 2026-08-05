@@ -1,0 +1,59 @@
+{
+  "schema_version": "1.0",
+  "baseline_id": "public-fund-local-development-v1",
+  "recorded_on": "2026-07-29",
+  "dataset": "fund",
+  "evaluation_layer": "query_plan",
+  "status": "development_first_run_holdout_locked",
+  "provider": {
+    "name": "local_test",
+    "official_submission_provider": false
+  },
+  "model": {
+    "repository": "Qwen/Qwen3-30B-A3B-Instruct-2507-FP8",
+    "served_name": "qwen3-local-test",
+    "revision": "5a5a776300a41aaa681dd7ff0106608ef2bc90db"
+  },
+  "suite": {
+    "id": "fund-core-50",
+    "version": "1.0",
+    "path": "packages/finance_agent_core/src/finance_agent_core/evaluation/suites/fund_core_50.json",
+    "sha256": "77d9be9ca86d9654fb61a52290ca08eadff6b618f861b985367b05d195c582b2",
+    "development_cases": 40,
+    "holdout_cases": 10
+  },
+  "data": {
+    "database_sha256": "99fac786e5be0ec5a7a53e11e1bd3bbccd5b37ab15243ecbf8b864a85b375ca4",
+    "manifest_sha256": "be83a616d033db2328d231499d1f0492323d02bace4f153ad3da4860a0d10bcd",
+    "source_file_sha256": "140d1ef0cec918d0b3f7c52c107cb123395594eb089b0cd70bb305709b0f44eb"
+  },
+  "metrics": {
+    "total": 40,
+    "passed": 40,
+    "strict_accuracy": 1.0,
+    "valid_plan_rate": 1.0,
+    "plan_exact_rate": 1.0,
+    "constraint_exact_rate": 1.0,
+    "oracle_exact_rate": 1.0,
+    "safety_block_rate": 1.0,
+    "latency_ms": {
+      "p50": 2905.228,
+      "p95": 4288.772,
+      "max": 4437.341
+    }
+  },
+  "reports": [
+    {
+      "role": "development_first_run",
+      "artifact_name": "fund-local-qwen-development-first.json",
+      "sha256": "c0d8a60b0a6465b9ef6035f1a3787b4835d765385ae18bfc0ad97d15d1cd99f6"
+    }
+  ],
+  "reproduce": "python -m finance_agent_core.evaluation --dataset fund --provider local_test --split development --workers 4 --require-perfect",
+  "limitations": [
+    "development 40개는 구현과 결정론적 linker 정합성 검사에 사용한 튜닝 세트다.",
+    "holdout 10개는 로컬 모델로 아직 실행하지 않았으며 이 baseline에 포함되지 않는다.",
+    "Qwen 단독 성능이 아니라 로컬 모델, 결정론적 linker, 계약, Oracle과 Verifier를 합친 시스템 점수다.",
+    "fund 공식 Agent 실행은 계속 비활성화되어 있고 HyperCLOVA X 또는 공식 공모전 평가 결과가 아니다."
+  ]
+}

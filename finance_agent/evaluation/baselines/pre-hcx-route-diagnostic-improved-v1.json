@@ -1,0 +1,45 @@
+{
+  "schema_version": "1.0",
+  "baseline_id": "pre-hcx-route-diagnostic-improved-v1",
+  "recorded_on": "2026-07-30",
+  "dataset": "four-product-families",
+  "evaluation_layer": "intent_route",
+  "status": "frozen_regression",
+  "provider": {
+    "name": "deterministic_intent_router",
+    "official_submission_provider": false
+  },
+  "model": null,
+  "suite": {
+    "id": "pre-hcx-route-diagnostic-28",
+    "version": "1.0",
+    "path": "packages/finance_agent_core/src/finance_agent_core/evaluation/suites/pre_hcx_route_diagnostic_28.json",
+    "sha256": "9ced15b98eaa312c5032af3f2adc60833a619e6c4019f77489f7d94553d363e5"
+  },
+  "data": {
+    "not_applicable_reason": "라우팅 진단은 상품 DB를 조회하지 않음",
+    "capability_matrix_sha256": "0fb58cefd0a2fd5b94149bb8454bfdcaaadeef736fb2d6fe1e2313c7eee68211"
+  },
+  "metrics": {
+    "total": 28,
+    "passed": 28,
+    "strict_accuracy": 1.0,
+    "product_family_coverage": 4,
+    "intent_coverage": 7
+  },
+  "reports": [
+    {
+      "artifact_name": "pre-hcx-route-diagnostic-improved-v1.json",
+      "sha256": "8e5c66cdbba130e7e0b72772629f2fecb623f86a08b5883d24df90b11627e3bc"
+    }
+  ],
+  "reproduce": [
+    "python -m finance_agent_core.evaluation.pre_hcx_cli diagnostic --profile current_router --generated-at-utc 2026-07-30T00:00:01Z --output artifacts/evaluation/pre-hcx-route-diagnostic-improved-v1.json --require-perfect"
+  ],
+  "limitations": [
+    "AI 담당자가 작성한 공개 internal diagnostic이며 독립 blind가 아님",
+    "정확한 intent·family·disposition·QueryPlan intent 배선만 측정",
+    "DB Oracle과 최종 답변 품질은 상품군별 별도 회귀로 측정",
+    "HyperCLOVA X 성능이 아님"
+  ]
+}

@@ -1,0 +1,6 @@
+name: gaeng3-llm-local
+channels:
+  - conda-forge
+dependencies:
+  - python=3.12
+  - pip

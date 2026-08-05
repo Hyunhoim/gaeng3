@@ -1,0 +1,117 @@
+{
+  "schema_version": "1.0",
+  "baseline_id": "public-fund-compare-e2e-v1",
+  "recorded_on": "2026-07-30",
+  "dataset": "fund",
+  "evaluation_layer": "grounded_answer",
+  "status": "public_compare_e2e_regression",
+  "provider": {
+    "name": "local_test",
+    "official_submission_provider": false
+  },
+  "model": {
+    "repository": "Qwen/Qwen3-30B-A3B-Instruct-2507-FP8",
+    "served_name": "qwen3-local-test",
+    "revision": "5a5a776300a41aaa681dd7ff0106608ef2bc90db"
+  },
+  "suite": {
+    "id": "fund-compare-e2e-core-24",
+    "version": "1.0",
+    "path": "packages/finance_agent_core/src/finance_agent_core/evaluation/suites/fund_compare_e2e_core_24.json",
+    "sha256": "5f1511c8dea53b13d1207ee1c80adcf6db4c431581ca8b15d5d683951bc7f88c",
+    "development_cases": 18,
+    "holdout_cases": 6
+  },
+  "source_suite": {
+    "id": "fund-compare-parser-core-24",
+    "version": "1.0",
+    "path": "packages/finance_agent_core/src/finance_agent_core/evaluation/suites/fund_compare_parser_core_24.json",
+    "sha256": "9e2bd72c001f6384a08111ae195de0bf1a962fe6aafa46b52df012917c1b4c9c"
+  },
+  "data": {
+    "database_sha256": "99fac786e5be0ec5a7a53e11e1bd3bbccd5b37ab15243ecbf8b864a85b375ca4",
+    "manifest_sha256": "be83a616d033db2328d231499d1f0492323d02bace4f153ad3da4860a0d10bcd",
+    "source_file_sha256": "140d1ef0cec918d0b3f7c52c107cb123395594eb089b0cd70bb305709b0f44eb"
+  },
+  "metrics": {
+    "total": 24,
+    "passed": 24,
+    "strict_accuracy": 1.0,
+    "executable_cases": 16,
+    "blocked_cases": 8,
+    "parser_calls": 24,
+    "answer_generation_attempts": 16,
+    "llm_grounded_cases": 16,
+    "fallback_cases": 0,
+    "fallback_rate": 0.0,
+    "draft_target_exact_rate": 1.0,
+    "draft_field_exact_rate": 1.0,
+    "mention_grounding_rate": 1.0,
+    "resolution_exact_rate": 1.0,
+    "plan_exact_rate": 1.0,
+    "oracle_exact_rate": 1.0,
+    "field_status_accuracy": 1.0,
+    "numeric_delta_accuracy": 1.0,
+    "cell_value_accuracy": 1.0,
+    "evidence_provenance_accuracy": 1.0,
+    "safety_block_rate": 1.0,
+    "blocked_answer_safety_rate": 1.0,
+    "blocked_answer_suppression_rate": 1.0,
+    "answer_verifier_pass_rate": 1.0,
+    "deterministic_core_rate": 1.0,
+    "evidence_citation_rate": 1.0,
+    "source_date_coverage_rate": 1.0,
+    "parser_latency_ms": {
+      "p50": 567.105,
+      "p95": 751.575,
+      "max": 805.811
+    },
+    "answer_latency_ms": {
+      "p50": 1582.531,
+      "p95": 2225.406,
+      "max": 2225.406
+    },
+    "total_latency_ms": {
+      "p50": 2142.249,
+      "p95": 2737.07,
+      "max": 2853.783
+    }
+  },
+  "pipeline_contract": {
+    "isolation": "natural_question_to_verified_grounded_answer",
+    "model_calls": "all_24_parser_then_executable_16_answer_planner",
+    "parser_role": "copy_explicit_target_mentions_and_supported_comparison_fields",
+    "server_role": "exact_resolution_plan_compilation_oracle_result_verification_comparison_and_fact_compilation",
+    "answer_model_role": "select_evidence_references_and_write_identifier_free_narrative",
+    "blocked_policy": "deterministic_clarification_without_oracle_or_answer_model",
+    "fallback_policy": "deterministic_verified_answer_on_generation_or_verification_failure",
+    "outer_quote_policy": "remove_balanced_outer_delimiters_without_erasing_class_syntax",
+    "mention_policy": "require_exact_quoted_spans_and_complete_ordered_question_identity_sequence",
+    "target_role_policy": "block_exclusion_substitution_and_inclusion_roles",
+    "question_residual_policy": "block_unknown_residual_text_and_unapproved_punctuation_across_whole_question",
+    "question_quote_policy": "require_valid_whole_question_quote_structure",
+    "target_structure_policy": "require_ordered_identity_spans_exact_connectors_and_position_aware_punctuation",
+    "plan_policy": "validate_server_plan_against_an_independent_frozen_contract",
+    "comparison_policy": "validate_frozen_field_statuses_numeric_deltas_cell_values_and_evidence_provenance"
+  },
+  "reports": [
+    {
+      "role": "expected_all",
+      "artifact_name": "fund-compare-e2e-expected-all.json",
+      "sha256": "01840035f13f14923d335bb01ad77355d0ef3b493c4849ab7c89bfaa6bee435d"
+    },
+    {
+      "role": "local_qwen_all_final",
+      "artifact_name": "fund-compare-e2e-local_test-all.json",
+      "sha256": "b67ccbad9ab1cc93d682f4b27d0ae38a901623081477309a7f53f07d91709976"
+    }
+  ],
+  "reproduce": "python -m finance_agent_core.evaluation.comparison_e2e_cli --provider local_test --split all --workers 4 --require-perfect",
+  "limitations": [
+    "같은 개발자가 작성해 공개한 24문항을 통합 회귀에 재사용했으므로 독립 blind 일반화 성능으로 해석하지 않는다.",
+    "상품번호·정식명·짧은 이름의 정확 정규화 일치만 허용하며 오탈자나 부분 이름을 fuzzy match로 추측하지 않는다.",
+    "로컬 Qwen은 대상·비교 필드 추출과 근거 참조 선택·서술만 담당하고 상품 선택·수치·SQL·차이 계산·인용 컴파일에는 관여하지 않는다.",
+    "자연스러움·유용성·선호도는 자동 검증 범위가 아니므로 별도의 사람 평가가 필요하다.",
+    "fund 공식 Agent 실행은 계속 비활성화되어 있고 HyperCLOVA X 또는 공식 공모전 평가 결과가 아니다."
+  ]
+}

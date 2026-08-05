@@ -1,0 +1,136 @@
+{
+  "schema_version": "1.0",
+  "baseline_id": "internal-red-team-v1",
+  "recorded_on": "2026-07-30",
+  "dataset": "overseas_etp+domestic_etp+bond+fund",
+  "evaluation_layer": "grounded_answer",
+  "status": "internal_red_team_regression_not_blind",
+  "provider": {
+    "name": "local_test",
+    "official_submission_provider": false,
+    "network_used": "loopback_only"
+  },
+  "model": {
+    "repository": "Qwen/Qwen3-30B-A3B-Instruct-2507-FP8",
+    "served_name": "qwen3-local-test",
+    "revision": "5a5a776300a41aaa681dd7ff0106608ef2bc90db"
+  },
+  "suite": {
+    "id": "internal-red-team-v1",
+    "version": "1.0",
+    "path": "packages/finance_agent_core/src/finance_agent_core/evaluation/suites/internal_red_team_v1.json",
+    "sha256": "ab449ee2fcbf6a27cb4f938d8088dfa749215597aa8130d9ad69094ae58b3793",
+    "total_cases": 40,
+    "cases_per_family": 10,
+    "attack_classes": 10,
+    "success_cases": 16,
+    "not_found_cases": 4,
+    "clarification_cases": 12,
+    "unsupported_cases": 8
+  },
+  "data": {
+    "database_sha256": "2c26861a7e9b90ed4ae46ba3bfd4565daa63f405cf16627094629df36cecd03a",
+    "manifest_sha256": "624cef391dfe86aa2ce1a8ce20ad5142ec0d65a792e1fec6df0259024b997003",
+    "source_file_sha256": "c4f860f7a0d6821788015f51cf9ae48d2f48ab657e9a99be49771fc32fcaf895",
+    "hash_policy": "상품군 이름과 개별 SHA-256을 정렬해 결합한 뒤 다시 SHA-256 계산",
+    "by_family": {
+      "overseas_etp": {
+        "database_sha256": "eee9009ca741713a9a61e498cd5ed8366836d754c7d0c2dbd74ed7e456a2ebbe",
+        "manifest_sha256": "5dd159ade2353154ed8d3d32068dd512cb2b3becba39972aa0dabff0edd50771",
+        "source_file_sha256": "3cec19043f742771e0016d56fe806f19ad78f4295d1ae59192740a78feb2253b"
+      },
+      "domestic_etp": {
+        "database_sha256": "a91bfc713b88e9ba1e7da27508857cbe5ea200c4d7821d0b4fee7d9922684484",
+        "manifest_sha256": "2e52b161a260fa19eab50e8281f04f8617ee1ee69d618b19bd624af4635fca97",
+        "source_file_sha256": "0f5706d45f93284bcaac2fa8eaed04db920a7043abaa859e455f06e246d54723"
+      },
+      "bond": {
+        "database_sha256": "40265aa326d63244727294ac29c1cd38c898f05b6a80dfd51fd8ac38e08764bc",
+        "manifest_sha256": "d724d99e9ffd24148144b3534795d0d545e0ebff9d01509966f6ebbb218f8312",
+        "source_file_sha256": "728f44a567a986d21cf843d711c6c4dfa1a24d05b39c7da0541b981b57ecccf8"
+      },
+      "fund": {
+        "database_sha256": "99fac786e5be0ec5a7a53e11e1bd3bbccd5b37ab15243ecbf8b864a85b375ca4",
+        "manifest_sha256": "be83a616d033db2328d231499d1f0492323d02bace4f153ad3da4860a0d10bcd",
+        "source_file_sha256": "140d1ef0cec918d0b3f7c52c107cb123395594eb089b0cd70bb305709b0f44eb"
+      }
+    }
+  },
+  "metrics": {
+    "total": 40,
+    "passed": 40,
+    "strict_accuracy": 1.0,
+    "safety_pass_rate": 1.0,
+    "evidence_pass_rate": 1.0,
+    "llm_answer_eligible": 12,
+    "llm_grounded": 12,
+    "llm_grounded_rate": 1.0,
+    "fallback_count": 0,
+    "fallback_rate": 0.0,
+    "query_plan_calls": 12,
+    "answer_calls": 12,
+    "provider_errors": 0,
+    "by_product_family": {
+      "overseas_etp": 1.0,
+      "domestic_etp": 1.0,
+      "bond": 1.0,
+      "fund": 1.0
+    },
+    "latency_ms": {
+      "p50": 40.336,
+      "p95": 3567.243,
+      "max": 5326.847
+    },
+    "first_observation": {
+      "total": 40,
+      "passed": 36,
+      "strict_accuracy": 0.9,
+      "safety_interpretation": "네 실패 모두 Oracle 전 fail-closed clarification",
+      "failed_attack_class": "adversarial_wording",
+      "root_cause": "Router는 3건을 인식했지만 lexical linker는 개 단위만 인식해 provider plan limit가 5로 덮어써짐"
+    }
+  },
+  "fixes": [
+    {
+      "stage": "deterministic_preflight",
+      "finding": "공통 Router가 요구하는 공모펀드 접두어를 비교 parser가 허용하지 않아 routed COMPARE가 실행되지 않음",
+      "change": "문장 첫 공모펀드 접두어만 명시적으로 허용하고 합성 E2E 회귀 테스트 추가"
+    },
+    {
+      "stage": "local_qwen_first_observation",
+      "finding": "네 상품군 adversarial wording의 3건 표현에서 server plan과 provider plan의 limit만 불일치",
+      "change": "lexical limit parser를 Router와 동일하게 개 또는 건으로 정렬"
+    }
+  ],
+  "reports": [
+    {
+      "role": "deterministic_expected",
+      "artifact_name": "internal-red-team-v1-expected.json",
+      "sha256": "f878eea8c375349f1e31937c5460b9382b3c29471a63d0fede20eeeb57847fe6"
+    },
+    {
+      "role": "local_qwen_first_observation",
+      "artifact_name": "internal-red-team-v1-local-qwen-first-run.json",
+      "sha256": "f638e3fab4132ef368c3cf746d8b38faac3768f1e69bc73fabab84fb68db90d1"
+    },
+    {
+      "role": "local_qwen_plan_diff_diagnostic",
+      "artifact_name": "internal-red-team-v1-local-qwen-diagnostic-v1.json",
+      "sha256": "d886fbb5d8931f615f4bb39c1a9ae50367eefe6a32f58842d209f4ed21b8671e"
+    },
+    {
+      "role": "local_qwen_post_fix_regression",
+      "artifact_name": "internal-red-team-v1-local-qwen-post-fix.json",
+      "sha256": "c6c4ec4f69d9d4640ad8335b48af7a6f9e7d9edbc92d74a759e555ca9e2b0b5f"
+    }
+  ],
+  "reproduce": "FINANCE_AGENT_LLM_MODE=local_test ENABLE_NON_HCX_TEST_LLM=1 LLM_PROVIDER=local_test LOCAL_TEST_LLM_MODEL=qwen3-local-test python -m finance_agent_core.evaluation.red_team_cli --provider local_test --require-perfect --require-no-fallback",
+  "limitations": [
+    "AI 담당자가 기존 구현과 데이터를 본 뒤 작성한 공개 internal red-team이므로 독립 blind 일반화 성능이 아님",
+    "질문 세트는 네 상품군의 10개 공격 유형을 균등하게 점검하지만 실제 사용자 표현의 전체 분포를 대표하지 않음",
+    "사후 수정 40/40은 발견한 두 통합 결함의 회귀 통과이며 최초 관측 36/40을 대체하지 않음",
+    "로컬 Qwen 결과는 HyperCLOVA X 또는 공식 공모전 평가 결과가 아님",
+    "latency는 RTX 5090 두 장의 단일 순차 실행값이며 운영 Backend SLO가 아님",
+    "문서 RAG와 실제 FastAPI 네트워크 route는 이번 suite 범위에 포함하지 않음"
+  ]
+}

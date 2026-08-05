@@ -1,0 +1,9 @@
+{
+  "protocol_version": "1.0",
+  "suite_id": "pre-hcx-route-diagnostic-28-v2",
+  "status": "sealed_internal_diagnostic",
+  "suite_sha256": "ef35437ac3b9a02c2438ef664b49c339a631c249f53784b43fb2c1050d86e271",
+  "case_count": 28,
+  "created_at_utc": "2026-07-30T01:00:00Z",
+  "limitation": "self_authored_not_independent_blind"
+}

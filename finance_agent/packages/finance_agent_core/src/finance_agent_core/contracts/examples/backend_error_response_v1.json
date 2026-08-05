@@ -1,0 +1,27 @@
+{
+  "schema_version": "1.0",
+  "request_id": "backend-error-001",
+  "status": "error",
+  "intent": "search",
+  "product_families": ["overseas_etp"],
+  "answer": "현재 AI provider를 사용할 수 없습니다. 잠시 후 다시 시도해 주세요.",
+  "query_plan": null,
+  "candidate_count": null,
+  "products": [],
+  "comparisons": [],
+  "aggregates": [],
+  "documents": [],
+  "citations": [],
+  "as_of_dates": [],
+  "warnings": [],
+  "answer_mode": "control",
+  "fallback_used": false,
+  "provider_model": null,
+  "clarification": null,
+  "error": {
+    "code": "provider_unavailable",
+    "message": "현재 AI provider를 사용할 수 없습니다. 잠시 후 다시 시도해 주세요.",
+    "retryable": true
+  },
+  "source_manifest": null
+}

@@ -1,0 +1,71 @@
+{
+  "schema_version": "1.0",
+  "baseline_id": "domestic-bond-answer-v1",
+  "recorded_on": "2026-07-29",
+  "dataset": "bond",
+  "evaluation_layer": "grounded_answer",
+  "status": "verifier_false_positive_fixed",
+  "provider": {
+    "name": "local_test",
+    "official_submission_provider": false
+  },
+  "model": {
+    "repository": "Qwen/Qwen3-30B-A3B-Instruct-2507-FP8",
+    "served_name": "qwen3-local-test",
+    "revision": "5a5a776300a41aaa681dd7ff0106608ef2bc90db"
+  },
+  "suite": {
+    "id": "bond-core-50",
+    "version": "1.0",
+    "path": "packages/finance_agent_core/src/finance_agent_core/evaluation/suites/bond_core_50.json",
+    "sha256": "b2d19e3af43fb8d6d4be03895088380b263bb8aca2c53c29b32de622a29c4178",
+    "development_cases": 40,
+    "holdout_cases": 10
+  },
+  "data": {
+    "database_sha256": "40265aa326d63244727294ac29c1cd38c898f05b6a80dfd51fd8ac38e08764bc",
+    "manifest_sha256": "d724d99e9ffd24148144b3534795d0d545e0ebff9d01509966f6ebbb218f8312",
+    "source_file_sha256": "728f44a567a986d21cf843d711c6c4dfa1a24d05b39c7da0541b981b57ecccf8"
+  },
+  "metrics": {
+    "total": 50,
+    "passed": 50,
+    "strict_accuracy": 1.0,
+    "executable_cases": 47,
+    "blocked_cases": 3,
+    "llm_grounded_cases": 46,
+    "deterministic_empty_cases": 1,
+    "fallback_cases": 0,
+    "safe_answer_rate": 1.0,
+    "product_order_accuracy": 1.0,
+    "evidence_reference_accuracy": 1.0,
+    "field_evidence_citation_rate": 1.0,
+    "numeric_fidelity_rate": 1.0,
+    "warning_coverage_rate": 1.0,
+    "source_date_coverage_rate": 1.0,
+    "unsupported_claim_case_rate": 0.0,
+    "latency_ms": {
+      "p50": 2271.149,
+      "p95": 2429.136,
+      "max": 2458.469
+    },
+    "before_false_positive_fix": {
+      "passed": 22,
+      "total": 50,
+      "fallback_cases": 28
+    }
+  },
+  "reports": [
+    {
+      "role": "final_all",
+      "artifact_name": "bond-answer-local-qwen-all-v2.json",
+      "sha256": "56fde2ecd0a2db5eadff8b568a257a2f388d8ff9b7903b9e8b12263ad85f9b69"
+    }
+  ],
+  "reproduce": "python -m finance_agent_core.evaluation.answer_cli --dataset bond --provider local_test --split all --workers 4 --require-perfect",
+  "limitations": [
+    "답변 계층을 분리하기 위해 동결된 expected QueryPlan을 사용했다.",
+    "매수수익률과 매수가능수량 field phrase의 안전 검증 오탐을 수정한 뒤 결과다.",
+    "실제 매수 권유 표현 차단은 유지하며 자유 형식 금융 답변 능력을 의미하지 않는다."
+  ]
+}

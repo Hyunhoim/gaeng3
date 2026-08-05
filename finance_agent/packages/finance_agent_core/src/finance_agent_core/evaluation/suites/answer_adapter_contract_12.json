@@ -1,0 +1,89 @@
+{
+  "schema_version": "1.0",
+  "suite_id": "answer-adapter-contract-12",
+  "suite_version": "1.0",
+  "evaluation_layer": "system_contract",
+  "cases": [
+    {
+      "id": "answer-adapter-success",
+      "test_name": "test_answer_adapter_returns_http_200_for_verified_result",
+      "expected_http_status": 200,
+      "expected_backend_status": "success"
+    },
+    {
+      "id": "answer-adapter-authentication",
+      "test_name": "test_answer_adapter_maps_provider_failure_without_leaking_details[authentication]",
+      "expected_http_status": 503,
+      "expected_error_code": "provider_unavailable",
+      "expected_retryable": false
+    },
+    {
+      "id": "answer-adapter-rate-limit",
+      "test_name": "test_answer_adapter_maps_provider_failure_without_leaking_details[rate_limit]",
+      "expected_http_status": 503,
+      "expected_error_code": "provider_unavailable",
+      "expected_retryable": true
+    },
+    {
+      "id": "answer-adapter-service",
+      "test_name": "test_answer_adapter_maps_provider_failure_without_leaking_details[service]",
+      "expected_http_status": 503,
+      "expected_error_code": "provider_unavailable",
+      "expected_retryable": true
+    },
+    {
+      "id": "answer-adapter-timeout",
+      "test_name": "test_answer_adapter_maps_provider_failure_without_leaking_details[timeout]",
+      "expected_http_status": 504,
+      "expected_error_code": "provider_unavailable",
+      "expected_retryable": true
+    },
+    {
+      "id": "answer-adapter-transport",
+      "test_name": "test_answer_adapter_maps_provider_failure_without_leaking_details[transport]",
+      "expected_http_status": 503,
+      "expected_error_code": "provider_unavailable",
+      "expected_retryable": true
+    },
+    {
+      "id": "answer-adapter-invalid-response",
+      "test_name": "test_answer_adapter_maps_provider_failure_without_leaking_details[invalid_response]",
+      "expected_http_status": 502,
+      "expected_error_code": "provider_unavailable",
+      "expected_retryable": true
+    },
+    {
+      "id": "answer-adapter-configuration",
+      "test_name": "test_answer_adapter_maps_configuration_failure_as_non_retryable",
+      "expected_http_status": 503,
+      "expected_error_code": "provider_unavailable",
+      "expected_retryable": false
+    },
+    {
+      "id": "answer-adapter-grounded-fallback",
+      "test_name": "test_answer_adapter_keeps_answer_provider_failure_as_safe_http_200_fallback",
+      "expected_http_status": 200,
+      "expected_backend_status": "success",
+      "expected_answer_mode": "deterministic_fallback"
+    },
+    {
+      "id": "answer-adapter-dataset",
+      "test_name": "test_answer_adapter_maps_missing_database_to_retryable_dataset_error",
+      "expected_http_status": 503,
+      "expected_error_code": "dataset_unavailable",
+      "expected_retryable": true
+    },
+    {
+      "id": "answer-adapter-internal",
+      "test_name": "test_answer_adapter_maps_unexpected_failure_without_exception_text",
+      "expected_http_status": 500,
+      "expected_error_code": "internal_error",
+      "expected_retryable": false
+    },
+    {
+      "id": "answer-adapter-state-contract",
+      "test_name": "test_backend_error_contract_rejects_executed_evidence_and_http_200",
+      "expected_outcome": "invalid_state_rejected"
+    }
+  ]
+}
