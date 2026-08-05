@@ -14,7 +14,9 @@
 ```
 
 Docker 이미지는 Python 3.12를 사용하고, 실행 시에는 권한이 제한된 비-root 사용자로
-동작한다. Uvicorn은 개발용 자동 재시작 없이 production 방식으로 실행된다.
+동작한다. 이미지에는 `app/`과 `start.sh`만 복사하며 로컬 `.env`, 테스트, Compose
+helper는 포함하지 않는다. Uvicorn은 개발용 자동 재시작 없이 production 방식으로
+실행된다.
 
 ## 협업 경계
 
@@ -125,9 +127,20 @@ cp fastapi_backend/.env.example fastapi_backend/.env
 저장소 루트에서 실행한다.
 
 ```bash
-./fastapi_backend/compose.sh up --build --detach backend
+./fastapi_backend/compose.sh build-image
+./fastapi_backend/compose.sh up --no-build --detach backend
 ./fastapi_backend/compose.sh ps
 ```
+
+이미지를 만드는 명령과 컨테이너를 띄우는 명령을 분리했다. `build-image`는 Docker
+Compose를 거치지 않고 현재 경로를 그대로 Docker에 전달하므로, 한글 경로의 Unicode
+표현 방식이 달라 일부 Compose 버전에서 build context를 찾지 못하는 문제를 피한다.
+생성되는 로컬 이미지 이름은 `gaeng3-backend:local`이다.
+
+Docker API의 `permission denied`가 나오면 현재 계정이 `docker` 그룹에 포함됐는지
+확인한다. 계정을 방금 그룹에 추가했다면 기존 터미널에는 권한이 반영되지 않으므로
+로그아웃 후 다시 로그인하거나 새 셸에서 `newgrp docker`를 한 번 실행한다. 데이터
+파일 권한을 넓히거나 매번 `sudo`로 실행하는 방식은 사용하지 않는다.
 
 기본 포트는 서버 내부의 `127.0.0.1:18001`이다. API 상태와 문서는 다음 주소에서
 확인한다.

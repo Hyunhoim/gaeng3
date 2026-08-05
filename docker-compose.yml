@@ -1,5 +1,6 @@
 services:
   backend:
+    image: gaeng3-backend:local
     build:
       context: .
       dockerfile: fastapi_backend/Dockerfile

@@ -5,6 +5,10 @@
 .env
 .env.*
 !.env.example
+fastapi_backend/.env
+fastapi_backend/.env.*
+!fastapi_backend/.env.example
+!fastapi_backend/.env.*.example
 Data/
 finance_agent/artifacts/
 finance_agent/docs/
