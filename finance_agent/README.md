@@ -191,7 +191,8 @@ field-level evidence, Qwen grounded answer, Answer Verifier·fallback까지 한
 
 남은 우선순위는 금융 도메인 담당자의
 external blind 100문항·비공개 정답키 작성, 승인된 실제 문서 corpus와 사람
-평가, 8월 6일 공식 안내 후 HyperCLOVA X 실제 HTTP transport, 동료의
-Backend 합류 후 FastAPI `/answer` route다. 최초 SEARCH parser
+평가, 8월 6일 공식 안내 후 HyperCLOVA X 실제 HTTP transport, Ubuntu SSH
+Docker 재현과 Next.js 화면 연결이다. FastAPI `/health`·`/answer`는 실제 네 DB의
+단일·교차 상품군 로컬 HTTP smoke test를 통과했다. 최초 SEARCH parser
 holdout 실패 1건은 회귀 수정했지만 9/10 기록은 그대로 유지한다. 공모펀드
 공식 Agent 실행도 계속 비활성화한다.

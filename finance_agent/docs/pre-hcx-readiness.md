@@ -46,7 +46,7 @@
 | 5 | 사람 rubric·Backend DTO | JSON 예시·schema·contract test 포함 | 계약 완료·사람 평가 대기 |
 | 6 | baseline 동결·전체 QA | 회귀·wheel·문서·hash 검증과 외부 게이트 명시 | 내부 완료 |
 | 7 | HyperCLOVA X provider 경계 | 세 operation·주입형 transport·오류·관측·전체 경로 E2E | 내부 8/8 완료·실제 HTTP 대기 |
-| 8 | `/answer` service adapter | HTTP status·안전한 ERROR DTO·fallback·비노출 계약 | 프레임워크 독립 12/12 완료·FastAPI route 대기 |
+| 8 | `/answer` service adapter·FastAPI route | HTTP status·안전한 ERROR DTO·fallback·비노출·입력 검증 계약 | adapter 12/12·Backend 7/7·로컬 HTTP 완료, SSH Docker 대기 |
 | 9 | `internal-red-team-v1` | 네 상품군 40문항·10개 공격 유형·전체 `/answer` E2E | expected·수정 후 로컬 Qwen 40/40 |
 | 10 | 교차 상품군 grounded answer | family evidence 격리·교차 문구 검증·전체 fallback·무호출 | expected·로컬 Qwen 각각 4/4 |
 | 11 | 금융 도메인 QA 실험 | 담당자 작성 40문항 hash 검증·단계별 E2E·Q002 SEARCH gold | v1.2 사후 회귀 40/40·잘못된 실행 0건 |

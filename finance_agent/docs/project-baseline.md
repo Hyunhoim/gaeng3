@@ -129,6 +129,11 @@
   검증된 fallback은 HTTP 200으로 유지하고, QueryPlan provider·dataset·내부
   장애는 evidence 없는 안전한 ERROR DTO와 HTTP 502·503·504·500으로 변환한다.
   질문·credential·provider 본문·파일 경로 비노출을 포함한 12개 계약을 통과했다.
+- FastAPI `/health`·`/answer` route를 Backend DTO에 직접 연결했다. 입력 검증
+  실패도 내부 위치와 값을 노출하지 않는 HTTP 422 `invalid_request` DTO로
+  통일했다. 네 SQLite health, 국내채권 단일 검색, 국내·해외 ETP 교차 검색의
+  로컬 HTTP smoke test와 Backend 계약 7/7을 통과했다. Ubuntu SSH Docker 재현은
+  외부 게이트로 유지한다.
 - 네 상품군 각 10문항과 10개 공격 유형으로 구성한 공개
   `internal-red-team-v1`을 Router부터 `/answer` service adapter까지 실행했다.
   최초 로컬 Qwen은 strict 36/40이었지만 네 실패 모두 Oracle 전 안전 차단됐다.
@@ -333,8 +338,10 @@ QueryPlan에는 최소한 intent, 상품군, 필수 조건, 완화 전 확인이
   실행하고 부분 결과·manifest·Backend family DTO와 직접 비교 차단을 검증한다.
 - [x] 프레임워크 독립 `/answer` service adapter에 HTTP status·ERROR DTO·
   fallback·민감정보 비노출 계약을 연결한다.
-- [ ] 공식 endpoint·인증 계약에 맞는 HTTP transport와 FastAPI `/answer`
-  route를 연결하고 실제 API로 재현한다.
+- [x] FastAPI `/health`·`/answer` route와 입력 검증 오류 DTO를 연결하고 실제
+  SQLite 로컬 HTTP 경로로 재현한다.
+- [ ] 공식 endpoint·인증 계약에 맞는 HyperCLOVA X HTTP transport를 연결하고
+  Ubuntu SSH Docker·주최 측 실행 환경에서 재현한다.
 
 ### P3 — 평가 확장
 

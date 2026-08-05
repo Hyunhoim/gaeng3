@@ -202,8 +202,8 @@
 - 다음 외부 게이트: 금융 도메인 담당자의 external blind 100문항·비공개 정답키,
   승인 corpus, 실제 사람 평가
 - 다음 기술 통합: 2026-08-06 설명회 공지 후 공식 endpoint·인증
-  계약 기반 HyperCLOVA X HTTP transport, 동료의 Backend 합류 후 FastAPI
-  `/answer` route
+  계약 기반 HyperCLOVA X HTTP transport, Ubuntu SSH Docker 재현과 Next.js 화면
+  연결. FastAPI `/health`·`/answer` 로컬 실제 데이터 경로는 통합 완료
 
 ## 6. 저장소 밖의 근거 자료
 
