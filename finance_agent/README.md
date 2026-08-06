@@ -73,8 +73,19 @@ finance_agent/
 └── environment.yml               # Conda 개발 환경
 ```
 
-패키지 내부 모듈과 CLI는
-[finance-agent-core README](packages/finance_agent_core/README.md)에서 설명
+### 디렉터리별 시작 문서
+
+| 디렉터리 | 먼저 볼 문서 | 역할 |
+| --- | --- | --- |
+| `docs/` | [AI 기술문서 안내](docs/README.md) | 현재 기준·계약·설계·평가 해석 |
+| `packages/` | [패키지 안내](packages/README.md) | 설치 가능한 Agent Core 코드 |
+| `evaluation/` | [평가 README](evaluation/README.md) | 질문 세트·baseline·봉인 프로토콜 |
+| `scripts/` | [스크립트 안내](scripts/README.md) | 데이터셋 생성·계약·평가 도구 |
+| `requirements/` | [의존성 안내](requirements/README.md) | base·dev·로컬 LLM pip 의존성 |
+| `notebooks/` | [노트북 안내](notebooks/README.md) | 재현 가능한 데이터 탐색 |
+| `reports/` | [보고서 안내](reports/README.md) | 사람이 읽는 분석 전달 자료 |
+
+`artifacts/`는 정규화 DB와 실행 결과가 만들어지는 로컬 작업 공간이며 Git에서 제외
 
 ## 5. 개발 환경
 
@@ -170,13 +181,14 @@ Backend는 Agent 내부 SQL·검색·검증을 다시 구현하지 않고 다음
 
 처음 Agent 작업을 시작한다면 다음 순서를 권장
 
-1. [프로젝트 문서 인덱스](docs/project-index.md)
-2. [현재 프로젝트 기준](docs/project-baseline.md)
-3. [Capability matrix](docs/capability-matrix.md)
-4. [데이터 감사 기준](docs/data-audit.md)
-5. [Field Registry와 QueryPlan 계약](docs/contracts.md)
-6. [Backend DTO](docs/backend-contract.md)
-7. [평가 README](evaluation/README.md)
+1. [AI 기술문서 안내](docs/README.md)
+2. [프로젝트 상세 문서 인덱스](docs/project-index.md)
+3. [현재 프로젝트 기준](docs/project-baseline.md)
+4. [Capability matrix](docs/capability-matrix.md)
+5. [데이터 감사 기준](docs/data-audit.md)
+6. [Field Registry와 QueryPlan 계약](docs/contracts.md)
+7. [Backend DTO](docs/backend-contract.md)
+8. [평가 README](evaluation/README.md)
 
 연구 답변과 과거 프롬프트는 구현 정본이 아님. 현재 판단에는 문서 인덱스가 지정한
 정본과 동결된 평가 기준선을 우선 사용

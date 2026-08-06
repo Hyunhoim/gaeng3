@@ -1,16 +1,16 @@
 # HyperCLOVA X 연결 전 준비 기준
 
-마지막 갱신: 2026-08-05
+마지막 갱신: 2026-08-06
 
 이 문서는 HyperCLOVA X API를 연결하기 전에 Agent Core에서 끝내야 할 구현,
 평가, 계약과 외부 확인 게이트를 추적하는 정본이다. 완료 표시는 코드·테스트·
 재현 가능한 산출물이 모두 일치할 때만 갱신한다.
 
-## 0. 시작 기준선
+## 0. 시작 기준선 — 2026-07-30 당시 기록
 
-점검 대상은 `haeyeongcho` 브랜치의 현재 작업 트리다. 공모펀드 자연어 비교
-작업이 아직 커밋되지 않은 상태이므로 기존 변경을 보존하고 그 위에서 작업한다.
-이번 준비 작업에서는 commit, push, PR을 수행하지 않는다.
+아래 내용은 준비 작업을 시작한 2026-07-30 당시 상태를 보존한 기록이다. 현재
+상태는 이 문서의 완료 대상과 내부 완료 QA, [프로젝트 기준](project-baseline.md)을
+함께 확인한다.
 
 2026-07-30 최초 점검 결과:
 
@@ -159,9 +159,9 @@ Backend `/answer` service adapter 결과:
 - 봉인 이후 단 한 번 수행하는 최초 blind 실행
 - 금융 도메인 담당자와 팀원이 수행한 사람 평가 점수
 - 주최 측이 허용한 외부 비정형 문서 corpus와 사용 범위 확인
-- 2026-08-06 오프라인 설명회의 HyperCLOVA X 모델명·
-  Structured Outputs 범위·endpoint·인증·제출 범위 확인
-- 위 공지 후의 실제 HTTP transport 연결과 공식 재현
+- 2026-08-06 오프라인 설명회 참석 팀원의 기록에서 HyperCLOVA X 모델명·
+  Structured Outputs 범위·endpoint·인증·제출 범위와 공식 출처 확인
+- 위 공식 답변 확인 후의 실제 HTTP transport 연결과 공식 재현
 - 공식 답변에 따른 제출 후보의 로컬 LLM provider·설정·
   스크립트·의존성 제거와 정적·기계적 검수
 - 주최 측 실행 환경에서 Docker·포트·인증·네트워크 정책 최종 재현
@@ -173,7 +173,7 @@ Backend `/answer` service adapter 결과:
 
 - pytest `338 passed`
 - Ruff lint와 format 통과
-- 문서 검사 `47 Markdown files`, `28 evaluation baselines` 통과
+- 문서 검사 `53 Markdown files`, `28 evaluation baselines` 통과
 - `pip check` 통과
 - build isolation 없이 wheel 생성과 신규 JSON package data 포함 여부 통과
 - `git diff --check` 통과

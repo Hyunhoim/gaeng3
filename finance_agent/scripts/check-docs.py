@@ -13,6 +13,14 @@ DOCS_ROOT = PROJECT_ROOT / "docs"
 PROPOSAL_ROOT = REPOSITORY_ROOT / "docs" / "proposal"
 BASELINE_ROOT = PROJECT_ROOT / "evaluation" / "baselines"
 EVALUATION_ARTIFACT_ROOT = PROJECT_ROOT / "artifacts" / "evaluation"
+AREA_READMES = (
+    PROJECT_ROOT / "docs" / "README.md",
+    PROJECT_ROOT / "scripts" / "README.md",
+    PROJECT_ROOT / "packages" / "README.md",
+    PROJECT_ROOT / "requirements" / "README.md",
+    PROJECT_ROOT / "notebooks" / "README.md",
+    PROJECT_ROOT / "reports" / "README.md",
+)
 READINESS_MANIFEST = (
     PROJECT_ROOT / "evaluation" / "protocols" / "pre-hcx-readiness-v1.manifest.json"
 )
@@ -122,6 +130,7 @@ FORBIDDEN_BASELINE_KEYS = {
     "results",
 }
 REQUIRED_PROPOSAL_TARGETS = {
+    "briefing-2026-08-06.md",
     "technical-proposal.md",
     "evidence-map.md",
     "user-scenarios.md",
@@ -169,6 +178,7 @@ def _markdown_files() -> list[Path]:
         PROJECT_ROOT / "README.md",
         PROJECT_ROOT / "packages" / "finance_agent_core" / "README.md",
         PROJECT_ROOT / "evaluation" / "README.md",
+        *AREA_READMES,
     ]
     files.extend(
         path
@@ -464,6 +474,7 @@ def _readiness_files() -> list[Path]:
         PROJECT_ROOT / "scripts" / "run-answer-adapter-contract.py",
         package_root / "README.md",
         package_root / "pyproject.toml",
+        *AREA_READMES,
     }
     files.update(
         path
