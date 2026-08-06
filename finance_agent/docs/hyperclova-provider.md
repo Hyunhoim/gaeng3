@@ -1,15 +1,15 @@
 # HyperCLOVA X provider 계약
 
-마지막 갱신: 2026-08-04
+마지막 갱신: 2026-08-06
 
 이 문서는 실제 API credential 없이 먼저 동결한 HyperCLOVA X provider 경계와
 fake transport 테스트 범위를 설명한다. 현재 완료된 것은 요청·응답·오류 계약이며,
 NAVER Cloud endpoint에 실제 HTTP 요청을 보내는 transport는 아직 구현하지 않았다.
 
-2026-08-06 오프라인 설명회에서 공식 사용법이 공지될 예정이므로,
-그전까지는 endpoint·credential·header·실제 HTTP 연결을 시도하지
-않는다. 현재 범위는 네트워크 없이 재생하는 계약·오류·fallback
-검증까지다.
+2026-08-06 오프라인 설명회 질문은 확정했으며 현재 참석 팀원의 기록 전달을
+기다리고 있다. 공식 답변과 출처를 확인하기 전까지 endpoint·credential·header·
+실제 HTTP 연결을 시도하지 않는다. 현재 범위는 네트워크 없이 재생하는 계약·오류·
+fallback 검증까지다.
 
 ## 1. 왜 API 연결보다 계약을 먼저 만드는가
 

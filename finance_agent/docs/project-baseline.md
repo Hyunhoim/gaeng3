@@ -385,7 +385,7 @@ QueryPlan에는 최소한 intent, 상품군, 필수 조건, 완화 전 확인이
 - intent, 상품군, 연산자, hard-constraint violation, evidence 정확성, unsupported 처리, latency를 분리 측정한다.
 - 다른 상품군은 데이터 신뢰도와 예상 평가 비중에 따라 순차 확장한다.
 
-## 9. 2026-08-06 설명회에서 확인할 항목
+## 9. 2026-08-06 설명회 기록을 받아 확인할 항목
 
 - 허용되는 HyperCLOVA X 정확한 모델명·버전과 Structured Outputs 지원 범위
 - 공식 endpoint·인증 header·요청·응답 body와 request ID 규칙
@@ -397,7 +397,8 @@ QueryPlan에는 최소한 intent, 상품군, 필수 조건, 완화 전 확인이
 - 평가 질의 분포, 정확도·응답시간·설명 품질의 배점
 - 네트워크·GPU·Docker·DB·외부 데이터의 평가 환경 제약
 
-공식 답변을 받으면 이 문서와 `data-audit.md`, 활성 구현 명세를 함께 갱신한다.
+참석 팀원의 기록을 받은 뒤 공식 답변과 출처를 구분해 확인하고, 이 문서와
+`data-audit.md`, 활성 구현 명세를 함께 갱신한다.
 
 ## 10. 현재 완료 판단
 

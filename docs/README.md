@@ -3,7 +3,7 @@
 팀 전체가 함께 사용하는 문서와 기술 제안서 자료를 관리하는 디렉터리
 
 프로젝트 소개와 실행법은 [루트 README](../README.md), Agent 구현 문서는
-[`finance_agent/docs/`](../finance_agent/docs/project-index.md)에서 관리
+[AI 기술문서 안내](../finance_agent/docs/README.md)에서 관리
 
 ## 이 디렉터리의 역할
 
@@ -22,7 +22,7 @@ docs/
 | --- | --- | --- |
 | 프로젝트 전체 파악 | [저장소 README](../README.md) | 전체 팀 |
 | 기술 제안서·제출 준비 | [기술 제안서 작성 허브](proposal/README.md) | 전체 팀 |
-| AI 구현·데이터·평가 확인 | [AI 기술문서 인덱스](../finance_agent/docs/project-index.md) | AI·Backend 담당 |
+| AI 구현·데이터·평가 확인 | [AI 기술문서 안내](../finance_agent/docs/README.md) | AI·Backend 담당 |
 | Backend 연동 | [Backend DTO](../finance_agent/docs/backend-contract.md) | AI·Backend 담당 |
 | 개발·커밋 규칙 | [CONTRIBUTING](../CONTRIBUTING.md) | 코드 기여자 |
 
@@ -52,6 +52,7 @@ docs/
 
 ### AI·Backend 연동 담당자
 
-1. [AI 기술문서 인덱스](../finance_agent/docs/project-index.md)
-2. [Backend DTO](../finance_agent/docs/backend-contract.md)
-3. [Backend README](../fastapi_backend/README.md)
+1. [AI 기술문서 안내](../finance_agent/docs/README.md)
+2. [AI 상세 문서 인덱스](../finance_agent/docs/project-index.md)
+3. [Backend DTO](../finance_agent/docs/backend-contract.md)
+4. [Backend README](../fastapi_backend/README.md)
