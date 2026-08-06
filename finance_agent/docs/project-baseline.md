@@ -161,8 +161,11 @@
   경계를 개선해 strict·route·safety·evidence·answer 40/40,
   control 잘못된 실행·오류 0건을 기록했다. 개발 세트 사후 회귀이므로
   독립 blind 성능으로 해석하지 않는다.
-- 전체 코드 회귀는 pytest 333개, Ruff lint·format, pip dependency check와
+- 전체 코드 회귀는 pytest 338개, Ruff lint·format, pip dependency check와
   wheel 빌드를 통과했다.
+- Docker `data-init`은 읽기 전용 공식 XLSX에서 네 SQLite를 자동 생성·검증하고,
+  같은 원천과 registry에서는 재사용한다. 모든 DB 준비가 성공한 뒤에만 Backend를
+  시작하며 Backend에는 생성 volume을 읽기 전용으로 연결한다.
 
 ## 3. 변경할 수 없는 공식 제약
 

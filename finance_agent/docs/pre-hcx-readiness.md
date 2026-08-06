@@ -171,13 +171,15 @@ Backend `/answer` service adapter 결과:
 
 ## 4. 내부 완료 QA
 
-- pytest `333 passed`
+- pytest `338 passed`
 - Ruff lint와 format 통과
 - 문서 검사 `47 Markdown files`, `28 evaluation baselines` 통과
 - `pip check` 통과
 - build isolation 없이 wheel 생성과 신규 JSON package data 포함 여부 통과
 - `git diff --check` 통과
 - source·test·문서·baseline·protocol tree SHA-256 manifest 검증
+- 공식 XLSX 4종에서 Docker volume의 SQLite 4개를 자동 생성하고 두 번째 실행에서
+  모두 재사용, Backend health와 실제 HTTP 스모크 7/7 통과
 
 source freeze는
 `evaluation/protocols/pre-hcx-readiness-v1.manifest.json`에 보존한다. 외부

@@ -165,7 +165,7 @@ python -m pytest fastapi_backend/tests
 python -m ruff check fastapi_backend
 python -m ruff format --check fastapi_backend
 BACKEND_ENV_FILE=fastapi_backend/.env.example \
-  ./fastapi_backend/compose.sh config --quiet
+  ./compose.sh config --quiet
 ```
 
 Docker가 없는 환경에서는 Compose 검증을 실행하지 못한 사실을 PR에 명시하고,
