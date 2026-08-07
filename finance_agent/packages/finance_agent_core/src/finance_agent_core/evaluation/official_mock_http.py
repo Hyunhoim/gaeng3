@@ -6,6 +6,7 @@ import math
 import re
 import time
 from collections.abc import Callable, Sequence
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from typing import Any, Literal
 from urllib.error import HTTPError
@@ -107,6 +108,7 @@ class OfficialHttpReport(OfficialHttpModel):
     base_url: str
     backend_profile: Literal["deterministic", "local_test"]
     declared_model: str | None
+    request_concurrency: int = Field(ge=1, le=16)
     model_visibility: Literal["declared_by_runner_not_exposed_by_official_contract"]
     suite_id: str
     suite_version: str
@@ -461,6 +463,7 @@ class OfficialMockHttpRunner:
         request_timeout_seconds: float = 60.0,
         response_budget_seconds: float = 60.0,
         expected_fund_execution_policy: Literal["locked", "public_fund_v1_approved"] = "locked",
+        request_concurrency: int = 1,
         requester: HttpRequester = request_json,
     ) -> None:
         if request_timeout_seconds <= 0:
@@ -471,6 +474,8 @@ class OfficialMockHttpRunner:
             raise ValueError("local_test profile requires a declared model")
         if backend_profile == "deterministic" and declared_model is not None:
             raise ValueError("deterministic profile cannot declare a model")
+        if not 1 <= request_concurrency <= 16:
+            raise ValueError("request concurrency must be between 1 and 16")
         self.loaded_suite = loaded_suite
         self.base_url = base_url.rstrip("/")
         self.backend_profile = backend_profile
@@ -478,7 +483,23 @@ class OfficialMockHttpRunner:
         self.request_timeout_seconds = request_timeout_seconds
         self.response_budget_seconds = response_budget_seconds
         self.expected_fund_execution_policy = expected_fund_execution_policy
+        self.request_concurrency = request_concurrency
         self.requester = requester
+
+    def _run_case(self, case: OfficialMockCase) -> OfficialHttpCaseResult:
+        url = f"{self.base_url}/answer?" + urlencode(
+            {"question_id": case.id, "question": case.question}
+        )
+        status, body, response_bytes, latency_ms = self.requester(url, self.request_timeout_seconds)
+        return evaluate_official_http_case(
+            case,
+            http_status=status,
+            body=body,
+            response_bytes=response_bytes,
+            latency_ms=latency_ms,
+            backend_profile=self.backend_profile,
+            response_budget_seconds=self.response_budget_seconds,
+        )
 
     def run(self) -> OfficialHttpReport:
         health_status, health_body, health_bytes, health_latency = self.requester(
@@ -506,25 +527,8 @@ class OfficialMockHttpRunner:
             latency_ms=round(health_latency, 3),
             violations=health_violations,
         )
-        results: list[OfficialHttpCaseResult] = []
-        for case in self.loaded_suite.suite.cases:
-            url = f"{self.base_url}/answer?" + urlencode(
-                {"question_id": case.id, "question": case.question}
-            )
-            status, body, response_bytes, latency_ms = self.requester(
-                url, self.request_timeout_seconds
-            )
-            results.append(
-                evaluate_official_http_case(
-                    case,
-                    http_status=status,
-                    body=body,
-                    response_bytes=response_bytes,
-                    latency_ms=latency_ms,
-                    backend_profile=self.backend_profile,
-                    response_budget_seconds=self.response_budget_seconds,
-                )
-            )
+        with ThreadPoolExecutor(max_workers=self.request_concurrency) as executor:
+            results = list(executor.map(self._run_case, self.loaded_suite.suite.cases))
         summary = _build_summary(
             self.loaded_suite,
             results,
@@ -540,6 +544,7 @@ class OfficialMockHttpRunner:
             base_url=self.base_url,
             backend_profile=self.backend_profile,
             declared_model=self.declared_model,
+            request_concurrency=self.request_concurrency,
             model_visibility="declared_by_runner_not_exposed_by_official_contract",
             suite_id=self.loaded_suite.suite.suite_id,
             suite_version=self.loaded_suite.suite.suite_version,
@@ -548,7 +553,8 @@ class OfficialMockHttpRunner:
             summary=summary,
             cases=results,
             interpretation_limits=[
-                "실제 Docker FastAPI GET /answer 네트워크 경로의 단일 순차 관측이다.",
+                "실제 Docker FastAPI GET /answer 네트워크 경로의 제한된 "
+                f"동시성 {self.request_concurrency} 단일 관측이다.",
                 "공식 다섯 문자열 응답은 provider 이름을 노출하지 않아 "
                 "모델명은 실행자가 선언한 값이다.",
                 "Docker Backend의 local_test는 답변 생성에만 Qwen을 사용하고 "

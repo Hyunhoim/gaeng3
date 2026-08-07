@@ -24,6 +24,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--request-timeout-seconds", type=float, default=60.0)
     parser.add_argument("--response-budget-seconds", type=float, default=60.0)
     parser.add_argument(
+        "--concurrency",
+        type=int,
+        default=1,
+        help="Number of concurrent GET /answer requests (1-16).",
+    )
+    parser.add_argument(
         "--expected-fund-execution-policy",
         choices=("locked", "public_fund_v1_approved"),
         default="locked",
@@ -54,6 +60,7 @@ def main(argv: list[str] | None = None) -> int:
             request_timeout_seconds=arguments.request_timeout_seconds,
             response_budget_seconds=arguments.response_budget_seconds,
             expected_fund_execution_policy=arguments.expected_fund_execution_policy,
+            request_concurrency=arguments.concurrency,
         ).run()
     except (OSError, RuntimeError, TypeError, ValueError, URLError) as error:
         print(f"Official mock HTTP evaluation failed before completion: {error}", file=sys.stderr)
@@ -65,6 +72,7 @@ def main(argv: list[str] | None = None) -> int:
             {
                 "output": str(arguments.output),
                 "backend_profile": report.backend_profile,
+                "request_concurrency": report.request_concurrency,
                 "passed": report.summary.passed,
                 "total": report.summary.total,
                 "strict_accuracy": report.summary.strict_accuracy,

@@ -1,7 +1,11 @@
 from __future__ import annotations
 
 import json
+import time
+from threading import Lock
 from urllib.parse import parse_qs, urlparse
+
+import pytest
 
 from finance_agent_core.evaluation.official_mock import (
     OfficialMockCase,
@@ -205,3 +209,77 @@ def test_official_http_runner_scores_frozen_suite_over_get_requests() -> None:
     assert report.summary.llm_answer_eligible == 17
     assert report.summary.llm_grounded == 17
     assert report.summary.perfect
+
+
+def test_official_http_runner_limits_concurrency_and_preserves_case_order() -> None:
+    loaded = load_official_mock_suite()
+    cases = {case.id: case for case in loaded.suite.cases}
+    lock = Lock()
+    active = 0
+    max_active = 0
+
+    def requester(url: str, timeout: float):
+        nonlocal active, max_active
+        assert timeout == 60.0
+        parsed = urlparse(url)
+        if parsed.path == "/health":
+            return (
+                200,
+                {
+                    "status": "ok",
+                    "configured_product_families": [
+                        "bond",
+                        "domestic_etp",
+                        "overseas_etp",
+                        "fund",
+                    ],
+                    "ready_product_families": [
+                        "bond",
+                        "domestic_etp",
+                        "overseas_etp",
+                        "fund",
+                    ],
+                    "missing_product_families": [],
+                    "unavailable_product_families": [],
+                    "fund_execution_policy": "locked",
+                },
+                200,
+                1.0,
+            )
+        with lock:
+            active += 1
+            max_active = max(max_active, active)
+        try:
+            time.sleep(0.005)
+            parameters = parse_qs(parsed.query)
+            case = cases[parameters["question_id"][0]]
+            body = _official_body(case)
+            return 200, body, len(json.dumps(body).encode()), 100.0
+        finally:
+            with lock:
+                active -= 1
+
+    report = OfficialMockHttpRunner(
+        loaded_suite=loaded,
+        base_url="http://127.0.0.1:18002",
+        backend_profile="local_test",
+        declared_model="qwen3-local-test",
+        request_concurrency=4,
+        requester=requester,
+    ).run()
+
+    assert report.request_concurrency == 4
+    assert 2 <= max_active <= 4
+    assert [result.id for result in report.cases] == [case.id for case in loaded.suite.cases]
+    assert report.summary.perfect
+
+
+def test_official_http_runner_rejects_unsafe_concurrency() -> None:
+    with pytest.raises(ValueError, match="between 1 and 16"):
+        OfficialMockHttpRunner(
+            loaded_suite=load_official_mock_suite(),
+            base_url="http://127.0.0.1:18002",
+            backend_profile="deterministic",
+            declared_model=None,
+            request_concurrency=17,
+        )
