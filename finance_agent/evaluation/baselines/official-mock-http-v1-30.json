@@ -1,0 +1,78 @@
+{
+  "schema_version": "1.0",
+  "baseline_id": "official-mock-http-v1-30",
+  "recorded_on": "2026-08-07",
+  "dataset": "overseas_etp+domestic_etp+bond+fund",
+  "evaluation_layer": "system_regression",
+  "status": "official_http_first_observed",
+  "provider": {
+    "name": "local_test",
+    "role": "grounded_answer_only",
+    "official_submission_provider": false,
+    "network_used": "docker_loopback_only"
+  },
+  "model": {
+    "repository": "Qwen/Qwen3-30B-A3B-Instruct-2507-FP8",
+    "served_name": "qwen3-local-test",
+    "revision": "5a5a776300a41aaa681dd7ff0106608ef2bc90db",
+    "visibility": "runner_declared_official_response_does_not_expose_provider"
+  },
+  "suite": {
+    "id": "official-mock-v1-30",
+    "version": "1.0",
+    "path": "packages/finance_agent_core/src/finance_agent_core/evaluation/suites/official_mock_v1_30.json",
+    "sha256": "c9250cd45656beadad563087941112b31318254c50fc72bf9f15dcaa1d88a36e",
+    "total_cases": 30,
+    "answerable_cases": 25,
+    "unanswerable_cases": 5
+  },
+  "data": {
+    "database_sha256": "2c26861a7e9b90ed4ae46ba3bfd4565daa63f405cf16627094629df36cecd03a",
+    "manifest_sha256": "624cef391dfe86aa2ce1a8ce20ad5142ec0d65a792e1fec6df0259024b997003",
+    "source_file_sha256": "c4f860f7a0d6821788015f51cf9ae48d2f48ab657e9a99be49771fc32fcaf895",
+    "hash_policy": "상품군 이름과 개별 SHA-256을 정렬해 결합한 뒤 다시 SHA-256 계산"
+  },
+  "metrics": {
+    "total": 30,
+    "passed": 24,
+    "strict_accuracy": 0.8,
+    "answerable_total": 25,
+    "answerable_passed": 19,
+    "answerable_accuracy": 0.76,
+    "unanswerable_total": 5,
+    "unanswerable_safely_handled": 5,
+    "unanswerable_safety_rate": 1.0,
+    "official_contract_passed": 30,
+    "official_contract_pass_rate": 1.0,
+    "semantic_passed": 24,
+    "semantic_pass_rate": 0.8,
+    "within_response_budget": 30,
+    "response_budget_seconds": 60,
+    "llm_answer_eligible": 17,
+    "llm_grounded": 12,
+    "fallback_count": 1,
+    "fund_policy_locked": 6,
+    "latency_ms": {
+      "min": 1.261,
+      "p50": 486.924,
+      "p95": 2491.057,
+      "max": 2885.126
+    }
+  },
+  "reports": [
+    {
+      "role": "docker_get_answer_local_qwen_first_observation",
+      "artifact_name": "official-mock-http-v1-30-local-qwen-first.json",
+      "sha256": "6a809057e0d4d83a0bc809648e4eb9349e519baff08db2dddbeb5f0f9353551d"
+    }
+  ],
+  "reproduce": "Qwen loopback을 시작하고 로컬 LLM Compose override로 Backend를 재생성한 뒤 python -m finance_agent_core.evaluation.official_mock_http_cli --base-url http://127.0.0.1:18002 --backend-profile local_test --declared-model qwen3-local-test를 실행",
+  "limitations": [
+    "실제 Docker FastAPI GET /answer 네트워크 경로의 단일 순차 관측임",
+    "공모펀드 정상 질문 6건은 Backend의 의도적인 공식 실행 잠금 때문에 clarification으로 종료됨",
+    "공모펀드 6건을 숨기거나 정답을 바꾸지 않고 최초 관측 실패로 보존함",
+    "Docker Backend는 Qwen을 답변 생성에만 사용하고 QueryPlan은 서버 규칙으로 확정함",
+    "공식 다섯 문자열 응답은 provider명을 노출하지 않아 모델명은 실행자 선언값임",
+    "공개 self-authored 모의문항이며 독립 blind·HyperCLOVA X·공식 평가 결과가 아님"
+  ]
+}

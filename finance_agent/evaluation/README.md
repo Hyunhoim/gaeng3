@@ -43,6 +43,7 @@ DB, 원천 XLSX, 전체 report, 모델 가중치는 계속 `artifacts/` 또는 �
 | [Backend answer adapter 계약](baselines/answer-adapter-contract-v1.json) | HTTP status·안전한 ERROR DTO·fallback·민감정보 비노출 12개 |
 | [내부 red-team 전체 E2E](baselines/internal-red-team-v1.json) | 네 상품군 40문항의 Router→Qwen→Oracle→Verifier→Backend DTO와 공격 유형 회귀 |
 | [공식 형식 30문항 공개 모의평가](baselines/official-mock-v1-30.json) | 난이도 10/10/10·답변 불가 5개에서 Qwen→Oracle→Verifier→공식 5필드 전체 경로 관측 |
+| [공식 GET Docker 30문항 최초 관측](baselines/official-mock-http-v1-30.json) | 실제 FastAPI 네트워크의 5필드 30/30·의미 24/30·공모펀드 정책 잠금 6건 |
 | [금융 도메인 QA 최초 관측](baselines/domain-qa-e2e-v1.json) | 금융 도메인 담당자 40문항의 route·safety·evidence·answer 단계별 최초 관측 |
 | [금융 도메인 QA SEARCH gold](baselines/domain-qa-e2e-v1.1-gold.json) | Q002 QueryPlan·Oracle 후보·상위 ID·evidence 지문 동결 후 Router 개선 전 관측 |
 | [금융 도메인 QA Router 회귀](baselines/domain-qa-e2e-v1.2-router.json) | Router·linker 안전 경계 개선 후 strict·route·safety·evidence·answer 40/40 |
@@ -102,6 +103,11 @@ handoff 불일치로 36/40이었고, 원인을 수정한 사후 회귀는 40/40�
 `domain_qa_initial_observed`, `domain_qa_gold_observed` 상태는 최초 실행
 결과가 완전하지 않아도
 수정하거나 숨기지 않고 관측값 그대로 보존한다.
+
+`official_http_first_observed`도 같은 원칙을 따른다. 실제 Docker GET 30문항은
+공식 다섯 문자열·60초 예산 30/30, 의미 일치 24/30이며, 실패 6건은 모두
+Backend의 의도적인 공모펀드 공식 실행 잠금이다. 내부 평가 전용 30/30과 실제
+배포 정책을 섞지 않고 최초 차이를 그대로 보존한다.
 
 `domain-qa-dev-v1-40`은 금융 도메인 담당자가 작성하고 AI 담당자가 검토한
 개발 QA다. 40문항을 route·plan·retrieval·evidence·answer·safety·contract로

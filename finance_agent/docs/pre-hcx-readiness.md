@@ -140,6 +140,15 @@ Backend `/answer` service adapter 결과:
 - 로컬 순차 실행 p50 1,553.318ms, p95 3,876.727ms, 최대 4,398.949ms
 - self-authored 공개 모의평가이며 독립 blind·HyperCLOVA X·공모전 점수가 아님
 
+같은 30문항의 실제 Docker FastAPI `GET /answer` 최초 관측:
+
+- 공식 다섯 문자열과 질문당 60초 예산 30/30
+- 기대 검색·비교·집계 의미 일치 24/30, 답변 불가 안전 처리 5/5
+- 실패 6건은 모두 의도적인 공모펀드 공식 실행 잠금이며 HTTP·Qwen 오류 0건
+- Qwen 도달 13건 중 grounded 12건, 채권 가치 판단 문구 1건은 안전 fallback
+- p50 486.924ms, p95 2,491.057ms, 최대 2,885.126ms
+- 실제 배포 설정의 최초 관측이며 내부 평가 전용 30/30과 구분해 보존
+
 교차 상품군 grounded answer 결과:
 
 - 국내·해외 ETP를 별도 QueryPlan·Oracle·Verifier·evidence 경계로 유지
@@ -183,15 +192,17 @@ Backend `/answer` service adapter 결과:
 
 ## 4. 내부 완료 QA
 
-- pytest `357 passed`
+- pytest `361 passed`
 - Ruff lint와 format 통과
-- 문서 검사 `55 Markdown files`, `32 evaluation baselines` 통과
+- 문서 검사 `55 Markdown files`, `33 evaluation baselines` 통과
 - `pip check` 통과
 - build isolation 없이 wheel 생성과 신규 JSON package data 포함 여부 통과
 - `git diff --check` 통과
 - source·test·문서·baseline·protocol tree SHA-256 manifest 검증
 - 공식 XLSX 4종에서 Docker volume의 SQLite 4개를 자동 생성하고 두 번째 실행에서
   모두 재사용, Backend health와 내부 HTTP 스모크 7/7·공식 GET 1/1 통과
+- 실제 Docker 공식 GET 30문항의 형식·60초 30/30, 의미 24/30과 공모펀드 잠금
+  6건의 최초 관측 보존
 
 source freeze는
 `evaluation/protocols/pre-hcx-readiness-v1.manifest.json`에 보존한다. 외부

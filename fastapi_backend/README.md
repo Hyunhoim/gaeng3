@@ -216,6 +216,24 @@ python fastapi_backend/scripts/smoke.py \
 공식 채권 예시의 단일 관측 응답 시간은 943.605ms였다. 개발 서버의 1회 측정이므로
 운영 지연 보장이나 부하 성능으로 해석하지 않는다.
 
+### 동결 30문항 실제 GET 평가
+
+단일 공식 GET뿐 아니라 설명회 분포를 모사한 동결 30문항을 실제 네트워크로
+호출할 때는 `finance_agent/`에서 다음 채점기를 실행한다
+
+```bash
+python -m finance_agent_core.evaluation.official_mock_http_cli \
+  --base-url http://127.0.0.1:18002 \
+  --backend-profile local_test \
+  --declared-model qwen3-local-test
+```
+
+이 채점기는 공식 다섯 문자열, 질문 보존, intent·상품군·후보 수, 상품 ID,
+비교·집계 근거와 60초 예산을 함께 검사한다. 2026-08-07 최초 관측은 형식·시간
+30/30, 의미 24/30이다. 여섯 실패는 모두 현재 Backend에서 의도적으로 잠근
+공모펀드 정상 질문이며, 모델 오류나 HTTP 오류가 아니다. 자세한 해석은
+[공식 형식 30문항 공개 모의평가](../finance_agent/docs/evaluation-official-mock.md)를 따른다
+
 ## 8. 주요 환경변수
 
 환경변수 예시는 `.env.example`, 개인 설정은 Git에서 제외되는 `.env`에서 관리

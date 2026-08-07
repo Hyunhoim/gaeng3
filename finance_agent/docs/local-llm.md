@@ -149,6 +149,21 @@ LOCAL_TEST_LLM_MODEL=qwen3-local-test \
 분포·응답시간·해석 제한은 [공식 형식 공개 모의평가](evaluation-official-mock.md)에
 기록한다.
 
+위 명령은 한 프로세스 안의 기능 E2E다. 실제 Docker FastAPI 네트워크까지 포함하려면
+Qwen Backend를 켠 상태에서 별도 터미널의 `finance_agent/`에서 실행한다
+
+```bash
+python -m finance_agent_core.evaluation.official_mock_http_cli \
+  --base-url http://127.0.0.1:18002 \
+  --backend-profile local_test \
+  --declared-model qwen3-local-test \
+  --output artifacts/evaluation/official-mock-http-v1-30-local-qwen.json
+```
+
+Docker의 `local_test`는 Qwen을 답변 생성에만 연결하고 QueryPlan은 서버 규칙으로
+확정한다. 최초 관측은 공식 5필드·60초 30/30, 의미 24/30이며, 공모펀드 공식
+실행 잠금 6건을 실패로 그대로 보존했다
+
 ### Docker Backend grounded answer 스모크
 
 로컬 Qwen은 개발 전용 Compose override를 통해 실제 FastAPI Backend의 최종 설명
