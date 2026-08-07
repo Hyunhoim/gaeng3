@@ -164,6 +164,12 @@ Docker의 `local_test`는 Qwen을 답변 생성에만 연결하고 QueryPlan은 
 확정한다. 최초 관측은 공식 5필드·60초 30/30, 의미 24/30이며, 공모펀드 공식
 실행 잠금 6건을 실패로 그대로 보존했다
 
+최초 24/30을 덮어쓰지 않고, Backend에 공모펀드만 여는 명시적
+`public_fund_v1_approved` 정책을 적용해 같은 동결 30문항을 재평가했다. 의미·형식·
+60초 30/30, Qwen 문장 검증 17/17, fallback 0건으로 통과했다. 실험 후에는 다시
+기본 `locked`로 복구했다. 이 정책은 팀 내부 배포 승인이지 주최 측의 공식 승인이
+아니다
+
 ### Docker Backend grounded answer 스모크
 
 로컬 Qwen은 개발 전용 Compose override를 통해 실제 FastAPI Backend의 최종 설명

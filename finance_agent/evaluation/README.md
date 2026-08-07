@@ -44,6 +44,7 @@ DB, 원천 XLSX, 전체 report, 모델 가중치는 계속 `artifacts/` 또는 �
 | [내부 red-team 전체 E2E](baselines/internal-red-team-v1.json) | 네 상품군 40문항의 Router→Qwen→Oracle→Verifier→Backend DTO와 공격 유형 회귀 |
 | [공식 형식 30문항 공개 모의평가](baselines/official-mock-v1-30.json) | 난이도 10/10/10·답변 불가 5개에서 Qwen→Oracle→Verifier→공식 5필드 전체 경로 관측 |
 | [공식 GET Docker 30문항 최초 관측](baselines/official-mock-http-v1-30.json) | 실제 FastAPI 네트워크의 5필드 30/30·의미 24/30·공모펀드 정책 잠금 6건 |
+| [공식 GET Docker 공모펀드 명시적 승인](baselines/official-mock-http-fund-approved-v1-30.json) | 최초 24/30 보존 후 공모펀드만 여는 v1 정책으로 의미·형식·60초 30/30, Qwen 17/17 |
 | [금융 도메인 QA 최초 관측](baselines/domain-qa-e2e-v1.json) | 금융 도메인 담당자 40문항의 route·safety·evidence·answer 단계별 최초 관측 |
 | [금융 도메인 QA SEARCH gold](baselines/domain-qa-e2e-v1.1-gold.json) | Q002 QueryPlan·Oracle 후보·상위 ID·evidence 지문 동결 후 Router 개선 전 관측 |
 | [금융 도메인 QA Router 회귀](baselines/domain-qa-e2e-v1.2-router.json) | Router·linker 안전 경계 개선 후 strict·route·safety·evidence·answer 40/40 |
@@ -108,6 +109,11 @@ handoff 불일치로 36/40이었고, 원인을 수정한 사후 회귀는 40/40�
 공식 다섯 문자열·60초 예산 30/30, 의미 일치 24/30이며, 실패 6건은 모두
 Backend의 의도적인 공모펀드 공식 실행 잠금이다. 내부 평가 전용 30/30과 실제
 배포 정책을 섞지 않고 최초 차이를 그대로 보존한다.
+
+`fund_approved_http_regression`은 그 최초 결과를 수정하지 않고 동일한 30문항에
+명시적 `public_fund_v1_approved` 배포 정책만 적용한 재평가다. 의미·형식·시간
+30/30, 답변 불가 5/5, Qwen 문장 검증 17/17, fallback 0건이다. 이 정책명은
+팀의 배포 승인이며 주최 측의 공식 사용 승인을 뜻하지 않는다.
 
 `domain-qa-dev-v1-40`은 금융 도메인 담당자가 작성하고 AI 담당자가 검토한
 개발 QA다. 40문항을 route·plan·retrieval·evidence·answer·safety·contract로

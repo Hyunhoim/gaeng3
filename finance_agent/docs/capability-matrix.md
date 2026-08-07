@@ -1,6 +1,6 @@
 # 금융상품 Agent capability matrix
 
-마지막 갱신: 2026-07-30
+마지막 갱신: 2026-08-07
 
 이 문서는 네 상품군과 일곱 질의 유형의 현재 실행 범위를 설명한다. 기계 판독
 정본은 `capability_matrix.json`이며 Python loader가 모든 28개 조합과
@@ -10,16 +10,18 @@ QueryPlan·SQLite Oracle 지원 범위를 자동 검사한다.
 
 | 질의 유형 | 해외 ETF·ETN | 국내 ETF·ETN | 국내채권 | 공모펀드 |
 | --- | --- | --- | --- | --- |
-| SEARCH | 실행 | 실행 | 실행 | 내부 평가 실행 |
-| DETAIL | 정확한 식별자를 SEARCH로 낮춰 실행 | 정확한 식별자를 SEARCH로 낮춰 실행 | 정확한 식별자를 SEARCH로 낮춰 실행 | 정확한 `itm_no`를 SEARCH로 낮춰 내부 실행 |
-| COMPARE | 정확한 두 상품 공통 계약으로 실행 | 정확한 두 상품 공통 계약으로 실행 | 정확한 두 상품 공통 계약으로 실행 | 정확한 두 공모펀드 공통 계약으로 내부 실행 |
-| AGGREGATE | 결정론적 실행 | 결정론적 실행 | 결정론적 실행 | 내부 평가 실행 |
-| EXPLAIN | 정확한 상품 field evidence 설명 | 정확한 상품 field evidence 설명 | 정확한 상품 field evidence 설명 | 정확한 상품 field evidence 설명 |
+| SEARCH | 실행 | 실행 | 실행 | 기본 잠금·명시적 v1 승인 실행 |
+| DETAIL | 정확한 식별자를 SEARCH로 낮춰 실행 | 정확한 식별자를 SEARCH로 낮춰 실행 | 정확한 식별자를 SEARCH로 낮춰 실행 | 기본 잠금·정확한 `itm_no`를 v1 승인 실행 |
+| COMPARE | 정확한 두 상품 공통 계약으로 실행 | 정확한 두 상품 공통 계약으로 실행 | 정확한 두 상품 공통 계약으로 실행 | 기본 잠금·두 공모펀드를 v1 승인 실행 |
+| AGGREGATE | 결정론적 실행 | 결정론적 실행 | 결정론적 실행 | 기본 잠금·v1 승인 결정론적 실행 |
+| EXPLAIN | 정확한 상품 field evidence 설명 | 정확한 상품 field evidence 설명 | 정확한 상품 field evidence 설명 | 기본 잠금·v1 승인 field evidence 설명 |
 | CLARIFY | 역질문 | 역질문 | 역질문 | 역질문 |
 | UNSUPPORTED | 안전 거절 | 안전 거절 | 안전 거절 | 안전 거절 |
 
-공모펀드의 “내부 실행” 표시는 데이터·Oracle·verifier가 구현됐지만 공식 Agent
-execution flag는 HyperCLOVA X schema와 주최 측 계약 확인 전까지 꺼져 있다는 뜻이다.
+공모펀드의 “기본 잠금·명시적 v1 승인”은 데이터·Oracle·verifier는 구현되었지만
+Backend가 실수로 기능을 열지 않도록 기본을 `locked`로 둔다는 뜻이다. 팀이 공모펀드
+v1 계약을 승인한 배포에서만 `public_fund_v1_approved`를 지정한다. 이는 팀 내부
+배포 승인이며 주최 측의 공식 이용 승인을 뜻하지 않는다
 
 ## 실행 의미
 

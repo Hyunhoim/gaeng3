@@ -46,7 +46,7 @@
 | 5 | 사람 rubric·Backend DTO | JSON 예시·schema·contract test 포함 | 계약 완료·사람 평가 대기 |
 | 6 | baseline 동결·전체 QA | 회귀·wheel·문서·hash 검증과 외부 게이트 명시 | 내부 완료 |
 | 7 | HyperCLOVA X provider 경계 | 세 operation·주입형 transport·오류·관측·전체 경로 E2E | 내부 8/8 완료·실제 HTTP 대기 |
-| 8 | `/answer` service adapter·FastAPI route | HTTP status·안전한 ERROR DTO·fallback·비노출·입력 검증 계약 | adapter 12/12·Backend 10/10·Ubuntu Docker HTTP 7/7 |
+| 8 | `/answer` service adapter·FastAPI route | HTTP status·안전한 ERROR DTO·fallback·비노출·입력 검증 계약 | adapter 12/12·Backend 30/30·Ubuntu Docker HTTP 7/7 |
 | 9 | `internal-red-team-v1` | 네 상품군 40문항·10개 공격 유형·전체 `/answer` E2E | expected·수정 후 로컬 Qwen 40/40 |
 | 10 | 교차 상품군 grounded answer | family evidence 격리·교차 문구 검증·전체 fallback·무호출 | expected·로컬 Qwen 각각 4/4 |
 | 11 | 금융 도메인 QA 실험 | 담당자 작성 40문항 hash 검증·단계별 E2E·Q002 SEARCH gold | v1.2 사후 회귀 40/40·잘못된 실행 0건 |
@@ -120,7 +120,7 @@ Backend `/answer` service adapter 결과:
 - 질문·credential·provider 본문·파일 경로 비노출 포함 동결 12개 시나리오 12/12
 - Ubuntu SSH Docker에서 health와 채권·국내 ETP·해외 ETP 실행, 공모펀드 잠금,
   역질문·미지원·HTTP 422의 7개 실제 요청 7/7
-- Backend 단위·계약 테스트 10/10
+- Backend 단위·계약 테스트 30/30
 - 실제 HyperCLOVA X·request 인증·주최 측 네트워크 transport 품질 점수가 아님
 
 `internal-red-team-v1` 전체 E2E 결과:
@@ -148,6 +148,14 @@ Backend `/answer` service adapter 결과:
 - Qwen 도달 13건 중 grounded 12건, 채권 가치 판단 문구 1건은 안전 fallback
 - p50 486.924ms, p95 2,491.057ms, 최대 2,885.126ms
 - 실제 배포 설정의 최초 관측이며 내부 평가 전용 30/30과 구분해 보존
+
+최초 결과 보존 후 공모펀드 명시적 v1 승인 경로 재평가:
+
+- 기본 `locked`는 유지하고 `public_fund_v1_approved`를 지정한 배포에서만 공모펀드 실행
+- 같은 동결 30문항 의미·공식 형식·60초 30/30, 답변 불가 5/5
+- Qwen 문장 검증 17/17, fallback 0건
+- 실험 후 Backend 기본 `locked` 복구와 Qwen 프로세스·GPU 메모리 종료 확인
+- 이 정책은 팀 내부 배포 승인이며 주최 측의 공식 이용 승인을 뜻하지 않음
 
 교차 상품군 grounded answer 결과:
 
@@ -192,9 +200,9 @@ Backend `/answer` service adapter 결과:
 
 ## 4. 내부 완료 QA
 
-- pytest `361 passed`
+- pytest `362 passed`
 - Ruff lint와 format 통과
-- 문서 검사 `55 Markdown files`, `33 evaluation baselines` 통과
+- 문서 검사 `55 Markdown files`, `34 evaluation baselines` 통과
 - `pip check` 통과
 - build isolation 없이 wheel 생성과 신규 JSON package data 포함 여부 통과
 - `git diff --check` 통과
@@ -203,6 +211,7 @@ Backend `/answer` service adapter 결과:
   모두 재사용, Backend health와 내부 HTTP 스모크 7/7·공식 GET 1/1 통과
 - 실제 Docker 공식 GET 30문항의 형식·60초 30/30, 의미 24/30과 공모펀드 잠금
   6건의 최초 관측 보존
+- 명시적 공모펀드 v1 승인 경로의 동일 30문항 30/30과 실험 후 기본 잠금 복구 확인
 
 source freeze는
 `evaluation/protocols/pre-hcx-readiness-v1.manifest.json`에 보존한다. 외부

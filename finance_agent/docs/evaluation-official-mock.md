@@ -1,6 +1,6 @@
 # 공식 형식 30문항 공개 모의평가
 
-상태: v1.1 기능 E2E 30/30 · 실제 Docker GET 최초 관측 24/30 · blind 아님
+상태: v1.2 최초 24/30 보존 · 명시적 공모펀드 승인 경로 30/30 · blind 아님
 
 기준일: 2026-08-07
 
@@ -23,6 +23,11 @@ Answer Verifier가 막아 검증된 정해진 답변으로 교체했다
 공식 다섯 문자열과 60초 예산은 30/30이지만, 공모펀드 정상 질문 6건이 현재
 Backend의 의도적인 공식 실행 잠금 때문에 안전한 역질문으로 끝났다. 이는 모델의
 무작위 실패가 아니라 실제 배포 설정과 내부 평가 설정 사이에서 발견한 기능 차이다
+
+최초 결과를 덮어쓰지 않고, 공모펀드만 명시적 `public_fund_v1_approved`
+정책으로 열어 같은 30문항을 재실행했다. 결과는 의미·공식 형식·60초 예산 모두
+30/30이고, 답변 생성 대상 17건도 모두 검증을 통과해 fallback 0건이었다. 이 정책은
+팀의 버전 관리용 승인이며 주최 측의 공식 이용 승인을 뜻하지 않는다
 
 이 결과는 공모전 예상 점수가 아니다. AI 담당자가 기존 구현과 데이터를 본 뒤
 만든 공개 모의평가이므로 처음 보는 비공개 질문에 대한 성능을 나타내지 않는다
@@ -85,6 +90,7 @@ SHA-256은
 | 로컬 Qwen 최초 관측 | 30/30 | 5/5 | 30/30 | 30/30 | 16/17 | 1 |
 | 호출 채점 수정 후 재실행 | 30/30 | 5/5 | 30/30 | 30/30 | 16/17 | 1 |
 | 실제 Docker GET 최초 관측 | 24/30 | 5/5 | 24/30 | 30/30 | 12/13 | 1 |
+| 실제 Docker GET 공모펀드 명시적 승인 | 30/30 | 5/5 | 30/30 | 30/30 | 17/17 | 0 |
 
 호출 채점 수정 후 로컬 실행의 응답시간은 다음과 같다
 
@@ -132,6 +138,32 @@ Backend는 공모펀드 데이터가 준비돼 있어도 공식 실행을 허용
 `6a809057e0d4d83a0bc809648e4eb9349e519baff08db2dddbeb5f0f9353551d`다.
 전체 파일은 Git에서 제외하고 [집계 baseline](../evaluation/baselines/official-mock-http-v1-30.json)에
 결과와 해석 한계를 보존한다
+
+### 4.2 공모펀드 명시적 승인 재평가
+
+기본은 `locked`로 두되 공모펀드 실행을 막는다. 팀이 버전을 바꾸지 않고
+`FINANCE_BACKEND_FUND_EXECUTION_POLICY=public_fund_v1_approved`를 지정한 실행에서만
+공모펀드 실행을 연다. 다른 상품군이나 개별 승인이 나중에 지원하지 않는
+기능까지 함께 열지 않는다
+
+| 항목 | 결과 |
+| --- | ---: |
+| 전체 의미 일치 | 30/30 |
+| 공식 다섯 문자열 형식 | 30/30 |
+| 답변 불가 안전 처리 | 5/5 |
+| 60초 이내 응답 | 30/30 |
+| Qwen 문장 검증 통과 | 17/17 |
+| 안전 fallback | 0 |
+
+응답시간은 최소 1.074ms, p50 1,126.521ms, p95 2,383.337ms, 최대
+2,559.679ms다. 잠겨 있던 공모펀드 6건이 실제 검색·비교·집계로 이어져도
+모든 문항의 결과는 안전했다. 최초 24/30은 바꾸지 않고, 승인 경로 30/30은
+별도 기준선으로 보존한다
+
+승인 report는 `official-mock-http-v1-30-fund-approved-first.json`, SHA-256은
+`37588e61c5c78ea5620d0c81307e50c4b35d59e245835c8684c9d307b549b378`다.
+집계 결과는 [공모펀드 명시적 승인 baseline](../evaluation/baselines/official-mock-http-fund-approved-v1-30.json)에
+보존한다
 
 ## 5. fallback 1건
 
@@ -204,12 +236,37 @@ python -m finance_agent_core.evaluation.official_mock_http_cli \
   --output artifacts/evaluation/official-mock-http-v1-30-local-qwen.json
 ```
 
-`--require-perfect`는 현재 의도적인 공모펀드 잠금 6건 때문에 실패한다. 이 옵션을
-빼면 최초 관측처럼 report를 보존하고 종료하며, 잠금을 승인 없이 해제해 30/30으로
-만들지 않는다
+명시적 승인이 없는 기본에서 `--require-perfect`는 의도한 공모펀드 잠금 6건을 구별해
+실패한다. 최초 관측은 수정하지 않는다
+
+팀이 버전을 바꾸는 명시적 승인 경로를 재현할 때만 저장소 루트에서 Backend를
+다음과 같이 재생성한다
+
+```bash
+FINANCE_BACKEND_FUND_EXECUTION_POLICY=public_fund_v1_approved \
+./compose.sh -f docker-compose.yml \
+  -f fastapi_backend/docker-compose.local-llm.yml \
+  up --no-build --detach --force-recreate --wait backend
+```
+
+그런 다음 `finance_agent/`에서 승인 정책까지 검사하며 실행한다
+
+```bash
+python -m finance_agent_core.evaluation.official_mock_http_cli \
+  --base-url http://127.0.0.1:18002 \
+  --backend-profile local_test \
+  --declared-model qwen3-local-test \
+  --expected-fund-execution-policy public_fund_v1_approved \
+  --require-perfect \
+  --output artifacts/evaluation/official-mock-http-v1-30-fund-approved.json
+```
+
+실행 후에는 반드시 기본 Backend로 재생성하고 `/health`의 `fund_execution_policy`가
+`locked`인지 확인한다
 
 전체 report는 `artifacts/evaluation/`에만 생성하며 Git에는 넣지 않는다. 집계 지표와
-report SHA-256은 [baseline](../evaluation/baselines/official-mock-v1-30.json)에 보존한다
+report SHA-256은 [최초 HTTP baseline](../evaluation/baselines/official-mock-http-v1-30.json)과
+[승인 HTTP baseline](../evaluation/baselines/official-mock-http-fund-approved-v1-30.json)에 나눠 보존한다
 
 ## 8. 해석 제한
 
@@ -221,6 +278,8 @@ report SHA-256은 [baseline](../evaluation/baselines/official-mock-v1-30.json)�
 - 공모전 점수나 1등 가능성을 직접 증명하지 않음
 - 실제 Docker 최초 관측 24/30은 공모펀드 실행 승인 전의 배포 정책 기준이며,
   공모펀드 기능 미구현이나 Qwen 생성 실패 6건을 뜻하지 않음
+- 공모펀드 명시적 승인 30/30은 팀의 배포 정책에서 기능이 제대로 작동함을 뜻하고,
+  주최 측의 공식 사용 승인 또는 실제 평가를 뜻하지 않음
 
 다음 공식 모델 평가는 정확한 HyperCLOVA X API 계약과 크레딧을 받은 뒤 이 세트를
 변경하지 않고 별도 report로 수행한다

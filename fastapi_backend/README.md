@@ -72,6 +72,7 @@ Backend는 다음 Agent 공개 계약만 사용
 - 모두 준비됨: HTTP 200, `status=ok`
 - 하나라도 누락·불일치: HTTP 503, `status=degraded`
 - 파일 경로와 내부 오류 정보는 공개 응답에 노출하지 않음
+- `fund_execution_policy`는 공모펀드가 기본 잠금인지, 명시적 버전 승인으로 열렸는지 표시
 
 ```bash
 curl --fail http://127.0.0.1:18001/health
@@ -234,6 +235,25 @@ python -m finance_agent_core.evaluation.official_mock_http_cli \
 공모펀드 정상 질문이며, 모델 오류나 HTTP 오류가 아니다. 자세한 해석은
 [공식 형식 30문항 공개 모의평가](../finance_agent/docs/evaluation-official-mock.md)를 따른다
 
+최초 결과를 보존한 뒤 공모펀드만 `public_fund_v1_approved`로 열고
+같은 30문항을 재실행한 결과는 형식·시간·의미 30/30, 답변 생성
+17/17, fallback 0건이다. 이 정책값은 팀의 배포 승인을 표현할 뿐 주최 측의
+공식 사용 승인을 뜻하지 않는다
+
+저장소 루트에서 다음과 같이 새 프로세스에만 적용한다
+
+```bash
+FINANCE_BACKEND_FUND_EXECUTION_POLICY=public_fund_v1_approved \
+./compose.sh -f docker-compose.yml \
+  -f fastapi_backend/docker-compose.local-llm.yml \
+  up --no-build --detach --force-recreate --wait backend
+
+curl --fail http://127.0.0.1:18002/health
+```
+
+실험이 끝나면 환경변수와 override를 빼고 Backend를 재생성한 다음,
+`fund_execution_policy=locked`를 확인한다
+
 ## 8. 주요 환경변수
 
 환경변수 예시는 `.env.example`, 개인 설정은 Git에서 제외되는 `.env`에서 관리
@@ -246,6 +266,7 @@ python -m finance_agent_core.evaluation.official_mock_http_cli \
 | `WEB_CONCURRENCY` | `1` | Uvicorn worker 수 |
 | `OFFICIAL_ANSWER_TIMEOUT_SECONDS` | `55` | 평가용 GET의 바깥쪽 응답 제한, 0초 초과 60초 미만만 허용 |
 | `FINANCE_BACKEND_ANSWER_PROVIDER` | `deterministic` | 답변 provider, 기본은 모델 미사용 |
+| `FINANCE_BACKEND_FUND_EXECUTION_POLICY` | `locked` | 공모펀드 실행 정책, 팀이 승인한 버전에서만 `public_fund_v1_approved` |
 
 Compose에서는 네 DB를 전용 volume의 `/data/*.sqlite3`로 자동 연결하므로 DB 경로를
 개인 `.env`에서 직접 지정하지 않음

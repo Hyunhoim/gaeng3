@@ -35,12 +35,13 @@
 | 주장 | 값 | 정본 | 해석 제한 |
 | --- | ---: | --- | --- |
 | 원천 감사 | 4종 145,393행, 65/65 | [데이터 감사](../../finance_agent/docs/data-audit.md) | 제공 스냅샷 기준 |
-| 전체 코드 회귀 | pytest 361개 | [readiness](../../finance_agent/docs/pre-hcx-readiness.md) | Agent Core 범위 |
+| 전체 코드 회귀 | pytest 362개 | [readiness](../../finance_agent/docs/pre-hcx-readiness.md) | Agent Core 범위 |
 | 교차 상품군 SEARCH | 국내·해외 ETP 4/4 | [교차 SEARCH](../../finance_agent/docs/cross-family-search.md) | 공개 회귀, not blind |
 | 교차 상품군 grounded answer | expected·로컬 Qwen 각각 4/4; 생성 대상 2문항 모두 grounded; 실제 모델 호출 3회; fallback 0 | [교차 SEARCH](../../finance_agent/docs/cross-family-search.md)·[baseline](../../finance_agent/evaluation/baselines/cross-family-answer-v1.json) | 공개 4문항, not blind; 로컬 Qwen은 개발 전용 |
 | 내부 red-team | 수정 후 40/40 | [red-team 평가](../../finance_agent/docs/evaluation-internal-red-team.md) | self-authored, not blind |
 | 공식 형식 공개 모의평가 | 전체 계약 30/30, 답변 불가 5/5, Qwen 생성 16/17, fallback 1 | [모의평가](../../finance_agent/docs/evaluation-official-mock.md)·[baseline](../../finance_agent/evaluation/baselines/official-mock-v1-30.json) | 설명회 분포 모사, self-authored, not blind |
 | 공식 GET Docker 30문항 | 형식·60초 30/30, 의미 24/30, 공모펀드 정책 잠금 6건 | [모의평가](../../finance_agent/docs/evaluation-official-mock.md)·[HTTP baseline](../../finance_agent/evaluation/baselines/official-mock-http-v1-30.json) | 개발 서버 순차 1회, local Qwen 답변 전용, not blind |
+| 공식 GET 공모펀드 명시적 승인 | 의미·형식·60초 30/30, Qwen 17/17, fallback 0 | [모의평가](../../finance_agent/docs/evaluation-official-mock.md)·[승인 baseline](../../finance_agent/evaluation/baselines/official-mock-http-fund-approved-v1-30.json) | 최초 24/30 보존 후 팀 배포 정책 재평가, 주최 승인 아님, not blind |
 | 금융 도메인 QA Router 회귀 | 40/40, 잘못된 실행·오류 0건 | [도메인 QA 평가](../../finance_agent/docs/evaluation-domain-qa.md)·[baseline](../../finance_agent/evaluation/baselines/domain-qa-e2e-v1.2-router.json) | 개선에 사용한 개발 세트, not blind |
 | 네 상품군 자연어 비교 공개 회귀 | 54문항 | [비교 평가](../../finance_agent/docs/evaluation-product-comparison.md) | 공개 회귀 |
 | SEARCH·AGGREGATE 결과 지문 | 8/8 | [성능 기준선](../../finance_agent/docs/evaluation-search-aggregate-performance.md) | 단일 개발 장비 |

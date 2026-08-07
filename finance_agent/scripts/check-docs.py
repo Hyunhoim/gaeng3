@@ -43,7 +43,7 @@ PRODUCT_COMPARE_SUITE = (
 
 LINK_PATTERN = re.compile(r"!?\[[^\]]*]\((?:<(?P<angle>[^>]+)>|(?P<plain>[^)\s]+))\)")
 SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
-FROZEN_PYTEST_PASSED = 361
+FROZEN_PYTEST_PASSED = 362
 
 REQUIRED_INDEX_TARGETS = {
     "project-baseline.md",
@@ -102,6 +102,7 @@ REQUIRED_BASELINES = {
     "internal-red-team-v1.json",
     "official-mock-v1-30.json",
     "official-mock-http-v1-30.json",
+    "official-mock-http-fund-approved-v1-30.json",
     "pre-hcx-route-diagnostic-initial-v1.json",
     "pre-hcx-route-diagnostic-improved-v1.json",
     "pre-hcx-route-diagnostic-initial-v2.json",

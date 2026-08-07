@@ -131,7 +131,7 @@
   질문·credential·provider 본문·파일 경로 비노출을 포함한 12개 계약을 통과했다.
 - FastAPI `/health`·`/answer` route를 Backend DTO에 직접 연결했다. 입력 검증
   실패도 내부 위치와 값을 노출하지 않는 HTTP 422 `invalid_request` DTO로
-  통일했다. Backend 단위·계약 테스트 10/10과 Ubuntu SSH Docker 실제 HTTP
+  통일했다. Backend 단위·계약 테스트 30/30과 Ubuntu SSH Docker 실제 HTTP
   스모크 7/7을 통과했다. health에서 네 DB ready, 채권·국내 ETP·해외 ETP 실행,
   공모펀드 실행 잠금, 역질문·미지원·HTTP 422를 각각 검증했다. 주최 측 실행
   환경의 포트·인증·네트워크 정책 재현은 외부 게이트로 유지한다.
@@ -171,7 +171,7 @@
   경계를 개선해 strict·route·safety·evidence·answer 40/40,
   control 잘못된 실행·오류 0건을 기록했다. 개발 세트 사후 회귀이므로
   독립 blind 성능으로 해석하지 않는다.
-- 전체 코드 회귀는 pytest 361개, Ruff lint·format, pip dependency check와
+- 전체 코드 회귀는 pytest 362개, Ruff lint·format, pip dependency check와
   wheel 빌드를 통과했다.
 - Docker `data-init`은 읽기 전용 공식 XLSX에서 네 SQLite를 자동 생성·검증하고,
   같은 원천과 registry에서는 재사용한다. 모든 DB 준비가 성공한 뒤에만 Backend를
@@ -181,6 +181,9 @@
 - 동결 30문항도 실제 Docker `GET /answer`로 순차 호출했다. 공식 다섯 문자열과
   60초 예산은 30/30, 의미 일치는 24/30이다. 실패 6건은 모두 Backend의 의도적인
   공모펀드 공식 실행 잠금이며, 내부 평가 전용 30/30과 구분해 최초 결과를 보존했다.
+- 최초 24/30을 덮어쓰지 않고 공모펀드만 여는 명시적 v1 배포 정책으로 같은 30문항을
+  재실행했다. 의미·형식·60초 30/30, Qwen 문장 검증 17/17, fallback 0건이며
+  실험 후 Backend는 기본 `locked`로 복구했다.
 
 ## 3. 변경할 수 없는 공식 제약
 
