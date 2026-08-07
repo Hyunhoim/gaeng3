@@ -25,7 +25,6 @@ from finance_agent_core.contracts.backend import (
     BackendStatus,
 )
 from finance_agent_core.contracts.queryplan import Intent, ProductFamily
-from finance_agent_core.contracts.routing import InteractionIntent
 from finance_agent_core.evaluation.briefing_examples import (
     BriefingAnswerability,
     BriefingDifficulty,
@@ -352,11 +351,8 @@ def _expected_provider_calls(
                 continue
             if expectation.query_plan_intent is Intent.SEARCH:
                 query_plan_calls += 1
-            elif (
-                expectation.query_plan_intent is None
-                and expectation.interaction_intent is InteractionIntent.SEARCH
-            ):
-                query_plan_calls += len(expectation.product_families)
+            # Cross-family SEARCH is compiled from server-owned family plans.
+            # The LLM only explains each verified family result afterward.
     answer_calls = sum(
         (
             len(case.expectation.product_families)

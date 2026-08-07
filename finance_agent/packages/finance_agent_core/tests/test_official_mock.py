@@ -16,6 +16,7 @@ from finance_agent_core.evaluation.briefing_examples import (
 )
 from finance_agent_core.evaluation.official_mock import (
     OfficialMockSuite,
+    _expected_provider_calls,
     evaluate_official_mock_case,
     load_official_mock_suite,
     verify_official_mock_databases,
@@ -120,3 +121,16 @@ def test_unanswerable_case_passes_internal_and_five_string_contract() -> None:
     assert result.system.actual_candidate_count is None
     assert result.official_contract_passed
     assert all(result.official_checks.values())
+
+
+def test_official_mock_provider_calls_exclude_server_owned_cross_family_plans() -> None:
+    suite = load_official_mock_suite().suite
+
+    assert _expected_provider_calls(suite, "expected") == {
+        "query_plan_calls": 0,
+        "answer_calls": 18,
+    }
+    assert _expected_provider_calls(suite, "local_test") == {
+        "query_plan_calls": 13,
+        "answer_calls": 18,
+    }
