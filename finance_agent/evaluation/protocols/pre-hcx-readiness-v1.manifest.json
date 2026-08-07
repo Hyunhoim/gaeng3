@@ -3,12 +3,12 @@
   "baseline_id": "pre-hcx-readiness-v1",
   "recorded_on": "2026-08-07",
   "status": "internal_ready_external_gates_pending",
-  "git_commit": "503c2a36b9962fc7a397800aa5228dde1126c6a7",
-  "last_committed_source_commit": "503c2a36b9962fc7a397800aa5228dde1126c6a7",
+  "git_commit": "b15310b3bd8213962526bea07e56565b5aeb4c71",
+  "last_committed_source_commit": "b15310b3bd8213962526bea07e56565b5aeb4c71",
   "generated_from_dirty_worktree": false,
   "hash_algorithm": "sha256(sorted(relative_path + NUL + file_sha256 + LF))",
   "file_count": 277,
-  "tree_sha256": "cf11b88cf09a194098d513c3c99ef006459af3bb2c08fa249b4b9ff0c94a9b89",
+  "tree_sha256": "d887eaa616dcece568d2bc12c15cb885991b9f9f9b31bf516164eb282ac4072d",
   "included_scope": [
     "README.md",
     "environment*.yml",
@@ -57,6 +57,7 @@
     "backend_compose_config": "passed",
     "backend_local_http_smoke": "health_validation_bond_cross_family_passed",
     "backend_ssh_docker_http_smoke": "health_four_families_and_7_cases_passed",
+    "backend_official_get_http_smoke": "five_string_contract_passed_943_605ms_single_observation",
     "backend_data_init": "official_xlsx_four_databases_built_validated_and_reused",
     "backend_local_qwen_http_smoke": "grounded_7_of_7_fallback_7_of_7_default_restored_7_of_7",
     "internal_red_team_replay_2026_08_07": "expected_and_local_qwen_40_of_40_after_router_contract_fix"
