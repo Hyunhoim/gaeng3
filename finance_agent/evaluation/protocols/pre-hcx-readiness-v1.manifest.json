@@ -3,12 +3,12 @@
   "baseline_id": "pre-hcx-readiness-v1",
   "recorded_on": "2026-08-07",
   "status": "internal_ready_external_gates_pending",
-  "git_commit": "b15310b3bd8213962526bea07e56565b5aeb4c71",
-  "last_committed_source_commit": "b15310b3bd8213962526bea07e56565b5aeb4c71",
+  "git_commit": "8451686de581e1a7211790745988d25b9ec543f1",
+  "last_committed_source_commit": "8451686de581e1a7211790745988d25b9ec543f1",
   "generated_from_dirty_worktree": false,
   "hash_algorithm": "sha256(sorted(relative_path + NUL + file_sha256 + LF))",
-  "file_count": 277,
-  "tree_sha256": "d887eaa616dcece568d2bc12c15cb885991b9f9f9b31bf516164eb282ac4072d",
+  "file_count": 284,
+  "tree_sha256": "66940119a23025733cff559fd6b5ae46a5cb29893e9363fae1c45315c51c9f73",
   "included_scope": [
     "README.md",
     "environment*.yml",
@@ -30,6 +30,7 @@
     "scripts/run-hcx-contract-e2e.py",
     "scripts/run-answer-adapter-contract.py",
     "scripts/sync-ontology.py",
+    "scripts/generate-official-mock-suite.py",
     "../ontology/*.ttl"
   ],
   "diagnostic": {
@@ -42,12 +43,12 @@
     "limitation": "self_authored_internal_diagnostic_not_independent_blind"
   },
   "qa": {
-    "pytest_passed": 350,
+    "pytest_passed": 357,
     "ruff_lint": "passed",
     "ruff_format": "passed",
     "pip_check": "passed",
-    "documentation_markdown": 54,
-    "documentation_baselines": 31,
+    "documentation_markdown": 55,
+    "documentation_baselines": 32,
     "wheel_build_no_isolation": "passed",
     "wheel_required_package_data": "passed",
     "git_diff_check": "passed",
@@ -60,7 +61,8 @@
     "backend_official_get_http_smoke": "five_string_contract_passed_943_605ms_single_observation",
     "backend_data_init": "official_xlsx_four_databases_built_validated_and_reused",
     "backend_local_qwen_http_smoke": "grounded_7_of_7_fallback_7_of_7_default_restored_7_of_7",
-    "internal_red_team_replay_2026_08_07": "expected_and_local_qwen_40_of_40_after_router_contract_fix"
+    "internal_red_team_replay_2026_08_07": "expected_and_local_qwen_40_of_40_after_router_contract_fix",
+    "official_shape_mock_2026_08_07": "30_of_30_unanswerable_5_of_5_qwen_grounded_16_of_17_safe_fallback_1"
   },
   "external_gates": [
     "금융 도메인 담당자의 external blind 100문항과 비공개 정답키 작성",
