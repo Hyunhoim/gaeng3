@@ -3,12 +3,12 @@
   "baseline_id": "pre-hcx-readiness-v1",
   "recorded_on": "2026-08-07",
   "status": "internal_ready_external_gates_pending",
-  "git_commit": "6e1e88fe26eb12438f31f690c54c12d23d086e76",
-  "last_committed_source_commit": "6e1e88fe26eb12438f31f690c54c12d23d086e76",
+  "git_commit": "f5b56cf713af70fdf030073623b43b3a16f69d77",
+  "last_committed_source_commit": "f5b56cf713af70fdf030073623b43b3a16f69d77",
   "generated_from_dirty_worktree": false,
   "hash_algorithm": "sha256(sorted(relative_path + NUL + file_sha256 + LF))",
-  "file_count": 288,
-  "tree_sha256": "6ef136d9e19e20b4038401cd7707979ef7ccc1a4692458b801c9772289d9dc21",
+  "file_count": 289,
+  "tree_sha256": "3aff443af6c8238c9d338423b036eacc920bfc20a2f9e6144371364022666933",
   "included_scope": [
     "README.md",
     "environment*.yml",
@@ -43,16 +43,16 @@
     "limitation": "self_authored_internal_diagnostic_not_independent_blind"
   },
   "qa": {
-    "pytest_passed": 361,
+    "pytest_passed": 362,
     "ruff_lint": "passed",
     "ruff_format": "passed",
     "pip_check": "passed",
     "documentation_markdown": 55,
-    "documentation_baselines": 33,
+    "documentation_baselines": 34,
     "wheel_build_no_isolation": "passed",
     "wheel_required_package_data": "passed",
     "git_diff_check": "passed",
-    "backend_pytest_passed": 29,
+    "backend_pytest_passed": 30,
     "backend_ruff_lint": "passed",
     "backend_ruff_format": "passed",
     "backend_compose_config": "passed",
@@ -63,7 +63,8 @@
     "backend_local_qwen_http_smoke": "grounded_7_of_7_fallback_7_of_7_default_restored_7_of_7",
     "internal_red_team_replay_2026_08_07": "expected_and_local_qwen_40_of_40_after_router_contract_fix",
     "official_shape_mock_2026_08_07": "30_of_30_unanswerable_5_of_5_qwen_grounded_16_of_17_safe_fallback_1",
-    "official_get_docker_mock_2026_08_07": "contract_and_60s_30_of_30_semantic_24_of_30_fund_policy_lock_6"
+    "official_get_docker_mock_2026_08_07": "contract_and_60s_30_of_30_semantic_24_of_30_fund_policy_lock_6",
+    "official_get_docker_fund_approved_2026_08_07": "same_frozen_30_contract_semantic_and_60s_30_of_30_qwen_grounded_17_of_17_fallback_0_default_lock_restored"
   },
   "external_gates": [
     "금융 도메인 담당자의 external blind 100문항과 비공개 정답키 작성",
