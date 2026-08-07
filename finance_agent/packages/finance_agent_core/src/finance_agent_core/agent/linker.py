@@ -673,6 +673,16 @@ def build_lexical_hints(
     if family == "fund" and unsupported_spans:
         rankings = []
     if family == "bond":
+        rating_token = re.search(
+            r"신용\s*등급(?:이|은)?\s*([A-Z]{1,5}(?:[+0-])?)(?=인|\s|$)",
+            question,
+        )
+        valid_ratings = set(
+            load_field_registry().require_field("credit_rating", ["bond"]).enum_values
+        )
+        if rating_token and rating_token.group(1) not in valid_ratings:
+            required[:] = [item for item in required if item["field"] != "credit_rating"]
+            unsupported_spans.append(rating_token.group(0))
         ordered_rating = re.search(
             r"신용등급.{0,20}?(?:이상|이하|초과|미만|높은|낮은)",
             question,

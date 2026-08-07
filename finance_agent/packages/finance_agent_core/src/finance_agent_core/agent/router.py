@@ -19,7 +19,7 @@ _AGGREGATE = re.compile(
     r"(?:AUM|보수율|수익률|이율|잔존일수|듀레이션)\s*(?:최대|최소)",
     re.IGNORECASE,
 )
-_EXPLAIN = re.compile(r"설명|무슨\s*뜻|뭐(?:야|고)|의미|장점|요소|왜\s|알려")
+_EXPLAIN = re.compile(r"설명|무슨\s*뜻|뭐(?:야|고)|의미|장점|요소|왜\s")
 _DEFINITION = re.compile(r"무슨\s*뜻|뭐(?:야|고)|의미")
 _DETAIL = re.compile(r"상세|세부|정보\s*조회|상품번호|종목코드|티커")
 _AMBIGUOUS = re.compile(

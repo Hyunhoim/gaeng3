@@ -21,6 +21,7 @@ DB, 원천 XLSX, 전체 report, 모델 가중치는 계속 `artifacts/` 또는 �
 | 파일 | 범위 |
 | --- | --- |
 | [설명회 공개 예시 최초 관측](baselines/briefing-examples-v1-initial.json) | 답변 가능 5개·답변 불가 3개의 Router→Oracle→Verifier 현재 도달 범위 |
+| [설명회 공개 예시 안전 개선](baselines/briefing-examples-v1-safety-improved.json) | 잘못된 신용등급 차단과 요청 어미 오분류 수정 후 회귀 |
 | [해외 ETP QueryPlan](baselines/overseas-etp-queryplan-v1.json) | 로컬 Qwen hybrid parser 사후 회귀 |
 | [국내 ETP QueryPlan](baselines/domestic-etp-queryplan-v1.json) | development와 최초 local-inference holdout |
 | [국내 ETP 답변](baselines/domestic-etp-answer-v1.json) | 최소권한 grounded answer |
@@ -120,6 +121,9 @@ strict 1/40·safety 32/40은 유지되며 E2 사후 회귀의 비교점이다.
 예시 5개와 답변 불가 예시 3개를 그대로 보존한 개발 회귀다. 최초 관측은 엄격
 1/8, 답변 가능 실행 0/5, 답변 불가 안전 처리 2/3이다. 특히 존재하지 않는
 `AAAA` 신용등급이 조건 없이 전체 채권 검색으로 실행된 문제를 숨기지 않고 기록한다.
+안전 개선 회귀에서는 공손한 `알려줘`를 설명 intent로 고정하던 규칙을 제거하고,
+등록되지 않은 신용등급을 SQL 전에 차단해 엄격 2/8, 답변 불가 안전 처리 3/3,
+잘못된 실행 0건을 확인한다.
 이 질문들은 실제 평가 문항이 아니며, 공개 후 수정 결과도 blind 성능으로 해석하지
 않는다.
 

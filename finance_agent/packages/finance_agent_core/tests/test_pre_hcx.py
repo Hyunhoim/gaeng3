@@ -181,6 +181,17 @@ def test_router_generalizes_financial_safety_boundaries() -> None:
         assert decision.draft.product_families == families
 
 
+def test_router_treats_polite_request_ending_as_search_not_explanation() -> None:
+    decision = IntentRouter().route(
+        "현재 판매 가능한 원화채권 중 AA- 이상 종목 알려줘",
+        "briefing-search-001",
+    )
+
+    assert decision.draft.intent is InteractionIntent.SEARCH
+    assert decision.disposition is RouteDisposition.EXECUTE
+    assert decision.draft.product_families == [ProductFamily.BOND]
+
+
 def test_diagnostic_commitment_detects_tampering(tmp_path: Path) -> None:
     suite_resource = (
         Path(__file__).parents[1]
