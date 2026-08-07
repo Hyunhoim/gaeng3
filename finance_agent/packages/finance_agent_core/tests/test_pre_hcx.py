@@ -22,7 +22,10 @@ from finance_agent_core.evaluation.external_holdout import (
     EXTERNAL_INTENT_QUOTAS,
     ExternalBlindAnswerKey,
     ExternalBlindQuestionSet,
+    claim_external_blind_first_run,
+    complete_external_blind_first_run,
     create_external_blind_commitment,
+    reject_external_near_duplicates,
     validate_external_blind_bundle,
     verify_external_blind_commitment,
 )
@@ -299,4 +302,77 @@ def test_external_blind_schema_validator_and_commitment(tmp_path: Path) -> None:
             question_path,
             answer_path,
             implementation_commit="b" * 40,
+        )
+
+
+def test_external_blind_rejects_near_duplicate_public_question() -> None:
+    questions = ExternalBlindQuestionSet.model_validate(_external_question_payload())
+    reference = questions.cases[0].question.replace(" ", "")
+
+    with pytest.raises(ValueError, match="too similar to frozen references"):
+        reject_external_near_duplicates(questions, [reference])
+
+    reject_external_near_duplicates(questions, ["완전히 다른 공개 기준 질문"])
+
+
+def test_external_blind_first_run_state_is_single_use_and_report_bound(
+    tmp_path: Path,
+) -> None:
+    questions = ExternalBlindQuestionSet.model_validate(_external_question_payload())
+    answers = ExternalBlindAnswerKey.model_validate(_external_answer_payload())
+    question_path = tmp_path / "questions.json"
+    answer_path = tmp_path / "answers.json"
+    question_path.write_text(questions.model_dump_json(), encoding="utf-8")
+    answer_path.write_text(answers.model_dump_json(), encoding="utf-8")
+    commitment = create_external_blind_commitment(
+        question_path,
+        answer_path,
+        implementation_commit="a" * 40,
+        created_at_utc="2026-08-07T00:00:00Z",
+    )
+    state_path = tmp_path / "first-run.json"
+
+    started = claim_external_blind_first_run(
+        state_path,
+        commitment,
+        provider="local_test",
+        model="test-model",
+        started_at_utc="2026-08-07T00:01:00Z",
+    )
+    assert started.status == "started"
+    with pytest.raises(FileExistsError):
+        claim_external_blind_first_run(
+            state_path,
+            commitment,
+            provider="local_test",
+            model="test-model",
+            started_at_utc="2026-08-07T00:02:00Z",
+        )
+
+    report_path = tmp_path / "external-first-run-report.json"
+    report_path.write_text('{"passed": 91, "total": 100}\n', encoding="utf-8")
+    mismatched = commitment.model_copy(update={"questions_sha256": "f" * 64})
+    with pytest.raises(ValueError, match="differs from the sealed commitment"):
+        complete_external_blind_first_run(
+            state_path,
+            mismatched,
+            report_path,
+            completed_at_utc="2026-08-07T00:03:00Z",
+        )
+
+    completed = complete_external_blind_first_run(
+        state_path,
+        commitment,
+        report_path,
+        completed_at_utc="2026-08-07T00:04:00Z",
+    )
+    assert completed.status == "completed"
+    assert completed.report_name == report_path.name
+    assert completed.report_sha256 is not None
+    with pytest.raises(ValueError, match="already completed"):
+        complete_external_blind_first_run(
+            state_path,
+            commitment,
+            report_path,
+            completed_at_utc="2026-08-07T00:05:00Z",
         )
