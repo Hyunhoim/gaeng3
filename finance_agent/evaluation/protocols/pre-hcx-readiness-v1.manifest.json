@@ -1,14 +1,14 @@
 {
   "schema_version": "1.0",
   "baseline_id": "pre-hcx-readiness-v1",
-  "recorded_on": "2026-08-06",
+  "recorded_on": "2026-08-07",
   "status": "internal_ready_external_gates_pending",
-  "git_commit": "f7ce5b8656878dbc59dade006459d459dbf1bb75",
-  "last_committed_source_commit": "f7ce5b8656878dbc59dade006459d459dbf1bb75",
+  "git_commit": "a79ee50a31df7985d6c42d70cde7f8f642d2c2c8",
+  "last_committed_source_commit": "a79ee50a31df7985d6c42d70cde7f8f642d2c2c8",
   "generated_from_dirty_worktree": false,
   "hash_algorithm": "sha256(sorted(relative_path + NUL + file_sha256 + LF))",
   "file_count": 258,
-  "tree_sha256": "67c5a7fb650c8b1d2888ca8dec0e4014c1b4102c9ff40a7d3868fa38a3d5f312",
+  "tree_sha256": "f8bd09348f64fb9047646f7d5c45f3eb22388f633b2aa9af2cf42188f4d96417",
   "included_scope": [
     "README.md",
     "environment*.yml",
@@ -56,19 +56,21 @@
     "backend_local_http_smoke": "health_validation_bond_cross_family_passed",
     "backend_ssh_docker_http_smoke": "health_four_families_and_7_cases_passed",
     "backend_data_init": "official_xlsx_four_databases_built_validated_and_reused",
-    "backend_local_qwen_http_smoke": "grounded_7_of_7_fallback_7_of_7_default_restored_7_of_7"
+    "backend_local_qwen_http_smoke": "grounded_7_of_7_fallback_7_of_7_default_restored_7_of_7",
+    "internal_red_team_replay_2026_08_07": "expected_and_local_qwen_40_of_40_after_router_contract_fix"
   },
   "external_gates": [
     "금융 도메인 담당자의 external blind 100문항과 비공개 정답키 작성",
     "봉인 이후 최초 blind E2E 단일 실행",
     "승인된 실제 비정형 문서 corpus와 활용 범위 확인",
     "최소 2명의 독립 reviewer가 수행한 실제 사람 평가",
-    "2026-08-06 오프라인 설명회 참석 팀원의 기록에서 HyperCLOVA X 모델·Structured Outputs·endpoint·인증·제출 범위와 공식 출처 확인",
+    "HyperCLOVA X 정확한 모델·Structured Outputs·endpoint·인증·제출 범위의 공식 서면 확인",
+    "NCP 크레딧 수령과 HyperCLOVA X 적용 서비스 확인",
     "공식 답변 확인 후 HyperCLOVA X 실제 HTTP transport·공식 재현·제출 후보의 로컬 LLM 구성 제거 검수",
     "주최 측 실행 환경의 Docker·포트·인증·네트워크 정책 최종 재현"
   ],
   "limitations": [
-    "git_commit은 readiness manifest 자체를 제외한 source tree가 동결된 커밋을 가리킴",
+    "git_commit은 readiness manifest 자체를 제외한 설명회 반영 source tree가 동결된 커밋을 가리킴",
     "source tree hash는 git_commit의 readiness 포함 범위와 일치함",
     "로컬 Qwen과 공개 회귀 결과는 HyperCLOVA X 공식 성능이 아님",
     "external gate 완료 전 최종 일반화 성능 또는 제출 준비 완료를 주장하지 않음"
