@@ -1,4 +1,5 @@
 from importlib.resources import files
+from time import sleep
 
 import pytest
 from fastapi.testclient import TestClient
@@ -236,3 +237,37 @@ def test_official_get_answer_normalizes_every_internal_status_to_http_200(
         "think_trace",
         "answer",
     }
+
+
+def test_official_get_answer_returns_safe_http_200_before_outer_budget() -> None:
+    slow_agent = FakeAgentService()
+    original_answer = slow_agent.answer
+
+    def slow_answer(question: str, request_id: str):
+        sleep(0.05)
+        return original_answer(question, request_id)
+
+    slow_agent.answer = slow_answer  # type: ignore[method-assign]
+    application = create_app(
+        settings=Settings(official_answer_timeout_seconds=0.01),
+        agent=slow_agent,
+    )
+
+    with TestClient(application) as client:
+        response = client.get(
+            "/answer",
+            params={"question_id": "Q-TIMEOUT", "question": "오래 걸리는 평가 질문"},
+        )
+
+    assert response.status_code == 200
+    body = OfficialAnswerResponse.model_validate(response.json())
+    assert "시간이 초과" in body.answer
+    assert "request_timeout" in body.think_trace
+
+
+@pytest.mark.parametrize("timeout_seconds", [0, 60])
+def test_settings_rejects_official_budget_outside_safe_range(
+    timeout_seconds: float,
+) -> None:
+    with pytest.raises(ValueError, match="official_answer_timeout_seconds"):
+        Settings(official_answer_timeout_seconds=timeout_seconds)

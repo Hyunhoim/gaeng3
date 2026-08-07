@@ -165,7 +165,7 @@
   경계를 개선해 strict·route·safety·evidence·answer 40/40,
   control 잘못된 실행·오류 0건을 기록했다. 개발 세트 사후 회귀이므로
   독립 blind 성능으로 해석하지 않는다.
-- 전체 코드 회귀는 pytest 346개, Ruff lint·format, pip dependency check와
+- 전체 코드 회귀는 pytest 347개, Ruff lint·format, pip dependency check와
   wheel 빌드를 통과했다.
 - Docker `data-init`은 읽기 전용 공식 XLSX에서 네 SQLite를 자동 생성·검증하고,
   같은 원천과 registry에서는 재사용한다. 모든 DB 준비가 성공한 뒤에만 Backend를
@@ -182,8 +182,8 @@
 - 공식 adapter는 `question_id`, `question`, `retrieved_context`, `think_trace`,
   `answer`의 다섯 문자열 필드를 반환한다.
 - 답을 찾지 못하거나 처리할 수 없는 질문도 같은 스키마와 HTTP 200으로 응답한다.
-- 위 공식 adapter의 DTO·FastAPI route·전 상태·예외·추가 parameter 계약은
-  2026-08-07 자동 테스트를 통과했으며, 공개 서버 배포와 60초 내부 예산은 남아 있다.
+- 위 공식 adapter의 DTO·FastAPI route·전 상태·예외·추가 parameter·기본 55초
+  외곽 시간 예산은 2026-08-07 자동 테스트를 통과했으며, 공개 서버 배포는 남아 있다.
 - 도메인별 `common.ttl`, `bond_kr.ttl`, `etf_kr.ttl`, `etf_gl.ttl`,
   `fund_pub.ttl`을 제출 기준으로 준비한다.
 - 임베딩 등 비-LLM 영역에는 구현 방식 제한이 없다는 공식 문구가 있지만, 경계 모델의 허용 여부는 설명회에서 재확인한다.

@@ -34,6 +34,12 @@ class Settings(BaseSettings):
         default="deterministic",
         validation_alias="FINANCE_BACKEND_ANSWER_PROVIDER",
     )
+    official_answer_timeout_seconds: float = Field(
+        default=55.0,
+        gt=0,
+        lt=60,
+        validation_alias="OFFICIAL_ANSWER_TIMEOUT_SECONDS",
+    )
     overseas_etp_db: Path | None = Field(
         default=None,
         validation_alias="FINANCE_DB_OVERSEAS_ETP",

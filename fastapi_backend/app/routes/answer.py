@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, Response
@@ -7,11 +8,13 @@ from finance_agent_core.agent import (
     execute_answer_request,
     invalid_official_request_response,
     official_response_from_backend,
+    official_timeout_response,
 )
 from finance_agent_core.contracts.backend import BackendAgentRequest, BackendAgentResponse
 from finance_agent_core.contracts.official import OfficialAnswerResponse
 
-from app.dependencies import AgentService, get_agent
+from app.config import Settings
+from app.dependencies import AgentService, get_agent, get_settings
 
 router = APIRouter(tags=["answer"])
 
@@ -41,8 +44,9 @@ def answer(
     "/answer",
     response_model=OfficialAnswerResponse,
 )
-def official_answer(
+async def official_answer(
     service: Annotated[AgentService, Depends(get_agent)],
+    settings: Annotated[Settings, Depends(get_settings)],
     question_id: Annotated[str | None, Query()] = None,
     question: Annotated[str | None, Query()] = None,
 ) -> OfficialAnswerResponse:
@@ -61,7 +65,16 @@ def official_answer(
             question=question,
         )
     request = BackendAgentRequest(request_id=question_id, question=question)
-    result = execute_answer_request(service, request)
+    try:
+        result = await asyncio.wait_for(
+            asyncio.to_thread(execute_answer_request, service, request),
+            timeout=settings.official_answer_timeout_seconds,
+        )
+    except TimeoutError:
+        return official_timeout_response(
+            question_id=question_id,
+            question=question,
+        )
     return official_response_from_backend(
         question_id=question_id,
         question=question,

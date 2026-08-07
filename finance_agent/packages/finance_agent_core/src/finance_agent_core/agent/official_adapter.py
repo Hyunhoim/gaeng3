@@ -7,6 +7,7 @@ from finance_agent_core.contracts.backend import BackendAgentResponse, BackendSt
 from finance_agent_core.contracts.official import OfficialAnswerResponse
 
 _INVALID_REQUEST_MESSAGE = "요청 형식이 올바르지 않습니다. question_id와 question을 확인해 주세요."
+_TIMEOUT_MESSAGE = "요청 처리 시간이 초과되었습니다. 잠시 후 다시 시도해 주세요."
 
 
 def _json_text(payload: dict[str, Any]) -> str:
@@ -150,4 +151,29 @@ def invalid_official_request_response(
             }
         ),
         answer=_INVALID_REQUEST_MESSAGE,
+    )
+
+
+def official_timeout_response(
+    *,
+    question_id: str,
+    question: str,
+) -> OfficialAnswerResponse:
+    """Return a fixed public response when the outer evaluation budget expires."""
+
+    return OfficialAnswerResponse(
+        question_id=question_id,
+        question=question,
+        retrieved_context=_json_text(
+            {"citations": [], "reason": "시간 제한으로 근거 처리를 완료하지 못함"}
+        ),
+        think_trace=_json_text(
+            {
+                "trace_type": "structured_execution_summary_not_hidden_reasoning",
+                "status": "error",
+                "execution_steps": ["request_time_budget", "safe_control_response"],
+                "control_code": "request_timeout",
+            }
+        ),
+        answer=_TIMEOUT_MESSAGE,
     )

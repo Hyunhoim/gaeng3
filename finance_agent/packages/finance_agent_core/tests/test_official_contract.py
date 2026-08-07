@@ -6,6 +6,7 @@ from importlib.resources import files
 from finance_agent_core.agent import (
     invalid_official_request_response,
     official_response_from_backend,
+    official_timeout_response,
 )
 from finance_agent_core.contracts.backend import BackendAgentResponse
 from finance_agent_core.contracts.official import OfficialAnswerResponse
@@ -45,3 +46,15 @@ def test_invalid_official_request_keeps_fixed_five_string_contract() -> None:
     }
     assert response.question_id == "invalid-question-id"
     assert json.loads(response.think_trace)["control_code"] == "invalid_request"
+
+
+def test_official_timeout_response_has_no_evidence_and_fixed_control_code() -> None:
+    response = official_timeout_response(
+        question_id="Q-TIMEOUT",
+        question="처리가 오래 걸리는 평가 질문",
+    )
+
+    assert response.question_id == "Q-TIMEOUT"
+    assert json.loads(response.retrieved_context)["citations"] == []
+    assert json.loads(response.think_trace)["control_code"] == "request_timeout"
+    assert "시간이 초과" in response.answer

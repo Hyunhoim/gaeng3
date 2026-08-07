@@ -139,6 +139,11 @@ query parameter는 무시한다.
 `think_trace`는 모델의 숨은 사고과정이 아니라 질문 분류·필터·검증·fallback 결과처럼
 다시 확인할 수 있는 실행 기록만 담는다.
 
+전체 처리의 바깥쪽 제한은 기본 55초다. 시간이 다 되면 근거가 없는 안전한 시간 초과
+답변을 HTTP 200으로 먼저 반환한다. 실행 중인 작업을 강제로 종료하는 방식은 아니므로,
+실제 HyperCLOVA X 연결 때는 모델 호출 제한을 이 값보다 짧게 설정하고 동시 요청 수를
+별도로 제한해야 한다.
+
 ## 5. 전체 시스템에서 실행
 
 일반적인 실행·종료·로그 확인은 저장소 루트에서 수행
@@ -217,6 +222,7 @@ python fastapi_backend/scripts/smoke.py \
 | `BACKEND_PORT` | `18001` | 호스트에서 접근할 Backend 포트 |
 | `FINANCE_RAW_DATA_DIR` | `../../2. Data/1. Raw/1.금융상품` | 읽기 전용 공식 XLSX 경로 |
 | `WEB_CONCURRENCY` | `1` | Uvicorn worker 수 |
+| `OFFICIAL_ANSWER_TIMEOUT_SECONDS` | `55` | 평가용 GET의 바깥쪽 응답 제한, 0초 초과 60초 미만만 허용 |
 | `FINANCE_BACKEND_ANSWER_PROVIDER` | `deterministic` | 답변 provider, 기본은 모델 미사용 |
 
 Compose에서는 네 DB를 전용 volume의 `/data/*.sqlite3`로 자동 연결하므로 DB 경로를

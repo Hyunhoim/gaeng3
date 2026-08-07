@@ -24,6 +24,7 @@ from finance_agent_core.agent.fund_resolver import (
 from finance_agent_core.agent.official_adapter import (
     invalid_official_request_response,
     official_response_from_backend,
+    official_timeout_response,
 )
 from finance_agent_core.agent.routed_service import (
     FamilySearchResult,
@@ -56,4 +57,5 @@ __all__ = [
     "normalize_fund_mention",
     "invalid_official_request_response",
     "official_response_from_backend",
+    "official_timeout_response",
 ]

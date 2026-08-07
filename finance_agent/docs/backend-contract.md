@@ -192,3 +192,8 @@ HTTP 422·502·503·504 오류 의미를 바꾸지 않는다. 정의되지 않�
 Agent Core 계약 2건과 Backend의 모든 응답 상태·예외·추가 parameter 테스트로
 자동 검증한다. Docker HTTP smoke도 실제 공식 GET 응답의 필드·문자열·
 직렬화를 검사하도록 확장했다.
+
+평가 route에는 기본 55초의 바깥쪽 시간 예산을 둔다. 예산이 끝나면
+`control_code=request_timeout`, 빈 citation과 안전 문구를 담은 같은 다섯 문자열을
+HTTP 200으로 반환한다. 이 제한은 실행 중인 Python thread를 강제 종료하지 않으므로,
+실제 provider timeout은 55초보다 짧게 두고 동시 요청 상한도 별도로 확정해야 한다.

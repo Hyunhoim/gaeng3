@@ -195,7 +195,7 @@ HCX 모델·endpoint·인증과 크레딧 적용 범위는 남아 있어 기존�
 - 금융 도메인 QA: v1 개발 40문항 최초 strict 1/40,
   safety·evidence 각각 32/40을 보존하고 v1.2 Router·linker 회귀에서
   모든 계약 40/40·잘못된 실행 0건, dependency pending 13건은 유지
-- 코드 회귀 기준: 전체 pytest 346개, Ruff lint·format, pip dependency check,
+- 코드 회귀 기준: 전체 pytest 347개, Ruff lint·format, pip dependency check,
   wheel과 필수 package data 검사
 - 로컬 Qwen 평가 기준: 동결 50문항에서 최초 미사용 holdout 9/10,
   오류 수정 후 전체 회귀 50/50을 연속 2회 재현
@@ -213,7 +213,7 @@ HCX 모델·endpoint·인증과 크레딧 적용 범위는 남아 있어 기존�
 - Docker 데이터 준비: 읽기 전용 공식 XLSX에서 네 SQLite를 자동 생성·검증하고
   두 번째 실행에서 네 DB 모두 재사용, 성공 후에만 Backend 시작
 - 다음 기술 통합: 공식 `GET /answer` adapter와 다섯 문자열·전 결과 HTTP 200
-  계약은 구현·테스트 완료. 다음으로 60초 내부 시간 예산과
+  계약과 기본 55초 외곽 시간 예산은 구현·테스트 완료. 다음으로
   도메인별 Ontology `.ttl` 5개를 구현. 이후 크레딧·정확한 model ID·endpoint·
   인증 계약을 확보하면 HyperCLOVA X HTTP transport를 연결. 주최 측 실행 환경의
   포트·인증·네트워크 정책은 별도 재현 필요
