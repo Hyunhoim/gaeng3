@@ -40,6 +40,19 @@ class SmokeCase:
         }
 
 
+@dataclass(frozen=True)
+class OfficialSmokeCase:
+    case_id: str
+    query: tuple[tuple[str, str], ...]
+    expected_question_id: str
+    expected_question: str
+    expected_control_code: str | None = None
+    forbidden_output_fragments: tuple[str, ...] = ()
+
+    def query_string(self) -> str:
+        return urlencode(self.query)
+
+
 CASES = (
     SmokeCase(
         case_id="docker-smoke-bond-001",
@@ -111,6 +124,69 @@ CASES = (
         expected_status="error",
         expected_intent="unsupported",
         expected_error_code="invalid_request",
+    ),
+)
+
+_MALICIOUS_FRAGMENT = "<script>alert(1)</script>"
+_LONG_QUESTION = "가" * 2001
+OFFICIAL_CASES = (
+    OfficialSmokeCase(
+        case_id="official-valid",
+        query=(
+            ("question_id", "docker-smoke-official-001"),
+            ("question", "현재 판매 가능한 원화채권 중 AA- 이상 종목 알려줘"),
+            ("unexpected", "ignored"),
+        ),
+        expected_question_id="docker-smoke-official-001",
+        expected_question="현재 판매 가능한 원화채권 중 AA- 이상 종목 알려줘",
+    ),
+    OfficialSmokeCase(
+        case_id="official-unicode-and-markup",
+        query=(
+            ("question_id", "평가-😀-001"),
+            (
+                "question",
+                f"내일 가장 오를 ETF를 예측해줘 & {_MALICIOUS_FRAGMENT}",
+            ),
+        ),
+        expected_question_id="평가-😀-001",
+        expected_question=f"내일 가장 오를 ETF를 예측해줘 & {_MALICIOUS_FRAGMENT}",
+        forbidden_output_fragments=(_MALICIOUS_FRAGMENT,),
+    ),
+    OfficialSmokeCase(
+        case_id="official-blank-values",
+        query=(("question_id", " "), ("question", " ")),
+        expected_question_id="invalid-question-id",
+        expected_question=" ",
+        expected_control_code="invalid_request",
+    ),
+    OfficialSmokeCase(
+        case_id="official-missing-id",
+        query=(("question", "해외 ETF를 알려줘"),),
+        expected_question_id="invalid-question-id",
+        expected_question="해외 ETF를 알려줘",
+        expected_control_code="invalid_request",
+    ),
+    OfficialSmokeCase(
+        case_id="official-missing-question",
+        query=(("question_id", "Q-MISSING"),),
+        expected_question_id="Q-MISSING",
+        expected_question="",
+        expected_control_code="invalid_request",
+    ),
+    OfficialSmokeCase(
+        case_id="official-id-too-long",
+        query=(("question_id", "Q" * 129), ("question", "국내채권을 알려줘")),
+        expected_question_id="invalid-question-id",
+        expected_question="국내채권을 알려줘",
+        expected_control_code="invalid_request",
+    ),
+    OfficialSmokeCase(
+        case_id="official-question-too-long",
+        query=(("question_id", "Q-LONG"), ("question", _LONG_QUESTION)),
+        expected_question_id="Q-LONG",
+        expected_question=_LONG_QUESTION[:2000],
+        expected_control_code="invalid_request",
     ),
 )
 
@@ -278,6 +354,8 @@ def validate_official_answer(
     *,
     question_id: str,
     question: str,
+    expected_control_code: str | None = None,
+    forbidden_output_fragments: tuple[str, ...] = (),
 ) -> list[str]:
     errors: list[str] = []
     expected_keys = {
@@ -296,6 +374,7 @@ def validate_official_answer(
         all(isinstance(body.get(key), str) for key in expected_keys),
         "official answer fields must all be strings",
     )
+    decoded_fields: dict[str, dict[str, Any]] = {}
     for key in ("retrieved_context", "think_trace"):
         value = body.get(key)
         if not isinstance(value, str):
@@ -306,6 +385,25 @@ def validate_official_answer(
             errors.append(f"official {key} is not valid JSON text")
         else:
             _expect(errors, isinstance(decoded, dict), f"official {key} must encode an object")
+            if isinstance(decoded, dict):
+                decoded_fields[key] = decoded
+    if expected_control_code is not None:
+        trace = decoded_fields.get("think_trace", {})
+        _expect(errors, trace.get("status") == "error", "official control status differs")
+        _expect(
+            errors,
+            trace.get("control_code") == expected_control_code,
+            "official control code differs",
+        )
+    for fragment in forbidden_output_fragments:
+        for key in ("retrieved_context", "think_trace", "answer"):
+            value = body.get(key)
+            if isinstance(value, str):
+                _expect(
+                    errors,
+                    fragment not in value,
+                    f"official {key} reflected a forbidden input fragment",
+                )
     return errors
 
 
@@ -391,32 +489,38 @@ def main(argv: list[str] | None = None) -> int:
                     ),
                 )
             )
-        official_question_id = "docker-smoke-official-001"
-        official_question = "현재 판매 가능한 원화채권 중 AA- 이상 종목 알려줘"
-        official_status, official_body, official_bytes, official_duration = _request_json(
-            f"{base_url}/answer?"
-            + urlencode(
+        official_results = []
+        for case in OFFICIAL_CASES:
+            official_status, official_body, official_bytes, official_duration = _request_json(
+                f"{base_url}/answer?{case.query_string()}",
+                timeout=arguments.timeout,
+            )
+            official_errors = validate_official_answer(
+                official_status,
+                official_body,
+                question_id=case.expected_question_id,
+                question=case.expected_question,
+                expected_control_code=case.expected_control_code,
+                forbidden_output_fragments=case.forbidden_output_fragments,
+            )
+            official_results.append(
                 {
-                    "question_id": official_question_id,
-                    "question": official_question,
+                    "case_id": case.case_id,
+                    "passed": not official_errors,
+                    "http_status": official_status,
+                    "response_bytes": official_bytes,
+                    "duration_ms": round(official_duration, 3),
+                    "errors": official_errors,
                 }
-            ),
-            timeout=arguments.timeout,
-        )
-        official_errors = validate_official_answer(
-            official_status,
-            official_body,
-            question_id=official_question_id,
-            question=official_question,
-        )
+            )
     except (OSError, RuntimeError, TypeError, URLError) as error:
         print(f"Docker HTTP smoke failed before completion: {error}", file=sys.stderr)
         return 2
 
     passed_cases = sum(item["passed"] for item in results)
     report = {
-        "schema_version": "1.0",
-        "suite_id": "docker-http-smoke-v1",
+        "schema_version": "1.1",
+        "suite_id": "docker-http-smoke-v2",
         "started_at": started_at.isoformat(),
         "base_url": base_url,
         "llm_provider_expected": arguments.provider_model is not None,
@@ -430,20 +534,21 @@ def main(argv: list[str] | None = None) -> int:
             "duration_ms": round(health_duration, 3),
             "errors": health_errors,
         },
-        "official_answer": {
-            "passed": not official_errors,
-            "http_status": official_status,
-            "response_bytes": official_bytes,
-            "duration_ms": round(official_duration, 3),
-            "errors": official_errors,
-        },
+        "official_answers": official_results,
         "metrics": {
-            "passed": passed_cases,
-            "failed": len(results) - passed_cases,
-            "total": len(results),
+            "backend_passed": passed_cases,
+            "backend_failed": len(results) - passed_cases,
+            "backend_total": len(results),
+            "official_passed": sum(item["passed"] for item in official_results),
+            "official_failed": sum(not item["passed"] for item in official_results),
+            "official_total": len(official_results),
         },
         "cases": results,
-        "passed": not health_errors and not official_errors and passed_cases == len(results),
+        "passed": (
+            not health_errors
+            and passed_cases == len(results)
+            and all(item["passed"] for item in official_results)
+        ),
     }
     rendered = json.dumps(report, ensure_ascii=False, indent=2) + "\n"
     if arguments.output is not None:

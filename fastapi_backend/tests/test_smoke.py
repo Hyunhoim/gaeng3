@@ -172,3 +172,53 @@ def test_validate_official_answer_requires_five_json_string_fields() -> None:
         question_id="Q-001",
         question="평가 질문",
     )
+
+
+def test_validate_official_answer_checks_safe_control_code() -> None:
+    body = {
+        "question_id": "invalid-question-id",
+        "question": "",
+        "retrieved_context": '{"citations":[]}',
+        "think_trace": '{"status":"error","control_code":"invalid_request"}',
+        "answer": "요청 형식을 확인해 주세요.",
+    }
+
+    assert (
+        validate_official_answer(
+            200,
+            body,
+            question_id="invalid-question-id",
+            question="",
+            expected_control_code="invalid_request",
+        )
+        == []
+    )
+    body["think_trace"] = '{"status":"error","control_code":"wrong"}'
+    assert "official control code differs" in validate_official_answer(
+        200,
+        body,
+        question_id="invalid-question-id",
+        question="",
+        expected_control_code="invalid_request",
+    )
+
+
+def test_validate_official_answer_rejects_reflected_forbidden_fragment() -> None:
+    fragment = "<script>alert(1)</script>"
+    body = {
+        "question_id": "Q-SAFE",
+        "question": f"ETF를 알려줘 {fragment}",
+        "retrieved_context": '{"citations":[]}',
+        "think_trace": '{"status":"unsupported"}',
+        "answer": f"지원하지 않습니다. {fragment}",
+    }
+
+    errors = validate_official_answer(
+        200,
+        body,
+        question_id="Q-SAFE",
+        question=f"ETF를 알려줘 {fragment}",
+        forbidden_output_fragments=(fragment,),
+    )
+
+    assert "official answer reflected a forbidden input fragment" in errors
