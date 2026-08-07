@@ -11,6 +11,7 @@ LLM 실행 도구를 보관하는 곳
 | 파일 | 역할 |
 | --- | --- |
 | `check-docs.py` | 문서 링크, 제안서 구조, 평가 baseline, source-freeze 검사 |
+| `check-submission-boundary.py` | 개발용 로컬 LLM의 운영 파일 혼입과 제출 후보 잔존 검사 |
 | `sync-ontology.py` | field registry에서 공식 Turtle 5개 생성·문법·정합성 검사 |
 | `generate-bond-suite.py` | 국내채권 평가 질문 세트 생성 |
 | `generate-domestic-etp-suite.py` | 국내 ETF·ETN 평가 질문 세트 생성 |

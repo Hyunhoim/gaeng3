@@ -33,7 +33,7 @@ ETF·ETN, 공모펀드를 조회·비교·계산한 뒤 근거와 기준일을 �
 | Backend | FastAPI `GET /health`, 내부용 `POST /answer`, 평가용 `GET /answer` 구현 |
 | Frontend | 동료의 `nextjs-frontend/` 코드 합류 후 연결 예정 |
 | LLM | 로컬 Qwen은 내부 개발에만 사용, HyperCLOVA X는 크레딧·실제 API 규격 확보 후 연결 |
-| 자동 검증 | AI Core pytest 362개와 Backend·문서·Docker 검증 경로 관리 |
+| 자동 검증 | AI Core pytest 370개와 Backend 34개·문서·Docker 검증 경로 관리 |
 
 세부 기능과 평가 결과는 [AI Agent 작업공간](finance_agent/README.md)에서 관리
 
@@ -57,6 +57,7 @@ flowchart LR
 ```text
 gaeng3/
 ├── compose.sh                        # 전체 Docker 실행 진입점
+├── rehearse.sh                       # Docker·경계·테스트·문서 전체 리허설
 ├── docker-compose.yml               # 현재 data-init·Backend 서비스 구성
 ├── nextjs-frontend/                 # Next.js 화면(합류 예정)
 ├── ontology/                        # 제출용 공통·상품군별 Turtle 5개
@@ -180,6 +181,20 @@ API 명세 화면은 `http://127.0.0.1:18001/docs`에서 확인
 
 루트 [compose.sh](compose.sh)는 한글 프로젝트 경로에서 일부 Docker Compose 버전이
 이미지 build context를 찾지 못하는 문제까지 처리하는 프로젝트 공식 실행 진입점
+
+### 5.7 한 명령 전체 리허설
+
+기본 Docker 기동, 공모펀드 잠금 확인, Backend·공식 GET 14건 스모크,
+개발/제출 경계 검사, Agent·Backend 전체 테스트와 문서 검사를 한 번에 실행
+
+```bash
+PYTHON_BIN=/home/haeyeongcho/miniforge3/envs/gaeng3-dev/bin/python \
+  ./rehearse.sh
+```
+
+이미 최신 이미지를 빌드했다면 `--no-build` 사용. 공식 범위 확인 후 로컬 LLM
+흔적을 제거한 제출 후보에서는 `--submission`을 붙이며, 현재 개발 저장소에서는
+관련 파일이 남아 있으므로 이 옵션이 실패하는 것이 정상
 
 ## 6. 영역별 개발 안내
 
