@@ -24,6 +24,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--request-timeout-seconds", type=float, default=60.0)
     parser.add_argument("--response-budget-seconds", type=float, default=60.0)
     parser.add_argument(
+        "--expected-fund-execution-policy",
+        choices=("locked", "public_fund_v1_approved"),
+        default="locked",
+    )
+    parser.add_argument(
         "--output",
         type=Path,
         default=Path("artifacts/evaluation/official-mock-http-v1-30.json"),
@@ -48,6 +53,7 @@ def main(argv: list[str] | None = None) -> int:
             declared_model=arguments.declared_model,
             request_timeout_seconds=arguments.request_timeout_seconds,
             response_budget_seconds=arguments.response_budget_seconds,
+            expected_fund_execution_policy=arguments.expected_fund_execution_policy,
         ).run()
     except (OSError, RuntimeError, TypeError, ValueError, URLError) as error:
         print(f"Official mock HTTP evaluation failed before completion: {error}", file=sys.stderr)

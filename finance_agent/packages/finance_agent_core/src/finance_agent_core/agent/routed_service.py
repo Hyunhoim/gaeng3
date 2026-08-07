@@ -204,6 +204,7 @@ class RoutedFinanceAgent:
         query_plan_provider: QueryPlanProvider | None = None,
         answer_provider: GroundedAnswerProvider | None = None,
         allow_internal_disabled_dataset: bool = False,
+        capability_execution_overrides: set[ProductFamily | str] | None = None,
         record_cache: RecordSnapshotCache | None = None,
         identity_cache: ProductIdentitySnapshotCache | None = None,
     ) -> None:
@@ -226,6 +227,9 @@ class RoutedFinanceAgent:
         )
         self.answer_provider = answer_provider
         self.allow_internal_disabled_dataset = allow_internal_disabled_dataset
+        self.capability_execution_overrides = frozenset(
+            ProductFamily(family) for family in capability_execution_overrides or set()
+        )
 
     def _record_universe(self, database_path: Path, plan: QueryPlan):
         if self._record_cache_enabled:
@@ -538,17 +542,23 @@ class RoutedFinanceAgent:
         return provider_plan
 
     def _require_execution(self, plan: QueryPlan) -> None:
+        uses_approved_override = bool(plan.product_families) and set(
+            plan.product_families
+        ).issubset(
+            self.capability_execution_overrides,
+        )
+        use_internal_contract = self.allow_internal_disabled_dataset or uses_approved_override
         if plan.intent is Intent.AGGREGATE:
-            if self.allow_internal_disabled_dataset:
+            if use_internal_contract:
                 require_internal_evaluation_aggregation(plan)
             else:
                 require_executable_aggregation(plan)
         elif plan.intent is Intent.COMPARE:
-            if self.allow_internal_disabled_dataset:
+            if use_internal_contract:
                 require_internal_evaluation_comparison(plan)
             else:
                 require_executable_comparison(plan)
-        elif self.allow_internal_disabled_dataset:
+        elif use_internal_contract:
             require_internal_evaluation_search(plan)
         else:
             require_executable_search(plan)

@@ -7,6 +7,8 @@ from finance_agent_core.contracts.queryplan import ProductFamily
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+FundExecutionPolicy = Literal["locked", "public_fund_v1_approved"]
+
 
 class Settings(BaseSettings):
     """Environment-backed settings kept outside the HTTP response contract."""
@@ -40,6 +42,10 @@ class Settings(BaseSettings):
         lt=60,
         validation_alias="OFFICIAL_ANSWER_TIMEOUT_SECONDS",
     )
+    fund_execution_policy: FundExecutionPolicy = Field(
+        default="locked",
+        validation_alias="FINANCE_BACKEND_FUND_EXECUTION_POLICY",
+    )
     overseas_etp_db: Path | None = Field(
         default=None,
         validation_alias="FINANCE_DB_OVERSEAS_ETP",
@@ -59,13 +65,23 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def require_development_for_local_provider(self) -> Settings:
-        """Keep the non-HCX provider outside evaluation and production."""
+        """Keep provider and capability opt-ins fail-closed."""
 
         if self.answer_provider == "local_test" and self.app_env != "development":
             raise ValueError(
                 "FINANCE_BACKEND_ANSWER_PROVIDER=local_test is allowed only in development"
             )
+        if self.fund_execution_policy == "public_fund_v1_approved" and self.fund_db is None:
+            raise ValueError("approved public fund execution requires FINANCE_DB_FUND")
         return self
+
+    @property
+    def capability_execution_overrides(self) -> set[ProductFamily]:
+        """Return only the versioned product contracts explicitly approved for execution."""
+
+        if self.fund_execution_policy == "public_fund_v1_approved":
+            return {ProductFamily.FUND}
+        return set()
 
     @property
     def database_paths(self) -> dict[ProductFamily, Path]:

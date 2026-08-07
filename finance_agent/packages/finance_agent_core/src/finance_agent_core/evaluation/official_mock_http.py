@@ -47,6 +47,7 @@ class OfficialHttpHealth(OfficialHttpModel):
     passed: bool
     http_status: int
     ready_product_families: list[str]
+    fund_execution_policy: str | None
     response_bytes: int = Field(ge=0)
     latency_ms: float = Field(ge=0)
     violations: list[str]
@@ -277,7 +278,12 @@ def _answer_mode_is_expected(
     return mode == "deterministic"
 
 
-def validate_health(http_status: int, body: dict[str, Any]) -> list[str]:
+def validate_health(
+    http_status: int,
+    body: dict[str, Any],
+    *,
+    expected_fund_execution_policy: Literal["locked", "public_fund_v1_approved"] = "locked",
+) -> list[str]:
     checks = {
         "http_status_200": http_status == 200,
         "status_ok": body.get("status") == "ok",
@@ -285,6 +291,8 @@ def validate_health(http_status: int, body: dict[str, Any]) -> list[str]:
         "ready_families_exact": body.get("ready_product_families") == _EXPECTED_FAMILIES,
         "missing_families_empty": body.get("missing_product_families") == [],
         "unavailable_families_empty": body.get("unavailable_product_families") == [],
+        "fund_execution_policy_exact": body.get("fund_execution_policy")
+        == expected_fund_execution_policy,
     }
     return [name for name, passed in checks.items() if not passed]
 
@@ -452,6 +460,7 @@ class OfficialMockHttpRunner:
         declared_model: str | None,
         request_timeout_seconds: float = 60.0,
         response_budget_seconds: float = 60.0,
+        expected_fund_execution_policy: Literal["locked", "public_fund_v1_approved"] = "locked",
         requester: HttpRequester = request_json,
     ) -> None:
         if request_timeout_seconds <= 0:
@@ -468,13 +477,18 @@ class OfficialMockHttpRunner:
         self.declared_model = declared_model
         self.request_timeout_seconds = request_timeout_seconds
         self.response_budget_seconds = response_budget_seconds
+        self.expected_fund_execution_policy = expected_fund_execution_policy
         self.requester = requester
 
     def run(self) -> OfficialHttpReport:
         health_status, health_body, health_bytes, health_latency = self.requester(
             f"{self.base_url}/health", self.request_timeout_seconds
         )
-        health_violations = validate_health(health_status, health_body)
+        health_violations = validate_health(
+            health_status,
+            health_body,
+            expected_fund_execution_policy=self.expected_fund_execution_policy,
+        )
         health = OfficialHttpHealth(
             passed=not health_violations,
             http_status=health_status,
@@ -482,6 +496,11 @@ class OfficialMockHttpRunner:
                 health_body.get("ready_product_families")
                 if isinstance(health_body.get("ready_product_families"), list)
                 else []
+            ),
+            fund_execution_policy=(
+                health_body.get("fund_execution_policy")
+                if isinstance(health_body.get("fund_execution_policy"), str)
+                else None
             ),
             response_bytes=health_bytes,
             latency_ms=round(health_latency, 3),

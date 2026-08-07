@@ -84,6 +84,7 @@ def test_validate_health_requires_all_four_ready_families() -> None:
         "ready_product_families": ["bond", "domestic_etp", "overseas_etp", "fund"],
         "missing_product_families": [],
         "unavailable_product_families": [],
+        "fund_execution_policy": "locked",
     }
 
     assert validate_health(200, healthy) == []
@@ -179,6 +180,7 @@ def test_official_http_runner_scores_frozen_suite_over_get_requests() -> None:
                 ],
                 "missing_product_families": [],
                 "unavailable_product_families": [],
+                "fund_execution_policy": "locked",
             }
             return 200, body, 200, 1.0
         parameters = parse_qs(parsed.query)

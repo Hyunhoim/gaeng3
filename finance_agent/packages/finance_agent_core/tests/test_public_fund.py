@@ -25,6 +25,7 @@ from finance_agent_core.answering import (
 )
 from finance_agent_core.config import QualityStatus
 from finance_agent_core.contracts import QueryPlan
+from finance_agent_core.contracts.queryplan import ProductFamily
 from finance_agent_core.domain import DatabaseManifest, NormalizedPublicFundRecord
 from finance_agent_core.evaluation.answer_cli import build_parser as build_answer_parser
 from finance_agent_core.evaluation.answer_runner import (
@@ -265,6 +266,28 @@ def test_routed_fund_comparison_accepts_required_family_prefix(
     assert [item.canonical_field for item in result.comparisons] == [
         "three_month_return_pct",
         "aum",
+    ]
+
+
+def test_routed_fund_execution_requires_explicit_family_override(
+    tmp_path: Path,
+) -> None:
+    path, _, _ = write_comparison_fund_database(tmp_path)
+    question = "공모펀드 KR0000000001과 KR0000000002의 3개월 수익률을 비교해줘"
+
+    locked = RoutedFinanceAgent({"fund": path}).answer(question, "fund-locked-001")
+    approved = RoutedFinanceAgent(
+        {"fund": path},
+        capability_execution_overrides={"fund"},
+    ).answer(question, "fund-approved-001")
+
+    assert locked.status == "clarify"
+    assert approved.status == "executed"
+    assert approved.query_plan is not None
+    assert approved.query_plan.product_families == [ProductFamily.FUND]
+    assert [product.product_id for product in approved.products] == [
+        "KR0000000001",
+        "KR0000000002",
     ]
 
 
