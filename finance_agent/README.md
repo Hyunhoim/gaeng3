@@ -17,6 +17,7 @@
 - 검색 결과, 필드별 근거와 기준일 생성
 - 결과와 최종 답변의 상품명·수치·순위·출처 검증
 - 공개 회귀·blind·red-team·사람 평가를 위한 도구와 기준선
+- field registry에서 제출용 Ontology Turtle 5개를 생성·검사하는 도구
 - 개발 전용 로컬 Qwen과 향후 HyperCLOVA X provider 계약
 
 ### 포함하지 않는 것
@@ -119,6 +120,7 @@ conda run -n gaeng3-dev \
 conda run -n gaeng3-dev python -m pytest -q
 conda run -n gaeng3-dev python -m ruff check .
 conda run -n gaeng3-dev python -m ruff format --check .
+conda run -n gaeng3-dev python scripts/sync-ontology.py --check
 conda run -n gaeng3-dev python scripts/check-docs.py
 ```
 

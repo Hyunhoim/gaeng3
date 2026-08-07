@@ -44,6 +44,7 @@ HCX 모델·endpoint·인증과 크레딧 적용 범위는 남아 있어 기존�
 - [데이터 감사 기준](data-audit.md)
 - [공모펀드 원천 데이터 계약](public-fund-contract.md)
 - [Field Registry와 QueryPlan 계약](contracts.md)
+- [Ontology 제출 계약](ontology.md)
 - [capability matrix](capability-matrix.md)
 - [Backend DTO](backend-contract.md)
 - [HyperCLOVA X provider 계약](hyperclova-provider.md)
@@ -85,6 +86,7 @@ HCX 모델·endpoint·인증과 크레딧 적용 범위는 남아 있어 기존�
 | [공모펀드 원천 데이터 계약](public-fund-contract.md) | 공모펀드 grain·field capability·품질 규칙·실행 승인 조건 | P1 정본 |
 | [공모펀드 계약 감사 노트북](../notebooks/public-fund-contract-audit.ipynb) | product-grain 전수 감사 재현 흐름과 품질 회귀 | 재현 보조 |
 | [Field Registry와 QueryPlan 계약](contracts.md) | 네 상품군 field capability, 서버 QueryPlan, HCX schema subset | P1 정본 |
+| [Ontology 제출 계약](ontology.md) | 공식 Turtle 5개·registry 기반 생성·문법·정합성 검사 | v1.0 구현 |
 | [해외 ETP 핵심 평가 기준선](evaluation.md) | 동결 50문항, oracle·채점 규칙, 최초 holdout과 사후 회귀 결과 | v1.0 정본 |
 | [국내 ETP 핵심 평가 기준선](evaluation-domestic-etp.md) | 국내 ETP 동결 50문항, 품질 계약, local-inference split 결과 | v1.0 정본 |
 | [국내채권 핵심 평가 기준선](evaluation-domestic-bond.md) | 국내채권 동결 50문항, stale·날짜 계약, 로컬 Qwen·답변 결과 | v1.0 정본 |
@@ -195,7 +197,7 @@ HCX 모델·endpoint·인증과 크레딧 적용 범위는 남아 있어 기존�
 - 금융 도메인 QA: v1 개발 40문항 최초 strict 1/40,
   safety·evidence 각각 32/40을 보존하고 v1.2 Router·linker 회귀에서
   모든 계약 40/40·잘못된 실행 0건, dependency pending 13건은 유지
-- 코드 회귀 기준: 전체 pytest 347개, Ruff lint·format, pip dependency check,
+- 코드 회귀 기준: 전체 pytest 350개, Ruff lint·format, pip dependency check,
   wheel과 필수 package data 검사
 - 로컬 Qwen 평가 기준: 동결 50문항에서 최초 미사용 holdout 9/10,
   오류 수정 후 전체 회귀 50/50을 연속 2회 재현
@@ -212,9 +214,9 @@ HCX 모델·endpoint·인증과 크레딧 적용 범위는 남아 있어 기존�
   해외 ETP 실행, 공모펀드 잠금, 역질문·미지원·HTTP 422 스모크 7/7 완료
 - Docker 데이터 준비: 읽기 전용 공식 XLSX에서 네 SQLite를 자동 생성·검증하고
   두 번째 실행에서 네 DB 모두 재사용, 성공 후에만 Backend 시작
-- 다음 기술 통합: 공식 `GET /answer` adapter와 다섯 문자열·전 결과 HTTP 200
-  계약과 기본 55초 외곽 시간 예산은 구현·테스트 완료. 다음으로
-  도메인별 Ontology `.ttl` 5개를 구현. 이후 크레딧·정확한 model ID·endpoint·
+- 다음 기술 통합: 공식 `GET /answer` 계약·기본 55초 외곽 시간 예산과
+  도메인별 Ontology `.ttl` 5개는 구현·테스트 완료. 다음으로 Docker 공식 GET
+  smoke와 전체 baseline을 재검증. 이후 크레딧·정확한 model ID·endpoint·
   인증 계약을 확보하면 HyperCLOVA X HTTP transport를 연결. 주최 측 실행 환경의
   포트·인증·네트워크 정책은 별도 재현 필요
 

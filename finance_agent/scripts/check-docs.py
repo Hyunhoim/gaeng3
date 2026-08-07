@@ -43,7 +43,7 @@ PRODUCT_COMPARE_SUITE = (
 
 LINK_PATTERN = re.compile(r"!?\[[^\]]*]\((?:<(?P<angle>[^>]+)>|(?P<plain>[^)\s]+))\)")
 SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
-FROZEN_PYTEST_PASSED = 347
+FROZEN_PYTEST_PASSED = 350
 
 REQUIRED_INDEX_TARGETS = {
     "project-baseline.md",
@@ -71,6 +71,7 @@ REQUIRED_INDEX_TARGETS = {
     "comparison-engine-design.md",
     "document-rag.md",
     "backend-contract.md",
+    "ontology.md",
     "human-evaluation.md",
     "milestones/2026-07-29-agent-core-v0.1.md",
     "../evaluation/README.md",
@@ -478,6 +479,7 @@ def _readiness_files() -> list[Path]:
         PROJECT_ROOT / "scripts" / "check-docs.py",
         PROJECT_ROOT / "scripts" / "run-hcx-contract-e2e.py",
         PROJECT_ROOT / "scripts" / "run-answer-adapter-contract.py",
+        PROJECT_ROOT / "scripts" / "sync-ontology.py",
         package_root / "README.md",
         package_root / "pyproject.toml",
         *AREA_READMES,
@@ -493,6 +495,7 @@ def _readiness_files() -> list[Path]:
         if path.is_file() and path.suffix in {".py", ".json", ".yaml"}
     )
     files.update((package_root / "tests").rglob("*.py"))
+    files.update((REPOSITORY_ROOT / "ontology").glob("*.ttl"))
     files.update((PROJECT_ROOT / "requirements").rglob("*.txt"))
     files.update(BASELINE_ROOT.glob("*.json"))
     files.update(
@@ -506,7 +509,10 @@ def _readiness_files() -> list[Path]:
 def _readiness_tree_sha256(paths: list[Path]) -> str:
     digest = hashlib.sha256()
     for path in paths:
-        relative = path.relative_to(PROJECT_ROOT).as_posix()
+        try:
+            relative = path.relative_to(PROJECT_ROOT).as_posix()
+        except ValueError:
+            relative = f"../{path.relative_to(REPOSITORY_ROOT).as_posix()}"
         digest.update(relative.encode("utf-8"))
         digest.update(b"\0")
         digest.update(_sha256(path).encode("ascii"))

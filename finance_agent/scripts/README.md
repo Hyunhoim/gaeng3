@@ -11,6 +11,7 @@ LLM 실행 도구를 보관하는 곳
 | 파일 | 역할 |
 | --- | --- |
 | `check-docs.py` | 문서 링크, 제안서 구조, 평가 baseline, source-freeze 검사 |
+| `sync-ontology.py` | field registry에서 공식 Turtle 5개 생성·문법·정합성 검사 |
 | `generate-bond-suite.py` | 국내채권 평가 질문 세트 생성 |
 | `generate-domestic-etp-suite.py` | 국내 ETF·ETN 평가 질문 세트 생성 |
 | `generate-fund-suite.py` | 공모펀드 평가 질문 세트 생성 |
@@ -23,6 +24,7 @@ LLM 실행 도구를 보관하는 곳
 
 - 저장소의 `finance_agent/` 디렉터리에서 실행
 - 생성 결과는 Git에 커밋하지 않고 `artifacts/` 아래에 저장
+- 제출용 `ontology/*.ttl`은 예외적으로 Git에 보관하며 registry 변경 후 재생성
 - 동결 질문이나 baseline을 다시 만들기 전에 관련 평가 프로토콜 확인
 - 로컬 Qwen은 공식 평가·제출용이 아닌 내부 개발 도구로만 사용
 

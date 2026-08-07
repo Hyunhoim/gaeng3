@@ -63,6 +63,7 @@ Python 개발 의존성:
 /home/haeyeongcho/miniforge3/envs/gaeng3-dev/bin/pytest
 /home/haeyeongcho/miniforge3/envs/gaeng3-dev/bin/python -m pip check
 /home/haeyeongcho/miniforge3/envs/gaeng3-dev/bin/python scripts/check-docs.py
+/home/haeyeongcho/miniforge3/envs/gaeng3-dev/bin/python scripts/sync-ontology.py --check
 SOURCE_DATE_EPOCH=1785283200 \
   /home/haeyeongcho/miniforge3/envs/gaeng3-dev/bin/python -m pip wheel \
   --no-deps \

@@ -36,7 +36,7 @@ flowchart LR
     API -.-> WEB
     OFFICIAL -.-> CLIENT
 
-    REGISTRY["Field Registry<br/>현재 의미 정본"] -.-> TTL["Ontology Turtle 5개<br/>구현·정합성 검사 대기"]
+    REGISTRY["Field Registry<br/>현재 의미 정본"] --> TTL["Ontology Turtle 5개<br/>생성·문법·정합성 검사 완료"]
 
     CORPUS["승인된 외부 문서 corpus<br/>수집·검수 대기"] -.-> RAG["BM25 / SQLite FTS"]
     RAG -.-> EVIDENCE
@@ -53,6 +53,7 @@ flowchart LR
 - 프레임워크 독립 Backend DTO와 service adapter
 - FastAPI `/health`·`/answer`, 안전한 422 DTO와 실제 SQLite 로컬 HTTP smoke test
 - 공식 `GET /answer` 다섯 문자열 adapter와 전 결과 HTTP 200 계약
+- 도메인별 Ontology Turtle 5개와 field registry exact-match 검사
 - Ubuntu SSH Docker build·데이터 준비·Backend HTTP smoke
 - HyperCLOVA X fake transport·오류 계약
 
@@ -60,7 +61,6 @@ flowchart LR
 
 - Next.js 실제 화면
 - 공식 `GET /answer`의 공개 서버·평가 client 통신 재현
-- 도메인별 Ontology Turtle 5개와 field registry 정합성 검사
 - HyperCLOVA X 실제 endpoint·인증
 - 승인된 실제 비정형 금융 문서
 - public 배포·평가 기간 API 운영

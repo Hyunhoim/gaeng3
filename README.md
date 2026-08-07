@@ -28,11 +28,12 @@ ETF·ETN, 공모펀드를 조회·비교·계산한 뒤 근거와 기준일을 �
 | 영역 | 현재 상태 |
 | --- | --- |
 | 데이터 | 공식 XLSX에서 네 상품군 SQLite를 자동 생성·검증하는 경로 구현 |
+| Ontology | 공식 파일명 Turtle 5개를 field registry에서 자동 생성·문법·정합성 검사 |
 | AI Agent | 검색·비교·집계·근거 생성·결과 검증 구현 |
 | Backend | FastAPI `GET /health`, 내부용 `POST /answer`, 평가용 `GET /answer` 구현 |
 | Frontend | 동료의 `nextjs-frontend/` 코드 합류 후 연결 예정 |
 | LLM | 로컬 Qwen은 내부 개발에만 사용, HyperCLOVA X는 크레딧·실제 API 규격 확보 후 연결 |
-| 자동 검증 | AI Core pytest 347개와 Backend·문서·Docker 검증 경로 관리 |
+| 자동 검증 | AI Core pytest 350개와 Backend·문서·Docker 검증 경로 관리 |
 
 세부 기능과 평가 결과는 [AI Agent 작업공간](finance_agent/README.md)에서 관리
 
@@ -58,6 +59,7 @@ gaeng3/
 ├── compose.sh                        # 전체 Docker 실행 진입점
 ├── docker-compose.yml               # 현재 data-init·Backend 서비스 구성
 ├── nextjs-frontend/                 # Next.js 화면(합류 예정)
+├── ontology/                        # 제출용 공통·상품군별 Turtle 5개
 ├── fastapi_backend/                 # FastAPI API·Docker·HTTP 테스트
 │   └── README.md                     # Backend 개발 안내
 ├── finance_agent/                   # 검색·검증·답변 생성 Agent Core
@@ -186,6 +188,7 @@ API 명세 화면은 `http://127.0.0.1:18001/docs`에서 확인
 | 전체 시스템 실행 | 이 README | 저장소 루트 |
 | FastAPI·Docker·HTTP 계약 | [Backend README](fastapi_backend/README.md) | 저장소 루트 또는 `fastapi_backend/` |
 | Agent·검색·검증·평가 | [AI Agent README](finance_agent/README.md) | `finance_agent/` |
+| Ontology 생성·검사 | [Ontology 제출 계약](finance_agent/docs/ontology.md) | `finance_agent/` |
 | 팀 문서·기술 제안서 | [문서 안내](docs/README.md) | `docs/` |
 | 기술 제안서 작성 | [기술 제안서 허브](docs/proposal/README.md) | `docs/proposal/` |
 | 협업·커밋·PR | [CONTRIBUTING](CONTRIBUTING.md) | 저장소 전체 |

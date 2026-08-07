@@ -52,7 +52,7 @@
 | 11 | 금융 도메인 QA 실험 | 담당자 작성 40문항 hash 검증·단계별 E2E·Q002 SEARCH gold | v1.2 사후 회귀 40/40·잘못된 실행 0건 |
 | 12 | 제출용 모델 경계 | 로컬 provider 제거 검사·투명한 개발·제출 분리 | release gate 문서화·제출 범위 서면 확인 대기 |
 | 13 | 공식 평가 API adapter | `GET /answer`·다섯 문자열·전 결과 HTTP 200·60초 내부 예산 | route·DTO·상태·오류·55초 외곽 예산 완료 |
-| 14 | 도메인별 Ontology | Turtle 5개·field registry 정합성·문법 검사 | 설명회 계약 확인·구현 대기 |
+| 14 | 도메인별 Ontology | Turtle 5개·field registry 정합성·문법 검사 | 5개 생성·RDFLib 문법·registry exact-match 완료 |
 
 ## 2. 평가 해석 원칙
 
@@ -174,9 +174,9 @@ Backend `/answer` service adapter 결과:
 
 ## 4. 내부 완료 QA
 
-- pytest `347 passed`
+- pytest `350 passed`
 - Ruff lint와 format 통과
-- 문서 검사 `53 Markdown files`, `31 evaluation baselines` 통과
+- 문서 검사 `54 Markdown files`, `31 evaluation baselines` 통과
 - `pip check` 통과
 - build isolation 없이 wheel 생성과 신규 JSON package data 포함 여부 통과
 - `git diff --check` 통과

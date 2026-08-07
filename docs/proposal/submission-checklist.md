@@ -27,8 +27,8 @@
 - [ ] `.env.example`에 변수명만 제공하고 credential은 제외
 - [ ] 원천 데이터·DB 생성과 애플리케이션 시작 순서 문서화
 - [ ] clean checkout에서 build·test·start 재현
-- [ ] `ontology/common.ttl`, `bond_kr.ttl`, `etf_kr.ttl`, `etf_gl.ttl`, `fund_pub.ttl` 제출
-- [ ] Ontology Turtle 문법과 field registry 정합성 자동 검사
+- [x] `ontology/common.ttl`, `bond_kr.ttl`, `etf_kr.ttl`, `etf_gl.ttl`, `fund_pub.ttl` 생성
+- [x] Ontology Turtle 문법과 field registry 정합성 자동 검사
 - [ ] 비밀정보, 로컬 경로, 모델 weight, `artifacts/`가 Git에 없는지 확인
 - [ ] 공식 제출 범위 확정 후 로컬 LLM provider·설정·스크립트·의존성 제거
 - [ ] Git 이력을 재작성하지 않고 개발 이력과 제출 경로를 투명하게 분리

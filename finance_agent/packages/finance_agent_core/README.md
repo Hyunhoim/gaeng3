@@ -70,6 +70,7 @@ Answer Verifier, 결정론적 evidence compiler와 safe fallback으로 구성한
 - [`queryplan.py`](src/finance_agent_core/contracts/queryplan.py): 서버의 엄격한 구조·의미 검증
 - [`queryplan.hcx.schema.json`](src/finance_agent_core/contracts/queryplan.hcx.schema.json): HyperCLOVA X Structured Outputs용 보수적 schema
 - [`capability_matrix.json`](src/finance_agent_core/config/capability_matrix.json): 상품군·intent별 실행·통제 범위
+- [`ontology.py`](src/finance_agent_core/ontology.py): field registry 기반 공식 Turtle 5개 결정론적 생성
 - [`backend.py`](src/finance_agent_core/contracts/backend.py): Backend request·response·citation·fallback DTO
 - [`backend_adapter.py`](src/finance_agent_core/agent/backend_adapter.py): HTTP status·안전한 ERROR DTO·fallback service 경계
 - [계약 설명](../../docs/contracts.md): 설계 근거, 첫 vertical slice 예시, 확장 규칙
@@ -79,6 +80,7 @@ Answer Verifier, 결정론적 evidence compiler와 safe fallback으로 구성한
 - [공통 COMPARE 계약](../../docs/comparison-engine-design.md): exact identity·필드·통화·기준일·stale
 - [교차 상품군 SEARCH·답변 계약](../../docs/cross-family-search.md): 상품군별 계획·병렬 실행·evidence 격리 생성·전체 fallback
 - [금융 도메인 QA 실험](../../docs/evaluation-domain-qa.md): 담당자 작성 40문항의 hash 검증·행동 기능·단계별 E2E 채점
+- [Ontology 제출 계약](../../docs/ontology.md): 파일 역할·생성·문법·registry 정합성 검사
 - [사람 평가 rubric](../../docs/human-evaluation.md): 독립 reviewer·critical gate
 - [internal-red-team-v1](../../docs/evaluation-internal-red-team.md): 네 상품군 전체 E2E·안전 회귀
 
