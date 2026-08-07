@@ -170,6 +170,8 @@
 - Docker `data-init`은 읽기 전용 공식 XLSX에서 네 SQLite를 자동 생성·검증하고,
   같은 원천과 registry에서는 재사용한다. 모든 DB 준비가 성공한 뒤에만 Backend를
   시작하며 Backend에는 생성 volume을 읽기 전용으로 연결한다.
+- 새 Docker 이미지에서 내부 HTTP 시나리오 7/7과 공식 `GET /answer` 다섯 문자열
+  1/1을 통과했다. 공식 채권 예시 1회 응답은 943.605ms이며 운영 SLO가 아니다.
 
 ## 3. 변경할 수 없는 공식 제약
 

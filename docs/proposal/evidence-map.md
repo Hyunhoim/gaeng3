@@ -44,6 +44,7 @@
 | SEARCH·AGGREGATE 결과 지문 | 8/8 | [성능 기준선](../../finance_agent/docs/evaluation-search-aggregate-performance.md) | 단일 개발 장비 |
 | HCX API 없는 전체 계약 | 8/8 | [HCX provider](../../finance_agent/docs/hyperclova-provider.md) | 실제 API 성능 아님 |
 | Backend service adapter | 12/12 | [Backend 계약](../../finance_agent/docs/backend-contract.md) | 실제 HTTP route 아님 |
+| 공식 GET Docker smoke | 1/1, 단일 채권 예시 943.605ms | [Backend README](../../fastapi_backend/README.md) | 개발 서버 1회, 부하·운영 SLO 아님 |
 
 ## 완료되지 않은 주장
 

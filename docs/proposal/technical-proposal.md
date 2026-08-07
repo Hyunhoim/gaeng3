@@ -157,6 +157,8 @@ BM25/SQLite FTS 기반 문서 검색의 적재·필터·출처·기준일 계약
   잘못된 control 실행·오류 0건
 - HyperCLOVA X API 없는 provider·Agent 계약 8/8
 - Backend service adapter 오류·fallback·비노출 계약 12/12
+- 새 Docker 이미지의 내부 HTTP 7/7과 공식 GET 다섯 문자열 1/1,
+  단일 채권 예시 응답 943.605ms
 - 설명회 현장 자료에서 평가 API 다섯 문자열 필드·미응답 HTTP 200·60초 권장과
   도메인별 Ontology 제출 요구 확인
 

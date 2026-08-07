@@ -211,12 +211,13 @@ HCX 모델·endpoint·인증과 크레딧 적용 범위는 남아 있어 기존�
 - 다음 외부 게이트: 금융 도메인 담당자의 external blind 100문항·비공개 정답키,
   승인 corpus, 실제 사람 평가
 - Ubuntu SSH Docker 통합: 실제 이미지 build, 네 DB health, 채권·국내 ETP·
-  해외 ETP 실행, 공모펀드 잠금, 역질문·미지원·HTTP 422 스모크 7/7 완료
+  해외 ETP 실행, 공모펀드 잠금, 역질문·미지원·HTTP 422 스모크 7/7과
+  공식 GET 다섯 문자열 1/1 완료
 - Docker 데이터 준비: 읽기 전용 공식 XLSX에서 네 SQLite를 자동 생성·검증하고
   두 번째 실행에서 네 DB 모두 재사용, 성공 후에만 Backend 시작
-- 다음 기술 통합: 공식 `GET /answer` 계약·기본 55초 외곽 시간 예산과
-  도메인별 Ontology `.ttl` 5개는 구현·테스트 완료. 다음으로 Docker 공식 GET
-  smoke와 전체 baseline을 재검증. 이후 크레딧·정확한 model ID·endpoint·
+- 다음 기술 통합: 공식 `GET /answer` 계약·기본 55초 외곽 시간 예산,
+  Docker 공식 GET smoke와 도메인별 Ontology `.ttl` 5개는 구현·테스트 완료.
+  이후 크레딧·정확한 model ID·endpoint·
   인증 계약을 확보하면 HyperCLOVA X HTTP transport를 연결. 주최 측 실행 환경의
   포트·인증·네트워크 정책은 별도 재현 필요
 

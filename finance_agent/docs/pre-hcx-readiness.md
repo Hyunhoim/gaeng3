@@ -182,7 +182,7 @@ Backend `/answer` service adapter 결과:
 - `git diff --check` 통과
 - source·test·문서·baseline·protocol tree SHA-256 manifest 검증
 - 공식 XLSX 4종에서 Docker volume의 SQLite 4개를 자동 생성하고 두 번째 실행에서
-  모두 재사용, Backend health와 실제 HTTP 스모크 7/7 통과
+  모두 재사용, Backend health와 내부 HTTP 스모크 7/7·공식 GET 1/1 통과
 
 source freeze는
 `evaluation/protocols/pre-hcx-readiness-v1.manifest.json`에 보존한다. 외부
