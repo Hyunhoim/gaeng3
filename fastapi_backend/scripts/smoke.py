@@ -4,7 +4,7 @@ import argparse
 import json
 import sys
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -191,6 +191,27 @@ OFFICIAL_CASES = (
 )
 
 
+def smoke_cases(fund_execution_policy: str) -> tuple[SmokeCase, ...]:
+    if fund_execution_policy == "locked":
+        return CASES
+    if fund_execution_policy != "public_fund_v1_approved":
+        raise ValueError(f"unsupported fund execution policy: {fund_execution_policy}")
+    return tuple(
+        replace(
+            case,
+            case_id="docker-smoke-fund-approved-001",
+            expected_status="success",
+            expected_answer_mode="deterministic",
+            expected_product_count=5,
+            expected_dataset="fund",
+            expected_clarification_code=None,
+        )
+        if case.case_id == "docker-smoke-fund-locked-001"
+        else case
+        for case in CASES
+    )
+
+
 def _request_json(
     url: str,
     *,
@@ -228,7 +249,12 @@ def _expect(errors: list[str], condition: bool, message: str) -> None:
         errors.append(message)
 
 
-def validate_health(http_status: int, body: dict[str, Any]) -> list[str]:
+def validate_health(
+    http_status: int,
+    body: dict[str, Any],
+    *,
+    expected_fund_execution_policy: str | None = None,
+) -> list[str]:
     errors: list[str] = []
     _expect(errors, http_status == 200, f"expected HTTP 200, got {http_status}")
     _expect(errors, body.get("status") == "ok", "health status must be ok")
@@ -248,6 +274,12 @@ def validate_health(http_status: int, body: dict[str, Any]) -> list[str]:
         body.get("unavailable_product_families") == [],
         "unavailable families are present",
     )
+    if expected_fund_execution_policy is not None:
+        _expect(
+            errors,
+            body.get("fund_execution_policy") == expected_fund_execution_policy,
+            "fund execution policy differs",
+        )
     return errors
 
 
@@ -447,6 +479,11 @@ def build_parser() -> argparse.ArgumentParser:
         default="deterministic",
     )
     parser.add_argument("--provider-model")
+    parser.add_argument(
+        "--expected-fund-execution-policy",
+        choices=("locked", "public_fund_v1_approved"),
+        default="locked",
+    )
     parser.add_argument("--output", type=Path)
     return parser
 
@@ -459,15 +496,20 @@ def main(argv: list[str] | None = None) -> int:
     if arguments.success_answer_mode != "deterministic" and not arguments.provider_model:
         parser.error("LLM answer modes require --provider-model")
     base_url = arguments.base_url.rstrip("/")
+    cases = smoke_cases(arguments.expected_fund_execution_policy)
     started_at = datetime.now(UTC)
     try:
         health_status, health_body, health_bytes, health_duration = _request_json(
             f"{base_url}/health",
             timeout=arguments.timeout,
         )
-        health_errors = validate_health(health_status, health_body)
+        health_errors = validate_health(
+            health_status,
+            health_body,
+            expected_fund_execution_policy=arguments.expected_fund_execution_policy,
+        )
         results = []
-        for case in CASES:
+        for case in cases:
             http_status, body, response_bytes, duration_ms = _request_json(
                 f"{base_url}/answer",
                 timeout=arguments.timeout,
@@ -526,6 +568,7 @@ def main(argv: list[str] | None = None) -> int:
         "llm_provider_expected": arguments.provider_model is not None,
         "expected_success_answer_mode": arguments.success_answer_mode,
         "expected_provider_model": arguments.provider_model,
+        "expected_fund_execution_policy": arguments.expected_fund_execution_policy,
         "health": {
             "passed": not health_errors,
             "http_status": health_status,
@@ -537,8 +580,8 @@ def main(argv: list[str] | None = None) -> int:
         "official_answers": official_results,
         "metrics": {
             "backend_passed": passed_cases,
-            "backend_failed": len(results) - passed_cases,
-            "backend_total": len(results),
+            "backend_failed": len(cases) - passed_cases,
+            "backend_total": len(cases),
             "official_passed": sum(item["passed"] for item in official_results),
             "official_failed": sum(not item["passed"] for item in official_results),
             "official_total": len(official_results),
@@ -546,7 +589,7 @@ def main(argv: list[str] | None = None) -> int:
         "cases": results,
         "passed": (
             not health_errors
-            and passed_cases == len(results)
+            and passed_cases == len(cases)
             and all(item["passed"] for item in official_results)
         ),
     }

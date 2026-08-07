@@ -1,5 +1,8 @@
+import pytest
+
 from scripts.smoke import (
     SmokeCase,
+    smoke_cases,
     validate_answer,
     validate_health,
     validate_official_answer,
@@ -30,6 +33,59 @@ def test_validate_health_accepts_ready_four_family_service() -> None:
         )
         == []
     )
+
+
+def test_validate_health_checks_declared_fund_execution_policy() -> None:
+    body = {
+        "status": "ok",
+        "configured_product_families": [
+            "bond",
+            "domestic_etp",
+            "overseas_etp",
+            "fund",
+        ],
+        "ready_product_families": [
+            "bond",
+            "domestic_etp",
+            "overseas_etp",
+            "fund",
+        ],
+        "missing_product_families": [],
+        "unavailable_product_families": [],
+        "fund_execution_policy": "locked",
+    }
+
+    assert (
+        validate_health(
+            200,
+            body,
+            expected_fund_execution_policy="locked",
+        )
+        == []
+    )
+    assert "fund execution policy differs" in validate_health(
+        200,
+        body,
+        expected_fund_execution_policy="public_fund_v1_approved",
+    )
+
+
+def test_smoke_cases_switch_only_fund_expectation_for_approved_policy() -> None:
+    locked = smoke_cases("locked")
+    approved = smoke_cases("public_fund_v1_approved")
+    locked_fund = next(case for case in locked if "fund" in case.case_id)
+    approved_fund = next(case for case in approved if "fund" in case.case_id)
+
+    assert locked_fund.expected_status == "clarification"
+    assert locked_fund.expected_clarification_code == "capability_executable"
+    assert approved_fund.case_id == "docker-smoke-fund-approved-001"
+    assert approved_fund.expected_status == "success"
+    assert approved_fund.expected_product_count == 5
+    assert approved_fund.expected_dataset == "fund"
+    assert approved_fund.expected_clarification_code is None
+
+    with pytest.raises(ValueError, match="unsupported fund execution policy"):
+        smoke_cases("unsafe")
 
 
 def test_validate_answer_checks_success_evidence() -> None:
