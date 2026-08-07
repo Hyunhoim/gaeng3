@@ -1,0 +1,125 @@
+{
+  "schema_version": "1.0",
+  "suite_id": "briefing-examples-v1-8",
+  "suite_version": "1.0",
+  "status": "official_examples_public_not_blind",
+  "source": {
+    "title": "2026-08-06 오프라인 설명회 평가 질의 예시",
+    "artifact_name": "KakaoTalk_Photo_2026-08-06-15-24-27 011.jpeg",
+    "sha256": "1f06e7dbbbe7505516ff7f7dc0524cd45d86e8005bb49ae248e04526da877437",
+    "interpretation": "official_distribution_example_not_evaluation_item"
+  },
+  "data": {
+    "overseas_etp": {
+      "database_sha256": "eee9009ca741713a9a61e498cd5ed8366836d754c7d0c2dbd74ed7e456a2ebbe",
+      "manifest_sha256": "5dd159ade2353154ed8d3d32068dd512cb2b3becba39972aa0dabff0edd50771"
+    },
+    "domestic_etp": {
+      "database_sha256": "a91bfc713b88e9ba1e7da27508857cbe5ea200c4d7821d0b4fee7d9922684484",
+      "manifest_sha256": "2e52b161a260fa19eab50e8281f04f8617ee1ee69d618b19bd624af4635fca97"
+    },
+    "bond": {
+      "database_sha256": "40265aa326d63244727294ac29c1cd38c898f05b6a80dfd51fd8ac38e08764bc",
+      "manifest_sha256": "d724d99e9ffd24148144b3534795d0d545e0ebff9d01509966f6ebbb218f8312"
+    },
+    "fund": {
+      "database_sha256": "99fac786e5be0ec5a7a53e11e1bd3bbccd5b37ab15243ecbf8b864a85b375ca4",
+      "manifest_sha256": "be83a616d033db2328d231499d1f0492323d02bace4f153ad3da4860a0d10bcd"
+    }
+  },
+  "cases": [
+    {
+      "id": "briefing-examples-v1-001",
+      "answerability": "answerable",
+      "difficulty": "low",
+      "question": "현재 판매 가능한 원화채권 중 AA- 이상 종목 알려줘",
+      "target_families": ["bond"],
+      "expected_interaction_intents": ["search"],
+      "required_capabilities": [
+        "structured_product_search",
+        "current_sellability",
+        "ordered_credit_rating"
+      ]
+    },
+    {
+      "id": "briefing-examples-v1-002",
+      "answerability": "answerable",
+      "difficulty": "medium",
+      "question": "국민성장펀드의 구조와 투자전략 동향 등 찾아서 알려줘",
+      "target_families": ["fund"],
+      "expected_interaction_intents": ["search", "detail", "explain"],
+      "required_capabilities": [
+        "entity_resolution",
+        "document_rag",
+        "temporal_document_grounding"
+      ]
+    },
+    {
+      "id": "briefing-examples-v1-003",
+      "answerability": "answerable",
+      "difficulty": "medium",
+      "question": "캠브리콘이 편입된 중국 반도체 ETF를 알려줘",
+      "target_families": ["overseas_etp", "domestic_etp"],
+      "expected_interaction_intents": ["search"],
+      "required_capabilities": [
+        "entity_resolution",
+        "portfolio_holdings_relation",
+        "structured_product_search"
+      ]
+    },
+    {
+      "id": "briefing-examples-v1-004",
+      "answerability": "answerable",
+      "difficulty": "high",
+      "question": "최근 6개월 동안 우주항공 테마와 연결 이력이 있는 관련 ETF를 정리해줘",
+      "target_families": ["domestic_etp", "overseas_etp"],
+      "expected_interaction_intents": ["search", "explain"],
+      "required_capabilities": [
+        "temporal_theme_relation",
+        "portfolio_history",
+        "multi_source_evidence"
+      ]
+    },
+    {
+      "id": "briefing-examples-v1-005",
+      "answerability": "answerable",
+      "difficulty": "high",
+      "question": "에코프로의 자회사를 편입한 ETF 중 순자산이 큰 상품의 위험요인 알려줘",
+      "target_families": ["domestic_etp"],
+      "expected_interaction_intents": ["search", "explain"],
+      "required_capabilities": [
+        "corporate_relation",
+        "portfolio_holdings_relation",
+        "aum_ranking",
+        "risk_document_grounding"
+      ]
+    },
+    {
+      "id": "briefing-examples-v1-006",
+      "answerability": "unanswerable",
+      "difficulty": "not_applicable",
+      "question": "신용등급 AAAA인 채권 찾아줘",
+      "target_families": ["bond"],
+      "expected_interaction_intents": ["search", "clarify", "unsupported"],
+      "required_capabilities": ["invalid_enum_rejection", "safe_unanswerable"]
+    },
+    {
+      "id": "briefing-examples-v1-007",
+      "answerability": "unanswerable",
+      "difficulty": "not_applicable",
+      "question": "Kimi 관련 투자 상품 있어?",
+      "target_families": [],
+      "expected_interaction_intents": ["search", "clarify", "unsupported"],
+      "required_capabilities": ["entity_resolution", "safe_unanswerable"]
+    },
+    {
+      "id": "briefing-examples-v1-008",
+      "answerability": "unanswerable",
+      "difficulty": "not_applicable",
+      "question": "KODEX AI로봇 ETF 정보 알려줘",
+      "target_families": ["domestic_etp"],
+      "expected_interaction_intents": ["search", "detail", "clarify", "unsupported"],
+      "required_capabilities": ["exact_product_identity", "safe_unanswerable"]
+    }
+  ]
+}

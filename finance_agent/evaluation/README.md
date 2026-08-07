@@ -20,6 +20,7 @@ DB, 원천 XLSX, 전체 report, 모델 가중치는 계속 `artifacts/` 또는 �
 
 | 파일 | 범위 |
 | --- | --- |
+| [설명회 공개 예시 최초 관측](baselines/briefing-examples-v1-initial.json) | 답변 가능 5개·답변 불가 3개의 Router→Oracle→Verifier 현재 도달 범위 |
 | [해외 ETP QueryPlan](baselines/overseas-etp-queryplan-v1.json) | 로컬 Qwen hybrid parser 사후 회귀 |
 | [국내 ETP QueryPlan](baselines/domestic-etp-queryplan-v1.json) | development와 최초 local-inference holdout |
 | [국내 ETP 답변](baselines/domestic-etp-answer-v1.json) | 최소권한 grounded answer |
@@ -114,6 +115,13 @@ strict 1/40·safety 32/40은 유지되며 E2 사후 회귀의 비교점이다.
 회귀다. strict·route·safety·evidence·answer를 40/40, control의
 잘못된 실행·오류를 0건으로 기록했다. 개선에 사용한 개발 세트이므로
 독립 blind·LLM 생성 품질·공식 평가 점수로 해석하지 않는다.
+
+`briefing-examples-v1-8`은 2026-08-06 설명회 화면에 공개된 난이도별 답변 가능
+예시 5개와 답변 불가 예시 3개를 그대로 보존한 개발 회귀다. 최초 관측은 엄격
+1/8, 답변 가능 실행 0/5, 답변 불가 안전 처리 2/3이다. 특히 존재하지 않는
+`AAAA` 신용등급이 조건 없이 전체 채권 검색으로 실행된 문제를 숨기지 않고 기록한다.
+이 질문들은 실제 평가 문항이 아니며, 공개 후 수정 결과도 blind 성능으로 해석하지
+않는다.
 
 라우팅 v1은 AGGREGATE 미지원, v2는 COMPARE가 공모펀드에만 열렸던 당시의
 봉인 이력이다. 현재 capability 정본은 원본을 수정하지 않고 별도

@@ -43,7 +43,7 @@ PRODUCT_COMPARE_SUITE = (
 
 LINK_PATTERN = re.compile(r"!?\[[^\]]*]\((?:<(?P<angle>[^>]+)>|(?P<plain>[^)\s]+))\)")
 SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
-FROZEN_PYTEST_PASSED = 338
+FROZEN_PYTEST_PASSED = 341
 
 REQUIRED_INDEX_TARGETS = {
     "project-baseline.md",
@@ -76,6 +76,7 @@ REQUIRED_INDEX_TARGETS = {
     "../evaluation/README.md",
 }
 REQUIRED_BASELINES = {
+    "briefing-examples-v1-initial.json",
     "overseas-etp-queryplan-v1.json",
     "domestic-etp-queryplan-v1.json",
     "domestic-etp-answer-v1.json",
@@ -402,6 +403,7 @@ def _check_baseline(path: Path) -> list[str]:
         "domain_qa_initial_observed",
         "domain_qa_gold_observed",
         "domain_qa_router_improved",
+        "briefing_examples_initial_observed",
     }:
         if (
             not isinstance(total, int)

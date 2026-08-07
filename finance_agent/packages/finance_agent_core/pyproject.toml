@@ -31,6 +31,7 @@ finance-benchmark-search-aggregate = "finance_agent_core.evaluation.search_aggre
 finance-pre-hcx = "finance_agent_core.evaluation.pre_hcx_cli:main"
 finance-evaluate-internal-red-team = "finance_agent_core.evaluation.red_team_cli:main"
 finance-evaluate-domain-qa = "finance_agent_core.evaluation.domain_qa_cli:main"
+finance-evaluate-briefing-examples = "finance_agent_core.evaluation.briefing_examples_cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
