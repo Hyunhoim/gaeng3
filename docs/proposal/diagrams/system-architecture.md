@@ -1,16 +1,17 @@
 # 금융상품 Agent 시스템 구성도
 
-상태: 초안 v0.2
+상태: 초안 v0.3 · 설명회 계약 반영
 
-기준일: 2026-08-05
+기준일: 2026-08-07
 
 실선은 Agent Core와 FastAPI에서 검증된 경로, 점선은 외부 통합이 남은 경로다.
 
 ```mermaid
 flowchart LR
     U["사용자"] -.-> WEB["Next.js UI<br/>통합 대기"]
-    WEB -.-> API["FastAPI POST /answer<br/>로컬 통합 완료"]
-    CLIENT["평가 서버 · HTTP client"] --> API
+    WEB -.-> API["내부 FastAPI POST /answer<br/>로컬 통합 완료"]
+    CLIENT["주최 측 평가 client"] -.-> OFFICIAL["공식 GET /answer adapter<br/>다섯 문자열 · 구현 대기"]
+    OFFICIAL -.-> REQ
     API --> REQ["BackendAgentRequest"]
 
     REQ --> ROUTER["Fail-closed Intent Router"]
@@ -31,7 +32,11 @@ flowchart LR
     FALLBACK --> DTO
 
     DTO --> API
-    API --> CLIENT
+    DTO -.-> OFFICIAL
+    API -.-> WEB
+    OFFICIAL -.-> CLIENT
+
+    REGISTRY["Field Registry<br/>현재 의미 정본"] -.-> TTL["Ontology Turtle 5개<br/>구현·정합성 검사 대기"]
 
     CORPUS["승인된 외부 문서 corpus<br/>수집·검수 대기"] -.-> RAG["BM25 / SQLite FTS"]
     RAG -.-> EVIDENCE
@@ -47,14 +52,17 @@ flowchart LR
 - 상품군별 evidence-only grounded answer·Answer Verifier·교차 검증·전체 deterministic fallback
 - 프레임워크 독립 Backend DTO와 service adapter
 - FastAPI `/health`·`/answer`, 안전한 422 DTO와 실제 SQLite 로컬 HTTP smoke test
+- Ubuntu SSH Docker build·데이터 준비·Backend HTTP smoke
 - HyperCLOVA X fake transport·오류 계약
 
 ## 외부 통합 대기
 
 - Next.js 실제 화면
+- 공식 `GET /answer` 다섯 문자열 adapter와 전 결과 HTTP 200 계약
+- 도메인별 Ontology Turtle 5개와 field registry 정합성 검사
 - HyperCLOVA X 실제 endpoint·인증
 - 승인된 실제 비정형 금융 문서
-- Ubuntu SSH Docker build·배포·공개 API 운영
+- public 배포·평가 기간 API 운영
 
 최종 제안서에서는 통합 완료 후 점선을 실선으로 바꾸고 실제 배포 구성과
 모니터링 계층을 반영한다.

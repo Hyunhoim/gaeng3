@@ -2,15 +2,16 @@
 
 상태: 활성
 
-기준일: 2026-08-06
+기준일: 2026-08-07
 
 공식 과제 소개자료 7페이지의 예선 제출 항목과 변경 금지 조건을 기준으로 한다.
 
 ## 0. 일정
 
 - [x] 2026-08-06 설명회 질문 목록 확정
-- [ ] 참석 팀원의 설명회 기록 전달 및 공식 답변·출처 반영
-- [x] 참석 팀원의 기록과 공식 출처 확인 전 HyperCLOVA X 실제 연결 보류
+- [x] 참석 팀원의 설명회 기록 전달 및 현장 사진·공식 PDF 교차 검토
+- [x] 확정사항·구두 메모·후속 확인 항목을 설명회 반영 기록에 분리
+- [x] 크레딧·정확한 모델 ID·endpoint·인증 규격 확보 전 HyperCLOVA X 실제 연결 보류
 - [ ] 2026-09-06 이전 최종 source commit·제안서·API 문서 동결
 - [ ] 평가 기간 동안 공지된 기간 내 API 활성 상태 유지
 - [ ] 마감 이후 금지되는 commit·push·서버 변경 범위 재확인
@@ -26,6 +27,8 @@
 - [ ] `.env.example`에 변수명만 제공하고 credential은 제외
 - [ ] 원천 데이터·DB 생성과 애플리케이션 시작 순서 문서화
 - [ ] clean checkout에서 build·test·start 재현
+- [ ] `ontology/common.ttl`, `bond_kr.ttl`, `etf_kr.ttl`, `etf_gl.ttl`, `fund_pub.ttl` 제출
+- [ ] Ontology Turtle 문법과 field registry 정합성 자동 검사
 - [ ] 비밀정보, 로컬 경로, 모델 weight, `artifacts/`가 Git에 없는지 확인
 - [ ] 공식 제출 범위 확정 후 로컬 LLM provider·설정·스크립트·의존성 제거
 - [ ] Git 이력을 재작성하지 않고 개발 이력과 제출 경로를 투명하게 분리
@@ -53,9 +56,12 @@ Docker 실행은 재현 완료. `nextjs-frontend/`는 아직 저장소에 없으
 
 - [ ] Public 통신 가능한 endpoint
 - [ ] `GET /answer`
-- [ ] `question_id`, `question` query parameter
-- [ ] 공식 요청·응답 JSON Schema 문서
-- [ ] timeout·QPS·동시 요청·최대 입력 길이 처리
+- [x] `question_id`, `question` 필수 query parameter 규격 확인
+- [x] 다섯 필수 응답 필드가 모두 문자열인 규격 확인
+- [ ] 성공·미검색·역질문·미지원·오류가 동일한 다섯 필드와 HTTP 200 반환
+- [ ] 정의되지 않은 query parameter에도 HTTP 500을 반환하지 않음
+- [ ] 질문당 60초 권장보다 짧은 내부 timeout과 안전 응답 처리
+- [ ] 미확정 QPS·동시 요청·최대 입력 길이·retry 정책 확인 후 처리
 - [ ] 인증이 필요하면 주최 측 호출 방식과 호환
 - [ ] health check·구조화 로그·credential masking
 - [ ] provider·dataset 장애의 안전한 status와 응답
@@ -67,32 +73,38 @@ Docker 실행은 재현 완료. `nextjs-frontend/`는 아직 저장소에 없으
 | --- | --- | --- |
 | `question_id` | `request_id` | 값 보존, 이름만 매핑 |
 | `question` | request의 원문 | 응답에도 원문 그대로 포함 |
-| `retrieved_context` | products·comparisons·aggregates·documents·citations | 공식 타입 확인 후 안전하게 직렬화 |
+| `retrieved_context` | products·comparisons·aggregates·documents·citations | JSON 문자열로 안전하게 직렬화 |
 | `think_trace` | intent·QueryPlan hash·도구·검증·fallback 상태 | 숨은 사고과정 없이 실행 사실만 제공 |
 | `answer` | 검증된 최종 answer | 변경 없이 전달 |
 
-내부 DTO의 추가 필드를 공식 응답에 그대로 노출하지 않는다. 추가 필드 허용 여부와
-두 context 필드의 문자열·객체 타입을 설명회에서 확인한 뒤 별도 official adapter를
-동결한다.
+내부 DTO의 추가 필드를 공식 응답에 그대로 노출하지 않는다. 현장 자료에서 두 context
+필드가 문자열로 확인됐으므로 별도 official adapter의 다섯 문자열 필드를 동결한다.
 
-## 4. 2026-08-06 설명회 질문
+## 4. 2026-08-06 설명회 반영 상태
 
 현장 질문과 공식 답변 원문은
-[8월 6일 설명회 질문·답변 기록지](briefing-2026-08-06.md)에 기록한다.
+[8월 6일 설명회 반영 기록](briefing-2026-08-06.md)에 확정·잠정·미확정 사항을
+구분해 기록한다.
 
 - [ ] 허용 HyperCLOVA X 모델명·버전
 - [ ] Structured Outputs 또는 JSON schema 지원 범위
 - [ ] endpoint·인증 header·요청·응답 body
-- [ ] `retrieved_context`, `think_trace`의 필수 타입과 평가 방식
+- [x] `retrieved_context`, `think_trace`의 필수 문자열 타입
+- [ ] `retrieved_context`, `think_trace`의 세부 채점 방식
 - [ ] 숨은 사고과정 대신 구조화 실행 기록을 제공해도 되는지
-- [ ] 공식 예시 외 추가 응답 필드 허용 여부
+- [x] 공식 제출 adapter는 예시의 다섯 필드만 반환하기로 결정
 - [ ] timeout·QPS·retry-after·동시 요청·입력 길이
-- [ ] HTTP status와 오류 body 기대 형식
+- [x] 답할 수 없는 질문도 같은 응답 스키마와 HTTP 200 사용
+- [ ] 잘못된 필수 입력의 공식 처리 규칙
 - [ ] Docker·DB·외부 데이터·네트워크 제약
 - [ ] 평가 질의 분포와 정확성·지연·정성평가 배점
 - [ ] 임베딩·re-ranker·NER·번역 모델의 LLM 해당 여부
 - [ ] 로컬 LLM을 개발 단계에 사용한 코드·문서·Git 이력의 제출 허용 범위
 - [ ] 보수 0·수익률 0·판매 가능 상태·공모펀드 grain의 공식 의미
+- [x] 평가 배점 20·40·40, 예상 30문항·미응답 5문항, 60초 권장 확인
+- [x] 도메인별 Ontology `.ttl` 5개를 서면 기준으로 준비하기로 결정
+- [ ] 구두 메모와 충돌하는 Ontology 형식을 서면으로 재확인
+- [ ] HyperCLOVA X가 20만 원 크레딧 적용 서비스인지 확인
 
 ## 5. 최종 동결
 

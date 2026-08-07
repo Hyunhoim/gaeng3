@@ -1,7 +1,7 @@
 # 금융상품 Agent 현재 프로젝트 기준
 
 상태: 현재 정본
-기준일: 2026-08-04
+기준일: 2026-08-07
 대상 저장소: `https://github.com/Hyunhoim/gaeng3`
 
 ## 1. 한 문장 목표
@@ -141,6 +141,10 @@
   `3건` limit handoff를 수정한 뒤 strict·safety·evidence 40/40, QueryPlan·
   grounded answer 각 12회, provider 오류·fallback 0건을 기록했다. 독립 blind나
   HyperCLOVA X 품질 점수는 아니다.
+- 2026-08-07 설명회 문서 반영 후 replay에서 expected·로컬 Qwen 모두 37/40인
+  Router 계약 회귀를 발견했다. 과도한 ETP 비용 모호성 규칙과 제어 응답 family
+  순서를 수정하고 단위 테스트를 추가한 뒤 expected·로컬 Qwen strict·safety·
+  evidence 40/40, provider 오류·fallback 0건을 다시 확인했다.
 - 국내·해외 ETP 교차 SEARCH는 상품군별 evidence-only grounded answer까지
   확장했다. expected·로컬 Qwen 공개 회귀는 각각 4/4, 생성 대상 2문항
   grounded, 실제 모델 호출 3회, fallback 0이며 전체 빈 결과와 control은
@@ -175,13 +179,18 @@
 - 데이터로 확인할 수 없는 조건은 추정하지 않고, 확인 불가 또는 역질문으로 처리한다.
 - 수익 보장, 근거 없는 미래 수익률 전망, 단정적인 투자 권유를 생성하지 않는다.
 - 공식 `GET /answer` 요청·응답 계약과 주최 측 실행 환경을 최종적으로 준수한다.
+- 공식 adapter는 `question_id`, `question`, `retrieved_context`, `think_trace`,
+  `answer`의 다섯 문자열 필드를 반환한다.
+- 답을 찾지 못하거나 처리할 수 없는 질문도 같은 스키마와 HTTP 200으로 응답한다.
+- 도메인별 `common.ttl`, `bond_kr.ttl`, `etf_kr.ttl`, `etf_gl.ttl`,
+  `fund_pub.ttl`을 제출 기준으로 준비한다.
 - 임베딩 등 비-LLM 영역에는 구현 방식 제한이 없다는 공식 문구가 있지만, 경계 모델의 허용 여부는 설명회에서 재확인한다.
 
 ## 4. 모델·도구 사용 정책
 
 | 구성요소 | 개발 단계 | 평가·제출 경로 | 현재 결정 |
 | --- | --- | --- | --- |
-| HyperCLOVA X | 요청·응답·오류 계약과 fake transport 완료 | 허용·필수 | 8월 6일 공식 안내 전까지 실연결 보류 |
+| HyperCLOVA X | 요청·응답·오류 계약과 fake transport 완료 | 허용·필수 | 크레딧·정확한 모델 ID·endpoint·인증 규격 확보 전 실연결 보류 |
 | Mock/fixture provider | 기본 테스트와 CI | 실제 답변 생성에 사용하지 않음 | 항상 유지 |
 | `Qwen/Qwen3-30B-A3B-Instruct-2507-FP8` | 명시적으로 켠 로컬 실험만 | 금지 | 임시 개발 provider |
 | 다른 생성형 LLM/VLM | 사용하지 않음 | 금지 | 제외 |
@@ -204,7 +213,7 @@
   실패한다. service adapter는 이 설정 오류를 안전한 비재시도 ERROR DTO로 변환한다.
   실제 FastAPI route와 네트워크 transport는 아직 없다.
 - 로컬 모델의 응답·로그·캐시·가중치는 Git과 제출물에서 제외한다.
-- 2026-08-06 설명회 후 공식 제출 범위를 확인한 뒤 제출 후보의
+- 공식 제출 범위를 서면으로 확인한 뒤 제출 후보의
   로컬 provider·설정·스크립트·의존성을 제거하고 자동 검사한다.
 - 과거 Git 이력을 재작성해 개발 이력을 숨기지 않고, 내부 개발 저장소와
   공식 제출 후보의 경계를 투명하게 관리한다.
@@ -385,20 +394,35 @@ QueryPlan에는 최소한 intent, 상품군, 필수 조건, 완화 전 확인이
 - intent, 상품군, 연산자, hard-constraint violation, evidence 정확성, unsupported 처리, latency를 분리 측정한다.
 - 다른 상품군은 데이터 신뢰도와 예상 평가 비중에 따라 순차 확장한다.
 
-## 9. 2026-08-06 설명회 기록을 받아 확인할 항목
+## 9. 2026-08-06 설명회 반영과 남은 확인 항목
+
+현장 사진과 공식 PDF에서 확인한 내용:
+
+- 평가 배점은 소스코드 20%, 기술제안서 40%, 평가 API 40%
+- 예상 질문은 총 30개이며 답할 수 없는 질문 5개 포함, 질문당 60초 이내 권장
+- 공식 API는 `GET /answer`, 필수 query parameter는 `question_id`와 `question`
+- 응답은 `question_id`, `question`, `retrieved_context`, `think_trace`, `answer`의
+  다섯 필수 문자열
+- 답할 수 없는 질문도 HTTP 200과 같은 스키마로 응답
+- 도메인별 Ontology `.ttl` 5개가 서면 화면의 신규 필수 제출물
+- 팀당 크레딧 20만 원, 만료일 2026-09-30, 초과·비지원 비용은 팀 부담
+
+남은 공식 확인 항목:
 
 - 허용되는 HyperCLOVA X 정확한 모델명·버전과 Structured Outputs 지원 범위
-- 공식 endpoint·인증 header·요청·응답 body와 request ID 규칙
-- API 인증, timeout, QPS, 재시도, 입력 길이, 응답 필수 필드
-- 다른 모델로 만든 개발용 synthetic 질문·응답 또는 평가 데이터의 제출 가능 여부
-- 임베딩, re-ranker, NER, 번역 모델이 공식 정의상 LLM에 포함되는지
+- 공식 endpoint·인증 header·실제 모델 요청·응답 body와 request ID 규칙
+- timeout, QPS, 동시 요청, 재시도, 최대 입력 길이
+- HyperCLOVA X가 지급 크레딧의 지원 서비스인지
+- 개발용 로컬 LLM 코드·문서·Git 이력과 synthetic 데이터의 제출 허용 범위
+- 임베딩, re-ranker, NER, OCR, 번역 모델의 허용 범위
+- `think_trace`의 구체적인 채점 기준과 구조화 실행 기록 인정 여부
 - 보수 0, 수익률 0, 판매·거래 가능 상태의 정확한 의미와 코드북
 - 펀드 속성 코드와 상품 grain, 손상 행 처리 기준
-- 평가 질의 분포, 정확도·응답시간·설명 품질의 배점
-- 네트워크·GPU·Docker·DB·외부 데이터의 평가 환경 제약
+- 주최 측 실행 환경의 네트워크·GPU·Docker·DB 제약
+- `.ttl` 필수 화면과 형식이 자유라는 구두 메모의 충돌
 
-참석 팀원의 기록을 받은 뒤 공식 답변과 출처를 구분해 확인하고, 이 문서와
-`data-audit.md`, 활성 구현 명세를 함께 갱신한다.
+확정·잠정·미확정 구분과 구현 순서는
+[설명회 반영 기록](../../docs/proposal/briefing-2026-08-06.md)을 따른다.
 
 ## 10. 현재 완료 판단
 

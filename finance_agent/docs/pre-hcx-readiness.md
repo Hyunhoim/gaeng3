@@ -1,6 +1,6 @@
 # HyperCLOVA X 연결 전 준비 기준
 
-마지막 갱신: 2026-08-06
+마지막 갱신: 2026-08-07
 
 이 문서는 HyperCLOVA X API를 연결하기 전에 Agent Core에서 끝내야 할 구현,
 평가, 계약과 외부 확인 게이트를 추적하는 정본이다. 완료 표시는 코드·테스트·
@@ -50,7 +50,9 @@
 | 9 | `internal-red-team-v1` | 네 상품군 40문항·10개 공격 유형·전체 `/answer` E2E | expected·수정 후 로컬 Qwen 40/40 |
 | 10 | 교차 상품군 grounded answer | family evidence 격리·교차 문구 검증·전체 fallback·무호출 | expected·로컬 Qwen 각각 4/4 |
 | 11 | 금융 도메인 QA 실험 | 담당자 작성 40문항 hash 검증·단계별 E2E·Q002 SEARCH gold | v1.2 사후 회귀 40/40·잘못된 실행 0건 |
-| 12 | 제출용 모델 경계 | 8월 6일 공식 확인·로컬 provider 제거 검사·투명한 개발·제출 분리 | release gate 문서화·공지 대기 |
+| 12 | 제출용 모델 경계 | 로컬 provider 제거 검사·투명한 개발·제출 분리 | release gate 문서화·제출 범위 서면 확인 대기 |
+| 13 | 공식 평가 API adapter | `GET /answer`·다섯 문자열·전 결과 HTTP 200·60초 내부 예산 | 설명회 계약 확인·구현 대기 |
+| 14 | 도메인별 Ontology | Turtle 5개·field registry 정합성·문법 검사 | 설명회 계약 확인·구현 대기 |
 
 ## 2. 평가 해석 원칙
 
@@ -159,14 +161,15 @@ Backend `/answer` service adapter 결과:
 - 봉인 이후 단 한 번 수행하는 최초 blind 실행
 - 금융 도메인 담당자와 팀원이 수행한 사람 평가 점수
 - 주최 측이 허용한 외부 비정형 문서 corpus와 사용 범위 확인
-- 2026-08-06 오프라인 설명회 참석 팀원의 기록에서 HyperCLOVA X 모델명·
-  Structured Outputs 범위·endpoint·인증·제출 범위와 공식 출처 확인
+- HyperCLOVA X 정확한 모델명·Structured Outputs 범위·endpoint·인증·제출 범위의
+  공식 서면 확인과 크레딧 수령·적용 서비스 확인
 - 위 공식 답변 확인 후의 실제 HTTP transport 연결과 공식 재현
 - 공식 답변에 따른 제출 후보의 로컬 LLM provider·설정·
   스크립트·의존성 제거와 정적·기계적 검수
 - 주최 측 실행 환경에서 Docker·포트·인증·네트워크 정책 최종 재현
 
-이 게이트가 남아 있는 동안 저장소는 “HyperCLOVA X 연결 전 내부 준비 완료”까지만
+설명회 현장 자료에서 공식 `GET /answer`와 Ontology 요구는 확인했다. 위 게이트가
+남아 있는 동안 저장소는 “HyperCLOVA X 연결 전 내부 준비 완료”까지만
 주장할 수 있고, 최종 평가 준비 완료나 일반화 성능 완료를 주장하지 않는다.
 
 ## 4. 내부 완료 QA

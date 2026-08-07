@@ -1,8 +1,8 @@
 # 금융상품 Agent 기술 제안서
 
-상태: 팀 검토 전 초안 v0.1
+상태: 팀 검토 전 초안 v0.2 · 설명회 계약 반영
 
-기준일: 2026-07-31
+기준일: 2026-08-07
 
 이 문서는 최종 PDF 또는 발표자료를 만들기 위한 내용 정본이다. 구현되지 않은
 기능과 외부 확인이 필요한 항목은 완료된 기능처럼 표현하지 않는다.
@@ -80,9 +80,10 @@ BM25/SQLite FTS 기반 문서 검색의 적재·필터·출처·기준일 계약
 
 [시스템 구성도 정본](diagrams/system-architecture.md)은 다음 두 범위를 분리한다.
 
-- 현재 검증 완료: Agent Core, SQLite Oracle, Verifier, evidence, Backend DTO
+- 현재 검증 완료: Agent Core, SQLite Oracle, Verifier, evidence, Backend DTO,
+  FastAPI 내부 `POST /answer`, Docker 데이터 준비·HTTP smoke
 - 교차 상품군 SEARCH의 family별 근거 격리·답변 검증·전체 fallback
-- 외부 통합 대기: Next.js·FastAPI, 8월 6일 공식 안내 후
+- 외부 통합 대기: Next.js, 공식 `GET /answer` adapter, Ontology `.ttl`,
   HyperCLOVA X transport, 공개 API 서버
 
 목표 구조를 현재 구현 완료 상태로 오해하지 않도록 실선과 점선으로 구분한다.
@@ -133,6 +134,7 @@ BM25/SQLite FTS 기반 문서 검색의 적재·필터·출처·기준일 계약
 - 문서 corpus 승인 후 동일 citation 계약으로 비정형 설명 확장
 - compact identity cache와 필요한 필드만 읽는 projected verifier로 메모리 절감
 - Backend DTO와 공식 제출 schema를 분리해 UI·평가 API 변화에 대응
+- `GET /answer` 공식 다섯 문자열 필드는 별도 adapter로 고정해 내부 DTO 확장과 분리
 - 평가 suite·baseline·hash를 통해 기능 추가 후 회귀 여부를 자동 확인
 
 확장성은 “어떤 질문도 처리”한다는 뜻이 아니다. 새 필드·상품군·문서는 의미,
@@ -154,6 +156,8 @@ BM25/SQLite FTS 기반 문서 검색의 적재·필터·출처·기준일 계약
   잘못된 control 실행·오류 0건
 - HyperCLOVA X API 없는 provider·Agent 계약 8/8
 - Backend service adapter 오류·fallback·비노출 계약 12/12
+- 설명회 현장 자료에서 평가 API 다섯 문자열 필드·미응답 HTTP 200·60초 권장과
+  도메인별 Ontology 제출 요구 확인
 
 내부 공개 평가의 100%는 배선·회귀 안정성이지 독립 blind 일반화 성능이 아니다.
 
@@ -172,5 +176,7 @@ BM25/SQLite FTS 기반 문서 검색의 적재·필터·출처·기준일 계약
 - 최소 2명의 독립 reviewer가 수행한 사람 평가
 - 허용된 실제 비정형 문서 corpus와 사용 범위
 - HyperCLOVA X 모델·endpoint·인증·Structured Outputs 확인과 실제 재현
-- FastAPI 공식 `/answer` route, Docker 환경과 공개 서버 통합
-- 공식 schema의 `retrieved_context`·`think_trace` 타입과 추가 필드 허용 여부 확인
+- FastAPI 공식 `GET /answer` route와 다섯 문자열 응답, Docker·공개 서버 통합
+- Ontology Turtle 파일 5개와 field registry 정합성 검증
+- `think_trace`의 구조화 실행 기록에 대한 세부 평가 방식 확인
+- 크레딧 승인과 HyperCLOVA X 적용 서비스 확인

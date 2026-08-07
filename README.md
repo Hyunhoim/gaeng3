@@ -31,7 +31,7 @@ ETF·ETN, 공모펀드를 조회·비교·계산한 뒤 근거와 기준일을 �
 | AI Agent | 검색·비교·집계·근거 생성·결과 검증 구현 |
 | Backend | FastAPI `GET /health`, `POST /answer` 구현 |
 | Frontend | 동료의 `nextjs-frontend/` 코드 합류 후 연결 예정 |
-| LLM | 로컬 Qwen은 내부 개발에만 사용, HyperCLOVA X 실제 연결은 공식 안내 후 진행 |
+| LLM | 로컬 Qwen은 내부 개발에만 사용, HyperCLOVA X는 크레딧·실제 API 규격 확보 후 연결 |
 | 자동 검증 | AI Core pytest 338개와 Backend·문서·Docker 검증 경로 관리 |
 
 세부 기능과 평가 결과는 [AI Agent 작업공간](finance_agent/README.md)에서 관리
@@ -183,7 +183,7 @@ API 명세 화면은 `http://127.0.0.1:18001/docs`에서 확인
 ## 7. LLM과 데이터 원칙
 
 - 평가·제출 경로의 LLM은 공식 규칙에 따라 HyperCLOVA X만 사용
-- 로컬 Qwen은 HyperCLOVA X 연결 전 내부 개발과 장애 검증에만 사용
+- 로컬 Qwen은 크레딧과 실제 HCX API 규격을 확보하기 전 내부 회귀·E2E·장애 검증에만 사용
 - 공식 범위 확인 후 제출 후보에서 로컬 모델 관련 코드·설정·의존성 제거 및 검사
 - 답변의 상품명·수치·순위·출처는 제공 데이터와 결정론적 코드로 검증
 - 공식 데이터와 외부 데이터가 충돌하면 공식 데이터 우선
