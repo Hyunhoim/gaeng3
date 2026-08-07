@@ -9,7 +9,7 @@
 
 ### Backend가 담당하는 것
 
-- `GET /health`, `POST /answer` FastAPI route
+- `GET /health`, 내부용 `POST /answer`, 평가용 `GET /answer` FastAPI route
 - 요청 JSON 검증과 오류 응답 변환
 - Agent Core 의존성 생성과 실행 수명주기
 - Docker 이미지와 Backend 시작 명령
@@ -119,6 +119,26 @@ curl --fail-with-body \
 Swagger UI는 `http://127.0.0.1:18001/docs`, OpenAPI JSON은
 `http://127.0.0.1:18001/openapi.json`에서 확인
 
+### 평가용 `GET /answer`
+
+주최 측 평가 규격에 맞춰 `question_id`와 `question`을 query parameter로 받는다.
+
+```bash
+curl --get --fail-with-body \
+  --data-urlencode 'question_id=Q-001' \
+  --data-urlencode 'question=현재 판매 가능한 원화채권 중 AA- 이상 종목 알려줘' \
+  http://127.0.0.1:18001/answer
+```
+
+응답은 `question_id`, `question`, `retrieved_context`, `think_trace`, `answer`의
+다섯 필드만 갖고 모두 문자열이다. 정상 검색, 결과 없음, 역질문, 미지원,
+내부 오류도 같은 다섯 필드와 HTTP 200을 반환한다. 정의되지 않은 추가
+query parameter는 무시한다.
+
+`retrieved_context`와 `think_trace`는 JSON을 문자열로 직렬화한 값이다.
+`think_trace`는 모델의 숨은 사고과정이 아니라 질문 분류·필터·검증·fallback 결과처럼
+다시 확인할 수 있는 실행 기록만 담는다.
+
 ## 5. 전체 시스템에서 실행
 
 일반적인 실행·종료·로그 확인은 저장소 루트에서 수행
@@ -182,7 +202,8 @@ python fastapi_backend/scripts/smoke.py \
   --output /tmp/gaeng3-docker-http-smoke-v1.json
 ```
 
-스모크는 `/health`, 세 실행 상품군 검색, 공모펀드 정책 잠금, 모호한 요청, 예측·단정
+스모크는 `/health`, 내부 `POST /answer` 안전 분기와 공식 `GET /answer` 다섯 문자열
+계약을 함께 검사한다. 세 실행 상품군 검색, 공모펀드 정책 잠금, 모호한 요청, 예측·단정
 요청과 잘못된 JSON DTO를 함께 검사. 실제 평가 점수가 아니라 HTTP 배선과 안전 분기의
 회귀 여부를 확인하는 용도
 

@@ -9,6 +9,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
+from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 EXPECTED_FAMILIES = ["bond", "domestic_etp", "overseas_etp", "fund"]
@@ -271,6 +272,43 @@ def validate_answer(
     return errors
 
 
+def validate_official_answer(
+    http_status: int,
+    body: dict[str, Any],
+    *,
+    question_id: str,
+    question: str,
+) -> list[str]:
+    errors: list[str] = []
+    expected_keys = {
+        "question_id",
+        "question",
+        "retrieved_context",
+        "think_trace",
+        "answer",
+    }
+    _expect(errors, http_status == 200, f"official answer expected HTTP 200, got {http_status}")
+    _expect(errors, set(body) == expected_keys, "official answer fields differ")
+    _expect(errors, body.get("question_id") == question_id, "official question_id differs")
+    _expect(errors, body.get("question") == question, "official question differs")
+    _expect(
+        errors,
+        all(isinstance(body.get(key), str) for key in expected_keys),
+        "official answer fields must all be strings",
+    )
+    for key in ("retrieved_context", "think_trace"):
+        value = body.get(key)
+        if not isinstance(value, str):
+            continue
+        try:
+            decoded = json.loads(value)
+        except json.JSONDecodeError:
+            errors.append(f"official {key} is not valid JSON text")
+        else:
+            _expect(errors, isinstance(decoded, dict), f"official {key} must encode an object")
+    return errors
+
+
 def _case_summary(
     case: SmokeCase,
     *,
@@ -353,6 +391,24 @@ def main(argv: list[str] | None = None) -> int:
                     ),
                 )
             )
+        official_question_id = "docker-smoke-official-001"
+        official_question = "현재 판매 가능한 원화채권 중 AA- 이상 종목 알려줘"
+        official_status, official_body, official_bytes, official_duration = _request_json(
+            f"{base_url}/answer?"
+            + urlencode(
+                {
+                    "question_id": official_question_id,
+                    "question": official_question,
+                }
+            ),
+            timeout=arguments.timeout,
+        )
+        official_errors = validate_official_answer(
+            official_status,
+            official_body,
+            question_id=official_question_id,
+            question=official_question,
+        )
     except (OSError, RuntimeError, TypeError, URLError) as error:
         print(f"Docker HTTP smoke failed before completion: {error}", file=sys.stderr)
         return 2
@@ -374,13 +430,20 @@ def main(argv: list[str] | None = None) -> int:
             "duration_ms": round(health_duration, 3),
             "errors": health_errors,
         },
+        "official_answer": {
+            "passed": not official_errors,
+            "http_status": official_status,
+            "response_bytes": official_bytes,
+            "duration_ms": round(official_duration, 3),
+            "errors": official_errors,
+        },
         "metrics": {
             "passed": passed_cases,
             "failed": len(results) - passed_cases,
             "total": len(results),
         },
         "cases": results,
-        "passed": not health_errors and passed_cases == len(results),
+        "passed": not health_errors and not official_errors and passed_cases == len(results),
     }
     rendered = json.dumps(report, ensure_ascii=False, indent=2) + "\n"
     if arguments.output is not None:

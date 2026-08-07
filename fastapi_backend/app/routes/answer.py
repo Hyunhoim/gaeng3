@@ -2,9 +2,14 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Response
-from finance_agent_core.agent import execute_answer_request
+from fastapi import APIRouter, Depends, Query, Response
+from finance_agent_core.agent import (
+    execute_answer_request,
+    invalid_official_request_response,
+    official_response_from_backend,
+)
 from finance_agent_core.contracts.backend import BackendAgentRequest, BackendAgentResponse
+from finance_agent_core.contracts.official import OfficialAnswerResponse
 
 from app.dependencies import AgentService, get_agent
 
@@ -30,3 +35,35 @@ def answer(
     result = execute_answer_request(service, request)
     response.status_code = result.http_status_code
     return result.response
+
+
+@router.get(
+    "/answer",
+    response_model=OfficialAnswerResponse,
+)
+def official_answer(
+    service: Annotated[AgentService, Depends(get_agent)],
+    question_id: Annotated[str | None, Query()] = None,
+    question: Annotated[str | None, Query()] = None,
+) -> OfficialAnswerResponse:
+    """Expose the briefing's five-string GET contract with fail-safe HTTP 200 semantics."""
+
+    if (
+        question_id is None
+        or not question_id.strip()
+        or len(question_id) > 128
+        or question is None
+        or not question.strip()
+        or len(question) > 2000
+    ):
+        return invalid_official_request_response(
+            question_id=question_id,
+            question=question,
+        )
+    request = BackendAgentRequest(request_id=question_id, question=question)
+    result = execute_answer_request(service, request)
+    return official_response_from_backend(
+        question_id=question_id,
+        question=question,
+        response=result.response,
+    )

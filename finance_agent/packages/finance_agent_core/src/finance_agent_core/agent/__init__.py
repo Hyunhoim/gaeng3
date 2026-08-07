@@ -21,6 +21,10 @@ from finance_agent_core.agent.fund_resolver import (
     FundResolutionCandidate,
     normalize_fund_mention,
 )
+from finance_agent_core.agent.official_adapter import (
+    invalid_official_request_response,
+    official_response_from_backend,
+)
 from finance_agent_core.agent.routed_service import (
     FamilySearchResult,
     RoutedAgentResult,
@@ -50,4 +54,6 @@ __all__ = [
     "extract_explicit_fund_comparison_draft",
     "extract_fund_comparison_fields",
     "normalize_fund_mention",
+    "invalid_official_request_response",
+    "official_response_from_backend",
 ]

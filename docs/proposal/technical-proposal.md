@@ -81,9 +81,9 @@ BM25/SQLite FTS 기반 문서 검색의 적재·필터·출처·기준일 계약
 [시스템 구성도 정본](diagrams/system-architecture.md)은 다음 두 범위를 분리한다.
 
 - 현재 검증 완료: Agent Core, SQLite Oracle, Verifier, evidence, Backend DTO,
-  FastAPI 내부 `POST /answer`, Docker 데이터 준비·HTTP smoke
+  FastAPI 내부 `POST /answer`, 공식 `GET /answer` 계약, Docker 데이터 준비·HTTP smoke
 - 교차 상품군 SEARCH의 family별 근거 격리·답변 검증·전체 fallback
-- 외부 통합 대기: Next.js, 공식 `GET /answer` adapter, Ontology `.ttl`,
+- 외부 통합 대기: Next.js, 공식 `GET /answer` 공개 통신 재현, Ontology `.ttl`,
   HyperCLOVA X transport, 공개 API 서버
 
 목표 구조를 현재 구현 완료 상태로 오해하지 않도록 실선과 점선으로 구분한다.
@@ -147,7 +147,7 @@ BM25/SQLite FTS 기반 문서 검색의 적재·필터·출처·기준일 계약
 현재 대표 근거:
 
 - 4종 원천 145,393행 감사, 핵심 expectation 65/65
-- Agent Core 전체 pytest 344개 통과
+- Agent Core 전체 pytest 346개 통과
 - 공식 XLSX에서 SQLite 4개를 자동 생성·검증한 뒤 Backend를 시작하는 Docker 경로 완료
 - 국내·해외 ETP 교차 SEARCH 공개 실제 데이터 회귀 4/4
 - 교차 상품군 grounded answer 공개 회귀 expected·로컬 Qwen 각각 4/4, 생성 대상 2문항 모두 grounded, 모델 호출 3회, fallback 0
@@ -176,7 +176,7 @@ BM25/SQLite FTS 기반 문서 검색의 적재·필터·출처·기준일 계약
 - 최소 2명의 독립 reviewer가 수행한 사람 평가
 - 허용된 실제 비정형 문서 corpus와 사용 범위
 - HyperCLOVA X 모델·endpoint·인증·Structured Outputs 확인과 실제 재현
-- FastAPI 공식 `GET /answer` route와 다섯 문자열 응답, Docker·공개 서버 통합
+- FastAPI 공식 `GET /answer` Docker·공개 서버 통합
 - Ontology Turtle 파일 5개와 field registry 정합성 검증
 - `think_trace`의 구조화 실행 기록에 대한 세부 평가 방식 확인
 - 크레딧 승인과 HyperCLOVA X 적용 서비스 확인

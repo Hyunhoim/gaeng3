@@ -1,4 +1,9 @@
-from scripts.smoke import SmokeCase, validate_answer, validate_health
+from scripts.smoke import (
+    SmokeCase,
+    validate_answer,
+    validate_health,
+    validate_official_answer,
+)
 
 
 def test_validate_health_accepts_ready_four_family_service() -> None:
@@ -140,3 +145,30 @@ def test_validate_answer_accepts_locked_fund_control() -> None:
     }
 
     assert validate_answer(case, 200, body) == []
+
+
+def test_validate_official_answer_requires_five_json_string_fields() -> None:
+    body = {
+        "question_id": "Q-001",
+        "question": "평가 질문",
+        "retrieved_context": '{"citations":[]}',
+        "think_trace": '{"status":"not_found"}',
+        "answer": "확인할 수 없습니다.",
+    }
+
+    assert (
+        validate_official_answer(
+            200,
+            body,
+            question_id="Q-001",
+            question="평가 질문",
+        )
+        == []
+    )
+    body["think_trace"] = "not-json"
+    assert "official think_trace is not valid JSON text" in validate_official_answer(
+        200,
+        body,
+        question_id="Q-001",
+        question="평가 질문",
+    )

@@ -10,7 +10,7 @@
 flowchart LR
     U["사용자"] -.-> WEB["Next.js UI<br/>통합 대기"]
     WEB -.-> API["내부 FastAPI POST /answer<br/>로컬 통합 완료"]
-    CLIENT["주최 측 평가 client"] -.-> OFFICIAL["공식 GET /answer adapter<br/>다섯 문자열 · 구현 대기"]
+    CLIENT["주최 측 평가 client"] -.-> OFFICIAL["공식 GET /answer adapter<br/>FastAPI 구현 · 계약 테스트 완료"]
     OFFICIAL -.-> REQ
     API --> REQ["BackendAgentRequest"]
 
@@ -52,13 +52,14 @@ flowchart LR
 - 상품군별 evidence-only grounded answer·Answer Verifier·교차 검증·전체 deterministic fallback
 - 프레임워크 독립 Backend DTO와 service adapter
 - FastAPI `/health`·`/answer`, 안전한 422 DTO와 실제 SQLite 로컬 HTTP smoke test
+- 공식 `GET /answer` 다섯 문자열 adapter와 전 결과 HTTP 200 계약
 - Ubuntu SSH Docker build·데이터 준비·Backend HTTP smoke
 - HyperCLOVA X fake transport·오류 계약
 
 ## 외부 통합 대기
 
 - Next.js 실제 화면
-- 공식 `GET /answer` 다섯 문자열 adapter와 전 결과 HTTP 200 계약
+- 공식 `GET /answer`의 공개 서버·평가 client 통신 재현
 - 도메인별 Ontology Turtle 5개와 field registry 정합성 검사
 - HyperCLOVA X 실제 endpoint·인증
 - 승인된 실제 비정형 금융 문서

@@ -55,16 +55,16 @@ Docker 실행은 재현 완료. `nextjs-frontend/`는 아직 저장소에 없으
 ## 3. 평가용 API 서버
 
 - [ ] Public 통신 가능한 endpoint
-- [ ] `GET /answer`
+- [x] `GET /answer` route와 다섯 문자열 response model
 - [x] `question_id`, `question` 필수 query parameter 규격 확인
 - [x] 다섯 필수 응답 필드가 모두 문자열인 규격 확인
-- [ ] 성공·미검색·역질문·미지원·오류가 동일한 다섯 필드와 HTTP 200 반환
-- [ ] 정의되지 않은 query parameter에도 HTTP 500을 반환하지 않음
+- [x] 성공·미검색·역질문·미지원·오류가 동일한 다섯 필드와 HTTP 200 반환
+- [x] 정의되지 않은 query parameter에도 HTTP 500을 반환하지 않음
 - [ ] 질문당 60초 권장보다 짧은 내부 timeout과 안전 응답 처리
 - [ ] 미확정 QPS·동시 요청·최대 입력 길이·retry 정책 확인 후 처리
 - [ ] 인증이 필요하면 주최 측 호출 방식과 호환
 - [ ] health check·구조화 로그·credential masking
-- [ ] provider·dataset 장애의 안전한 status와 응답
+- [x] provider·dataset 장애의 안전한 공식 응답 계약
 - [ ] 평가 기간 가용성·재시작·모니터링 계획
 
 ### 공식 예시와 내부 DTO의 경계

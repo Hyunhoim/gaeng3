@@ -29,10 +29,10 @@ ETF·ETN, 공모펀드를 조회·비교·계산한 뒤 근거와 기준일을 �
 | --- | --- |
 | 데이터 | 공식 XLSX에서 네 상품군 SQLite를 자동 생성·검증하는 경로 구현 |
 | AI Agent | 검색·비교·집계·근거 생성·결과 검증 구현 |
-| Backend | FastAPI `GET /health`, `POST /answer` 구현 |
+| Backend | FastAPI `GET /health`, 내부용 `POST /answer`, 평가용 `GET /answer` 구현 |
 | Frontend | 동료의 `nextjs-frontend/` 코드 합류 후 연결 예정 |
 | LLM | 로컬 Qwen은 내부 개발에만 사용, HyperCLOVA X는 크레딧·실제 API 규격 확보 후 연결 |
-| 자동 검증 | AI Core pytest 344개와 Backend·문서·Docker 검증 경로 관리 |
+| 자동 검증 | AI Core pytest 346개와 Backend·문서·Docker 검증 경로 관리 |
 
 세부 기능과 평가 결과는 [AI Agent 작업공간](finance_agent/README.md)에서 관리
 
@@ -122,6 +122,16 @@ curl --fail-with-body \
   --request POST \
   --header 'Content-Type: application/json' \
   --data '{"schema_version":"1.0","request_id":"manual-001","question":"매수 가능한 국내채권을 매수수익률 높은 순으로 3개 보여줘.","locale":"ko-KR"}' \
+  http://127.0.0.1:18001/answer
+```
+
+위 `POST /answer`는 Frontend가 상품·근거·상태를 세부적으로 받기 위한 내부 API다.
+주최 측 평가 규격을 확인하는 `GET /answer`는 다음처럼 호출한다.
+
+```bash
+curl --get --fail-with-body \
+  --data-urlencode 'question_id=Q-001' \
+  --data-urlencode 'question=현재 판매 가능한 원화채권 중 AA- 이상 종목 알려줘' \
   http://127.0.0.1:18001/answer
 ```
 
