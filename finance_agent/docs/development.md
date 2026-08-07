@@ -1,14 +1,15 @@
 # 개발 환경과 현재 구현 상태
 
 상태: 현재 정본
-기준일: 2026-07-29
+기준일: 2026-08-07
 
 ## 저장소 상태
 
 - 로컬 branch: `haeyeongcho`
 - upstream: `origin/haeyeongcho`
-- 원격 기준 commit: `382068b8`
-- 공모펀드 수직 검색 파이프라인과 동결 50문항 평가 계약까지 원격 branch에 반영됨
+- AI Agent와 FastAPI Backend 통합 코드가 같은 branch에 있음
+- 로컬 branch는 이번 검증 커밋을 포함해 upstream보다 앞서며, 이 문서는 특정
+  commit ID 대신 source-freeze manifest로 검증 대상을 고정
 
 동료가 가져올 `vintasoftware/nextjs-fastapi-template`은 저장소 루트의
 `fastapi_backend`, `nextjs-frontend`, `docs`를 사용한다. AI·데이터 작업공간은
@@ -26,7 +27,7 @@
 | Node.js | NVM Node `24.18.0` |
 | npm | `11.16.0` |
 | Git | `2.34.1` |
-| Docker | 현재 호스트 PATH에서 없음 |
+| Docker | Engine `29.7.1`, Compose `5.4.0`, 일반 사용자 실행 확인 |
 
 Conda는 Python 환경을 격리하고 pip는 Python 패키지를 설치한다. Frontend Node는 동료 템플릿과 NVM 설정을 존중하며 Conda에 중복 설치하지 않는다.
 
@@ -72,15 +73,17 @@ SOURCE_DATE_EPOCH=1785283200 \
   packages/finance_agent_core
 ```
 
-2026-07-29 결과:
+2026-08-07 결과:
 
-- Ruff: 통과
-- pytest: 96개 통과
-- pip dependency check: 통과
-- 문서 링크·인덱스·평가 baseline·suite hash 검사: 통과
-- 고정 `SOURCE_DATE_EPOCH` wheel을 서로 다른 임시 디렉터리에서 두 번 빌드해
-  byte hash 일치, SHA-256
-  `e71bee8713e1489a46ab8827a861207a314a3e8592730ef809dd4acb4f204760`
+- Agent Core pytest 370개, Backend pytest 34개 통과
+- Ruff format·lint, pip dependency, ontology sync 검사 통과
+- 문서 링크·인덱스·평가 baseline·suite hash 55건과 baseline 38개 통과
+- 루트 `./rehearse.sh`로 새 Docker 이미지 준비, health, 기본 공모펀드 잠금,
+  Backend·공식 GET 확장 smoke 14/14, 전체 회귀를 한 번에 재현
+- 제출 경계 자동 검사는 개발 저장소를 `development`로 통과시키고, 로컬 모델
+  흔적이 남은 현재 소스를 `submission`에서 의도적으로 차단
+- 최신 source-freeze 값과 wheel 검증 결과는
+  [연결 전 준비 기준](pre-hcx-readiness.md)과 source-freeze manifest에 기록
 
 ## P1 계약 구현
 
@@ -90,8 +93,10 @@ SOURCE_DATE_EPOCH=1785283200 \
 - HCX 전송 schema는 공식 Structured Outputs keyword subset만 사용
 - registry의 queryable·sortable·selectable·aggregatable·comparable field와
   HCX enum 정합성을 테스트
-- 공모펀드 QueryPlan은 내부 계약 검증이 가능하지만 실제 Agent 진입점에서는
-  `execution_enabled: false`로 명시적으로 거절
+- 공모펀드 QueryPlan과 전체 답변 경로는 구현했지만 Backend 기본 정책은
+  `fund_execution_policy=locked`
+- 팀이 검증한 개발 리허설에서만 `public_fund_v1_approved`를 명시해 실행하며,
+  이는 주최 측의 공식 승인이나 제출 설정을 뜻하지 않음
 
 ## 상품 정규화·검색
 
@@ -113,8 +118,9 @@ SOURCE_DATE_EPOCH=1785283200 \
 - 공모펀드 전용 내부 schema와 lexical/schema linker를 구현했고 로컬 Qwen
   hybrid parser의 development 최초 실행은 40/40이다. commit `32e12fa`
   이후 최초 holdout은 9/10이며 실패 1건을 그대로 보존했다.
-- 공모펀드 공식 Agent 실행은 실제 HyperCLOVA X HTTP transport와 FastAPI
-  `/answer` route를 검증할 때까지 `execution_enabled: false`로 유지한다.
+- 공모펀드 공식 Agent 실행은 기본 `locked`로 유지한다. 팀이 승인한 v1 개발
+  리허설에서만 `public_fund_v1_approved`를 명시해 열고, 실험 후 기본 잠금으로
+  복구한다.
 - 국내 DB와 manifest를 임시 경로에 재구축했을 때 원본 artifact와 SHA-256이
   byte 단위로 일치했다.
 - 공모펀드 SQLite를 두 임시 경로에서 재구축했을 때 DB와 manifest가 각각
@@ -264,9 +270,10 @@ identity와 지원 언어를 제외한 질문 전체의 미등록 잔여 표현,
 회귀 질문에 대한 배선 검증이다. 다른 작성자가 만든 독립 blind 질문의
 parser→답변 E2E와 사람 rubric은 아직 실행하지 않았다.
 HyperCLOVA X는 세 operation의 provider·주입형 transport·오류 계약과 API 없는
-fake 테스트까지만 완료했다. 실제 endpoint·인증 header·HTTP transport는 아직
-연결하지 않았으며, 공모펀드 공식 Agent 실행은 계속
-`execution_enabled: false`다.
+fake 테스트까지 완료했다. 설명회에서 확인한 공식 `GET /answer` 다섯 문자열과
+질문당 60초 계약은 FastAPI route와 Docker에서 검증했지만, 실제 endpoint·인증
+header·credential은 크레딧 수령 전이라 아직 연결하지 않았다. 공모펀드는 기본
+`fund_execution_policy=locked`이며 명시적 개발 승인 경로만 별도로 검증했다.
 
 이 수치는 자유 생성 LLM 점수가 아니라 제한된 hybrid system의 계약 준수율이다.
 네 상품군·일곱 intent Router, capability matrix, BM25/SQLite FTS 문서 검색,
