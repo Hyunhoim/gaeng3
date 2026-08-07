@@ -110,8 +110,13 @@ class RedTeamExpectation(RedTeamModel):
             return self
         if self.backend_status is not BackendStatus.SUCCESS:
             raise ValueError("red-team expectations do not accept backend errors")
-        if self.query_plan_intent is None or self.candidate_count is None:
-            raise ValueError("success expectation requires QueryPlan intent and candidate count")
+        cross_family_search = (
+            self.interaction_intent is InteractionIntent.SEARCH and len(self.product_families) > 1
+        )
+        if self.query_plan_intent is None and not cross_family_search:
+            raise ValueError("success expectation requires a QueryPlan intent")
+        if self.candidate_count is None:
+            raise ValueError("success expectation requires a candidate count")
         if self.evidence_kind is ExpectedEvidenceKind.NONE:
             raise ValueError("success expectation requires an evidence kind")
         if self.evidence_kind is ExpectedEvidenceKind.PRODUCT and not self.product_ids:
