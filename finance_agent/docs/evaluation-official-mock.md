@@ -165,6 +165,38 @@ Backend는 공모펀드 데이터가 준비돼 있어도 공식 실행을 허용
 집계 결과는 [공모펀드 명시적 승인 baseline](../evaluation/baselines/official-mock-http-fund-approved-v1-30.json)에
 보존한다
 
+### 4.3 제한 동시성 재검증
+
+공식 평가 client가 요청을 순차로만 보낸다고 단정하지 않고, 같은 동결 30문항을
+제한된 동시성으로 재생했다
+
+| 구성 | 결과 | p50 | p95 | 최대 |
+| --- | ---: | ---: | ---: | ---: |
+| 결정론적·동시성 1 | 30/30 | 187.993ms | 1,203.800ms | 1,742.160ms |
+| 결정론적·동시성 2 | 30/30 | 317.901ms | 2,708.489ms | 3,992.930ms |
+| 결정론적·동시성 4 | 30/30 | 749.675ms | 7,220.005ms | 8,551.599ms |
+| Qwen·공모펀드 승인·동시성 2 | 30/30 | 1,675.904ms | 3,009.731ms | 3,037.592ms |
+
+모든 구성에서 의미·공식 형식·답변 불가 안전 처리가 유지. Qwen 구성은 생성 대상
+17/17, fallback 0건. 단일 Uvicorn worker의 1회 관측이고 동시성이 커질수록
+결정론적 지연이 증가했으므로 처리량·최대 동시성·운영 SLO 주장에는 사용하지 않음
+
+### 4.4 공식 GET 예외 입력과 모델 장애
+
+Docker 확장 스모크는 Backend 7건 외에 정상·결측·공백·길이 초과·유니코드·
+마크업 공식 GET 7건을 검사
+
+- 기본 결정론적·공모펀드 잠금: 14/14
+- 로컬 Qwen·공모펀드 승인: 14/14
+- Qwen 중단 후 결정론적 fallback: 14/14
+- 마크업 입력은 원래 `question` 필드에만 보존되고 답변·근거·실행 요약에는 반사되지 않음
+- 실행 후 Qwen 포트 종료, GPU 각 15MiB, Backend `fund_execution_policy=locked` 복구 확인
+
+집계 근거는 [결정론적 동시성](../evaluation/baselines/official-mock-http-concurrency-v1.json),
+[Qwen 동시성 2](../evaluation/baselines/official-mock-http-qwen-approved-c2-v1.json),
+[기본 스모크](../evaluation/baselines/docker-http-smoke-v2.json),
+[Qwen 정상·장애 스모크](../evaluation/baselines/docker-http-smoke-qwen-v2.json)에 분리 보존
+
 ## 5. fallback 1건
 
 대상 질문은 `원화 매수 가능한 국내채권을 매수수익률 높은 순으로 5개 보여줘`다
@@ -256,8 +288,10 @@ python -m finance_agent_core.evaluation.official_mock_http_cli \
   --base-url http://127.0.0.1:18002 \
   --backend-profile local_test \
   --declared-model qwen3-local-test \
+  --concurrency 2 \
   --expected-fund-execution-policy public_fund_v1_approved \
   --require-perfect \
+  --require-no-fallback \
   --output artifacts/evaluation/official-mock-http-v1-30-fund-approved.json
 ```
 

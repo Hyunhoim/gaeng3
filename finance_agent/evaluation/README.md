@@ -45,6 +45,10 @@ DB, 원천 XLSX, 전체 report, 모델 가중치는 계속 `artifacts/` 또는 �
 | [공식 형식 30문항 공개 모의평가](baselines/official-mock-v1-30.json) | 난이도 10/10/10·답변 불가 5개에서 Qwen→Oracle→Verifier→공식 5필드 전체 경로 관측 |
 | [공식 GET Docker 30문항 최초 관측](baselines/official-mock-http-v1-30.json) | 실제 FastAPI 네트워크의 5필드 30/30·의미 24/30·공모펀드 정책 잠금 6건 |
 | [공식 GET Docker 공모펀드 명시적 승인](baselines/official-mock-http-fund-approved-v1-30.json) | 최초 24/30 보존 후 공모펀드만 여는 v1 정책으로 의미·형식·60초 30/30, Qwen 17/17 |
+| [공식 GET 결정론적 동시성](baselines/official-mock-http-concurrency-v1.json) | 동시성 1·2·4에서 의미·형식 90/90과 단일 worker 지연 변화 관측 |
+| [공식 GET Qwen 동시성 2](baselines/official-mock-http-qwen-approved-c2-v1.json) | 공모펀드 승인·Qwen 답변 17/17·fallback 0·전체 30/30 재검증 |
+| [Docker HTTP 확장 스모크](baselines/docker-http-smoke-v2.json) | 기본 잠금·결정론적 Backend 7건과 공식 정상·예외 GET 7건 14/14 |
+| [Docker Qwen 정상·장애 스모크](baselines/docker-http-smoke-qwen-v2.json) | 네 상품군 Qwen grounded 14/14와 모델 중단 fallback 14/14 |
 | [금융 도메인 QA 최초 관측](baselines/domain-qa-e2e-v1.json) | 금융 도메인 담당자 40문항의 route·safety·evidence·answer 단계별 최초 관측 |
 | [금융 도메인 QA SEARCH gold](baselines/domain-qa-e2e-v1.1-gold.json) | Q002 QueryPlan·Oracle 후보·상위 ID·evidence 지문 동결 후 Router 개선 전 관측 |
 | [금융 도메인 QA Router 회귀](baselines/domain-qa-e2e-v1.2-router.json) | Router·linker 안전 경계 개선 후 strict·route·safety·evidence·answer 40/40 |
@@ -115,6 +119,15 @@ Backend의 의도적인 공모펀드 공식 실행 잠금이다. 내부 평가 �
 30/30, 답변 불가 5/5, Qwen 문장 검증 17/17, fallback 0건이다. 이 정책명은
 팀의 배포 승인이며 주최 측의 공식 사용 승인을 뜻하지 않는다.
 
+결정론적 공식 GET 동시성 회귀는 같은 30문항을 1·2·4개씩 제한적으로 전송해
+모두 30/30을 확인했다. 단일 Uvicorn worker에서 동시성이 커질수록 p50·p95가
+증가했으므로 처리량 개선이나 SLO로 주장하지 않고 계약 안정성 경계로만 사용한다.
+
+로컬 Qwen 최신 재검증은 공모펀드 승인 정책에서 동시성 2로 30/30, 생성 대상
+17/17, fallback 0건이다. 별도 확장 스모크는 정상 모델에서 14/14, 모델을 끈
+뒤 네 상품군 결정론적 fallback에서도 14/14를 확인했다. 모두 개발용 공개
+회귀이며 HyperCLOVA X·독립 blind·공식 평가 결과가 아니다.
+
 `domain-qa-dev-v1-40`은 금융 도메인 담당자가 작성하고 AI 담당자가 검토한
 개발 QA다. 40문항을 route·plan·retrieval·evidence·answer·safety·contract로
 분해해 최초 strict 1/40, safety 32/40을 기록했다. 모델 성능이나 독립 blind
@@ -174,6 +187,10 @@ Markdown 링크를 함께 확인한다.
 - 검증·봉인·실행 도구: `scripts/blind-fund-eval.py`
 
 실제 문항과 비공개 정답키는 첫 실행 전 Git에 포함하지 않는다.
+
+네 상품군 공통 외부 blind 프로토콜은 공개 suite와의 근접 중복 검사, 질문·정답·
+구현 커밋 봉인, 원자적 단일 사용 `started` 상태와 완료 report SHA-256 결합을
+지원한다. 첫 실행이 중단되면 상태를 지우고 재시도하지 않고 최초 실패로 보존한다.
 
 ## HyperCLOVA X 연결 전 source freeze
 

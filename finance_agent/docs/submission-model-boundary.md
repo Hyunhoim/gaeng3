@@ -78,6 +78,34 @@
 | 문서 | 완료·미완료·개발 실험·공식 성능을 구분 |
 | 검수 | AI·Backend·금융 도메인 담당자가 각각 1회 확인 |
 
+### 자동 검사
+
+현재 개발 저장소가 로컬 LLM 파일을 격리하고 운영용 Compose·Dockerfile·필수
+의존성에 섞지 않았는지 확인
+
+```bash
+PYTHONPATH=finance_agent/packages/finance_agent_core/src \
+python finance_agent/scripts/check-submission-boundary.py \
+  --profile development
+```
+
+공식 범위 확인 후 별도 제출 후보에서는 더 엄격한 검사 실행
+
+```bash
+PYTHONPATH=finance_agent/packages/finance_agent_core/src \
+python finance_agent/scripts/check-submission-boundary.py \
+  --profile submission \
+  --output finance_agent/artifacts/release/submission-boundary.json
+```
+
+- `development`: 로컬 실험 파일은 허용하지만 루트 Compose·Backend Dockerfile·
+  운영 의존성에 로컬 LLM 표식이 들어가면 실패
+- `submission`: Git 추적 파일의 로컬 provider·모델·실행 문구와 `.env`, 모델
+  weight, SQLite까지 모두 실패 처리
+- 현재 개발 저장소는 `development` 통과, `submission` 차단이 정상
+- 검사는 현재 Git 추적 파일만 확인하며 Git 이력 재작성이나 공식 허용 범위 판단을
+  대신하지 않음
+
 ## 6. 현재 상태
 
 - 로컬 provider는 아직 개발 저장소에 존재
@@ -86,6 +114,8 @@
 - 실제 HyperCLOVA X 연결은 크레딧·정확한 모델 ID·endpoint·인증 규격 확보 후로 보류
 - 그 전까지 로컬 Qwen은 내부 회귀·E2E·fallback 시험에 계속 사용
 - 로컬 LLM 제거 작업은 공식 제출 범위 확정 후 수행
+- 자동 경계 검사는 구현 완료. 현재 개발 프로필은 통과하고 제출 프로필은 남아 있는
+  개발 흔적을 의도적으로 차단
 
 이 문서는 제거 완료 증명이 아니라, **제거를 놓치지 않기 위한
 release gate**임

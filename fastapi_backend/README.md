@@ -205,17 +205,28 @@ python fastapi_backend/scripts/smoke.py \
 ```bash
 python fastapi_backend/scripts/smoke.py \
   --base-url http://127.0.0.1:18002 \
-  --output /tmp/gaeng3-docker-http-smoke-v1.json
+  --output /tmp/gaeng3-docker-http-smoke-v2.json
 ```
 
-스모크는 `/health`, 내부 `POST /answer` 안전 분기와 공식 `GET /answer` 다섯 문자열
-계약을 함께 검사한다. 세 실행 상품군 검색, 공모펀드 정책 잠금, 모호한 요청, 예측·단정
-요청과 잘못된 JSON DTO를 함께 검사. 실제 평가 점수가 아니라 HTTP 배선과 안전 분기의
-회귀 여부를 확인하는 용도
+스모크는 `/health`, 내부 `POST /answer` 7건과 공식 `GET /answer` 7건을 함께
+검사. 공식 GET에는 정상 질문뿐 아니라 결측·공백·길이 초과·유니코드·마크업 형태
+입력을 포함하며, 어떤 경우에도 HTTP 200과 다섯 문자열 계약이 유지되는지 확인
 
-2026-08-07 새 Docker 이미지에서 내부 시나리오 7/7과 공식 GET 1/1이 통과했다.
-공식 채권 예시의 단일 관측 응답 시간은 943.605ms였다. 개발 서버의 1회 측정이므로
-운영 지연 보장이나 부하 성능으로 해석하지 않는다.
+기본값은 `fund_execution_policy=locked`를 요구. 팀이 공모펀드 실행 정책을 명시한
+개발 리허설에서는 다음 인자를 추가
+
+```bash
+python fastapi_backend/scripts/smoke.py \
+  --base-url http://127.0.0.1:18002 \
+  --timeout 180 \
+  --success-answer-mode llm_grounded \
+  --provider-model qwen3-local-test \
+  --expected-fund-execution-policy public_fund_v1_approved
+```
+
+2026-08-07 실제 Docker에서 기본 결정론적·잠금 경로 14/14, Qwen·공모펀드 승인
+경로 14/14, Qwen 중단 후 결정론적 fallback 경로 14/14를 확인. 공개 개발
+스모크이므로 공식 점수·독립 blind·운영 지연 보장으로 해석하지 않음
 
 ### 동결 30문항 실제 GET 평가
 
@@ -226,7 +237,9 @@ python fastapi_backend/scripts/smoke.py \
 python -m finance_agent_core.evaluation.official_mock_http_cli \
   --base-url http://127.0.0.1:18002 \
   --backend-profile local_test \
-  --declared-model qwen3-local-test
+  --declared-model qwen3-local-test \
+  --concurrency 2 \
+  --expected-fund-execution-policy public_fund_v1_approved
 ```
 
 이 채점기는 공식 다섯 문자열, 질문 보존, intent·상품군·후보 수, 상품 ID,
@@ -237,8 +250,10 @@ python -m finance_agent_core.evaluation.official_mock_http_cli \
 
 최초 결과를 보존한 뒤 공모펀드만 `public_fund_v1_approved`로 열고
 같은 30문항을 재실행한 결과는 형식·시간·의미 30/30, 답변 생성
-17/17, fallback 0건이다. 이 정책값은 팀의 배포 승인을 표현할 뿐 주최 측의
-공식 사용 승인을 뜻하지 않는다
+17/17, fallback 0건이다. 최신 동시성 2 재검증도 30/30, fallback 0건,
+p95 약 3.01초·최대 약 3.04초로 통과. 단일 서버의 1회 관측이므로 부하 시험이나
+운영 SLO가 아니며, 정책값은 팀의 배포 승인을 표현할 뿐 주최 측의 공식 사용
+승인을 뜻하지 않음
 
 저장소 루트에서 다음과 같이 새 프로세스에만 적용한다
 

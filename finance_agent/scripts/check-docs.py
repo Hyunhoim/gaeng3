@@ -43,7 +43,7 @@ PRODUCT_COMPARE_SUITE = (
 
 LINK_PATTERN = re.compile(r"!?\[[^\]]*]\((?:<(?P<angle>[^>]+)>|(?P<plain>[^)\s]+))\)")
 SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
-FROZEN_PYTEST_PASSED = 362
+FROZEN_PYTEST_PASSED = 370
 
 REQUIRED_INDEX_TARGETS = {
     "project-baseline.md",
@@ -103,6 +103,10 @@ REQUIRED_BASELINES = {
     "official-mock-v1-30.json",
     "official-mock-http-v1-30.json",
     "official-mock-http-fund-approved-v1-30.json",
+    "official-mock-http-concurrency-v1.json",
+    "official-mock-http-qwen-approved-c2-v1.json",
+    "docker-http-smoke-v2.json",
+    "docker-http-smoke-qwen-v2.json",
     "pre-hcx-route-diagnostic-initial-v1.json",
     "pre-hcx-route-diagnostic-improved-v1.json",
     "pre-hcx-route-diagnostic-initial-v2.json",
@@ -476,7 +480,11 @@ def _check_product_comparison_commitment() -> list[str]:
 
 def _readiness_files() -> list[Path]:
     package_root = PROJECT_ROOT / "packages" / "finance_agent_core"
+    backend_root = REPOSITORY_ROOT / "fastapi_backend"
     files = {
+        REPOSITORY_ROOT / "compose.sh",
+        REPOSITORY_ROOT / "rehearse.sh",
+        REPOSITORY_ROOT / "docker-compose.yml",
         PROJECT_ROOT / "README.md",
         PROJECT_ROOT / "environment.yml",
         PROJECT_ROOT / "environment.local-llm.yml",
@@ -488,6 +496,13 @@ def _readiness_files() -> list[Path]:
         PROJECT_ROOT / "scripts" / "generate-official-mock-suite.py",
         package_root / "README.md",
         package_root / "pyproject.toml",
+        backend_root / ".env.example",
+        backend_root / "Dockerfile",
+        backend_root / "Dockerfile.dockerignore",
+        backend_root / "README.md",
+        backend_root / "docker-compose.local-llm.yml",
+        backend_root / "pyproject.toml",
+        backend_root / "requirements.txt",
         *AREA_READMES,
     }
     files.update(
@@ -501,6 +516,16 @@ def _readiness_files() -> list[Path]:
         if path.is_file() and path.suffix in {".py", ".json", ".yaml"}
     )
     files.update((package_root / "tests").rglob("*.py"))
+    files.update(
+        path
+        for path in (PROJECT_ROOT / "scripts").rglob("*")
+        if path.is_file() and path.suffix in {".py", ".sh"}
+    )
+    files.update(
+        path
+        for path in backend_root.rglob("*")
+        if path.is_file() and path.suffix in {".py", ".sh"}
+    )
     files.update((REPOSITORY_ROOT / "ontology").glob("*.ttl"))
     files.update((PROJECT_ROOT / "requirements").rglob("*.txt"))
     files.update(BASELINE_ROOT.glob("*.json"))

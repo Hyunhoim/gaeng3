@@ -1,0 +1,102 @@
+{
+  "schema_version": "1.0",
+  "baseline_id": "official-mock-http-concurrency-v1",
+  "recorded_on": "2026-08-07",
+  "dataset": "overseas_etp+domestic_etp+bond+fund",
+  "evaluation_layer": "system_performance",
+  "status": "official_http_concurrency_regression",
+  "provider": {
+    "name": "deterministic",
+    "role": "verified_template_only",
+    "official_submission_provider": false,
+    "network_used": "docker_loopback_only"
+  },
+  "model": {
+    "repository": null,
+    "served_name": null,
+    "revision": null,
+    "visibility": "no_model_used"
+  },
+  "suite": {
+    "id": "official-mock-v1-30",
+    "version": "1.0",
+    "path": "packages/finance_agent_core/src/finance_agent_core/evaluation/suites/official_mock_v1_30.json",
+    "sha256": "c9250cd45656beadad563087941112b31318254c50fc72bf9f15dcaa1d88a36e",
+    "cases_per_profile": 30,
+    "concurrency_profiles": [1, 2, 4]
+  },
+  "data": {
+    "database_sha256": "2c26861a7e9b90ed4ae46ba3bfd4565daa63f405cf16627094629df36cecd03a",
+    "manifest_sha256": "624cef391dfe86aa2ce1a8ce20ad5142ec0d65a792e1fec6df0259024b997003",
+    "source_file_sha256": "c4f860f7a0d6821788015f51cf9ae48d2f48ab657e9a99be49771fc32fcaf895",
+    "hash_policy": "상품군 이름과 개별 SHA-256을 정렬해 결합한 뒤 다시 SHA-256 계산"
+  },
+  "execution_policy": {
+    "fund": "public_fund_v1_approved",
+    "default_fund_policy": "locked",
+    "answer_provider": "deterministic",
+    "server_workers": 1
+  },
+  "metrics": {
+    "total": 90,
+    "passed": 90,
+    "strict_accuracy": 1.0,
+    "official_contract_passed": 90,
+    "semantic_passed": 90,
+    "fallback_count": 0,
+    "profiles": {
+      "concurrency_1": {
+        "passed": 30,
+        "latency_ms": {
+          "min": 1.462,
+          "p50": 187.993,
+          "p95": 1203.8,
+          "max": 1742.16
+        }
+      },
+      "concurrency_2": {
+        "passed": 30,
+        "latency_ms": {
+          "min": 1.45,
+          "p50": 317.901,
+          "p95": 2708.489,
+          "max": 3992.93
+        }
+      },
+      "concurrency_4": {
+        "passed": 30,
+        "latency_ms": {
+          "min": 1.851,
+          "p50": 749.675,
+          "p95": 7220.005,
+          "max": 8551.599
+        }
+      }
+    }
+  },
+  "reports": [
+    {
+      "role": "docker_get_deterministic_concurrency_1",
+      "artifact_name": "official-mock-http-deterministic-c1.json",
+      "sha256": "524b7f1d7e2d06c0f334f1d53e28a2b80a56f35863a541ab9aa3899bf5264141"
+    },
+    {
+      "role": "docker_get_deterministic_concurrency_2",
+      "artifact_name": "official-mock-http-deterministic-c2.json",
+      "sha256": "a0b0ae8ec2da152aa0c6305b500c777a14b66118df25497b30c530304a6da4a4"
+    },
+    {
+      "role": "docker_get_deterministic_concurrency_4",
+      "artifact_name": "official-mock-http-deterministic-c4.json",
+      "sha256": "eff5e7113603fe7acf0f44697cb31aa1d1813b29b25ad057433353f461417f3e"
+    }
+  ],
+  "reproduce": "공모펀드 승인 정책과 결정론적 provider로 Backend를 시작한 뒤 official_mock_http_cli에 --concurrency 1, 2, 4와 --require-perfect를 각각 적용",
+  "limitations": [
+    "단일 Ubuntu 호스트·단일 Uvicorn worker·Docker loopback에서 프로필별 한 번 실행함",
+    "동시성 2와 4에서도 계약과 의미는 유지됐지만 지연시간은 순차 실행보다 증가함",
+    "처리량·서비스 수준 목표·최대 안전 동시성을 입증하는 부하 시험이 아님",
+    "결정론적 답변만 사용해 HyperCLOVA X·로컬 LLM 지연시간을 포함하지 않음",
+    "공개 self-authored 모의문항이며 독립 blind·공식 평가 결과가 아님"
+  ]
+}

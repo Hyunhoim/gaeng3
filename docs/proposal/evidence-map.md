@@ -35,19 +35,21 @@
 | 주장 | 값 | 정본 | 해석 제한 |
 | --- | ---: | --- | --- |
 | 원천 감사 | 4종 145,393행, 65/65 | [데이터 감사](../../finance_agent/docs/data-audit.md) | 제공 스냅샷 기준 |
-| 전체 코드 회귀 | pytest 362개 | [readiness](../../finance_agent/docs/pre-hcx-readiness.md) | Agent Core 범위 |
+| 전체 코드 회귀 | Agent Core pytest 370개·Backend pytest 34개 | [readiness](../../finance_agent/docs/pre-hcx-readiness.md) | 단위·계약 회귀 범위 |
 | 교차 상품군 SEARCH | 국내·해외 ETP 4/4 | [교차 SEARCH](../../finance_agent/docs/cross-family-search.md) | 공개 회귀, not blind |
 | 교차 상품군 grounded answer | expected·로컬 Qwen 각각 4/4; 생성 대상 2문항 모두 grounded; 실제 모델 호출 3회; fallback 0 | [교차 SEARCH](../../finance_agent/docs/cross-family-search.md)·[baseline](../../finance_agent/evaluation/baselines/cross-family-answer-v1.json) | 공개 4문항, not blind; 로컬 Qwen은 개발 전용 |
 | 내부 red-team | 수정 후 40/40 | [red-team 평가](../../finance_agent/docs/evaluation-internal-red-team.md) | self-authored, not blind |
 | 공식 형식 공개 모의평가 | 전체 계약 30/30, 답변 불가 5/5, Qwen 생성 16/17, fallback 1 | [모의평가](../../finance_agent/docs/evaluation-official-mock.md)·[baseline](../../finance_agent/evaluation/baselines/official-mock-v1-30.json) | 설명회 분포 모사, self-authored, not blind |
 | 공식 GET Docker 30문항 | 형식·60초 30/30, 의미 24/30, 공모펀드 정책 잠금 6건 | [모의평가](../../finance_agent/docs/evaluation-official-mock.md)·[HTTP baseline](../../finance_agent/evaluation/baselines/official-mock-http-v1-30.json) | 개발 서버 순차 1회, local Qwen 답변 전용, not blind |
 | 공식 GET 공모펀드 명시적 승인 | 의미·형식·60초 30/30, Qwen 17/17, fallback 0 | [모의평가](../../finance_agent/docs/evaluation-official-mock.md)·[승인 baseline](../../finance_agent/evaluation/baselines/official-mock-http-fund-approved-v1-30.json) | 최초 24/30 보존 후 팀 배포 정책 재평가, 주최 승인 아님, not blind |
+| 공식 GET 제한 동시성 | 결정론적 동시성 1·2·4 각 30/30, Qwen 동시성 2에서 30/30·fallback 0 | [모의평가](../../finance_agent/docs/evaluation-official-mock.md)·[결정론적 baseline](../../finance_agent/evaluation/baselines/official-mock-http-concurrency-v1.json)·[Qwen baseline](../../finance_agent/evaluation/baselines/official-mock-http-qwen-approved-c2-v1.json) | 단일 worker·프로필별 1회, 부하·SLO 아님 |
 | 금융 도메인 QA Router 회귀 | 40/40, 잘못된 실행·오류 0건 | [도메인 QA 평가](../../finance_agent/docs/evaluation-domain-qa.md)·[baseline](../../finance_agent/evaluation/baselines/domain-qa-e2e-v1.2-router.json) | 개선에 사용한 개발 세트, not blind |
 | 네 상품군 자연어 비교 공개 회귀 | 54문항 | [비교 평가](../../finance_agent/docs/evaluation-product-comparison.md) | 공개 회귀 |
 | SEARCH·AGGREGATE 결과 지문 | 8/8 | [성능 기준선](../../finance_agent/docs/evaluation-search-aggregate-performance.md) | 단일 개발 장비 |
 | HCX API 없는 전체 계약 | 8/8 | [HCX provider](../../finance_agent/docs/hyperclova-provider.md) | 실제 API 성능 아님 |
 | Backend service adapter | 12/12 | [Backend 계약](../../finance_agent/docs/backend-contract.md) | 실제 HTTP route 아님 |
-| 공식 GET Docker smoke | 1/1, 단일 채권 예시 943.605ms | [Backend README](../../fastapi_backend/README.md) | 개발 서버 1회, 부하·운영 SLO 아님 |
+| Docker HTTP 확장 smoke | 기본 14/14, Qwen 14/14, Qwen 장애 fallback 14/14 | [Backend README](../../fastapi_backend/README.md)·[기본 baseline](../../finance_agent/evaluation/baselines/docker-http-smoke-v2.json)·[Qwen baseline](../../finance_agent/evaluation/baselines/docker-http-smoke-qwen-v2.json) | 공개 개발 스모크, 보안 침투·운영 SLO 아님 |
+| 제출 모델 경계 | development 통과·submission 차단 자동 검사 | [제출 경계](../../finance_agent/docs/submission-model-boundary.md) | 현재는 개발 저장소라 제출 차단이 정상, 공식 범위 확인 후 cleanup 필요 |
 
 ## 완료되지 않은 주장
 

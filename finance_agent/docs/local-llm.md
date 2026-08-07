@@ -177,22 +177,26 @@ Docker의 `local_test`는 Qwen을 답변 생성에만 연결하고 QueryPlan은 
 결정론적 Core가 담당한다. 다음 명령은 저장소 루트에서 실행한다.
 
 ```bash
+FINANCE_BACKEND_FUND_EXECUTION_POLICY=public_fund_v1_approved \
 ./compose.sh \
   -f docker-compose.yml \
   -f fastapi_backend/docker-compose.local-llm.yml \
-  up --no-build --detach backend
+  up --no-build --detach --force-recreate --wait backend
 
 python fastapi_backend/scripts/smoke.py \
   --base-url http://127.0.0.1:18002 \
   --timeout 180 \
   --success-answer-mode llm_grounded \
-  --provider-model qwen3-local-test
+  --provider-model qwen3-local-test \
+  --expected-fund-execution-policy public_fund_v1_approved
 ```
 
 Qwen을 종료한 상태에서는 `--success-answer-mode deterministic_fallback`으로 같은
-7개 요청을 검사한다. 2026-08-05 실제 Docker HTTP 결과는 Qwen 정상 7/7, 장애
-fallback 7/7, 기본 결정론적 구성 복구 후 7/7이었다. 테스트가 끝나면 다음 명령으로
-개발 전용 override를 제거한 기본 컨테이너를 다시 만든다.
+14개 요청을 검사한다. 2026-08-07 실제 Docker HTTP 결과는 공모펀드까지 연
+Qwen 정상 14/14, 모델 중단 fallback 14/14, 기본 공모펀드 잠금·결정론적 구성
+복구 후 14/14였다. 공식 GET 7건에는 결측·공백·길이 초과·유니코드·마크업 입력도
+포함. 테스트가 끝나면 다음 명령으로 개발 전용 override를 제거한 기본 컨테이너를
+다시 만든다.
 
 ```bash
 ./compose.sh \

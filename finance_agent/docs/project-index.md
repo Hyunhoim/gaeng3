@@ -199,8 +199,8 @@ HCX 모델·endpoint·인증과 크레딧 적용 범위는 남아 있어 기존�
 - 금융 도메인 QA: v1 개발 40문항 최초 strict 1/40,
   safety·evidence 각각 32/40을 보존하고 v1.2 Router·linker 회귀에서
   모든 계약 40/40·잘못된 실행 0건, dependency pending 13건은 유지
-- 코드 회귀 기준: 전체 pytest 350개, Ruff lint·format, pip dependency check,
-  wheel과 필수 package data 검사
+- 코드 회귀 기준: Agent Core pytest 370개·Backend pytest 34개, Ruff lint·format,
+  pip dependency check, wheel과 필수 package data 검사
 - 로컬 Qwen 평가 기준: 동결 50문항에서 최초 미사용 holdout 9/10,
   오류 수정 후 전체 회귀 50/50을 연속 2회 재현
 - 국내 ETP 로컬 Qwen 기준: development 40/40, local-inference holdout 첫 실행 10/10
@@ -213,12 +213,20 @@ HCX 모델·endpoint·인증과 크레딧 적용 범위는 남아 있어 기존�
 - 다음 외부 게이트: 금융 도메인 담당자의 external blind 100문항·비공개 정답키,
   승인 corpus, 실제 사람 평가
 - Ubuntu SSH Docker 통합: 실제 이미지 build, 네 DB health, 채권·국내 ETP·
-  해외 ETP 실행, 공모펀드 잠금, 역질문·미지원·HTTP 422 스모크 7/7과
-  공식 GET 다섯 문자열 1/1 완료
+  해외 ETP 실행, 공모펀드 잠금, 역질문·미지원·HTTP 422 Backend 7건과
+  공식 GET 정상·예외 7건의 확장 스모크 14/14 완료
 - 동결 30문항의 실제 Docker 공식 GET: 형식·60초 30/30, 의미 24/30,
   공모펀드 공식 실행 잠금 6건을 최초 관측 baseline으로 보존
 - 공모펀드만 여는 명시적 v1 배포 정책으로 동일 30문항 의미·형식·60초 30/30,
   Qwen 17/17, fallback 0건 재평가. 실험 후 기본 `locked`로 복구
+- 제한 동시성 회귀: 결정론적 1·2·4에서 각 30/30, Qwen·공모펀드 승인
+  동시성 2에서 30/30·fallback 0. 부하·운영 SLO가 아닌 계약 안정성 관측
+- Qwen 정상 스모크 14/14, Qwen 중단 fallback 14/14, 종료 후 포트·GPU 해제와
+  기본 공모펀드 잠금 Backend 복구 확인
+- 외부 blind는 공개 세트 유사도 검사·SHA 봉인·최초 1회 상태·report hash 결합 완료,
+  실제 100문항 작성과 최초 실행은 금융 도메인 담당자 외부 게이트
+- 제출 경계 자동 검사: 개발 프로필 통과, 현재 제출 프로필 차단. 공식 범위 확인 후
+  로컬 개발 파일을 제거한 release 후보에서 재검사
 - Docker 데이터 준비: 읽기 전용 공식 XLSX에서 네 SQLite를 자동 생성·검증하고
   두 번째 실행에서 네 DB 모두 재사용, 성공 후에만 Backend 시작
 - 다음 기술 통합: 공식 `GET /answer` 계약·기본 55초 외곽 시간 예산,

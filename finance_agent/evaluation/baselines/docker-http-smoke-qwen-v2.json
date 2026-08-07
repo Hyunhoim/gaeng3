@@ -1,0 +1,76 @@
+{
+  "schema_version": "1.0",
+  "baseline_id": "docker-http-smoke-qwen-v2",
+  "recorded_on": "2026-08-07",
+  "dataset": "overseas_etp+domestic_etp+bond+fund",
+  "evaluation_layer": "system_regression",
+  "status": "docker_http_qwen_and_outage_regression",
+  "provider": {
+    "name": "local_test",
+    "role": "grounded_answer_only",
+    "official_submission_provider": false,
+    "network_used": "docker_and_qwen_loopback_only"
+  },
+  "model": {
+    "repository": "Qwen/Qwen3-30B-A3B-Instruct-2507-FP8",
+    "served_name": "qwen3-local-test",
+    "revision": "5a5a776300a41aaa681dd7ff0106608ef2bc90db",
+    "visibility": "development_only"
+  },
+  "suite": {
+    "id": "docker-http-smoke-v2",
+    "version": "1.1",
+    "path": "../fastapi_backend/scripts/smoke.py",
+    "sha256": "6c341163b12d5e7584663c25877bf7d57a57e9c1a4dc407c82908950748ef975",
+    "cases_per_profile": 14,
+    "profiles": [
+      "qwen_available",
+      "qwen_unavailable"
+    ]
+  },
+  "data": {
+    "database_sha256": "2c26861a7e9b90ed4ae46ba3bfd4565daa63f405cf16627094629df36cecd03a",
+    "manifest_sha256": "624cef391dfe86aa2ce1a8ce20ad5142ec0d65a792e1fec6df0259024b997003",
+    "source_file_sha256": "c4f860f7a0d6821788015f51cf9ae48d2f48ab657e9a99be49771fc32fcaf895",
+    "hash_policy": "상품군 이름과 개별 SHA-256을 정렬해 결합한 뒤 다시 SHA-256 계산"
+  },
+  "execution_policy": {
+    "fund": "public_fund_v1_approved",
+    "default_fund_policy": "locked",
+    "answer_provider": "local_test"
+  },
+  "metrics": {
+    "total": 28,
+    "passed": 28,
+    "strict_accuracy": 1.0,
+    "qwen_available_total": 14,
+    "qwen_available_passed": 14,
+    "qwen_grounded_backend_answers": 4,
+    "qwen_available_fallback_count": 0,
+    "qwen_unavailable_total": 14,
+    "qwen_unavailable_passed": 14,
+    "qwen_unavailable_backend_fallbacks": 4,
+    "official_contract_passed": 14,
+    "markup_reflection_blocked": 2
+  },
+  "reports": [
+    {
+      "role": "docker_http_qwen_available_fund_approved",
+      "artifact_name": "gaeng3-docker-http-smoke-v2-qwen-approved.json",
+      "sha256": "fdc3cbcc33d94185fa9efe0fabe71a491a38f23610dde22c0aaf796999b70f74"
+    },
+    {
+      "role": "docker_http_qwen_unavailable_deterministic_fallback",
+      "artifact_name": "gaeng3-docker-http-smoke-v2-qwen-outage.json",
+      "sha256": "7c84430f24c7a8660c2f1631d80ee9396d8dafae741941fdb7410de058b0601a"
+    }
+  ],
+  "reproduce": "개발용 Qwen loopback과 local-LLM Compose override 및 public_fund_v1_approved를 명시해 smoke.py를 실행한 뒤 Qwen만 종료하고 deterministic_fallback 기댓값으로 같은 스모크를 재실행",
+  "limitations": [
+    "로컬 Qwen은 개발 전용이며 평가·제출·운영 provider가 아님",
+    "공모펀드 정책명은 팀 내부 배포 승인이고 주최 측 공식 승인을 뜻하지 않음",
+    "정상·장애 프로필을 각각 한 번 실행한 회귀이며 장시간 안정성 시험이 아님",
+    "fallback 통과는 답변 안전성을 뜻하며 모델 장애 자체가 없었다는 뜻이 아님",
+    "공개 개발 스모크이며 독립 blind·HyperCLOVA X·공식 평가 결과가 아님"
+  ]
+}

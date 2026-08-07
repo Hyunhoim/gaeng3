@@ -37,7 +37,7 @@
 | 단계 | 산출물 | 완료 조건 | 상태 |
 | --- | --- | --- | --- |
 | 0 | 현재 코드·문서·평가 감사 | 시작 검사와 간극 기록 | 완료 |
-| 1 | 공통 진단·외부 holdout 프로토콜 | schema, validator, SHA 봉인, 진단 전·후 report | 내부 완료·외부 작성 대기 |
+| 1 | 공통 진단·외부 holdout 프로토콜 | schema, validator, 공개 세트 유사도 검사, SHA 봉인, 최초 1회 상태 잠금 | 내부 완료·외부 작성 대기 |
 | 2 | 네 상품군 capability matrix | QueryPlan·Oracle과 자동 정합성 검사 | 완료 |
 | 3 | fail-closed Router·공통 답변 경로 | 실행·역질문·거절이 계약대로 분리되고 E2E 검증 | 완료 |
 | 3A | 네 상품군 AGGREGATE | Decimal 계산·통화 gate·결측·기준일·독립 verifier·Backend evidence | 완료 |
@@ -46,11 +46,11 @@
 | 5 | 사람 rubric·Backend DTO | JSON 예시·schema·contract test 포함 | 계약 완료·사람 평가 대기 |
 | 6 | baseline 동결·전체 QA | 회귀·wheel·문서·hash 검증과 외부 게이트 명시 | 내부 완료 |
 | 7 | HyperCLOVA X provider 경계 | 세 operation·주입형 transport·오류·관측·전체 경로 E2E | 내부 8/8 완료·실제 HTTP 대기 |
-| 8 | `/answer` service adapter·FastAPI route | HTTP status·안전한 ERROR DTO·fallback·비노출·입력 검증 계약 | adapter 12/12·Backend 30/30·Ubuntu Docker HTTP 7/7 |
+| 8 | `/answer` service adapter·FastAPI route | HTTP status·안전한 ERROR DTO·fallback·비노출·입력 검증 계약 | adapter 12/12·Backend 34/34·Docker 기본/Qwen/장애 각 14/14 |
 | 9 | `internal-red-team-v1` | 네 상품군 40문항·10개 공격 유형·전체 `/answer` E2E | expected·수정 후 로컬 Qwen 40/40 |
 | 10 | 교차 상품군 grounded answer | family evidence 격리·교차 문구 검증·전체 fallback·무호출 | expected·로컬 Qwen 각각 4/4 |
 | 11 | 금융 도메인 QA 실험 | 담당자 작성 40문항 hash 검증·단계별 E2E·Q002 SEARCH gold | v1.2 사후 회귀 40/40·잘못된 실행 0건 |
-| 12 | 제출용 모델 경계 | 로컬 provider 제거 검사·투명한 개발·제출 분리 | release gate 문서화·제출 범위 서면 확인 대기 |
+| 12 | 제출용 모델 경계 | 로컬 provider 제거 검사·투명한 개발·제출 분리 | 개발 자동 검사 통과·제출 자동 차단·공식 범위 서면 확인 대기 |
 | 13 | 공식 평가 API adapter | `GET /answer`·다섯 문자열·전 결과 HTTP 200·60초 내부 예산 | route·DTO·상태·오류·55초 외곽 예산 완료 |
 | 14 | 도메인별 Ontology | Turtle 5개·field registry 정합성·문법 검사 | 5개 생성·RDFLib 문법·registry exact-match 완료 |
 | 15 | 공식 형식 공개 모의평가 | 난이도 10/10/10·답변 불가 5개·공식 5필드·latency | expected·로컬 Qwen 30/30·생성 16/17·안전 fallback 1건 |
@@ -200,18 +200,26 @@ Backend `/answer` service adapter 결과:
 
 ## 4. 내부 완료 QA
 
-- pytest `362 passed`
+- Agent Core pytest `370 passed`
+- Backend pytest `34 passed`
 - Ruff lint와 format 통과
-- 문서 검사 `55 Markdown files`, `34 evaluation baselines` 통과
+- 문서 검사 `55 Markdown files`, `38 evaluation baselines` 통과
 - `pip check` 통과
 - build isolation 없이 wheel 생성과 신규 JSON package data 포함 여부 통과
 - `git diff --check` 통과
 - source·test·문서·baseline·protocol tree SHA-256 manifest 검증
 - 공식 XLSX 4종에서 Docker volume의 SQLite 4개를 자동 생성하고 두 번째 실행에서
-  모두 재사용, Backend health와 내부 HTTP 스모크 7/7·공식 GET 1/1 통과
+  모두 재사용, 기본 Backend·공식 GET 확장 스모크 14/14 통과
 - 실제 Docker 공식 GET 30문항의 형식·60초 30/30, 의미 24/30과 공모펀드 잠금
   6건의 최초 관측 보존
 - 명시적 공모펀드 v1 승인 경로의 동일 30문항 30/30과 실험 후 기본 잠금 복구 확인
+- 로컬 Qwen·공모펀드 승인 Docker 스모크 14/14, 모델 중단 fallback 14/14,
+  공식 모의 30문항 동시성 2에서 30/30·fallback 0 확인
+- 결정론적 공식 30문항은 동시성 1·2·4에서 모두 30/30. 단일 worker에서
+  동시성이 커질수록 지연이 증가해 처리량·SLO 근거로는 사용하지 않음
+- 외부 blind 100문항은 공개 질문 유사도 검사와 원자적 최초 실행 상태·report hash
+  결합까지 구현. 실제 질문·정답 작성과 최초 실행은 외부 게이트로 유지
+- 제출 경계 개발 프로필 통과, 제출 프로필은 현재 로컬 개발 흔적을 의도적으로 차단
 
 source freeze는
 `evaluation/protocols/pre-hcx-readiness-v1.manifest.json`에 보존한다. 외부

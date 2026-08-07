@@ -171,19 +171,30 @@
   경계를 개선해 strict·route·safety·evidence·answer 40/40,
   control 잘못된 실행·오류 0건을 기록했다. 개발 세트 사후 회귀이므로
   독립 blind 성능으로 해석하지 않는다.
-- 전체 코드 회귀는 pytest 362개, Ruff lint·format, pip dependency check와
+- 전체 Agent Core 회귀는 pytest 370개, Backend 회귀는 34개이며 Ruff lint·format,
+  pip dependency check와
   wheel 빌드를 통과했다.
 - Docker `data-init`은 읽기 전용 공식 XLSX에서 네 SQLite를 자동 생성·검증하고,
   같은 원천과 registry에서는 재사용한다. 모든 DB 준비가 성공한 뒤에만 Backend를
   시작하며 Backend에는 생성 volume을 읽기 전용으로 연결한다.
-- 새 Docker 이미지에서 내부 HTTP 시나리오 7/7과 공식 `GET /answer` 다섯 문자열
-  1/1을 통과했다. 공식 채권 예시 1회 응답은 943.605ms이며 운영 SLO가 아니다.
+- 새 Docker 이미지에서 내부 Backend 7건과 공식 `GET /answer` 7건으로 구성한
+  확장 스모크 14/14를 통과했다. 공식 GET은 정상·결측·공백·길이 초과·유니코드·
+  마크업 입력의 HTTP 200·다섯 문자열·안전 제어를 함께 검사한다.
 - 동결 30문항도 실제 Docker `GET /answer`로 순차 호출했다. 공식 다섯 문자열과
   60초 예산은 30/30, 의미 일치는 24/30이다. 실패 6건은 모두 Backend의 의도적인
   공모펀드 공식 실행 잠금이며, 내부 평가 전용 30/30과 구분해 최초 결과를 보존했다.
 - 최초 24/30을 덮어쓰지 않고 공모펀드만 여는 명시적 v1 배포 정책으로 같은 30문항을
   재실행했다. 의미·형식·60초 30/30, Qwen 문장 검증 17/17, fallback 0건이며
   실험 후 Backend는 기본 `locked`로 복구했다.
+- 최신 Docker 재검증에서 로컬 Qwen·공모펀드 승인 스모크 14/14, Qwen 중단 후
+  결정론적 fallback 14/14를 확인했다. 같은 공식 모의 30문항을 동시성 2로 보내도
+  30/30, Qwen 17/17, fallback 0건이며 p95 약 3.01초·최대 약 3.04초였다.
+- 결정론적 공식 모의 30문항은 동시성 1·2·4에서 모두 30/30이었지만 단일 worker의
+  p50은 약 0.19초→0.32초→0.75초, p95는 약 1.20초→2.71초→7.22초로 증가했다.
+  이 관측은 계약 안정성만 보여주며 처리량이나 운영 SLO를 입증하지 않는다.
+- 제출 경계 자동 검사는 개발 전용 파일을 운영 Compose·Dockerfile·의존성과 분리했는지
+  확인한다. 현재 `development`는 통과하고 `submission`은 남은 로컬 개발 흔적을
+  의도적으로 차단한다.
 
 ## 3. 변경할 수 없는 공식 제약
 
@@ -371,8 +382,8 @@ QueryPlan에는 최소한 intent, 상품군, 필수 조건, 완화 전 확인이
   fallback·민감정보 비노출 계약을 연결한다.
 - [x] FastAPI `/health`·`/answer` route와 입력 검증 오류 DTO를 연결하고 실제
   SQLite 로컬 HTTP 경로로 재현한다.
-- [x] Ubuntu SSH Docker에서 이미지 build·health·네 상품군 정책·제어 응답을
-  실제 HTTP 7개 요청으로 재현한다.
+- [x] Ubuntu SSH Docker에서 이미지 build·health·네 상품군 정책·제어 응답과
+  공식 GET 예외 입력을 실제 HTTP 14개 요청으로 재현한다.
 - [ ] 공식 endpoint·인증 계약에 맞는 HyperCLOVA X HTTP transport를 연결하고
   주최 측 실행 환경에서 재현한다.
 
@@ -387,6 +398,8 @@ QueryPlan에는 최소한 intent, 상품군, 필수 조건, 완화 전 확인이
 - [x] parser 규칙을 commit한 뒤 공모펀드 holdout을 최초 1회 평가한다.
 - [x] 공개된 holdout 실패를 family handoff 회귀 테스트로 수정한다.
 - [x] 독립 100문항 blind 세트의 분포·봉인·최초 실행 프로토콜을 구현한다.
+- [x] 네 상품군 외부 blind에 공개 질문 유사도 검사와 단일 사용 최초 실행 상태·
+  결과 report hash 결합을 추가한다.
 - [x] 공모펀드 grounded answer를 `fund-core-50`에서 평가한다.
 - [x] 공모펀드 true COMPARE의 선택·계산·근거·검증·폴백을 20문항에서 평가한다.
 - [x] 자연어 상품명·짧은 이름·상품번호를 정확한 COMPARE 대상으로 연결하는

@@ -1,0 +1,74 @@
+{
+  "schema_version": "1.0",
+  "baseline_id": "docker-http-smoke-v2",
+  "recorded_on": "2026-08-07",
+  "dataset": "overseas_etp+domestic_etp+bond+fund",
+  "evaluation_layer": "system_regression",
+  "status": "docker_http_smoke_regression",
+  "provider": {
+    "name": "deterministic",
+    "role": "verified_template_only",
+    "official_submission_provider": false,
+    "network_used": "docker_loopback_only"
+  },
+  "model": {
+    "repository": null,
+    "served_name": null,
+    "revision": null,
+    "visibility": "no_model_used"
+  },
+  "suite": {
+    "id": "docker-http-smoke-v2",
+    "version": "1.1",
+    "path": "../fastapi_backend/scripts/smoke.py",
+    "sha256": "6c341163b12d5e7584663c25877bf7d57a57e9c1a4dc407c82908950748ef975",
+    "backend_cases": 7,
+    "official_get_cases": 7
+  },
+  "data": {
+    "database_sha256": "2c26861a7e9b90ed4ae46ba3bfd4565daa63f405cf16627094629df36cecd03a",
+    "manifest_sha256": "624cef391dfe86aa2ce1a8ce20ad5142ec0d65a792e1fec6df0259024b997003",
+    "source_file_sha256": "c4f860f7a0d6821788015f51cf9ae48d2f48ab657e9a99be49771fc32fcaf895",
+    "hash_policy": "상품군 이름과 개별 SHA-256을 정렬해 결합한 뒤 다시 SHA-256 계산"
+  },
+  "execution_policy": {
+    "fund": "locked",
+    "answer_provider": "deterministic"
+  },
+  "metrics": {
+    "total": 14,
+    "passed": 14,
+    "strict_accuracy": 1.0,
+    "backend_total": 7,
+    "backend_passed": 7,
+    "official_get_total": 7,
+    "official_get_passed": 7,
+    "official_contract_pass_rate": 1.0,
+    "invalid_request_control_passed": 5,
+    "markup_reflection_blocked": 1,
+    "health_latency_ms": 9.642,
+    "backend_latency_ms": {
+      "min": 1.086,
+      "max": 861.735
+    },
+    "official_get_latency_ms": {
+      "min": 0.725,
+      "max": 654.61
+    }
+  },
+  "reports": [
+    {
+      "role": "docker_http_smoke_default_locked",
+      "artifact_name": "gaeng3-docker-http-smoke-v2.json",
+      "sha256": "5c9758a8174b45a85af45c31d5b3db6d189d37ea93452d966e2e4bf07cae0da4"
+    }
+  ],
+  "reproduce": "기본 locked 설정으로 ./compose.sh up --no-build --detach --force-recreate --wait backend를 실행한 뒤 python fastapi_backend/scripts/smoke.py --base-url http://127.0.0.1:18002를 실행",
+  "limitations": [
+    "단일 Ubuntu 호스트와 Docker loopback에서 한 번 실행한 계약 스모크임",
+    "공모펀드는 기본 locked 정책의 clarification을 정상 동작으로 검증함",
+    "유니코드·마크업 검사는 입력 반사 방지이며 전문 보안 침투 테스트가 아님",
+    "결정론적 답변만 사용해 HyperCLOVA X·로컬 LLM 생성 품질을 평가하지 않음",
+    "공개 개발 스모크이며 독립 blind·공식 평가 결과가 아님"
+  ]
+}
