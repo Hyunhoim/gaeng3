@@ -3,12 +3,12 @@
   "baseline_id": "pre-hcx-readiness-v1",
   "recorded_on": "2026-08-07",
   "status": "internal_ready_external_gates_pending",
-  "git_commit": "5f6ec0f5fc2936acb6610b4d8eb28370cb290255",
-  "last_committed_source_commit": "5f6ec0f5fc2936acb6610b4d8eb28370cb290255",
+  "git_commit": "503c2a36b9962fc7a397800aa5228dde1126c6a7",
+  "last_committed_source_commit": "503c2a36b9962fc7a397800aa5228dde1126c6a7",
   "generated_from_dirty_worktree": false,
   "hash_algorithm": "sha256(sorted(relative_path + NUL + file_sha256 + LF))",
-  "file_count": 268,
-  "tree_sha256": "27e7c25b083af6ce53afceaa95dc4bffb80dcb0d1b65c7422737273a7f8452be",
+  "file_count": 277,
+  "tree_sha256": "cf11b88cf09a194098d513c3c99ef006459af3bb2c08fa249b4b9ff0c94a9b89",
   "included_scope": [
     "README.md",
     "environment*.yml",
@@ -28,7 +28,9 @@
     "packages/finance_agent_core/tests/**/*.py",
     "scripts/check-docs.py",
     "scripts/run-hcx-contract-e2e.py",
-    "scripts/run-answer-adapter-contract.py"
+    "scripts/run-answer-adapter-contract.py",
+    "scripts/sync-ontology.py",
+    "../ontology/*.ttl"
   ],
   "diagnostic": {
     "suite_sha256": "8bab9b0f4fd3e40782c591e2e3aea2f9d76b94a2d31d846d8b957604af0313b0",
@@ -40,11 +42,11 @@
     "limitation": "self_authored_internal_diagnostic_not_independent_blind"
   },
   "qa": {
-    "pytest_passed": 347,
+    "pytest_passed": 350,
     "ruff_lint": "passed",
     "ruff_format": "passed",
     "pip_check": "passed",
-    "documentation_markdown": 53,
+    "documentation_markdown": 54,
     "documentation_baselines": 31,
     "wheel_build_no_isolation": "passed",
     "wheel_required_package_data": "passed",
