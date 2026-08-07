@@ -26,7 +26,6 @@ _AMBIGUOUS = re.compile(
     r"적당한|괜찮은|안전한|좋은\s*상품|추천(?:해|하|받|할\s*만한)|"
     r"좀\s*낮아도|많이\s*주는|제일\s*수익률|리스크.*신경\s*안|"
     r"뭐가\s*더\s*좋|어느.*더\s*좋|"
-    r"(?:ETF|ETN).*(?:ETF|ETN).*(?:보수|수수료|비용)|"
     r"(?:가격.*왜|왜.*가격)",
     re.IGNORECASE,
 )
@@ -74,6 +73,12 @@ _LABELED_ID = re.compile(
     r"(?:상품번호|종목코드|티커)\s*[:：]?\s*([A-Z0-9._:-]{2,30})",
     re.IGNORECASE,
 )
+_CONTROL_FAMILY_PRIORITY = {
+    ProductFamily.FUND: 0,
+    ProductFamily.BOND: 1,
+    ProductFamily.DOMESTIC_ETP: 2,
+    ProductFamily.OVERSEAS_ETP: 3,
+}
 
 
 def _ordered_unique(values: Iterable[str]) -> list[str]:
@@ -201,6 +206,10 @@ class IntentRouter:
 
         families = _product_families(stripped)
         intent = _intent(stripped, families)
+        if len(families) > 1 and intent is not InteractionIntent.SEARCH:
+            # Control responses do not execute a family sequence. Keep their DTO order
+            # stable across router vocabulary changes and preserve the frozen contract.
+            families = sorted(families, key=_CONTROL_FAMILY_PRIORITY.__getitem__)
         mentions = _product_mentions(stripped)
         draft = MinimalQueryDraft(
             request_id=request_id,

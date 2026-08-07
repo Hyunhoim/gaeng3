@@ -114,6 +114,23 @@ def test_router_fails_closed_for_missing_identity_and_cross_family_question() ->
     assert cross_family.disposition is RouteDisposition.CLARIFY
     assert cross_family.reason_code == "ambiguous_product_family"
     assert cross_family.query_plan_intent is None
+    assert cross_family.draft.intent is InteractionIntent.COMPARE
+    assert cross_family.draft.product_families == [
+        ProductFamily.FUND,
+        ProductFamily.DOMESTIC_ETP,
+    ]
+
+    etp_comparison = router.route(
+        "국내 ETF와 해외 ETF의 총보수율을 비교해줘",
+        "route-003",
+    )
+    assert etp_comparison.disposition is RouteDisposition.CLARIFY
+    assert etp_comparison.reason_code == "ambiguous_product_family"
+    assert etp_comparison.draft.intent is InteractionIntent.COMPARE
+    assert etp_comparison.draft.product_families == [
+        ProductFamily.DOMESTIC_ETP,
+        ProductFamily.OVERSEAS_ETP,
+    ]
 
 
 def test_router_generalizes_financial_safety_boundaries() -> None:
