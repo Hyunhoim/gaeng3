@@ -64,6 +64,7 @@ HCX 모델·endpoint·인증과 크레딧 적용 범위는 남아 있어 기존�
 - [COMPARE 공개 회귀](evaluation-product-comparison.md)
 - [SEARCH·AGGREGATE 성능](evaluation-search-aggregate-performance.md)
 - [internal red-team](evaluation-internal-red-team.md)
+- [공식 형식 30문항 공개 모의평가](evaluation-official-mock.md)
 - [금융 도메인 QA](evaluation-domain-qa.md)
 - [사람 평가 rubric](human-evaluation.md)
 - [전체 평가 baseline](../evaluation/README.md)
@@ -107,6 +108,7 @@ HCX 모델·endpoint·인증과 크레딧 적용 범위는 남아 있어 기존�
 | [교차 상품군 병렬 SEARCH와 grounded answer v2](cross-family-search.md) | 상품군별 QueryPlan·병렬 Oracle·evidence 격리 생성·교차 문구 검증·전체 fallback 계약 | v2.0 정본 |
 | [HyperCLOVA X provider 계약](hyperclova-provider.md) | 세 LLM 역할의 요청·응답·오류·관측 계약과 API 없는 전체 Agent E2E | 계약·E2E 8/8 완료·실제 HTTP 대기 |
 | [internal-red-team-v1 전체 E2E 평가](evaluation-internal-red-team.md) | 네 상품군 40문항의 공격 유형·전체 `/answer` 경로·최초 실패·수정 후 회귀 | v1.0 정본 |
+| [공식 형식 30문항 공개 모의평가](evaluation-official-mock.md) | 설명회 예상 난이도 10/10/10·답변 불가 5개 분포의 Qwen·Oracle·검증·공식 응답 전체 경로 | v1.0 최초 관측 |
 | [금융 도메인 QA 실험 파이프라인](evaluation-domain-qa.md) | 금융 도메인 담당자 40문항의 hash 검증·단계별 채점·Q002 QueryPlan·Oracle·evidence gold | v1.2 Router 회귀 40/40 |
 | [제출용 모델 경계와 로컬 LLM 정리 메모](submission-model-boundary.md) | 8월 6일 공식 확인, 제출 후보의 로컬 provider·설정·의존성 제거, 투명한 개발·제출 경계 | release gate |
 | [BM25/SQLite FTS 문서 RAG](document-rag.md) | 승인 문서 적재·BM25 검색·필터·근거·기준일·not-found 계약 | 최소 기능 완료 |

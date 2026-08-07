@@ -42,6 +42,7 @@ DB, 원천 XLSX, 전체 report, 모델 가중치는 계속 `artifacts/` 또는 �
 | [HyperCLOVA X API 없는 계약 E2E](baselines/hcx-contract-e2e-v1.json) | 세 실행 상품군 SEARCH·fallback·timeout·정책 차단·계획 guard 8개 |
 | [Backend answer adapter 계약](baselines/answer-adapter-contract-v1.json) | HTTP status·안전한 ERROR DTO·fallback·민감정보 비노출 12개 |
 | [내부 red-team 전체 E2E](baselines/internal-red-team-v1.json) | 네 상품군 40문항의 Router→Qwen→Oracle→Verifier→Backend DTO와 공격 유형 회귀 |
+| [공식 형식 30문항 공개 모의평가](baselines/official-mock-v1-30.json) | 난이도 10/10/10·답변 불가 5개에서 Qwen→Oracle→Verifier→공식 5필드 전체 경로 관측 |
 | [금융 도메인 QA 최초 관측](baselines/domain-qa-e2e-v1.json) | 금융 도메인 담당자 40문항의 route·safety·evidence·answer 단계별 최초 관측 |
 | [금융 도메인 QA SEARCH gold](baselines/domain-qa-e2e-v1.1-gold.json) | Q002 QueryPlan·Oracle 후보·상위 ID·evidence 지문 동결 후 Router 개선 전 관측 |
 | [금융 도메인 QA Router 회귀](baselines/domain-qa-e2e-v1.2-router.json) | Router·linker 안전 경계 개선 후 strict·route·safety·evidence·answer 40/40 |
@@ -131,6 +132,12 @@ strict 1/40·safety 32/40은 유지되며 E2 사후 회귀의 비교점이다.
 답변 가능 실행 1/5를 기록한다.
 이 질문들은 실제 평가 문항이 아니며, 공개 후 수정 결과도 blind 성능으로 해석하지
 않는다.
+
+`official-mock-v1-30`은 설명회의 예상 난이도 하·중·상 각 10개와 답변 불가
+5개 분포만 모사한 공개 모의평가다. 로컬 Qwen에서 검색·비교·집계·안전·근거·
+공식 응답 계약 30/30, 답변 생성 16/17, 안전 fallback 1건을 기록했다. fallback은
+`수익성 평가`라는 가치 판단 가능 문구를 Answer Verifier가 차단한 결과다.
+AI 담당자가 기존 질문과 정답을 재사용했으므로 독립 blind나 공식 평가 점수가 아니다.
 
 라우팅 v1은 AGGREGATE 미지원, v2는 COMPARE가 공모펀드에만 열렸던 당시의
 봉인 이력이다. 현재 capability 정본은 원본을 수정하지 않고 별도

@@ -33,7 +33,7 @@ ETF·ETN, 공모펀드를 조회·비교·계산한 뒤 근거와 기준일을 �
 | Backend | FastAPI `GET /health`, 내부용 `POST /answer`, 평가용 `GET /answer` 구현 |
 | Frontend | 동료의 `nextjs-frontend/` 코드 합류 후 연결 예정 |
 | LLM | 로컬 Qwen은 내부 개발에만 사용, HyperCLOVA X는 크레딧·실제 API 규격 확보 후 연결 |
-| 자동 검증 | AI Core pytest 350개와 Backend·문서·Docker 검증 경로 관리 |
+| 자동 검증 | AI Core pytest 357개와 Backend·문서·Docker 검증 경로 관리 |
 
 세부 기능과 평가 결과는 [AI Agent 작업공간](finance_agent/README.md)에서 관리
 

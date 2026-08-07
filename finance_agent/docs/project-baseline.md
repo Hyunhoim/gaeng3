@@ -145,6 +145,12 @@
   Router 계약 회귀를 발견했다. 과도한 ETP 비용 모호성 규칙과 제어 응답 family
   순서를 수정하고 단위 테스트를 추가한 뒤 expected·로컬 Qwen strict·safety·
   evidence 40/40, provider 오류·fallback 0건을 다시 확인했다.
+- 설명회의 예상 난이도 하·중·상 각 10문항과 답변 불가 5개 분포를 모사한
+  공개 모의평가를 추가했다. expected·로컬 Qwen 모두 검색·비교·집계·안전·근거·
+  공식 5필드 계약 30/30이며, Qwen 답변 생성은 16/17이다. 나머지 1건의
+  `수익성 평가` 문구는 Answer Verifier가 차단해 결정론적 답변으로 교체했다.
+  로컬 순차 실행 p50은 1,553.318ms, p95는 3,876.727ms, 최대는
+  4,398.949ms다. 공개 self-authored 세트이므로 blind나 공식 점수가 아니다.
 - 국내·해외 ETP 교차 SEARCH는 상품군별 evidence-only grounded answer까지
   확장했다. expected·로컬 Qwen 공개 회귀는 각각 4/4, 생성 대상 2문항
   grounded, 실제 모델 호출 3회, fallback 0이며 전체 빈 결과와 control은
@@ -165,7 +171,7 @@
   경계를 개선해 strict·route·safety·evidence·answer 40/40,
   control 잘못된 실행·오류 0건을 기록했다. 개발 세트 사후 회귀이므로
   독립 blind 성능으로 해석하지 않는다.
-- 전체 코드 회귀는 pytest 350개, Ruff lint·format, pip dependency check와
+- 전체 코드 회귀는 pytest 357개, Ruff lint·format, pip dependency check와
   wheel 빌드를 통과했다.
 - Docker `data-init`은 읽기 전용 공식 XLSX에서 네 SQLite를 자동 생성·검증하고,
   같은 원천과 registry에서는 재사용한다. 모든 DB 준비가 성공한 뒤에만 Backend를

@@ -83,6 +83,7 @@ Answer Verifier, 결정론적 evidence compiler와 safe fallback으로 구성한
 - [Ontology 제출 계약](../../docs/ontology.md): 파일 역할·생성·문법·registry 정합성 검사
 - [사람 평가 rubric](../../docs/human-evaluation.md): 독립 reviewer·critical gate
 - [internal-red-team-v1](../../docs/evaluation-internal-red-team.md): 네 상품군 전체 E2E·안전 회귀
+- [공식 형식 30문항 공개 모의평가](../../docs/evaluation-official-mock.md): 난이도 10/10/10·답변 불가 5개 전체 경로
 
 ## 상품군 vertical slice
 

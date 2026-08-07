@@ -53,6 +53,7 @@
 | 12 | 제출용 모델 경계 | 로컬 provider 제거 검사·투명한 개발·제출 분리 | release gate 문서화·제출 범위 서면 확인 대기 |
 | 13 | 공식 평가 API adapter | `GET /answer`·다섯 문자열·전 결과 HTTP 200·60초 내부 예산 | route·DTO·상태·오류·55초 외곽 예산 완료 |
 | 14 | 도메인별 Ontology | Turtle 5개·field registry 정합성·문법 검사 | 5개 생성·RDFLib 문법·registry exact-match 완료 |
+| 15 | 공식 형식 공개 모의평가 | 난이도 10/10/10·답변 불가 5개·공식 5필드·latency | expected·로컬 Qwen 30/30·생성 16/17·안전 fallback 1건 |
 
 ## 2. 평가 해석 원칙
 
@@ -131,6 +132,14 @@ Backend `/answer` service adapter 결과:
 - QueryPlan 12회·grounded answer 12회, provider 오류·verifier fallback 0건
 - 공개 내부 red-team이므로 독립 blind나 HyperCLOVA X 품질 점수가 아님
 
+공식 형식 30문항 공개 모의평가 결과:
+
+- 설명회 예상 분포대로 난이도 하·중·상 각 10문항, 답변 불가 5문항 구성
+- 검색·비교·집계·안전·근거와 공식 5필드 계약 expected·로컬 Qwen 30/30
+- 답변 생성 대상 17문항 중 16문항 grounded, 가치 판단 문구 1건은 안전 fallback
+- 로컬 순차 실행 p50 1,553.318ms, p95 3,876.727ms, 최대 4,398.949ms
+- self-authored 공개 모의평가이며 독립 blind·HyperCLOVA X·공모전 점수가 아님
+
 교차 상품군 grounded answer 결과:
 
 - 국내·해외 ETP를 별도 QueryPlan·Oracle·Verifier·evidence 경계로 유지
@@ -174,9 +183,9 @@ Backend `/answer` service adapter 결과:
 
 ## 4. 내부 완료 QA
 
-- pytest `350 passed`
+- pytest `357 passed`
 - Ruff lint와 format 통과
-- 문서 검사 `54 Markdown files`, `31 evaluation baselines` 통과
+- 문서 검사 `55 Markdown files`, `32 evaluation baselines` 통과
 - `pip check` 통과
 - build isolation 없이 wheel 생성과 신규 JSON package data 포함 여부 통과
 - `git diff --check` 통과

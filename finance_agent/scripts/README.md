@@ -15,6 +15,7 @@ LLM 실행 도구를 보관하는 곳
 | `generate-bond-suite.py` | 국내채권 평가 질문 세트 생성 |
 | `generate-domestic-etp-suite.py` | 국내 ETF·ETN 평가 질문 세트 생성 |
 | `generate-fund-suite.py` | 공모펀드 평가 질문 세트 생성 |
+| `generate-official-mock-suite.py` | 설명회 예상 분포의 30문항 공개 모의평가를 기존 검증 정답에서 재생성·확인 |
 | `blind-fund-eval.py` | 봉인된 공모펀드 blind 평가 실행 보조 |
 | `run-hcx-contract-e2e.py` | 실제 API 없이 HyperCLOVA X provider 계약 검사 |
 | `run-answer-adapter-contract.py` | Agent 응답과 Backend adapter 계약 검사 |

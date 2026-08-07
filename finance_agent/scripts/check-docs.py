@@ -43,7 +43,7 @@ PRODUCT_COMPARE_SUITE = (
 
 LINK_PATTERN = re.compile(r"!?\[[^\]]*]\((?:<(?P<angle>[^>]+)>|(?P<plain>[^)\s]+))\)")
 SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
-FROZEN_PYTEST_PASSED = 350
+FROZEN_PYTEST_PASSED = 357
 
 REQUIRED_INDEX_TARGETS = {
     "project-baseline.md",
@@ -59,6 +59,7 @@ REQUIRED_INDEX_TARGETS = {
     "evaluation-search-aggregate-performance.md",
     "cross-family-search.md",
     "evaluation-internal-red-team.md",
+    "evaluation-official-mock.md",
     "evaluation-domain-qa.md",
     "submission-model-boundary.md",
     "hyperclova-provider.md",
@@ -99,6 +100,7 @@ REQUIRED_BASELINES = {
     "hcx-contract-e2e-v1.json",
     "answer-adapter-contract-v1.json",
     "internal-red-team-v1.json",
+    "official-mock-v1-30.json",
     "pre-hcx-route-diagnostic-initial-v1.json",
     "pre-hcx-route-diagnostic-improved-v1.json",
     "pre-hcx-route-diagnostic-initial-v2.json",
@@ -480,6 +482,7 @@ def _readiness_files() -> list[Path]:
         PROJECT_ROOT / "scripts" / "run-hcx-contract-e2e.py",
         PROJECT_ROOT / "scripts" / "run-answer-adapter-contract.py",
         PROJECT_ROOT / "scripts" / "sync-ontology.py",
+        PROJECT_ROOT / "scripts" / "generate-official-mock-suite.py",
         package_root / "README.md",
         package_root / "pyproject.toml",
         *AREA_READMES,

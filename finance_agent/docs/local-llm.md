@@ -131,6 +131,24 @@ LOCAL_TEST_LLM_MODEL=qwen3-local-test \
 [internal-red-team-v1 전체 E2E 평가](evaluation-internal-red-team.md)에
 보존한다.
 
+설명회 예상 분포의 30문항 공개 모의평가는 같은 서버에서 다음과 같이 실행한다.
+
+```bash
+FINANCE_AGENT_LLM_MODE=local_test \
+ENABLE_NON_HCX_TEST_LLM=1 \
+LLM_PROVIDER=local_test \
+LOCAL_TEST_LLM_BASE_URL=http://127.0.0.1:18000/v1 \
+LOCAL_TEST_LLM_MODEL=qwen3-local-test \
+/home/haeyeongcho/miniforge3/envs/gaeng3-dev/bin/python \
+  -m finance_agent_core.evaluation.official_mock_cli \
+  --provider local_test \
+  --require-perfect
+```
+
+최초 관측은 전체 계약 30/30, 답변 생성 16/17, 안전 fallback 1건이다. 자세한
+분포·응답시간·해석 제한은 [공식 형식 공개 모의평가](evaluation-official-mock.md)에
+기록한다.
+
 ### Docker Backend grounded answer 스모크
 
 로컬 Qwen은 개발 전용 Compose override를 통해 실제 FastAPI Backend의 최종 설명
