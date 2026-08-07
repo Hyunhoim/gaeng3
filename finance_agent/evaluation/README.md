@@ -20,6 +20,7 @@ DB, 원천 XLSX, 전체 report, 모델 가중치는 계속 `artifacts/` 또는 �
 
 | 파일 | 범위 |
 | --- | --- |
+| [설명회 공개 예시 채권 개선](baselines/briefing-examples-v1-bond-improved.json) | 원화·판매 가능·AA- 이상 검색과 근거 검증을 연결한 회귀 |
 | [설명회 공개 예시 최초 관측](baselines/briefing-examples-v1-initial.json) | 답변 가능 5개·답변 불가 3개의 Router→Oracle→Verifier 현재 도달 범위 |
 | [설명회 공개 예시 안전 개선](baselines/briefing-examples-v1-safety-improved.json) | 잘못된 신용등급 차단과 요청 어미 오분류 수정 후 회귀 |
 | [해외 ETP QueryPlan](baselines/overseas-etp-queryplan-v1.json) | 로컬 Qwen hybrid parser 사후 회귀 |
@@ -124,6 +125,10 @@ strict 1/40·safety 32/40은 유지되며 E2 사후 회귀의 비교점이다.
 안전 개선 회귀에서는 공손한 `알려줘`를 설명 intent로 고정하던 규칙을 제거하고,
 등록되지 않은 신용등급을 SQL 전에 차단해 엄격 2/8, 답변 불가 안전 처리 3/3,
 잘못된 실행 0건을 확인한다.
+채권 개선 회귀에서는 `판매 가능`을 고객의 스냅샷 기준 매수 가능으로 연결하고,
+`AA- 이상`을 registry의 최고→최저 등급 순서에 따라 AAA·AA+·AA0·AA- 목록으로
+확정한다. 전체 데이터에서 27개 후보를 Oracle과 Verifier가 함께 확인해 엄격 3/8,
+답변 가능 실행 1/5를 기록한다.
 이 질문들은 실제 평가 문항이 아니며, 공개 후 수정 결과도 blind 성능으로 해석하지
 않는다.
 

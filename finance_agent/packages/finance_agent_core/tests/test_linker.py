@@ -219,7 +219,7 @@ def test_bond_plain_maturity_years_are_normalized_to_remaining_days() -> None:
     } == {("remaining_days", "between", (0, 365))}
 
 
-def test_bond_ordered_credit_rating_is_blocked_without_guessing_scale() -> None:
+def test_bond_ordered_credit_rating_expands_from_registry_scale() -> None:
     payload = first_vertical_slice_plan("wrong-family").model_dump(mode="json")
     linked = canonicalize_query_plan_payload(
         "신용등급 AA- 이상인 국내채권을 찾아줘",
@@ -227,8 +227,14 @@ def test_bond_ordered_credit_rating_is_blocked_without_guessing_scale() -> None:
     )
 
     assert linked["product_families"] == ["bond"]
-    assert linked["unsupported_conditions"]
-    assert "신용등급 AA- 이상" in linked["unsupported_conditions"][0]["span"]
+    assert linked["unsupported_conditions"] == []
+    assert next(item for item in linked["constraints"] if item["field"] == "credit_rating") == {
+        "field": "credit_rating",
+        "operator": "in",
+        "value": ["AAA", "AA+", "AA0", "AA-"],
+        "unit": "code",
+        "strength": "locked",
+    }
 
 
 def test_bond_invalid_credit_rating_is_blocked_instead_of_silently_dropped() -> None:

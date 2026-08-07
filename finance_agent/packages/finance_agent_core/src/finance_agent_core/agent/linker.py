@@ -391,7 +391,14 @@ def build_lexical_hints(
     if family == "bond":
         if any(
             phrase in question
-            for phrase in ("현재 매수 가능", "매수 가능", "살 수 있는", "주문 가능한")
+            for phrase in (
+                "현재 매수 가능",
+                "매수 가능",
+                "현재 판매 가능",
+                "판매 가능",
+                "살 수 있는",
+                "주문 가능한",
+            )
         ):
             add("currently_buyable", True)
         lookup_patterns = [
@@ -516,7 +523,7 @@ def build_lexical_hints(
     elif family != "domestic_etp":
         unsupported_patterns.extend(["1일 수익률", "3개월 수익률", "국내 ETF"])
     if family == "bond":
-        unsupported_patterns.extend(["AUM", "총보수", "판매 가능", "거래정지"])
+        unsupported_patterns.extend(["AUM", "총보수", "거래정지"])
     ambiguity_patterns = ["적당한", "안전한", "괜찮은"]
 
     rankings: list[dict[str, str]] = []
@@ -684,12 +691,39 @@ def build_lexical_hints(
             required[:] = [item for item in required if item["field"] != "credit_rating"]
             unsupported_spans.append(rating_token.group(0))
         ordered_rating = re.search(
-            r"신용등급.{0,20}?(?:이상|이하|초과|미만|높은|낮은)",
+            r"(?:신용\s*등급(?:이|은)?\s*)?"
+            r"(AAA|AA\+|AA0|AA-|A\+|A0|A-|BBB\+|BBB0|BBB-|"
+            r"BB\+|BB0|BB-|B\+|B0|B-|CCC|CC0|C0|C)\s*"
+            r"(이상|이하|초과|미만)",
             question,
         )
         if ordered_rating:
             required[:] = [item for item in required if item["field"] != "credit_rating"]
-            unsupported_spans.append(ordered_rating.group(0))
+            ratings = list(
+                load_field_registry().require_field("credit_rating", ["bond"]).enum_values
+            )
+            threshold_index = ratings.index(ordered_rating.group(1))
+            boundary = ordered_rating.group(2)
+            if boundary == "이상":
+                selected_ratings = ratings[: threshold_index + 1]
+            elif boundary == "초과":
+                selected_ratings = ratings[:threshold_index]
+            elif boundary == "이하":
+                selected_ratings = ratings[threshold_index:]
+            else:
+                selected_ratings = ratings[threshold_index + 1 :]
+            if selected_ratings:
+                add("credit_rating", selected_ratings, "in")
+            else:
+                unsupported_spans.append(ordered_rating.group(0))
+        else:
+            vague_ordered_rating = re.search(
+                r"신용등급.{0,20}?(?:높은|낮은)",
+                question,
+            )
+            if vague_ordered_rating:
+                required[:] = [item for item in required if item["field"] != "credit_rating"]
+                unsupported_spans.append(vague_ordered_rating.group(0))
     ambiguity_spans = [phrase for phrase in ambiguity_patterns if phrase in question]
     if family == "fund":
         aum_requested = any(item["field"] == "aum" for item in required) or any(

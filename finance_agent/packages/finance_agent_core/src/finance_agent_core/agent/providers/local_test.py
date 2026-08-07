@@ -189,7 +189,7 @@ question_id는 {question_id!r}를 정확히 사용한다.
   핵심 ETF는 core_etf=true다. 수익률 기간은 one_day_return_pct,
   one_month_return_pct, three_month_return_pct, six_month_return_pct,
   one_year_return_pct, ytd_return_pct 중 정확히 대응하는 field를 쓴다.
-- bond의 "매수 가능"은 currently_buyable=true다. 이 필드는
+- bond의 "매수 가능"과 고객에게 "판매 가능"한 상품은 currently_buyable=true다. 이 필드는
   BUYABLE_QUANTITY가 존재하고 0보다 크며 MAT_DT가 2026-07-11 이후인 경우만
   true인 보수적 파생값이다. 결측 수량을 false나 0으로 추정하지 않는다.
 - bond의 회사채·특수채·국공채·개인투자용국채는 bond_major_class,
@@ -198,10 +198,10 @@ question_id는 {question_id!r}를 정확히 사용한다.
   after_tax_yield_pct, coupon_rate_pct이고 퍼센트포인트다. 잔존일수는
   remaining_days(day), 듀레이션은 duration_years(year), 매수가능수량은
   buyable_quantity(source_quantity)다.
-- bond 신용등급은 credit_rating exact eq/in만 허용한다. "AA- 이상"처럼
-  등급의 순서를 요구하는 조건은 unsupported_conditions에 기록하고 임의의
-  등급 목록으로 확장하지 않는다. bond_risk_code도 코드 숫자의 순서를
-  해석하지 않는다.
+- bond 신용등급 QueryPlan은 credit_rating exact eq/in만 허용한다. "AA- 이상"처럼
+  임계 등급과 방향이 명시된 조건은 서버 linker가 registry의 최고→최저 enum 순서를
+  기준으로 in 목록으로 확정한다. 모델이 임의 목록을 만들지 않는다. 임계값 없는
+  "등급이 높은" 표현과 bond_risk_code 숫자의 순서는 해석하지 않는다.
 {fund_rules}
 - "판매 가능"은 sellable=true, "판매 불가"는 sellable=false다.
   "거래 중지 아님/거래 가능"은 trading_suspended=false,
