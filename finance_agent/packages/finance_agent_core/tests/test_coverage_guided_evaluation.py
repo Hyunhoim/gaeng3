@@ -26,8 +26,11 @@ from finance_agent_core.evaluation.coverage_ablation import (
 from finance_agent_core.evaluation.coverage_analysis import plan_delta_codes
 from finance_agent_core.evaluation.coverage_campaign_cli import (
     _campaign_ranges,
+    _estimate_qwen_calls,
     _load_or_create_protocol,
+    _preflight_output_state,
     _protocol_semantic_sha256,
+    _selection_distribution,
     _validate_batch_selection,
 )
 from finance_agent_core.evaluation.coverage_plan import (
@@ -296,6 +299,43 @@ def test_coverage_campaign_ranges_cover_selection_without_overlap() -> None:
         (32, 25),
         (57, 3),
     ]
+
+
+def test_coverage_campaign_preflight_estimates_qwen_calls_and_distribution() -> None:
+    suite = _two_case_suite()
+    ranges = _campaign_ranges(2, offset=0, limit=None, shard_size=1)
+
+    assert _selection_distribution(suite, ranges) == {"overseas_etp:search": 2}
+    assert _estimate_qwen_calls(
+        selected_source_count=10,
+        profiles=[
+            "expected",
+            "local_test_grounded_plan_only",
+            "local_test_answer_only",
+            "local_test_grounded",
+        ],
+    ) == {
+        "question_generation": 10,
+        "query_plan_upper_bound": 60,
+        "answer_upper_bound": 60,
+        "total_upper_bound": 130,
+    }
+
+
+def test_coverage_campaign_preflight_rejects_unbound_nonempty_output(tmp_path) -> None:
+    output = tmp_path / "campaign"
+    output.mkdir()
+    (output / "partial.json").write_text("{}", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="no protocol"):
+        _preflight_output_state(
+            output,
+            suite=_suite(),
+            ranges=[(0, 1)],
+            shard_size=1,
+            generator_model="qwen3-local-test",
+            source_git_commit="a" * 40,
+        )
 
 
 def test_coverage_campaign_validates_exact_shard_sources() -> None:

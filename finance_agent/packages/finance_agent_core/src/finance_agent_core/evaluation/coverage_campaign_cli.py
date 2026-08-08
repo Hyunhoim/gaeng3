@@ -3,7 +3,9 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import shutil
 import subprocess
+from collections import Counter
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal
@@ -229,6 +231,96 @@ def _campaign_ranges(
     return [(start, min(shard_size, stop - start)) for start in range(offset, stop, shard_size)]
 
 
+_QWEN_PLAN_PROFILES = {
+    "local_test",
+    "local_test_plan_only",
+    "local_test_grounded",
+    "local_test_grounded_plan_only",
+}
+_QWEN_ANSWER_PROFILES = {
+    "local_test",
+    "local_test_answer_only",
+    "local_test_grounded",
+}
+
+
+def _estimate_qwen_calls(
+    *,
+    selected_source_count: int,
+    profiles: list[CoverageAgentProfile],
+) -> dict[str, int]:
+    requested_questions = selected_source_count * 3
+    generation_calls = selected_source_count
+    plan_calls = requested_questions * sum(profile in _QWEN_PLAN_PROFILES for profile in profiles)
+    answer_calls = requested_questions * sum(
+        profile in _QWEN_ANSWER_PROFILES for profile in profiles
+    )
+    return {
+        "question_generation": generation_calls,
+        "query_plan_upper_bound": plan_calls,
+        "answer_upper_bound": answer_calls,
+        "total_upper_bound": generation_calls + plan_calls + answer_calls,
+    }
+
+
+def _selection_distribution(
+    suite: CoveragePlanSuite,
+    ranges: list[tuple[int, int]],
+) -> dict[str, int]:
+    selected = [case for offset, limit in ranges for case in suite.cases[offset : offset + limit]]
+    counts = Counter(
+        f"{case.cell.product_family.value}:{case.cell.intent.value}" for case in selected
+    )
+    return dict(sorted(counts.items()))
+
+
+def _preflight_output_state(
+    output_dir: Path,
+    *,
+    suite: CoveragePlanSuite,
+    ranges: list[tuple[int, int]],
+    shard_size: int,
+    generator_model: str,
+    source_git_commit: str,
+) -> str:
+    if not output_dir.exists():
+        return "new"
+    if not output_dir.is_dir():
+        raise ValueError("coverage campaign output path is not a directory")
+    entries = list(output_dir.iterdir())
+    if not entries:
+        return "new_empty_directory"
+    protocol_path = output_dir / "protocol.json"
+    if not protocol_path.is_file():
+        raise ValueError("non-empty coverage campaign output has no protocol.json")
+    protocol = CoverageCampaignProtocol.model_validate_json(
+        protocol_path.read_text(encoding="utf-8")
+    )
+    expected = {
+        "source_git_commit": source_git_commit,
+        "plan_suite_id": suite.suite_id,
+        "plan_suite_semantic_sha256": coverage_plan_suite_semantic_sha256(suite),
+        "selection_offset": ranges[0][0],
+        "selected_source_count": sum(limit for _, limit in ranges),
+        "shard_size": shard_size,
+        "generator_model": generator_model,
+    }
+    observed = protocol.model_dump(mode="json")
+    mismatches = [name for name, value in expected.items() if observed.get(name) != value]
+    if mismatches:
+        raise ValueError("coverage campaign output protocol differs: " + ", ".join(mismatches))
+    return "resumable"
+
+
+def _available_bytes(path: Path) -> int:
+    candidate = path.resolve()
+    while not candidate.exists():
+        if candidate == candidate.parent:
+            raise ValueError("cannot resolve an existing campaign output parent")
+        candidate = candidate.parent
+    return shutil.disk_usage(candidate).free
+
+
 def _batch_source_ids(batch: CoverageQuestionBatch) -> set[str]:
     return {
         *(candidate.source_case_id for candidate in batch.candidates),
@@ -439,6 +531,17 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--shard-size", type=int, default=25)
     parser.add_argument("--workers", type=int, default=4)
     parser.add_argument("--profile", action="append", choices=_PROFILES)
+    parser.add_argument(
+        "--preflight-only",
+        action="store_true",
+        help="validate the long-running campaign without writing artifacts",
+    )
+    parser.add_argument(
+        "--skip-provider-health",
+        action="store_true",
+        help="skip the loopback Qwen health request during an offline preflight",
+    )
+    parser.add_argument("--minimum-free-gib", type=float, default=5.0)
     return parser
 
 
@@ -567,6 +670,8 @@ def main(argv: list[str] | None = None) -> int:
         raise ValueError("coverage campaign profiles must be unique")
     if phase in {"compare", "all"} and len(profiles) < 2:
         raise ValueError("coverage campaign comparison requires at least two profiles")
+    if arguments.minimum_free_gib <= 0:
+        raise ValueError("coverage campaign minimum free GiB must be positive")
 
     source_git_commit, source_worktree_clean = _git_source_state(Path.cwd())
     if not source_worktree_clean:
@@ -574,6 +679,57 @@ def main(argv: list[str] | None = None) -> int:
             "coverage campaign refuses tracked source changes; "
             "commit them or use a new clean worktree"
         )
+
+    if arguments.preflight_only:
+        settings = LocalTestSettings.from_environment()
+        database_paths = _database_paths(arguments.database_dir)
+        database_hashes = verify_coverage_databases(suite, database_paths)
+        output_state = _preflight_output_state(
+            arguments.output_dir,
+            suite=suite,
+            ranges=ranges,
+            shard_size=arguments.shard_size,
+            generator_model=settings.model,
+            source_git_commit=source_git_commit,
+        )
+        free_bytes = _available_bytes(arguments.output_dir)
+        minimum_bytes = int(arguments.minimum_free_gib * 1024**3)
+        if free_bytes < minimum_bytes:
+            raise ValueError("coverage campaign output disk is below the required free-space floor")
+        provider_health: dict[str, Any] | str = "skipped"
+        if not arguments.skip_provider_health:
+            provider = LocalQwenSemanticQuestionProvider(settings)
+            provider_health = provider.healthcheck()
+        selected_source_count = sum(limit for _, limit in ranges)
+        print(
+            json.dumps(
+                {
+                    "status": "passed",
+                    "source_git_commit": source_git_commit,
+                    "source_worktree_clean": source_worktree_clean,
+                    "plan_suite_id": suite.suite_id,
+                    "plan_suite_semantic_sha256": coverage_plan_suite_semantic_sha256(suite),
+                    "selected_source_count": selected_source_count,
+                    "requested_question_count": selected_source_count * 3,
+                    "selection_distribution": _selection_distribution(suite, ranges),
+                    "shard_count": len(ranges),
+                    "profiles": profiles,
+                    "qwen_call_estimate": _estimate_qwen_calls(
+                        selected_source_count=selected_source_count,
+                        profiles=profiles,
+                    ),
+                    "database_sha256_by_family": database_hashes,
+                    "output_state": output_state,
+                    "free_gib": round(free_bytes / 1024**3, 3),
+                    "minimum_free_gib": arguments.minimum_free_gib,
+                    "generator_model": settings.model,
+                    "provider_health": provider_health,
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
+        return 0
 
     provider: LocalQwenSemanticQuestionProvider | None = None
     configured_model: str | None = None

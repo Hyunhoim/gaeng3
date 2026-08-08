@@ -241,6 +241,26 @@ export PYTHONPATH=packages/finance_agent_core/src
 
 ### 권장: 쓰기 전용·재개 가능 캠페인
 
+장시간 실행 전에는 Qwen 서버를 시작한 뒤 쓰기 없는 사전 점검을 먼저 수행
+
+~~~bash
+python -m finance_agent_core.evaluation.coverage_campaign_cli \
+  --suite-input artifacts/evaluation/coverage-guided-plan-v1-canonical-screened-v2.json \
+  --output-dir artifacts/evaluation/coverage-qwen-campaign-first \
+  --shard-size 25 \
+  --workers 4 \
+  --profile expected \
+  --profile local_test_grounded_plan_only \
+  --profile local_test_answer_only \
+  --profile local_test_grounded \
+  --preflight-only
+~~~
+
+사전 점검은 코드가 clean commit인지, 네 SQLite 지문이 같은지, 출력 디렉터리가
+새 캠페인 또는 같은 protocol의 재개인지, 여유 디스크와 Qwen health가 충분한지
+확인한다. 예상 질문 수·최대 Qwen 호출 수도 함께 출력한다. 모델 서버를 아직 시작하지
+않은 준비 단계에서는 `--skip-provider-health`로 나머지 조건만 확인할 수 있다.
+
 먼저 서로 다른 출력 디렉터리에서 10개 source pilot을 실행
 
 이 pilot은 suite 앞부분의 국내채권 SEARCH 사례만 사용하므로 provider 연결·JSON 형식·
