@@ -1,0 +1,50 @@
+{
+  "schema_version": "1.0",
+  "protocol_id": "qwen-eval-lab-v1",
+  "protocol_version": "1.0",
+  "status": "internal_development_not_blind",
+  "source_suite_id": "official-mock-v1-30",
+  "source_suite_sha256": "c9250cd45656beadad563087941112b31318254c50fc72bf9f15dcaa1d88a36e",
+  "source_case_ids": [
+    "official-mock-v1-001",
+    "official-mock-v1-002",
+    "official-mock-v1-003",
+    "official-mock-v1-004",
+    "official-mock-v1-005",
+    "official-mock-v1-006",
+    "official-mock-v1-007",
+    "official-mock-v1-008",
+    "official-mock-v1-009",
+    "official-mock-v1-010",
+    "official-mock-v1-011",
+    "official-mock-v1-012",
+    "official-mock-v1-013",
+    "official-mock-v1-014",
+    "official-mock-v1-015",
+    "official-mock-v1-016",
+    "official-mock-v1-017",
+    "official-mock-v1-018",
+    "official-mock-v1-019",
+    "official-mock-v1-020",
+    "official-mock-v1-021",
+    "official-mock-v1-022",
+    "official-mock-v1-023",
+    "official-mock-v1-024",
+    "official-mock-v1-025",
+    "official-mock-v1-026",
+    "official-mock-v1-027",
+    "official-mock-v1-028",
+    "official-mock-v1-029",
+    "official-mock-v1-030"
+  ],
+  "axes": [
+    "paraphrase",
+    "clause_reordering",
+    "distractor_resistance"
+  ],
+  "interpretation_limits": [
+    "공식 분포를 모사한 공개 30문항에서 파생한 내부 개발 질문임",
+    "생성 모델과 평가 대상 모델이 같을 수 있어 독립성이 없음",
+    "후보 생성 품질과 Agent 강건성을 분리해 해석해야 함"
+  ]
+}
