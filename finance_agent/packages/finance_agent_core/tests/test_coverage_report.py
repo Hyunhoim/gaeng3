@@ -78,6 +78,8 @@ def _report(*, source_hash: str = _HASH) -> CoverageAblationReport:
         generated_at_utc="2026-08-08T00:00:00+00:00",
         source_kind="naturalized",
         source_semantic_sha256=source_hash,
+        statistical_unit="source_plan_cluster",
+        statistical_unit_count=1,
         baseline_label="expected",
         profiles=[
             _profile("expected", passed=1, plans=0, p95=10),
@@ -189,6 +191,7 @@ def test_coverage_report_renders_generation_ablation_and_limits() -> None:
     assert "+300.0ms" in rendered
     assert "search_constraint" in rendered
     assert "사람이 확인할 변화 문항" in rendered
+    assert "source_plan_cluster" in rendered
     assert "질문 2" in rendered
     assert "내부 synthetic 평가임" in rendered
 

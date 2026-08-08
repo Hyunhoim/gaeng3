@@ -68,6 +68,8 @@ def main(argv: list[str] | None = None) -> int:
             {
                 "output": str(arguments.output),
                 "source_kind": comparison.source_kind,
+                "statistical_unit": comparison.statistical_unit,
+                "statistical_unit_count": comparison.statistical_unit_count,
                 "baseline": comparison.baseline_label,
                 "profiles": [
                     {
@@ -97,6 +99,8 @@ def main(argv: list[str] | None = None) -> int:
                         "evidence_rescued": item.evidence_rescued,
                         "evidence_regressed": item.evidence_regressed,
                         "mcnemar_exact_p_value": item.mcnemar_exact_p_value,
+                        "mcnemar_unit_rescued": item.mcnemar_unit_rescued,
+                        "mcnemar_unit_regressed": item.mcnemar_unit_regressed,
                         "holm_adjusted_p_value": item.holm_adjusted_p_value,
                         "statistically_significant_after_holm": (
                             item.statistically_significant_after_holm

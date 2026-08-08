@@ -25,6 +25,7 @@ type ComparableCoverageReport = (
 
 class CoverageObservation(CoverageModel):
     id: str
+    cluster_id: str
     question: str
     product_family: str
     intent: str
@@ -102,6 +103,8 @@ class CoveragePairwiseDelta(CoverageModel):
     regressed_case_ids: list[str]
     stage_transitions: dict[str, int]
     mcnemar_exact_p_value: float = Field(ge=0, le=1)
+    mcnemar_unit_rescued: int = Field(default=0, ge=0)
+    mcnemar_unit_regressed: int = Field(default=0, ge=0)
     holm_adjusted_p_value: float = Field(ge=0, le=1)
     statistically_significant_after_holm: bool
     zero_strict_regression: bool
@@ -117,6 +120,8 @@ class CoverageAblationReport(CoverageModel):
     status: Literal["internal_synthetic_not_blind"] = "internal_synthetic_not_blind"
     source_kind: Literal["canonical", "naturalized"]
     source_semantic_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    statistical_unit: Literal["case", "source_plan_cluster"] = "case"
+    statistical_unit_count: int = Field(default=1, ge=1)
     baseline_label: str
     profiles: list[CoverageProfileSnapshot] = Field(min_length=2)
     pairwise_deltas: list[CoveragePairwiseDelta] = Field(min_length=1)
@@ -175,6 +180,39 @@ def _paired_bootstrap_ci95(
     ]
 
 
+def _cluster_bootstrap_ci95(
+    values_by_cluster: Mapping[str, Sequence[int]],
+    *,
+    seed: str,
+    samples: int = 10_000,
+) -> list[float]:
+    if not values_by_cluster:
+        raise ValueError("cluster bootstrap requires observations")
+    clusters = [list(values) for _, values in sorted(values_by_cluster.items())]
+    if any(not values for values in clusters):
+        raise ValueError("cluster bootstrap groups must not be empty")
+    cluster_sums = [sum(values) for values in clusters]
+    cluster_sizes = [len(values) for values in clusters]
+    if len(clusters) == 1:
+        value = cluster_sums[0] / cluster_sizes[0]
+        return [round(value, 6), round(value, 6)]
+    generator = random.Random(seed)
+    count = len(clusters)
+    estimates: list[float] = []
+    for _ in range(samples):
+        numerator = 0
+        denominator = 0
+        for _ in range(count):
+            index = generator.randrange(count)
+            numerator += cluster_sums[index]
+            denominator += cluster_sizes[index]
+        estimates.append(numerator / denominator)
+    return [
+        round(_raw_percentile(estimates, 0.025), 6),
+        round(_raw_percentile(estimates, 0.975), 6),
+    ]
+
+
 def _mcnemar_exact_p_value(rescued: int, regressed: int) -> float:
     discordant = rescued + regressed
     if discordant == 0:
@@ -193,6 +231,7 @@ def _observations(report: ComparableCoverageReport) -> list[CoverageObservation]
         return [
             CoverageObservation(
                 id=item.id,
+                cluster_id=item.id,
                 question=item.question,
                 product_family=item.product_family.value,
                 intent=item.intent.value,
@@ -219,6 +258,7 @@ def _observations(report: ComparableCoverageReport) -> list[CoverageObservation]
         observations.append(
             CoverageObservation(
                 id=item.candidate.id,
+                cluster_id=item.candidate.source_case_id,
                 question=item.candidate.question,
                 product_family=item.candidate.cell.product_family.value,
                 intent=item.candidate.cell.intent.value,
@@ -275,6 +315,8 @@ def _snapshot(
     label: str,
     report: ComparableCoverageReport,
     observations: Sequence[CoverageObservation],
+    *,
+    kind: Literal["canonical", "naturalized"],
 ) -> CoverageProfileSnapshot:
     total = len(observations)
     passed = sum(item.passed for item in observations)
@@ -284,6 +326,15 @@ def _snapshot(
     stages = Counter(
         item.first_failure_stage for item in observations if item.first_failure_stage is not None
     )
+    accuracy_ci95 = _wilson_ci95(passed, total)
+    if kind == "naturalized":
+        passed_by_cluster: dict[str, list[int]] = {}
+        for item in observations:
+            passed_by_cluster.setdefault(item.cluster_id, []).append(int(item.passed))
+        accuracy_ci95 = _cluster_bootstrap_ci95(
+            passed_by_cluster,
+            seed=f"coverage-profile-v2:{label}",
+        )
     return CoverageProfileSnapshot(
         label=label,
         agent_profile=report.agent_profile,
@@ -291,7 +342,7 @@ def _snapshot(
         total=total,
         passed=passed,
         strict_accuracy=round(passed / total, 6),
-        strict_accuracy_ci95=_wilson_ci95(passed, total),
+        strict_accuracy_ci95=accuracy_ci95,
         plan_semantic_passed=plan_passed,
         plan_semantic_rate=round(plan_passed / total, 6),
         evidence_semantic_passed=evidence_passed,
@@ -383,6 +434,24 @@ def _breakdowns(
     return result
 
 
+def _mcnemar_cluster_counts(
+    pairs: Sequence[tuple[CoverageObservation, CoverageObservation]],
+) -> tuple[int, int]:
+    grouped: dict[str, list[tuple[CoverageObservation, CoverageObservation]]] = {}
+    for left, right in pairs:
+        if left.cluster_id != right.cluster_id:
+            raise ValueError("coverage ablation observation clusters differ")
+        grouped.setdefault(left.cluster_id, []).append((left, right))
+    rescued = 0
+    regressed = 0
+    for cluster_pairs in grouped.values():
+        baseline_passed = all(left.passed for left, _ in cluster_pairs)
+        candidate_passed = all(right.passed for _, right in cluster_pairs)
+        rescued += not baseline_passed and candidate_passed
+        regressed += baseline_passed and not candidate_passed
+    return rescued, regressed
+
+
 def _pairwise(
     baseline_label: str,
     candidate_label: str,
@@ -390,6 +459,8 @@ def _pairwise(
     candidate: Sequence[CoverageObservation],
     baseline_snapshot: CoverageProfileSnapshot,
     candidate_snapshot: CoverageProfileSnapshot,
+    *,
+    kind: Literal["canonical", "naturalized"],
 ) -> CoveragePairwiseDelta:
     baseline_by_id = {item.id: item for item in baseline}
     candidate_by_id = {item.id: item for item in candidate}
@@ -400,7 +471,20 @@ def _pairwise(
     regressed = [left.id for left, right in pairs if left.passed and not right.passed]
     transitions = Counter(f"{_state(left)}->{_state(right)}" for left, right in pairs)
     paired_differences = [int(right.passed) - int(left.passed) for left, right in pairs]
-    raw_p_value = _mcnemar_exact_p_value(len(rescued), len(regressed))
+    clustered_differences: dict[str, list[int]] = {}
+    for (left, _), difference in zip(pairs, paired_differences, strict=True):
+        clustered_differences.setdefault(left.cluster_id, []).append(difference)
+    difference_ci95 = _paired_bootstrap_ci95(
+        paired_differences,
+        seed=f"coverage-ablation-v1:{baseline_label}:{candidate_label}",
+    )
+    if kind == "naturalized":
+        difference_ci95 = _cluster_bootstrap_ci95(
+            clustered_differences,
+            seed=f"coverage-ablation-v2:{baseline_label}:{candidate_label}",
+        )
+    mcnemar_rescued, mcnemar_regressed = _mcnemar_cluster_counts(pairs)
+    raw_p_value = _mcnemar_exact_p_value(mcnemar_rescued, mcnemar_regressed)
     return CoveragePairwiseDelta(
         baseline_label=baseline_label,
         candidate_label=candidate_label,
@@ -409,10 +493,7 @@ def _pairwise(
             candidate_snapshot.strict_accuracy - baseline_snapshot.strict_accuracy,
             6,
         ),
-        strict_accuracy_delta_ci95=_paired_bootstrap_ci95(
-            paired_differences,
-            seed=f"coverage-ablation-v1:{baseline_label}:{candidate_label}",
-        ),
+        strict_accuracy_delta_ci95=difference_ci95,
         plan_semantic_rate_delta=round(
             candidate_snapshot.plan_semantic_rate - baseline_snapshot.plan_semantic_rate,
             6,
@@ -443,6 +524,8 @@ def _pairwise(
         regressed_case_ids=regressed,
         stage_transitions=dict(sorted(transitions.items())),
         mcnemar_exact_p_value=raw_p_value,
+        mcnemar_unit_rescued=mcnemar_rescued,
+        mcnemar_unit_regressed=mcnemar_regressed,
         holm_adjusted_p_value=raw_p_value,
         statistically_significant_after_holm=False,
         zero_strict_regression=not regressed,
@@ -515,7 +598,15 @@ def compare_coverage_profiles(
         observed_hash = canonical_json_sha256(_source_payload(kind, observations_by_label[label]))
         if observed_hash != source_hash:
             raise ValueError(f"coverage ablation source questions differ for {label}")
-    snapshots = [_snapshot(label, reports[label], observations_by_label[label]) for label in labels]
+    snapshots = [
+        _snapshot(
+            label,
+            reports[label],
+            observations_by_label[label],
+            kind=kind,
+        )
+        for label in labels
+    ]
     snapshot_by_label = {item.label: item for item in snapshots}
     baseline_label = labels[0]
     pairwise = _apply_holm_correction(
@@ -527,16 +618,19 @@ def compare_coverage_profiles(
                 observations_by_label[label],
                 snapshot_by_label[baseline_label],
                 snapshot_by_label[label],
+                kind=kind,
             )
             for label in labels[1:]
         ]
     )
     timestamp = generated_at_utc or datetime.now(UTC).replace(microsecond=0).isoformat()
     return CoverageAblationReport(
-        ablation_id=f"coverage-{kind}-ablation-v1",
+        ablation_id=f"coverage-{kind}-ablation-v2",
         generated_at_utc=timestamp,
         source_kind=kind,
         source_semantic_sha256=source_hash,
+        statistical_unit=("case" if kind == "canonical" else "source_plan_cluster"),
+        statistical_unit_count=len({item.cluster_id for item in first_observations}),
         baseline_label=baseline_label,
         profiles=snapshots,
         pairwise_deltas=pairwise,
@@ -547,8 +641,15 @@ def compare_coverage_profiles(
                 "naturalized 역할 비교 분모는 기계 의미 보존을 통과한 질문이며 "
                 "생성 거절·오류는 별도 생성 지표로 본다."
             ),
-            "정확도 구간은 Wilson 95%, paired 차이 구간은 seed 고정 10,000회 bootstrap이다.",
-            "paired 개선 검정은 exact McNemar이며 여러 후보는 Holm 방식으로 보정한다.",
+            (
+                "canonical 정확도 구간은 Wilson 95%이며, naturalized 정확도와 paired "
+                "차이 구간은 같은 정답 계획의 세 문체를 묶은 seed 고정 10,000회 "
+                "cluster bootstrap이다."
+            ),
+            (
+                "paired 개선 검정은 canonical 문항 또는 naturalized source plan을 "
+                "단위로 한 exact McNemar이며 여러 후보는 Holm 방식으로 보정한다."
+            ),
             "provider_call_delta는 후보에서 baseline을 뺀 부호 있는 변화량이다.",
             "자동 생성·공개 개발 평가이며 독립 blind나 HyperCLOVA X 성능이 아니다.",
         ],

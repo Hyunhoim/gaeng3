@@ -18,7 +18,7 @@
 | [PICARD, EMNLP 2021](https://aclanthology.org/2021.emnlp-main.779/) | 형식 언어 생성은 출력 후 오류 처리만 하지 말고 허용되지 않는 생성을 제약 | Structured Outputs JSON Schema, Pydantic 계약, registry capability, 서버 고정 조건과 grounded-plan gate를 연속 적용 | 토큰별 incremental parser인 PICARD 자체를 구현한 것은 아님 |
 | [RAGChecker, NeurIPS 2024](https://proceedings.neurips.cc/paper_files/paper/2024/hash/27245589131d17368cccdfa990cbf16e-Abstract-Datasets_and_Benchmarks_Track.html) | 모듈형 시스템은 최종 답만이 아니라 검색과 생성 단계를 분리해 진단 | routing·planning·execution·evidence·answer 단계, plan/evidence strict, fallback과 provider 호출·지연을 별도 기록 | 현재 주력은 정형 SQL 검색이며 실제 문서 corpus RAG 평가는 승인 corpus 확보 후 수행 |
 | [RAGTruth, ACL 2024](https://aclanthology.org/2024.acl-long.585/) | 근거를 제공해도 생성 답변에 미지원·모순 주장이 남을 수 있으므로 별도 검증 필요 | LLM에는 field evidence만 제공하고 Answer Verifier가 상품명·수치·순위·기준일·근거를 검사, 실패 시 결정론적 fallback | 별도 hallucination 분류 모델을 학습하지 않고 서버 규칙으로 검증 가능한 금융 사실만 검사 |
-| [Dror et al., ACL 2018](https://aclanthology.org/P18-1128/) | 성능 차이가 우연이 아닌지 평가 설정과 지표에 맞는 통계 검정 필요 | 동일 질문 paired 비교, Wilson 95% 구간, 고정 시드 bootstrap, exact McNemar, 다중 후보 Holm 보정 | 내부 synthetic 표본의 통계적 유의성이 실제 공모전 분포의 유효성을 보장하지 않음 |
+| [Dror et al., ACL 2018](https://aclanthology.org/P18-1128/) | 성능 차이가 우연이 아닌지 평가 설정과 지표에 맞는 통계 검정 필요 | 동일 질문 paired 비교, canonical Wilson 95% 구간, 자연어 변형은 source plan 단위 cluster bootstrap·exact McNemar, 다중 후보 Holm 보정 | 내부 synthetic 표본의 통계적 유의성이 실제 공모전 분포의 유효성을 보장하지 않음 |
 
 ## 2. 이 원칙으로 만든 평가 흐름
 

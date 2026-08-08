@@ -20,6 +20,7 @@ from finance_agent_core.contracts.queryplan import (
 )
 from finance_agent_core.evaluation.coverage_ablation import (
     _apply_holm_correction,
+    _cluster_bootstrap_ci95,
     _mcnemar_exact_p_value,
     _paired_bootstrap_ci95,
     _wilson_ci95,
@@ -815,6 +816,16 @@ def test_coverage_ablation_statistics_are_deterministic_and_exact() -> None:
     assert first == second
     assert 0 < first[0] <= 0.2 <= first[1]
 
+    clustered = {
+        "source-a": [1, 1, 1],
+        "source-b": [0, 0, 0],
+        "source-c": [1, 0, 0],
+    }
+    cluster_first = _cluster_bootstrap_ci95(clustered, seed="fixed")
+    cluster_second = _cluster_bootstrap_ci95(clustered, seed="fixed")
+    assert cluster_first == cluster_second
+    assert cluster_first[0] <= 4 / 9 <= cluster_first[1]
+
 
 def test_coverage_ablation_holm_correction_is_monotonic() -> None:
     suite = _suite()
@@ -921,5 +932,9 @@ def test_compare_naturalized_profiles_excludes_mechanically_rejected_questions()
     )
 
     assert comparison.source_kind == "naturalized"
+    assert comparison.statistical_unit == "source_plan_cluster"
+    assert comparison.statistical_unit_count == 1
     assert [profile.total for profile in comparison.profiles] == [2, 2]
     assert comparison.pairwise_deltas[0].total == 2
+    assert comparison.pairwise_deltas[0].mcnemar_unit_rescued == 0
+    assert comparison.pairwise_deltas[0].mcnemar_unit_regressed == 0

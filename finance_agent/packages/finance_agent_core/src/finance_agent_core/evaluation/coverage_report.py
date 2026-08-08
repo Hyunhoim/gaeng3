@@ -245,6 +245,7 @@ def render_coverage_experiment_markdown(
         "",
         f"생성 시각(UTC): `{report.generated_at_utc}`  ",
         f"질문 종류: `{report.source_kind}`  ",
+        (f"통계 단위: `{report.statistical_unit}` ({report.statistical_unit_count}개)  "),
         f"질문 지문: `{report.source_semantic_sha256}`",
         "",
         "## 0. 해석 원칙",
@@ -349,6 +350,7 @@ def render_coverage_experiment_markdown(
                     "구제",
                     "퇴행",
                     "퇴행 0",
+                    "검정 단위 구제/퇴행",
                     "Holm p",
                     "p95 변화",
                 ],
@@ -363,6 +365,7 @@ def render_coverage_experiment_markdown(
                         delta.rescued,
                         delta.regressed,
                         "예" if delta.zero_strict_regression else "아니오",
+                        f"{delta.mcnemar_unit_rescued}/{delta.mcnemar_unit_regressed}",
                         f"{delta.holm_adjusted_p_value:.6g}",
                         _milliseconds(delta.latency_delta_ms["p95"]),
                     ]
@@ -371,6 +374,10 @@ def render_coverage_experiment_markdown(
             ),
             "",
             "구제는 기준선이 틀리고 후보가 맞힌 문항, 퇴행은 기준선이 맞고 후보가 틀린 문항을 뜻함",
+            (
+                "검정 단위는 canonical이면 개별 문항, naturalized이면 같은 정답 계획에서 "
+                "생성한 문체 변형 묶음이며 exact McNemar와 신뢰구간은 이 상관관계를 반영"
+            ),
             "",
         ]
     )
