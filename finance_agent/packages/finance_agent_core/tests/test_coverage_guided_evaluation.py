@@ -16,6 +16,7 @@ from finance_agent_core.contracts.queryplan import (
     SortDirection,
     Unit,
 )
+from finance_agent_core.evaluation.coverage_ablation import compare_coverage_profiles
 from finance_agent_core.evaluation.coverage_analysis import plan_delta_codes
 from finance_agent_core.evaluation.coverage_plan import (
     CoverageCell,
@@ -39,12 +40,16 @@ from finance_agent_core.evaluation.coverage_questions import (
     merge_coverage_question_batches,
     validate_coverage_question,
 )
+from finance_agent_core.evaluation.coverage_runner import CoverageRunner
 from finance_agent_core.evaluation.metamorphic import (
     GeneratedMutation,
     MutationAxis,
     MutationValidation,
 )
-from finance_agent_core.evaluation.red_team_e2e import ProviderTelemetry
+from finance_agent_core.evaluation.red_team_e2e import (
+    ProviderCallSnapshot,
+    ProviderTelemetry,
+)
 from finance_agent_core.evaluation.semantic_roundtrip import build_semantic_plan_spec
 
 _HASH = "a" * 64
@@ -490,3 +495,68 @@ def test_merge_coverage_question_run_reports_rejects_wrong_batch_pair() -> None:
             batches=[second_batch],
             reports=[report],
         )
+
+
+def test_compare_coverage_profiles_counts_rescues_and_call_cost() -> None:
+    suite = _suite()
+    baseline = CoverageRunner(
+        suite=suite,
+        services={family: _NoCallService() for family in ProductFamily},
+        agent_profile="expected",
+        agent_model=None,
+        telemetry=ProviderTelemetry(),
+    ).run(generated_at_utc="2026-08-08T07:00:00+00:00")
+    improved_checks = {name: True for name in baseline.cases[0].checks}
+    improved_case = baseline.cases[0].model_copy(
+        update={
+            "passed": True,
+            "checks": improved_checks,
+            "violations": [],
+            "first_failure_stage": None,
+        }
+    )
+    candidate = baseline.model_copy(
+        update={
+            "agent_profile": "local_test_grounded_plan_only",
+            "agent_model": "qwen3-local-test",
+            "provider_calls": ProviderCallSnapshot(
+                query_plan_calls=1,
+                query_plan_errors=0,
+                query_plan_latency_ms=25.0,
+                answer_calls=0,
+                answer_errors=0,
+                answer_latency_ms=0.0,
+            ),
+            "cases": [improved_case],
+        }
+    )
+
+    comparison = compare_coverage_profiles(
+        {"deterministic": baseline, "qwen_plan": candidate},
+        generated_at_utc="2026-08-08T08:00:00+00:00",
+    )
+    delta = comparison.pairwise_deltas[0]
+
+    assert comparison.baseline_label == "deterministic"
+    assert delta.rescued == 1
+    assert delta.regressed == 0
+    assert delta.plan_rescued == 1
+    assert delta.evidence_rescued == 1
+    assert delta.provider_call_delta.query_plan_calls == 1
+    assert delta.stage_transitions == {"routing->pass": 1}
+
+
+def test_compare_coverage_profiles_rejects_different_questions() -> None:
+    suite = _suite()
+    baseline = CoverageRunner(
+        suite=suite,
+        services={family: _NoCallService() for family in ProductFamily},
+        agent_profile="expected",
+        agent_model=None,
+        telemetry=ProviderTelemetry(),
+    ).run()
+    changed_case = baseline.cases[0].model_copy(update={"question": "다른 질문"})
+    changed = baseline.model_copy(update={"cases": [changed_case]})
+
+    with pytest.raises(ValueError, match="source questions differ"):
+        compare_coverage_profiles({"baseline": baseline, "changed": changed})
