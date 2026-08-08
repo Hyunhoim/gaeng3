@@ -217,6 +217,8 @@ def _observations(report: ComparableCoverageReport) -> list[CoverageObservation]
         ]
     observations: list[CoverageObservation] = []
     for item in report.variants:
+        if not item.candidate.validation.passed:
+            continue
         execution = item.execution
         observations.append(
             CoverageObservation(
@@ -511,6 +513,8 @@ def compare_coverage_profiles(
 
     observations_by_label = {label: _observations(report) for label, report in reports.items()}
     first_observations = observations_by_label[labels[0]]
+    if not first_observations:
+        raise ValueError("coverage ablation has no mechanically accepted questions")
     source_hash = canonical_json_sha256(_source_payload(kind, first_observations))
     for label in labels[1:]:
         observed_hash = canonical_json_sha256(_source_payload(kind, observations_by_label[label]))
@@ -542,6 +546,10 @@ def compare_coverage_profiles(
         interpretation_limits=[
             "첫 번째 입력을 baseline으로 사용해 이후 profile을 문항별 비교한다.",
             "rescued와 regressed는 같은 질문·같은 정답 계획·같은 데이터 지문에서만 계산한다.",
+            (
+                "naturalized 역할 비교 분모는 기계 의미 보존을 통과한 질문이며 "
+                "생성 거절·오류는 별도 생성 지표로 본다."
+            ),
             "정확도 구간은 Wilson 95%, paired 차이 구간은 seed 고정 10,000회 bootstrap이다.",
             "paired 개선 검정은 exact McNemar이며 여러 후보는 Holm 방식으로 보정한다.",
             "provider_call_delta는 후보에서 baseline을 뺀 부호 있는 변화량이다.",

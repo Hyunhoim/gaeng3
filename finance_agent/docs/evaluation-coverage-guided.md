@@ -218,7 +218,7 @@ Qwen은 기존 질문 문장을 보지 않음
 주요 지표
 
 - 생성 의미 보존 통과율
-- 통과 질문에 대한 Agent strict 정확도
+- 기계 의미 보존을 통과한 질문에 대한 Agent strict 정확도
 - 전체 생성 요청 중 최종 strict 통과율인 end-to-end yield
 - QueryPlan 의미 일치율
 - field evidence 의미 일치율
@@ -341,6 +341,7 @@ python -m finance_agent_core.evaluation.coverage_ablation_cli \
 정확도 하나만 보고 개선으로 판정하지 않음
 
 - profile 정확도에는 Wilson 95% 신뢰구간 표시
+- Agent profile 비교 분모에서는 기계 거절 질문을 제외하고 생성 통과율은 별도 표시
 - 같은 질문의 통과 여부 차이는 seed 고정 10,000회 paired bootstrap 구간 표시
 - 구제·퇴행 비대칭은 exact McNemar 검정으로 확인
 - 여러 Qwen profile을 한 번에 비교하면 Holm 방식으로 우연한 유의성 보정

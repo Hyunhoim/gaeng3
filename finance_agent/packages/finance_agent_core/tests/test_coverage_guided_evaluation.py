@@ -685,3 +685,46 @@ def test_compare_coverage_profiles_rejects_different_questions() -> None:
 
     with pytest.raises(ValueError, match="source questions differ"):
         compare_coverage_profiles({"baseline": baseline, "changed": changed})
+
+
+def test_compare_naturalized_profiles_excludes_mechanically_rejected_questions() -> None:
+    suite = _suite()
+    generated = generate_coverage_question_batch(_QuestionProvider(), suite)
+    candidates = [
+        generated.candidates[0].model_copy(
+            update={
+                "validation": MutationValidation(
+                    checks={"forced_rejection": False},
+                    violations=["forced_rejection"],
+                    passed=False,
+                )
+            }
+        ),
+        *generated.candidates[1:],
+    ]
+    batch = generated.model_copy(
+        update={
+            "accepted_count": 2,
+            "rejected_count": 1,
+            "candidates": candidates,
+        }
+    )
+    report = CoverageQuestionRunner(
+        suite=suite,
+        batch=batch,
+        services={family: _NoCallService() for family in ProductFamily},
+        agent_profile="expected",
+        agent_model=None,
+        telemetry=ProviderTelemetry(),
+    ).run()
+
+    comparison = compare_coverage_profiles(
+        {
+            "baseline": report,
+            "candidate": report.model_copy(update={"agent_profile": "candidate"}),
+        }
+    )
+
+    assert comparison.source_kind == "naturalized"
+    assert [profile.total for profile in comparison.profiles] == [2, 2]
+    assert comparison.pairwise_deltas[0].total == 2
