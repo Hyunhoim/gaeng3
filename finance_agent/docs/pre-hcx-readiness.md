@@ -192,7 +192,7 @@ registry 기반 자동 커버리지 최초 관측:
 - `공모가 아닌 공모펀드`, `거래 가능하지 않은 ETF`, `AUM이 크지 않은`,
   `특정 상품을 제외한`처럼 조건을 반대로 해석하기 쉬운 질문은 임의 실행하지 않고
   미지원 또는 조건 확인으로 종료
-- 전체 단위·계약 테스트 461/461, lint·format 검사 통과
+- 전체 단위·계약 테스트 465/465, lint·format 검사 통과
 - 위 결과도 이미 확인한 공개 개발 세트의 사후 회귀이며 독립 blind가 아님
 
 같은 30문항의 실제 Docker FastAPI `GET /answer` 최초 관측:
@@ -255,7 +255,7 @@ registry 기반 자동 커버리지 최초 관측:
 
 ## 4. 내부 완료 QA
 
-- Agent Core pytest `461 passed`
+- Agent Core pytest `465 passed`
 - Backend pytest `34 passed`
 - Ruff lint와 format 통과
 - 문서 검사 `57 Markdown files`, `41 evaluation baselines` 통과
