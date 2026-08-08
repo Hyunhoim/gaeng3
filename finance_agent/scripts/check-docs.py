@@ -43,7 +43,7 @@ PRODUCT_COMPARE_SUITE = (
 
 LINK_PATTERN = re.compile(r"!?\[[^\]]*]\((?:<(?P<angle>[^>]+)>|(?P<plain>[^)\s]+))\)")
 SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
-FROZEN_PYTEST_PASSED = 467
+FROZEN_PYTEST_PASSED = 470
 
 REQUIRED_INDEX_TARGETS = {
     "project-baseline.md",

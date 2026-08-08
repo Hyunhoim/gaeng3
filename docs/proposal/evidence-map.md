@@ -36,7 +36,7 @@
 | 주장 | 값 | 정본 | 해석 제한 |
 | --- | ---: | --- | --- |
 | 원천 감사 | 4종 145,393행, 65/65 | [데이터 감사](../../finance_agent/docs/data-audit.md) | 제공 스냅샷 기준 |
-| 전체 코드 회귀 | Agent Core pytest 467개·Backend pytest 34개 | [readiness](../../finance_agent/docs/pre-hcx-readiness.md) | 단위·계약 회귀 범위 |
+| 전체 코드 회귀 | Agent Core pytest 470개·Backend pytest 34개 | [readiness](../../finance_agent/docs/pre-hcx-readiness.md) | 단위·계약 회귀 범위 |
 | 교차 상품군 SEARCH | 국내·해외 ETP 4/4 | [교차 SEARCH](../../finance_agent/docs/cross-family-search.md) | 공개 회귀, not blind |
 | 교차 상품군 grounded answer | expected·로컬 Qwen 각각 4/4; 생성 대상 2문항 모두 grounded; 실제 모델 호출 3회; fallback 0 | [교차 SEARCH](../../finance_agent/docs/cross-family-search.md)·[baseline](../../finance_agent/evaluation/baselines/cross-family-answer-v1.json) | 공개 4문항, not blind; 로컬 Qwen은 개발 전용 |
 | 내부 red-team | 수정 후 40/40 | [red-team 평가](../../finance_agent/docs/evaluation-internal-red-team.md) | self-authored, not blind |

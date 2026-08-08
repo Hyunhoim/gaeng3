@@ -586,9 +586,7 @@ def main(argv: list[str] | None = None) -> int:
     protocol_path = arguments.output_dir / "protocol.json"
     if configured_model is None:
         if not protocol_path.exists():
-            raise ValueError(
-                "coverage campaign protocol is missing; run --phase generate first"
-            )
+            raise ValueError("coverage campaign protocol is missing; run --phase generate first")
         existing_protocol = CoverageCampaignProtocol.model_validate_json(
             protocol_path.read_text(encoding="utf-8")
         )

@@ -144,11 +144,7 @@ def _wilson_ci95(passed: int, total: int) -> list[float]:
     denominator = 1 + z**2 / total
     center = (proportion + z**2 / (2 * total)) / denominator
     half_width = (
-        z
-        * math.sqrt(
-            proportion * (1 - proportion) / total + z**2 / (4 * total**2)
-        )
-        / denominator
+        z * math.sqrt(proportion * (1 - proportion) / total + z**2 / (4 * total**2)) / denominator
     )
     return [
         round(max(0.0, center - half_width), 6),
@@ -484,8 +480,7 @@ def _apply_holm_correction(
             update={
                 "holm_adjusted_p_value": adjusted_by_index[index],
                 "statistically_significant_after_holm": (
-                    adjusted_by_index[index] < 0.05
-                    and delta.strict_accuracy_delta > 0
+                    adjusted_by_index[index] < 0.05 and delta.strict_accuracy_delta > 0
                 ),
             }
         )
@@ -523,17 +518,19 @@ def compare_coverage_profiles(
     snapshots = [_snapshot(label, reports[label], observations_by_label[label]) for label in labels]
     snapshot_by_label = {item.label: item for item in snapshots}
     baseline_label = labels[0]
-    pairwise = _apply_holm_correction([
-        _pairwise(
-            baseline_label,
-            label,
-            observations_by_label[baseline_label],
-            observations_by_label[label],
-            snapshot_by_label[baseline_label],
-            snapshot_by_label[label],
-        )
-        for label in labels[1:]
-    ])
+    pairwise = _apply_holm_correction(
+        [
+            _pairwise(
+                baseline_label,
+                label,
+                observations_by_label[baseline_label],
+                observations_by_label[label],
+                snapshot_by_label[baseline_label],
+                snapshot_by_label[label],
+            )
+            for label in labels[1:]
+        ]
+    )
     timestamp = generated_at_utc or datetime.now(UTC).replace(microsecond=0).isoformat()
     return CoverageAblationReport(
         ablation_id=f"coverage-{kind}-ablation-v1",

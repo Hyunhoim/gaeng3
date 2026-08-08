@@ -277,6 +277,19 @@ python -m finance_agent_core.evaluation.coverage_campaign_cli \
 - 같은 질문의 결정론적 결과와 Qwen 결과를 paired 방식으로 비교
 - 질문·실행·비교 파일의 SHA-256을 `manifest.json`에 기록
 
+캠페인이 끝나면 생성 성공률·구성별 정확도·구제·퇴행·지연·실패 단계를 사람이
+읽을 수 있는 Markdown 보고서로 변환
+
+~~~bash
+python -m finance_agent_core.evaluation.coverage_report_cli \
+  --questions artifacts/evaluation/coverage-qwen-campaign-first/questions/campaign.json \
+  --ablation artifacts/evaluation/coverage-qwen-campaign-first/ablation.json \
+  --output artifacts/evaluation/coverage-qwen-campaign-first/report.md
+~~~
+
+보고서는 Qwen 생성 의미 보존 통과율과 Agent strict 정확도의 분모를 분리하고,
+좋아진 문항뿐 아니라 기존 정답을 망가뜨린 퇴행과 p95 지연도 같은 표에 표시
+
 생성, 실행, 비교를 분리해야 하면 같은 출력 디렉터리에 `--phase generate`,
 `--phase run`, `--phase compare`를 순서대로 사용
 
