@@ -10,6 +10,7 @@ from typing import Any, Literal, Protocol
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from finance_agent_core.agent.linker import canonicalize_query_plan_payload
+from finance_agent_core.agent.product_comparison import comparison_projection
 from finance_agent_core.config import FieldDefinition, load_field_registry
 from finance_agent_core.contracts.queryplan import (
     SEARCH_PROJECTION_BY_FAMILY,
@@ -1126,25 +1127,8 @@ class GroundedPlanGate:
     ) -> list[str]:
         if intent is Intent.SEARCH:
             return list(SEARCH_PROJECTION_BY_FAMILY[family.value])
-        registry = load_field_registry()
         if intent is Intent.COMPARE:
-            requested = ["product_id", "product_name"]
-            for optional in ("ticker", "short_name"):
-                try:
-                    definition = registry.require_field(optional, [family.value])
-                except ValueError:
-                    continue
-                if definition.selectable:
-                    requested.append(optional)
-            requested.extend(comparison_fields)
-            for optional in ("trading_currency", "dynamic_as_of"):
-                try:
-                    definition = registry.require_field(optional, [family.value])
-                except ValueError:
-                    continue
-                if definition.selectable:
-                    requested.append(optional)
-            return list(dict.fromkeys(requested))
+            return comparison_projection(family, comparison_fields)
         return list(
             dict.fromkeys(
                 [

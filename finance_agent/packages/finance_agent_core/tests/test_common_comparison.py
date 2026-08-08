@@ -10,7 +10,11 @@ from pydantic import ValidationError
 from finance_agent_core.agent import RoutedFinanceAgent
 from finance_agent_core.config import QualityStatus
 from finance_agent_core.contracts.backend import routed_result_to_backend
-from finance_agent_core.contracts.queryplan import QueryPlan
+from finance_agent_core.contracts.queryplan import (
+    SEARCH_PROJECTION_BY_FAMILY,
+    ProductFamily,
+    QueryPlan,
+)
 from finance_agent_core.execution import (
     ComparisonResultVerifier,
     ResultVerifier,
@@ -36,6 +40,10 @@ def test_overseas_comparison_runs_end_to_end_and_exposes_backend_dto(
         "total_expense_ratio_pct",
         "aum",
     ]
+    assert (
+        result.query_plan.projection
+        == SEARCH_PROJECTION_BY_FAMILY[ProductFamily.OVERSEAS_ETP.value]
+    )
     assert [product.product_id for product in result.products] == ["AMX:B2", "AMX:B1"]
     assert [item.status for item in result.comparisons] == [
         "numeric_delta",
@@ -112,6 +120,75 @@ def test_comparison_identity_failure_returns_clarification(
     assert result.query_plan is None
     assert result.products == []
     assert result.comparisons == []
+
+
+def test_comparison_accepts_explicit_two_id_inclusion_grammar(
+    sample_database: tuple[Path, list[object], object],
+) -> None:
+    path, _, _ = sample_database
+    result = RoutedFinanceAgent({"overseas_etp": path}).answer(
+        ("상품 ID가 AMX:B1과 AMX:B2에 포함되는 두 해외 ETF 상품의 AUM을 비교해줘"),
+        "compare-overseas-inclusion-grammar",
+    )
+
+    assert result.status == "executed"
+    assert result.query_plan is not None
+    assert result.query_plan.intent_payload.comparison_fields == ["aum"]
+
+
+def test_comparison_rejects_negated_or_additional_inclusion_role(
+    sample_database: tuple[Path, list[object], object],
+) -> None:
+    path, _, _ = sample_database
+    agent = RoutedFinanceAgent({"overseas_etp": path})
+    negated = agent.answer(
+        "해외 ETF AMX:B1은 포함하지 않고 AMX:B2와 AUM을 비교해줘",
+        "compare-overseas-negated-inclusion",
+    )
+    additional = agent.answer(
+        "해외 ETF AMX:B1과 AMX:B2에 다른 상품도 포함해 AUM을 비교해줘",
+        "compare-overseas-additional-inclusion",
+    )
+
+    assert negated.status == "clarify"
+    assert additional.status == "clarify"
+    assert negated.products == []
+    assert additional.products == []
+
+
+@pytest.mark.parametrize(
+    ("question", "expected_field"),
+    [
+        (
+            "상품 ID가 KR7000000003과 KR7000000002인 국내 ETF·ETN 두 상품의 "
+            "연금 계좌에서 거래 가능한지 여부를 비교해줘",
+            "pension_eligible",
+        ),
+        (
+            "상품 ID가 KR7000000003과 KR7000000002인 국내 ETF·ETN 두 상품의 "
+            "거래 가능 여부를 비교해줘",
+            "trading_suspended",
+        ),
+        (
+            "상품 ID가 KR7000000003과 KR7000000002인 국내 ETF·ETN 두 상품의 총보수율을 비교해줘",
+            "total_expense_ratio_pct",
+        ),
+    ],
+)
+def test_comparison_supports_exact_product_operational_field_phrases(
+    domestic_sample_database: tuple[Path, list[object], object],
+    question: str,
+    expected_field: str,
+) -> None:
+    path, _, _ = domestic_sample_database
+    result = RoutedFinanceAgent({"domestic_etp": path}).answer(
+        question,
+        f"compare-domestic-operational-{expected_field}",
+    )
+
+    assert result.status == "executed"
+    assert result.query_plan is not None
+    assert result.query_plan.intent_payload.comparison_fields == [expected_field]
 
 
 @pytest.mark.parametrize(

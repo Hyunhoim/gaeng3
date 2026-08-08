@@ -16,6 +16,7 @@ from finance_agent_core.evaluation.coverage_plan import (
 )
 from finance_agent_core.evaluation.coverage_question_runner import (
     CoverageQuestionCampaignReport,
+    CoverageQuestionRunReport,
     CoverageQuestionVariantResult,
 )
 from finance_agent_core.evaluation.semantics import query_plan_semantic_payload
@@ -177,7 +178,7 @@ def _bucket(cases: Sequence[CoverageExecutionAuditCase]) -> CoverageExecutionAud
 
 def audit_coverage_execution_semantics(
     suite: CoveragePlanSuite,
-    report: CoverageQuestionCampaignReport,
+    report: CoverageQuestionCampaignReport | CoverageQuestionRunReport,
     *,
     source_report_sha256: str,
     generated_at_utc: str | None = None,
@@ -256,10 +257,15 @@ def audit_coverage_execution_semantics(
     overall = _bucket(audited)
     residual = Counter(check for item in audited for check in item.residual_failed_checks)
     timestamp = generated_at_utc or datetime.now(UTC).replace(microsecond=0).isoformat()
+    source_report_id = (
+        report.campaign_id
+        if isinstance(report, CoverageQuestionCampaignReport)
+        else report.report_id
+    )
     return CoverageExecutionAuditReport(
-        audit_id=f"{report.campaign_id}-aggregate-execution-inert-v1-audit",
+        audit_id=f"{source_report_id}-aggregate-execution-inert-v1-audit",
         generated_at_utc=timestamp,
-        source_report_id=report.campaign_id,
+        source_report_id=source_report_id,
         source_report_sha256=source_report_sha256,
         source_agent_profile=report.agent_profile,
         source_agent_model=report.agent_model,

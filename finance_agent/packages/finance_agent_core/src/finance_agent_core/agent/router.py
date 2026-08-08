@@ -204,8 +204,13 @@ def _intent(question: str, families: list[ProductFamily]) -> InteractionIntent:
         or (ProductFamily.FUND in families and _FUND_UNAVAILABLE_DETAIL.search(question))
     ):
         return InteractionIntent.UNSUPPORTED
+    exact_two_product_comparison = bool(
+        _COMPARE.search(question) and len(_product_mentions(question)) == 2
+    )
     if _AMBIGUOUS.search(question) or (
-        _MIXED_ETP_COST.search(question) and _EXPLICIT_ETP_TYPE.search(question) is None
+        _MIXED_ETP_COST.search(question)
+        and _EXPLICIT_ETP_TYPE.search(question) is None
+        and not exact_two_product_comparison
     ):
         return InteractionIntent.CLARIFY
     if _DEFINITION.search(question):

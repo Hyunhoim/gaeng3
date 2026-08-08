@@ -274,9 +274,14 @@ def fund_comparison_plan_contract_exact(
                 "product_id",
                 "product_name",
                 "short_name",
-                *fields,
-                *(["trading_currency"] if "aum" in fields else []),
+                "fund_geography_scope",
+                "fund_management_attribute",
+                "risk_level",
+                "three_month_return_pct",
+                "aum",
+                "trading_currency",
                 "dynamic_as_of",
+                *fields,
             ]
         )
     )

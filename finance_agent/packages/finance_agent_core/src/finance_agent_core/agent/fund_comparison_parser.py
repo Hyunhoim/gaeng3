@@ -13,8 +13,10 @@ from finance_agent_core.agent.fund_resolver import (
     normalize_fund_mention,
     strip_fund_mention_quotes,
 )
+from finance_agent_core.agent.product_comparison import comparison_projection
 from finance_agent_core.config import load_field_registry
 from finance_agent_core.contracts import QueryPlan
+from finance_agent_core.contracts.queryplan import ProductFamily
 
 type FundComparisonField = Literal[
     "product_name",
@@ -82,17 +84,20 @@ _FIELD_PATTERNS: tuple[tuple[FundComparisonField, tuple[str, ...]], ...] = (
         (r"6\s*개월\s*(?:수익률|수익|성과)", r"반년\s*(?:수익률|수익|성과)", r"6M\s*수익률"),
     ),
     ("company_sellable", (r"당사\s*판매\s*여부", r"미래에셋(?:증권)?\s*판매\s*여부")),
-    ("fund_geography_scope", (r"국내외\s*구분", r"해외\s*펀드\s*여부", r"펀드\s*지역\s*구분")),
+    (
+        "fund_geography_scope",
+        (r"국내외\s*(?:펀드\s*)?구분", r"해외\s*펀드\s*여부", r"펀드\s*지역\s*구분"),
+    ),
     ("fund_management_attribute", (r"펀드\s*유형", r"운용\s*속성", r"상품\s*유형")),
     ("investment_region", (r"투자\s*지역", r"투자\s*국가")),
-    ("investor_type", (r"투자자\s*유형", r"개인\s*법인\s*구분")),
+    ("investor_type", (r"투자자\s*(?:유형|구분)", r"개인\s*법인\s*구분")),
     ("currency_hedged", (r"환\s*헤지\s*여부", r"환헤지")),
     ("trading_currency", (r"거래\s*통화", r"표시\s*통화", r"통화")),
     ("product_name", (r"정식\s*상품명", r"정확한\s*상품명", r"상품명", r"펀드명", r"정식명")),
     ("short_name", (r"짧은\s*이름", r"단축\s*상품명", r"약어명")),
     ("risk_level", (r"위험\s*등급", r"위험도")),
     ("aum", (r"(?<![A-Z])AUM(?![A-Z])", r"순자산", r"운용\s*자산")),
-    ("sellable", (r"판매\s*여부", r"판매\s*상태")),
+    ("sellable", (r"판매\s*(?:가능\s*)?여부", r"판매\s*상태")),
 )
 
 _UNSUPPORTED_PATTERNS: tuple[tuple[str, str], ...] = (
@@ -918,6 +923,68 @@ def _audited_natural_id_comparison_surface(
     return any(pattern.fullmatch(surface) is not None for pattern in patterns)
 
 
+def _audited_labeled_id_comparison_surface(
+    question: str,
+    identity_spans: tuple[tuple[int, int], ...],
+    identity_masked_question: str,
+) -> bool:
+    """Accept a narrow labeled-ID grammar without allowing arbitrary suffix text."""
+
+    if len(identity_spans) != 2:
+        return False
+    surface = _identity_placeholder_surface(question, identity_spans)
+    labeled_targets = re.compile(
+        r"^\s*공모\s*펀드\s*(?:중에서|에\s*해당하며)\s*"
+        r"상품\s*(?:ID|아이디|번호)(?:가|는|은|이)?\s*"
+        r"<ID>\s*(?:또는|및|와|과)\s*<ID>\s*인\s*"
+        r"(?:"
+        r"상품\s*두\s*개를\s*(?:비교할\s*때|대상으로)|"
+        r"두\s*상품(?:을\s*(?:비교할\s*때|비교하고)|의)"
+        r")",
+        flags=re.IGNORECASE,
+    )
+    if labeled_targets.match(surface) is None:
+        return False
+    if _COMPARISON_TRIGGER.search(surface) is None or not _supported_field_spans(surface):
+        return False
+    if _UNRESOLVED_TARGET_REFERENCE_PATTERN.search(
+        identity_masked_question
+    ) or _PUNCTUATION_PLACEHOLDER_PATTERN.search(identity_masked_question):
+        return False
+
+    residual = _mask_supported_question_language(identity_masked_question)
+    allowed_tokens = _ALLOWED_QUESTION_TOKENS | {
+        "id가",
+        "또는",
+        "인",
+        "개를",
+        "할",
+        "때",
+        "규모를",
+        "확인하고자",
+        "합니다",
+        "정확하게",
+        "각",
+        "확인",
+        "하여",
+        "대상으로",
+        "각각의",
+        "수익률을",
+        "제공",
+        "공모펀드에",
+        "해당하며",
+    }
+    tokens = [token.casefold() for token in re.findall(r"[^\W_]+", residual, flags=re.UNICODE)]
+    if any(token not in allowed_tokens for token in tokens):
+        return False
+    return not any(
+        not character.isspace()
+        and not character.isalnum()
+        and character not in _ALLOWED_QUESTION_PUNCTUATION
+        for character in residual
+    )
+
+
 def _is_word_apostrophe(text: str, index: int, character: str) -> bool:
     if character not in {"'", "’"}:
         return False
@@ -1023,6 +1090,10 @@ def compile_fund_comparison_query_plan(
     audited_surface = _audited_natural_id_comparison_surface(
         validation_question,
         question_identity_spans,
+    ) or _audited_labeled_id_comparison_surface(
+        validation_question,
+        question_identity_spans,
+        identity_masked_question,
     )
     targets_complete = (
         target_sequence_complete
@@ -1156,15 +1227,7 @@ def compile_fund_comparison_query_plan(
                 "strength": "locked",
             }
         )
-    projection = [
-        "product_id",
-        "product_name",
-        "short_name",
-        *comparison_fields,
-        *(["trading_currency"] if "aum" in comparison_fields else []),
-        "dynamic_as_of",
-    ]
-    projection = list(dict.fromkeys(projection))
+    projection = comparison_projection(ProductFamily.FUND, comparison_fields)
     for field_name in comparison_fields:
         if not registry.require_field(field_name, ["fund"]).selectable:
             raise ValueError(f"fund comparison field is not selectable: {field_name}")

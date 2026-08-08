@@ -9,6 +9,7 @@ from finance_agent_core.evaluation.coverage_execution_audit import (
 )
 from finance_agent_core.evaluation.coverage_question_runner import (
     CoverageQuestionCampaignReport,
+    CoverageQuestionRunReport,
 )
 from finance_agent_core.evaluation.coverage_runner import load_coverage_plan_suite
 from finance_agent_core.evaluation.runner import sha256_file
@@ -31,8 +32,11 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     arguments = build_parser().parse_args(argv)
     suite = load_coverage_plan_suite(arguments.suite_input)
-    report = CoverageQuestionCampaignReport.model_validate_json(
-        arguments.report_input.read_text(encoding="utf-8")
+    payload = json.loads(arguments.report_input.read_text(encoding="utf-8"))
+    report = (
+        CoverageQuestionCampaignReport.model_validate(payload)
+        if "campaign_id" in payload
+        else CoverageQuestionRunReport.model_validate(payload)
     )
     audit = audit_coverage_execution_semantics(
         suite,

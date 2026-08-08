@@ -7,6 +7,7 @@ from collections.abc import Iterable, Sequence
 from finance_agent_core.config import load_field_registry
 from finance_agent_core.contracts import QueryPlan
 from finance_agent_core.contracts.queryplan import (
+    SEARCH_PROJECTION_BY_FAMILY,
     Constraint,
     ConstraintOperator,
     ConstraintStrength,
@@ -26,10 +27,18 @@ _FIELD_PATTERNS: dict[ProductFamily, tuple[tuple[str, tuple[str, ...]], ...]] = 
     ProductFamily.OVERSEAS_ETP: (
         ("total_expense_ratio_pct", (r"총\s*보수(?:율)?", r"보수율", r"expense\s*ratio")),
         ("aum", (r"(?<![A-Z])AUM(?![A-Z])", r"순자산", r"운용\s*자산")),
-        ("product_type", (r"상품\s*유형", r"ETF\s*ETN\s*구분")),
+        ("product_name", (r"상품명", r"상품\s*이름", r"정식\s*명칭")),
+        ("product_type", (r"상품\s*유형", r"ETP\s*유형", r"ETF\s*ETN\s*구분")),
         ("exchange_code", (r"거래소(?:\s*코드)?",)),
         ("sellable", (r"판매\s*(?:가능\s*)?여부", r"판매\s*상태")),
-        ("trading_suspended", (r"거래\s*(?:중지|정지)\s*여부", r"거래\s*상태")),
+        (
+            "trading_suspended",
+            (
+                r"거래\s*(?:중지|정지)\s*여부",
+                r"거래\s*가능\s*여부",
+                r"거래\s*상태",
+            ),
+        ),
         ("asset_type", (r"투자\s*자산(?:\s*유형)?", r"자산군")),
         ("investment_region", (r"투자\s*(?:지역|국가)",)),
         ("trading_currency", (r"거래\s*통화", r"표시\s*통화")),
@@ -57,21 +66,43 @@ _FIELD_PATTERNS: dict[ProductFamily, tuple[tuple[str, tuple[str, ...]], ...]] = 
         ("leverage_factor", (r"레버리지\s*배수", r"배수")),
         ("close_price", (r"종가", r"마감\s*가격")),
         ("aum", (r"(?<![A-Z])AUM(?![A-Z])", r"순자산", r"운용\s*자산")),
-        ("product_type", (r"상품\s*유형", r"ETF\s*ETN\s*구분")),
+        ("product_name", (r"상품명", r"상품\s*이름", r"정식\s*명칭")),
+        ("product_type", (r"상품\s*유형", r"ETP\s*유형", r"ETF\s*ETN\s*구분")),
         ("exchange_code", (r"거래소(?:\s*코드)?",)),
         ("sellable", (r"판매\s*(?:가능\s*)?여부", r"판매\s*상태")),
-        ("trading_suspended", (r"거래\s*(?:중지|정지)\s*여부", r"거래\s*상태")),
+        (
+            "trading_suspended",
+            (
+                r"거래\s*(?:중지|정지)\s*여부",
+                r"거래\s*가능\s*여부",
+                r"거래\s*상태",
+            ),
+        ),
         ("asset_type", (r"투자\s*자산(?:\s*유형)?", r"자산군")),
         ("investment_region", (r"투자\s*(?:지역|국가)",)),
         ("manager", (r"운용사", r"자산운용사", r"발행사")),
         ("base_index", (r"기초\s*지수", r"추종\s*지수")),
         ("strategy", (r"운용\s*전략", r"복제\s*방식")),
         ("risk_level", (r"위험\s*등급", r"위험도")),
-        ("pension_eligible", (r"연금\s*(?:거래\s*)?가능\s*여부",)),
-        ("core_etf", (r"핵심\s*ETF\s*여부", r"코어\s*ETF\s*여부")),
+        (
+            "pension_eligible",
+            (
+                r"연금\s*(?:거래\s*)?가능\s*여부",
+                r"연금\s*계좌.{0,12}?거래\s*가능",
+            ),
+        ),
+        (
+            "core_etf",
+            (
+                r"핵심\s*ETF\s*여부",
+                r"코어\s*ETF\s*여부",
+                r"핵심\s*ETF.{0,12}?해당(?:하는지)?\s*여부",
+            ),
+        ),
         ("trading_currency", (r"거래\s*통화", r"표시\s*통화")),
     ),
     ProductFamily.BOND: (
+        ("product_name", (r"상품명", r"상품\s*이름", r"정식\s*명칭")),
         ("after_tax_yield_pct", (r"세후\s*수익률",)),
         ("buy_yield_pct", (r"매수\s*수익률", r"세전\s*수익률")),
         ("coupon_rate_pct", (r"표면\s*(?:이율|금리)", r"쿠폰\s*금리")),
@@ -102,9 +133,10 @@ _UNSUPPORTED_PATTERNS: dict[ProductFamily, tuple[tuple[str, str], ...]] = {
     ProductFamily.BOND: ((r"예상\s*수익률|만기\s*수익률", "제공 데이터에 없는 수익률"),),
 }
 _UNSAFE_TARGET_ROLE_PATTERN = re.compile(
-    r"제외(?:하고|한|해)?|빼고|말고|대신|포함",
+    r"제외(?:하고|한|해)?|빼고|말고|대신|미포함|포함(?:되)?지\s*않",
     flags=re.IGNORECASE,
 )
+_INCLUSION_ROLE_PATTERN = re.compile(r"포함", flags=re.IGNORECASE)
 _DOMESTIC_RETURN_FIELDS = {
     "one_day_return_pct",
     "one_month_return_pct",
@@ -113,6 +145,50 @@ _DOMESTIC_RETURN_FIELDS = {
     "one_year_return_pct",
     "ytd_return_pct",
 }
+
+
+def comparison_projection(
+    family: ProductFamily,
+    comparison_fields: Sequence[str],
+) -> list[str]:
+    """Return standard product evidence plus every requested comparison field."""
+
+    registry = load_field_registry()
+    candidates = [*SEARCH_PROJECTION_BY_FAMILY[family.value], *comparison_fields]
+    if any(
+        "trading_currency" in registry.require_field(field_name, [family.value]).comparison_scope
+        for field_name in comparison_fields
+    ):
+        candidates.append("trading_currency")
+    return list(
+        dict.fromkeys(
+            field_name
+            for field_name in candidates
+            if family.value in registry.fields[field_name].datasets
+            and registry.require_field(field_name, [family.value]).selectable
+        )
+    )
+
+
+def _has_unsafe_target_role(question: str, mentions: Sequence[str]) -> bool:
+    if _UNSAFE_TARGET_ROLE_PATTERN.search(question):
+        return True
+    inclusion_matches = list(_INCLUSION_ROLE_PATTERN.finditer(question))
+    if not inclusion_matches:
+        return False
+    if len(mentions) != 2:
+        return True
+    first, second = (re.escape(mention) for mention in mentions)
+    allowed = re.compile(
+        rf"(?:상품\s*(?:ID|아이디|번호)(?:가|는|은|이)?\s*)?"
+        rf"{first}\s*(?:와|과|및)\s*{second}에\s*포함되는",
+        flags=re.IGNORECASE,
+    )
+    allowed_spans = [match.span() for match in allowed.finditer(question)]
+    return any(
+        not any(start <= match.start() and match.end() <= end for start, end in allowed_spans)
+        for match in inclusion_matches
+    )
 
 
 def normalize_product_mention(value: str) -> str:
@@ -228,7 +304,7 @@ def compile_product_comparison_plan(
 ) -> QueryPlan:
     if family is ProductFamily.FUND:
         raise ProductComparisonParseError("공모펀드는 검증된 전용 비교 parser를 사용해야 합니다")
-    if _UNSAFE_TARGET_ROLE_PATTERN.search(question):
+    if _has_unsafe_target_role(question, mentions):
         raise ProductComparisonParseError(
             "제외·대신·포함처럼 비교 대상 역할을 바꾸는 표현은 현재 지원하지 않습니다"
         )
@@ -250,13 +326,7 @@ def compile_product_comparison_plan(
                 f"{definition.label}은 현재 비교 가능한 필드가 아닙니다"
             )
 
-    projection = ["product_id", "product_name", "ticker", *comparison_fields]
-    if any(
-        "trading_currency" in registry.require_field(field_name, [family.value]).comparison_scope
-        for field_name in comparison_fields
-    ):
-        projection.append("trading_currency")
-    projection = list(dict.fromkeys(projection))
+    projection = comparison_projection(family, comparison_fields)
     return QueryPlan(
         schema_version="1.0",
         question_id=question_id,
