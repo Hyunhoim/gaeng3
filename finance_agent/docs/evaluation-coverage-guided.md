@@ -243,6 +243,10 @@ export PYTHONPATH=packages/finance_agent_core/src
 
 먼저 서로 다른 출력 디렉터리에서 10개 source pilot을 실행
 
+이 pilot은 suite 앞부분의 국내채권 SEARCH 사례만 사용하므로 provider 연결·JSON 형식·
+재시작·보고서 생성을 확인하는 건강검진이다. 네 상품군이나 전체 의도 성능의 대표
+표본으로 해석하지 않는다. 상품군·의도별 판단은 299개 source 전체 캠페인에서 수행한다.
+
 ~~~bash
 python -m finance_agent_core.evaluation.coverage_campaign_cli \
   --suite-input artifacts/evaluation/coverage-guided-plan-v1-canonical-screened-v2.json \
@@ -298,11 +302,14 @@ python -m finance_agent_core.evaluation.coverage_campaign_cli \
 python -m finance_agent_core.evaluation.coverage_report_cli \
   --questions artifacts/evaluation/coverage-qwen-campaign-first/questions/campaign.json \
   --ablation artifacts/evaluation/coverage-qwen-campaign-first/ablation.json \
-  --output artifacts/evaluation/coverage-qwen-campaign-first/report.md
+  --output artifacts/evaluation/coverage-qwen-campaign-first/report.md \
+  --review-examples 10
 ~~~
 
 보고서는 Qwen 생성 의미 보존 통과율과 Agent strict 정확도의 분모를 분리하고,
-좋아진 문항뿐 아니라 기존 정답을 망가뜨린 퇴행과 p95 지연도 같은 표에 표시
+좋아진 문항뿐 아니라 기존 정답을 망가뜨린 퇴행과 p95 지연도 같은 표에 표시한다.
+또한 의미 보존 탈락·생성 오류·구제·퇴행 질문을 고정 순서로 표본 추출해 사람이 바로
+검수할 수 있게 한다.
 
 생성, 실행, 비교를 분리해야 하면 같은 출력 디렉터리에 `--phase generate`,
 `--phase run`, `--phase compare`를 순서대로 사용

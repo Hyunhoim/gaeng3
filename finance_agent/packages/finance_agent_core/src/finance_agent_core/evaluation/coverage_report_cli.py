@@ -20,6 +20,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--questions", type=Path)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--top-changes", type=int, default=15)
+    parser.add_argument("--review-examples", type=int, default=10)
     return parser
 
 
@@ -39,6 +40,7 @@ def main(argv: list[str] | None = None) -> int:
         report,
         question_batch=question_batch,
         top_changes=arguments.top_changes,
+        review_examples=arguments.review_examples,
     )
     arguments.output.parent.mkdir(parents=True, exist_ok=True)
     arguments.output.write_text(rendered, encoding="utf-8")

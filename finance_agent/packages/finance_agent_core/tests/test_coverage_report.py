@@ -188,6 +188,8 @@ def test_coverage_report_renders_generation_ablation_and_limits() -> None:
     assert "퇴행" in rendered
     assert "+300.0ms" in rendered
     assert "search_constraint" in rendered
+    assert "사람이 확인할 변화 문항" in rendered
+    assert "질문 2" in rendered
     assert "내부 synthetic 평가임" in rendered
 
 
@@ -202,3 +204,8 @@ def test_coverage_report_rejects_mismatched_questions() -> None:
 def test_coverage_report_rejects_non_positive_top_changes() -> None:
     with pytest.raises(ValueError, match="positive"):
         render_coverage_experiment_markdown(_report(), top_changes=0)
+
+
+def test_coverage_report_rejects_non_positive_review_examples() -> None:
+    with pytest.raises(ValueError, match="review_examples"):
+        render_coverage_experiment_markdown(_report(), review_examples=0)

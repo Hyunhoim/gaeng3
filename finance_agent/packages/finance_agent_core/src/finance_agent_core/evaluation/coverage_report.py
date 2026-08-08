@@ -27,6 +27,13 @@ def _escape_cell(value: object) -> str:
     return str(value).replace("|", "\\|").replace("\n", " ")
 
 
+def _shorten(value: object, *, limit: int = 180) -> str:
+    normalized = " ".join(str(value).split())
+    if len(normalized) <= limit:
+        return normalized
+    return f"{normalized[: limit - 1]}…"
+
+
 def _table(headers: list[str], rows: Iterable[Iterable[object]]) -> list[str]:
     rendered = [f"| {' | '.join(headers)} |", f"| {' | '.join('---' for _ in headers)} |"]
     rendered.extend(f"| {' | '.join(_escape_cell(value) for value in row)} |" for row in rows)
@@ -91,14 +98,143 @@ def _top_changes(
     )[:limit]
 
 
+def _candidate_metadata(candidate: object) -> tuple[str, str, str]:
+    cell = getattr(candidate, "cell", None)
+    if cell is None:
+        return "—", "—", "—"
+    family = getattr(cell, "product_family", None)
+    intent = getattr(cell, "intent", None)
+    axis = getattr(candidate, "axis", None)
+    return (
+        getattr(family, "value", family) or "—",
+        getattr(intent, "value", intent) or "—",
+        getattr(axis, "value", axis) or "—",
+    )
+
+
+def _generation_review_sections(
+    batch: CoverageQuestionBatch,
+    *,
+    limit: int,
+) -> list[str]:
+    lines: list[str] = []
+    rejected = sorted(
+        (candidate for candidate in batch.candidates if not candidate.validation.passed),
+        key=lambda candidate: (candidate.validation.violations, candidate.id),
+    )
+    if rejected:
+        lines.extend(
+            [
+                "### 의미 보존 검사 탈락 표본",
+                "",
+                *_table(
+                    ["질문 ID", "상품군", "의도", "문체", "탈락 사유", "생성 질문"],
+                    [
+                        [
+                            candidate.id,
+                            *_candidate_metadata(candidate),
+                            ", ".join(candidate.validation.violations),
+                            _shorten(candidate.question),
+                        ]
+                        for candidate in rejected[:limit]
+                    ],
+                ),
+                "",
+                f"전체 {len(rejected)}건 중 최대 {limit}건을 고정 순서로 표시",
+                "",
+            ]
+        )
+    failures = sorted(
+        batch.generation_failures,
+        key=lambda failure: (failure.error_type, failure.source_case_id),
+    )
+    if failures:
+        lines.extend(
+            [
+                "### 질문 생성 오류 표본",
+                "",
+                *_table(
+                    ["원본 계획 ID", "상품군", "의도", "오류", "메시지"],
+                    [
+                        [
+                            failure.source_case_id,
+                            getattr(
+                                failure.cell.product_family,
+                                "value",
+                                failure.cell.product_family,
+                            ),
+                            getattr(failure.cell.intent, "value", failure.cell.intent),
+                            failure.error_type,
+                            _shorten(failure.error_message),
+                        ]
+                        for failure in failures[:limit]
+                    ],
+                ),
+                "",
+                f"전체 {len(failures)}건 중 최대 {limit}건을 고정 순서로 표시",
+                "",
+            ]
+        )
+    return lines
+
+
+def _change_review_sections(
+    report: CoverageAblationReport,
+    batch: CoverageQuestionBatch,
+    *,
+    limit: int,
+) -> list[str]:
+    candidates = {candidate.id: candidate for candidate in batch.candidates}
+    lines: list[str] = []
+    for delta in report.pairwise_deltas:
+        rows: list[list[object]] = []
+        for change, identifiers in (
+            ("구제", delta.rescued_case_ids),
+            ("퇴행", delta.regressed_case_ids),
+        ):
+            for identifier in identifiers[:limit]:
+                candidate = candidates.get(identifier)
+                if candidate is None:
+                    raise ValueError(
+                        f"coverage change question is missing from batch: {identifier}"
+                    )
+                rows.append(
+                    [
+                        change,
+                        identifier,
+                        *_candidate_metadata(candidate),
+                        _shorten(candidate.question),
+                    ]
+                )
+        if not rows:
+            continue
+        lines.extend(
+            [
+                f"### {report.baseline_label} → {delta.candidate_label}",
+                "",
+                *_table(
+                    ["변화", "질문 ID", "상품군", "의도", "문체", "질문"],
+                    rows,
+                ),
+                "",
+                f"구제·퇴행 각각 최대 {limit}건을 표시",
+                "",
+            ]
+        )
+    return lines
+
+
 def render_coverage_experiment_markdown(
     report: CoverageAblationReport,
     *,
     question_batch: CoverageQuestionBatch | None = None,
     top_changes: int = 15,
+    review_examples: int = 10,
 ) -> str:
     if top_changes < 1:
         raise ValueError("coverage report top_changes must be positive")
+    if review_examples < 1:
+        raise ValueError("coverage report review_examples must be positive")
     if question_batch is not None:
         _validate_question_batch(report, question_batch)
 
@@ -161,6 +297,7 @@ def render_coverage_experiment_markdown(
                     "",
                 ]
             )
+        lines.extend(_generation_review_sections(question_batch, limit=review_examples))
 
     section_number = 2 if question_batch is not None else 1
     lines.extend(
@@ -298,6 +435,21 @@ def render_coverage_experiment_markdown(
         )
     if not any_changes:
         lines.extend(["구제 또는 퇴행이 발생한 기능 구간 없음", ""])
+
+    section_number += 1
+    lines.extend([f"## {section_number}. 사람이 확인할 변화 문항", ""])
+    if question_batch is None:
+        lines.extend(["질문 batch를 함께 전달하면 구제·퇴행 질문 표본을 표시", ""])
+    else:
+        review_sections = _change_review_sections(
+            report,
+            question_batch,
+            limit=review_examples,
+        )
+        if review_sections:
+            lines.extend(review_sections)
+        else:
+            lines.extend(["구제 또는 퇴행 문항 없음", ""])
 
     section_number += 1
     lines.extend(
