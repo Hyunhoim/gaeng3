@@ -16,6 +16,8 @@
 | 제출용 Ontology가 무엇인지 | [Ontology 제출 계약](ontology.md) |
 | 평가 수치를 어떻게 해석하는지 | [평가 README](../evaluation/README.md) |
 | 설명회 형식 30문항 결과가 궁금한지 | [공식 형식 공개 모의평가](evaluation-official-mock.md) |
+| 질문 표현을 바꾼 Qwen 스트레스 평가가 궁금한지 | [Qwen 변형 질문 평가](evaluation-qwen-metamorphic.md) |
+| 원문을 숨긴 의미 재구성·모델 계획 gate가 궁금한지 | [Qwen 변형 질문 평가 9절](evaluation-qwen-metamorphic.md#9-원문-표현을-숨긴-semantic-round-trip) |
 | HyperCLOVA X 연결 전에 무엇이 남았는지 | [연결 전 준비 기준](pre-hcx-readiness.md) |
 
 ## 목적별 위치
@@ -37,6 +39,8 @@
 - 성공·결과 없음·역질문·미지원·오류의 HTTP 200 계약 테스트 완료
 - 예상 30문항·미응답 5문항·60초 권장과 도메인별 `.ttl` 제출 화면 확인
 - 같은 10/10/10·미응답 5개 분포의 공개 모의평가를 구성해 로컬 Qwen 전체 경로 30/30 확인
+- Qwen이 만든 의미 보존 변형 77개를 전체 Agent로 재생해 77/77·fallback 0 확인
+- 원문 문장을 숨긴 의미 재구성 64개에서 최초 15/64를 보존하고 출력·계획 의미 64/64로 개선
 - 도메인별 Turtle 5개 생성과 RDFLib 문법·field registry 정합성 검사 완료
 - 정확한 HCX 모델 ID·endpoint·인증 규격과 크레딧 적용 범위는 후속 확인 필요
 - 크레딧을 받기 전까지 실제 HCX 연결은 보류하고 로컬 Qwen 내부 시험 계속

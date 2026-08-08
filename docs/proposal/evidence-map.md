@@ -2,7 +2,7 @@
 
 상태: 활성
 
-기준일: 2026-08-07
+기준일: 2026-08-08
 
 제안서에 사용하는 주장과 실제 코드·문서·baseline을 연결한다. `검증 완료`는
 해당 범위의 저장소 회귀를 통과했다는 뜻이며 공식 평가 성능을 뜻하지 않는다.
@@ -40,6 +40,8 @@
 | 교차 상품군 grounded answer | expected·로컬 Qwen 각각 4/4; 생성 대상 2문항 모두 grounded; 실제 모델 호출 3회; fallback 0 | [교차 SEARCH](../../finance_agent/docs/cross-family-search.md)·[baseline](../../finance_agent/evaluation/baselines/cross-family-answer-v1.json) | 공개 4문항, not blind; 로컬 Qwen은 개발 전용 |
 | 내부 red-team | 수정 후 40/40 | [red-team 평가](../../finance_agent/docs/evaluation-internal-red-team.md) | self-authored, not blind |
 | 공식 형식 공개 모의평가 | 전체 계약 30/30, 답변 불가 5/5, Qwen 생성 16/17, fallback 1 | [모의평가](../../finance_agent/docs/evaluation-official-mock.md)·[baseline](../../finance_agent/evaluation/baselines/official-mock-v1-30.json) | 설명회 분포 모사, self-authored, not blind |
+| Qwen 표현 강건성·역할 ablation | 의미 보존 변형 네 실행 profile 모두 77/77, 의미·safety·evidence 100%, 답변 fallback 3/61→0/61; plan+answer p95 4,096.584ms | [변형 평가](../../finance_agent/docs/evaluation-qwen-metamorphic.md)·[baseline](../../finance_agent/evaluation/baselines/qwen-eval-lab-v1.json) | 공개 원문 파생·사후 수정, 생성 90개 중 13개 실행 전 폐기, 단일 순차 장비, not blind |
+| 원문 비공개 의미 재구성·모델 계획 gate | 생성 75·선별 64, 최초 결정론적 15/64→출력·QueryPlan 의미 64/64; grounded-plan 최초 28/64, gate 구제 9건 | [변형 평가 9절](../../finance_agent/docs/evaluation-qwen-metamorphic.md#9-원문-표현을-숨긴-semantic-round-trip)·[baseline](../../finance_agent/evaluation/baselines/semantic-roundtrip-v1.json) | 공개 정답 의미 파생·사후 수정, 강화된 Qwen prompt·gate 재실행 대기, not blind |
 | 공식 GET Docker 30문항 | 형식·60초 30/30, 의미 24/30, 공모펀드 정책 잠금 6건 | [모의평가](../../finance_agent/docs/evaluation-official-mock.md)·[HTTP baseline](../../finance_agent/evaluation/baselines/official-mock-http-v1-30.json) | 개발 서버 순차 1회, local Qwen 답변 전용, not blind |
 | 공식 GET 공모펀드 명시적 승인 | 의미·형식·60초 30/30, Qwen 17/17, fallback 0 | [모의평가](../../finance_agent/docs/evaluation-official-mock.md)·[승인 baseline](../../finance_agent/evaluation/baselines/official-mock-http-fund-approved-v1-30.json) | 최초 24/30 보존 후 팀 배포 정책 재평가, 주최 승인 아님, not blind |
 | 공식 GET 제한 동시성 | 결정론적 동시성 1·2·4 각 30/30, Qwen 동시성 2에서 30/30·fallback 0 | [모의평가](../../finance_agent/docs/evaluation-official-mock.md)·[결정론적 baseline](../../finance_agent/evaluation/baselines/official-mock-http-concurrency-v1.json)·[Qwen baseline](../../finance_agent/evaluation/baselines/official-mock-http-qwen-approved-c2-v1.json) | 단일 worker·프로필별 1회, 부하·SLO 아님 |

@@ -1,6 +1,6 @@
 # HyperCLOVA X 연결 전 준비 기준
 
-마지막 갱신: 2026-08-07
+마지막 갱신: 2026-08-08
 
 이 문서는 HyperCLOVA X API를 연결하기 전에 Agent Core에서 끝내야 할 구현,
 평가, 계약과 외부 확인 게이트를 추적하는 정본이다. 완료 표시는 코드·테스트·
@@ -54,6 +54,8 @@
 | 13 | 공식 평가 API adapter | `GET /answer`·다섯 문자열·전 결과 HTTP 200·60초 내부 예산 | route·DTO·상태·오류·55초 외곽 예산 완료 |
 | 14 | 도메인별 Ontology | Turtle 5개·field registry 정합성·문법 검사 | 5개 생성·RDFLib 문법·registry exact-match 완료 |
 | 15 | 공식 형식 공개 모의평가 | 난이도 10/10/10·답변 불가 5개·공식 5필드·latency | expected·로컬 Qwen 30/30·생성 16/17·안전 fallback 1건 |
+| 16 | Qwen 변형·전체 Agent 스트레스 평가 | 세 표현 축·의미 선별·gold 감사·실패 단계·fallback 전후 비교 | 승인 변형 결정론적·Qwen 각각 77/77·fallback 0/61 |
+| 17 | 원문 비공개 semantic round-trip | 실행 의미만 제공·계획 지문·근거 첨부 모델 계획 gate | 생성 75·선별 64, 최초 15/64→결정론적 출력·계획 64/64; 강화 Qwen 재실행 대기 |
 
 ## 2. 평가 해석 원칙
 
@@ -126,10 +128,13 @@ Backend `/answer` service adapter 결과:
 `internal-red-team-v1` 전체 E2E 결과:
 
 - 네 상품군 각 10문항, 10개 공격 유형을 Router부터 Backend DTO까지 실행
-- expected provider 40/40, 최초 로컬 Qwen strict 36/40·안전 차단 40/40
+- 과거 원본 정답표 기준 expected provider 40/40, 최초 로컬 Qwen strict 36/40·안전 차단 40/40
 - 최초 네 실패는 모두 `3건`을 lexical linker가 limit 5로 해석한 `$.limit` 불일치
 - Router와 linker의 단위 문법을 맞춘 뒤 로컬 Qwen strict·safety·evidence 40/40
 - QueryPlan 12회·grounded answer 12회, provider 오류·verifier fallback 0건
+- 이후 Qwen 변형 질문 감사에서 `낮은 순`·`짧은 순` 정답 2건이 반대 방향으로
+  산출된 것을 발견함. 올바른 정렬을 적용한 현재 Agent를 변경하지 않은 원본 정답표로
+  다시 채점하면 strict 38/40, safety 40/40이며 hash-pinned 교정표를 적용한 평가는 40/40
 - 공개 내부 red-team이므로 독립 blind나 HyperCLOVA X 품질 점수가 아님
 
 공식 형식 30문항 공개 모의평가 결과:
@@ -139,6 +144,39 @@ Backend `/answer` service adapter 결과:
 - 답변 생성 대상 17문항 중 16문항 grounded, 가치 판단 문구 1건은 안전 fallback
 - 로컬 순차 실행 p50 1,553.318ms, p95 3,876.727ms, 최대 4,398.949ms
 - self-authored 공개 모의평가이며 독립 blind·HyperCLOVA X·공모전 점수가 아님
+
+Qwen 변형 질문·전체 Agent 스트레스 평가 결과:
+
+- 공개 원문 30개에서 paraphrase·조건 순서 변경·무해한 부가 문장 90개 생성
+- 숫자·상품 식별자·연산자·핵심 개념 보존 validator 통과 77개, 폐기 13개
+- 최초 허용 변형 88개 중 60개 통과에서 시작해 Agent 표현 경계를 회귀로 보강
+- `낮은 순`·`짧은 순` 두 gold 정렬 오류를 DB 값으로 확인하고 원본 보존 overlay 적용
+- 교정 후 원문 30/30, 결정론적 Agent 변형 77/77, 전체 Qwen Agent 77/77
+- Qwen 계획 43회·답변 61회에서 provider 오류 0, 의미·safety·evidence 100%
+- 안전 설명문 계약 전 검증 fallback 3/61을 같은 전체 재실행에서 0/61로 감소
+- 공개 원문 파생·사후 개선 회귀이므로 독립 blind나 공식 성능으로 해석하지 않음
+
+원문 비공개 semantic round-trip 결과:
+
+- Qwen에 기존 질문 문장을 주지 않고 서버가 확정한 실행 의미만 제공
+- 정중체·구어체·전문 메모 75개 생성, 기계 의미 보존 64개 통과·11개 폐기
+- 결정론적 Agent 최초 15/64를 보존하고 라우팅·식별·비교·집계 표현 공백을 분류
+- 출력만 같고 QueryPlan이 다른 5건을 추가로 발견하도록 평가 지문 강화
+- 공통 규칙 보강 후 강화된 출력·QueryPlan 의미, safety, evidence 모두 64/64
+- Qwen grounded-plan 최초 28/64·gate 구제 9건을 관측했으나 결과 분석 후 강화한
+  prompt·gate는 같은 frozen batch에서 재실행해야 함
+- 실제 존재하지만 질문에 없는 상품 ID, 부정된 ID·조건·정렬, malformed JSON은
+  실행 권한을 얻지 못하도록 단위 회귀로 고정
+- 공개 정답 파생·사후 개선 회귀이므로 독립 blind나 공식 점수로 해석하지 않음
+
+부정 표현 안전장치 보강 후 교차 회귀 결과:
+
+- 상품 비교 30/30, 네 상품군 검색·집계 8/8, 금융 도메인 개발 QA 40/40
+- `공모가 아닌 공모펀드`, `거래 가능하지 않은 ETF`, `AUM이 크지 않은`,
+  `특정 상품을 제외한`처럼 조건을 반대로 해석하기 쉬운 질문은 임의 실행하지 않고
+  미지원 또는 조건 확인으로 종료
+- 전체 단위·계약 테스트 448/448, lint·format 검사 통과
+- 위 결과도 이미 확인한 공개 개발 세트의 사후 회귀이며 독립 blind가 아님
 
 같은 30문항의 실제 Docker FastAPI `GET /answer` 최초 관측:
 
@@ -203,7 +241,7 @@ Backend `/answer` service adapter 결과:
 - Agent Core pytest `370 passed`
 - Backend pytest `34 passed`
 - Ruff lint와 format 통과
-- 문서 검사 `55 Markdown files`, `38 evaluation baselines` 통과
+- 문서 검사 `56 Markdown files`, `40 evaluation baselines` 통과
 - `pip check` 통과
 - build isolation 없이 wheel 생성과 신규 JSON package data 포함 여부 통과
 - `git diff --check` 통과

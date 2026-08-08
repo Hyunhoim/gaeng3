@@ -1,0 +1,196 @@
+{
+  "schema_version": "1.0",
+  "baseline_id": "semantic-roundtrip-v1",
+  "recorded_on": "2026-08-08",
+  "dataset": "overseas_etp+domestic_etp+bond+fund",
+  "evaluation_layer": "system_regression",
+  "status": "public_derived_post_fix_not_blind",
+  "provider": {
+    "name": "local_test",
+    "official_submission_provider": false,
+    "network_used": "loopback_only",
+    "roles": [
+      "semantic_question_generator",
+      "grounded_plan_proposer"
+    ]
+  },
+  "model": {
+    "repository": "Qwen/Qwen3-30B-A3B-Instruct-2507-FP8",
+    "served_name": "qwen3-local-test",
+    "revision": "5a5a776300a41aaa681dd7ff0106608ef2bc90db"
+  },
+  "suite": {
+    "id": "semantic-roundtrip-v1",
+    "path": "packages/finance_agent_core/src/finance_agent_core/evaluation/suites/semantic_roundtrip_v1.json",
+    "sha256": "1a5c3410ff54ca9499c15afa90626251b1cb5cca3e86975ad3f9118d78389fb5",
+    "source_suite_id": "official-mock-v1-30",
+    "source_suite_sha256": "c9250cd45656beadad563087941112b31318254c50fc72bf9f15dcaa1d88a36e",
+    "eligible_source_cases": 25,
+    "source_wording_visible_to_generator": false,
+    "generator_input": "server-compiled semantic plan plus field labels and expected data semantics",
+    "axes": [
+      "semantic_colloquial",
+      "semantic_formal",
+      "semantic_telegraphic"
+    ],
+    "frozen_mutation_batch": {
+      "artifact_name": "semantic-roundtrip-v1-local-mutations-screened-v3.json",
+      "sha256": "c2a58fb2ef2c49c64ba1bfb8fb90a4976903fbd331e4d819593cde3ea30353e1",
+      "semantic_sha256": "5afa4d20864bbdf11c49474f6a799d6a9a2e001a29fe921e0f32f9132f841687"
+    },
+    "gold_audit": {
+      "id": "official-mock-v1-gold-audit-v1",
+      "sha256": "0bf5474ec05d0d390d279f8b07245cb6c1d7a899f0f812a5650f0fbab6ef32df",
+      "corrected_case_ids": [
+        "official-mock-v1-009",
+        "official-mock-v1-016"
+      ]
+    }
+  },
+  "data": {
+    "database_sha256": "2c26861a7e9b90ed4ae46ba3bfd4565daa63f405cf16627094629df36cecd03a",
+    "manifest_sha256": "624cef391dfe86aa2ce1a8ce20ad5142ec0d65a792e1fec6df0259024b997003",
+    "source_file_sha256": "c4f860f7a0d6821788015f51cf9ae48d2f48ab657e9a99be49771fc32fcaf895",
+    "hash_policy": "상품군 이름과 개별 SHA-256을 정렬해 결합한 뒤 다시 SHA-256 계산",
+    "database_sha256_by_family": {
+      "bond": "40265aa326d63244727294ac29c1cd38c898f05b6a80dfd51fd8ac38e08764bc",
+      "domestic_etp": "a91bfc713b88e9ba1e7da27508857cbe5ea200c4d7821d0b4fee7d9922684484",
+      "overseas_etp": "eee9009ca741713a9a61e498cd5ed8366836d754c7d0c2dbd74ed7e456a2ebbe",
+      "fund": "99fac786e5be0ec5a7a53e11e1bd3bbccd5b37ab15243ecbf8b864a85b375ca4"
+    }
+  },
+  "generation": {
+    "requested": 75,
+    "generated": 75,
+    "accepted": 64,
+    "rejected_before_agent_execution": 11,
+    "integrity_rate": 0.853333
+  },
+  "metrics": {
+    "total": 64,
+    "passed": 64,
+    "strict_accuracy": 1.0,
+    "deterministic_first_run": {
+      "passed": 15,
+      "executed": 64,
+      "strict_accuracy": 0.234375,
+      "safety_pass_rate": 1.0
+    },
+    "qwen_legacy_full_path_first_run": {
+      "passed": 15,
+      "executed": 64,
+      "strict_accuracy": 0.234375
+    },
+    "qwen_grounded_plan_first_run": {
+      "passed": 28,
+      "executed": 64,
+      "strict_accuracy": 0.4375,
+      "safety_pass_rate_before_provider_error_fallback": 0.921875,
+      "safety_pass_rate_after_provider_error_fallback": 1.0
+    },
+    "grounded_plan_gate_audit_first_run": {
+      "eligible": 63,
+      "provider_valid": 46,
+      "provider_errors": 17,
+      "gate_accepted": 14,
+      "gate_rejected": 32,
+      "model_rescues": 9,
+      "model_supplements": 4,
+      "model_same_as_server": 1,
+      "fail_closed": 14
+    },
+    "deterministic_post_fix_progression": [
+      {
+        "passed": 37,
+        "executed": 64
+      },
+      {
+        "passed": 53,
+        "executed": 64
+      },
+      {
+        "passed": 64,
+        "executed": 64,
+        "comparison_contract": "output_semantics_only"
+      },
+      {
+        "passed": 59,
+        "executed": 64,
+        "comparison_contract": "output_and_query_plan_semantics"
+      },
+      {
+        "passed": 64,
+        "executed": 64,
+        "comparison_contract": "output_and_query_plan_semantics",
+        "safety_pass_rate": 1.0,
+        "evidence_pass_rate": 1.0,
+        "source_passed": 25,
+        "source_total": 25
+      }
+    ]
+  },
+  "findings": [
+    "Qwen이 원문 문장을 보지 않고 실행 의미만 보고 만든 질문에서 최초 결정론적 Agent는 15/64만 같은 의미로 처리함",
+    "최초 Qwen grounded-plan 경로는 28/64로 13건을 구조했지만 provider 오류와 gate 거절을 분리하지 않으면 개선 원인을 설명할 수 없었음",
+    "Router·linker·상세 식별자·비교·집계 문법을 공통 규칙으로 보강해 출력과 QueryPlan 의미가 모두 같은 64/64 사후 회귀를 확보함",
+    "출력 상품이 우연히 같아도 QueryPlan 조건이 다르면 실패하도록 평가 지문을 강화했고, 강화 직후 숨은 계획 차이 5건을 발견함",
+    "모델 계획은 원문 evidence span, registry capability, 유일한 데이터 식별자, 서버가 이미 확정한 조건을 모두 통과할 때만 실행 권한을 얻음",
+    "실재하지만 질문에 없는 상품 ID, 부정된 ID·필드·정렬, 임의 품질 필터와 malformed transport는 fail closed 단위 회귀로 고정함"
+  ],
+  "reports": [
+    {
+      "role": "deterministic_first_observation",
+      "artifact_name": "semantic-roundtrip-v1-expected-agent-first-observation.json",
+      "sha256": "85be7862c4a99d6738c3e21472d4b321719b5866f9f650e2ded75e5e257912c3"
+    },
+    {
+      "role": "legacy_qwen_full_path_first_observation",
+      "artifact_name": "semantic-roundtrip-v1-local-agent-first-observation.json",
+      "sha256": "277d4ef966e6ff4607a1c8a7687f8f5b68cfce16b5ed4b0b4b0894fdf8f467d2"
+    },
+    {
+      "role": "grounded_plan_first_observation",
+      "artifact_name": "semantic-roundtrip-v1-grounded-plan-first-observation.json",
+      "sha256": "16fe6732585ba08c6acf7d05c2a9a5b4f21a8f5cd2ee0915a4292536482fd746"
+    },
+    {
+      "role": "grounded_plan_safe_fallback_observation",
+      "artifact_name": "semantic-roundtrip-v1-grounded-plan-safe-fallback-observation.json",
+      "sha256": "e9a8a69595df692f64bb082479079b01d2ccad1941c7e042c2a7f03e941d7e74"
+    },
+    {
+      "role": "grounded_plan_gate_audit_first_observation",
+      "artifact_name": "semantic-roundtrip-v1-grounded-plan-audit-first-observation.json",
+      "sha256": "29cccb844c1e9a0c063dac9e1739bbeb611fa20807b83bed0a3685ee5f414774"
+    },
+    {
+      "role": "deterministic_output_semantics_post_fix",
+      "artifact_name": "semantic-roundtrip-v1-deterministic-improved-v4.json",
+      "sha256": "2daa0f9a55d4d77acadcd66185d547cff70ed88a578983852673163271189726"
+    },
+    {
+      "role": "strict_query_plan_semantics_first_observation",
+      "artifact_name": "semantic-roundtrip-v1-deterministic-plan-semantic-v5.json",
+      "sha256": "5493e436f01c5bb6f148d692632a86b686f3567831cf921ce8de8b8db62460b0"
+    },
+    {
+      "role": "strict_query_plan_semantics_post_fix",
+      "artifact_name": "semantic-roundtrip-v1-deterministic-plan-semantic-v8.json",
+      "sha256": "311275552ff1bf2d0b7d70a6ee46bf53df3fc920deda8d6c2aa65e2b55e6dfa1"
+    }
+  ],
+  "reproduce": "PYTHONPATH=packages/finance_agent_core/src python -m finance_agent_core.evaluation.metamorphic_run_cli --batch-input artifacts/evaluation/semantic-roundtrip-v1-local-mutations-screened-v3.json --agent-provider expected --output artifacts/evaluation/semantic-roundtrip-v1-deterministic-plan-semantic-replay.json",
+  "pending": [
+    "강화된 grounded-plan prompt와 gate를 같은 frozen batch에 Qwen으로 다시 실행",
+    "공개 원문에서 파생되지 않은 외부 또는 금융 도메인 담당자 blind 세트 최초 실행",
+    "HyperCLOVA X 연결 후 같은 frozen batch와 gate 계약으로 역할별 A/B"
+  ],
+  "limitations": [
+    "공개 개발 문항의 실행 계획에서 파생한 질문이므로 독립 blind가 아님",
+    "Qwen은 원문 wording을 보지 않았지만 같은 조건 명세와 공개 데이터 정답 의미를 입력으로 받음",
+    "생성 75개 중 기계 의미 보존 검사를 통과한 64개만 Agent 성능 분모에 포함하며 폐기 11개를 별도 공개함",
+    "64/64는 실패를 보고 코드를 고친 사후 회귀이며 일반화 성능이나 공모전 예상 점수가 아님",
+    "grounded-plan 28/64는 안전 계약 개선 전 최초 관측이며 강화된 계약의 Qwen 재실행은 아직 대기 중임",
+    "로컬 Qwen은 개발 전용이며 HyperCLOVA X 품질·비용·API 호환성을 대변하지 않음"
+  ]
+}

@@ -75,7 +75,7 @@ SOURCE_DATE_EPOCH=1785283200 \
 
 2026-08-07 결과:
 
-- Agent Core pytest 370개, Backend pytest 34개 통과
+- Agent Core pytest 448개, Backend pytest 34개 통과
 - Ruff format·lint, pip dependency, ontology sync 검사 통과
 - 문서 링크·인덱스·평가 baseline·suite hash 55건과 baseline 38개 통과
 - 루트 `./rehearse.sh`로 새 Docker 이미지 준비, health, 기본 공모펀드 잠금,

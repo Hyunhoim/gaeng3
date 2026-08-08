@@ -171,7 +171,7 @@
   경계를 개선해 strict·route·safety·evidence·answer 40/40,
   control 잘못된 실행·오류 0건을 기록했다. 개발 세트 사후 회귀이므로
   독립 blind 성능으로 해석하지 않는다.
-- 전체 Agent Core 회귀는 pytest 370개, Backend 회귀는 34개이며 Ruff lint·format,
+- 전체 Agent Core 회귀는 pytest 448개, Backend 회귀는 34개이며 Ruff lint·format,
   pip dependency check와
   wheel 빌드를 통과했다.
 - Docker `data-init`은 읽기 전용 공식 XLSX에서 네 SQLite를 자동 생성·검증하고,

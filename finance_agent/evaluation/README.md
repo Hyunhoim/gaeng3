@@ -43,6 +43,8 @@ DB, 원천 XLSX, 전체 report, 모델 가중치는 계속 `artifacts/` 또는 �
 | [Backend answer adapter 계약](baselines/answer-adapter-contract-v1.json) | HTTP status·안전한 ERROR DTO·fallback·민감정보 비노출 12개 |
 | [내부 red-team 전체 E2E](baselines/internal-red-team-v1.json) | 네 상품군 40문항의 Router→Qwen→Oracle→Verifier→Backend DTO와 공격 유형 회귀 |
 | [공식 형식 30문항 공개 모의평가](baselines/official-mock-v1-30.json) | 난이도 10/10/10·답변 불가 5개에서 Qwen→Oracle→Verifier→공식 5필드 전체 경로 관측 |
+| [Qwen 변형 질문 스트레스 평가](baselines/qwen-eval-lab-v1.json) | 공개 원문 30개에서 세 표현 축 90개 생성·77개 선별·gold 감사·결정론적/Qwen 전체 경로 회귀 |
+| [원문 비공개 semantic round-trip](baselines/semantic-roundtrip-v1.json) | Qwen에 원문 문장을 숨기고 실행 의미로 75개 재생성·64개 선별·최초 15/64→계획 의미까지 64/64 사후 회귀 |
 | [공식 GET Docker 30문항 최초 관측](baselines/official-mock-http-v1-30.json) | 실제 FastAPI 네트워크의 5필드 30/30·의미 24/30·공모펀드 정책 잠금 6건 |
 | [공식 GET Docker 공모펀드 명시적 승인](baselines/official-mock-http-fund-approved-v1-30.json) | 최초 24/30 보존 후 공모펀드만 여는 v1 정책으로 의미·형식·60초 30/30, Qwen 17/17 |
 | [공식 GET 결정론적 동시성](baselines/official-mock-http-concurrency-v1.json) | 동시성 1·2·4에서 의미·형식 90/90과 단일 worker 지연 변화 관측 |
@@ -163,6 +165,21 @@ strict 1/40·safety 32/40은 유지되며 E2 사후 회귀의 비교점이다.
 공식 응답 계약 30/30, 답변 생성 16/17, 안전 fallback 1건을 기록했다. fallback은
 `수익성 평가`라는 가치 판단 가능 문구를 Answer Verifier가 차단한 결과다.
 AI 담당자가 기존 질문과 정답을 재사용했으므로 독립 blind나 공식 평가 점수가 아니다.
+
+`qwen-eval-lab-v1`은 위 공개 30문항을 paraphrase·clause reordering·
+distractor resistance 세 축으로 바꾼 90개 후보를 만든다. 숫자·식별자·연산자·
+핵심 개념 보존 검사를 통과한 77개만 실행하고 폐기 13개는 생성 품질 실패로 별도
+기록한다. gold 정렬 오류 2건을 원본 변경 없이 hash-pinned overlay로 교정한 뒤
+결정론적 Agent와 전체 Qwen Agent가 각각 77/77, 의미·safety·evidence 100%를
+기록했다. 안전 설명문 계약 전 fallback 3/61은 사후 전체 회귀에서 0/61로 줄었다.
+질문 파생·사후 수정 세트이므로 독립 blind나 공식 점수가 아니다.
+
+`semantic-roundtrip-v1`은 생성기에 원문 문장을 주지 않고 서버가 확정한
+조건·정렬·비교·집계 의미로만 새 질문을 만든다. 생성 75개 중 기계 의미
+보존을 통과한 64개에서 결정론적 Agent는 최초 15/64였고, 공통 문법 개선
+후 출력과 QueryPlan 의미를 모두 비교하는 기준에서 64/64를 기록했다. 최초
+Qwen grounded-plan은 28/64였고, 강화된 prompt·gate 재실행은 대기 중이다. 이 또한
+공개 정답 파생·사후 수정 회귀이며 blind나 공식 점수가 아니다.
 
 라우팅 v1은 AGGREGATE 미지원, v2는 COMPARE가 공모펀드에만 열렸던 당시의
 봉인 이력이다. 현재 capability 정본은 원본을 수정하지 않고 별도

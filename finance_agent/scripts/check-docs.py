@@ -43,7 +43,7 @@ PRODUCT_COMPARE_SUITE = (
 
 LINK_PATTERN = re.compile(r"!?\[[^\]]*]\((?:<(?P<angle>[^>]+)>|(?P<plain>[^)\s]+))\)")
 SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
-FROZEN_PYTEST_PASSED = 370
+FROZEN_PYTEST_PASSED = 448
 
 REQUIRED_INDEX_TARGETS = {
     "project-baseline.md",
@@ -60,6 +60,7 @@ REQUIRED_INDEX_TARGETS = {
     "cross-family-search.md",
     "evaluation-internal-red-team.md",
     "evaluation-official-mock.md",
+    "evaluation-qwen-metamorphic.md",
     "evaluation-domain-qa.md",
     "submission-model-boundary.md",
     "hyperclova-provider.md",
@@ -101,6 +102,8 @@ REQUIRED_BASELINES = {
     "answer-adapter-contract-v1.json",
     "internal-red-team-v1.json",
     "official-mock-v1-30.json",
+    "qwen-eval-lab-v1.json",
+    "semantic-roundtrip-v1.json",
     "official-mock-http-v1-30.json",
     "official-mock-http-fund-approved-v1-30.json",
     "official-mock-http-concurrency-v1.json",
