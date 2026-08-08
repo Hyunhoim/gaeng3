@@ -258,7 +258,7 @@ registry 기반 자동 커버리지 최초 관측:
 - Agent Core pytest `465 passed`
 - Backend pytest `34 passed`
 - Ruff lint와 format 통과
-- 문서 검사 `57 Markdown files`, `41 evaluation baselines` 통과
+- 문서 검사 `58 Markdown files`, `41 evaluation baselines` 통과
 - `pip check` 통과
 - build isolation 없이 wheel 생성과 신규 JSON package data 포함 여부 통과
 - `git diff --check` 통과

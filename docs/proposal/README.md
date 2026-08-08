@@ -39,6 +39,7 @@ AI 구현 세부사항은 `finance_agent/docs/`에 유지하고, 이곳에서는
 | --- | --- | --- |
 | [기술 제안서 원문](technical-proposal.md) | 공식 7개 항목을 따르는 팀 공통 원고 | 초안 v0.1 |
 | [제안서 근거 맵](evidence-map.md) | 제안서 주장과 코드·평가 결과의 연결 | 활성 |
+| [연구 근거](research-basis.md) | 탑티어 연구에서 차용한 원칙과 실제 구현·한계의 구분 | 활성 |
 | [사용자 시나리오](user-scenarios.md) | 질문·Agent 처리·화면 결과·안전 처리를 정의 | 초안 |
 | [제출 체크리스트](submission-checklist.md) | 소스·제안서·API·동결 절차 점검 | 활성 |
 | [시스템 구성도](diagrams/system-architecture.md) | 현재 검증 범위와 목표 통합 범위 구분 | 초안 |

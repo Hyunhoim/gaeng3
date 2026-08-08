@@ -14,6 +14,7 @@
 | 제안 요약 | LLM과 결정론적 검색·검증을 분리한 Evidence-Compiled Hybrid SQL Agent | [프로젝트 기준](../../finance_agent/docs/project-baseline.md) | 검증 완료 |
 | 문제 정의 | 네 상품군의 grain·필드·결측·기준일이 서로 다름 | [데이터 감사](../../finance_agent/docs/data-audit.md) | 검증 완료 |
 | 제안 방법 | typed QueryPlan·Oracle·Verifier·field evidence·Answer Verifier | [계약](../../finance_agent/docs/contracts.md) | 검증 완료 |
+| 연구 근거 | 행동 기능 검사·구조화 출력 제약·단계별 진단·paired 통계 비교를 실제 구현과 연결 | [연구 근거](research-basis.md) | 적용 범위 기록 완료 |
 | 시스템 구성도 | Agent Core·FastAPI·공식 GET 계약·Docker 로컬 통합 완료, Next.js·HCX·공개 서버 대기 | [연결 전 readiness](../../finance_agent/docs/pre-hcx-readiness.md) | 부분 완료 |
 | 주요 기능 흐름 | SEARCH·교차 상품군 독립 검색·family별 grounded answer·교차 검증·전체 fallback·COMPARE·AGGREGATE·제어 응답 | [교차 SEARCH](../../finance_agent/docs/cross-family-search.md) | 검증 완료 |
 | 사용자 시나리오 | 검색·비교·집계·역질문·거절 | [사용자 시나리오](user-scenarios.md) | 금융·화면 검수 대기 |

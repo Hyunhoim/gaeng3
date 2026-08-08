@@ -150,6 +150,7 @@ REQUIRED_PROPOSAL_TARGETS = {
     "briefing-2026-08-06.md",
     "technical-proposal.md",
     "evidence-map.md",
+    "research-basis.md",
     "user-scenarios.md",
     "submission-checklist.md",
     "diagrams/system-architecture.md",
