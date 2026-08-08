@@ -16,7 +16,13 @@ from finance_agent_core.contracts.queryplan import (
     SortDirection,
     Unit,
 )
-from finance_agent_core.evaluation.coverage_ablation import compare_coverage_profiles
+from finance_agent_core.evaluation.coverage_ablation import (
+    _apply_holm_correction,
+    _mcnemar_exact_p_value,
+    _paired_bootstrap_ci95,
+    _wilson_ci95,
+    compare_coverage_profiles,
+)
 from finance_agent_core.evaluation.coverage_analysis import plan_delta_codes
 from finance_agent_core.evaluation.coverage_plan import (
     CoverageCell,
@@ -544,6 +550,87 @@ def test_compare_coverage_profiles_counts_rescues_and_call_cost() -> None:
     assert delta.evidence_rescued == 1
     assert delta.provider_call_delta.query_plan_calls == 1
     assert delta.stage_transitions == {"routing->pass": 1}
+    assert delta.strict_accuracy_delta_ci95 == [1.0, 1.0]
+    assert delta.zero_strict_regression
+    assert comparison.profiles[0].strict_accuracy_ci95[0] == 0.0
+    assert comparison.profiles[1].strict_accuracy_ci95[1] == 1.0
+    assert [item.model_dump() for item in delta.breakdowns["product_family"]] == [
+        {
+            "value": "overseas_etp",
+            "total": 1,
+            "baseline_passed": 0,
+            "candidate_passed": 1,
+            "baseline_accuracy": 0.0,
+            "candidate_accuracy": 1.0,
+            "accuracy_delta": 1.0,
+            "rescued": 1,
+            "regressed": 0,
+            "net_rescued": 1,
+        }
+    ]
+    assert delta.breakdowns["axis"] == []
+
+
+def test_coverage_ablation_statistics_are_deterministic_and_exact() -> None:
+    assert _wilson_ci95(50, 100) == [0.403832, 0.596168]
+    assert _mcnemar_exact_p_value(10, 0) == 0.001953125
+    assert _mcnemar_exact_p_value(0, 0) == 1.0
+
+    differences = [1] * 20 + [0] * 80
+    first = _paired_bootstrap_ci95(differences, seed="fixed")
+    second = _paired_bootstrap_ci95(differences, seed="fixed")
+    assert first == second
+    assert 0 < first[0] <= 0.2 <= first[1]
+
+
+def test_coverage_ablation_holm_correction_is_monotonic() -> None:
+    suite = _suite()
+    baseline = CoverageRunner(
+        suite=suite,
+        services={family: _NoCallService() for family in ProductFamily},
+        agent_profile="expected",
+        agent_model=None,
+        telemetry=ProviderTelemetry(),
+    ).run()
+    comparison = compare_coverage_profiles(
+        {
+            "baseline": baseline,
+            "candidate": baseline.model_copy(update={"agent_profile": "candidate"}),
+        }
+    )
+    template = comparison.pairwise_deltas[0]
+    corrected = _apply_holm_correction(
+        [
+            template.model_copy(
+                update={
+                    "candidate_label": "a",
+                    "mcnemar_exact_p_value": 0.01,
+                    "strict_accuracy_delta": 0.1,
+                }
+            ),
+            template.model_copy(
+                update={
+                    "candidate_label": "b",
+                    "mcnemar_exact_p_value": 0.03,
+                    "strict_accuracy_delta": 0.1,
+                }
+            ),
+            template.model_copy(
+                update={
+                    "candidate_label": "c",
+                    "mcnemar_exact_p_value": 0.04,
+                    "strict_accuracy_delta": 0.1,
+                }
+            ),
+        ]
+    )
+
+    assert [item.holm_adjusted_p_value for item in corrected] == [0.03, 0.06, 0.06]
+    assert [item.statistically_significant_after_holm for item in corrected] == [
+        True,
+        False,
+        False,
+    ]
 
 
 def test_compare_coverage_profiles_rejects_different_questions() -> None:

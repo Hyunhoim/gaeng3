@@ -76,6 +76,7 @@ def main(argv: list[str] | None = None) -> int:
                         "passed": item.passed,
                         "total": item.total,
                         "strict_accuracy": item.strict_accuracy,
+                        "strict_accuracy_ci95": item.strict_accuracy_ci95,
                         "plan_semantic_rate": item.plan_semantic_rate,
                         "evidence_semantic_rate": item.evidence_semantic_rate,
                         "fallback_count": item.fallback_count,
@@ -87,12 +88,34 @@ def main(argv: list[str] | None = None) -> int:
                     {
                         "candidate": item.candidate_label,
                         "strict_accuracy_delta": item.strict_accuracy_delta,
+                        "strict_accuracy_delta_ci95": item.strict_accuracy_delta_ci95,
                         "rescued": item.rescued,
                         "regressed": item.regressed,
+                        "zero_strict_regression": item.zero_strict_regression,
                         "plan_rescued": item.plan_rescued,
                         "plan_regressed": item.plan_regressed,
                         "evidence_rescued": item.evidence_rescued,
                         "evidence_regressed": item.evidence_regressed,
+                        "mcnemar_exact_p_value": item.mcnemar_exact_p_value,
+                        "holm_adjusted_p_value": item.holm_adjusted_p_value,
+                        "statistically_significant_after_holm": (
+                            item.statistically_significant_after_holm
+                        ),
+                        "top_net_rescues": {
+                            dimension: [
+                                bucket.model_dump(mode="json")
+                                for bucket in sorted(
+                                    buckets,
+                                    key=lambda bucket: (
+                                        -bucket.net_rescued,
+                                        -bucket.total,
+                                        bucket.value,
+                                    ),
+                                )[:10]
+                            ]
+                            for dimension, buckets in item.breakdowns.items()
+                            if buckets
+                        },
                         "provider_call_delta": item.provider_call_delta.model_dump(mode="json"),
                         "latency_delta_ms": item.latency_delta_ms,
                     }
