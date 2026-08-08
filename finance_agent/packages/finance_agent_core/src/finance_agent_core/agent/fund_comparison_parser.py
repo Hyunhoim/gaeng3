@@ -107,6 +107,19 @@ _UNSUPPORTED_PATTERNS: tuple[tuple[str, str], ...] = (
 )
 
 _COMPARISON_TRIGGER = re.compile(r"비교|대조|차이|나란히", flags=re.IGNORECASE)
+_SUPPORTED_REQUEST_PREAMBLE_PATTERNS = (
+    re.compile(r"\A\s*다음\s+요청을\s+처리해\s+주세요\s*:\s*", flags=re.IGNORECASE),
+    re.compile(
+        r"\A\s*조건을\s+빠짐없이\s+적용해서\s+답해\s*줘\s*\.\s*"
+        r"요청\s*:\s*",
+        flags=re.IGNORECASE,
+    ),
+    re.compile(
+        r"\A\s*답변\s+문장은\s+한\s+문단이면\s+됩니다\s*\.\s*"
+        r"원래\s+요청\s*:\s*",
+        flags=re.IGNORECASE,
+    ),
+)
 _REQUEST_SENTENCE_END_PATTERN = re.compile(
     r"(?:해\s*줘|해\s*주세요|알려\s*줘|알려\s*주세요|보여\s*줘|보여\s*주세요|"
     r"말해\s*줘|말해\s*주세요|설명해\s*줘|설명해\s*주세요)$",
@@ -618,6 +631,15 @@ def _mask_supported_question_language(masked_question: str) -> str:
     return "".join(masked)
 
 
+def _mask_supported_request_preamble(question: str) -> str:
+    """Remove only audited, presentation-only request framing while preserving offsets."""
+    normalized = unicodedata.normalize("NFKC", question)
+    for pattern in _SUPPORTED_REQUEST_PREAMBLE_PATTERNS:
+        if match := pattern.match(normalized):
+            return " " * match.end() + normalized[match.end() :]
+    return normalized
+
+
 def _question_has_unrecognized_text(masked_question: str) -> bool:
     if _UNRESOLVED_TARGET_REFERENCE_PATTERN.search(
         masked_question
@@ -847,12 +869,13 @@ def compile_fund_comparison_query_plan(
     mentions = draft.target_mentions
     resolutions = tuple(resolver.resolve(mention) for mention in mentions)
     grounded = tuple(_mention_grounded(question, mention) for mention in mentions)
+    validation_question = _mask_supported_request_preamble(question)
     (
         question_identities,
         identity_masked_question,
         question_identity_spans,
     ) = _question_identity_scan(
-        question,
+        validation_question,
         resolver,
     )
     target_sequence_complete = tuple(
@@ -860,8 +883,11 @@ def compile_fund_comparison_query_plan(
     ) == tuple(resolution.normalized_mention for resolution in resolutions)
     targets_complete = (
         target_sequence_complete
-        and _question_target_structure_unambiguous(question, question_identity_spans)
-        and _target_quotes_well_formed(question)
+        and _question_target_structure_unambiguous(
+            validation_question,
+            question_identity_spans,
+        )
+        and _target_quotes_well_formed(validation_question)
         and not _question_has_unrecognized_text(identity_masked_question)
     )
     target_roles_unambiguous = _UNSAFE_TARGET_ROLE_PATTERN.search(identity_masked_question) is None
