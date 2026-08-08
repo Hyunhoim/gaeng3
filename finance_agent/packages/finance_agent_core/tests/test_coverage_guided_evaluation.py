@@ -1,0 +1,492 @@
+from __future__ import annotations
+
+import pytest
+
+from finance_agent_core.contracts.queryplan import (
+    SEARCH_PROJECTION_BY_FAMILY,
+    Constraint,
+    ConstraintOperator,
+    ConstraintStrength,
+    Intent,
+    IntentPayload,
+    NullPlacement,
+    ProductFamily,
+    QueryPlan,
+    Ranking,
+    SortDirection,
+    Unit,
+)
+from finance_agent_core.evaluation.coverage_analysis import plan_delta_codes
+from finance_agent_core.evaluation.coverage_plan import (
+    CoverageCell,
+    CoverageCellKind,
+    CoverageOutcome,
+    CoveragePlanCase,
+    CoveragePlanSuite,
+    CoveragePlanSummary,
+    coverage_plan_suite_semantic_sha256,
+    render_canonical_question,
+    rerender_coverage_plan_suite,
+)
+from finance_agent_core.evaluation.coverage_question_runner import (
+    CoverageQuestionRunner,
+    merge_coverage_question_run_reports,
+)
+from finance_agent_core.evaluation.coverage_questions import (
+    _boolean_value_present,
+    coverage_question_batch_semantic_sha256,
+    generate_coverage_question_batch,
+    merge_coverage_question_batches,
+    validate_coverage_question,
+)
+from finance_agent_core.evaluation.metamorphic import (
+    GeneratedMutation,
+    MutationAxis,
+    MutationValidation,
+)
+from finance_agent_core.evaluation.red_team_e2e import ProviderTelemetry
+from finance_agent_core.evaluation.semantic_roundtrip import build_semantic_plan_spec
+
+_HASH = "a" * 64
+
+
+def _search_plan() -> QueryPlan:
+    family = ProductFamily.OVERSEAS_ETP
+    projection = list(
+        dict.fromkeys(
+            [
+                *SEARCH_PROJECTION_BY_FAMILY[family.value],
+                "product_type",
+                "sellable",
+                "investment_region",
+            ]
+        )
+    )
+    return QueryPlan(
+        schema_version="1.0",
+        question_id="coverage-guided-plan-v1-0001",
+        intent=Intent.SEARCH,
+        product_families=[family],
+        constraints=[
+            Constraint(
+                field="product_type",
+                operator=ConstraintOperator.EQ,
+                value="ETF",
+                unit=Unit.CODE,
+                strength=ConstraintStrength.LOCKED,
+            ),
+            Constraint(
+                field="sellable",
+                operator=ConstraintOperator.EQ,
+                value=True,
+                unit=Unit.BOOLEAN,
+                strength=ConstraintStrength.LOCKED,
+            ),
+            Constraint(
+                field="investment_region",
+                operator=ConstraintOperator.EQ,
+                value="United States of America",
+                unit=Unit.CODE,
+                strength=ConstraintStrength.LOCKED,
+            ),
+            Constraint(
+                field="total_expense_ratio_pct",
+                operator=ConstraintOperator.LTE,
+                value=0.1,
+                unit=Unit.PCT_POINT,
+                strength=ConstraintStrength.LOCKED,
+            ),
+        ],
+        ranking=[Ranking(field="aum", direction=SortDirection.DESC, nulls=NullPlacement.LAST)],
+        projection=projection,
+        limit=3,
+        intent_payload=IntentPayload(
+            comparison_fields=[],
+            group_by=[],
+            aggregations=[],
+            explain_product_ids=[],
+        ),
+        ambiguities=[],
+        unsupported_conditions=[],
+    )
+
+
+def _case() -> CoveragePlanCase:
+    plan = _search_plan()
+    return CoveragePlanCase(
+        id=plan.question_id,
+        cell=CoverageCell(
+            key="overseas_etp:search_constraint:total_expense_ratio_pct:lte",
+            product_family=ProductFamily.OVERSEAS_ETP,
+            intent=Intent.SEARCH,
+            kind=CoverageCellKind.SEARCH_CONSTRAINT,
+            field="total_expense_ratio_pct",
+            operator=ConstraintOperator.LTE,
+        ),
+        canonical_question=render_canonical_question(plan),
+        plan=plan,
+        outcome=CoverageOutcome(
+            candidate_count=3,
+            returned_product_ids=["AMX:AAA", "AMX:BBB", "AMX:CCC"],
+            product_evidence_count=3,
+            comparison_evidence_count=0,
+            aggregate_evidence_count=0,
+            query_plan_semantic_sha256=_HASH,
+            evidence_semantic_sha256=_HASH,
+            system_semantic_sha256=_HASH,
+            source_dataset="overseas_etp",
+            source_snapshot_date="2026-07-11",
+            latency_ms=1.0,
+        ),
+    )
+
+
+def _suite() -> CoveragePlanSuite:
+    case = _case()
+    return CoveragePlanSuite(
+        generated_at_utc="2026-08-08T00:00:00+00:00",
+        registry_schema_version="1.3",
+        registry_sha256=_HASH,
+        database_sha256_by_family={family.value: _HASH for family in ProductFamily},
+        selection_contract={"search": "test"},
+        summary=CoveragePlanSummary(
+            attempted_cells=1,
+            executable_cases=1,
+            excluded_cells=0,
+            execution_rate=1.0,
+            by_family={"overseas_etp": 1},
+            by_kind={"search_constraint": 1},
+            by_operator={"lte": 1},
+            by_direction={},
+            by_function={},
+            exclusion_reasons={},
+        ),
+        cases=[case],
+        exclusions=[],
+        interpretation_limits=["unit test"],
+    )
+
+
+def _two_case_suite() -> CoveragePlanSuite:
+    first = _case()
+    second_plan = first.plan.model_copy(update={"question_id": "coverage-guided-plan-v1-0002"})
+    second = first.model_copy(
+        update={
+            "id": "coverage-guided-plan-v1-0002",
+            "cell": first.cell.model_copy(
+                update={"key": "overseas_etp:search_constraint:total_expense_ratio_pct:lte:second"}
+            ),
+            "plan": second_plan,
+        }
+    )
+    return CoveragePlanSuite(
+        generated_at_utc="2026-08-08T00:00:00+00:00",
+        registry_schema_version="1.3",
+        registry_sha256=_HASH,
+        database_sha256_by_family={family.value: _HASH for family in ProductFamily},
+        selection_contract={"search": "test"},
+        summary=CoveragePlanSummary(
+            attempted_cells=2,
+            executable_cases=2,
+            excluded_cells=0,
+            execution_rate=1.0,
+            by_family={"overseas_etp": 2},
+            by_kind={"search_constraint": 2},
+            by_operator={"lte": 2},
+            by_direction={},
+            by_function={},
+            exclusion_reasons={},
+        ),
+        cases=[first, second],
+        exclusions=[],
+        interpretation_limits=["unit test"],
+    )
+
+
+class _QuestionProvider:
+    @property
+    def provider_name(self):
+        return "expected"
+
+    @property
+    def model_name(self):
+        return None
+
+    def generate_questions(self, spec, axes):
+        questions = {
+            MutationAxis.SEMANTIC_FORMAL: (
+                "판매 가능한 해외 ETF 중 투자 지역이 미국이고 총보수율이 0.1% 이하인 "
+                "상품을 AUM 큰 순으로 3개 찾아주세요"
+            ),
+            MutationAxis.SEMANTIC_COLLOQUIAL: (
+                "해외 ETF에서 판매 가능한 것만 보고 투자 지역 미국, 총보수율 0.1% 이하로 "
+                "AUM 큰 순 3개 찾아줘"
+            ),
+            MutationAxis.SEMANTIC_TELEGRAPHIC: (
+                "해외 ETF 판매 가능 투자 지역 미국 총보수율 0.1% 이하 AUM 큰 순 3개 조회"
+            ),
+        }
+        return [GeneratedMutation(axis=axis, question=questions[axis]) for axis in axes]
+
+
+class _NoCallService:
+    def answer(self, question: str, request_id: str):
+        raise AssertionError("rejected coverage questions must not execute")
+
+
+def test_coverage_question_validator_requires_all_values_and_fields() -> None:
+    case = _case()
+    spec = build_semantic_plan_spec(case.plan)
+    valid = _QuestionProvider().generate_questions(spec, [MutationAxis.SEMANTIC_FORMAL])[0]
+    accepted = validate_coverage_question(
+        valid.question,
+        case,
+        spec,
+        source_questions=[case.canonical_question],
+    )
+    missing_value = validate_coverage_question(
+        valid.question.replace("0.1%", "낮은"),
+        case,
+        spec,
+        source_questions=[case.canonical_question],
+    )
+    assert accepted.passed
+    assert not missing_value.passed
+    assert "all_constraint_values_present" in missing_value.violations
+
+
+def test_generate_coverage_question_batch_is_counted_and_hash_stable() -> None:
+    suite = _suite()
+    batch = generate_coverage_question_batch(
+        _QuestionProvider(),
+        suite,
+        generated_at_utc="2026-08-08T01:00:00+00:00",
+    )
+    regenerated = batch.model_copy(update={"generated_at_utc": "2026-08-09T01:00:00+00:00"})
+    assert batch.requested_count == 3
+    assert batch.generated_count == 3
+    assert batch.accepted_count == 3
+    assert batch.rejected_count == 0
+    assert batch.generation_failure_count == 0
+    assert coverage_question_batch_semantic_sha256(
+        batch
+    ) == coverage_question_batch_semantic_sha256(regenerated)
+
+
+def test_rerender_preserves_plan_outcome_and_updates_semantic_hash() -> None:
+    suite = _suite()
+    old_hash = coverage_plan_suite_semantic_sha256(suite)
+    rerendered = rerender_coverage_plan_suite(
+        suite,
+        generated_at_utc="2026-08-08T02:00:00+00:00",
+    )
+    assert rerendered.cases[0].plan == suite.cases[0].plan
+    assert rerendered.cases[0].outcome == suite.cases[0].outcome
+    assert rerendered.cases[0].canonical_question == render_canonical_question(suite.cases[0].plan)
+    assert coverage_plan_suite_semantic_sha256(rerendered) != old_hash
+
+
+def test_coverage_question_runner_does_not_execute_rejected_candidates() -> None:
+    suite = _suite()
+    generated = generate_coverage_question_batch(_QuestionProvider(), suite)
+    rejected_candidates = [
+        candidate.model_copy(
+            update={
+                "validation": MutationValidation(
+                    checks={"forced_rejection": False},
+                    violations=["forced_rejection"],
+                    passed=False,
+                )
+            }
+        )
+        for candidate in generated.candidates
+    ]
+    batch = generated.model_copy(
+        update={
+            "accepted_count": 0,
+            "rejected_count": 3,
+            "candidates": rejected_candidates,
+        }
+    )
+    service = _NoCallService()
+    report = CoverageQuestionRunner(
+        suite=suite,
+        batch=batch,
+        services={family: service for family in ProductFamily},
+        agent_profile="expected",
+        agent_model=None,
+        telemetry=ProviderTelemetry(),
+    ).run(generated_at_utc="2026-08-08T03:00:00+00:00")
+    assert report.summary.accepted == 0
+    assert report.summary.rejected == 3
+    assert report.summary.executed == 0
+    assert report.summary.agent_strict_accuracy is None
+    assert report.summary.first_failure_stages == {"mutation_validation": 3}
+
+
+def test_merge_coverage_question_batches_is_order_stable() -> None:
+    suite = _two_case_suite()
+    first = generate_coverage_question_batch(
+        _QuestionProvider(),
+        suite,
+        offset=0,
+        limit=1,
+        generated_at_utc="2026-08-08T01:00:00+00:00",
+    )
+    second = generate_coverage_question_batch(
+        _QuestionProvider(),
+        suite,
+        offset=1,
+        limit=1,
+        generated_at_utc="2026-08-08T02:00:00+00:00",
+    )
+    forward = merge_coverage_question_batches(
+        [first, second],
+        generated_at_utc="2026-08-08T03:00:00+00:00",
+    )
+    reverse = merge_coverage_question_batches(
+        [second, first],
+        generated_at_utc="2026-08-08T03:00:00+00:00",
+    )
+
+    assert forward.selected_source_count == 2
+    assert forward.requested_count == 6
+    assert forward.generated_count == 6
+    assert [item.source_case_id for item in forward.candidates] == [
+        "coverage-guided-plan-v1-0001",
+        "coverage-guided-plan-v1-0001",
+        "coverage-guided-plan-v1-0001",
+        "coverage-guided-plan-v1-0002",
+        "coverage-guided-plan-v1-0002",
+        "coverage-guided-plan-v1-0002",
+    ]
+    assert coverage_question_batch_semantic_sha256(
+        forward
+    ) == coverage_question_batch_semantic_sha256(reverse)
+
+
+def test_merge_coverage_question_batches_rejects_overlapping_sources() -> None:
+    suite = _suite()
+    batch = generate_coverage_question_batch(_QuestionProvider(), suite)
+
+    with pytest.raises(ValueError, match="overlap source cases"):
+        merge_coverage_question_batches([batch, batch])
+
+
+def test_merge_coverage_question_batches_rejects_generator_mismatch() -> None:
+    suite = _two_case_suite()
+    first = generate_coverage_question_batch(_QuestionProvider(), suite, offset=0, limit=1)
+    second = generate_coverage_question_batch(
+        _QuestionProvider(), suite, offset=1, limit=1
+    ).model_copy(update={"generator": "local_test", "model": "different-model"})
+
+    with pytest.raises(ValueError, match="generator differs"):
+        merge_coverage_question_batches([first, second])
+
+
+def test_plan_delta_uses_the_same_semantic_normalization_as_the_runner() -> None:
+    expected = _search_plan()
+    implicit_etp_scope = Constraint(
+        field="product_type",
+        operator=ConstraintOperator.IN,
+        value=["ETF", "ETN"],
+        unit=Unit.CODE,
+        strength=ConstraintStrength.LOCKED,
+    )
+    equivalent = expected.model_copy(
+        update={"constraints": [*expected.constraints, implicit_etp_scope]}
+    )
+    changed_limit = expected.model_copy(update={"limit": expected.limit + 1})
+
+    assert plan_delta_codes(expected, equivalent) == []
+    assert plan_delta_codes(expected, changed_limit) == ["limit_changed"]
+
+
+def test_coverage_boolean_screen_scopes_negation_to_the_same_field() -> None:
+    sellable = Constraint(
+        field="sellable",
+        operator=ConstraintOperator.EQ,
+        value=True,
+        unit=Unit.BOOLEAN,
+        strength=ConstraintStrength.LOCKED,
+    )
+    trading_active = Constraint(
+        field="trading_suspended",
+        operator=ConstraintOperator.EQ,
+        value=False,
+        unit=Unit.BOOLEAN,
+        strength=ConstraintStrength.LOCKED,
+    )
+    trading_suspended = trading_active.model_copy(update={"value": True})
+
+    assert _boolean_value_present(
+        "판매 가능한 해외 ETF 중 특정 운용사는 제외해줘",
+        sellable,
+    )
+    assert _boolean_value_present("거래 중지 아닌 국내 ETF를 찾아줘", trading_active)
+    assert not _boolean_value_present(
+        "거래 중지 아닌 국내 ETF를 찾아줘",
+        trading_suspended,
+    )
+
+
+def test_merge_coverage_question_run_reports_recomputes_campaign_summary() -> None:
+    suite = _two_case_suite()
+    first_batch = generate_coverage_question_batch(_QuestionProvider(), suite, offset=0, limit=1)
+    second_batch = generate_coverage_question_batch(_QuestionProvider(), suite, offset=1, limit=1)
+    services = {family: _NoCallService() for family in ProductFamily}
+    first_report = CoverageQuestionRunner(
+        suite=suite,
+        batch=first_batch,
+        services=services,
+        agent_profile="expected",
+        agent_model=None,
+        telemetry=ProviderTelemetry(),
+    ).run(generated_at_utc="2026-08-08T04:00:00+00:00")
+    second_report = CoverageQuestionRunner(
+        suite=suite,
+        batch=second_batch,
+        services=services,
+        agent_profile="expected",
+        agent_model=None,
+        telemetry=ProviderTelemetry(),
+    ).run(generated_at_utc="2026-08-08T05:00:00+00:00")
+
+    campaign = merge_coverage_question_run_reports(
+        suite=suite,
+        batches=[second_batch, first_batch],
+        reports=[second_report, first_report],
+        generated_at_utc="2026-08-08T06:00:00+00:00",
+    )
+
+    assert len(campaign.shards) == 2
+    assert campaign.summary.requested == 6
+    assert campaign.summary.generated == 6
+    assert campaign.summary.accepted == 6
+    assert campaign.summary.executed == 6
+    assert campaign.summary.passed == 0
+    assert campaign.summary.first_failure_stages == {"routing": 6}
+    assert [item.candidate.source_case_id for item in campaign.variants[:3]] == [
+        "coverage-guided-plan-v1-0001"
+    ] * 3
+
+
+def test_merge_coverage_question_run_reports_rejects_wrong_batch_pair() -> None:
+    suite = _two_case_suite()
+    first_batch = generate_coverage_question_batch(_QuestionProvider(), suite, offset=0, limit=1)
+    second_batch = generate_coverage_question_batch(_QuestionProvider(), suite, offset=1, limit=1)
+    report = CoverageQuestionRunner(
+        suite=suite,
+        batch=first_batch,
+        services={family: _NoCallService() for family in ProductFamily},
+        agent_profile="expected",
+        agent_model=None,
+        telemetry=ProviderTelemetry(),
+    ).run()
+
+    with pytest.raises(ValueError, match="question batch SHA-256 differs"):
+        merge_coverage_question_run_reports(
+            suite=suite,
+            batches=[second_batch],
+            reports=[report],
+        )

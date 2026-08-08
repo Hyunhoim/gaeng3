@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import hashlib
-import json
 import math
 import time
 from collections import Counter
@@ -13,7 +11,7 @@ from pydantic import Field
 
 from finance_agent_core.agent import execute_answer_request
 from finance_agent_core.contracts.backend import BackendAgentRequest
-from finance_agent_core.contracts.queryplan import ProductFamily, QueryPlan
+from finance_agent_core.contracts.queryplan import ProductFamily
 from finance_agent_core.evaluation.metamorphic import (
     MetamorphicModel,
     MutationBatch,
@@ -35,6 +33,10 @@ from finance_agent_core.evaluation.red_team_e2e import (
     RedTeamExpectation,
     RoutedAnswerService,
     _evaluate_case,
+)
+from finance_agent_core.evaluation.semantics import (
+    canonical_json_sha256,
+    query_plan_semantic_sha256,
 )
 
 type MetamorphicAgentProfile = Literal[
@@ -122,60 +124,6 @@ class MetamorphicReport(MetamorphicModel):
     interpretation_limits: list[str]
 
 
-def _canonical_sha256(payload: object) -> str:
-    encoded = json.dumps(
-        payload,
-        ensure_ascii=False,
-        sort_keys=True,
-        separators=(",", ":"),
-    ).encode()
-    return hashlib.sha256(encoded).hexdigest()
-
-
-def _canonical_items(values: Sequence[object]) -> list[object]:
-    return sorted(
-        values,
-        key=lambda value: json.dumps(
-            value,
-            ensure_ascii=False,
-            sort_keys=True,
-            separators=(",", ":"),
-        ),
-    )
-
-
-def _query_plan_semantic_sha256(plan: QueryPlan | None) -> str | None:
-    """Hash executable meaning while ignoring request IDs and commutative list order."""
-
-    if plan is None:
-        return None
-    payload = plan.model_dump(mode="json")
-    payload.pop("question_id", None)
-    constraints = [
-        constraint
-        for constraint in payload.get("constraints", [])
-        if not (
-            constraint.get("field") == "product_type"
-            and constraint.get("operator") == "in"
-            and set(constraint.get("value", [])) == {"ETF", "ETN"}
-        )
-    ]
-    for constraint in constraints:
-        if constraint.get("operator") in {"in", "not_in"} and isinstance(
-            constraint.get("value"),
-            list,
-        ):
-            constraint["value"] = _canonical_items(constraint["value"])
-    payload["constraints"] = _canonical_items(constraints)
-    payload["projection"] = sorted(payload.get("projection", []))
-    intent_payload = payload.get("intent_payload", {})
-    for key in ("comparison_fields", "group_by", "aggregations", "explain_product_ids"):
-        intent_payload[key] = _canonical_items(intent_payload.get(key, []))
-    payload["ambiguities"] = _canonical_items(payload.get("ambiguities", []))
-    payload["unsupported_conditions"] = _canonical_items(payload.get("unsupported_conditions", []))
-    return _canonical_sha256(payload)
-
-
 def _system_semantics(
     result: RedTeamCaseResult,
     plan_semantic_sha256: str | None,
@@ -206,7 +154,7 @@ def _system_semantic_sha256(
     result: RedTeamCaseResult,
     plan_semantic_sha256: str | None,
 ) -> str:
-    return _canonical_sha256(_system_semantics(result, plan_semantic_sha256))
+    return canonical_json_sha256(_system_semantics(result, plan_semantic_sha256))
 
 
 def _metamorphic_contract_equivalent(
@@ -414,7 +362,7 @@ class MetamorphicRunner:
         started = time.perf_counter()
         adapter = execute_answer_request(self.services[case.coverage_family], request)
         latency_ms = round((time.perf_counter() - started) * 1000, 3)
-        self._plan_semantics_by_case_id[case.id] = _query_plan_semantic_sha256(
+        self._plan_semantics_by_case_id[case.id] = query_plan_semantic_sha256(
             adapter.response.query_plan
         )
         return _evaluate_case(  # type: ignore[arg-type]

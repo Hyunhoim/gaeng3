@@ -36,6 +36,13 @@ finance-generate-qwen-eval-lab = "finance_agent_core.evaluation.metamorphic_cli:
 finance-run-qwen-eval-lab = "finance_agent_core.evaluation.metamorphic_run_cli:main"
 finance-generate-semantic-roundtrip = "finance_agent_core.evaluation.semantic_roundtrip_cli:main"
 finance-audit-grounded-plan = "finance_agent_core.evaluation.grounded_plan_audit_cli:main"
+finance-generate-coverage-plan = "finance_agent_core.evaluation.coverage_plan_cli:main"
+finance-run-coverage-plan = "finance_agent_core.evaluation.coverage_run_cli:main"
+finance-generate-coverage-questions = "finance_agent_core.evaluation.coverage_question_cli:main"
+finance-run-coverage-questions = "finance_agent_core.evaluation.coverage_question_run_cli:main"
+finance-merge-coverage-questions = "finance_agent_core.evaluation.coverage_question_merge_cli:main"
+finance-merge-coverage-question-runs = "finance_agent_core.evaluation.coverage_question_run_merge_cli:main"
+finance-analyze-coverage = "finance_agent_core.evaluation.coverage_analysis_cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

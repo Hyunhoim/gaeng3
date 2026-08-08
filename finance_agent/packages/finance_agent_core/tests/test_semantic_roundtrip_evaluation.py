@@ -19,7 +19,6 @@ from finance_agent_core.contracts.queryplan import (
     Unit,
 )
 from finance_agent_core.evaluation.metamorphic import SEMANTIC_ROUNDTRIP_AXES
-from finance_agent_core.evaluation.metamorphic_runner import _query_plan_semantic_sha256
 from finance_agent_core.evaluation.official_mock import load_official_mock_suite
 from finance_agent_core.evaluation.semantic_roundtrip import (
     LocalQwenSemanticQuestionProvider,
@@ -28,6 +27,7 @@ from finance_agent_core.evaluation.semantic_roundtrip import (
     load_semantic_roundtrip_protocol,
     validate_semantic_question,
 )
+from finance_agent_core.evaluation.semantics import query_plan_semantic_sha256
 
 
 def _complex_search_plan() -> QueryPlan:
@@ -179,8 +179,8 @@ def test_plan_semantic_hash_ignores_request_and_commutative_order_but_not_looser
     product_type.update(operator="in", value=["ETN", "ETF"])
     looser = QueryPlan.model_validate(looser_payload)
 
-    assert _query_plan_semantic_sha256(plan) == _query_plan_semantic_sha256(reordered)
-    assert _query_plan_semantic_sha256(plan) != _query_plan_semantic_sha256(looser)
+    assert query_plan_semantic_sha256(plan) == query_plan_semantic_sha256(reordered)
+    assert query_plan_semantic_sha256(plan) != query_plan_semantic_sha256(looser)
 
 
 def test_plan_semantic_hash_treats_all_registered_etp_types_as_no_filter() -> None:
@@ -200,9 +200,9 @@ def test_plan_semantic_hash_treats_all_registered_etp_types_as_no_filter() -> No
         }
     )
 
-    assert _query_plan_semantic_sha256(
+    assert query_plan_semantic_sha256(
         QueryPlan.model_validate(no_type_payload)
-    ) == _query_plan_semantic_sha256(QueryPlan.model_validate(all_types_payload))
+    ) == query_plan_semantic_sha256(QueryPlan.model_validate(all_types_payload))
 
 
 def test_local_qwen_semantic_provider_uses_only_semantic_spec(
