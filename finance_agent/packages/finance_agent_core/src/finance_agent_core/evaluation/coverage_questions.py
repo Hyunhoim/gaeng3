@@ -39,7 +39,7 @@ from finance_agent_core.evaluation.semantic_roundtrip import (
 from finance_agent_core.evaluation.semantics import canonical_json_sha256
 
 _QUESTION_PROTOCOL_ID = "coverage-guided-question-v1"
-_SCREEN_VERSION = "coverage-question-screen-v1"
+_SCREEN_VERSION = "coverage-question-screen-v2"
 _NEGATION = re.compile(
     r"제외|아니|아닌|아님|않|불가|미포함|빼고|말고",
     re.IGNORECASE,
@@ -100,7 +100,7 @@ class CoverageQuestionBatch(CoverageModel):
     generated_at_utc: str
     status: Literal["internal_synthetic_not_blind"] = "internal_synthetic_not_blind"
     protocol_id: Literal["coverage-guided-question-v1"] = _QUESTION_PROTOCOL_ID
-    screen_version: Literal["coverage-question-screen-v1"] = _SCREEN_VERSION
+    screen_version: Literal["coverage-question-screen-v2"] = _SCREEN_VERSION
     plan_suite_id: str
     plan_suite_semantic_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     generator: Literal["expected", "local_test"]
@@ -281,6 +281,131 @@ def _operators_present(question: str, plan: QueryPlan) -> bool:
     return True
 
 
+_BOUND_OPERATOR_PATTERNS: dict[ConstraintOperator, re.Pattern[str]] = {
+    ConstraintOperator.LT: re.compile(r"미만|(?<![<])<(?![=])|보다.{0,4}(?:낮|작|적|짧|이전)"),
+    ConstraintOperator.LTE: re.compile(r"이하|<=|≤|넘지.{0,4}않|최대"),
+    ConstraintOperator.GT: re.compile(r"초과|(?<![>])>(?![=])|보다.{0,4}(?:높|크|많|길|이후)"),
+    ConstraintOperator.GTE: re.compile(r"이상|>=|≥|적어도|최소"),
+}
+
+
+def _typed_value_spans(
+    question: str,
+    *,
+    raw: object,
+    value_type: ValueType,
+) -> list[tuple[int, int]]:
+    normalized = unicodedata.normalize("NFKC", question)
+    if value_type is ValueType.NUMBER:
+        expected = Decimal(str(raw))
+        spans: list[tuple[int, int]] = []
+        for match in _NUMBER.finditer(normalized):
+            try:
+                observed = Decimal(match.group().replace(",", ""))
+            except InvalidOperation:
+                continue
+            if observed == expected:
+                spans.append(match.span())
+        return spans
+    if value_type is ValueType.DATE:
+        return [match.span() for match in re.finditer(re.escape(str(raw)), normalized)]
+    return []
+
+
+def _operator_near_spans(
+    question: str,
+    spans: Sequence[tuple[int, int]],
+    operator: ConstraintOperator,
+    *,
+    radius: int = 16,
+) -> bool:
+    normalized = unicodedata.normalize("NFKC", question)
+    operator_matches = [
+        (candidate, match.span())
+        for candidate, pattern in _BOUND_OPERATOR_PATTERNS.items()
+        for match in pattern.finditer(normalized)
+    ]
+    for start, end in spans:
+        distances = [
+            (
+                0
+                if match_start < end and match_end > start
+                else start - match_end + 0.25
+                if match_end <= start
+                else match_start - end,
+                candidate,
+            )
+            for candidate, (match_start, match_end) in operator_matches
+        ]
+        nearby = [(distance, candidate) for distance, candidate in distances if distance <= radius]
+        if not nearby:
+            continue
+        minimum = min(distance for distance, _ in nearby)
+        nearest = {candidate for distance, candidate in nearby if distance == minimum}
+        if nearest == {operator}:
+            return True
+    return False
+
+
+def _between_values_bound(
+    question: str,
+    spans_by_value: list[list[tuple[int, int]]],
+) -> bool:
+    if len(spans_by_value) != 2 or any(not spans for spans in spans_by_value):
+        return False
+    if _operator_near_spans(
+        question,
+        spans_by_value[0],
+        ConstraintOperator.GTE,
+    ) and _operator_near_spans(
+        question,
+        spans_by_value[1],
+        ConstraintOperator.LTE,
+    ):
+        return True
+    normalized = unicodedata.normalize("NFKC", question)
+    for lower in spans_by_value[0]:
+        for upper in spans_by_value[1]:
+            if lower[0] >= upper[0]:
+                continue
+            segment = normalized[max(0, lower[0] - 8) : min(len(normalized), upper[1] + 12)]
+            if re.search(r"사이|범위|부터.{0,40}까지|[~～]", segment):
+                return True
+    return False
+
+
+def _operators_bound_to_values(question: str, plan: QueryPlan) -> bool:
+    family = plan.product_families[0]
+    for constraint in plan.constraints:
+        if (
+            constraint.operator not in _BOUND_OPERATOR_PATTERNS
+            and constraint.operator is not ConstraintOperator.BETWEEN
+        ):
+            continue
+        definition = load_field_registry().require_field(constraint.field, [family.value])
+        if definition.value_type not in {ValueType.NUMBER, ValueType.DATE}:
+            continue
+        raw_values = constraint.value if isinstance(constraint.value, list) else [constraint.value]
+        spans_by_value = [
+            _typed_value_spans(
+                question,
+                raw=raw,
+                value_type=definition.value_type,
+            )
+            for raw in raw_values
+        ]
+        if constraint.operator is ConstraintOperator.BETWEEN:
+            if not _between_values_bound(question, spans_by_value):
+                return False
+            continue
+        if any(
+            not _operator_near_spans(question, spans, constraint.operator)
+            for spans in spans_by_value
+        ):
+            return False
+    return True
+
+
 def _all_fields_present(question: str, plan: QueryPlan) -> bool:
     family = plan.product_families[0]
     fields = {
@@ -331,6 +456,10 @@ def validate_coverage_question(
             spec,
         ),
         "all_constraint_operators_present": _operators_present(question, case.plan),
+        "constraint_operators_bound_to_values": _operators_bound_to_values(
+            question,
+            case.plan,
+        ),
     }
     violations = [name for name, passed in checks.items() if not passed]
     return MutationValidation(checks=checks, violations=violations, passed=not violations)

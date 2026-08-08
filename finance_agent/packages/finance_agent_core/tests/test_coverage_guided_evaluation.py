@@ -50,6 +50,7 @@ from finance_agent_core.evaluation.coverage_question_runner import (
 )
 from finance_agent_core.evaluation.coverage_questions import (
     _boolean_value_present,
+    _operators_bound_to_values,
     coverage_question_batch_semantic_sha256,
     generate_coverage_question_batch,
     merge_coverage_question_batches,
@@ -553,6 +554,86 @@ def test_coverage_boolean_screen_scopes_negation_to_the_same_field() -> None:
     assert not _boolean_value_present(
         "거래 중지 아닌 국내 ETF를 찾아줘",
         trading_suspended,
+    )
+
+
+def test_coverage_screen_binds_each_inequality_to_its_numeric_value() -> None:
+    plan = _search_plan().model_copy(
+        update={
+            "constraints": [
+                *_search_plan().constraints,
+                Constraint(
+                    field="aum",
+                    operator=ConstraintOperator.GTE,
+                    value=250000000,
+                    unit=Unit.SOURCE_CURRENCY_AMOUNT,
+                    strength=ConstraintStrength.LOCKED,
+                ),
+            ]
+        }
+    )
+
+    assert _operators_bound_to_values(
+        "총보수율 0.1% 이하이고 AUM 250000000 이상인 해외 ETF",
+        plan,
+    )
+    assert not _operators_bound_to_values(
+        "총보수율 0.1% 이상이고 AUM 250000000 이하인 해외 ETF",
+        plan,
+    )
+
+
+def test_coverage_screen_binds_between_bounds_to_each_value() -> None:
+    plan = _search_plan().model_copy(
+        update={
+            "constraints": [
+                Constraint(
+                    field="aum",
+                    operator=ConstraintOperator.BETWEEN,
+                    value=[150000000, 250000000],
+                    unit=Unit.SOURCE_CURRENCY_AMOUNT,
+                    strength=ConstraintStrength.LOCKED,
+                )
+            ]
+        }
+    )
+
+    assert _operators_bound_to_values(
+        "AUM이 150000000 이상 250000000 이하인 해외 ETF",
+        plan,
+    )
+    assert _operators_bound_to_values(
+        "AUM 150000000부터 250000000까지인 해외 ETF",
+        plan,
+    )
+    assert not _operators_bound_to_values(
+        "AUM이 150000000 이하 250000000 이상인 해외 ETF",
+        plan,
+    )
+
+
+def test_coverage_screen_binds_date_inequality_to_its_value() -> None:
+    plan = _search_plan().model_copy(
+        update={
+            "constraints": [
+                Constraint(
+                    field="dynamic_as_of",
+                    operator=ConstraintOperator.GTE,
+                    value="2026-06-01",
+                    unit=Unit.DATE,
+                    strength=ConstraintStrength.LOCKED,
+                )
+            ]
+        }
+    )
+
+    assert _operators_bound_to_values(
+        "동적 지표 기준일이 2026-06-01 이상인 해외 ETF",
+        plan,
+    )
+    assert not _operators_bound_to_values(
+        "동적 지표 기준일이 2026-06-01 이하인 해외 ETF",
+        plan,
     )
 
 
