@@ -22,6 +22,10 @@ LLM 실행 도구를 보관하는 곳
 | `run-answer-adapter-contract.py` | Agent 응답과 Backend adapter 계약 검사 |
 | `local-llm/` | 개발 전용 Qwen 서버와 E2E 실행 도구 |
 
+registry 전체 Qwen 자연화·Agent 역할 비교는 패키지 명령
+`finance-run-coverage-campaign`을 사용하며, 중단 후 재개와 최초 산출물
+덮어쓰기 방지 절차는 [자동 커버리지 평가](../docs/evaluation-coverage-guided.md)를 따름
+
 ## 사용 원칙
 
 - 저장소의 `finance_agent/` 디렉터리에서 실행

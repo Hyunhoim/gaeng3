@@ -239,6 +239,49 @@ export LOCAL_TEST_LLM_TIMEOUT_SECONDS=180
 export PYTHONPATH=packages/finance_agent_core/src
 ~~~
 
+### 권장: 쓰기 전용·재개 가능 캠페인
+
+먼저 서로 다른 출력 디렉터리에서 10개 source pilot을 실행
+
+~~~bash
+python -m finance_agent_core.evaluation.coverage_campaign_cli \
+  --suite-input artifacts/evaluation/coverage-guided-plan-v1-canonical-screened-v2.json \
+  --output-dir artifacts/evaluation/coverage-qwen-pilot-first \
+  --source-limit 10 \
+  --shard-size 10 \
+  --workers 4 \
+  --profile expected \
+  --profile local_test_grounded_plan_only
+~~~
+
+pilot의 생성 실패·기계 거절·오해 사례를 확인한 뒤 최초 전체 캠페인을 별도
+디렉터리에 실행
+
+~~~bash
+python -m finance_agent_core.evaluation.coverage_campaign_cli \
+  --suite-input artifacts/evaluation/coverage-guided-plan-v1-canonical-screened-v2.json \
+  --output-dir artifacts/evaluation/coverage-qwen-campaign-first \
+  --shard-size 25 \
+  --workers 4 \
+  --profile expected \
+  --profile local_test_grounded_plan_only
+~~~
+
+이 도구는 다음 안전장치를 적용
+
+- 질문과 profile 실행을 작은 shard로 저장해 중단 후 같은 명령으로 재개
+- 이미 생긴 최초 관측 파일은 덮어쓰지 않고 hash·source ID·모델을 검증해 재사용
+- 질문 shard와 실행 shard를 일대일로 검사한 뒤 캠페인 결과 병합
+- 같은 질문의 결정론적 결과와 Qwen 결과를 paired 방식으로 비교
+- 질문·실행·비교 파일의 SHA-256을 `manifest.json`에 기록
+
+생성, 실행, 비교를 분리해야 하면 같은 출력 디렉터리에 `--phase generate`,
+`--phase run`, `--phase compare`를 순서대로 사용
+
+### 하위 단계별 명령
+
+캠페인 자동화 없이 각 파일을 직접 점검할 때만 아래 명령을 사용
+
 먼저 10개 계획으로 pilot 생성
 
 ~~~bash
@@ -294,6 +337,15 @@ python -m finance_agent_core.evaluation.coverage_ablation_cli \
 
 비교 결과는 strict 상승만 보여주지 않고 Qwen이 구제한 문항과 새로 실패시킨
 문항, 계획·근거의 구제·퇴행, 실패 단계 이동, 추가 호출·오류·지연을 함께 기록
+
+정확도 하나만 보고 개선으로 판정하지 않음
+
+- profile 정확도에는 Wilson 95% 신뢰구간 표시
+- 같은 질문의 통과 여부 차이는 seed 고정 10,000회 paired bootstrap 구간 표시
+- 구제·퇴행 비대칭은 exact McNemar 검정으로 확인
+- 여러 Qwen profile을 한 번에 비교하면 Holm 방식으로 우연한 유의성 보정
+- 상품군·기능·필드·연산자·정렬·집계 함수·표현 축별 구제와 퇴행도 함께 집계
+- 통계적 개선이 있어도 새 strict 퇴행 사례는 ID 단위로 별도 검토
 
 ## 7. 1등 전략에서 이 실험의 위치
 

@@ -24,6 +24,10 @@ from finance_agent_core.evaluation.coverage_ablation import (
     compare_coverage_profiles,
 )
 from finance_agent_core.evaluation.coverage_analysis import plan_delta_codes
+from finance_agent_core.evaluation.coverage_campaign_cli import (
+    _campaign_ranges,
+    _validate_batch_selection,
+)
 from finance_agent_core.evaluation.coverage_plan import (
     CoverageCell,
     CoverageCellKind,
@@ -282,6 +286,40 @@ def test_generate_coverage_question_batch_is_counted_and_hash_stable() -> None:
     assert coverage_question_batch_semantic_sha256(
         batch
     ) == coverage_question_batch_semantic_sha256(regenerated)
+
+
+def test_coverage_campaign_ranges_cover_selection_without_overlap() -> None:
+    assert _campaign_ranges(299, offset=7, limit=53, shard_size=25) == [
+        (7, 25),
+        (32, 25),
+        (57, 3),
+    ]
+
+
+def test_coverage_campaign_validates_exact_shard_sources() -> None:
+    suite = _two_case_suite()
+    batch = generate_coverage_question_batch(
+        _QuestionProvider(),
+        suite,
+        offset=1,
+        limit=1,
+    ).model_copy(update={"generator": "local_test", "model": "qwen3-local-test"})
+
+    _validate_batch_selection(
+        batch,
+        suite,
+        offset=1,
+        limit=1,
+        expected_model="qwen3-local-test",
+    )
+    with pytest.raises(ValueError, match="source IDs differ"):
+        _validate_batch_selection(
+            batch,
+            suite,
+            offset=0,
+            limit=1,
+            expected_model="qwen3-local-test",
+        )
 
 
 def test_rerender_preserves_plan_outcome_and_updates_semantic_hash() -> None:
