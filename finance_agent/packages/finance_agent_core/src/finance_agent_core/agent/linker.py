@@ -7,7 +7,10 @@ from typing import Any
 
 from finance_agent_core.config import load_field_registry
 from finance_agent_core.contracts import QueryPlan
-from finance_agent_core.contracts.queryplan import SEARCH_PROJECTION_BY_FAMILY
+from finance_agent_core.contracts.queryplan import (
+    SEARCH_PROJECTION_BY_FAMILY,
+    search_projection,
+)
 
 NUMBER = r"-?\d+(?:\.\d+)?"
 SCALED_NUMBER = rf"{NUMBER}\s*(?:천억원|백억원|십억원|조원|억원|만원|천억|백억|십억|억|조|만|원)?"
@@ -235,16 +238,35 @@ def build_lexical_hints(
             question,
             re.IGNORECASE,
         )
-    if (
+    explicit_product_type_set = re.search(
+        r"(?:ETP\s*유형|ETF\s*ETN\s*구분|상품\s*유형)"
+        r"(?:이|가|은|는)?\s*[:：]?\s*"
+        r"ETF\s*(?:또는|및|와|과|나|·|/)\s*ETN|"
+        r"ETF인지\s*ETN인지\s*(?:알려|구분|확인)",
+        question,
+        re.IGNORECASE,
+    )
+    conditional_product_type = re.search(
+        r"(?<![A-Z])(ETF|ETN)(?:라면|이라면)",
+        question,
+        re.IGNORECASE,
+    )
+    if explicit_product_type_set is not None and conditional_product_type is None:
+        add("product_type", "ETF")
+        add("product_type", "ETN")
+    elif (
         explicit_product_type is not None
         and explicit_product_type.group(1).upper() not in negated_product_types
     ):
         add("product_type", explicit_product_type.group(1).upper())
     else:
-        if "ETF" in question and "ETF" not in negated_product_types:
-            add("product_type", "ETF")
-        if "ETN" in question and "ETN" not in negated_product_types:
-            add("product_type", "ETN")
+        positive_product_types = [
+            product_type
+            for product_type in ("ETF", "ETN")
+            if product_type in question and product_type not in negated_product_types
+        ]
+        if len(positive_product_types) == 1:
+            add("product_type", positive_product_types[0])
     if family == "fund":
         negated_public = _negated_literal_span(question, "공모")
         if negated_public is None:
@@ -387,16 +409,13 @@ def build_lexical_hints(
     if etp_family and "현재 거래 가능" in question and negated_trade_available is None:
         add("sellable", True)
         add("trading_suspended", False)
-    if etp_family and any(
-        phrase in question
-        for phrase in (
-            "거래 중지가 아니",
-            "거래 중지가 아닌",
-            "거래정지가 아니",
-            "거래정지가 아닌",
-            "거래 중지 아님",
-        )
-    ):
+    negated_trading_suspension = re.search(
+        r"거래\s*(?:중지|정지)(?:가|는|이)?\s*"
+        r"(?:되지\s*않|아니|아닌|아님)|"
+        r"거래\s*(?:중지|정지)된\s*상품.{0,12}(?:제외|빼고|말고)",
+        question,
+    )
+    if etp_family and negated_trading_suspension is not None:
         add("trading_suspended", False)
     negated_sale_available = re.search(
         r"판매(?:가|이)?\s*가능.{0,8}(?:하지\s*않|아닌|없)",
@@ -408,10 +427,14 @@ def build_lexical_hints(
         add("sellable", True)
     if etp_family and ("판매할 수 없" in question or "판매 불가" in question):
         add("sellable", False)
-    if etp_family and re.search(
-        r"거래(?:가)?\s*(?:중지|정지)"
-        r"(?!\s*(?:가\s*)?(?:아니|아닌|아님))(?:된|됨| 상태)?",
-        question,
+    if (
+        etp_family
+        and negated_trading_suspension is None
+        and re.search(
+            r"거래(?:가)?\s*(?:중지|정지)"
+            r"(?!\s*(?:가\s*)?(?:아니|아닌|아님))(?:된|됨| 상태)?",
+            question,
+        )
     ):
         add("trading_suspended", True)
     if family == "domestic_etp":
@@ -1049,12 +1072,22 @@ def canonicalize_query_plan_payload(
     payload["schema_version"] = "1.0"
     payload["intent"] = "search"
     payload["product_families"] = [family]
-    payload["constraints"] = _hint_constraints(
+    constraints = _hint_constraints(
         hints["required_constraints"],
         family,
     )
-    payload["ranking"] = hints["required_rankings"]
-    payload["projection"] = SEARCH_PROJECTION_BY_FAMILY[family]
+    rankings = hints["required_rankings"]
+    payload["constraints"] = constraints
+    payload["ranking"] = rankings
+    payload["projection"] = search_projection(
+        family,
+        *(
+            constraint["field"]
+            for constraint in constraints
+            if constraint["field"] != "public_offering"
+        ),
+        *(ranking["field"] for ranking in rankings),
+    )
     payload["limit"] = hints["limit"]
     payload["intent_payload"] = {
         "comparison_fields": [],

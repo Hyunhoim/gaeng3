@@ -81,6 +81,26 @@ class ProductFamily(StrEnum):
     FUND = "fund"
 
 
+def search_projection(
+    family: ProductFamily | str,
+    *fields: str,
+) -> list[str]:
+    """Return standard search evidence plus every selected plan field."""
+
+    family_name = family.value if isinstance(family, ProductFamily) else family
+    registry = load_field_registry()
+    candidates = [*SEARCH_PROJECTION_BY_FAMILY[family_name], *fields]
+    return list(
+        dict.fromkeys(
+            field
+            for field in candidates
+            if field in registry.fields
+            and family_name in registry.fields[field].datasets
+            and registry.require_field(field, [family_name]).selectable
+        )
+    )
+
+
 class ConstraintOperator(StrEnum):
     EQ = "eq"
     NEQ = "neq"

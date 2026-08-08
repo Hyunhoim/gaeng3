@@ -13,7 +13,6 @@ from finance_agent_core.agent.linker import canonicalize_query_plan_payload
 from finance_agent_core.agent.product_comparison import comparison_projection
 from finance_agent_core.config import FieldDefinition, load_field_registry
 from finance_agent_core.contracts.queryplan import (
-    SEARCH_PROJECTION_BY_FAMILY,
     AggregateFunction,
     Aggregation,
     Constraint,
@@ -27,6 +26,7 @@ from finance_agent_core.contracts.queryplan import (
     Ranking,
     SortDirection,
     Unit,
+    search_projection,
 )
 from finance_agent_core.contracts.routing import (
     InteractionIntent,
@@ -660,6 +660,8 @@ class GroundedPlanGate:
         projection = self._projection(
             family,
             proposal.intent,
+            constraints,
+            rankings,
             comparison_fields,
             group_by,
             aggregations,
@@ -1121,12 +1123,22 @@ class GroundedPlanGate:
     def _projection(
         family: ProductFamily,
         intent: Intent,
+        constraints: Sequence[Constraint],
+        rankings: Sequence[Ranking],
         comparison_fields: Sequence[str],
         group_by: Sequence[str],
         aggregations: Sequence[Aggregation],
     ) -> list[str]:
         if intent is Intent.SEARCH:
-            return list(SEARCH_PROJECTION_BY_FAMILY[family.value])
+            return search_projection(
+                family,
+                *(
+                    constraint.field
+                    for constraint in constraints
+                    if constraint.field != "public_offering"
+                ),
+                *(ranking.field for ranking in rankings),
+            )
         if intent is Intent.COMPARE:
             return comparison_projection(family, comparison_fields)
         return list(

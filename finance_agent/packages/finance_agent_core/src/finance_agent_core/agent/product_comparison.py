@@ -7,7 +7,6 @@ from collections.abc import Iterable, Sequence
 from finance_agent_core.config import load_field_registry
 from finance_agent_core.contracts import QueryPlan
 from finance_agent_core.contracts.queryplan import (
-    SEARCH_PROJECTION_BY_FAMILY,
     Constraint,
     ConstraintOperator,
     ConstraintStrength,
@@ -15,6 +14,7 @@ from finance_agent_core.contracts.queryplan import (
     IntentPayload,
     ProductFamily,
     Unit,
+    search_projection,
 )
 from finance_agent_core.storage import ProductIdentityRecord
 
@@ -154,20 +154,13 @@ def comparison_projection(
     """Return standard product evidence plus every requested comparison field."""
 
     registry = load_field_registry()
-    candidates = [*SEARCH_PROJECTION_BY_FAMILY[family.value], *comparison_fields]
+    candidates = list(comparison_fields)
     if any(
         "trading_currency" in registry.require_field(field_name, [family.value]).comparison_scope
         for field_name in comparison_fields
     ):
         candidates.append("trading_currency")
-    return list(
-        dict.fromkeys(
-            field_name
-            for field_name in candidates
-            if family.value in registry.fields[field_name].datasets
-            and registry.require_field(field_name, [family.value]).selectable
-        )
-    )
+    return search_projection(family, *candidates)
 
 
 def _has_unsafe_target_role(question: str, mentions: Sequence[str]) -> bool:

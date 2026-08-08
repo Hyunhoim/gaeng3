@@ -16,7 +16,6 @@ from pydantic import (
 
 from finance_agent_core.config import load_field_registry
 from finance_agent_core.contracts.queryplan import (
-    SEARCH_PROJECTION_BY_FAMILY,
     Ambiguity,
     Constraint,
     ConstraintOperator,
@@ -25,6 +24,7 @@ from finance_agent_core.contracts.queryplan import (
     QueryPlan,
     Ranking,
     UnsupportedCondition,
+    search_projection,
 )
 
 type EvaluationScalar = StrictBool | StrictInt | StrictFloat | StrictStr
@@ -127,14 +127,23 @@ class EvaluationCase(EvaluationModel):
                     reason=f"현재 동결된 {product_family} field registry에서 지원하지 않는 조건",
                 )
             )
+        constraints = [item.to_constraint(product_family) for item in self.constraints]
         return QueryPlan(
             schema_version="1.0",
             question_id=self.id,
             intent="search",
             product_families=[product_family],
-            constraints=[item.to_constraint(product_family) for item in self.constraints],
+            constraints=constraints,
             ranking=self.ranking,
-            projection=SEARCH_PROJECTION_BY_FAMILY[product_family],
+            projection=search_projection(
+                product_family,
+                *(
+                    constraint.field
+                    for constraint in constraints
+                    if constraint.field != "public_offering"
+                ),
+                *(ranking.field for ranking in self.ranking),
+            ),
             limit=self.limit,
             intent_payload=IntentPayload(
                 comparison_fields=[],

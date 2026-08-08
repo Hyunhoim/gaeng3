@@ -17,7 +17,6 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from finance_agent_core.config import AsOfBasis, FieldDefinition, ValueType, load_field_registry
 from finance_agent_core.contracts.queryplan import (
-    SEARCH_PROJECTION_BY_FAMILY,
     AggregateFunction,
     Aggregation,
     Constraint,
@@ -31,6 +30,7 @@ from finance_agent_core.contracts.queryplan import (
     Ranking,
     SortDirection,
     Unit,
+    search_projection,
 )
 from finance_agent_core.evaluation.semantics import (
     canonical_json_sha256,
@@ -417,16 +417,7 @@ def _merge_constraints(constraints: Sequence[Constraint]) -> list[Constraint]:
 
 
 def _projection(family: ProductFamily, *fields: str) -> list[str]:
-    registry = load_field_registry()
-    candidates = [*SEARCH_PROJECTION_BY_FAMILY[family.value], *fields]
-    return list(
-        dict.fromkeys(
-            field
-            for field in candidates
-            if family.value in registry.fields[field].datasets
-            and registry.require_field(field, [family.value]).selectable
-        )
-    )
+    return search_projection(family, *fields)
 
 
 def _empty_payload() -> IntentPayload:

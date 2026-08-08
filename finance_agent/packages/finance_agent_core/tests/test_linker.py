@@ -55,6 +55,40 @@ def test_explicit_etp_type_overrides_broad_etf_etn_family_phrase() -> None:
 @pytest.mark.parametrize(
     "question",
     [
+        "국내 ETF·ETN 중 AUM이 큰 상품 3개를 보여줘",
+        "해외 ETF나 ETN 중 총보수가 낮은 상품 3개를 보여줘",
+    ],
+)
+def test_broad_etf_etn_family_phrase_does_not_add_a_type_constraint(
+    question: str,
+) -> None:
+    hints = build_lexical_hints(question)
+
+    assert not any(item["field"] == "product_type" for item in hints["required_constraints"])
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        "해외 ETP 중 ETP 유형이 ETF 또는 ETN에 포함되는 상품 3개",
+        "해외 ETF나 ETN 중 ETF인지 ETN인지 알려주는 상품 3개",
+    ],
+)
+def test_explicit_multi_type_condition_is_preserved_as_a_set(question: str) -> None:
+    hints = build_lexical_hints(question)
+
+    product_types = [
+        item for item in hints["required_constraints"] if item["field"] == "product_type"
+    ]
+    assert product_types == [
+        {"field": "product_type", "operator": "eq", "value": "ETF"},
+        {"field": "product_type", "operator": "eq", "value": "ETN"},
+    ]
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
         "ETF 유형에 해당하며 해외 ETF·ETN 상품 조회",
         "ETF인지 ETN인지 확인하고 ETF라면 상세 조회",
     ],
@@ -313,6 +347,33 @@ def test_negated_trade_availability_requires_clarification() -> None:
         item["field"] in {"sellable", "trading_suspended"} for item in hints["required_constraints"]
     )
     assert any("거래 가능하지 않" in span for span in hints["ambiguity_spans"])
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        "거래 중지되지 않은 국내 ETF·ETN 3개를 보여줘",
+        "거래 정지된 상품을 제외하고 해외 ETF·ETN 3개를 보여줘",
+    ],
+)
+def test_explicit_non_suspended_wording_is_not_inverted(question: str) -> None:
+    hints = build_lexical_hints(question)
+
+    suspended = [
+        item for item in hints["required_constraints"] if item["field"] == "trading_suspended"
+    ]
+    assert suspended == [{"field": "trading_suspended", "operator": "eq", "value": False}]
+
+
+def test_search_projection_includes_constraint_and_ranking_evidence_fields() -> None:
+    payload = first_vertical_slice_plan("expanded-search-evidence").model_dump(mode="json")
+    linked = canonicalize_query_plan_payload(
+        "레버리지 배수가 1배 이상인 국내 ETF·ETN을 1년 수익률 낮은 순으로 3개 보여줘",
+        payload,
+    )
+
+    assert "leverage_factor" in linked["projection"]
+    assert "one_year_return_pct" in linked["projection"]
 
 
 def test_vague_negated_ranking_is_not_silently_dropped() -> None:
