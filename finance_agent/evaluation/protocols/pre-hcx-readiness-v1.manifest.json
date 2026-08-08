@@ -3,12 +3,12 @@
   "baseline_id": "pre-hcx-readiness-v1",
   "recorded_on": "2026-08-08",
   "status": "internal_ready_external_gates_pending",
-  "git_commit": "b4746e0ec0cf358406b64518788a2f4536d729f1",
-  "last_committed_source_commit": "b4746e0ec0cf358406b64518788a2f4536d729f1",
+  "git_commit": "11f76670a47a81a31b7d5d851216048fc6beddea",
+  "last_committed_source_commit": "11f76670a47a81a31b7d5d851216048fc6beddea",
   "generated_from_dirty_worktree": false,
   "hash_algorithm": "sha256(sorted(relative_path + NUL + file_sha256 + LF))",
   "file_count": 376,
-  "tree_sha256": "32a567cc08d805c30e66789a0140131d53a45ca23fa93e088f2cd0074e787d3d",
+  "tree_sha256": "4854dec2176219e67ffe1d12b3d94d0903c797cdba4362e073654f808d4200c9",
   "included_scope": [
     "README.md",
     "../compose.sh",
@@ -85,7 +85,8 @@
     "coverage_campaign_git_lock_2026_08_08": "tracked_and_nonignored_untracked_source_changes_blocked_ignored_artifacts_allowed",
     "coverage_cluster_statistics_2026_08_08": "naturalized_source_plan_cluster_bootstrap_and_cluster_mcnemar_with_holm_correction_passed",
     "coverage_execution_semantic_audit_2026_08_08": "primary_exact_65_of_391_preserved_aggregate_execution_inert_expected_134_qwen_plan_132_compare_and_search_prioritized",
-    "coverage_compare_postfix_regression_2026_08_08": "same_public_391_exact_94_execution_semantic_163_compare_29_of_29_other_kind_pass_counts_unchanged_not_blind"
+    "coverage_compare_postfix_regression_2026_08_08": "same_public_391_exact_94_execution_semantic_163_compare_29_of_29_other_kind_pass_counts_unchanged_not_blind",
+    "coverage_compare_qwen_plan_postfix_2026_08_08": "same_public_391_exact_94_execution_semantic_161_compare_29_of_29_rescued_2_regressed_2_no_net_gain_p95_plus_2238ms"
   },
   "external_gates": [
     "금융 도메인 담당자의 external blind 100문항과 비공개 정답키 작성",
