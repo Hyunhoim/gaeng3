@@ -26,6 +26,8 @@ from finance_agent_core.evaluation.coverage_ablation import (
 from finance_agent_core.evaluation.coverage_analysis import plan_delta_codes
 from finance_agent_core.evaluation.coverage_campaign_cli import (
     _campaign_ranges,
+    _load_or_create_protocol,
+    _protocol_semantic_sha256,
     _validate_batch_selection,
 )
 from finance_agent_core.evaluation.coverage_plan import (
@@ -319,6 +321,41 @@ def test_coverage_campaign_validates_exact_shard_sources() -> None:
             offset=0,
             limit=1,
             expected_model="qwen3-local-test",
+        )
+
+
+def test_coverage_campaign_protocol_is_write_once_and_commit_bound(tmp_path) -> None:
+    suite = _suite()
+    protocol_path = tmp_path / "protocol.json"
+    first = _load_or_create_protocol(
+        protocol_path,
+        campaign_id="pilot",
+        suite=suite,
+        ranges=[(0, 1)],
+        shard_size=10,
+        generator_model="qwen3-local-test",
+        source_git_commit="a" * 40,
+    )
+    replay = _load_or_create_protocol(
+        protocol_path,
+        campaign_id="pilot",
+        suite=suite,
+        ranges=[(0, 1)],
+        shard_size=10,
+        generator_model="qwen3-local-test",
+        source_git_commit="a" * 40,
+    )
+
+    assert _protocol_semantic_sha256(first) == _protocol_semantic_sha256(replay)
+    with pytest.raises(ValueError, match="protocol differs"):
+        _load_or_create_protocol(
+            protocol_path,
+            campaign_id="pilot",
+            suite=suite,
+            ranges=[(0, 1)],
+            shard_size=10,
+            generator_model="qwen3-local-test",
+            source_git_commit="b" * 40,
         )
 
 

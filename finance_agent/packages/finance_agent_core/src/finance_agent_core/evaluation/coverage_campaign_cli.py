@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal
@@ -53,6 +54,23 @@ class CoverageCampaignFile(CoverageModel):
     semantic_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
 
 
+class CoverageCampaignProtocol(CoverageModel):
+    schema_version: Literal["1.0"] = "1.0"
+    campaign_id: str
+    recorded_at_utc: str
+    status: Literal["internal_synthetic_not_blind"] = "internal_synthetic_not_blind"
+    source_git_commit: str = Field(pattern=r"^[0-9a-f]{40}$")
+    source_worktree_clean: Literal[True] = True
+    plan_suite_id: str
+    plan_suite_semantic_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    selection_offset: int = Field(ge=0)
+    selected_source_count: int = Field(ge=1)
+    shard_size: int = Field(ge=1)
+    generator: Literal["local_test"] = "local_test"
+    generator_model: str = Field(min_length=1)
+    interpretation_limits: list[str] = Field(min_length=1, max_length=20)
+
+
 class CoverageCampaignShard(CoverageModel):
     offset: int = Field(ge=0)
     limit: int = Field(ge=1)
@@ -80,6 +98,8 @@ class CoverageExperimentManifest(CoverageModel):
     recorded_at_utc: str
     status: Literal["internal_synthetic_not_blind"] = "internal_synthetic_not_blind"
     completed_stages: list[Literal["questions", "runs", "ablation"]]
+    protocol: CoverageCampaignFile
+    source_git_commit: str = Field(pattern=r"^[0-9a-f]{40}$")
     plan_suite_id: str
     plan_suite_semantic_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     selection_offset: int = Field(ge=0)
@@ -108,6 +128,39 @@ def _semantic_model_sha256(model: CoverageModel) -> str:
     return canonical_json_sha256(payload)
 
 
+def _protocol_semantic_sha256(protocol: CoverageCampaignProtocol) -> str:
+    payload = protocol.model_dump(mode="json")
+    payload.pop("recorded_at_utc", None)
+    return canonical_json_sha256(payload)
+
+
+def _git_source_state(path: Path) -> tuple[str, bool]:
+    try:
+        root = subprocess.run(
+            ["git", "-C", str(path), "rev-parse", "--show-toplevel"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        commit = subprocess.run(
+            ["git", "-C", root, "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        tracked_changes = subprocess.run(
+            ["git", "-C", root, "status", "--porcelain", "--untracked-files=no"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+    except (OSError, subprocess.CalledProcessError) as error:
+        raise ValueError("coverage campaign requires a readable Git worktree") from error
+    if len(commit) != 40:
+        raise ValueError("coverage campaign Git commit is invalid")
+    return commit, not tracked_changes
+
+
 def _atomic_write_text(path: Path, content: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(f".{path.name}.tmp")
@@ -119,6 +172,42 @@ def _write_new_model(path: Path, model: CoverageModel) -> None:
     if path.exists():
         raise ValueError(f"refusing to overwrite first-observation artifact: {path}")
     _atomic_write_text(path, f"{model.model_dump_json(indent=2)}\n")
+
+
+def _load_or_create_protocol(
+    path: Path,
+    *,
+    campaign_id: str,
+    suite: CoveragePlanSuite,
+    ranges: list[tuple[int, int]],
+    shard_size: int,
+    generator_model: str,
+    source_git_commit: str,
+) -> CoverageCampaignProtocol:
+    expected = CoverageCampaignProtocol(
+        campaign_id=campaign_id,
+        recorded_at_utc=datetime.now(UTC).replace(microsecond=0).isoformat(),
+        source_git_commit=source_git_commit,
+        source_worktree_clean=True,
+        plan_suite_id=suite.suite_id,
+        plan_suite_semantic_sha256=coverage_plan_suite_semantic_sha256(suite),
+        selection_offset=ranges[0][0],
+        selected_source_count=sum(limit for _, limit in ranges),
+        shard_size=shard_size,
+        generator_model=generator_model,
+        interpretation_limits=[
+            "질문 생성과 Agent 실행은 이 Git commit과 suite 선택에서만 재개한다.",
+            "tracked source가 바뀌면 같은 디렉터리에 결과를 섞지 않고 새 캠페인을 만든다.",
+            "로컬 Qwen은 개발 전용이며 공식 제출 또는 HyperCLOVA X 성능이 아니다.",
+        ],
+    )
+    if not path.exists():
+        _write_new_model(path, expected)
+        return expected
+    observed = CoverageCampaignProtocol.model_validate_json(path.read_text(encoding="utf-8"))
+    if _protocol_semantic_sha256(observed) != _protocol_semantic_sha256(expected):
+        raise ValueError("coverage campaign protocol differs; use a new output directory")
+    return observed
 
 
 def _campaign_ranges(
@@ -356,6 +445,8 @@ def build_parser() -> argparse.ArgumentParser:
 def _manifest(
     *,
     output_dir: Path,
+    protocol_path: Path,
+    protocol: CoverageCampaignProtocol,
     suite: CoveragePlanSuite,
     ranges: list[tuple[int, int]],
     batches: list[CoverageQuestionBatch],
@@ -419,6 +510,12 @@ def _manifest(
         campaign_id=output_dir.name,
         recorded_at_utc=datetime.now(UTC).replace(microsecond=0).isoformat(),
         completed_stages=completed,
+        protocol=_file_reference(
+            protocol_path,
+            output_dir,
+            semantic_sha256=_protocol_semantic_sha256(protocol),
+        ),
+        source_git_commit=protocol.source_git_commit,
         plan_suite_id=suite.suite_id,
         plan_suite_semantic_sha256=coverage_plan_suite_semantic_sha256(suite),
         selection_offset=ranges[0][0],
@@ -471,13 +568,40 @@ def main(argv: list[str] | None = None) -> int:
     if phase in {"compare", "all"} and len(profiles) < 2:
         raise ValueError("coverage campaign comparison requires at least two profiles")
 
+    source_git_commit, source_worktree_clean = _git_source_state(Path.cwd())
+    if not source_worktree_clean:
+        raise ValueError(
+            "coverage campaign refuses tracked source changes; "
+            "commit them or use a new clean worktree"
+        )
+
     provider: LocalQwenSemanticQuestionProvider | None = None
-    expected_model: str | None = None
+    configured_model: str | None = None
     if phase in {"generate", "all"}:
         settings = LocalTestSettings.from_environment()
         provider = LocalQwenSemanticQuestionProvider(settings)
         provider.healthcheck()
-        expected_model = settings.model
+        configured_model = settings.model
+
+    protocol_path = arguments.output_dir / "protocol.json"
+    if configured_model is None:
+        if not protocol_path.exists():
+            raise ValueError(
+                "coverage campaign protocol is missing; run --phase generate first"
+            )
+        existing_protocol = CoverageCampaignProtocol.model_validate_json(
+            protocol_path.read_text(encoding="utf-8")
+        )
+        configured_model = existing_protocol.generator_model
+    protocol = _load_or_create_protocol(
+        protocol_path,
+        campaign_id=arguments.output_dir.name,
+        suite=suite,
+        ranges=ranges,
+        shard_size=arguments.shard_size,
+        generator_model=configured_model,
+        source_git_commit=source_git_commit,
+    )
 
     batches: list[CoverageQuestionBatch] = []
     for offset, limit in ranges:
@@ -489,7 +613,7 @@ def main(argv: list[str] | None = None) -> int:
                 offset=offset,
                 limit=limit,
                 workers=arguments.workers,
-                expected_model=expected_model,
+                expected_model=protocol.generator_model,
             )
         )
     merged_questions_path = arguments.output_dir / "questions" / "campaign.json"
@@ -545,6 +669,8 @@ def main(argv: list[str] | None = None) -> int:
 
     manifest = _manifest(
         output_dir=arguments.output_dir,
+        protocol_path=protocol_path,
+        protocol=protocol,
         suite=suite,
         ranges=ranges,
         batches=batches,
@@ -564,6 +690,7 @@ def main(argv: list[str] | None = None) -> int:
         json.dumps(
             {
                 "manifest": str(arguments.output_dir / "manifest.json"),
+                "source_git_commit": manifest.source_git_commit,
                 "completed_stages": manifest.completed_stages,
                 "sources": manifest.selected_source_count,
                 "questions_requested": merged_questions.requested_count,
