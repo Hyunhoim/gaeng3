@@ -65,8 +65,19 @@ def _build_services(
 ) -> tuple[dict[ProductFamily, RoutedFinanceAgent], str | None]:
     record_cache = RecordSnapshotCache(max_entries=4)
     identity_cache = ProductIdentitySnapshotCache(max_entries=4)
-    if provider_name == "local_test":
-        settings = LocalTestSettings.from_environment()
+    local_plan = provider_name in {"local_test", "local_test_plan_only"}
+    local_answer = provider_name in {"local_test", "local_test_answer_only"}
+    if provider_name not in {
+        "expected",
+        "local_test",
+        "local_test_plan_only",
+        "local_test_answer_only",
+    }:
+        raise ValueError(f"unsupported evaluation provider profile: {provider_name}")
+    settings = LocalTestSettings.from_environment() if local_plan or local_answer else None
+    if local_plan:
+        if settings is None:
+            raise RuntimeError("local plan profile requires local settings")
         standard_query_provider = InstrumentedQueryPlanProvider(
             LocalTestProvider(settings),
             telemetry,
@@ -75,21 +86,24 @@ def _build_services(
             LocalTestProvider(settings, internal_evaluation_family="fund"),
             telemetry,
         )
+        standard_query_provider.provider.healthcheck()
+    else:
+        standard_query_provider = None
+        fund_query_provider = None
+    if local_answer:
+        if settings is None:
+            raise RuntimeError("local answer profile requires local settings")
         answer_provider = InstrumentedAnswerProvider(
             LocalGroundedAnswerProvider(settings),
             telemetry,
         )
-        standard_query_provider.provider.healthcheck()
         answer_provider.provider.healthcheck()
-        model = settings.model
     else:
-        standard_query_provider = None
-        fund_query_provider = None
         answer_provider = InstrumentedAnswerProvider(
             ExpectedGroundedAnswerProvider(),
             telemetry,
         )
-        model = None
+    model = None if settings is None else settings.model
 
     services: dict[ProductFamily, RoutedFinanceAgent] = {}
     for family in ProductFamily:

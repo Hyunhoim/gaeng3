@@ -291,6 +291,23 @@ def test_runner_cli_accepts_frozen_batch_replay_without_generator() -> None:
     assert arguments.agent_provider == "expected"
 
 
+@pytest.mark.parametrize(
+    "profile",
+    ["local_test_plan_only", "local_test_answer_only", "local_test"],
+)
+def test_runner_cli_accepts_qwen_ablation_profiles(profile: str) -> None:
+    arguments = build_run_parser().parse_args(
+        [
+            "--batch-input",
+            "mutations.json",
+            "--agent-provider",
+            profile,
+        ]
+    )
+
+    assert arguments.agent_provider == profile
+
+
 def test_local_qwen_provider_enforces_structured_axis_contract(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

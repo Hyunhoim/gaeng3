@@ -44,7 +44,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--agent-provider",
-        choices=("expected", "local_test"),
+        choices=(
+            "expected",
+            "local_test_plan_only",
+            "local_test_answer_only",
+            "local_test",
+        ),
         default="expected",
     )
     parser.add_argument(

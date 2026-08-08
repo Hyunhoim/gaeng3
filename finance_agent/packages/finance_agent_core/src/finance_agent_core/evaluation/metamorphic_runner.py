@@ -37,6 +37,13 @@ from finance_agent_core.evaluation.red_team_e2e import (
     _evaluate_case,
 )
 
+type MetamorphicAgentProfile = Literal[
+    "expected",
+    "local_test_plan_only",
+    "local_test_answer_only",
+    "local_test",
+]
+
 
 class MetamorphicExecutionCase(MetamorphicModel):
     id: str
@@ -87,7 +94,7 @@ class MetamorphicReport(MetamorphicModel):
     generated_at_utc: str
     generator: Literal["expected", "local_test"]
     generator_model: str | None
-    agent_profile: Literal["expected", "local_test"]
+    agent_profile: MetamorphicAgentProfile
     agent_model: str | None
     protocol_id: str
     protocol_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
@@ -314,7 +321,7 @@ class MetamorphicRunner:
         *,
         batch: MutationBatch,
         services: Mapping[ProductFamily, RoutedAnswerService],
-        agent_profile: Literal["expected", "local_test"],
+        agent_profile: MetamorphicAgentProfile,
         database_sha256_by_family: dict[str, str],
         telemetry: ProviderTelemetry,
         agent_model: str | None,
