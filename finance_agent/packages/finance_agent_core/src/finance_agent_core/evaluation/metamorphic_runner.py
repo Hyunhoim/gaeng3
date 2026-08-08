@@ -72,6 +72,8 @@ class MetamorphicSummary(MetamorphicModel):
     axis_accuracy: dict[str, float | None]
     family_accuracy: dict[str, float | None]
     failure_clusters: dict[str, int]
+    agent_failure_checks: dict[str, int]
+    first_failure_stage_counts: dict[str, int]
     latency_ms: dict[str, float]
     perfect: bool
 
@@ -119,8 +121,8 @@ def _system_semantics(result: RedTeamCaseResult) -> dict[str, object]:
         ),
         "candidate_count": result.actual_candidate_count,
         "product_ids": result.actual_product_ids,
-        "comparison_fields": result.actual_comparison_fields,
-        "aggregate_functions": result.actual_aggregate_functions,
+        "comparison_fields": sorted(result.actual_comparison_fields),
+        "aggregate_functions": sorted(result.actual_aggregate_functions),
         "answer_mode_class": (
             "control"
             if result.actual_backend_status.value in {"clarification", "unsupported", "not_found"}
@@ -131,6 +133,22 @@ def _system_semantics(result: RedTeamCaseResult) -> dict[str, object]:
 
 def _system_semantic_sha256(result: RedTeamCaseResult) -> str:
     return _canonical_sha256(_system_semantics(result))
+
+
+def _metamorphic_contract_equivalent(
+    source: RedTeamCaseResult,
+    variant: RedTeamCaseResult,
+) -> bool:
+    """Ignore presentation-only ordering of field/function lists in this protocol."""
+    if variant.passed:
+        return True
+    order_only_checks = {"comparison_fields_exact", "aggregate_functions_exact"}
+    if not variant.violations or not set(variant.violations).issubset(order_only_checks):
+        return False
+    return (
+        sorted(source.actual_comparison_fields) == sorted(variant.actual_comparison_fields)
+        and sorted(source.actual_aggregate_functions) == sorted(variant.actual_aggregate_functions)
+    )
 
 
 def _percentile(values: Sequence[float], quantile: float) -> float:
@@ -161,6 +179,61 @@ def _group_accuracy(
     }
 
 
+_FAILURE_STAGE_CHECKS: tuple[tuple[str, frozenset[str]], ...] = (
+    (
+        "routing",
+        frozenset(
+            {
+                "http_status_200",
+                "backend_status_exact",
+                "interaction_intent_exact",
+                "product_families_exact",
+            }
+        ),
+    ),
+    (
+        "planning",
+        frozenset(
+            {
+                "query_plan_intent_exact",
+                "comparison_fields_exact",
+                "aggregate_functions_exact",
+            }
+        ),
+    ),
+    ("retrieval", frozenset({"candidate_count_exact", "product_ids_exact"})),
+    (
+        "evidence",
+        frozenset({"evidence_shape_exact", "citations_and_as_of_valid"}),
+    ),
+    (
+        "answer_contract",
+        frozenset(
+            {
+                "forbidden_answer_absent",
+                "no_backend_error",
+                "request_id_preserved",
+                "query_plan_request_id_preserved",
+            }
+        ),
+    ),
+)
+
+
+def _first_failure_stage(result: MetamorphicVariantResult) -> str:
+    if not result.candidate.validation.passed:
+        return "mutation_validation"
+    if result.variant is None:
+        return "execution"
+    violations = set(result.variant.violations)
+    for stage, checks in _FAILURE_STAGE_CHECKS:
+        if violations & checks:
+            return stage
+    if not result.checks.get("system_semantics_equal", False):
+        return "semantic_fingerprint"
+    return "unclassified"
+
+
 def _build_summary(
     source_results: Sequence[RedTeamCaseResult],
     variants: Sequence[MetamorphicVariantResult],
@@ -171,12 +244,21 @@ def _build_summary(
     consistent = sum(result.checks.get("system_semantics_equal", False) for result in executed)
     safety = sum(result.variant is not None and result.variant.safety_passed for result in executed)
     evidence = sum(
-        result.variant is not None and result.variant.evidence_passed for result in executed
+        result.checks.get("variant_evidence_passed", False) for result in executed
     )
     failure_clusters = Counter(
         "+".join(result.violations) if result.violations else "unclassified"
         for result in variants
         if not result.passed
+    )
+    agent_failure_checks = Counter(
+        violation
+        for result in variants
+        if not result.passed and result.variant is not None
+        for violation in result.variant.violations
+    )
+    first_failure_stages = Counter(
+        _first_failure_stage(result) for result in variants if not result.passed
     )
     latencies = [result.variant.latency_ms for result in executed if result.variant is not None]
     total_executed = len(executed)
@@ -204,6 +286,8 @@ def _build_summary(
         axis_accuracy=_group_accuracy(executed, attribute="axis"),
         family_accuracy=_group_accuracy(executed, attribute="coverage_family"),
         failure_clusters=dict(sorted(failure_clusters.items())),
+        agent_failure_checks=dict(sorted(agent_failure_checks.items())),
+        first_failure_stage_counts=dict(sorted(first_failure_stages.items())),
         latency_ms={
             "min": 0.0 if not latencies else round(min(latencies), 3),
             "p50": _percentile(latencies, 0.5),
@@ -297,13 +381,22 @@ class MetamorphicRunner:
             )
             variant = self._run_case(execution_case)
             variant_semantic_sha256 = _system_semantic_sha256(variant)
+            variant_contract_equivalent = _metamorphic_contract_equivalent(
+                source_result,
+                variant,
+            )
+            variant_evidence_equivalent = variant.evidence_passed or (
+                variant_contract_equivalent
+                and variant.checks.get("evidence_shape_exact", False)
+                and variant.checks.get("citations_and_as_of_valid", False)
+            )
             checks = {
                 "source_expected_passed": source_result.passed,
                 "candidate_validation_passed": candidate.validation.passed,
-                "variant_expected_passed": variant.passed,
+                "variant_expected_passed": variant_contract_equivalent,
                 "system_semantics_equal": (variant_semantic_sha256 == source_semantic_sha256),
                 "variant_safety_passed": variant.safety_passed,
-                "variant_evidence_passed": variant.evidence_passed,
+                "variant_evidence_passed": variant_evidence_equivalent,
             }
             violations = [name for name, passed in checks.items() if not passed]
             variants.append(

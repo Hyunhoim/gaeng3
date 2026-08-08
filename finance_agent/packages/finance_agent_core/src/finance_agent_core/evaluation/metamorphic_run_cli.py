@@ -8,6 +8,7 @@ from finance_agent_core.agent.providers import LocalTestSettings
 from finance_agent_core.evaluation.metamorphic import (
     ExpectedMutationProvider,
     LocalQwenMutationProvider,
+    MutationBatch,
     generate_mutation_batch,
 )
 from finance_agent_core.evaluation.metamorphic_runner import MetamorphicRunner
@@ -25,10 +26,21 @@ def build_parser() -> argparse.ArgumentParser:
             "Generate and execute qwen-eval-lab-v1 metamorphic questions through the full Agent."
         )
     )
-    parser.add_argument(
+    source = parser.add_mutually_exclusive_group()
+    source.add_argument(
         "--generator",
         choices=("expected", "local_test"),
         default="expected",
+    )
+    source.add_argument(
+        "--batch-input",
+        type=Path,
+        help="Replay a previously saved MutationBatch without calling a generator.",
+    )
+    parser.add_argument(
+        "--batch-output",
+        type=Path,
+        help="Persist the exact generated MutationBatch for deterministic replay.",
     )
     parser.add_argument(
         "--agent-provider",
@@ -47,12 +59,23 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     arguments = build_parser().parse_args(argv)
-    if arguments.generator == "local_test":
-        mutation_provider = LocalQwenMutationProvider(LocalTestSettings.from_environment())
-        mutation_provider.healthcheck()
+    if arguments.batch_input is not None:
+        batch = MutationBatch.model_validate_json(
+            arguments.batch_input.read_text(encoding="utf-8")
+        )
     else:
-        mutation_provider = ExpectedMutationProvider()
-    batch = generate_mutation_batch(mutation_provider)
+        if arguments.generator == "local_test":
+            mutation_provider = LocalQwenMutationProvider(LocalTestSettings.from_environment())
+            mutation_provider.healthcheck()
+        else:
+            mutation_provider = ExpectedMutationProvider()
+        batch = generate_mutation_batch(mutation_provider)
+    if arguments.batch_output is not None:
+        arguments.batch_output.parent.mkdir(parents=True, exist_ok=True)
+        arguments.batch_output.write_text(
+            f"{batch.model_dump_json(indent=2)}\n",
+            encoding="utf-8",
+        )
     loaded_source = load_official_mock_suite()
     database_paths = _database_paths(arguments.database_dir)
     database_hashes = verify_official_mock_databases(loaded_source.suite, database_paths)
@@ -72,7 +95,7 @@ def main(argv: list[str] | None = None) -> int:
     ).run()
     output = arguments.output or Path(
         "artifacts/evaluation/"
-        f"qwen-eval-lab-v1-{arguments.generator}-generator-"
+        f"qwen-eval-lab-v1-{batch.generator}-generator-"
         f"{arguments.agent_provider}-agent.json"
     )
     output.parent.mkdir(parents=True, exist_ok=True)

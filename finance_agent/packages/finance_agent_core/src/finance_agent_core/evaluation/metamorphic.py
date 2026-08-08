@@ -35,6 +35,33 @@ _LABELED_ID = re.compile(
     re.IGNORECASE,
 )
 _CODE_FENCE_OR_JSON = re.compile(r"```|^\s*[\[{]", re.MULTILINE)
+_COMPARISON_OPERATOR_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
+    ("le", re.compile(r"이하|넘지\s*않", re.IGNORECASE)),
+    ("lt", re.compile(r"미만", re.IGNORECASE)),
+    ("ge", re.compile(r"이상|적어도", re.IGNORECASE)),
+    ("gt", re.compile(r"초과", re.IGNORECASE)),
+)
+_CRITICAL_CONCEPT_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
+    (
+        "availability",
+        re.compile(
+            r"(?:거래|판매|매수|구매)\s*(?:(?:가\s*)?가능|중)",
+            re.IGNORECASE,
+        ),
+    ),
+    ("trading_suspended", re.compile(r"거래\s*(?:가\s*)?(?:중지|정지|중단)", re.IGNORECASE)),
+    ("delisted", re.compile(r"상장\s*폐지", re.IGNORECASE)),
+    ("pension", re.compile(r"연금(?:\s*계좌)?", re.IGNORECASE)),
+    ("united_states", re.compile(r"미국", re.IGNORECASE)),
+    ("equity_style", re.compile(r"주식\s*형", re.IGNORECASE)),
+    ("bond_style", re.compile(r"채권\s*형", re.IGNORECASE)),
+    ("aum", re.compile(r"(?<![A-Z])AUM(?![A-Z])|순자산", re.IGNORECASE)),
+    ("expense_ratio", re.compile(r"총\s*보수(?:\s*율)?", re.IGNORECASE)),
+    ("risk_level", re.compile(r"위험\s*등급|위험도", re.IGNORECASE)),
+    ("return", re.compile(r"수익률", re.IGNORECASE)),
+    ("forecast", re.compile(r"예측|예상", re.IGNORECASE)),
+    ("recommendation", re.compile(r"추천|골라", re.IGNORECASE)),
+)
 
 
 class MetamorphicModel(BaseModel):
@@ -150,15 +177,65 @@ def _normalized_text(value: str) -> str:
     return " ".join(unicodedata.normalize("NFKC", value).split()).casefold()
 
 
+def _hard_literal_occurrences(question: str) -> list[str]:
+    occurrences = [
+        (match.start(), match.end(), match.group(0).strip())
+        for match in _ID_OR_NUMBER.finditer(question)
+    ]
+    occupied_spans = {(start, end) for start, end, _ in occurrences}
+    for match in _LABELED_ID.finditer(question):
+        span = match.span(1)
+        if span not in occupied_spans:
+            occurrences.append((*span, match.group(1)))
+            occupied_spans.add(span)
+    occurrences.extend(
+        (match.start(), match.end(), match.group(0).upper())
+        for match in _PRODUCT_TOKENS.finditer(question)
+    )
+    return [value for _, _, value in sorted(occurrences)]
+
+
 def _hard_literals(question: str) -> list[str]:
-    literals = [match.group(0).strip() for match in _ID_OR_NUMBER.finditer(question)]
-    literals.extend(match.group(1) for match in _LABELED_ID.finditer(question))
-    literals.extend(match.group(0).upper() for match in _PRODUCT_TOKENS.finditer(question))
-    return list(dict.fromkeys(literals))
+    return list(dict.fromkeys(_hard_literal_occurrences(question)))
 
 
 def _literal_counter(question: str) -> Counter[str]:
-    return Counter(_normalized_text(value) for value in _hard_literals(question))
+    return Counter(_normalized_text(value) for value in _hard_literal_occurrences(question))
+
+
+def _pattern_counter(
+    question: str,
+    patterns: Sequence[tuple[str, re.Pattern[str]]],
+) -> Counter[str]:
+    normalized = unicodedata.normalize("NFKC", question)
+    return Counter(
+        label
+        for label, pattern in patterns
+        for _ in pattern.finditer(normalized)
+    )
+
+
+def _product_family_present(question: str, family: ProductFamily) -> bool:
+    normalized = unicodedata.normalize("NFKC", question)
+    if family == ProductFamily.BOND:
+        return re.search(r"국내\s*채권", normalized, flags=re.IGNORECASE) is not None
+    if family == ProductFamily.FUND:
+        return re.search(r"공모\s*펀드", normalized, flags=re.IGNORECASE) is not None
+
+    direction = "국내" if family == ProductFamily.DOMESTIC_ETP else "해외"
+    competing_family = r"채권|공모\s*펀드"
+    before_product = re.compile(
+        rf"{direction}(?:(?!{competing_family}).){{0,50}}?(?:ETF|ETN|ETP)",
+        flags=re.IGNORECASE,
+    )
+    after_product = re.compile(
+        rf"(?:ETF|ETN|ETP)(?:(?!{competing_family}).){{0,30}}?{direction}(?:에서)?",
+        flags=re.IGNORECASE,
+    )
+    return (
+        before_product.search(normalized) is not None
+        or after_product.search(normalized) is not None
+    )
 
 
 def validate_mutation(
@@ -166,17 +243,32 @@ def validate_mutation(
     mutation: GeneratedMutation,
     *,
     sibling_questions: Sequence[str] = (),
+    expected_families: Sequence[ProductFamily] | None = None,
 ) -> MutationValidation:
     source_normalized = _normalized_text(source_question)
     question_normalized = _normalized_text(mutation.question)
     sibling_normalized = {_normalized_text(question) for question in sibling_questions}
     source_length = max(len(source_normalized), 1)
     length_ratio = len(question_normalized) / source_length
+    required_families = tuple(expected_families or ())
     checks = {
         "not_source_copy": question_normalized != source_normalized,
         "not_duplicate": question_normalized not in sibling_normalized,
         "hard_literals_exact": _literal_counter(mutation.question)
         == _literal_counter(source_question),
+        "comparison_operators_exact": _pattern_counter(
+            mutation.question,
+            _COMPARISON_OPERATOR_PATTERNS,
+        )
+        == _pattern_counter(source_question, _COMPARISON_OPERATOR_PATTERNS),
+        "critical_concepts_exact": _pattern_counter(
+            mutation.question,
+            _CRITICAL_CONCEPT_PATTERNS,
+        )
+        == _pattern_counter(source_question, _CRITICAL_CONCEPT_PATTERNS),
+        "product_families_preserved": all(
+            _product_family_present(mutation.question, family) for family in required_families
+        ),
         "length_ratio_safe": 0.45 <= length_ratio <= 3.5,
         "single_question": mutation.question.count("\n") <= 2,
         "no_code_or_json_wrapper": _CODE_FENCE_OR_JSON.search(mutation.question) is None,
@@ -398,6 +490,7 @@ def generate_mutation_batch(
                 case.question,
                 mutation,
                 sibling_questions=siblings,
+                expected_families=case.expectation.product_families,
             )
             siblings.append(mutation.question)
             candidates.append(

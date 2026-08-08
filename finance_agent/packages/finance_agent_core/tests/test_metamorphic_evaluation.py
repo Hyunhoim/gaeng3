@@ -22,6 +22,7 @@ from finance_agent_core.evaluation.metamorphic import (
     validate_mutation,
 )
 from finance_agent_core.evaluation.metamorphic_cli import main as metamorphic_main
+from finance_agent_core.evaluation.metamorphic_run_cli import build_parser as build_run_parser
 from finance_agent_core.evaluation.metamorphic_runner import MetamorphicRunner
 from finance_agent_core.evaluation.official_mock import load_official_mock_suite
 from finance_agent_core.evaluation.red_team_e2e import ProviderTelemetry
@@ -64,6 +65,53 @@ def test_validation_preserves_hard_literals_and_rejects_numeric_change() -> None
     rejected = validate_mutation(source, changed)
     assert not rejected.passed
     assert "hard_literals_exact" in rejected.violations
+
+
+@pytest.mark.parametrize(
+    ("source", "question", "violation"),
+    [
+        (
+            "1개월 수익률 순으로 보여줘",
+            "1개월 수익률 순으로 보여줘. 결과는 1개만 보여줘",
+            "hard_literals_exact",
+        ),
+        (
+            "총보수 0.20% 이하인 상품",
+            "총보수 0.20% 미만인 상품",
+            "comparison_operators_exact",
+        ),
+        (
+            "거래가 중지된 해외 ETF 4개",
+            "상장폐지된 해외 ETF 4개",
+            "critical_concepts_exact",
+        ),
+    ],
+)
+def test_validator_rejects_condition_semantics_changes(
+    source: str,
+    question: str,
+    violation: str,
+) -> None:
+    validation = validate_mutation(
+        source,
+        GeneratedMutation(axis=MutationAxis.PARAPHRASE, question=question),
+    )
+
+    assert violation in validation.violations
+
+
+def test_validator_requires_every_expected_product_family() -> None:
+    source = "공모펀드 KR5010101714와 KR5010101702를 비교해줘"
+    validation = validate_mutation(
+        source,
+        GeneratedMutation(
+            axis=MutationAxis.CLAUSE_REORDERING,
+            question="KR5010101714와 KR5010101702를 비교해줘",
+        ),
+        expected_families=[ProductFamily.FUND],
+    )
+
+    assert "product_families_preserved" in validation.violations
 
 
 def test_validation_rejects_source_copy_sibling_duplicate_and_json_wrapper() -> None:
@@ -172,6 +220,20 @@ def test_runner_checks_control_mutations_without_databases() -> None:
     assert report.summary.semantic_consistency_rate == 1.0
     assert report.summary.safety_pass_rate == 1.0
     assert report.summary.perfect
+
+
+def test_runner_cli_accepts_frozen_batch_replay_without_generator() -> None:
+    arguments = build_run_parser().parse_args(
+        [
+            "--batch-input",
+            "mutations.json",
+            "--agent-provider",
+            "expected",
+        ]
+    )
+
+    assert arguments.batch_input.name == "mutations.json"
+    assert arguments.agent_provider == "expected"
 
 
 def test_local_qwen_provider_enforces_structured_axis_contract(
