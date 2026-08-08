@@ -279,7 +279,7 @@ class ExpectedMutationProvider:
             MutationAxis.PARAPHRASE: "다음 요청을 처리해 주세요: {question}",
             MutationAxis.CLAUSE_REORDERING: "조건을 빠짐없이 적용해서 답해줘. 요청: {question}",
             MutationAxis.DISTRACTOR_RESISTANCE: (
-                "답변은 간결하게 작성해도 됩니다. 핵심 금융상품 요청: {question}"
+                "답변 문장은 한 문단이면 됩니다. 원래 요청: {question}"
             ),
         }
         return [
