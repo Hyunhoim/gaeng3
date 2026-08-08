@@ -136,6 +136,31 @@ def test_router_fails_closed_for_missing_identity_and_cross_family_question() ->
     ]
 
 
+@pytest.mark.parametrize(
+    "question",
+    [
+        "국내 ETF·ETN 중 총보수율이 높은 순으로 3개 보여줘",
+        "해외 ETF나 ETN 중 총보수 0.5% 이하인 상품 3개 보여줘",
+        "국내 ETF·ETN 중 티커가 낮은 순서로 3개 보여줘",
+    ],
+)
+def test_router_executes_explicit_mixed_etp_metric_and_ticker_order(question: str) -> None:
+    decision = IntentRouter().route(question, "route-explicit-search")
+
+    assert decision.draft.intent is InteractionIntent.SEARCH
+    assert decision.disposition is RouteDisposition.EXECUTE
+
+
+def test_router_still_clarifies_unspecified_mixed_etp_cost() -> None:
+    decision = IntentRouter().route(
+        "국내 ETF와 ETN 중 운용보수가 낮은 상품을 알려줘",
+        "route-unspecified-cost",
+    )
+
+    assert decision.draft.intent is InteractionIntent.CLARIFY
+    assert decision.disposition is RouteDisposition.CLARIFY
+
+
 def test_router_generalizes_financial_safety_boundaries() -> None:
     router = IntentRouter()
     cases = [

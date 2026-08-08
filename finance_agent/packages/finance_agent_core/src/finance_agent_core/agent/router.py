@@ -63,6 +63,12 @@ _MIXED_ETP_COST = re.compile(
     r"(?=.*ETF)(?=.*ETN)(?=.*(?:보수|수수료|비용))",
     re.IGNORECASE,
 )
+_EXPLICIT_TOTAL_EXPENSE_RATIO = re.compile(r"총\s*보수(?:율)?|보수율", re.IGNORECASE)
+_TICKER_ORDERING = re.compile(
+    r"(?:티커|종목\s*코드).{0,24}"
+    r"(?:오름차순|내림차순|큰\s*순|작은\s*순|높은\s*순|낮은\s*순|순서)",
+    re.IGNORECASE,
+)
 _EXPLICIT_ETP_TYPE = re.compile(
     r"(?:ETP\s*유형|ETF\s*여부|상품\s*유형)(?:이|가|은|는)?\s*[:：]?\s*(?:ETF|ETN)|"
     r"(?<![A-Z])(?:ETF|ETN)(?:인(?!지)|이며|이고|인데|에\s*해당|로\s*되어)",
@@ -210,6 +216,7 @@ def _intent(question: str, families: list[ProductFamily]) -> InteractionIntent:
     if _AMBIGUOUS.search(question) or (
         _MIXED_ETP_COST.search(question)
         and _EXPLICIT_ETP_TYPE.search(question) is None
+        and _EXPLICIT_TOTAL_EXPENSE_RATIO.search(question) is None
         and not exact_two_product_comparison
     ):
         return InteractionIntent.CLARIFY
@@ -219,6 +226,8 @@ def _intent(question: str, families: list[ProductFamily]) -> InteractionIntent:
         return InteractionIntent.COMPARE
     if _AGGREGATE.search(question):
         return InteractionIntent.AGGREGATE
+    if _TICKER_ORDERING.search(question):
+        return InteractionIntent.SEARCH
     if _EXPLAIN.search(question):
         return InteractionIntent.EXPLAIN
     if _DETAIL.search(question):
