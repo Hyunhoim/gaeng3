@@ -176,7 +176,7 @@
   같은 계획의 canonical 자연어 최초 strict는 37/299이며, 실패 262개 중
   질문 분류 45개·작업 계획 210개·근거 7개로 자연어 이해 병목을 분리했다.
   이는 자동 생성 진단이므로 독립 blind나 공모전 예상 점수가 아니다.
-- 전체 Agent Core 회귀는 pytest 459개, Backend 회귀는 34개이며 Ruff lint·format,
+- 전체 Agent Core 회귀는 pytest 461개, Backend 회귀는 34개이며 Ruff lint·format,
   pip dependency check와
   wheel 빌드를 통과했다.
 - Docker `data-init`은 읽기 전용 공식 XLSX에서 네 SQLite를 자동 생성·검증하고,

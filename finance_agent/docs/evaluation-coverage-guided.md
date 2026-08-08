@@ -283,6 +283,18 @@ python -m finance_agent_core.evaluation.coverage_question_run_merge_cli \
 중복 source case, 서로 다른 모델·평가 profile·suite hash, 잘못 연결한 batch와
 report가 있으면 병합을 중단
 
+같은 질문을 실행한 결정론적·Qwen profile report를 문항별 비교
+
+~~~bash
+python -m finance_agent_core.evaluation.coverage_ablation_cli \
+  --input deterministic=artifacts/evaluation/coverage-canonical-expected.json \
+  --input qwen_plan=artifacts/evaluation/coverage-canonical-qwen-plan.json \
+  --output artifacts/evaluation/coverage-canonical-ablation.json
+~~~
+
+비교 결과는 strict 상승만 보여주지 않고 Qwen이 구제한 문항과 새로 실패시킨
+문항, 계획·근거의 구제·퇴행, 실패 단계 이동, 추가 호출·오류·지연을 함께 기록
+
 ## 7. 1등 전략에서 이 실험의 위치
 
 이 실험 자체가 수상 근거는 아님
