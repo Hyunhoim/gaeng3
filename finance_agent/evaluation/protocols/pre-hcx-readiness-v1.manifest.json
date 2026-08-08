@@ -3,12 +3,12 @@
   "baseline_id": "pre-hcx-readiness-v1",
   "recorded_on": "2026-08-08",
   "status": "internal_ready_external_gates_pending",
-  "git_commit": "fb371db31252840ec78ab7c6320bb39e40d4e7f3",
-  "last_committed_source_commit": "fb371db31252840ec78ab7c6320bb39e40d4e7f3",
+  "git_commit": "13e8c1c5daf6d1e61716513e73021c5e61fdeb1b",
+  "last_committed_source_commit": "13e8c1c5daf6d1e61716513e73021c5e61fdeb1b",
   "generated_from_dirty_worktree": false,
   "hash_algorithm": "sha256(sorted(relative_path + NUL + file_sha256 + LF))",
   "file_count": 373,
-  "tree_sha256": "b4bdbc5906d090ef1470fb78010af22613cbb76aa439425411e48704c3924347",
+  "tree_sha256": "8113fbfbf8fd6aaa339e7310f432f3c2b9b12192307ce95da2e8f3b9b524d765",
   "included_scope": [
     "README.md",
     "../compose.sh",
@@ -42,7 +42,7 @@
     "limitation": "self_authored_internal_diagnostic_not_independent_blind"
   },
   "qa": {
-    "pytest_passed": 470,
+    "pytest_passed": 471,
     "ruff_lint": "passed",
     "ruff_format": "passed",
     "pip_check": "passed",
@@ -77,7 +77,8 @@
     "coverage_qwen_campaign_contract_2026_08_08": "write_once_resumable_shards_exact_source_model_hash_validation_profile_merge_ablation_and_manifest_tests_passed",
     "coverage_ablation_denominator_2026_08_08": "generator_acceptance_end_to_end_yield_and_agent_profile_accuracy_denominators_separated",
     "coverage_campaign_source_lock_2026_08_08": "clean_git_commit_suite_selection_shard_and_model_write_once_protocol_enforced",
-    "coverage_experiment_markdown_report_2026_08_08": "generation_acceptance_profile_accuracy_rescue_regression_latency_failure_stage_and_source_hash_contract_tests_passed"
+    "coverage_experiment_markdown_report_2026_08_08": "generation_acceptance_profile_accuracy_rescue_regression_latency_failure_stage_and_source_hash_contract_tests_passed",
+    "coverage_human_review_queue_2026_08_08": "semantic_rejection_generation_error_rescue_and_regression_examples_rendered_in_stable_order"
   },
   "external_gates": [
     "금융 도메인 담당자의 external blind 100문항과 비공개 정답키 작성",
