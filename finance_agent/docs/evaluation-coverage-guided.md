@@ -482,7 +482,43 @@ python -m finance_agent_core.evaluation.coverage_ablation_cli \
 - 상품군·기능·필드·연산자·정렬·집계 함수·표현 축별 구제와 퇴행도 함께 집계
 - 통계적 개선이 있어도 새 strict 퇴행 사례는 ID 단위로 별도 검토
 
-## 8. 1등 전략에서 이 실험의 위치
+## 8. exact 점수와 실제 실행 의미를 분리한 사후 감사
+
+최초 자연화 결과의 엄격한 `65/391`은 그대로 보존한다. 다만 실패 지도를 검토하던
+중 집계 계획의 다음 두 차이가 현재 실행 결과를 바꾸지 않는다는 사실을 확인했다.
+
+- `AGGREGATE projection`: 실행기는 이 목록을 사용하지 않고 조건·그룹·집계 대상에서
+  검증용 필드를 다시 구성
+- 그룹이 없는 `AGGREGATE limit`: 결과가 항상 하나이므로 1과 100 모두 같은 결과
+
+점수를 사후에 바꾸는 방식으로 사용하지 않도록 별도 감사 도구로 분리했다. 그룹별
+집계의 limit, 집계 함수·대상·그룹·조건·상품군, 검색·비교 계획은 한 항목도 완화하지
+않는다.
+
+~~~bash
+python -m finance_agent_core.evaluation.coverage_execution_audit_cli \
+  --suite-input artifacts/evaluation/coverage-guided-plan-v1-canonical-screened-v2.json \
+  --report-input artifacts/evaluation/coverage-qwen-campaign-first/runs/expected/campaign.json \
+  --output artifacts/evaluation/coverage-qwen-campaign-first/audits/expected-aggregate-execution-inert-v1.json
+~~~
+
+| 구성 | 기존 exact strict | 실행 의미 보조 strict | 표기 차이로만 승격 |
+| --- | ---: | ---: | ---: |
+| 규칙 기반 계획 | 65/391 | 134/391 | 69 |
+| Qwen 계획 | 65/391 | 132/391 | 67 |
+| 규칙 기반 계획 + Qwen 답변 | 65/391 | 134/391 | 69 |
+| Qwen 계획 + Qwen 답변 | 65/391 | 132/391 | 67 |
+
+규칙 기반 경로의 기능별 보조 strict는 조건 검색 `6/104`, 순위 검색 `11/103`,
+비교 `0/29`, 일반 집계 `69/79`, 그룹 집계 `48/76`이다. 따라서 일반 집계 전체를
+가장 큰 실패로 보던 최초 exact 지도는 실행 표기 차이의 영향을 많이 받았다. 다음
+구현 우선순위는 비교, 조건·순위 검색, 남은 실제 집계 오류 순으로 조정한다.
+
+이 보조 수치도 현재 실행기와 고정 데이터에 대한 사후 진단일 뿐 공식 점수나 외부
+blind 성능이 아니다. 실행기에서 projection 또는 limit의 의미가 바뀌면 감사 정책과
+기존 산출물을 새 버전으로 다시 검토해야 한다.
+
+## 9. 1등 전략에서 이 실험의 위치
 
 이 실험 자체가 수상 근거는 아님
 하지만 다음 세 가지를 동시에 만들 수 있다는 점이 차별점
@@ -501,7 +537,7 @@ python -m finance_agent_core.evaluation.coverage_ablation_cli \
 
 현재는 화면보다 위 평가 루프와 외부 blind 질문 확보가 우선
 
-## 9. 아직 반드시 필요한 외부 검증
+## 10. 아직 반드시 필요한 외부 검증
 
 - 금융 도메인 담당자가 기존 문항과 코드를 보지 않고 만든 외부 blind 100문항
 - 질문과 비공개 정답을 hash 봉인한 뒤 최초 1회 실행
@@ -510,7 +546,7 @@ python -m finance_agent_core.evaluation.coverage_ablation_cli \
 - 크레딧 수령 후 같은 동결 세트에서 HyperCLOVA X 역할별 A/B
 - 공식 제출 전 로컬 Qwen provider·설정·스크립트·의존성 제거 검사
 
-## 10. 정본과 해석 경계
+## 11. 정본과 해석 경계
 
 - 프로토콜:
   [coverage-guided-v1.protocol.json](../evaluation/protocols/coverage-guided-v1.protocol.json)

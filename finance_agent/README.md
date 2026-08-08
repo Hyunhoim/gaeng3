@@ -59,7 +59,7 @@ LLM은 수치 계산, 필터, 정렬, 상품 순위와 출처를 직접 만들�
 세부 필드와 제한은 [Capability matrix](docs/capability-matrix.md), 최신 구현·평가 상태는
 [현재 프로젝트 기준](docs/project-baseline.md)에서 확인
 
-registry 전체의 미시험 구간과 Qwen 자연화 최초 전체 결과는
+registry 전체의 미시험 구간, Qwen 자연화 최초 전체 결과와 exact·실행 의미 감사는
 [자동 커버리지 평가](docs/evaluation-coverage-guided.md)에서 확인
 
 ## 4. 디렉터리 구조

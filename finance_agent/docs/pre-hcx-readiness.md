@@ -56,7 +56,7 @@
 | 15 | 공식 형식 공개 모의평가 | 난이도 10/10/10·답변 불가 5개·공식 5필드·latency | expected·로컬 Qwen 30/30·생성 16/17·안전 fallback 1건 |
 | 16 | Qwen 변형·전체 Agent 스트레스 평가 | 세 표현 축·의미 선별·gold 감사·실패 단계·fallback 전후 비교 | 승인 변형 결정론적·Qwen 각각 77/77·fallback 0/61 |
 | 17 | 원문 비공개 semantic round-trip | 실행 의미만 제공·계획 지문·근거 첨부 모델 계획 gate | 생성 75·선별 64, 최초 15/64→결정론적 출력·계획 64/64; 강화 Qwen 재실행 대기 |
-| 18 | registry 기반 자동 커버리지 | 대표 계획 직접 실행·canonical 최초 관측·Qwen 자연화·shard 병합 | 299개 직접 실행·canonical 37/299; Qwen 897개 생성·391개 선별·네 구성 65/391 최초 동결 |
+| 18 | registry 기반 자동 커버리지 | 대표 계획 직접 실행·canonical 최초 관측·Qwen 자연화·shard 병합·실행 의미 감사 | 299개 직접 실행·canonical 37/299; Qwen 897개 생성·391개 선별·네 구성 exact 65/391; 보조 strict 규칙 134/391·Qwen 계획 132/391 |
 
 ## 2. 평가 해석 원칙
 
@@ -188,6 +188,10 @@ registry 기반 자동 커버리지 최초 관측:
 - Qwen 계획은 2건 구제·2건 퇴행으로 순개선 0, 95% 구간 약 -1.0%p~+1.0%p,
   Holm 보정 p=1.0이며 p95는 기준선보다 약 2.35초 증가
 - Qwen 답변만은 182회 생성에서 오류·fallback 없이 strict와 evidence를 유지
+- 기존 exact 65/391을 보존한 실행 의미 사후 감사에서 결과에 무관한 집계
+  projection과 비그룹 limit만 정규화하면 규칙 기반 134/391, Qwen 계획 132/391
+- 기능별 보조 strict는 조건 검색 6/104, 순위 검색 11/103, 비교 0/29,
+  일반 집계 69/79, 그룹 집계 48/76으로 다음 개선 우선순위는 비교와 검색
 - 자동 생성·공개 데이터 진단이므로 독립 blind·실사용 분포·공모전 점수가 아님
 
 부정 표현 안전장치 보강 후 교차 회귀 결과:
@@ -196,7 +200,7 @@ registry 기반 자동 커버리지 최초 관측:
 - `공모가 아닌 공모펀드`, `거래 가능하지 않은 ETF`, `AUM이 크지 않은`,
   `특정 상품을 제외한`처럼 조건을 반대로 해석하기 쉬운 질문은 임의 실행하지 않고
   미지원 또는 조건 확인으로 종료
-- 전체 단위·계약 테스트 477/477, lint·format 검사 통과
+- 전체 단위·계약 테스트 483/483, lint·format 검사 통과
 - 위 결과도 이미 확인한 공개 개발 세트의 사후 회귀이며 독립 blind가 아님
 
 같은 30문항의 실제 Docker FastAPI `GET /answer` 최초 관측:
@@ -259,7 +263,7 @@ registry 기반 자동 커버리지 최초 관측:
 
 ## 4. 내부 완료 QA
 
-- Agent Core pytest `477 passed`
+- Agent Core pytest `483 passed`
 - Backend pytest `34 passed`
 - Ruff lint와 format 통과
 - 문서 검사 `59 Markdown files`, `41 evaluation baselines` 통과

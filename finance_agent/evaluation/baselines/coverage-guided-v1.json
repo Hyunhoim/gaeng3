@@ -258,16 +258,74 @@
       "ablation_sha256": "c672afb1074477a4202e0f6dd0cf2c130fcadde14998f7d0797a5194cad99651",
       "markdown_report_sha256": "0e3599b3b74f822bf286fb8e048c9ffcfe386558f8794a025d1f6595b9396bf9"
     },
+    "execution_semantic_posthoc_audit": {
+      "policy": "aggregate_execution_inert_v1",
+      "primary_exact_strict_preserved": true,
+      "normalizations": [
+        "AGGREGATE projection을 group_by와 aggregation 대상 필드로 정규화",
+        "group_by가 없는 단일 AGGREGATE의 양의 limit 차이만 정규화"
+      ],
+      "never_normalized": [
+        "group_by가 있는 AGGREGATE limit",
+        "집계 함수·대상·그룹·조건·상품군",
+        "SEARCH·COMPARE 계획의 모든 필드"
+      ],
+      "profiles": [
+        {
+          "name": "expected",
+          "exact_strict_passed": 65,
+          "execution_semantic_strict_passed": 134,
+          "execution_inert_upgrades": 69,
+          "still_failed": 257
+        },
+        {
+          "name": "local_test_grounded_plan_only",
+          "exact_strict_passed": 65,
+          "execution_semantic_strict_passed": 132,
+          "execution_inert_upgrades": 67,
+          "still_failed": 259
+        },
+        {
+          "name": "local_test_answer_only",
+          "exact_strict_passed": 65,
+          "execution_semantic_strict_passed": 134,
+          "execution_inert_upgrades": 69,
+          "still_failed": 257
+        },
+        {
+          "name": "local_test_grounded",
+          "exact_strict_passed": 65,
+          "execution_semantic_strict_passed": 132,
+          "execution_inert_upgrades": 67,
+          "still_failed": 259
+        }
+      ],
+      "expected_by_kind": {
+        "search_constraint": "6/104",
+        "search_ranking": "11/103",
+        "compare_field": "0/29",
+        "aggregate_field": "69/79",
+        "group_by_field": "48/76"
+      },
+      "artifact_hashes": {
+        "expected": "c63c381c14e022499635e5bea36ea3ed106a58412ec35d423ce15402acd76ec1",
+        "local_test_grounded_plan_only": "12a44c787aa8d3c84d0de526b49f1dffbc9303b0fbd3146c1257e1bb2a373bab",
+        "local_test_answer_only": "f1c3c9bca6789c6475feec7b9237dc92db34f8eed374893e0d26a0730d64d3ab",
+        "local_test_grounded": "fc8264b4b38b53121241d2e68bd2d0b2c5377d5eee70d3f6959a9b43851586cd"
+      },
+      "conclusion": "집계 일반 필드는 표기상 exact 불일치가 컸지만 현재 실행 의미 기준 69/79로 대부분 동작함. Qwen 계획은 같은 보조 기준에서도 132/391로 규칙 기반 134/391보다 2건 낮으며, 실제 우선순위는 비교와 검색임"
+    },
     "conclusion": "현재 Qwen 계획 경로는 strict 순개선이 없고 2건 구제와 2건 퇴행을 교환하며 p95를 약 2.35초 늘림. 답변 전용 경로는 strict·evidence를 바꾸지 않고 오류와 fallback 없이 evidence 기반 문장을 생성함"
   },
   "next_experiment": {
     "goal": "최초 관측을 보존한 뒤 planning 공통 실패를 일반화 방식으로 수정하고 같은 질문에서 사후 회귀를 측정",
     "priority_gaps": [
       "compare_field",
-      "aggregate_field",
       "search_constraint",
+      "search_ranking",
       "between_and_set_operators",
-      "registry_field_projection_and_value_normalization"
+      "registry_field_projection_and_value_normalization",
+      "aggregate_residual_real_semantic_failures"
     ],
     "adoption_gate": "strict 순개선, 치명적 퇴행 0, 답변 불가 안전성 유지, p95 60초 미만, 전체 공개 회귀 통과"
   },
