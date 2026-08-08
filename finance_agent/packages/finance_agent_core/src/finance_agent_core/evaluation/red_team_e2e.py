@@ -16,6 +16,7 @@ from typing import Any, Literal, Protocol
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from finance_agent_core.agent import AnswerAdapterResult, execute_answer_request
+from finance_agent_core.agent.grounded_planning import GroundedPlanProposal
 from finance_agent_core.answering import GroundedAnswerContext, GroundedAnswerDraft
 from finance_agent_core.contracts import QueryPlan
 from finance_agent_core.contracts.backend import (
@@ -393,6 +394,10 @@ class InstrumentedQueryPlanProvider:
     def provider_name(self):
         return self.provider.provider_name
 
+    @property
+    def model_name(self):
+        return self.provider.model_name
+
     def generate_query_plan(self, question: str, question_id: str) -> QueryPlan:
         started = time.perf_counter()
         error = False
@@ -409,6 +414,31 @@ class InstrumentedQueryPlanProvider:
                 round((time.perf_counter() - started) * 1000, 3),
                 error=error,
                 plan=plan,
+            )
+
+    def generate_grounded_plan(
+        self,
+        question: str,
+        question_id: str,
+        product_family_hint: ProductFamily | None = None,
+    ) -> GroundedPlanProposal:
+        started = time.perf_counter()
+        error = False
+        try:
+            return self.provider.generate_grounded_plan(
+                question,
+                question_id,
+                product_family_hint,
+            )
+        except Exception:
+            error = True
+            raise
+        finally:
+            self.telemetry.record_query_plan(
+                question_id,
+                round((time.perf_counter() - started) * 1000, 3),
+                error=error,
+                plan=None,
             )
 
 

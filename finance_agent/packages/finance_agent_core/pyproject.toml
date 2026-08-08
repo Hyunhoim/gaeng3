@@ -35,6 +35,7 @@ finance-evaluate-briefing-examples = "finance_agent_core.evaluation.briefing_exa
 finance-generate-qwen-eval-lab = "finance_agent_core.evaluation.metamorphic_cli:main"
 finance-run-qwen-eval-lab = "finance_agent_core.evaluation.metamorphic_run_cli:main"
 finance-generate-semantic-roundtrip = "finance_agent_core.evaluation.semantic_roundtrip_cli:main"
+finance-audit-grounded-plan = "finance_agent_core.evaluation.grounded_plan_audit_cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

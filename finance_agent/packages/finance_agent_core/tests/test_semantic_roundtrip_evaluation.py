@@ -19,6 +19,7 @@ from finance_agent_core.contracts.queryplan import (
     Unit,
 )
 from finance_agent_core.evaluation.metamorphic import SEMANTIC_ROUNDTRIP_AXES
+from finance_agent_core.evaluation.metamorphic_runner import _query_plan_semantic_sha256
 from finance_agent_core.evaluation.official_mock import load_official_mock_suite
 from finance_agent_core.evaluation.semantic_roundtrip import (
     LocalQwenSemanticQuestionProvider,
@@ -131,7 +132,7 @@ def test_semantic_prompt_contains_plan_meaning_but_not_public_source_question() 
     assert "0.2%" in prompt
     assert "미국" in prompt
     assert "채권" in prompt
-    assert "결과_개수\": 5" in prompt
+    assert '결과_개수": 5' in prompt
     assert "total_expense_ratio_pct" not in prompt
 
 
@@ -161,6 +162,47 @@ def test_semantic_validator_accepts_new_wording_and_rejects_meaning_loss() -> No
     assert accepted.passed
     assert "numeric_constraints_present" in wrong_number.violations
     assert "result_limit_present" in missing_limit.violations
+
+
+def test_plan_semantic_hash_ignores_request_and_commutative_order_but_not_looser_filter() -> None:
+    plan = _complex_search_plan()
+    reordered_payload = plan.model_dump(mode="json")
+    reordered_payload["question_id"] = "another-request"
+    reordered_payload["constraints"] = list(reversed(reordered_payload["constraints"]))
+    reordered_payload["projection"] = list(reversed(reordered_payload["projection"]))
+    reordered = QueryPlan.model_validate(reordered_payload)
+
+    looser_payload = plan.model_dump(mode="json")
+    product_type = next(
+        item for item in looser_payload["constraints"] if item["field"] == "product_type"
+    )
+    product_type.update(operator="in", value=["ETN", "ETF"])
+    looser = QueryPlan.model_validate(looser_payload)
+
+    assert _query_plan_semantic_sha256(plan) == _query_plan_semantic_sha256(reordered)
+    assert _query_plan_semantic_sha256(plan) != _query_plan_semantic_sha256(looser)
+
+
+def test_plan_semantic_hash_treats_all_registered_etp_types_as_no_filter() -> None:
+    plan = _complex_search_plan()
+    no_type_payload = plan.model_dump(mode="json")
+    no_type_payload["constraints"] = [
+        item for item in no_type_payload["constraints"] if item["field"] != "product_type"
+    ]
+    all_types_payload = json.loads(json.dumps(no_type_payload))
+    all_types_payload["constraints"].append(
+        {
+            "field": "product_type",
+            "operator": "in",
+            "value": ["ETN", "ETF"],
+            "unit": "code",
+            "strength": "locked",
+        }
+    )
+
+    assert _query_plan_semantic_sha256(
+        QueryPlan.model_validate(no_type_payload)
+    ) == _query_plan_semantic_sha256(QueryPlan.model_validate(all_types_payload))
 
 
 def test_local_qwen_semantic_provider_uses_only_semantic_spec(

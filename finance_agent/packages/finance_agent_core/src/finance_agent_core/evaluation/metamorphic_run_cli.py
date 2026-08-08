@@ -49,6 +49,8 @@ def build_parser() -> argparse.ArgumentParser:
             "local_test_plan_only",
             "local_test_answer_only",
             "local_test",
+            "local_test_grounded_plan_only",
+            "local_test_grounded",
         ),
         default="expected",
     )
@@ -65,9 +67,7 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     arguments = build_parser().parse_args(argv)
     if arguments.batch_input is not None:
-        batch = MutationBatch.model_validate_json(
-            arguments.batch_input.read_text(encoding="utf-8")
-        )
+        batch = MutationBatch.model_validate_json(arguments.batch_input.read_text(encoding="utf-8"))
     else:
         if arguments.generator == "local_test":
             mutation_provider = LocalQwenMutationProvider(LocalTestSettings.from_environment())

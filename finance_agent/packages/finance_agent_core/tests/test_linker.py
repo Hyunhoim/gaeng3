@@ -1,3 +1,5 @@
+import pytest
+
 from finance_agent_core.agent.linker import (
     build_lexical_hints,
     canonicalize_linked_query_plan,
@@ -39,6 +41,33 @@ def test_lexical_hints_preserve_explicit_status_and_sort() -> None:
         {"field": "sellable", "operator": "eq", "value": True},
     ]
     assert hints["required_rankings"] == [{"field": "aum", "direction": "desc", "nulls": "last"}]
+
+
+def test_explicit_etp_type_overrides_broad_etf_etn_family_phrase() -> None:
+    hints = build_lexical_hints("ETP 유형이 ETF인 해외 ETF·ETN 상품 중 티커 IVEG.O 상세 조회")
+
+    product_types = [
+        item for item in hints["required_constraints"] if item["field"] == "product_type"
+    ]
+    assert product_types == [{"field": "product_type", "operator": "eq", "value": "ETF"}]
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        "ETF 유형에 해당하며 해외 ETF·ETN 상품 조회",
+        "ETF인지 ETN인지 확인하고 ETF라면 상세 조회",
+    ],
+)
+def test_conditional_or_type_wording_keeps_the_explicit_etf_constraint(
+    question: str,
+) -> None:
+    hints = build_lexical_hints(question, "overseas_etp")
+
+    product_types = [
+        item for item in hints["required_constraints"] if item["field"] == "product_type"
+    ]
+    assert product_types == [{"field": "product_type", "operator": "eq", "value": "ETF"}]
 
 
 def test_linker_canonicalizes_multiple_exchange_values_to_in() -> None:
@@ -178,14 +207,11 @@ def test_lexical_limit_matches_router_for_result_counter() -> None:
 
 def test_domestic_pension_and_identity_wording_are_normalized() -> None:
     pension = build_lexical_hints("국내에서 연금으로 거래 가능한 ETF의 수를 계산해줘")
-    identity = build_lexical_hints(
-        "국내 ETF 중 상품번호가 KR7091160002인 상품 상세 정보"
-    )
+    identity = build_lexical_hints("국내 ETF 중 상품번호가 KR7091160002인 상품 상세 정보")
 
     assert pension["product_family"] == "domestic_etp"
     assert {
-        (item["field"], item["operator"], item["value"])
-        for item in pension["required_constraints"]
+        (item["field"], item["operator"], item["value"]) for item in pension["required_constraints"]
     } >= {
         ("product_type", "eq", "ETF"),
         ("pension_eligible", "eq", True),
@@ -195,6 +221,19 @@ def test_domestic_pension_and_identity_wording_are_normalized() -> None:
         "operator": "eq",
         "value": "KR7091160002",
     }
+
+
+def test_domestic_natural_pension_and_aum_ranking_wording_are_normalized() -> None:
+    hints = build_lexical_hints("연금계좌로 거래가 가능한 국내 ETF 중 운용 자산이 제일 큰 거 3개")
+
+    assert {
+        (item["field"], item["operator"], item["value"]) for item in hints["required_constraints"]
+    } >= {
+        ("product_type", "eq", "ETF"),
+        ("pension_eligible", "eq", True),
+    }
+    assert hints["required_rankings"] == [{"field": "aum", "direction": "desc", "nulls": "last"}]
+    assert hints["limit"] == 3
 
 
 def test_prelink_overrides_wrong_model_family_with_domestic_contract() -> None:
@@ -241,13 +280,10 @@ def test_bond_plain_maturity_years_are_normalized_to_remaining_days() -> None:
 
 
 def test_bond_purchase_synonym_and_short_remaining_term_sort_are_normalized() -> None:
-    hints = build_lexical_hints(
-        "현재 구매 가능한 국내 채권을 잔존 기일이 짧은 순서로 3건 검색해줘"
-    )
+    hints = build_lexical_hints("현재 구매 가능한 국내 채권을 잔존 기일이 짧은 순서로 3건 검색해줘")
 
     assert ("currently_buyable", "eq", True) in {
-        (item["field"], item["operator"], item["value"])
-        for item in hints["required_constraints"]
+        (item["field"], item["operator"], item["value"]) for item in hints["required_constraints"]
     }
     assert hints["required_rankings"] == [
         {"field": "remaining_days", "direction": "asc", "nulls": "last"}
@@ -255,13 +291,94 @@ def test_bond_purchase_synonym_and_short_remaining_term_sort_are_normalized() ->
 
 
 def test_low_side_wording_overrides_generic_top_n_direction() -> None:
-    hints = build_lexical_hints(
-        "미국에 투자하는 해외 ETF를 총보수율 낮은 쪽부터 상위 3건 보여줘"
-    )
+    hints = build_lexical_hints("미국에 투자하는 해외 ETF를 총보수율 낮은 쪽부터 상위 3건 보여줘")
 
     assert hints["required_rankings"] == [
         {"field": "total_expense_ratio_pct", "direction": "asc", "nulls": "last"}
     ]
+
+
+def test_negated_public_fund_scope_is_not_silently_inverted() -> None:
+    hints = build_lexical_hints("공모가 아닌 공모펀드를 보여줘")
+
+    assert hints["product_family"] == "fund"
+    assert not any(item["field"] == "public_offering" for item in hints["required_constraints"])
+    assert any("공모가 아닌" in span for span in hints["unsupported_spans"])
+
+
+def test_negated_trade_availability_requires_clarification() -> None:
+    hints = build_lexical_hints("현재 거래 가능하지 않은 해외 ETF를 보여줘")
+
+    assert not any(
+        item["field"] in {"sellable", "trading_suspended"} for item in hints["required_constraints"]
+    )
+    assert any("거래 가능하지 않" in span for span in hints["ambiguity_spans"])
+
+
+def test_vague_negated_ranking_is_not_silently_dropped() -> None:
+    hints = build_lexical_hints("AUM이 크지 않은 해외 ETF를 보여줘")
+
+    assert hints["required_rankings"] == []
+    assert any("AUM이 크지 않" in span for span in hints["ambiguity_spans"])
+
+
+@pytest.mark.parametrize(
+    ("question", "blocked_field"),
+    [
+        ("미국 시장이 아닌 해외 ETF를 보여줘", "investment_region"),
+        ("채권형이 아닌 해외 ETF를 보여줘", "asset_type"),
+    ],
+)
+def test_negated_region_or_asset_type_is_not_silently_inverted(
+    question: str,
+    blocked_field: str,
+) -> None:
+    hints = build_lexical_hints(question)
+
+    assert not any(item["field"] == blocked_field for item in hints["required_constraints"])
+    assert hints["ambiguity_spans"]
+
+
+def test_excluded_unlabeled_identity_is_not_silently_dropped() -> None:
+    hints = build_lexical_hints("B2를 제외한 해외 ETF를 보여줘")
+
+    assert not any(
+        item["field"] in {"product_id", "ticker", "isin"} for item in hints["required_constraints"]
+    )
+    assert any("B2를 제외" in span for span in hints["ambiguity_spans"])
+
+
+@pytest.mark.parametrize(
+    ("question", "blocked_field"),
+    [
+        ("총보수 0.2% 이하가 아닌 해외 ETF를 보여줘", "total_expense_ratio_pct"),
+        ("만기일 2027-01-01 이전이 아닌 국내채권을 보여줘", "maturity_date"),
+    ],
+)
+def test_negated_numeric_or_date_operator_requires_clarification(
+    question: str,
+    blocked_field: str,
+) -> None:
+    hints = build_lexical_hints(question)
+
+    assert not any(item["field"] == blocked_field for item in hints["required_constraints"])
+    assert hints["ambiguity_spans"]
+
+
+def test_explicit_negative_boolean_filters_keep_their_polarity() -> None:
+    overseas = build_lexical_hints("판매가 가능하지 않은 해외 ETF를 보여줘")
+    domestic = build_lexical_hints("연금 거래가 가능하지 않은 국내 ETF를 보여줘")
+    bond = build_lexical_hints("매수가 가능하지 않은 국내채권을 보여줘")
+
+    assert ("sellable", False) in {
+        (item["field"], item["value"]) for item in overseas["required_constraints"]
+    }
+    assert ("pension_eligible", False) in {
+        (item["field"], item["value"]) for item in domestic["required_constraints"]
+    }
+    assert ("currently_buyable", False) in {
+        (item["field"], item["value"]) for item in bond["required_constraints"]
+    }
 
 
 def test_bond_ordered_credit_rating_expands_from_registry_scale() -> None:

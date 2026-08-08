@@ -81,6 +81,23 @@ def test_domestic_comparison_preserves_request_order(
     assert "요청한 국내 ETP 2개 중 2개를 확인했습니다" in result.answer
 
 
+def test_domestic_comparison_accepts_standard_one_month_abbreviation(
+    domestic_sample_database: tuple[Path, list[object], object],
+) -> None:
+    path, _, _ = domestic_sample_database
+    result = RoutedFinanceAgent({"domestic_etp": path}).answer(
+        "KR7000000003 vs KR7000000002, 국내 ETF, 1M 수익률과 종가 비교",
+        "compare-domestic-1m",
+    )
+
+    assert result.status == "executed"
+    assert result.query_plan is not None
+    assert result.query_plan.intent_payload.comparison_fields == [
+        "one_month_return_pct",
+        "close_price",
+    ]
+
+
 def test_comparison_identity_failure_returns_clarification(
     sample_database: tuple[Path, list[object], object],
 ) -> None:

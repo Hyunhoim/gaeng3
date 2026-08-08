@@ -776,14 +776,8 @@ def test_fund_comparison_compiler_accepts_audited_request_preamble(
 @pytest.mark.parametrize(
     "question",
     [
-        (
-            "공모펀드 KR0000000001와 KR0000000003의 최근 1개월 수익률과 "
-            "위험등급을 비교해 줘."
-        ),
-        (
-            "1개월 수익률과 위험등급을 기준으로 공모펀드 "
-            "KR0000000001와 KR0000000003를 비교해줘."
-        ),
+        ("공모펀드 KR0000000001와 KR0000000003의 최근 1개월 수익률과 위험등급을 비교해 줘."),
+        ("1개월 수익률과 위험등급을 기준으로 공모펀드 KR0000000001와 KR0000000003를 비교해줘."),
         (
             "공모펀드 KR0000000001와 KR0000000003의 1개월 수익률과 "
             "위험등급을 비교해줘. 답변은 표 형식으로 제공해 주세요."
@@ -807,10 +801,42 @@ def test_fund_comparison_compiler_accepts_audited_semantic_variants(
     require_internal_evaluation_comparison(compiled.plan)
 
 
+@pytest.mark.parametrize(
+    "question",
+    [
+        (
+            "공모펀드 중에서 상품 ID가 KR0000000001 및 KR0000000003인 두 상품의 "
+            "1개월 수익률과 상품 위험등급을 비교해 주세요."
+        ),
+        (
+            "KR0000000001랑 KR0000000003 이 두 공모펀드 중에서 어떤 게 최근 "
+            "한 달 수익률이 더 좋고, 위험도는 어떤지 좀 알려줘."
+        ),
+        "KR0000000001 vs KR0000000003, 공모펀드, 1M 수익률, 위험등급 비교",
+    ],
+)
+def test_fund_comparison_compiler_accepts_audited_natural_id_variants(
+    question: str,
+) -> None:
+    draft = RuleFundComparisonDraftProvider().generate_comparison_draft(
+        question,
+        "fund-natural-id-variant",
+    )
+    compiled = compile_fund_comparison_query_plan(
+        question=question,
+        question_id="fund-natural-id-variant",
+        draft=draft,
+        resolver=_resolver(),
+    )
+
+    assert compiled.mentions_grounded == (True, True)
+    assert compiled.targets_complete
+    require_internal_evaluation_comparison(compiled.plan)
+
+
 def test_fund_comparison_compiler_rejects_numeric_response_suffix() -> None:
     question = (
-        "공모펀드 KR0000000001와 KR0000000003의 위험등급을 비교해줘. "
-        "결과는 1개만 표시해 주세요."
+        "공모펀드 KR0000000001와 KR0000000003의 위험등급을 비교해줘. 결과는 1개만 표시해 주세요."
     )
     compiled = compile_fund_comparison_query_plan(
         question=question,

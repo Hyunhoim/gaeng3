@@ -94,16 +94,12 @@ def apply_official_mock_gold_audit(
     corrected: list[OfficialMockCase] = []
     for case in cases:
         correction = corrections.get(case.id)
-        if correction is None or (
-            active_case_ids is not None and case.id not in active_case_ids
-        ):
+        if correction is None or (active_case_ids is not None and case.id not in active_case_ids):
             corrected.append(case)
             continue
         if case.coverage_family is not correction.product_family:
             raise ValueError(f"gold audit family differs for {case.id}")
-        observed_database_sha256 = database_sha256_by_family.get(
-            correction.product_family.value
-        )
+        observed_database_sha256 = database_sha256_by_family.get(correction.product_family.value)
         if observed_database_sha256 != correction.database_sha256:
             raise ValueError(f"gold audit database SHA-256 differs for {case.id}")
         expectation = case.expectation.model_copy(

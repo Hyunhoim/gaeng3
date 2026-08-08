@@ -26,16 +26,17 @@ class _Mention:
 
 _COUNT_CONTEXT = re.compile(
     r"(?:상품|ETF|ETN|ETP|채권|펀드)(?:의)?\s*수(?:를|가|는)?\s*"
-    r"(?:계산|집계|총합|알려)"
+    r"(?:(?:정확히|모두|총)\s*)?(?:계산|집계|총합|알려)"
 )
 _FUNCTION_PATTERNS = {
-    AggregateFunction.COUNT: re.compile(
-        rf"몇\s*(?:개|건)|개수|건수|{_COUNT_CONTEXT.pattern}"
-    ),
+    AggregateFunction.COUNT: re.compile(rf"몇\s*(?:개|건)|개수|건수|{_COUNT_CONTEXT.pattern}"),
     AggregateFunction.AVG: re.compile(r"평균"),
     AggregateFunction.SUM: re.compile(r"합계|총합"),
     AggregateFunction.MIN: re.compile(r"최솟값|최소값|최저값|최소(?!\s*\d+\s*개)"),
-    AggregateFunction.MAX: re.compile(r"최댓값|최대값|최고값|최대(?!\s*\d+\s*개)"),
+    AggregateFunction.MAX: re.compile(
+        r"최댓값|최대값|최고값|최고\s*수준|최고\s*(?:수익률|보수율|이율)|"
+        r"최대(?!\s*\d+\s*개)"
+    ),
 }
 _DISTRIBUTION = re.compile(r"분포|비중")
 _IDENTITY_GROUP_FIELDS = {
@@ -136,6 +137,12 @@ def _group_fields(question: str, family: ProductFamily) -> list[str]:
     registry = load_field_registry()
     candidates: list[tuple[int, str]] = []
     distribution_requested = _DISTRIBUTION.search(question) is not None
+    explicit_etp_type_grouping = re.search(
+        r"ETF인지\s*ETN인지|ETF와\s*ETN으로\s*(?:분류|구분)|"
+        r"ETF\s*여부별|ETP\s*유형별",
+        question,
+        flags=re.IGNORECASE,
+    )
     for field_name, base_definition in registry.fields.items():
         if family.value not in base_definition.datasets:
             continue
@@ -150,6 +157,9 @@ def _group_fields(question: str, family: ProductFamily) -> list[str]:
             *_field_phrases(field_name, definition),
             *_CURATED_GROUP_PHRASES.get(field_name, ()),
         }
+        if field_name == "product_type" and explicit_etp_type_grouping is not None:
+            candidates.append((explicit_etp_type_grouping.start(), field_name))
+            continue
         for phrase in sorted(phrases, key=lambda value: (-len(value), value)):
             by_match = re.search(
                 rf"{re.escape(phrase)}\s*별",

@@ -12,7 +12,13 @@ from finance_agent_core.contracts.routing import (
     RouteDisposition,
 )
 
-_COMPARE = re.compile(r"비교|대조|차이|나란히|versus|\bvs\b", re.IGNORECASE)
+_COMPARE = re.compile(
+    r"비교|대조|차이|나란히|versus|\bvs\b|"
+    r"(?:둘|두\s*(?:개(?:의)?|상품|공모\s*펀드|펀드|채권|ETF|ETN))"
+    r".{0,40}?중(?:에서)?|"
+    r"어느\s*(?:게|것이).{0,40}?(?:높|낮|크|작|많|적)",
+    re.IGNORECASE,
+)
 _AGGREGATE = re.compile(
     r"몇\s*개|개수|건수|평균|합계|총합|집계|분포|비중|"
     r"(?:상품|ETF|ETN|ETP|채권|펀드)(?:의)?\s*수(?:를|가|는)?\s*(?:계산|집계|총합|알려)|"
@@ -22,7 +28,11 @@ _AGGREGATE = re.compile(
 )
 _EXPLAIN = re.compile(r"설명|무슨\s*뜻|뭐(?:야|고)|의미|장점|요소|왜\s")
 _DEFINITION = re.compile(r"무슨\s*뜻|뭐(?:야|고)|의미")
-_DETAIL = re.compile(r"상세|세부|정보\s*조회|상품번호|종목코드|티커")
+_DETAIL = re.compile(
+    r"상세|세부|자세히|어떤\s*상품|정보\s*조회|상품\s*(?:번호|ID|아이디)|"
+    r"종목\s*(?:코드|번호)|티커",
+    re.IGNORECASE,
+)
 _AMBIGUOUS = re.compile(
     r"적당한|괜찮은|안전한|좋은\s*상품|추천(?:해|하|받|할\s*만한)|"
     r"좀\s*낮아도|많이\s*주는|제일\s*수익률|리스크.*신경\s*안|"
@@ -53,6 +63,11 @@ _MIXED_ETP_COST = re.compile(
     r"(?=.*ETF)(?=.*ETN)(?=.*(?:보수|수수료|비용))",
     re.IGNORECASE,
 )
+_EXPLICIT_ETP_TYPE = re.compile(
+    r"(?:ETP\s*유형|ETF\s*여부|상품\s*유형)(?:이|가|은|는)?\s*[:：]?\s*(?:ETF|ETN)|"
+    r"(?<![A-Z])(?:ETF|ETN)(?:인(?!지)|이며|이고|인데|에\s*해당|로\s*되어)",
+    re.IGNORECASE,
+)
 _OVERSEAS_UNAVAILABLE_METRIC = re.compile(
     r"수익률|변동성|하락장|오른|S&P\s*500",
     re.IGNORECASE,
@@ -68,11 +83,13 @@ _QUOTED = (
     re.compile(r"‘([^’\n]+)’"),
 )
 _KNOWN_ID = re.compile(
-    r"(?<![A-Z0-9])(?:KR[A-Z0-9]{10}|(?:[A-Z]{2,5}|[0-9]{3}):[A-Z0-9._-]+)(?![A-Z0-9])",
+    r"(?<![A-Z0-9])(?:KR[A-Z0-9]{10}|(?:[A-Z]{2,5}|[0-9]{3}):[A-Z0-9._-]+|"
+    r"[A-Z][A-Z0-9]{0,9}\.[A-Z0-9]{1,5})(?![A-Z0-9])",
     re.IGNORECASE,
 )
 _LABELED_ID = re.compile(
-    r"(?:상품번호|종목코드|티커)(?:가|는|은|이)?\s*[:：]?\s*"
+    r"(?:상품\s*(?:번호|ID|아이디)|종목\s*(?:코드|번호)|티커)"
+    r"(?:가|는|은|이)?\s*[:：]?\s*"
     r"([A-Z0-9._:-]{2,30})",
     re.IGNORECASE,
 )
@@ -127,7 +144,15 @@ def _product_families(question: str) -> list[ProductFamily]:
     if re.search(etp_token, question, re.IGNORECASE):
         explicit_etp_family = domestic_matches or overseas_matches
         if not explicit_etp_family:
-            if re.search(r"NYSE|NASDAQ|AMEX", question, re.IGNORECASE):
+            if re.search(r"해외|글로벌", question, re.IGNORECASE):
+                match = re.search(r"해외|글로벌", question, re.IGNORECASE)
+                assert match is not None
+                mentions.append((match.start(), ProductFamily.OVERSEAS_ETP))
+            elif re.search(r"국내|한국", question, re.IGNORECASE):
+                match = re.search(r"국내|한국", question, re.IGNORECASE)
+                assert match is not None
+                mentions.append((match.start(), ProductFamily.DOMESTIC_ETP))
+            elif re.search(r"NYSE|NASDAQ|AMEX", question, re.IGNORECASE):
                 match = re.search(r"NYSE|NASDAQ|AMEX", question, re.IGNORECASE)
                 assert match is not None
                 mentions.append((match.start(), ProductFamily.OVERSEAS_ETP))
@@ -179,7 +204,9 @@ def _intent(question: str, families: list[ProductFamily]) -> InteractionIntent:
         or (ProductFamily.FUND in families and _FUND_UNAVAILABLE_DETAIL.search(question))
     ):
         return InteractionIntent.UNSUPPORTED
-    if _AMBIGUOUS.search(question) or _MIXED_ETP_COST.search(question):
+    if _AMBIGUOUS.search(question) or (
+        _MIXED_ETP_COST.search(question) and _EXPLICIT_ETP_TYPE.search(question) is None
+    ):
         return InteractionIntent.CLARIFY
     if _DEFINITION.search(question):
         return InteractionIntent.EXPLAIN

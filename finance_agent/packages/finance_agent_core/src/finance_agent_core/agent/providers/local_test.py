@@ -13,6 +13,12 @@ from finance_agent_core.agent.fund_comparison_parser import (
     SUPPORTED_FUND_COMPARISON_FIELDS,
     FundComparisonDraft,
 )
+from finance_agent_core.agent.grounded_planning import (
+    GroundedPlanProposal,
+    build_grounded_plan_system_prompt,
+    canonicalize_grounded_plan_proposal_payload,
+    grounded_plan_proposal_schema,
+)
 from finance_agent_core.agent.linker import (
     build_lexical_hints,
     canonicalize_linked_query_plan,
@@ -23,6 +29,7 @@ from finance_agent_core.contracts import QueryPlan, load_hcx_queryplan_schema
 from finance_agent_core.contracts.hcx_schema import (
     load_internal_evaluation_queryplan_schema,
 )
+from finance_agent_core.contracts.queryplan import ProductFamily
 
 
 class LocalProviderError(RuntimeError):
@@ -78,7 +85,7 @@ class LocalTestSettings:
         return cls(base_url=base_url, model=model, timeout_seconds=timeout)
 
 
-def _field_catalog(product_family: Literal["fund"] | None = None) -> dict[str, Any]:
+def _field_catalog(product_family: str | None = None) -> dict[str, Any]:
     registry = load_field_registry()
     catalog: dict[str, Any] = {}
     for name, definition in registry.fields.items():
@@ -94,6 +101,7 @@ def _field_catalog(product_family: Literal["fund"] | None = None) -> dict[str, A
             continue
         effective = resolved[0] if len(resolved) == 1 else definition
         catalog[name] = {
+            "label": effective.label,
             "aliases": effective.aliases,
             "type": effective.value_type.value,
             "unit": effective.unit,
@@ -369,6 +377,78 @@ class LocalTestProvider:
                 f"local model returned an invalid QueryPlan: {error}"
             ) from error
         return canonicalize_linked_query_plan(question, plan)
+
+    def generate_grounded_plan(
+        self,
+        question: str,
+        question_id: str,
+        product_family_hint: ProductFamily | None = None,
+    ) -> GroundedPlanProposal:
+        """Return an evidence-span proposal without granting it execution authority."""
+
+        if not question.strip():
+            raise ValueError("question cannot be blank")
+        if not question_id.strip():
+            raise ValueError("question_id cannot be blank")
+        if self.internal_evaluation_family == "fund":
+            if product_family_hint not in {None, ProductFamily.FUND}:
+                raise ValueError("fund provider received a non-fund family hint")
+            families = [ProductFamily.FUND]
+        elif product_family_hint is not None:
+            families = [product_family_hint]
+        else:
+            families = [
+                ProductFamily(name) for name in load_field_registry().executable_dataset_names()
+            ]
+        catalog_family = families[0].value if len(families) == 1 else None
+        payload = {
+            "model": self.settings.model,
+            "messages": [
+                {
+                    "role": "system",
+                    "content": build_grounded_plan_system_prompt(
+                        question_id,
+                        _field_catalog(catalog_family),
+                        families,
+                    ),
+                },
+                {"role": "user", "content": question},
+            ],
+            "temperature": 0,
+            "seed": 43,
+            "max_tokens": 4096,
+            "response_format": {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "grounded_finance_plan",
+                    "strict": True,
+                    "schema": grounded_plan_proposal_schema(families),
+                },
+            },
+        }
+        response = self._request_json("chat/completions", payload)
+        try:
+            content = response["choices"][0]["message"]["content"]
+        except (KeyError, IndexError, TypeError) as error:
+            raise LocalProviderError(
+                "local grounded plan response has an unexpected shape"
+            ) from error
+        if not isinstance(content, str):
+            raise LocalProviderError("local grounded plan response content is not text")
+        try:
+            raw_proposal = json.loads(content)
+            if not isinstance(raw_proposal, dict):
+                raise ValueError("grounded proposal must be a JSON object")
+            proposal = GroundedPlanProposal.model_validate(
+                canonicalize_grounded_plan_proposal_payload(raw_proposal)
+            )
+        except (json.JSONDecodeError, ValueError) as error:
+            raise LocalProviderError(
+                f"local model returned an invalid grounded plan: {error}"
+            ) from error
+        if proposal.question_id != question_id:
+            proposal = proposal.model_copy(update={"question_id": question_id})
+        return proposal
 
 
 def build_fund_comparison_draft_system_prompt(question: str) -> str:

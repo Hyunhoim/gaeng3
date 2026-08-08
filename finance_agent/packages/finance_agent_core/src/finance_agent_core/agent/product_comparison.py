@@ -35,11 +35,22 @@ _FIELD_PATTERNS: dict[ProductFamily, tuple[tuple[str, tuple[str, ...]], ...]] = 
         ("trading_currency", (r"거래\s*통화", r"표시\s*통화")),
     ),
     ProductFamily.DOMESTIC_ETP: (
-        ("one_day_return_pct", (r"1\s*일\s*(?:수익률|성과)", r"일간\s*수익률")),
-        ("one_month_return_pct", (r"1\s*개월\s*(?:수익률|성과)", r"월간\s*수익률")),
-        ("three_month_return_pct", (r"3\s*개월\s*(?:수익률|성과)",)),
-        ("six_month_return_pct", (r"6\s*개월\s*(?:수익률|성과)",)),
-        ("one_year_return_pct", (r"1\s*년\s*(?:수익률|성과)", r"연간\s*수익률")),
+        ("one_day_return_pct", (r"1\s*일\s*(?:수익률|성과)", r"일간\s*수익률", r"1D\s*수익률")),
+        (
+            "one_month_return_pct",
+            (
+                r"1\s*개월\s*(?:수익률|성과)",
+                r"한\s*달\s*(?:수익률|성과)",
+                r"월간\s*수익률",
+                r"1M\s*수익률",
+            ),
+        ),
+        ("three_month_return_pct", (r"3\s*개월\s*(?:수익률|성과)", r"3M\s*수익률")),
+        ("six_month_return_pct", (r"6\s*개월\s*(?:수익률|성과)", r"6M\s*수익률")),
+        (
+            "one_year_return_pct",
+            (r"1\s*년\s*(?:수익률|성과)", r"연간\s*수익률", r"1Y\s*수익률"),
+        ),
         ("ytd_return_pct", (r"YTD\s*수익률", r"연초\s*(?:이후|대비)\s*수익률")),
         ("total_expense_ratio_pct", (r"총\s*보수(?:율)?", r"보수율")),
         ("daily_trading_value", (r"일(?:간)?\s*거래대금", r"거래대금")),
@@ -135,6 +146,21 @@ def resolve_comparison_product_ids(
 ) -> list[str]:
     if len(mentions) != 2:
         raise ProductComparisonParseError("비교에는 서로 다른 두 상품의 정확한 식별자가 필요합니다")
+    resolved = resolve_exact_product_ids(family, mentions, records)
+    if len(set(resolved)) != 2:
+        raise ProductComparisonParseError("같은 상품을 서로 비교할 수 없습니다")
+    return resolved
+
+
+def resolve_exact_product_ids(
+    family: ProductFamily,
+    mentions: Sequence[str],
+    records: Sequence[ProductIdentityRecord],
+) -> list[str]:
+    """Resolve every explicit mention to one non-quarantined canonical product ID."""
+
+    if not mentions:
+        raise ProductComparisonParseError("정확한 상품 식별자가 필요합니다")
     alias_index: dict[str, set[str]] = {}
     expected_family = family.value
     for record in records:
@@ -157,8 +183,6 @@ def resolve_comparison_product_ids(
                 f"상품 식별자 {mention!r}가 여러 상품과 일치합니다: {candidates}"
             )
         resolved.append(candidates[0])
-    if len(set(resolved)) != 2:
-        raise ProductComparisonParseError("같은 상품을 서로 비교할 수 없습니다")
     return resolved
 
 

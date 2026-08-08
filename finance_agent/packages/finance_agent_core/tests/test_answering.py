@@ -254,9 +254,7 @@ def test_local_grounded_provider_uses_structured_output(
         == "result_1"
     )
     assert (
-        schema["properties"]["products"]["prefixItems"][0]["properties"][
-            "explanation"
-        ]["const"]
+        schema["properties"]["products"]["prefixItems"][0]["properties"]["explanation"]["const"]
         == "선택한 근거 항목이 요청한 정렬 근거로 사용됐습니다."
     )
 

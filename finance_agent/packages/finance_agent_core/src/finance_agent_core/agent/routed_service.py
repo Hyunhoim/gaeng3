@@ -12,6 +12,12 @@ from finance_agent_core.agent.compiler import (
     PlanCompilationBlockedError,
     ServerQueryPlanCompiler,
 )
+from finance_agent_core.agent.grounded_planning import (
+    GroundedPlanGate,
+    GroundedPlanProvider,
+    GroundedPlanRejectedError,
+    grounded_plan_is_eligible,
+)
 from finance_agent_core.agent.providers import QueryPlanProvider
 from finance_agent_core.agent.router import IntentRouter
 from finance_agent_core.answering import (
@@ -22,6 +28,7 @@ from finance_agent_core.answering import (
 )
 from finance_agent_core.contracts import QueryPlan, RouteDecision, RouteDisposition
 from finance_agent_core.contracts.queryplan import Intent, ProductFamily
+from finance_agent_core.contracts.routing import InteractionIntent
 from finance_agent_core.domain import (
     AggregateEvidence,
     ComparisonEvidence,
@@ -202,6 +209,7 @@ class RoutedFinanceAgent:
         *,
         router: IntentRouter | None = None,
         query_plan_provider: QueryPlanProvider | None = None,
+        grounded_plan_provider: GroundedPlanProvider | None = None,
         answer_provider: GroundedAnswerProvider | None = None,
         allow_internal_disabled_dataset: bool = False,
         capability_execution_overrides: set[ProductFamily | str] | None = None,
@@ -220,9 +228,14 @@ class RoutedFinanceAgent:
         )
         self.router = router or IntentRouter()
         self.query_plan_provider = query_plan_provider
+        self.grounded_plan_provider = grounded_plan_provider
         self.compiler = ServerQueryPlanCompiler(
             self.database_paths,
             record_cache=self.record_cache,
+            identity_cache=self.identity_cache,
+        )
+        self.grounded_plan_gate = GroundedPlanGate(
+            self.database_paths,
             identity_cache=self.identity_cache,
         )
         self.answer_provider = answer_provider
@@ -238,18 +251,28 @@ class RoutedFinanceAgent:
 
     def answer(self, question: str, request_id: str) -> RoutedAgentResult:
         decision = self.router.route(question, request_id)
-        if decision.disposition is not RouteDisposition.EXECUTE:
-            return self._control_result(decision)
+        decision = self._resolve_exact_identity_family(decision)
         if len(decision.draft.product_families) > 1:
+            if decision.disposition is not RouteDisposition.EXECUTE:
+                return self._control_result(decision)
             return self._answer_cross_family_search(decision)
         try:
-            plan = self.compiler.compile(decision)
+            compiled = self._compile_with_optional_grounded_plan(question, decision)
         except PlanCompilationBlockedError as error:
             return self._control_result(
                 decision,
                 disposition=RouteDisposition.CLARIFY,
                 reason=str(error),
             )
+        if compiled is None:
+            if decision.disposition is not RouteDisposition.EXECUTE:
+                return self._control_result(decision)
+            return self._control_result(
+                decision,
+                disposition=RouteDisposition.CLARIFY,
+                reason="질문의 실행 조건을 안전한 계획으로 확정하지 못했습니다.",
+            )
+        decision, plan, used_grounded_plan = compiled
 
         try:
             self._require_execution(plan)
@@ -266,7 +289,11 @@ class RoutedFinanceAgent:
                 reason=f"{answer} {error}",
                 plan=plan,
             )
-        if self.query_plan_provider is not None and plan.intent is Intent.SEARCH:
+        if (
+            self.query_plan_provider is not None
+            and not used_grounded_plan
+            and plan.intent is Intent.SEARCH
+        ):
             try:
                 plan = self._provider_search_plan(decision, plan)
             except PlanCompilationBlockedError as error:
@@ -352,6 +379,134 @@ class RoutedFinanceAgent:
             warnings=warnings,
             source_manifest=verified.manifest,
             answer_composition=composition,
+        )
+
+    def _resolve_exact_identity_family(self, decision: RouteDecision) -> RouteDecision:
+        if (
+            decision.disposition is not RouteDisposition.CLARIFY
+            or decision.reason_code != "ambiguous_product_family"
+            or not decision.draft.product_mentions
+        ):
+            return decision
+        resolved_families: set[ProductFamily] = set()
+        for mention in decision.draft.product_mentions:
+            matches: set[ProductFamily] = set()
+            for family, path in self.database_paths.items():
+                for record in self.identity_cache.get(path).records:
+                    identities = (record.product_id, record.ticker, record.isin)
+                    if any(
+                        value is not None and value.casefold() == mention.casefold()
+                        for value in identities
+                    ):
+                        matches.add(family)
+            if len(matches) != 1:
+                return decision
+            resolved_families.update(matches)
+        if len(resolved_families) != 1:
+            return decision
+        family = next(iter(resolved_families))
+        capability = self.router.matrix.require(family, decision.draft.intent)
+        if capability.status != "executable" or capability.query_plan_intent is None:
+            return decision
+        draft = decision.draft.model_copy(update={"product_families": [family]})
+        return RouteDecision(
+            draft=draft,
+            disposition=RouteDisposition.EXECUTE,
+            reason_code="exact_identity_family_resolved",
+            reason="정확한 상품 식별자를 제공 데이터에서 유일한 상품군으로 확인",
+            query_plan_intent=capability.query_plan_intent,
+            capability_matrix_version=decision.capability_matrix_version,
+        )
+
+    def _compile_with_optional_grounded_plan(
+        self,
+        question: str,
+        decision: RouteDecision,
+    ) -> tuple[RouteDecision, QueryPlan, bool] | None:
+        server_plan: QueryPlan | None = None
+        server_error: PlanCompilationBlockedError | None = None
+        if decision.disposition is RouteDisposition.EXECUTE:
+            try:
+                server_plan = self.compiler.compile(decision)
+            except PlanCompilationBlockedError as error:
+                server_error = error
+
+        eligible = self.grounded_plan_provider is not None and grounded_plan_is_eligible(decision)
+        if eligible:
+            assert self.grounded_plan_provider is not None
+            family_hint = (
+                decision.draft.product_families[0]
+                if len(decision.draft.product_families) == 1
+                else None
+            )
+            try:
+                proposal = self.grounded_plan_provider.generate_grounded_plan(
+                    question,
+                    decision.draft.request_id,
+                    family_hint,
+                )
+                grounded_plan = self.grounded_plan_gate.compile(
+                    question,
+                    decision,
+                    proposal,
+                    trusted_plan=server_plan,
+                )
+                grounded_decision = self._grounded_execution_decision(
+                    decision,
+                    grounded_plan,
+                )
+                return grounded_decision, grounded_plan, True
+            except GroundedPlanRejectedError:
+                pass
+            except Exception:
+                # A planning model is advisory only. Malformed output, transport
+                # failure, or an adapter bug must never become an HTTP 500 or
+                # acquire execution authority. Reuse the independently compiled
+                # server plan when one exists; otherwise answer with the normal
+                # fail-closed clarification path.
+                pass
+        if server_plan is None:
+            if server_error is not None:
+                raise server_error
+            return None
+        return decision, server_plan, False
+
+    @staticmethod
+    def _grounded_execution_decision(
+        decision: RouteDecision,
+        plan: QueryPlan,
+    ) -> RouteDecision:
+        if plan.intent is Intent.COMPARE:
+            interaction_intent = InteractionIntent.COMPARE
+        elif plan.intent is Intent.AGGREGATE:
+            interaction_intent = InteractionIntent.AGGREGATE
+        elif decision.draft.intent in {
+            InteractionIntent.DETAIL,
+            InteractionIntent.EXPLAIN,
+        }:
+            interaction_intent = decision.draft.intent
+        else:
+            interaction_intent = InteractionIntent.SEARCH
+        mentions: list[str] = []
+        for constraint in plan.constraints:
+            if constraint.field not in {"product_id", "ticker", "isin"}:
+                continue
+            values = constraint.value if isinstance(constraint.value, list) else [constraint.value]
+            mentions.extend(str(value) for value in values)
+        draft = decision.draft.model_copy(
+            update={
+                "intent": interaction_intent,
+                "product_families": plan.product_families,
+                "product_mentions": list(dict.fromkeys(mentions)),
+            }
+        )
+        return RouteDecision(
+            draft=draft,
+            disposition=RouteDisposition.EXECUTE,
+            reason_code="grounded_model_plan_accepted",
+            reason="모델 계획의 모든 실행 조건을 원문 근거와 서버 계약으로 검증",
+            query_plan_intent=plan.intent,
+            capability_matrix_version=decision.capability_matrix_version,
         )
 
     def _answer_cross_family_search(

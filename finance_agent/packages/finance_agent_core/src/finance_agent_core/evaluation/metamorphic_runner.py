@@ -13,7 +13,7 @@ from pydantic import Field
 
 from finance_agent_core.agent import execute_answer_request
 from finance_agent_core.contracts.backend import BackendAgentRequest
-from finance_agent_core.contracts.queryplan import ProductFamily
+from finance_agent_core.contracts.queryplan import ProductFamily, QueryPlan
 from finance_agent_core.evaluation.metamorphic import (
     MetamorphicModel,
     MutationBatch,
@@ -42,6 +42,8 @@ type MetamorphicAgentProfile = Literal[
     "local_test_plan_only",
     "local_test_answer_only",
     "local_test",
+    "local_test_grounded_plan_only",
+    "local_test_grounded",
 ]
 
 
@@ -57,6 +59,14 @@ class MetamorphicVariantResult(MetamorphicModel):
     candidate: MutationCandidate
     source_semantic_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     variant_semantic_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    source_plan_semantic_sha256: str | None = Field(
+        default=None,
+        pattern=r"^[0-9a-f]{64}$",
+    )
+    variant_plan_semantic_sha256: str | None = Field(
+        default=None,
+        pattern=r"^[0-9a-f]{64}$",
+    )
     variant: RedTeamCaseResult | None
     checks: dict[str, bool]
     violations: list[str]
@@ -122,7 +132,54 @@ def _canonical_sha256(payload: object) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
-def _system_semantics(result: RedTeamCaseResult) -> dict[str, object]:
+def _canonical_items(values: Sequence[object]) -> list[object]:
+    return sorted(
+        values,
+        key=lambda value: json.dumps(
+            value,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ),
+    )
+
+
+def _query_plan_semantic_sha256(plan: QueryPlan | None) -> str | None:
+    """Hash executable meaning while ignoring request IDs and commutative list order."""
+
+    if plan is None:
+        return None
+    payload = plan.model_dump(mode="json")
+    payload.pop("question_id", None)
+    constraints = [
+        constraint
+        for constraint in payload.get("constraints", [])
+        if not (
+            constraint.get("field") == "product_type"
+            and constraint.get("operator") == "in"
+            and set(constraint.get("value", [])) == {"ETF", "ETN"}
+        )
+    ]
+    for constraint in constraints:
+        if constraint.get("operator") in {"in", "not_in"} and isinstance(
+            constraint.get("value"),
+            list,
+        ):
+            constraint["value"] = _canonical_items(constraint["value"])
+    payload["constraints"] = _canonical_items(constraints)
+    payload["projection"] = sorted(payload.get("projection", []))
+    intent_payload = payload.get("intent_payload", {})
+    for key in ("comparison_fields", "group_by", "aggregations", "explain_product_ids"):
+        intent_payload[key] = _canonical_items(intent_payload.get(key, []))
+    payload["ambiguities"] = _canonical_items(payload.get("ambiguities", []))
+    payload["unsupported_conditions"] = _canonical_items(payload.get("unsupported_conditions", []))
+    return _canonical_sha256(payload)
+
+
+def _system_semantics(
+    result: RedTeamCaseResult,
+    plan_semantic_sha256: str | None,
+) -> dict[str, object]:
     return {
         "backend_status": result.actual_backend_status.value,
         "interaction_intent": result.actual_interaction_intent.value,
@@ -136,6 +193,7 @@ def _system_semantics(result: RedTeamCaseResult) -> dict[str, object]:
         "product_ids": result.actual_product_ids,
         "comparison_fields": sorted(result.actual_comparison_fields),
         "aggregate_functions": sorted(result.actual_aggregate_functions),
+        "query_plan_semantic_sha256": plan_semantic_sha256,
         "answer_mode_class": (
             "control"
             if result.actual_backend_status.value in {"clarification", "unsupported", "not_found"}
@@ -144,8 +202,11 @@ def _system_semantics(result: RedTeamCaseResult) -> dict[str, object]:
     }
 
 
-def _system_semantic_sha256(result: RedTeamCaseResult) -> str:
-    return _canonical_sha256(_system_semantics(result))
+def _system_semantic_sha256(
+    result: RedTeamCaseResult,
+    plan_semantic_sha256: str | None,
+) -> str:
+    return _canonical_sha256(_system_semantics(result, plan_semantic_sha256))
 
 
 def _metamorphic_contract_equivalent(
@@ -158,10 +219,9 @@ def _metamorphic_contract_equivalent(
     order_only_checks = {"comparison_fields_exact", "aggregate_functions_exact"}
     if not variant.violations or not set(variant.violations).issubset(order_only_checks):
         return False
-    return (
-        sorted(source.actual_comparison_fields) == sorted(variant.actual_comparison_fields)
-        and sorted(source.actual_aggregate_functions) == sorted(variant.actual_aggregate_functions)
-    )
+    return sorted(source.actual_comparison_fields) == sorted(
+        variant.actual_comparison_fields
+    ) and sorted(source.actual_aggregate_functions) == sorted(variant.actual_aggregate_functions)
 
 
 def _percentile(values: Sequence[float], quantile: float) -> float:
@@ -209,6 +269,7 @@ _FAILURE_STAGE_CHECKS: tuple[tuple[str, frozenset[str]], ...] = (
         frozenset(
             {
                 "query_plan_intent_exact",
+                "query_plan_semantics_equal",
                 "comparison_fields_exact",
                 "aggregate_functions_exact",
             }
@@ -256,9 +317,7 @@ def _build_summary(
     passed = sum(result.passed for result in executed)
     consistent = sum(result.checks.get("system_semantics_equal", False) for result in executed)
     safety = sum(result.variant is not None and result.variant.safety_passed for result in executed)
-    evidence = sum(
-        result.checks.get("variant_evidence_passed", False) for result in executed
-    )
+    evidence = sum(result.checks.get("variant_evidence_passed", False) for result in executed)
     failure_clusters = Counter(
         "+".join(result.violations) if result.violations else "unclassified"
         for result in variants
@@ -345,6 +404,7 @@ class MetamorphicRunner:
         )
         self.gold_audit = loaded_gold_audit
         self._source_by_id = {case.id: case for case in audited_cases}
+        self._plan_semantics_by_case_id: dict[str, str | None] = {}
 
     def _run_case(
         self,
@@ -354,6 +414,9 @@ class MetamorphicRunner:
         started = time.perf_counter()
         adapter = execute_answer_request(self.services[case.coverage_family], request)
         latency_ms = round((time.perf_counter() - started) * 1000, 3)
+        self._plan_semantics_by_case_id[case.id] = _query_plan_semantic_sha256(
+            adapter.response.query_plan
+        )
         return _evaluate_case(  # type: ignore[arg-type]
             case,
             adapter,
@@ -371,13 +434,19 @@ class MetamorphicRunner:
         for candidate in self.batch.candidates:
             source_case = self._source_by_id[candidate.source_case_id]
             source_result = source_results_by_id[candidate.source_case_id]
-            source_semantic_sha256 = _system_semantic_sha256(source_result)
+            source_plan_semantic_sha256 = self._plan_semantics_by_case_id[candidate.source_case_id]
+            source_semantic_sha256 = _system_semantic_sha256(
+                source_result,
+                source_plan_semantic_sha256,
+            )
             if not candidate.validation.passed:
                 variants.append(
                     MetamorphicVariantResult(
                         candidate=candidate,
                         source_semantic_sha256=source_semantic_sha256,
                         variant_semantic_sha256=None,
+                        source_plan_semantic_sha256=source_plan_semantic_sha256,
+                        variant_plan_semantic_sha256=None,
                         variant=None,
                         checks={
                             "source_expected_passed": source_result.passed,
@@ -400,7 +469,11 @@ class MetamorphicRunner:
                 expectation=source_case.expectation,
             )
             variant = self._run_case(execution_case)
-            variant_semantic_sha256 = _system_semantic_sha256(variant)
+            variant_plan_semantic_sha256 = self._plan_semantics_by_case_id[candidate.id]
+            variant_semantic_sha256 = _system_semantic_sha256(
+                variant,
+                variant_plan_semantic_sha256,
+            )
             variant_contract_equivalent = _metamorphic_contract_equivalent(
                 source_result,
                 variant,
@@ -414,6 +487,9 @@ class MetamorphicRunner:
                 "source_expected_passed": source_result.passed,
                 "candidate_validation_passed": candidate.validation.passed,
                 "variant_expected_passed": variant_contract_equivalent,
+                "query_plan_semantics_equal": (
+                    variant_plan_semantic_sha256 == source_plan_semantic_sha256
+                ),
                 "system_semantics_equal": (variant_semantic_sha256 == source_semantic_sha256),
                 "variant_safety_passed": variant.safety_passed,
                 "variant_evidence_passed": variant_evidence_equivalent,
@@ -424,6 +500,8 @@ class MetamorphicRunner:
                     candidate=candidate,
                     source_semantic_sha256=source_semantic_sha256,
                     variant_semantic_sha256=variant_semantic_sha256,
+                    source_plan_semantic_sha256=source_plan_semantic_sha256,
+                    variant_plan_semantic_sha256=variant_plan_semantic_sha256,
                     variant=variant,
                     checks=checks,
                     violations=violations,

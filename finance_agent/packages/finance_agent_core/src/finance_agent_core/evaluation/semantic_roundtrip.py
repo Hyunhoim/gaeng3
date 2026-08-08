@@ -97,14 +97,10 @@ _FIELD_CONCEPTS: dict[str, re.Pattern[str]] = {
         re.IGNORECASE,
     ),
     "pension_eligible": re.compile(r"연금", re.IGNORECASE),
-    "currently_buyable": re.compile(
-        r"(?:매수|구매|살).{0,12}(?:가능|중|수\s*있)", re.IGNORECASE
-    ),
+    "currently_buyable": re.compile(r"(?:매수|구매|살).{0,12}(?:가능|중|수\s*있)", re.IGNORECASE),
     "investment_region": re.compile(r"미국|지역|국가", re.IGNORECASE),
     "asset_type": re.compile(r"주식\s*형?|채권\s*형?|자산", re.IGNORECASE),
-    "total_expense_ratio_pct": re.compile(
-        r"총\s*보수(?:\s*율)?|보수\s*율|expense", re.IGNORECASE
-    ),
+    "total_expense_ratio_pct": re.compile(r"총\s*보수(?:\s*율)?|보수\s*율|expense", re.IGNORECASE),
     "aum": re.compile(r"AUM|순자산|운용\s*자산", re.IGNORECASE),
     "one_month_return_pct": re.compile(
         r"1\s*개월\s*수익률|한\s*달.{0,8}수익률|월간\s*수익률|1M", re.IGNORECASE
@@ -296,8 +292,7 @@ def build_semantic_plan_spec(plan: QueryPlan) -> SemanticPlanSpec:
         )
 
     comparison_fields = [
-        _field_spec(field_name, family)
-        for field_name in plan.intent_payload.comparison_fields
+        _field_spec(field_name, family) for field_name in plan.intent_payload.comparison_fields
     ]
     group_by = [_field_spec(field_name, family) for field_name in plan.intent_payload.group_by]
     aggregations = []
@@ -320,9 +315,7 @@ def build_semantic_plan_spec(plan: QueryPlan) -> SemanticPlanSpec:
         request_kind = "식별자가 정확히 일치하는 상품 상세 조회"
     else:
         request_kind = "조건 검색"
-    result_limit = (
-        plan.limit if plan.intent is Intent.SEARCH and not identifier_lookup else None
-    )
+    result_limit = plan.limit if plan.intent is Intent.SEARCH and not identifier_lookup else None
     return SemanticPlanSpec(
         product_family=family,
         product_family_label=_FAMILY_LABELS[family],
@@ -362,8 +355,7 @@ def _prompt_payload(spec: SemanticPlanSpec) -> dict[str, Any]:
         "비교할_항목": [field_payload(item) for item in spec.comparison_fields],
         "묶을_기준": [field_payload(item) for item in spec.group_by],
         "계산": [
-            {"함수": item.function_label, "대상": item.field_label}
-            for item in spec.aggregations
+            {"함수": item.function_label, "대상": item.field_label} for item in spec.aggregations
         ],
     }
 

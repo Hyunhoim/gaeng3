@@ -66,15 +66,29 @@ def _build_services(
     record_cache = RecordSnapshotCache(max_entries=4)
     identity_cache = ProductIdentitySnapshotCache(max_entries=4)
     local_plan = provider_name in {"local_test", "local_test_plan_only"}
-    local_answer = provider_name in {"local_test", "local_test_answer_only"}
+    grounded_plan = provider_name in {
+        "local_test_grounded_plan_only",
+        "local_test_grounded",
+    }
+    local_answer = provider_name in {
+        "local_test",
+        "local_test_answer_only",
+        "local_test_grounded",
+    }
     if provider_name not in {
         "expected",
         "local_test",
         "local_test_plan_only",
         "local_test_answer_only",
+        "local_test_grounded_plan_only",
+        "local_test_grounded",
     }:
         raise ValueError(f"unsupported evaluation provider profile: {provider_name}")
-    settings = LocalTestSettings.from_environment() if local_plan or local_answer else None
+    settings = (
+        LocalTestSettings.from_environment()
+        if local_plan or grounded_plan or local_answer
+        else None
+    )
     if local_plan:
         if settings is None:
             raise RuntimeError("local plan profile requires local settings")
@@ -90,6 +104,21 @@ def _build_services(
     else:
         standard_query_provider = None
         fund_query_provider = None
+    if grounded_plan:
+        if settings is None:
+            raise RuntimeError("grounded plan profile requires local settings")
+        standard_grounded_provider = InstrumentedQueryPlanProvider(
+            LocalTestProvider(settings),
+            telemetry,
+        )
+        fund_grounded_provider = InstrumentedQueryPlanProvider(
+            LocalTestProvider(settings, internal_evaluation_family="fund"),
+            telemetry,
+        )
+        standard_grounded_provider.provider.healthcheck()
+    else:
+        standard_grounded_provider = None
+        fund_grounded_provider = None
     if local_answer:
         if settings is None:
             raise RuntimeError("local answer profile requires local settings")
@@ -110,9 +139,13 @@ def _build_services(
         query_provider = (
             fund_query_provider if family is ProductFamily.FUND else standard_query_provider
         )
+        grounded_provider = (
+            fund_grounded_provider if family is ProductFamily.FUND else standard_grounded_provider
+        )
         services[family] = RoutedFinanceAgent(
             database_paths,
             query_plan_provider=query_provider,
+            grounded_plan_provider=grounded_provider,
             answer_provider=answer_provider,
             allow_internal_disabled_dataset=True,
             record_cache=record_cache,

@@ -88,6 +88,21 @@ def test_routed_agent_lowers_exact_detail_and_explain_to_search(
     assert result.products[0].ticker == "B2"
 
 
+def test_routed_agent_resolves_exact_identity_before_a_reversed_label(
+    sample_database: tuple[Path, list[NormalizedOverseasEtpRecord], DatabaseManifest],
+) -> None:
+    path, _, _ = sample_database
+    result = RoutedFinanceAgent({"overseas_etp": path}).answer(
+        "AMX:B2라는 상품 ID의 해외 ETF 상세 정보를 알려줘",
+        "routed-reversed-identity-label",
+    )
+
+    assert result.status == "executed"
+    assert result.query_plan is not None
+    assert result.query_plan.limit == 1
+    assert [product.product_id for product in result.products] == ["AMX:B2"]
+
+
 def test_routed_agent_never_touches_tools_for_control_route() -> None:
     agent = RoutedFinanceAgent({})
 
@@ -99,12 +114,44 @@ def test_routed_agent_never_touches_tools_for_control_route() -> None:
         "안전한 국내채권을 찾아줘",
         "routed-control-002",
     )
+    negated_public = agent.answer(
+        "공모가 아닌 공모펀드를 보여줘",
+        "routed-control-003",
+    )
+    negated_trade = agent.answer(
+        "현재 거래 가능하지 않은 해외 ETF를 보여줘",
+        "routed-control-004",
+    )
+    negated_rank = agent.answer(
+        "AUM이 크지 않은 해외 ETF를 보여줘",
+        "routed-control-005",
+    )
+    excluded_identity = agent.answer(
+        "B2를 제외한 해외 ETF를 보여줘",
+        "routed-control-006",
+    )
 
     assert unsupported.status == "unsupported"
     assert unsupported.query_plan is None
     assert unsupported.products == []
     assert clarify.status == "clarify"
     assert clarify.query_plan is None
+    assert negated_public.status == "unsupported"
+    assert negated_public.query_plan is not None
+    assert negated_public.query_plan.unsupported_conditions
+    assert negated_public.products == []
+    assert negated_trade.status == "clarify"
+    assert negated_trade.query_plan is not None
+    assert negated_trade.query_plan.ambiguities
+    assert negated_trade.products == []
+    assert negated_rank.status == "clarify"
+    assert negated_rank.query_plan is not None
+    assert negated_rank.query_plan.ambiguities
+    assert negated_rank.products == []
+    assert excluded_identity.status == "clarify"
+    assert excluded_identity.query_plan is not None
+    assert excluded_identity.query_plan.ambiguities
+    assert excluded_identity.products == []
 
 
 def test_routed_agent_falls_back_when_answer_provider_fails(

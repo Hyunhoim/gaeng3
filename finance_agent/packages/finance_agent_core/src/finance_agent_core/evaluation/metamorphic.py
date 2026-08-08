@@ -132,9 +132,7 @@ class MutationValidation(MetamorphicModel):
 
 
 class MutationCandidate(MetamorphicModel):
-    id: str = Field(
-        pattern=r"^(?:qwen-eval-lab-v1|semantic-roundtrip-v1)-[0-9]{3}-[a-z_]+$"
-    )
+    id: str = Field(pattern=r"^(?:qwen-eval-lab-v1|semantic-roundtrip-v1)-[0-9]{3}-[a-z_]+$")
     source_case_id: str = Field(pattern=r"^official-mock-v1-[0-9]{3}$")
     axis: MutationAxis
     coverage_family: ProductFamily
@@ -226,11 +224,7 @@ def _pattern_counter(
     patterns: Sequence[tuple[str, re.Pattern[str]]],
 ) -> Counter[str]:
     normalized = unicodedata.normalize("NFKC", question)
-    return Counter(
-        label
-        for label, pattern in patterns
-        for _ in pattern.finditer(normalized)
-    )
+    return Counter(label for label, pattern in patterns for _ in pattern.finditer(normalized))
 
 
 def _product_family_present(question: str, family: ProductFamily) -> bool:

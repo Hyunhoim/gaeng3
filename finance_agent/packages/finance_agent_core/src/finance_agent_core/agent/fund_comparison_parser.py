@@ -106,7 +106,10 @@ _UNSUPPORTED_PATTERNS: tuple[tuple[str, str], ...] = (
     (r"대표\s*펀드", "대표 펀드"),
 )
 
-_COMPARISON_TRIGGER = re.compile(r"비교|대조|차이|나란히", flags=re.IGNORECASE)
+_COMPARISON_TRIGGER = re.compile(
+    r"비교|대조|차이|나란히|더\s*(?:높|낮|좋|나쁘)\w*",
+    flags=re.IGNORECASE,
+)
 _SUPPORTED_REQUEST_PREAMBLE_PATTERNS = (
     re.compile(r"\A\s*다음\s+요청을\s+처리해\s+주세요\s*:\s*", flags=re.IGNORECASE),
     re.compile(
@@ -653,9 +656,7 @@ def _mask_supported_request_framing(question: str) -> str:
             break
     for pattern in _SUPPORTED_RESPONSE_SUFFIX_PATTERNS:
         if match := pattern.search(normalized):
-            normalized = normalized[: match.start()] + " " * (
-                match.end() - match.start()
-            )
+            normalized = normalized[: match.start()] + " " * (match.end() - match.start())
             break
     return normalized
 
@@ -865,6 +866,58 @@ def _question_target_structure_unambiguous(
     return tail_form in _ALLOWED_TARGET_TAIL_FORMS
 
 
+def _identity_placeholder_surface(
+    question: str,
+    identity_spans: tuple[tuple[int, int], ...],
+) -> str:
+    pieces: list[str] = []
+    previous_end = 0
+    for start, end in identity_spans:
+        pieces.extend((question[previous_end:start], "<ID>"))
+        previous_end = end
+    pieces.append(question[previous_end:])
+    return unicodedata.normalize("NFKC", "".join(pieces))
+
+
+def _audited_natural_id_comparison_surface(
+    question: str,
+    identity_spans: tuple[tuple[int, int], ...],
+) -> bool:
+    """Accept narrow, fully anchored natural-language forms around exactly two IDs."""
+
+    if len(identity_spans) != 2:
+        return False
+    surface = _identity_placeholder_surface(question, identity_spans)
+    field = (
+        "(?:" + "|".join(pattern for _, patterns in _FIELD_PATTERNS for pattern in patterns) + ")"
+    )
+    patterns = (
+        re.compile(
+            rf"^\s*공모\s*펀드\s*중에서\s*상품\s*(?:ID|아이디|번호)"
+            rf"(?:가|는|은|이)?\s*<ID>\s*(?:및|와|과|랑|이랑)\s*<ID>"
+            rf"\s*인\s*두\s*상품의\s*(?:상품\s*)?{field}"
+            rf"\s*(?:과|와|및|,)\s*(?:상품\s*)?{field}"
+            r"\s*(?:을|를)?\s*비교해\s*주세요\s*[.!?]?\s*$",
+            flags=re.IGNORECASE,
+        ),
+        re.compile(
+            rf"^\s*<ID>\s*(?:랑|이랑|와|과)\s*<ID>\s*이\s*두\s*"
+            rf"공모\s*펀드\s*중에서\s*어떤\s*게\s*최근\s*{field}"
+            rf"(?:이|가)?\s*더\s*(?:높|낮|좋|나쁘)\w*\s*[,，]?\s*"
+            rf"{field}(?:은|는|이|가)?\s*어떤지\s*좀\s*알려\s*줘"
+            r"\s*[.!?]?\s*$",
+            flags=re.IGNORECASE,
+        ),
+        re.compile(
+            rf"^\s*<ID>\s*(?:vs|versus)\s*<ID>\s*[,，]\s*"
+            rf"공모\s*펀드\s*[,，]\s*(?:상품\s*)?{field}\s*[,，]\s*"
+            rf"(?:상품\s*)?{field}\s*비교\s*[.!?]?\s*$",
+            flags=re.IGNORECASE,
+        ),
+    )
+    return any(pattern.fullmatch(surface) is not None for pattern in patterns)
+
+
 def _is_word_apostrophe(text: str, index: int, character: str) -> bool:
     if character not in {"'", "’"}:
         return False
@@ -926,7 +979,7 @@ def compile_fund_comparison_query_plan(
 ) -> CompiledFundComparisonPlan:
     mentions = draft.target_mentions
     resolutions = tuple(resolver.resolve(mention) for mention in mentions)
-    grounded = tuple(_mention_grounded(question, mention) for mention in mentions)
+    lexical_grounded = tuple(_mention_grounded(question, mention) for mention in mentions)
     validation_question = _mask_supported_request_framing(question)
     (
         question_identities,
@@ -951,14 +1004,30 @@ def compile_fund_comparison_query_plan(
     target_sequence_complete = tuple(
         resolution.normalized_mention for resolution in question_identities
     ) == tuple(resolution.normalized_mention for resolution in resolutions)
+    grounded = tuple(
+        lexical_match
+        or any(
+            resolution.normalized_mention == question_resolution.normalized_mention
+            for question_resolution in question_identities
+        )
+        for lexical_match, resolution in zip(
+            lexical_grounded,
+            resolutions,
+            strict=True,
+        )
+    )
+    strict_surface = _question_target_structure_unambiguous(
+        validation_question,
+        question_identity_spans,
+    ) and not _question_has_unrecognized_text(identity_masked_question)
+    audited_surface = _audited_natural_id_comparison_surface(
+        validation_question,
+        question_identity_spans,
+    )
     targets_complete = (
         target_sequence_complete
-        and _question_target_structure_unambiguous(
-            validation_question,
-            question_identity_spans,
-        )
+        and (strict_surface or audited_surface)
         and _target_quotes_well_formed(validation_question)
-        and not _question_has_unrecognized_text(identity_masked_question)
     )
     target_roles_unambiguous = _UNSAFE_TARGET_ROLE_PATTERN.search(identity_masked_question) is None
     comparison_fields = tuple(extract_fund_comparison_fields(question, mentions))

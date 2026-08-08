@@ -17,6 +17,7 @@ from finance_agent_core.agent.linker import canonicalize_query_plan_payload
 from finance_agent_core.agent.product_comparison import (
     ProductComparisonParseError,
     compile_product_comparison_plan,
+    resolve_exact_product_ids,
 )
 from finance_agent_core.contracts import QueryPlan
 from finance_agent_core.contracts.queryplan import Intent, ProductFamily
@@ -137,16 +138,33 @@ class ServerQueryPlanCompiler:
             InteractionIntent.DETAIL,
             InteractionIntent.EXPLAIN,
         }:
-            identity_constraints = [
-                constraint
-                for constraint in payload["constraints"]
-                if constraint["field"] in {"product_id", "ticker", "isin"}
-                and constraint["operator"] == "eq"
-            ]
-            if len(identity_constraints) != 1:
+            if len(decision.draft.product_mentions) != 1:
                 raise PlanCompilationBlockedError(
                     "detail or explain requires one server-linked exact product identity"
                 )
+            try:
+                database_path = self.database_paths[family]
+                product_id = resolve_exact_product_ids(
+                    family,
+                    decision.draft.product_mentions,
+                    self.identity_cache.get(database_path).records,
+                )[0]
+            except (KeyError, ProductComparisonParseError, ValueError) as error:
+                raise PlanCompilationBlockedError(str(error)) from error
+            payload["constraints"] = [
+                constraint
+                for constraint in payload["constraints"]
+                if constraint["field"] not in {"product_id", "ticker", "isin"}
+            ]
+            payload["constraints"].append(
+                {
+                    "field": "product_id",
+                    "operator": "eq",
+                    "value": product_id,
+                    "unit": "code",
+                    "strength": "locked",
+                }
+            )
             payload["limit"] = 1
             payload["ranking"] = []
         plan = QueryPlan.model_validate(payload)
