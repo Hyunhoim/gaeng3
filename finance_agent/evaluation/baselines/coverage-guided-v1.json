@@ -352,7 +352,30 @@
         "expected_run": "3be8f598b6be343ec296d3502ef630fc9f416d00c23b2120f27376590f24add5",
         "execution_semantic_audit": "299694143a42543e8fbd6777fc00ba3db557fa62e3157f0bf9a7fcd2d509bc22"
       },
-      "conclusion": "정확한 두 상품 ID를 자연스럽게 나열한 비교 문법과 표준 비교 근거 범위를 보강해 같은 공개 391문항에서 비교 0/29를 29/29로 개선함. 최초 관측 이후의 사후 회귀이므로 독립 blind 또는 공식 성능이 아님"
+      "qwen_plan_regression": {
+        "profile": "local_test_grounded_plan_only",
+        "exact_strict_passed": 94,
+        "execution_semantic_strict_passed": 161,
+        "compare_field": "29/29",
+        "rescued": 2,
+        "regressed": 2,
+        "strict_accuracy_delta": 0.0,
+        "plan_rescued": 3,
+        "plan_regressed": 2,
+        "evidence_rescued": 2,
+        "evidence_regressed": 4,
+        "query_plan_calls": 371,
+        "query_plan_errors": 1,
+        "latency_p95_ms": 6164.668,
+        "latency_p95_delta_ms": 2238.115,
+        "artifact_hashes": {
+          "run": "410b0523fcf46e21877d63d5daf1bea7ca8acf42c6d559a1a3e19d39ffc4fa14",
+          "execution_semantic_audit": "ab886bba23ec1adf6c8c58702a2304912d118ef50336f91acf7f467bdf67ba3f",
+          "ablation": "c4aa738515cc92c08d6f0166e4dfbf889b7042d18a49d7aab63c5b361c1eb5d8"
+        },
+        "conclusion": "비교 29/29는 유지했으나 규칙 기반 대비 exact 순개선 0, 실행 의미 보조 strict 2건 감소, p95 약 2.24초 증가로 계획 기본 경로 승격 근거가 없음"
+      },
+      "conclusion": "정확한 두 상품 ID를 자연스럽게 나열한 비교 문법과 표준 비교 근거 범위를 보강해 같은 공개 391문항에서 비교 0/29를 29/29로 개선함. Qwen 계획 재실행도 비교는 유지했지만 전체 순개선은 없었음. 최초 관측 이후의 사후 회귀이므로 독립 blind 또는 공식 성능이 아님"
     },
     "conclusion": "현재 Qwen 계획 경로는 strict 순개선이 없고 2건 구제와 2건 퇴행을 교환하며 p95를 약 2.35초 늘림. 답변 전용 경로는 strict·evidence를 바꾸지 않고 오류와 fallback 없이 evidence 기반 문장을 생성함"
   },
