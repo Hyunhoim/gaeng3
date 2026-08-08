@@ -3,12 +3,12 @@
   "baseline_id": "pre-hcx-readiness-v1",
   "recorded_on": "2026-08-08",
   "status": "internal_ready_external_gates_pending",
-  "git_commit": "dc1d41c8ad490d60ac8879c21d702a79e6b72998",
-  "last_committed_source_commit": "dc1d41c8ad490d60ac8879c21d702a79e6b72998",
+  "git_commit": "91bada7e69699c592eace3e85a07fa4286dc2b0f",
+  "last_committed_source_commit": "91bada7e69699c592eace3e85a07fa4286dc2b0f",
   "generated_from_dirty_worktree": false,
   "hash_algorithm": "sha256(sorted(relative_path + NUL + file_sha256 + LF))",
   "file_count": 373,
-  "tree_sha256": "875602384b95ec62761802644ce4d0aa9b852ff69c5cb904ddad5eef13d33215",
+  "tree_sha256": "5341b21cecd7ca23de52bba16b3053fab36f2bdf7be5077a24eeafa18c67858c",
   "included_scope": [
     "README.md",
     "../compose.sh",
@@ -42,7 +42,7 @@
     "limitation": "self_authored_internal_diagnostic_not_independent_blind"
   },
   "qa": {
-    "pytest_passed": 473,
+    "pytest_passed": 476,
     "ruff_lint": "passed",
     "ruff_format": "passed",
     "pip_check": "passed",
@@ -79,7 +79,8 @@
     "coverage_campaign_source_lock_2026_08_08": "clean_git_commit_suite_selection_shard_and_model_write_once_protocol_enforced",
     "coverage_experiment_markdown_report_2026_08_08": "generation_acceptance_profile_accuracy_rescue_regression_latency_failure_stage_and_source_hash_contract_tests_passed",
     "coverage_human_review_queue_2026_08_08": "semantic_rejection_generation_error_rescue_and_regression_examples_rendered_in_stable_order",
-    "coverage_campaign_preflight_2026_08_08": "clean_commit_four_database_hash_output_resume_disk_distribution_and_qwen_call_estimate_passed_provider_health_pending"
+    "coverage_campaign_preflight_2026_08_08": "clean_commit_four_database_hash_output_resume_disk_distribution_and_qwen_call_estimate_passed_provider_health_pending",
+    "coverage_question_screen_v2_2026_08_08": "numeric_date_inequality_nearest_value_binding_and_between_bound_direction_regressions_passed"
   },
   "external_gates": [
     "금융 도메인 담당자의 external blind 100문항과 비공개 정답키 작성",
