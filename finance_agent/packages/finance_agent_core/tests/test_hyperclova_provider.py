@@ -216,6 +216,9 @@ def test_hcx_grounded_answer_provider_uses_evidence_only_hcx_schema(
     assert context.products[0].product_name not in request.system_prompt
     assert context.products[0].ticker not in request.system_prompt
     assert context.products[0].fields[3].normalized_value not in request.system_prompt
+    assert request.response_schema["properties"]["products"]["items"]["properties"][
+        "explanation"
+    ]["enum"] == ["선택한 근거 항목이 요청한 정렬 근거로 사용됐습니다."]
 
 
 @pytest.mark.parametrize(

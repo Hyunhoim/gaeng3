@@ -241,6 +241,7 @@ def test_local_grounded_provider_uses_structured_output(
     assert payload["response_format"]["json_schema"]["strict"]
     assert "실제 값, 날짜, 개수" in payload["messages"][0]["content"]
     system_prompt = payload["messages"][0]["content"]
+    assert "safe_explanation" in system_prompt
     assert context.products[0].product_id not in system_prompt
     assert context.products[0].product_name not in system_prompt
     assert context.products[0].ticker not in system_prompt
@@ -251,6 +252,12 @@ def test_local_grounded_provider_uses_structured_output(
     assert (
         schema["properties"]["products"]["prefixItems"][0]["properties"]["result_ref"]["const"]
         == "result_1"
+    )
+    assert (
+        schema["properties"]["products"]["prefixItems"][0]["properties"][
+            "explanation"
+        ]["const"]
+        == "선택한 근거 항목이 요청한 정렬 근거로 사용됐습니다."
     )
 
 
