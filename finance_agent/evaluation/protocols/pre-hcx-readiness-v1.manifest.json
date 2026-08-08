@@ -1,14 +1,14 @@
 {
   "schema_version": "1.0",
   "baseline_id": "pre-hcx-readiness-v1",
-  "recorded_on": "2026-08-07",
+  "recorded_on": "2026-08-08",
   "status": "internal_ready_external_gates_pending",
-  "git_commit": "ed54dd26cf47e58a0e83ca8bac36a52ce2475135",
-  "last_committed_source_commit": "ed54dd26cf47e58a0e83ca8bac36a52ce2475135",
+  "git_commit": "04ec598bcd56c20d5f4db9edab55af74c9a41db1",
+  "last_committed_source_commit": "04ec598bcd56c20d5f4db9edab55af74c9a41db1",
   "generated_from_dirty_worktree": false,
   "hash_algorithm": "sha256(sorted(relative_path + NUL + file_sha256 + LF))",
-  "file_count": 330,
-  "tree_sha256": "5064c796ad1b708c04b14a145a0e2e9556e446c7aa787c8877f8908651d80578",
+  "file_count": 350,
+  "tree_sha256": "5cf74929d76d26613502cfb30f70e1873fad1bea99477aaf5037ff594a4fb66a",
   "included_scope": [
     "README.md",
     "../compose.sh",
@@ -42,12 +42,12 @@
     "limitation": "self_authored_internal_diagnostic_not_independent_blind"
   },
   "qa": {
-    "pytest_passed": 370,
+    "pytest_passed": 448,
     "ruff_lint": "passed",
     "ruff_format": "passed",
     "pip_check": "passed",
-    "documentation_markdown": 55,
-    "documentation_baselines": 38,
+    "documentation_markdown": 56,
+    "documentation_baselines": 40,
     "wheel_build_no_isolation": "passed",
     "wheel_required_package_data": "passed",
     "git_diff_check": "passed",
@@ -67,7 +67,11 @@
     "official_get_deterministic_concurrency_2026_08_07": "concurrency_1_2_4_each_30_of_30_latency_increased_with_concurrency_not_slo",
     "official_get_qwen_concurrency_2026_08_07": "concurrency_2_30_of_30_qwen_grounded_17_of_17_fallback_0",
     "external_blind_first_run_guard": "near_duplicate_check_atomic_single_claim_and_report_sha256_binding_passed",
-    "submission_boundary": "development_passed_submission_blocked_by_expected_local_development_footprints"
+    "submission_boundary": "development_passed_submission_blocked_by_expected_local_development_footprints",
+    "semantic_roundtrip_2026_08_08": "source_wording_hidden_generation_64_accepted_first_15_then_output_and_query_plan_semantics_64_of_64_post_fix",
+    "grounded_plan_gate_2026_08_08": "verbatim_evidence_registry_identity_server_anchor_and_negation_adversarial_tests_passed",
+    "negation_hardening_regression_2026_08_08": "product_compare_30_of_30_search_aggregate_8_of_8_domain_qa_40_of_40_pytest_448_of_448",
+    "internal_red_team_gold_audit_2026_08_08": "unaltered_historical_gold_38_of_40_safety_40_of_40_two_sort_direction_errors_preserved_and_hash_pinned_overlay_documented"
   },
   "external_gates": [
     "금융 도메인 담당자의 external blind 100문항과 비공개 정답키 작성",
@@ -80,8 +84,8 @@
     "주최 측 실행 환경의 Docker·포트·인증·네트워크 정책 최종 재현"
   ],
   "limitations": [
-    "git_commit은 readiness manifest 자체를 제외한 설명회 반영 source tree가 동결된 커밋을 가리킴",
-    "source tree hash는 git_commit의 readiness 포함 범위와 일치함",
+    "git_commit과 last_committed_source_commit은 이 manifest 직전의 source·문서 커밋을 가리킴",
+    "source tree hash는 readiness manifest 자체를 제외한 커밋된 작업 트리 범위와 일치함",
     "로컬 Qwen과 공개 회귀 결과는 HyperCLOVA X 공식 성능이 아님",
     "external gate 완료 전 최종 일반화 성능 또는 제출 준비 완료를 주장하지 않음"
   ]
