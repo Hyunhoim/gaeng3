@@ -3,12 +3,12 @@
   "baseline_id": "pre-hcx-readiness-v1",
   "recorded_on": "2026-08-08",
   "status": "internal_ready_external_gates_pending",
-  "git_commit": "5cc31646db888901e7d88eca41a94a9b152b3530",
-  "last_committed_source_commit": "5cc31646db888901e7d88eca41a94a9b152b3530",
+  "git_commit": "56f209c8c66b3cce938162ff139a0702293fe0e0",
+  "last_committed_source_commit": "56f209c8c66b3cce938162ff139a0702293fe0e0",
   "generated_from_dirty_worktree": false,
   "hash_algorithm": "sha256(sorted(relative_path + NUL + file_sha256 + LF))",
-  "file_count": 373,
-  "tree_sha256": "3ed1c79cf19ce15240b45139800980dec88f1f809cd0241fd02a013959d374fc",
+  "file_count": 376,
+  "tree_sha256": "74af556113dd6ce2ffb1b6e0c6a1995a65578fdc8177f3f49d532d96ab0ed4a7",
   "included_scope": [
     "README.md",
     "../compose.sh",
@@ -42,7 +42,7 @@
     "limitation": "self_authored_internal_diagnostic_not_independent_blind"
   },
   "qa": {
-    "pytest_passed": 477,
+    "pytest_passed": 483,
     "ruff_lint": "passed",
     "ruff_format": "passed",
     "pip_check": "passed",
@@ -83,7 +83,8 @@
     "coverage_campaign_preflight_2026_08_08": "clean_commit_four_database_hash_output_resume_disk_distribution_and_qwen_call_estimate_passed_provider_health_pending",
     "coverage_question_screen_v2_2026_08_08": "numeric_date_inequality_nearest_value_binding_and_between_bound_direction_regressions_passed",
     "coverage_campaign_git_lock_2026_08_08": "tracked_and_nonignored_untracked_source_changes_blocked_ignored_artifacts_allowed",
-    "coverage_cluster_statistics_2026_08_08": "naturalized_source_plan_cluster_bootstrap_and_cluster_mcnemar_with_holm_correction_passed"
+    "coverage_cluster_statistics_2026_08_08": "naturalized_source_plan_cluster_bootstrap_and_cluster_mcnemar_with_holm_correction_passed",
+    "coverage_execution_semantic_audit_2026_08_08": "primary_exact_65_of_391_preserved_aggregate_execution_inert_expected_134_qwen_plan_132_compare_and_search_prioritized"
   },
   "external_gates": [
     "금융 도메인 담당자의 external blind 100문항과 비공개 정답키 작성",
