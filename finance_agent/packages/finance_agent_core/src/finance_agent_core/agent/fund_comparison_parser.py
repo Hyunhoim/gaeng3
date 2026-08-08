@@ -120,9 +120,20 @@ _SUPPORTED_REQUEST_PREAMBLE_PATTERNS = (
         flags=re.IGNORECASE,
     ),
 )
+_SUPPORTED_RESPONSE_SUFFIX_PATTERNS = (
+    re.compile(
+        r"(?:\s*[.!?…]\s*)?답변은\s+표\s+형식으로\s+제공해\s+주세요\s*[.!?…]?\s*\Z",
+        flags=re.IGNORECASE,
+    ),
+    re.compile(
+        r"(?:\s*[.!?…]\s*)?결과는\s+(?:리스트|목록)\s+형식으로\s+제시해\s+주세요"
+        r"\s*[.!?…]?\s*\Z",
+        flags=re.IGNORECASE,
+    ),
+)
 _REQUEST_SENTENCE_END_PATTERN = re.compile(
     r"(?:해\s*줘|해\s*주세요|알려\s*줘|알려\s*주세요|보여\s*줘|보여\s*주세요|"
-    r"말해\s*줘|말해\s*주세요|설명해\s*줘|설명해\s*주세요)$",
+    r"말해\s*줘|말해\s*주세요|설명해\s*줘|설명해\s*주세요)\s*[.!?…]?\s*$",
     flags=re.IGNORECASE,
 )
 _ID_PATTERN = re.compile(r"(?<![A-Z0-9])KR[A-Z0-9]{10}(?![A-Z0-9])", flags=re.IGNORECASE)
@@ -287,6 +298,7 @@ _ALLOWED_QUESTION_TOKENS = frozenset(
         "서로",
         "모두",
         "함께",
+        "최근",
         "혹시",
         "안녕하세요",
         "이",
@@ -625,19 +637,64 @@ def _mask_supported_question_language(masked_question: str) -> str:
     patterns = [pattern for _, field_patterns in _FIELD_PATTERNS for pattern in field_patterns]
     patterns.extend(pattern for pattern, _ in _UNSUPPORTED_PATTERNS)
     patterns.append(_COMPARISON_TRIGGER.pattern)
+    patterns.append(_REQUEST_SENTENCE_END_PATTERN.pattern)
     for pattern in patterns:
         for match in re.finditer(pattern, masked_question, flags=re.IGNORECASE):
             masked[match.start() : match.end()] = " " * (match.end() - match.start())
     return "".join(masked)
 
 
-def _mask_supported_request_preamble(question: str) -> str:
-    """Remove only audited, presentation-only request framing while preserving offsets."""
+def _mask_supported_request_framing(question: str) -> str:
+    """Mask only audited presentation framing while preserving character offsets."""
     normalized = unicodedata.normalize("NFKC", question)
     for pattern in _SUPPORTED_REQUEST_PREAMBLE_PATTERNS:
         if match := pattern.match(normalized):
-            return " " * match.end() + normalized[match.end() :]
+            normalized = " " * match.end() + normalized[match.end() :]
+            break
+    for pattern in _SUPPORTED_RESPONSE_SUFFIX_PATTERNS:
+        if match := pattern.search(normalized):
+            normalized = normalized[: match.start()] + " " * (
+                match.end() - match.start()
+            )
+            break
     return normalized
+
+
+def _field_first_prefix_supported(raw_prefix: str) -> bool:
+    """Accept a narrow `fields 기준으로 공모펀드 ...` target introduction."""
+    if not re.search(
+        r"(?:을|를)?\s*기준(?:으로)?\s*공모\s*펀드\s*[:：]?\s*\Z",
+        raw_prefix,
+        flags=re.IGNORECASE,
+    ):
+        return False
+    field_spans = _supported_field_spans(raw_prefix)
+    if not field_spans:
+        return False
+    masked = list(raw_prefix)
+    for start, end in field_spans:
+        masked[start:end] = " " * (end - start)
+    residual = "".join(masked)
+    residual = re.sub(
+        r"(?:을|를)?\s*기준(?:으로)?\s*공모\s*펀드\s*[:：]?\s*\Z",
+        " ",
+        residual,
+        flags=re.IGNORECASE,
+    )
+    residual = re.sub(r"(?:\s|와|과|및|,|，|、)+", "", residual)
+    return not residual
+
+
+def _mask_supported_field_first_prefix(
+    question: str,
+    identity_spans: tuple[tuple[int, int], ...],
+) -> str:
+    if not identity_spans:
+        return question
+    first_start = identity_spans[0][0]
+    if not _field_first_prefix_supported(question[:first_start]):
+        return question
+    return " " * first_start + question[first_start:]
 
 
 def _question_has_unrecognized_text(masked_question: str) -> bool:
@@ -799,6 +856,7 @@ def _question_target_structure_unambiguous(
     target_tail = normalized[
         second_end : second_end + min(tail_boundaries, default=len(normalized) - second_end)
     ]
+    target_tail = re.sub(r"\b최근\s*", "", target_tail)
     tail_form = "".join(
         character.casefold()
         for character in target_tail
@@ -869,7 +927,19 @@ def compile_fund_comparison_query_plan(
     mentions = draft.target_mentions
     resolutions = tuple(resolver.resolve(mention) for mention in mentions)
     grounded = tuple(_mention_grounded(question, mention) for mention in mentions)
-    validation_question = _mask_supported_request_preamble(question)
+    validation_question = _mask_supported_request_framing(question)
+    (
+        question_identities,
+        identity_masked_question,
+        question_identity_spans,
+    ) = _question_identity_scan(
+        validation_question,
+        resolver,
+    )
+    validation_question = _mask_supported_field_first_prefix(
+        validation_question,
+        question_identity_spans,
+    )
     (
         question_identities,
         identity_masked_question,

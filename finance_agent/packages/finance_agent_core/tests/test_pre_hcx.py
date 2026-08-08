@@ -195,6 +195,28 @@ def test_router_treats_polite_request_ending_as_search_not_explanation() -> None
     assert decision.draft.product_families == [ProductFamily.BOND]
 
 
+def test_router_handles_count_synonyms_numeric_market_ids_and_prediction_synonyms() -> None:
+    router = IntentRouter()
+
+    count = router.route("모든 판매 가능한 해외 ETF의 수를 계산해줘", "route-count")
+    comparison = router.route(
+        "해외 ETF 101:IVEG.O과 101:IWTR.O의 AUM 차이를 비교해줘",
+        "route-numeric-market-id",
+    )
+    unsupported = router.route(
+        "금리 하락 후 가격이 상승할 것으로 예상되는 국내채권을 매수를 추천해줘",
+        "route-forecast",
+    )
+
+    assert count.draft.intent is InteractionIntent.AGGREGATE
+    assert count.disposition is RouteDisposition.EXECUTE
+    assert comparison.draft.product_mentions == ["101:IVEG.O", "101:IWTR.O"]
+    assert comparison.draft.intent is InteractionIntent.COMPARE
+    assert comparison.disposition is RouteDisposition.EXECUTE
+    assert unsupported.draft.intent is InteractionIntent.UNSUPPORTED
+    assert unsupported.disposition is RouteDisposition.UNSUPPORTED
+
+
 def test_diagnostic_commitment_detects_tampering(tmp_path: Path) -> None:
     suite_resource = (
         Path(__file__).parents[1]

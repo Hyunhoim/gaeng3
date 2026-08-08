@@ -176,6 +176,27 @@ def test_lexical_limit_matches_router_for_result_counter() -> None:
     assert hints["limit"] == 3
 
 
+def test_domestic_pension_and_identity_wording_are_normalized() -> None:
+    pension = build_lexical_hints("국내에서 연금으로 거래 가능한 ETF의 수를 계산해줘")
+    identity = build_lexical_hints(
+        "국내 ETF 중 상품번호가 KR7091160002인 상품 상세 정보"
+    )
+
+    assert pension["product_family"] == "domestic_etp"
+    assert {
+        (item["field"], item["operator"], item["value"])
+        for item in pension["required_constraints"]
+    } >= {
+        ("product_type", "eq", "ETF"),
+        ("pension_eligible", "eq", True),
+    }
+    assert identity["required_eq_constraints"][-1] == {
+        "field": "product_id",
+        "operator": "eq",
+        "value": "KR7091160002",
+    }
+
+
 def test_prelink_overrides_wrong_model_family_with_domestic_contract() -> None:
     payload = first_vertical_slice_plan("wrong-family").model_dump(mode="json")
     linked = canonicalize_query_plan_payload(
@@ -217,6 +238,30 @@ def test_bond_plain_maturity_years_are_normalized_to_remaining_days() -> None:
         (item["field"], item["operator"], tuple(item["value"]))
         for item in hints["required_constraints"]
     } == {("remaining_days", "between", (0, 365))}
+
+
+def test_bond_purchase_synonym_and_short_remaining_term_sort_are_normalized() -> None:
+    hints = build_lexical_hints(
+        "현재 구매 가능한 국내 채권을 잔존 기일이 짧은 순서로 3건 검색해줘"
+    )
+
+    assert ("currently_buyable", "eq", True) in {
+        (item["field"], item["operator"], item["value"])
+        for item in hints["required_constraints"]
+    }
+    assert hints["required_rankings"] == [
+        {"field": "remaining_days", "direction": "asc", "nulls": "last"}
+    ]
+
+
+def test_low_side_wording_overrides_generic_top_n_direction() -> None:
+    hints = build_lexical_hints(
+        "미국에 투자하는 해외 ETF를 총보수율 낮은 쪽부터 상위 3건 보여줘"
+    )
+
+    assert hints["required_rankings"] == [
+        {"field": "total_expense_ratio_pct", "direction": "asc", "nulls": "last"}
+    ]
 
 
 def test_bond_ordered_credit_rating_expands_from_registry_scale() -> None:

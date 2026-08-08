@@ -15,6 +15,7 @@ from finance_agent_core.contracts.routing import (
 _COMPARE = re.compile(r"비교|대조|차이|나란히|versus|\bvs\b", re.IGNORECASE)
 _AGGREGATE = re.compile(
     r"몇\s*개|개수|건수|평균|합계|총합|집계|분포|비중|"
+    r"(?:상품|ETF|ETN|ETP|채권|펀드)(?:의)?\s*수(?:를|가|는)?\s*(?:계산|집계|총합|알려)|"
     r"최댓값|최대값|최솟값|최소값|최고값|최저값|"
     r"(?:AUM|보수율|수익률|이율|잔존일수|듀레이션)\s*(?:최대|최소)",
     re.IGNORECASE,
@@ -31,7 +32,8 @@ _AMBIGUOUS = re.compile(
 )
 _UNSUPPORTED = re.compile(
     r"전망|예측|예상\s*수익|수익\s*보장|원금\s*보장|"
-    r"매수\s*추천|투자\s*추천|사야\s*할|사면\s*좋|가장\s*좋은|"
+    r"매수(?:를)?\s*추천|투자\s*추천|사야\s*할|사면\s*좋|가장\s*좋은|"
+    r"상승할\s*것으로\s*예상|"
     r"기대되는\s*(?:고)?수익|오를\s*것|오를까|호재|악재|"
     r"유상증자|유상감자|사모\s*CB|"
     r"기관.*(?:구매|순매수|매매량)|"
@@ -66,11 +68,12 @@ _QUOTED = (
     re.compile(r"‘([^’\n]+)’"),
 )
 _KNOWN_ID = re.compile(
-    r"(?<![A-Z0-9])(?:KR[A-Z0-9]{10}|[A-Z]{2,5}:[A-Z0-9._-]+)(?![A-Z0-9])",
+    r"(?<![A-Z0-9])(?:KR[A-Z0-9]{10}|(?:[A-Z]{2,5}|[0-9]{3}):[A-Z0-9._-]+)(?![A-Z0-9])",
     re.IGNORECASE,
 )
 _LABELED_ID = re.compile(
-    r"(?:상품번호|종목코드|티커)\s*[:：]?\s*([A-Z0-9._:-]{2,30})",
+    r"(?:상품번호|종목코드|티커)(?:가|는|은|이)?\s*[:：]?\s*"
+    r"([A-Z0-9._:-]{2,30})",
     re.IGNORECASE,
 )
 _CONTROL_FAMILY_PRIORITY = {
@@ -110,7 +113,7 @@ def _product_families(question: str) -> list[ProductFamily]:
     etp_token = r"(?<![A-Z])(?:ETF|ETN|ETP)(?![A-Z])"
     domestic_pattern = (
         rf"(?:국내|한국|코스피|코스닥)(?!\s*채권)[^와과,\n]{{0,20}}?{etp_token}|"
-        rf"{etp_token}\s*(?:국내|한국)"
+        rf"{etp_token}[^와과,\n]{{0,30}}?(?:국내|한국)(?!\s*채권)"
     )
     overseas_pattern = (
         rf"(?:해외|글로벌)[^와과,\n]{{0,20}}?{etp_token}|"

@@ -297,7 +297,10 @@ def build_lexical_hints(
     ):
         add("trading_suspended", True)
     if family == "domestic_etp":
-        if "연금 거래 가능" in question:
+        if re.search(
+            r"연금(?:\s*계좌)?(?:으로)?\s*(?:거래|구매)(?:가)?\s*가능",
+            question,
+        ):
             add("pension_eligible", True)
         if any(
             phrase in question
@@ -331,8 +334,16 @@ def build_lexical_hints(
             (r"운용사에\s*(.+?)이 포함", "manager", "contains"),
             (r"약어명에\s*(.+?)(?:가|이) 들어", "short_name", "contains"),
             (r"기초지수에\s*(.+?)(?:가|이) 포함", "base_index", "contains"),
-            (r"종목코드\s*([A-Z0-9]+)인", "ticker", "eq"),
-            (r"상품번호\s*([A-Z0-9]+)인", "product_id", "eq"),
+            (
+                r"종목코드(?:가|는|은|이)?\s*[:：]?\s*([A-Z0-9]+)(?:인|입니다|$|\s)",
+                "ticker",
+                "eq",
+            ),
+            (
+                r"상품번호(?:가|는|은|이)?\s*[:：]?\s*([A-Z0-9]+)(?:인|입니다|$|\s)",
+                "product_id",
+                "eq",
+            ),
         ]
         for pattern, field, operator in lookup_patterns:
             match = re.search(pattern, question)
@@ -375,7 +386,11 @@ def build_lexical_hints(
             if risk in question or loose in question:
                 add("risk_level", risk)
         lookup_patterns = [
-            (r"상품번호\s*([A-Z0-9]+)", "product_id", "eq"),
+            (
+                r"상품번호(?:가|는|은|이)?\s*[:：]?\s*([A-Z0-9]+)",
+                "product_id",
+                "eq",
+            ),
             (r"짧은 이름에\s*(.+?)(?:가|이)\s*들어간", "short_name", "contains"),
             (
                 r"(?:정식\s*)?상품명에\s*(.+?)(?:가|이)\s*포함된",
@@ -398,6 +413,7 @@ def build_lexical_hints(
                 "판매 가능",
                 "살 수 있는",
                 "주문 가능한",
+                "구매 가능",
             )
         ):
             add("currently_buyable", True)
@@ -405,8 +421,16 @@ def build_lexical_hints(
             (r"발행(?:기관|사|자)에\s*(.+?)(?:가|이)?\s*포함", "issuer", "contains"),
             (r"발행(?:기관|사|자)\s*(.+?)의", "issuer", "contains"),
             (r"상품명에\s*(.+?)(?:가|이)?\s*포함", "product_name", "contains"),
-            (r"종목코드\s*([A-Z0-9]+)인", "ticker", "eq"),
-            (r"상품번호\s*([A-Z0-9]+)인", "product_id", "eq"),
+            (
+                r"종목코드(?:가|는|은|이)?\s*[:：]?\s*([A-Z0-9]+)(?:인|입니다|$|\s)",
+                "ticker",
+                "eq",
+            ),
+            (
+                r"상품번호(?:가|는|은|이)?\s*[:：]?\s*([A-Z0-9]+)(?:인|입니다|$|\s)",
+                "product_id",
+                "eq",
+            ),
             (
                 r"신용등급(?:이|은)?\s*(AAA|AA\+|AA0|AA-|A\+|A0|A-|BBB\+|BBB0|BBB-|"
                 r"BB\+|BB0|BB-|B\+|B0|B-|CCC|CC0|C0|C)(?:인|$|\s)",
@@ -436,9 +460,14 @@ def build_lexical_hints(
                 add("remaining_days", days, "gt")
     if family == "overseas_etp":
         lookup_patterns = [
-            (r"(?:종목코드|티커)\s*[:：]?\s*([A-Z0-9._-]+)(?:인|의|$|\s)", "ticker"),
             (
-                r"상품번호\s*[:：]?\s*([A-Z]{2,5}:[A-Z0-9._-]+)(?:인|의|$|\s)",
+                r"(?:종목코드|티커)(?:가|는|은|이)?\s*[:：]?\s*"
+                r"([A-Z0-9._-]+)(?:인|의|입니다|$|\s)",
+                "ticker",
+            ),
+            (
+                r"상품번호(?:가|는|은|이)?\s*[:：]?\s*"
+                r"((?:[A-Z]{2,5}|[0-9]{3}):[A-Z0-9._-]+)(?:인|의|입니다|$|\s)",
                 "product_id",
             ),
         ]
@@ -527,7 +556,18 @@ def build_lexical_hints(
     ambiguity_patterns = ["적당한", "안전한", "괜찮은"]
 
     rankings: list[dict[str, str]] = []
-    ascending = any(phrase in question for phrase in ("오름차순", "낮은 순", "작은 순"))
+    ascending = any(
+        phrase in question
+        for phrase in (
+            "오름차순",
+            "낮은 순",
+            "낮은 쪽부터",
+            "작은 순",
+            "작은 쪽부터",
+            "짧은 순",
+            "짧은 쪽부터",
+        )
+    )
     descending = any(
         phrase in question
         for phrase in (
@@ -539,6 +579,9 @@ def build_lexical_hints(
             "좋은",
             "성과순",
             "가장 많이",
+            "높은 쪽부터",
+            "큰 쪽부터",
+            "긴 순",
         )
     )
     explicit_rank_patterns: list[tuple[str, str]] = []
@@ -566,7 +609,11 @@ def build_lexical_hints(
                     r"(?:매수가능수량|매수 가능 수량).{0,30}(?:큰|작은|높은|낮은|순)",
                     "buyable_quantity",
                 ),
-                (r"(?:잔존일수|잔존일).{0,30}(?:큰|작은|높은|낮은|순)", "remaining_days"),
+                (
+                    r"(?:잔존\s*(?:일수|일|기일)).{0,30}"
+                    r"(?:큰|작은|높은|낮은|긴|짧은|순)",
+                    "remaining_days",
+                ),
                 (r"듀레이션.{0,30}(?:큰|작은|높은|낮은|순)", "duration_years"),
                 (r"만기일.{0,30}(?:순|최신)", "maturity_date"),
             ]
