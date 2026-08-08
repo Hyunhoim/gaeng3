@@ -251,7 +251,9 @@ python -m finance_agent_core.evaluation.coverage_campaign_cli \
   --shard-size 10 \
   --workers 4 \
   --profile expected \
-  --profile local_test_grounded_plan_only
+  --profile local_test_grounded_plan_only \
+  --profile local_test_answer_only \
+  --profile local_test_grounded
 ~~~
 
 pilot의 생성 실패·기계 거절·오해 사례를 확인한 뒤 최초 전체 캠페인을 별도
@@ -264,8 +266,20 @@ python -m finance_agent_core.evaluation.coverage_campaign_cli \
   --shard-size 25 \
   --workers 4 \
   --profile expected \
-  --profile local_test_grounded_plan_only
+  --profile local_test_grounded_plan_only \
+  --profile local_test_answer_only \
+  --profile local_test_grounded
 ~~~
+
+네 profile을 같은 최초 캠페인에 넣는 이유
+
+- `expected`: 모델 없이 동작하는 현재 기준선
+- `local_test_grounded_plan_only`: 질문을 실행 계획으로 바꾸는 역할만 Qwen 사용
+- `local_test_answer_only`: 검색 계획은 같게 두고 설명문 생성만 Qwen 사용
+- `local_test_grounded`: 계획과 설명문 모두 Qwen을 사용하는 로컬 전체 경로
+
+전체 캠페인은 수천 회의 로컬 생성 호출이 생길 수 있으므로 pilot의 오류·fallback·
+지연을 먼저 확인하고 시작. 중단돼도 완료된 shard는 덮어쓰지 않고 재사용
 
 이 도구는 다음 안전장치를 적용
 
