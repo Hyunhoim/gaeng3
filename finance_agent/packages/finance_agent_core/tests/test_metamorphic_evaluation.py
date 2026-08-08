@@ -4,22 +4,27 @@ import json
 
 import pytest
 
+from finance_agent_core.agent import RoutedFinanceAgent
 from finance_agent_core.agent.providers import (
     LocalProviderError,
     LocalTestSettings,
 )
+from finance_agent_core.contracts.queryplan import ProductFamily
 from finance_agent_core.evaluation.metamorphic import (
     ExpectedMutationProvider,
     GeneratedMutation,
     LocalQwenMutationProvider,
     MutationAxis,
+    MutationBatch,
     generate_mutation_batch,
     load_metamorphic_protocol,
     mutation_batch_semantic_sha256,
     validate_mutation,
 )
 from finance_agent_core.evaluation.metamorphic_cli import main as metamorphic_main
+from finance_agent_core.evaluation.metamorphic_runner import MetamorphicRunner
 from finance_agent_core.evaluation.official_mock import load_official_mock_suite
+from finance_agent_core.evaluation.red_team_e2e import ProviderTelemetry
 
 
 def test_protocol_pins_every_official_mock_case_and_source_hash() -> None:
@@ -123,6 +128,50 @@ def test_expected_cli_writes_reproducible_batch(tmp_path, capsys) -> None:
     assert payload["accepted_count"] == 90
     summary = json.loads(capsys.readouterr().out)
     assert summary["all_accepted"] is True
+
+
+def test_runner_checks_control_mutations_without_databases() -> None:
+    full_batch = generate_mutation_batch(
+        ExpectedMutationProvider(),
+        generated_at_utc="2026-08-08T00:00:00+00:00",
+    )
+    selected_source_ids = {
+        "official-mock-v1-010",
+        "official-mock-v1-020",
+        "official-mock-v1-029",
+        "official-mock-v1-030",
+    }
+    selected = [
+        candidate
+        for candidate in full_batch.candidates
+        if candidate.source_case_id in selected_source_ids
+    ]
+    payload = full_batch.model_dump(mode="json")
+    payload.update(
+        requested_count=len(selected),
+        generated_count=len(selected),
+        accepted_count=len(selected),
+        rejected_count=0,
+        candidates=[candidate.model_dump(mode="json") for candidate in selected],
+    )
+    batch = MutationBatch.model_validate(payload)
+    service = RoutedFinanceAgent({})
+    services = {family: service for family in ProductFamily}
+
+    report = MetamorphicRunner(
+        batch=batch,
+        services=services,
+        agent_profile="expected",
+        database_sha256_by_family={family.value: "0" * 64 for family in ProductFamily},
+        telemetry=ProviderTelemetry(),
+        agent_model=None,
+    ).run(generated_at_utc="2026-08-08T00:00:00+00:00")
+
+    assert report.summary.source_passed == report.summary.source_total == 4
+    assert report.summary.candidate_passed == report.summary.candidate_executed == 12
+    assert report.summary.semantic_consistency_rate == 1.0
+    assert report.summary.safety_pass_rate == 1.0
+    assert report.summary.perfect
 
 
 def test_local_qwen_provider_enforces_structured_axis_contract(
