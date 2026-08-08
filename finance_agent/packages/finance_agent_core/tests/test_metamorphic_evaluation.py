@@ -11,6 +11,7 @@ from finance_agent_core.agent.providers import (
 )
 from finance_agent_core.contracts.queryplan import ProductFamily
 from finance_agent_core.evaluation.metamorphic import (
+    QWEN_EVAL_LAB_AXES,
     ExpectedMutationProvider,
     GeneratedMutation,
     LocalQwenMutationProvider,
@@ -38,7 +39,7 @@ def test_protocol_pins_every_official_mock_case_and_source_hash() -> None:
 
     assert protocol.source_suite_sha256 == source.sha256
     assert protocol.source_case_ids == [case.id for case in source.suite.cases]
-    assert protocol.axes == list(MutationAxis)
+    assert protocol.axes == list(QWEN_EVAL_LAB_AXES)
     assert protocol.status == "internal_development_not_blind"
 
 
@@ -323,7 +324,7 @@ def test_local_qwen_provider_enforces_structured_axis_contract(
             "axis": axis.value,
             "question": f"{case.question} - {axis.value} 표현",
         }
-        for axis in MutationAxis
+        for axis in QWEN_EVAL_LAB_AXES
     ]
     captured: dict[str, object] = {}
 
@@ -344,9 +345,9 @@ def test_local_qwen_provider_enforces_structured_axis_contract(
 
     monkeypatch.setattr(provider._client, "_request_json", fake_request)
 
-    generated = provider.generate_mutations(case, list(MutationAxis))
+    generated = provider.generate_mutations(case, list(QWEN_EVAL_LAB_AXES))
 
-    assert [item.axis for item in generated] == list(MutationAxis)
+    assert [item.axis for item in generated] == list(QWEN_EVAL_LAB_AXES)
     assert captured["path"] == "chat/completions"
     payload = captured["payload"]
     assert isinstance(payload, dict)
@@ -389,4 +390,4 @@ def test_local_qwen_provider_rejects_missing_axis(
     )
 
     with pytest.raises(LocalProviderError, match="axes differ"):
-        provider.generate_mutations(case, list(MutationAxis))
+        provider.generate_mutations(case, list(QWEN_EVAL_LAB_AXES))

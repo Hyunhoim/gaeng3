@@ -434,7 +434,8 @@ class MetamorphicRunner:
         timestamp = generated_at_utc or datetime.now(UTC).replace(microsecond=0).isoformat()
         return MetamorphicReport(
             report_id=(
-                f"qwen-eval-lab-v1-{self.batch.generator}-generator-{self.agent_profile}-agent"
+                f"{self.batch.protocol_id}-{self.batch.generator}-generator-"
+                f"{self.agent_profile}-agent"
             ),
             generated_at_utc=timestamp,
             generator=self.batch.generator,

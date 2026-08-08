@@ -72,6 +72,22 @@ class MutationAxis(StrEnum):
     PARAPHRASE = "paraphrase"
     CLAUSE_REORDERING = "clause_reordering"
     DISTRACTOR_RESISTANCE = "distractor_resistance"
+    SEMANTIC_FORMAL = "semantic_formal"
+    SEMANTIC_COLLOQUIAL = "semantic_colloquial"
+    SEMANTIC_TELEGRAPHIC = "semantic_telegraphic"
+
+
+QWEN_EVAL_LAB_AXES: tuple[MutationAxis, ...] = (
+    MutationAxis.PARAPHRASE,
+    MutationAxis.CLAUSE_REORDERING,
+    MutationAxis.DISTRACTOR_RESISTANCE,
+)
+
+SEMANTIC_ROUNDTRIP_AXES: tuple[MutationAxis, ...] = (
+    MutationAxis.SEMANTIC_FORMAL,
+    MutationAxis.SEMANTIC_COLLOQUIAL,
+    MutationAxis.SEMANTIC_TELEGRAPHIC,
+)
 
 
 class GeneratedMutation(MetamorphicModel):
@@ -116,7 +132,9 @@ class MutationValidation(MetamorphicModel):
 
 
 class MutationCandidate(MetamorphicModel):
-    id: str = Field(pattern=r"^qwen-eval-lab-v1-[0-9]{3}-[a-z_]+$")
+    id: str = Field(
+        pattern=r"^(?:qwen-eval-lab-v1|semantic-roundtrip-v1)-[0-9]{3}-[a-z_]+$"
+    )
     source_case_id: str = Field(pattern=r"^official-mock-v1-[0-9]{3}$")
     axis: MutationAxis
     coverage_family: ProductFamily

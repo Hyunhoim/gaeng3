@@ -23,7 +23,7 @@ from finance_agent_core.evaluation.red_team_e2e import ProviderTelemetry
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
-            "Generate and execute qwen-eval-lab-v1 metamorphic questions through the full Agent."
+            "Generate or replay a frozen metamorphic question batch through the full Agent."
         )
     )
     source = parser.add_mutually_exclusive_group()
@@ -100,7 +100,7 @@ def main(argv: list[str] | None = None) -> int:
     ).run()
     output = arguments.output or Path(
         "artifacts/evaluation/"
-        f"qwen-eval-lab-v1-{batch.generator}-generator-"
+        f"{batch.protocol_id}-{batch.generator}-generator-"
         f"{arguments.agent_provider}-agent.json"
     )
     output.parent.mkdir(parents=True, exist_ok=True)
