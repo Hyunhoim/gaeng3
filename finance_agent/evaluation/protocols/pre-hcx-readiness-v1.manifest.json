@@ -3,12 +3,12 @@
   "baseline_id": "pre-hcx-readiness-v1",
   "recorded_on": "2026-08-08",
   "status": "internal_ready_external_gates_pending",
-  "git_commit": "fbc76b9fdc4f2f8e83a390670d122453fa8f5d6f",
-  "last_committed_source_commit": "fbc76b9fdc4f2f8e83a390670d122453fa8f5d6f",
+  "git_commit": "0c11f70e925e53378487ab7afeac3b50575e7d3d",
+  "last_committed_source_commit": "0c11f70e925e53378487ab7afeac3b50575e7d3d",
   "generated_from_dirty_worktree": false,
   "hash_algorithm": "sha256(sorted(relative_path + NUL + file_sha256 + LF))",
   "file_count": 370,
-  "tree_sha256": "1ef1711ab0826b3d9d0d2fe6ebc875de725983fc02d84148cd3ec19a1e5149e2",
+  "tree_sha256": "fcbdd9c945b234dcfb43dbc22f88080ac404f4204f0e9db94ddbdbec88f19f5f",
   "included_scope": [
     "README.md",
     "../compose.sh",
@@ -42,7 +42,7 @@
     "limitation": "self_authored_internal_diagnostic_not_independent_blind"
   },
   "qa": {
-    "pytest_passed": 466,
+    "pytest_passed": 467,
     "ruff_lint": "passed",
     "ruff_format": "passed",
     "pip_check": "passed",
@@ -75,7 +75,8 @@
     "coverage_guided_first_observation_2026_08_08": "305_representative_cells_299_directly_executable_canonical_agent_37_of_299_plan_44_evidence_77_qwen_naturalization_pending",
     "coverage_profile_ablation_contract_2026_08_08": "same_question_rescue_regression_plan_evidence_stage_provider_call_latency_wilson_bootstrap_mcnemar_holm_and_bucket_comparison_tests_passed",
     "coverage_qwen_campaign_contract_2026_08_08": "write_once_resumable_shards_exact_source_model_hash_validation_profile_merge_ablation_and_manifest_tests_passed",
-    "coverage_ablation_denominator_2026_08_08": "generator_acceptance_end_to_end_yield_and_agent_profile_accuracy_denominators_separated"
+    "coverage_ablation_denominator_2026_08_08": "generator_acceptance_end_to_end_yield_and_agent_profile_accuracy_denominators_separated",
+    "coverage_campaign_source_lock_2026_08_08": "clean_git_commit_suite_selection_shard_and_model_write_once_protocol_enforced"
   },
   "external_gates": [
     "금융 도메인 담당자의 external blind 100문항과 비공개 정답키 작성",
