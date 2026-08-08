@@ -315,6 +315,45 @@
       },
       "conclusion": "집계 일반 필드는 표기상 exact 불일치가 컸지만 현재 실행 의미 기준 69/79로 대부분 동작함. Qwen 계획은 같은 보조 기준에서도 132/391로 규칙 기반 134/391보다 2건 낮으며, 실제 우선순위는 비교와 검색임"
     },
+    "postfix_compare_regression": {
+      "recorded_on": "2026-08-08",
+      "status": "same_public_questions_postfix_regression_not_blind",
+      "source_git_commit": "9aac2ff08c9808f5f3513939e2df71e7a51446c6",
+      "profile": "expected",
+      "question_semantic_sha256": "90d115b2f0199da3f6776842bde1e41b1ceecfef1c3a5c08dc426cf24cf3a9ad",
+      "metrics": {
+        "exact_strict_passed": 94,
+        "exact_strict_rate": 0.240409,
+        "execution_semantic_strict_passed": 163,
+        "execution_semantic_strict_rate": 0.41688,
+        "plan_semantic_passed": 103,
+        "evidence_semantic_passed": 180,
+        "fallback_count": 0,
+        "first_failure_stages": {
+          "routing": 42,
+          "planning": 246,
+          "evidence": 9
+        },
+        "by_kind": {
+          "search_constraint": "6/104",
+          "search_ranking": "11/103",
+          "compare_field": "29/29",
+          "aggregate_field": "69/79",
+          "group_by_field": "48/76"
+        }
+      },
+      "delta_from_first_observation": {
+        "exact_strict": 29,
+        "execution_semantic_strict": 29,
+        "compare_field": 29,
+        "other_kind_pass_counts_changed": false
+      },
+      "artifact_hashes": {
+        "expected_run": "3be8f598b6be343ec296d3502ef630fc9f416d00c23b2120f27376590f24add5",
+        "execution_semantic_audit": "299694143a42543e8fbd6777fc00ba3db557fa62e3157f0bf9a7fcd2d509bc22"
+      },
+      "conclusion": "정확한 두 상품 ID를 자연스럽게 나열한 비교 문법과 표준 비교 근거 범위를 보강해 같은 공개 391문항에서 비교 0/29를 29/29로 개선함. 최초 관측 이후의 사후 회귀이므로 독립 blind 또는 공식 성능이 아님"
+    },
     "conclusion": "현재 Qwen 계획 경로는 strict 순개선이 없고 2건 구제와 2건 퇴행을 교환하며 p95를 약 2.35초 늘림. 답변 전용 경로는 strict·evidence를 바꾸지 않고 오류와 fallback 없이 evidence 기반 문장을 생성함"
   },
   "next_experiment": {
