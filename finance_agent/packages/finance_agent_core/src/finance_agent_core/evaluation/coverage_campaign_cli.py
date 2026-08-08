@@ -151,7 +151,7 @@ def _git_source_state(path: Path) -> tuple[str, bool]:
             text=True,
         ).stdout.strip()
         tracked_changes = subprocess.run(
-            ["git", "-C", root, "status", "--porcelain", "--untracked-files=no"],
+            ["git", "-C", root, "status", "--porcelain", "--untracked-files=normal"],
             check=True,
             capture_output=True,
             text=True,
@@ -676,7 +676,7 @@ def main(argv: list[str] | None = None) -> int:
     source_git_commit, source_worktree_clean = _git_source_state(Path.cwd())
     if not source_worktree_clean:
         raise ValueError(
-            "coverage campaign refuses tracked source changes; "
+            "coverage campaign refuses tracked or non-ignored source changes; "
             "commit them or use a new clean worktree"
         )
 

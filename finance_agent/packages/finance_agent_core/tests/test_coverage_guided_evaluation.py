@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import subprocess
+
 import pytest
 
 from finance_agent_core.contracts.queryplan import (
@@ -27,6 +29,7 @@ from finance_agent_core.evaluation.coverage_analysis import plan_delta_codes
 from finance_agent_core.evaluation.coverage_campaign_cli import (
     _campaign_ranges,
     _estimate_qwen_calls,
+    _git_source_state,
     _load_or_create_protocol,
     _preflight_output_state,
     _protocol_semantic_sha256,
@@ -337,6 +340,40 @@ def test_coverage_campaign_preflight_rejects_unbound_nonempty_output(tmp_path) -
             generator_model="qwen3-local-test",
             source_git_commit="a" * 40,
         )
+
+
+def test_coverage_campaign_git_lock_rejects_nonignored_untracked_source(tmp_path) -> None:
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    (tmp_path / ".gitignore").write_text("artifacts/\n", encoding="utf-8")
+    (tmp_path / "tracked.py").write_text("VALUE = 1\n", encoding="utf-8")
+    subprocess.run(["git", "-C", str(tmp_path), "add", "."], check=True)
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(tmp_path),
+            "-c",
+            "user.name=Coverage Test",
+            "-c",
+            "user.email=coverage@example.invalid",
+            "commit",
+            "-q",
+            "-m",
+            "test",
+        ],
+        check=True,
+    )
+
+    _, clean = _git_source_state(tmp_path)
+    assert clean
+    (tmp_path / "untracked.py").write_text("VALUE = 2\n", encoding="utf-8")
+    _, clean = _git_source_state(tmp_path)
+    assert not clean
+    (tmp_path / "untracked.py").unlink()
+    (tmp_path / "artifacts").mkdir()
+    (tmp_path / "artifacts" / "result.json").write_text("{}", encoding="utf-8")
+    _, clean = _git_source_state(tmp_path)
+    assert clean
 
 
 def test_coverage_campaign_validates_exact_shard_sources() -> None:

@@ -311,6 +311,8 @@ python -m finance_agent_core.evaluation.coverage_campaign_cli \
 
 - 질문과 profile 실행을 작은 shard로 저장해 중단 후 같은 명령으로 재개
 - 첫 Qwen 호출 전에 clean Git commit·suite·선택 범위·모델을 `protocol.json`으로 잠금
+- Git에 무시된 `artifacts/` 결과는 허용하지만, 수정 파일과 무시되지 않은 새 소스 파일이
+  하나라도 있으면 시작 거부
 - tracked source가 바뀌면 이전 조각과 섞지 않고 새 출력 디렉터리를 요구
 - 이미 생긴 최초 관측 파일은 덮어쓰지 않고 hash·source ID·모델을 검증해 재사용
 - 질문 shard와 실행 shard를 일대일로 검사한 뒤 캠페인 결과 병합

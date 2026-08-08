@@ -203,7 +203,7 @@ HCX 모델·endpoint·인증과 크레딧 적용 범위는 남아 있어 기존�
 - 금융 도메인 QA: v1 개발 40문항 최초 strict 1/40,
   safety·evidence 각각 32/40을 보존하고 v1.2 Router·linker 회귀에서
   모든 계약 40/40·잘못된 실행 0건, dependency pending 13건은 유지
-- 코드 회귀 기준: Agent Core pytest 476개·Backend pytest 34개, Ruff lint·format,
+- 코드 회귀 기준: Agent Core pytest 477개·Backend pytest 34개, Ruff lint·format,
   pip dependency check, wheel과 필수 package data 검사
 - 로컬 Qwen 평가 기준: 동결 50문항에서 최초 미사용 holdout 9/10,
   오류 수정 후 전체 회귀 50/50을 연속 2회 재현
