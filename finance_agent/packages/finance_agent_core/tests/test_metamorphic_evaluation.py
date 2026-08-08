@@ -25,6 +25,10 @@ from finance_agent_core.evaluation.metamorphic_cli import main as metamorphic_ma
 from finance_agent_core.evaluation.metamorphic_run_cli import build_parser as build_run_parser
 from finance_agent_core.evaluation.metamorphic_runner import MetamorphicRunner
 from finance_agent_core.evaluation.official_mock import load_official_mock_suite
+from finance_agent_core.evaluation.official_mock_gold_audit import (
+    apply_official_mock_gold_audit,
+    load_official_mock_gold_audit,
+)
 from finance_agent_core.evaluation.red_team_e2e import ProviderTelemetry
 
 
@@ -36,6 +40,57 @@ def test_protocol_pins_every_official_mock_case_and_source_hash() -> None:
     assert protocol.source_case_ids == [case.id for case in source.suite.cases]
     assert protocol.axes == list(MutationAxis)
     assert protocol.status == "internal_development_not_blind"
+
+
+def test_gold_audit_corrects_two_sort_directions_without_mutating_source() -> None:
+    source = load_official_mock_suite()
+    loaded_audit = load_official_mock_gold_audit()
+    source_by_id = {case.id: case for case in source.suite.cases}
+
+    audited_cases, observed_audit = apply_official_mock_gold_audit(
+        source.suite.cases,
+        source_suite_sha256=source.sha256,
+        database_sha256_by_family={
+            "overseas_etp": "eee9009ca741713a9a61e498cd5ed8366836d754c7d0c2dbd74ed7e456a2ebbe",
+            "bond": "40265aa326d63244727294ac29c1cd38c898f05b6a80dfd51fd8ac38e08764bc",
+        },
+    )
+    audited_by_id = {case.id: case for case in audited_cases}
+
+    assert observed_audit == loaded_audit
+    assert [item.case_id for item in loaded_audit.audit.corrections] == [
+        "official-mock-v1-009",
+        "official-mock-v1-016",
+    ]
+    assert source_by_id["official-mock-v1-009"].expectation.product_ids == [
+        "AMX:SURI.K",
+        "AMX:XBNB.K",
+        "AMX:XXRP.K",
+    ]
+    assert audited_by_id["official-mock-v1-009"].expectation.product_ids == [
+        "AMX:AAAD.K",
+        "AMX:BBUS.K",
+        "AMX:BIV",
+    ]
+    assert audited_by_id["official-mock-v1-016"].expectation.product_ids == [
+        "KR6169374E75",
+        "KR6066571474",
+        "KR6029889674",
+    ]
+
+
+def test_gold_audit_fails_closed_on_database_hash_drift() -> None:
+    source = load_official_mock_suite()
+
+    with pytest.raises(ValueError, match="database SHA-256 differs"):
+        apply_official_mock_gold_audit(
+            source.suite.cases,
+            source_suite_sha256=source.sha256,
+            database_sha256_by_family={
+                "overseas_etp": "0" * 64,
+                "bond": "0" * 64,
+            },
+        )
 
 
 def test_hard_literal_validation_protects_labeled_overseas_ticker() -> None:

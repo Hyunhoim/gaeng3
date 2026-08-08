@@ -24,6 +24,9 @@ from finance_agent_core.evaluation.official_mock import (
     OfficialMockCase,
     load_official_mock_suite,
 )
+from finance_agent_core.evaluation.official_mock_gold_audit import (
+    apply_official_mock_gold_audit,
+)
 from finance_agent_core.evaluation.red_team_e2e import (
     ProviderCallSnapshot,
     ProviderTelemetry,
@@ -90,6 +93,9 @@ class MetamorphicReport(MetamorphicModel):
     protocol_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     source_suite_id: str
     source_suite_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    gold_audit_id: str
+    gold_audit_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    gold_audit_correction_ids: list[str]
     mutation_batch_semantic_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     database_sha256_by_family: dict[str, str]
     provider_calls: ProviderCallSnapshot
@@ -324,7 +330,14 @@ class MetamorphicRunner:
         self.database_sha256_by_family = database_sha256_by_family
         self.telemetry = telemetry
         self.agent_model = agent_model
-        self._source_by_id = {case.id: case for case in source.suite.cases}
+        audited_cases, loaded_gold_audit = apply_official_mock_gold_audit(
+            source.suite.cases,
+            source_suite_sha256=source.sha256,
+            database_sha256_by_family=database_sha256_by_family,
+            active_case_ids={candidate.source_case_id for candidate in batch.candidates},
+        )
+        self.gold_audit = loaded_gold_audit
+        self._source_by_id = {case.id: case for case in audited_cases}
 
     def _run_case(
         self,
@@ -425,6 +438,11 @@ class MetamorphicRunner:
             protocol_sha256=self.batch.protocol_sha256,
             source_suite_id=self.batch.source_suite_id,
             source_suite_sha256=self.batch.source_suite_sha256,
+            gold_audit_id=self.gold_audit.audit.audit_id,
+            gold_audit_sha256=self.gold_audit.sha256,
+            gold_audit_correction_ids=[
+                correction.case_id for correction in self.gold_audit.audit.corrections
+            ],
             mutation_batch_semantic_sha256=mutation_batch_semantic_sha256(self.batch),
             database_sha256_by_family=self.database_sha256_by_family,
             provider_calls=self.telemetry.snapshot(),
@@ -435,5 +453,6 @@ class MetamorphicRunner:
                 *self.batch.interpretation_limits,
                 "동일성 지문은 답변 문체를 제외한 실행 상태·상품·수치 구조만 비교함",
                 "변형 실패는 Agent 결함과 생성 질문의 의미 변질을 구분해 검토해야 함",
+                *self.gold_audit.audit.interpretation_limits,
             ],
         )

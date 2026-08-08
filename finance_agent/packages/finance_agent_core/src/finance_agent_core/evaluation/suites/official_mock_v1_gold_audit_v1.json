@@ -1,0 +1,57 @@
+{
+  "schema_version": "1.0",
+  "audit_id": "official-mock-v1-gold-audit-v1",
+  "status": "corrected_overlay_preserves_historical_suite",
+  "source_suite_id": "official-mock-v1-30",
+  "source_suite_sha256": "c9250cd45656beadad563087941112b31318254c50fc72bf9f15dcaa1d88a36e",
+  "corrections": [
+    {
+      "case_id": "official-mock-v1-009",
+      "product_family": "overseas_etp",
+      "ordering_field": "total_expense_ratio_micro_pct",
+      "requested_direction": "asc",
+      "historical_direction": "desc",
+      "candidate_count": 4138,
+      "product_ids": [
+        "AMX:AAAD.K",
+        "AMX:BBUS.K",
+        "AMX:BIV"
+      ],
+      "sort_values": [
+        10000,
+        20000,
+        20000
+      ],
+      "database_sha256": "eee9009ca741713a9a61e498cd5ed8366836d754c7d0c2dbd74ed7e456a2ebbe",
+      "tie_breaker": "total_expense_ratio_micro_pct ASC, product_id ASC",
+      "verification_note": "미국 투자 해외 ETF 4,138건을 대상으로 유효한 총보수율을 오름차순 정렬해 확인함. 원본 정답 3건은 같은 필드를 내림차순 정렬한 결과였음"
+    },
+    {
+      "case_id": "official-mock-v1-016",
+      "product_family": "bond",
+      "ordering_field": "remaining_days",
+      "requested_direction": "asc",
+      "historical_direction": "desc",
+      "candidate_count": 254,
+      "product_ids": [
+        "KR6169374E75",
+        "KR6066571474",
+        "KR6029889674"
+      ],
+      "sort_values": [
+        4,
+        5,
+        14
+      ],
+      "database_sha256": "40265aa326d63244727294ac29c1cd38c898f05b6a80dfd51fd8ac38e08764bc",
+      "tie_breaker": "remaining_days ASC, product_id ASC",
+      "verification_note": "현재 매수 가능한 국내채권 254건을 잔존일수 오름차순으로 정렬해 확인함. 원본 정답 3건은 잔존일수를 내림차순 정렬한 결과였음"
+    }
+  ],
+  "interpretation_limits": [
+    "이 파일은 Qwen 평가 실험에서 발견한 정답 산출 오류만 교정함",
+    "과거 official-mock-v1 원본과 기존 보고서는 재작성하지 않음",
+    "교정값은 명시된 원본 suite 및 정규화 DB SHA-256과 일치할 때만 적용함",
+    "이 교정 결과는 독립 blind 평가나 공모전 공식 점수를 의미하지 않음"
+  ]
+}
