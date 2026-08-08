@@ -1,0 +1,140 @@
+{
+  "schema_version": "1.0",
+  "baseline_id": "coverage-guided-v1",
+  "recorded_on": "2026-08-08",
+  "dataset": "overseas_etp+domestic_etp+bond+fund",
+  "evaluation_layer": "system_regression",
+  "status": "coverage_diagnostic_first_observed",
+  "provider": {
+    "name": "deterministic_current",
+    "official_submission_provider": false,
+    "network_used": false,
+    "roles": [
+      "canonical_question_router",
+      "deterministic_query_planner",
+      "oracle_and_evidence_verifier"
+    ]
+  },
+  "model": {
+    "repository": null,
+    "served_name": null,
+    "revision": null,
+    "reason": "최초 canonical 진단은 Qwen을 호출하지 않고 현재 서버 규칙의 자연어 이해 범위를 측정"
+  },
+  "suite": {
+    "id": "coverage-guided-v1",
+    "version": "1.0",
+    "status": "internal_synthetic_not_blind",
+    "path": "evaluation/protocols/coverage-guided-v1.protocol.json",
+    "sha256": "8909198fd80b04e8904976b269c694cda60b45dc9b619d0d0689e90e4eab98e8",
+    "registry_schema_version": "1.3",
+    "registry_sha256": "5887c4dba17fd33d0c20b550adf564796de508e3dcafc2a2e7bb3796603a73b5",
+    "attempted_capability_cells": 305,
+    "directly_executable_cases": 299,
+    "excluded_cells": 6,
+    "plan_suite_semantic_sha256": "0dfca5e5f706c1886953525e3f28d223209a8f5b8d9f4f051a829b4ca3361b3d"
+  },
+  "data": {
+    "database_sha256": "2c26861a7e9b90ed4ae46ba3bfd4565daa63f405cf16627094629df36cecd03a",
+    "manifest_sha256": "624cef391dfe86aa2ce1a8ce20ad5142ec0d65a792e1fec6df0259024b997003",
+    "source_file_sha256": "c4f860f7a0d6821788015f51cf9ae48d2f48ab657e9a99be49771fc32fcaf895",
+    "hash_policy": "상품군 이름과 개별 SHA-256을 정렬해 결합한 뒤 다시 SHA-256 계산",
+    "database_sha256_by_family": {
+      "bond": "40265aa326d63244727294ac29c1cd38c898f05b6a80dfd51fd8ac38e08764bc",
+      "domestic_etp": "a91bfc713b88e9ba1e7da27508857cbe5ea200c4d7821d0b4fee7d9922684484",
+      "overseas_etp": "eee9009ca741713a9a61e498cd5ed8366836d754c7d0c2dbd74ed7e456a2ebbe",
+      "fund": "99fac786e5be0ec5a7a53e11e1bd3bbccd5b37ab15243ecbf8b864a85b375ca4"
+    }
+  },
+  "metrics": {
+    "total": 299,
+    "passed": 37,
+    "strict_accuracy": 0.123746,
+    "direct_plan_execution": {
+      "attempted": 305,
+      "executed": 299,
+      "excluded": 6,
+      "execution_rate": 0.980328
+    },
+    "canonical_agent": {
+      "executed": 254,
+      "execution_rate": 0.849498,
+      "plan_semantic_passed": 44,
+      "plan_semantic_rate": 0.147157,
+      "evidence_semantic_passed": 77,
+      "evidence_semantic_rate": 0.257525,
+      "fallback_count": 0
+    },
+    "first_failure_stages": {
+      "routing": 45,
+      "planning": 210,
+      "evidence": 7
+    },
+    "strict_by_family": {
+      "bond": 0.185185,
+      "domestic_etp": 0.066667,
+      "overseas_etp": 0.1,
+      "fund": 0.15873
+    },
+    "strict_by_kind": {
+      "search_constraint": 0.035714,
+      "search_ranking": 0.191489,
+      "compare_field": 0.0,
+      "aggregate_field": 0.0,
+      "group_by_field": 0.705882
+    },
+    "latency_ms": {
+      "min": 0.047,
+      "p50": 74.589,
+      "p95": 1305.709,
+      "max": 5142.211
+    }
+  },
+  "reports": [
+    {
+      "role": "direct_plan_bank",
+      "artifact_name": "coverage-guided-plan-v1-canonical-screened-v2.json",
+      "sha256": "72546a055c989e3e798bd7350cbdb6869ab500808aaaea20980473cd9b7070e1"
+    },
+    {
+      "role": "canonical_agent_first_observation",
+      "artifact_name": "coverage-guided-plan-v1-canonical-screened-v2-first-observation.json",
+      "sha256": "8b6ebc6630f3b16976a48d40f918b27e67a50ca73a481c2f1fdd96820f6676d2"
+    },
+    {
+      "role": "failure_priority_diagnosis",
+      "artifact_name": "coverage-guided-plan-v1-canonical-screened-v2-diagnosis.json",
+      "sha256": "d2735678ae41d6cdf4169d2b7bc498deb5c7f517d2d4627f3719872a46df037d"
+    }
+  ],
+  "reproduce": "PYTHONPATH=packages/finance_agent_core/src python -m finance_agent_core.evaluation.coverage_run_cli --suite-input artifacts/evaluation/coverage-guided-plan-v1-canonical-screened-v2.json --agent-provider expected --output artifacts/evaluation/coverage-guided-plan-v1-canonical-screened-v2-replay.json",
+  "next_experiment": {
+    "generator": "Qwen/Qwen3-30B-A3B-Instruct-2507-FP8",
+    "source_wording_visible": false,
+    "requested_questions": 897,
+    "profiles": [
+      "expected",
+      "local_test_grounded_plan_only",
+      "local_test_grounded"
+    ],
+    "primary_metrics": [
+      "generator_acceptance_rate",
+      "agent_strict_accuracy",
+      "end_to_end_yield",
+      "plan_semantic_rate",
+      "evidence_semantic_rate",
+      "fallback_count",
+      "provider_error_count",
+      "latency"
+    ]
+  },
+  "limitations": [
+    "305개는 모든 필드·연산자 조합이 아니라 registry capability를 대표하도록 선택한 좌표임",
+    "299개 직접 실행 성공은 정답 QueryPlan을 바로 실행한 결과라 자연어 이해 성능이 아님",
+    "canonical 질문은 규칙으로 만든 진단 문장이라 실제 사용자 표현 분포를 대표하지 않음",
+    "37/299는 실패를 보기 전 보존한 최초 관측이지만 독립 blind나 공모전 예상 점수는 아님",
+    "비교·집계의 필드별 질문은 기존 공개 회귀보다 의도적으로 넓은 capability 범위를 사용함",
+    "로컬 Qwen 자연화·계획 실험과 사후 수정 결과는 이 baseline을 덮어쓰지 않고 별도로 기록함",
+    "로컬 Qwen은 개발 전용이며 HyperCLOVA X 품질·비용·API 호환성을 대변하지 않음"
+  ]
+}

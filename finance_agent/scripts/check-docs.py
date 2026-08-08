@@ -43,7 +43,7 @@ PRODUCT_COMPARE_SUITE = (
 
 LINK_PATTERN = re.compile(r"!?\[[^\]]*]\((?:<(?P<angle>[^>]+)>|(?P<plain>[^)\s]+))\)")
 SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
-FROZEN_PYTEST_PASSED = 448
+FROZEN_PYTEST_PASSED = 459
 
 REQUIRED_INDEX_TARGETS = {
     "project-baseline.md",
@@ -61,6 +61,7 @@ REQUIRED_INDEX_TARGETS = {
     "evaluation-internal-red-team.md",
     "evaluation-official-mock.md",
     "evaluation-qwen-metamorphic.md",
+    "evaluation-coverage-guided.md",
     "evaluation-domain-qa.md",
     "submission-model-boundary.md",
     "hyperclova-provider.md",
@@ -104,6 +105,7 @@ REQUIRED_BASELINES = {
     "official-mock-v1-30.json",
     "qwen-eval-lab-v1.json",
     "semantic-roundtrip-v1.json",
+    "coverage-guided-v1.json",
     "official-mock-http-v1-30.json",
     "official-mock-http-fund-approved-v1-30.json",
     "official-mock-http-concurrency-v1.json",
@@ -421,6 +423,7 @@ def _check_baseline(path: Path) -> list[str]:
         "briefing_examples_safety_improved",
         "briefing_examples_bond_improved",
         "official_http_first_observed",
+        "coverage_diagnostic_first_observed",
     }:
         if (
             not isinstance(total, int)

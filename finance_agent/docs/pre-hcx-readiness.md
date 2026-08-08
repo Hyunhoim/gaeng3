@@ -56,6 +56,7 @@
 | 15 | 공식 형식 공개 모의평가 | 난이도 10/10/10·답변 불가 5개·공식 5필드·latency | expected·로컬 Qwen 30/30·생성 16/17·안전 fallback 1건 |
 | 16 | Qwen 변형·전체 Agent 스트레스 평가 | 세 표현 축·의미 선별·gold 감사·실패 단계·fallback 전후 비교 | 승인 변형 결정론적·Qwen 각각 77/77·fallback 0/61 |
 | 17 | 원문 비공개 semantic round-trip | 실행 의미만 제공·계획 지문·근거 첨부 모델 계획 gate | 생성 75·선별 64, 최초 15/64→결정론적 출력·계획 64/64; 강화 Qwen 재실행 대기 |
+| 18 | registry 기반 자동 커버리지 | 대표 계획 직접 실행·canonical 최초 관측·Qwen 자연화·shard 병합 | 305개 중 299개 직접 실행, canonical strict 최초 37/299; Qwen 897질문 실험 대기 |
 
 ## 2. 평가 해석 원칙
 
@@ -169,13 +170,29 @@ Qwen 변형 질문·전체 Agent 스트레스 평가 결과:
   실행 권한을 얻지 못하도록 단위 회귀로 고정
 - 공개 정답 파생·사후 개선 회귀이므로 독립 blind나 공식 점수로 해석하지 않음
 
+registry 기반 자동 커버리지 최초 관측:
+
+- queryable·sortable·comparable·aggregatable 필드와 실제 DB 값을 조합해 대표
+  capability 좌표 305개를 자동 구성
+- 서로 다른 날짜·통화 값이 부족한 6개는 제외 이유를 보존하고, 나머지 정답
+  QueryPlan 299개는 Oracle·Verifier·field evidence 직접 실행에 성공
+- 같은 계획의 규칙형 질문을 현재 Agent에 넣은 최초 strict는 37/299,
+  실행 도달 254/299, 계획 의미 44/299, 근거 의미 77/299
+- 실패의 첫 단계는 질문 분류 45건, 작업 계획 210건, 근거 7건으로 자연어
+  이해층이 현재 가장 큰 병목임을 확인
+- 비교 0/72, 일반 필드 집계 0/34, 조건 검색 4/112를 숨기지 않고 최초
+  baseline으로 동결
+- Qwen은 canonical 원문 없이 의미 명세만 보고 정중체·구어체·검색창형
+  최대 897문항을 생성하며, 기계 의미 선별과 hash 기반 shard·실행 병합 후 평가
+- 자동 생성·공개 데이터 진단이므로 독립 blind·실사용 분포·공모전 점수가 아님
+
 부정 표현 안전장치 보강 후 교차 회귀 결과:
 
 - 상품 비교 30/30, 네 상품군 검색·집계 8/8, 금융 도메인 개발 QA 40/40
 - `공모가 아닌 공모펀드`, `거래 가능하지 않은 ETF`, `AUM이 크지 않은`,
   `특정 상품을 제외한`처럼 조건을 반대로 해석하기 쉬운 질문은 임의 실행하지 않고
   미지원 또는 조건 확인으로 종료
-- 전체 단위·계약 테스트 448/448, lint·format 검사 통과
+- 전체 단위·계약 테스트 459/459, lint·format 검사 통과
 - 위 결과도 이미 확인한 공개 개발 세트의 사후 회귀이며 독립 blind가 아님
 
 같은 30문항의 실제 Docker FastAPI `GET /answer` 최초 관측:
@@ -238,10 +255,10 @@ Qwen 변형 질문·전체 Agent 스트레스 평가 결과:
 
 ## 4. 내부 완료 QA
 
-- Agent Core pytest `370 passed`
+- Agent Core pytest `459 passed`
 - Backend pytest `34 passed`
 - Ruff lint와 format 통과
-- 문서 검사 `56 Markdown files`, `40 evaluation baselines` 통과
+- 문서 검사 `57 Markdown files`, `41 evaluation baselines` 통과
 - `pip check` 통과
 - build isolation 없이 wheel 생성과 신규 JSON package data 포함 여부 통과
 - `git diff --check` 통과

@@ -148,7 +148,7 @@ BM25/SQLite FTS 기반 문서 검색의 적재·필터·출처·기준일 계약
 현재 대표 근거:
 
 - 4종 원천 145,393행 감사, 핵심 expectation 65/65
-- Agent Core pytest 370개와 Backend pytest 34개 통과
+- Agent Core pytest 459개와 Backend pytest 34개 통과
 - 공식 XLSX에서 SQLite 4개를 자동 생성·검증한 뒤 Backend를 시작하는 Docker 경로 완료
 - 국내·해외 ETP 교차 SEARCH 공개 실제 데이터 회귀 4/4
 - 교차 상품군 grounded answer 공개 회귀 expected·로컬 Qwen 각각 4/4, 생성 대상 2문항 모두 grounded, 모델 호출 3회, fallback 0
@@ -167,6 +167,11 @@ BM25/SQLite FTS 기반 문서 검색의 적재·필터·출처·기준일 계약
   registry·유일 식별자·서버 고정 조건 gate를 통과한 항목만 실행하는 계약 구현
 - 실재하지만 원문에 없는 상품 ID, 부정된 ID·필드·정렬, 서버 조건 누락,
   malformed provider 응답이 실행 권한을 얻지 못하도록 공격 회귀로 고정
+- registry와 실제 DB에서 대표 기능 좌표 305개를 자동 구성하고 정답 계획
+  299개를 직접 실행해 검색·계산·근거 엔진의 넓은 실행 범위를 확인
+- 같은 299개 계획의 canonical 자연어 최초 strict 37/299를 보존하고,
+  질문 분류 45건·작업 계획 210건·근거 7건으로 실패 시작점을 분해해
+  다음 Qwen 자연화 897문항과 공통 문법 개선의 우선순위를 확보
 - 공식 예상 분포 공개 모의평가 30/30, 답변 불가 5/5 안전 처리,
   로컬 Qwen 생성 16/17·검증 fallback 1건
 - 같은 30문항의 실제 Docker GET은 공식 형식·60초 30/30, 의미 24/30이며

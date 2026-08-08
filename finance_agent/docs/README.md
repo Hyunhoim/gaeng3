@@ -18,6 +18,7 @@
 | 설명회 형식 30문항 결과가 궁금한지 | [공식 형식 공개 모의평가](evaluation-official-mock.md) |
 | 질문 표현을 바꾼 Qwen 스트레스 평가가 궁금한지 | [Qwen 변형 질문 평가](evaluation-qwen-metamorphic.md) |
 | 원문을 숨긴 의미 재구성·모델 계획 gate가 궁금한지 | [Qwen 변형 질문 평가 9절](evaluation-qwen-metamorphic.md#9-원문-표현을-숨긴-semantic-round-trip) |
+| 전체 필드의 미시험 구간과 다음 Qwen 실험이 궁금한지 | [자동 커버리지 평가](evaluation-coverage-guided.md) |
 | HyperCLOVA X 연결 전에 무엇이 남았는지 | [연결 전 준비 기준](pre-hcx-readiness.md) |
 
 ## 목적별 위치
@@ -41,6 +42,8 @@
 - 같은 10/10/10·미응답 5개 분포의 공개 모의평가를 구성해 로컬 Qwen 전체 경로 30/30 확인
 - Qwen이 만든 의미 보존 변형 77개를 전체 Agent로 재생해 77/77·fallback 0 확인
 - 원문 문장을 숨긴 의미 재구성 64개에서 최초 15/64를 보존하고 출력·계획 의미 64/64로 개선
+- registry 기반 대표 기능 305개 중 299개 직접 실행, canonical 자연어 최초 strict
+  37/299로 질문 이해층의 넓은 공백을 별도 동결
 - 도메인별 Turtle 5개 생성과 RDFLib 문법·field registry 정합성 검사 완료
 - 정확한 HCX 모델 ID·endpoint·인증 규격과 크레딧 적용 범위는 후속 확인 필요
 - 크레딧을 받기 전까지 실제 HCX 연결은 보류하고 로컬 Qwen 내부 시험 계속
