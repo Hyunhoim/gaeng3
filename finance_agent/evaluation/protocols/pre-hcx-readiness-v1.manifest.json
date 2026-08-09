@@ -1,14 +1,14 @@
 {
   "schema_version": "1.0",
   "baseline_id": "pre-hcx-readiness-v1",
-  "recorded_on": "2026-08-08",
+  "recorded_on": "2026-08-09",
   "status": "internal_ready_external_gates_pending",
-  "git_commit": "11f76670a47a81a31b7d5d851216048fc6beddea",
-  "last_committed_source_commit": "11f76670a47a81a31b7d5d851216048fc6beddea",
+  "git_commit": "bf3e29536aa4d672c3e9e2dd501f14dca82970f0",
+  "last_committed_source_commit": "bf3e29536aa4d672c3e9e2dd501f14dca82970f0",
   "generated_from_dirty_worktree": false,
   "hash_algorithm": "sha256(sorted(relative_path + NUL + file_sha256 + LF))",
   "file_count": 376,
-  "tree_sha256": "4854dec2176219e67ffe1d12b3d94d0903c797cdba4362e073654f808d4200c9",
+  "tree_sha256": "2406e3514f394118cb07cf624efc5b579d7b46ba60480a52bfc7e05462fcdf46",
   "included_scope": [
     "README.md",
     "../compose.sh",
@@ -42,7 +42,7 @@
     "limitation": "self_authored_internal_diagnostic_not_independent_blind"
   },
   "qa": {
-    "pytest_passed": 496,
+    "pytest_passed": 507,
     "ruff_lint": "passed",
     "ruff_format": "passed",
     "pip_check": "passed",
@@ -86,7 +86,9 @@
     "coverage_cluster_statistics_2026_08_08": "naturalized_source_plan_cluster_bootstrap_and_cluster_mcnemar_with_holm_correction_passed",
     "coverage_execution_semantic_audit_2026_08_08": "primary_exact_65_of_391_preserved_aggregate_execution_inert_expected_134_qwen_plan_132_compare_and_search_prioritized",
     "coverage_compare_postfix_regression_2026_08_08": "same_public_391_exact_94_execution_semantic_163_compare_29_of_29_other_kind_pass_counts_unchanged_not_blind",
-    "coverage_compare_qwen_plan_postfix_2026_08_08": "same_public_391_exact_94_execution_semantic_161_compare_29_of_29_rescued_2_regressed_2_no_net_gain_p95_plus_2238ms"
+    "coverage_compare_qwen_plan_postfix_2026_08_08": "same_public_391_exact_94_execution_semantic_161_compare_29_of_29_rescued_2_regressed_2_no_net_gain_p95_plus_2238ms",
+    "coverage_search_projection_postfix_2026_08_08": "same_public_391_exact_153_execution_semantic_222_constraint_43_of_104_ranking_33_of_103_rescued_59_regressed_0_not_blind",
+    "coverage_search_routing_postfix_2026_08_08": "same_public_391_exact_170_execution_semantic_242_constraint_47_of_104_ranking_46_of_103_rescued_17_regressed_0_not_blind"
   },
   "external_gates": [
     "금융 도메인 담당자의 external blind 100문항과 비공개 정답키 작성",
