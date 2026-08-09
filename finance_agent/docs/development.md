@@ -73,11 +73,11 @@ SOURCE_DATE_EPOCH=1785283200 \
   packages/finance_agent_core
 ```
 
-2026-08-07 결과:
+2026-08-09 결과:
 
-- Agent Core pytest 461개, Backend pytest 34개 통과
+- Agent Core pytest 507개, Backend pytest 34개 통과
 - Ruff format·lint, pip dependency, ontology sync 검사 통과
-- 문서 링크·인덱스·평가 baseline·suite hash 55건과 baseline 38개 통과
+- 문서 링크·인덱스·평가 baseline·suite hash 59건과 baseline 41개 통과
 - 루트 `./rehearse.sh`로 새 Docker 이미지 준비, health, 기본 공모펀드 잠금,
   Backend·공식 GET 확장 smoke 14/14, 전체 회귀를 한 번에 재현
 - 제출 경계 자동 검사는 개발 저장소를 `development`로 통과시키고, 로컬 모델

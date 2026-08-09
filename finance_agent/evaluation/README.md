@@ -45,7 +45,7 @@ DB, 원천 XLSX, 전체 report, 모델 가중치는 계속 `artifacts/` 또는 �
 | [공식 형식 30문항 공개 모의평가](baselines/official-mock-v1-30.json) | 난이도 10/10/10·답변 불가 5개에서 Qwen→Oracle→Verifier→공식 5필드 전체 경로 관측 |
 | [Qwen 변형 질문 스트레스 평가](baselines/qwen-eval-lab-v1.json) | 공개 원문 30개에서 세 표현 축 90개 생성·77개 선별·gold 감사·결정론적/Qwen 전체 경로 회귀 |
 | [원문 비공개 semantic round-trip](baselines/semantic-roundtrip-v1.json) | Qwen에 원문 문장을 숨기고 실행 의미로 75개 재생성·64개 선별·최초 15/64→계획 의미까지 64/64 사후 회귀 |
-| [registry 기반 자동 커버리지 최초 관측](baselines/coverage-guided-v1.json) | 대표 기능 305개·정답 계획 299개 직접 실행과 canonical 자연어 strict 37/299의 병목 진단 |
+| [registry 기반 자동 커버리지 최초 관측과 사후 회귀](baselines/coverage-guided-v1.json) | 대표 기능 305개·정답 계획 299개 직접 실행, Qwen 자연화 최초 65/391 보존, 비교·검색 개선 94→153→170과 최신 실행 의미 보조 strict 242/391 |
 | [공식 GET Docker 30문항 최초 관측](baselines/official-mock-http-v1-30.json) | 실제 FastAPI 네트워크의 5필드 30/30·의미 24/30·공모펀드 정책 잠금 6건 |
 | [공식 GET Docker 공모펀드 명시적 승인](baselines/official-mock-http-fund-approved-v1-30.json) | 최초 24/30 보존 후 공모펀드만 여는 v1 정책으로 의미·형식·60초 30/30, Qwen 17/17 |
 | [공식 GET 결정론적 동시성](baselines/official-mock-http-concurrency-v1.json) | 동시성 1·2·4에서 의미·형식 90/90과 단일 worker 지연 변화 관측 |

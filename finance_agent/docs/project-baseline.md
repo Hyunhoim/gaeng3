@@ -176,7 +176,11 @@
   같은 계획의 canonical 자연어 최초 strict는 37/299이며, 실패 262개 중
   질문 분류 45개·작업 계획 210개·근거 7개로 자연어 이해 병목을 분리했다.
   이는 자동 생성 진단이므로 독립 blind나 공모전 예상 점수가 아니다.
-- 전체 Agent Core 회귀는 pytest 496개, Backend 회귀는 34개이며 Ruff lint·format,
+- 같은 공개 Qwen 자연화 391문항의 최초 exact 65를 보존한 채, 비교 공통 문법으로
+  94, 검색 상품군·근거 문법으로 153, 명확한 비용·티커 Router로 170까지 단계별
+  사후 회귀했다. 최신 실행 의미 보조 strict는 242/391이며, 각 검색 단계의 기존
+  통과 문항 퇴행은 0건이다. 이는 개발에 사용한 같은 질문의 회귀이지 blind가 아니다.
+- 전체 Agent Core 회귀는 pytest 507개, Backend 회귀는 34개이며 Ruff lint·format,
   pip dependency check와
   wheel 빌드를 통과했다.
 - Docker `data-init`은 읽기 전용 공식 XLSX에서 네 SQLite를 자동 생성·검증하고,

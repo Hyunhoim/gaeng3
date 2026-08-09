@@ -377,16 +377,97 @@
       },
       "conclusion": "정확한 두 상품 ID를 자연스럽게 나열한 비교 문법과 표준 비교 근거 범위를 보강해 같은 공개 391문항에서 비교 0/29를 29/29로 개선함. Qwen 계획 재실행도 비교는 유지했지만 전체 순개선은 없었음. 최초 관측 이후의 사후 회귀이므로 독립 blind 또는 공식 성능이 아님"
     },
+    "postfix_search_projection_regression": {
+      "recorded_on": "2026-08-08",
+      "status": "same_public_questions_postfix_regression_not_blind",
+      "source_git_commit": "9fc514621db1539869b3ec51b286796a210f6291",
+      "profile": "expected",
+      "question_semantic_sha256": "90d115b2f0199da3f6776842bde1e41b1ceecfef1c3a5c08dc426cf24cf3a9ad",
+      "metrics": {
+        "exact_strict_passed": 153,
+        "exact_strict_rate": 0.391304,
+        "execution_semantic_strict_passed": 222,
+        "execution_semantic_strict_rate": 0.567775,
+        "fallback_count": 0,
+        "first_failure_stages": {
+          "routing": 42,
+          "planning": 196
+        },
+        "by_kind": {
+          "search_constraint": "43/104",
+          "search_ranking": "33/103",
+          "compare_field": "29/29",
+          "aggregate_field_execution_semantic": "69/79",
+          "group_by_field": "48/76"
+        }
+      },
+      "delta_from_compare_regression": {
+        "exact_strict": 59,
+        "execution_semantic_strict": 59,
+        "search_constraint": 37,
+        "search_ranking": 22,
+        "rescued": 59,
+        "regressed": 0,
+        "holm_adjusted_p_value": 1.4901e-08
+      },
+      "artifact_hashes": {
+        "expected_run": "312282b9c35a62da615dd4a5b963e1ac4e3a178c538885ed72001d84447b11cb",
+        "execution_semantic_audit": "edda3277880522532e119a3e33f871eb50262e1592caa37679532502fab32118",
+        "ablation": "29ab97f1a3c6eefe6ca3584cda6f267ef45ec1df01ce316f6e4cb6f63508c11e"
+      },
+      "conclusion": "일반 ETF·ETN 상품군 표현, 검색 조건·정렬 필드의 evidence projection, 거래 중지 부정을 공통 경로에서 보강해 조건·순위 검색 59건을 구제하고 퇴행 0건을 확인함"
+    },
+    "postfix_search_routing_regression": {
+      "recorded_on": "2026-08-08",
+      "status": "same_public_questions_postfix_regression_not_blind",
+      "source_git_commit": "35cca49bcebe4ffb040955bb148ba37e92bd2da3",
+      "profile": "expected",
+      "question_semantic_sha256": "90d115b2f0199da3f6776842bde1e41b1ceecfef1c3a5c08dc426cf24cf3a9ad",
+      "metrics": {
+        "exact_strict_passed": 170,
+        "exact_strict_rate": 0.434783,
+        "execution_semantic_strict_passed": 242,
+        "execution_semantic_strict_rate": 0.618926,
+        "fallback_count": 0,
+        "first_failure_stages": {
+          "routing": 17,
+          "planning": 204
+        },
+        "by_kind": {
+          "search_constraint": "47/104",
+          "search_ranking": "46/103",
+          "compare_field": "29/29",
+          "aggregate_field_execution_semantic": "72/79",
+          "group_by_field": "48/76"
+        }
+      },
+      "delta_from_search_projection_regression": {
+        "exact_strict": 17,
+        "execution_semantic_strict": 20,
+        "search_constraint": 4,
+        "search_ranking": 13,
+        "rescued": 17,
+        "regressed": 0,
+        "holm_adjusted_p_value": 0.03125
+      },
+      "artifact_hashes": {
+        "expected_run": "373a9d7865b506994e9b8aebd3887f679b544a75603130c001a7c156780708f4",
+        "execution_semantic_audit": "ecde310de28e82c7613e1460a5713d71ba08a875f061a49e5540f0b7cd2c4fa0",
+        "ablation": "c3d936955759695fd89309fda222d8cd451bf961736a84d3ab48d13c4249d229"
+      },
+      "conclusion": "명시적 총보수율과 티커 정렬 질문을 실행 경로로 연결해 17건을 추가 구제하고 퇴행 0건을 확인함. 모호한 운용보수는 계속 역질문하며, 남은 병목은 제외·범위·필드별 계획 문법과 생성 질문 선별임"
+    },
     "conclusion": "현재 Qwen 계획 경로는 strict 순개선이 없고 2건 구제와 2건 퇴행을 교환하며 p95를 약 2.35초 늘림. 답변 전용 경로는 strict·evidence를 바꾸지 않고 오류와 fallback 없이 evidence 기반 문장을 생성함"
   },
   "next_experiment": {
     "goal": "최초 관측을 보존한 뒤 planning 공통 실패를 일반화 방식으로 수정하고 같은 질문에서 사후 회귀를 측정",
     "priority_gaps": [
-      "compare_field",
       "search_constraint",
       "search_ranking",
       "between_and_set_operators",
+      "explicit_negation_operators",
       "registry_field_projection_and_value_normalization",
+      "mutation_screen_false_acceptance",
       "aggregate_residual_real_semantic_failures"
     ],
     "adoption_gate": "strict 순개선, 치명적 퇴행 0, 답변 불가 안전성 유지, p95 60초 미만, 전체 공개 회귀 통과"
@@ -399,6 +480,7 @@
     "비교·집계의 필드별 질문은 기존 공개 회귀보다 의도적으로 넓은 capability 범위를 사용함",
     "로컬 Qwen 자연화 최초 관측은 canonical 수치를 덮어쓰지 않고 별도 naturalized_first_observation에 추가함",
     "391개 실행 질문은 Qwen의 기계 의미 선별을 통과한 공개 정답 계획 파생 질문이며 독립 blind가 아님",
+    "비교 94/391과 검색 153/391·170/391은 최초 결과를 본 뒤 같은 공개 질문으로 개선한 사후 회귀이며 독립 blind가 아님",
     "Qwen 계획 경로의 2건 구제와 2건 퇴행은 source-plan cluster 통계에서 유의한 순개선이 아님",
     "로컬 Qwen은 개발 전용이며 HyperCLOVA X 품질·비용·API 호환성을 대변하지 않음"
   ]
