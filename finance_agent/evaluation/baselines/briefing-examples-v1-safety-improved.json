@@ -1,0 +1,92 @@
+{
+  "schema_version": "1.0",
+  "baseline_id": "briefing-examples-v1-safety-improved",
+  "recorded_on": "2026-08-07",
+  "dataset": "briefing_examples+overseas_etp+domestic_etp+bond+fund",
+  "evaluation_layer": "system_regression",
+  "status": "briefing_examples_safety_improved",
+  "provider": {
+    "name": "deterministic_current",
+    "official_submission_provider": false,
+    "network_used": false
+  },
+  "model": {
+    "repository": null,
+    "served_name": null,
+    "revision": null,
+    "reason": "공손한 요청 어미와 잘못된 신용등급의 fail-closed 경계를 수정한 사후 회귀"
+  },
+  "suite": {
+    "id": "briefing-examples-v1-8",
+    "version": "1.0",
+    "status": "official_examples_public_not_blind",
+    "path": "packages/finance_agent_core/src/finance_agent_core/evaluation/suites/briefing_examples_v1.json",
+    "sha256": "e448b0edda5957145e624aa2a60b97fcc697efc347c49e14074ba833944762c1",
+    "total_cases": 8,
+    "answerable_cases": 5,
+    "unanswerable_cases": 3,
+    "difficulty_distribution": {
+      "low": 1,
+      "medium": 2,
+      "high": 2,
+      "not_applicable": 3
+    }
+  },
+  "data": {
+    "database_sha256": "2c26861a7e9b90ed4ae46ba3bfd4565daa63f405cf16627094629df36cecd03a",
+    "manifest_sha256": "624cef391dfe86aa2ce1a8ce20ad5142ec0d65a792e1fec6df0259024b997003",
+    "source_file_sha256": "1f06e7dbbbe7505516ff7f7dc0524cd45d86e8005bb49ae248e04526da877437",
+    "source_artifact": "KakaoTalk_Photo_2026-08-06-15-24-27 011.jpeg",
+    "hash_policy": "상품군 이름과 개별 SHA-256을 정렬해 결합한 뒤 다시 SHA-256 계산",
+    "by_family": {
+      "overseas_etp": {
+        "database_sha256": "eee9009ca741713a9a61e498cd5ed8366836d754c7d0c2dbd74ed7e456a2ebbe",
+        "manifest_sha256": "5dd159ade2353154ed8d3d32068dd512cb2b3becba39972aa0dabff0edd50771"
+      },
+      "domestic_etp": {
+        "database_sha256": "a91bfc713b88e9ba1e7da27508857cbe5ea200c4d7821d0b4fee7d9922684484",
+        "manifest_sha256": "2e52b161a260fa19eab50e8281f04f8617ee1ee69d618b19bd624af4635fca97"
+      },
+      "bond": {
+        "database_sha256": "40265aa326d63244727294ac29c1cd38c898f05b6a80dfd51fd8ac38e08764bc",
+        "manifest_sha256": "d724d99e9ffd24148144b3534795d0d545e0ebff9d01509966f6ebbb218f8312"
+      },
+      "fund": {
+        "database_sha256": "99fac786e5be0ec5a7a53e11e1bd3bbccd5b37ab15243ecbf8b864a85b375ca4",
+        "manifest_sha256": "be83a616d033db2328d231499d1f0492323d02bace4f153ad3da4860a0d10bcd"
+      }
+    }
+  },
+  "metrics": {
+    "total": 8,
+    "passed": 2,
+    "strict_accuracy": 0.25,
+    "answerable_total": 5,
+    "answerable_executed": 0,
+    "answerable_execution_rate": 0.0,
+    "unanswerable_total": 3,
+    "unanswerable_safely_handled": 3,
+    "unanswerable_safety_rate": 1.0,
+    "unsafe_unanswerable_executions": 0,
+    "actual_status_counts": {
+      "clarification": 6,
+      "unsupported": 2
+    },
+    "semantic_sha256": "fd73a8e4b583b7cd0c6b5ab4e8a7a521819069f70fd69e465ca1bdfb4f3cd22e"
+  },
+  "reports": [
+    {
+      "role": "deterministic_safety_improved_observation",
+      "artifact_name": "briefing-examples-v1-safety-improved.json",
+      "sha256": "13aaebd5cef3dccff6046dbc8a7baffc3b9fb47000a82141e9086fa9b787e41f"
+    }
+  ],
+  "reproduce": "python -m finance_agent_core.evaluation.briefing_examples_cli --generated-at-utc 2026-08-07T01:00:00+00:00 --output artifacts/evaluation/briefing-examples-v1-safety-improved.json",
+  "limitations": [
+    "설명회에서 공개한 질의 분포 예시이며 실제 평가 문항이나 독립 blind 세트가 아님",
+    "공개 예시를 보고 수정한 사후 회귀이므로 새 질문 일반화 성능이 아님",
+    "답변 불가 안전 처리 3/3은 현재 세 공개 예시의 무근거 실행을 막았다는 뜻",
+    "답변 가능 실행은 여전히 0/5이며 관계 데이터·문서 근거·순서형 신용등급이 남아 있음",
+    "모델과 네트워크를 호출하지 않았으므로 로컬 Qwen이나 HyperCLOVA X 생성 품질 점수가 아님"
+  ]
+}

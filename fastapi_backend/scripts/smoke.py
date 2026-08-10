@@ -4,11 +4,12 @@ import argparse
 import json
 import sys
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
+from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 EXPECTED_FAMILIES = ["bond", "domestic_etp", "overseas_etp", "fund"]
@@ -37,6 +38,19 @@ class SmokeCase:
             "question": self.question,
             "locale": "ko-KR",
         }
+
+
+@dataclass(frozen=True)
+class OfficialSmokeCase:
+    case_id: str
+    query: tuple[tuple[str, str], ...]
+    expected_question_id: str
+    expected_question: str
+    expected_control_code: str | None = None
+    forbidden_output_fragments: tuple[str, ...] = ()
+
+    def query_string(self) -> str:
+        return urlencode(self.query)
 
 
 CASES = (
@@ -113,6 +127,90 @@ CASES = (
     ),
 )
 
+_MALICIOUS_FRAGMENT = "<script>alert(1)</script>"
+_LONG_QUESTION = "가" * 2001
+OFFICIAL_CASES = (
+    OfficialSmokeCase(
+        case_id="official-valid",
+        query=(
+            ("question_id", "docker-smoke-official-001"),
+            ("question", "현재 판매 가능한 원화채권 중 AA- 이상 종목 알려줘"),
+            ("unexpected", "ignored"),
+        ),
+        expected_question_id="docker-smoke-official-001",
+        expected_question="현재 판매 가능한 원화채권 중 AA- 이상 종목 알려줘",
+    ),
+    OfficialSmokeCase(
+        case_id="official-unicode-and-markup",
+        query=(
+            ("question_id", "평가-😀-001"),
+            (
+                "question",
+                f"내일 가장 오를 ETF를 예측해줘 & {_MALICIOUS_FRAGMENT}",
+            ),
+        ),
+        expected_question_id="평가-😀-001",
+        expected_question=f"내일 가장 오를 ETF를 예측해줘 & {_MALICIOUS_FRAGMENT}",
+        forbidden_output_fragments=(_MALICIOUS_FRAGMENT,),
+    ),
+    OfficialSmokeCase(
+        case_id="official-blank-values",
+        query=(("question_id", " "), ("question", " ")),
+        expected_question_id="invalid-question-id",
+        expected_question=" ",
+        expected_control_code="invalid_request",
+    ),
+    OfficialSmokeCase(
+        case_id="official-missing-id",
+        query=(("question", "해외 ETF를 알려줘"),),
+        expected_question_id="invalid-question-id",
+        expected_question="해외 ETF를 알려줘",
+        expected_control_code="invalid_request",
+    ),
+    OfficialSmokeCase(
+        case_id="official-missing-question",
+        query=(("question_id", "Q-MISSING"),),
+        expected_question_id="Q-MISSING",
+        expected_question="",
+        expected_control_code="invalid_request",
+    ),
+    OfficialSmokeCase(
+        case_id="official-id-too-long",
+        query=(("question_id", "Q" * 129), ("question", "국내채권을 알려줘")),
+        expected_question_id="invalid-question-id",
+        expected_question="국내채권을 알려줘",
+        expected_control_code="invalid_request",
+    ),
+    OfficialSmokeCase(
+        case_id="official-question-too-long",
+        query=(("question_id", "Q-LONG"), ("question", _LONG_QUESTION)),
+        expected_question_id="Q-LONG",
+        expected_question=_LONG_QUESTION[:2000],
+        expected_control_code="invalid_request",
+    ),
+)
+
+
+def smoke_cases(fund_execution_policy: str) -> tuple[SmokeCase, ...]:
+    if fund_execution_policy == "locked":
+        return CASES
+    if fund_execution_policy != "public_fund_v1_approved":
+        raise ValueError(f"unsupported fund execution policy: {fund_execution_policy}")
+    return tuple(
+        replace(
+            case,
+            case_id="docker-smoke-fund-approved-001",
+            expected_status="success",
+            expected_answer_mode="deterministic",
+            expected_product_count=5,
+            expected_dataset="fund",
+            expected_clarification_code=None,
+        )
+        if case.case_id == "docker-smoke-fund-locked-001"
+        else case
+        for case in CASES
+    )
+
 
 def _request_json(
     url: str,
@@ -151,7 +249,12 @@ def _expect(errors: list[str], condition: bool, message: str) -> None:
         errors.append(message)
 
 
-def validate_health(http_status: int, body: dict[str, Any]) -> list[str]:
+def validate_health(
+    http_status: int,
+    body: dict[str, Any],
+    *,
+    expected_fund_execution_policy: str | None = None,
+) -> list[str]:
     errors: list[str] = []
     _expect(errors, http_status == 200, f"expected HTTP 200, got {http_status}")
     _expect(errors, body.get("status") == "ok", "health status must be ok")
@@ -171,6 +274,12 @@ def validate_health(http_status: int, body: dict[str, Any]) -> list[str]:
         body.get("unavailable_product_families") == [],
         "unavailable families are present",
     )
+    if expected_fund_execution_policy is not None:
+        _expect(
+            errors,
+            body.get("fund_execution_policy") == expected_fund_execution_policy,
+            "fund execution policy differs",
+        )
     return errors
 
 
@@ -271,6 +380,65 @@ def validate_answer(
     return errors
 
 
+def validate_official_answer(
+    http_status: int,
+    body: dict[str, Any],
+    *,
+    question_id: str,
+    question: str,
+    expected_control_code: str | None = None,
+    forbidden_output_fragments: tuple[str, ...] = (),
+) -> list[str]:
+    errors: list[str] = []
+    expected_keys = {
+        "question_id",
+        "question",
+        "retrieved_context",
+        "think_trace",
+        "answer",
+    }
+    _expect(errors, http_status == 200, f"official answer expected HTTP 200, got {http_status}")
+    _expect(errors, set(body) == expected_keys, "official answer fields differ")
+    _expect(errors, body.get("question_id") == question_id, "official question_id differs")
+    _expect(errors, body.get("question") == question, "official question differs")
+    _expect(
+        errors,
+        all(isinstance(body.get(key), str) for key in expected_keys),
+        "official answer fields must all be strings",
+    )
+    decoded_fields: dict[str, dict[str, Any]] = {}
+    for key in ("retrieved_context", "think_trace"):
+        value = body.get(key)
+        if not isinstance(value, str):
+            continue
+        try:
+            decoded = json.loads(value)
+        except json.JSONDecodeError:
+            errors.append(f"official {key} is not valid JSON text")
+        else:
+            _expect(errors, isinstance(decoded, dict), f"official {key} must encode an object")
+            if isinstance(decoded, dict):
+                decoded_fields[key] = decoded
+    if expected_control_code is not None:
+        trace = decoded_fields.get("think_trace", {})
+        _expect(errors, trace.get("status") == "error", "official control status differs")
+        _expect(
+            errors,
+            trace.get("control_code") == expected_control_code,
+            "official control code differs",
+        )
+    for fragment in forbidden_output_fragments:
+        for key in ("retrieved_context", "think_trace", "answer"):
+            value = body.get(key)
+            if isinstance(value, str):
+                _expect(
+                    errors,
+                    fragment not in value,
+                    f"official {key} reflected a forbidden input fragment",
+                )
+    return errors
+
+
 def _case_summary(
     case: SmokeCase,
     *,
@@ -311,6 +479,11 @@ def build_parser() -> argparse.ArgumentParser:
         default="deterministic",
     )
     parser.add_argument("--provider-model")
+    parser.add_argument(
+        "--expected-fund-execution-policy",
+        choices=("locked", "public_fund_v1_approved"),
+        default="locked",
+    )
     parser.add_argument("--output", type=Path)
     return parser
 
@@ -323,15 +496,20 @@ def main(argv: list[str] | None = None) -> int:
     if arguments.success_answer_mode != "deterministic" and not arguments.provider_model:
         parser.error("LLM answer modes require --provider-model")
     base_url = arguments.base_url.rstrip("/")
+    cases = smoke_cases(arguments.expected_fund_execution_policy)
     started_at = datetime.now(UTC)
     try:
         health_status, health_body, health_bytes, health_duration = _request_json(
             f"{base_url}/health",
             timeout=arguments.timeout,
         )
-        health_errors = validate_health(health_status, health_body)
+        health_errors = validate_health(
+            health_status,
+            health_body,
+            expected_fund_execution_policy=arguments.expected_fund_execution_policy,
+        )
         results = []
-        for case in CASES:
+        for case in cases:
             http_status, body, response_bytes, duration_ms = _request_json(
                 f"{base_url}/answer",
                 timeout=arguments.timeout,
@@ -353,19 +531,44 @@ def main(argv: list[str] | None = None) -> int:
                     ),
                 )
             )
+        official_results = []
+        for case in OFFICIAL_CASES:
+            official_status, official_body, official_bytes, official_duration = _request_json(
+                f"{base_url}/answer?{case.query_string()}",
+                timeout=arguments.timeout,
+            )
+            official_errors = validate_official_answer(
+                official_status,
+                official_body,
+                question_id=case.expected_question_id,
+                question=case.expected_question,
+                expected_control_code=case.expected_control_code,
+                forbidden_output_fragments=case.forbidden_output_fragments,
+            )
+            official_results.append(
+                {
+                    "case_id": case.case_id,
+                    "passed": not official_errors,
+                    "http_status": official_status,
+                    "response_bytes": official_bytes,
+                    "duration_ms": round(official_duration, 3),
+                    "errors": official_errors,
+                }
+            )
     except (OSError, RuntimeError, TypeError, URLError) as error:
         print(f"Docker HTTP smoke failed before completion: {error}", file=sys.stderr)
         return 2
 
     passed_cases = sum(item["passed"] for item in results)
     report = {
-        "schema_version": "1.0",
-        "suite_id": "docker-http-smoke-v1",
+        "schema_version": "1.1",
+        "suite_id": "docker-http-smoke-v2",
         "started_at": started_at.isoformat(),
         "base_url": base_url,
         "llm_provider_expected": arguments.provider_model is not None,
         "expected_success_answer_mode": arguments.success_answer_mode,
         "expected_provider_model": arguments.provider_model,
+        "expected_fund_execution_policy": arguments.expected_fund_execution_policy,
         "health": {
             "passed": not health_errors,
             "http_status": health_status,
@@ -374,13 +577,21 @@ def main(argv: list[str] | None = None) -> int:
             "duration_ms": round(health_duration, 3),
             "errors": health_errors,
         },
+        "official_answers": official_results,
         "metrics": {
-            "passed": passed_cases,
-            "failed": len(results) - passed_cases,
-            "total": len(results),
+            "backend_passed": passed_cases,
+            "backend_failed": len(cases) - passed_cases,
+            "backend_total": len(cases),
+            "official_passed": sum(item["passed"] for item in official_results),
+            "official_failed": sum(not item["passed"] for item in official_results),
+            "official_total": len(official_results),
         },
         "cases": results,
-        "passed": not health_errors and passed_cases == len(results),
+        "passed": (
+            not health_errors
+            and passed_cases == len(cases)
+            and all(item["passed"] for item in official_results)
+        ),
     }
     rendered = json.dumps(report, ensure_ascii=False, indent=2) + "\n"
     if arguments.output is not None:

@@ -19,6 +19,8 @@ Backend DTO·`/answer` service adapter와 사람 평가 rubric은 별도 계약�
 로컬 Qwen·Oracle·Verifier·Backend DTO까지 한 경로로 회귀 검증한다.
 금융 도메인 담당자 작성 40문항은 별도 개발 QA로 hash를 고정하고 route·
 safety·evidence·answer 단계별 현재 상태를 측정한다.
+필드 registry와 실제 DB에서 대표 검색·정렬·비교·집계 계획을 자동 만들고,
+직접 Oracle 정답과 자연어 Agent의 계획·근거를 비교하는 커버리지 평가도 제공한다.
 네 상품군 공통 AGGREGATE는 COUNT·MIN·MAX·AVG·허용 SUM, 최대 두 범주
 group, 금액 통화 gate, 결측·기준일 보존, 별도 Python verifier와
 `AggregateEvidence`까지 구현했다. 집계 답변은 현재 LLM 없이 결정론적으로
@@ -70,6 +72,7 @@ Answer Verifier, 결정론적 evidence compiler와 safe fallback으로 구성한
 - [`queryplan.py`](src/finance_agent_core/contracts/queryplan.py): 서버의 엄격한 구조·의미 검증
 - [`queryplan.hcx.schema.json`](src/finance_agent_core/contracts/queryplan.hcx.schema.json): HyperCLOVA X Structured Outputs용 보수적 schema
 - [`capability_matrix.json`](src/finance_agent_core/config/capability_matrix.json): 상품군·intent별 실행·통제 범위
+- [`ontology.py`](src/finance_agent_core/ontology.py): field registry 기반 공식 Turtle 5개 결정론적 생성
 - [`backend.py`](src/finance_agent_core/contracts/backend.py): Backend request·response·citation·fallback DTO
 - [`backend_adapter.py`](src/finance_agent_core/agent/backend_adapter.py): HTTP status·안전한 ERROR DTO·fallback service 경계
 - [계약 설명](../../docs/contracts.md): 설계 근거, 첫 vertical slice 예시, 확장 규칙
@@ -79,8 +82,11 @@ Answer Verifier, 결정론적 evidence compiler와 safe fallback으로 구성한
 - [공통 COMPARE 계약](../../docs/comparison-engine-design.md): exact identity·필드·통화·기준일·stale
 - [교차 상품군 SEARCH·답변 계약](../../docs/cross-family-search.md): 상품군별 계획·병렬 실행·evidence 격리 생성·전체 fallback
 - [금융 도메인 QA 실험](../../docs/evaluation-domain-qa.md): 담당자 작성 40문항의 hash 검증·행동 기능·단계별 E2E 채점
+- [Ontology 제출 계약](../../docs/ontology.md): 파일 역할·생성·문법·registry 정합성 검사
 - [사람 평가 rubric](../../docs/human-evaluation.md): 독립 reviewer·critical gate
 - [internal-red-team-v1](../../docs/evaluation-internal-red-team.md): 네 상품군 전체 E2E·안전 회귀
+- [공식 형식 30문항 공개 모의평가](../../docs/evaluation-official-mock.md): 난이도 10/10/10·답변 불가 5개 전체 경로
+- [자동 커버리지·Qwen 자연화 평가](../../docs/evaluation-coverage-guided.md): 대표 계획 305개·단계별 병목·shard 실험 계약
 
 ## 상품군 vertical slice
 

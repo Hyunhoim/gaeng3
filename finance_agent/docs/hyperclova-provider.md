@@ -1,15 +1,16 @@
 # HyperCLOVA X provider 계약
 
-마지막 갱신: 2026-08-06
+마지막 갱신: 2026-08-07
 
 이 문서는 실제 API credential 없이 먼저 동결한 HyperCLOVA X provider 경계와
 fake transport 테스트 범위를 설명한다. 현재 완료된 것은 요청·응답·오류 계약이며,
 NAVER Cloud endpoint에 실제 HTTP 요청을 보내는 transport는 아직 구현하지 않았다.
 
-2026-08-06 오프라인 설명회 질문은 확정했으며 현재 참석 팀원의 기록 전달을
-기다리고 있다. 공식 답변과 출처를 확인하기 전까지 endpoint·credential·header·
-실제 HTTP 연결을 시도하지 않는다. 현재 범위는 네트워크 없이 재생하는 계약·오류·
-fallback 검증까지다.
+2026-08-06 설명회 자료에서 평가용 `GET /answer`와 다섯 문자열 응답 필드는
+확인했다. 그러나 HyperCLOVA X의 정확한 모델 ID·endpoint·credential·header와
+Structured Outputs 범위는 확인되지 않았고 크레딧도 아직 받지 않았다. 따라서 실제
+HTTP 연결은 계속 보류하며 현재 범위는 네트워크 없이 재생하는 계약·오류·fallback과
+개발 전용 로컬 Qwen 검증까지다.
 
 ## 1. 왜 API 연결보다 계약을 먼저 만드는가
 
@@ -191,18 +192,20 @@ transport·응답 오류, dataset 장애, 알 수 없는 예외와 answer fallba
 포함하지 않는다. 실제 FastAPI route, request 인증과 실제 네트워크 transport는
 이 계약의 바깥이며 아직 구현하지 않았다.
 
-## 10. 8월 6일 공식 안내 후 남은 작업
+## 10. 설명회 반영 후 남은 작업
 
-1. 허용 모델명과 Structured Outputs 지원 범위·제출 범위 재확인
-2. 공식 endpoint·인증 header·요청·응답 body를 구현하는 HTTP transport 추가
-3. credential을 환경변수 또는 secret store에서 읽고 로그 마스킹 검증
-4. 공식 timeout·QPS·retry-after 정책을 반영한 제한적 retry 구현
-5. 세 operation의 실제 API smoke test와 `hcx-contract-e2e-8` 재현
-6. token·latency·오류·fallback 비율 측정
-7. 로컬 Qwen 결과와 분리된 HyperCLOVA X 평가 baseline 기록
-8. FastAPI 공식 `/answer` route에서 provider 선택·인증·request validation 연결
-9. framework-neutral adapter와 실제 route를 합친 HTTP E2E 검증
-10. 공식 답변에 따라 제출 후보에서 로컬 LLM provider·설정·
+1. HCX 연결과 독립적으로 공식 `GET /answer` 다섯 문자열 adapter 구현
+2. 성공·미검색·역질문·미지원·오류의 HTTP 200 계약과 60초 내부 예산 검증
+3. 허용 모델명과 Structured Outputs 지원 범위·제출 범위 서면 확인
+4. 크레딧 승인·쿠폰 등록과 HyperCLOVA X 적용 여부 확인
+5. 공식 endpoint·인증 header·요청·응답 body를 구현하는 HTTP transport 추가
+6. credential을 환경변수 또는 secret store에서 읽고 로그 마스킹 검증
+7. 공식 timeout·QPS·retry-after 정책을 반영한 제한적 retry 구현
+8. 세 operation의 실제 API smoke test와 `hcx-contract-e2e-8` 재현
+9. token·latency·오류·fallback·예상 비용 측정
+10. 로컬 Qwen 결과와 분리된 HyperCLOVA X 평가 baseline 기록
+11. framework-neutral adapter와 실제 route를 합친 HTTP E2E 검증
+12. 공식 답변에 따라 제출 후보에서 로컬 LLM provider·설정·
     스크립트·의존성을 제거하고 clean checkout에서 재검증
 
 이 작업이 완료되기 전에는 “HyperCLOVA X API 연결 완료”라고 표현하지 않는다.

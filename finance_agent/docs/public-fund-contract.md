@@ -22,8 +22,18 @@
 - 40 development·10 holdout 핵심 평가 세트의 expected Oracle 회귀 50/50
 - 로컬 Qwen hybrid parser는 development 40/40, 최초 holdout 9/10
 - 공개된 holdout 실패는 family handoff 회귀 수정 후 무모델 replay 50/50
-- 실제 HyperCLOVA X HTTP transport와 FastAPI `/answer` route 검증 전까지
-  공식 Agent 실행은 비활성화
+- FastAPI Backend 기본값은 공모펀드 실행 `locked`
+- 팀이 승인한 버전에서만 `public_fund_v1_approved`로 열며 다른 비활성 기능은 열지 않음
+- 동결 30문항의 실제 Docker GET은 기본 잠금 24/30, 명시적 승인 경로 30/30으로 별도 보존
+
+### 0.1 Backend 실행 정책
+
+공모펀드는 데이터·검색·비교·집계·검증이 모두 준비됐지만 배포에서 실수로 열리지
+않도록 기본 잠금을 유지한다. 팀이 공모펀드 v1 계약을 승인한 배포에서만
+`FINANCE_BACKEND_FUND_EXECUTION_POLICY=public_fund_v1_approved`를 설정한다
+
+이 토큰은 팀 내부의 버전 관리 약속이다. 주최 측의 모델·데이터 사용 승인을 의미하지
+않으며, 실제 제출 전에는 별도의 제출 경계 검사를 다시 통과해야 한다
 
 ## 1. 근거와 재현 방법
 

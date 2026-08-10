@@ -1,15 +1,15 @@
 # 제출용 모델 경계와 로컬 LLM 정리 메모
 
-기준일: 2026-08-06
+기준일: 2026-08-07
 
 ## 0. 결정
 
 - 현재 로컬 Qwen 연결 코드와 실험 기록은 HyperCLOVA X가 없던
   개발 단계의 내부 검증용으로만 관리
 - 예선 평가·제출물에서 실행되는 LLM은 HyperCLOVA X로 제한
-- 2026-08-06 오프라인 설명회 참석 팀원의 기록과 공식 출처를 확인하기
-  전에는 실제 HTTP transport나 credential 연결을 시도하지 않음
-- 설명회 기록으로 제출 범위가 확정되면 로컬 LLM 코드·설정·의존성·
+- 설명회 자료를 검토했지만 정확한 HCX API 규격·크레딧 적용·로컬 LLM 제출 범위는
+  확인되지 않았으므로 실제 HTTP transport나 credential 연결을 시도하지 않음
+- 공식 서면 답변으로 제출 범위가 확정되면 로컬 LLM 코드·설정·의존성·
   실행 명령을 제출 후보에서 제거하고 기계적으로 검사
 
 핵심은 로컬 모델 사용 이력을 숨기는 것이 아니라, **내부 개발 이력과
@@ -33,7 +33,7 @@
 
 ## 2. 지금 지우지 않는 이유
 
-- 설명회 기록과 공식 출처를 받기 전에는 HyperCLOVA X의 실제 요청·응답 방식을 모름
+- 설명회 자료에는 평가 adapter 규격만 있고 HyperCLOVA X의 실제 요청·응답 방식은 없음
 - 현재 로컬 provider는 Router·Oracle·Verifier·fallback을 저비용으로
   반복 검사하는 개발 도구임
 - 먼저 삭제하면 HyperCLOVA X adapter와 비교할 기준을 잃을 수 있음
@@ -42,7 +42,7 @@
 
 정리 전에 과거 이력을 재작성하거나 Git history를 숨기는 작업은 하지 않음
 
-## 3. 8월 6일 설명회 기록에서 확인할 질문
+## 3. 설명회 이후에도 남은 확인 질문
 
 1. 다른 LLM의 “사용”이 최종 평가 API 실행만 뜻하는지
 2. 개발 단계의 로컬 LLM 실험 코드·문서·Git 이력도 제출 제한인지
@@ -51,7 +51,8 @@
 4. 평가 모드에서 HyperCLOVA X만 선택되는 fail-closed 검사로 충분한지
 5. 마지막 제출은 전체 개발 Git 저장소인지, 별도 release 소스 묶음인지
 
-공식 답변은 날짜·질문·답변 원문·팀 해석을 구분해 보존
+설명회 자료만으로 위 항목은 해결되지 않았음. 공식 답변은 날짜·질문·답변 원문·
+팀 해석을 구분해 보존
 
 ## 4. 공식 답변 확인 후 제출 후보 정리 순서
 
@@ -77,13 +78,44 @@
 | 문서 | 완료·미완료·개발 실험·공식 성능을 구분 |
 | 검수 | AI·Backend·금융 도메인 담당자가 각각 1회 확인 |
 
+### 자동 검사
+
+현재 개발 저장소가 로컬 LLM 파일을 격리하고 운영용 Compose·Dockerfile·필수
+의존성에 섞지 않았는지 확인
+
+```bash
+PYTHONPATH=finance_agent/packages/finance_agent_core/src \
+python finance_agent/scripts/check-submission-boundary.py \
+  --profile development
+```
+
+공식 범위 확인 후 별도 제출 후보에서는 더 엄격한 검사 실행
+
+```bash
+PYTHONPATH=finance_agent/packages/finance_agent_core/src \
+python finance_agent/scripts/check-submission-boundary.py \
+  --profile submission \
+  --output finance_agent/artifacts/release/submission-boundary.json
+```
+
+- `development`: 로컬 실험 파일은 허용하지만 루트 Compose·Backend Dockerfile·
+  운영 의존성에 로컬 LLM 표식이 들어가면 실패
+- `submission`: Git 추적 파일의 로컬 provider·모델·실행 문구와 `.env`, 모델
+  weight, SQLite까지 모두 실패 처리
+- 현재 개발 저장소는 `development` 통과, `submission` 차단이 정상
+- 검사는 현재 Git 추적 파일만 확인하며 Git 이력 재작성이나 공식 허용 범위 판단을
+  대신하지 않음
+
 ## 6. 현재 상태
 
 - 로컬 provider는 아직 개발 저장소에 존재
 - 평가·production 모드의 HyperCLOVA X 제한 게이트는 구현 완료
 - HyperCLOVA X fake transport·오류·fallback 계약은 구현 완료
-- 실제 HyperCLOVA X 연결은 팀원 기록과 공식 출처 확인 후로 보류
+- 실제 HyperCLOVA X 연결은 크레딧·정확한 모델 ID·endpoint·인증 규격 확보 후로 보류
+- 그 전까지 로컬 Qwen은 내부 회귀·E2E·fallback 시험에 계속 사용
 - 로컬 LLM 제거 작업은 공식 제출 범위 확정 후 수행
+- 자동 경계 검사는 구현 완료. 현재 개발 프로필은 통과하고 제출 프로필은 남아 있는
+  개발 흔적을 의도적으로 차단
 
 이 문서는 제거 완료 증명이 아니라, **제거를 놓치지 않기 위한
 release gate**임

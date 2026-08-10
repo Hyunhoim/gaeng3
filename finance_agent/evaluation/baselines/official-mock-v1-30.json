@@ -1,0 +1,115 @@
+{
+  "schema_version": "1.0",
+  "baseline_id": "official-mock-v1-30",
+  "recorded_on": "2026-08-07",
+  "dataset": "overseas_etp+domestic_etp+bond+fund",
+  "evaluation_layer": "system_regression",
+  "status": "public_official_shape_mock_not_blind",
+  "provider": {
+    "name": "local_test",
+    "official_submission_provider": false,
+    "network_used": "loopback_only"
+  },
+  "model": {
+    "repository": "Qwen/Qwen3-30B-A3B-Instruct-2507-FP8",
+    "served_name": "qwen3-local-test",
+    "revision": "5a5a776300a41aaa681dd7ff0106608ef2bc90db"
+  },
+  "suite": {
+    "id": "official-mock-v1-30",
+    "version": "1.0",
+    "path": "packages/finance_agent_core/src/finance_agent_core/evaluation/suites/official_mock_v1_30.json",
+    "sha256": "c9250cd45656beadad563087941112b31318254c50fc72bf9f15dcaa1d88a36e",
+    "total_cases": 30,
+    "difficulty_low": 10,
+    "difficulty_medium": 10,
+    "difficulty_high": 10,
+    "answerable_cases": 25,
+    "unanswerable_cases": 5
+  },
+  "data": {
+    "database_sha256": "2c26861a7e9b90ed4ae46ba3bfd4565daa63f405cf16627094629df36cecd03a",
+    "manifest_sha256": "624cef391dfe86aa2ce1a8ce20ad5142ec0d65a792e1fec6df0259024b997003",
+    "source_file_sha256": "c4f860f7a0d6821788015f51cf9ae48d2f48ab657e9a99be49771fc32fcaf895",
+    "hash_policy": "상품군 이름과 개별 SHA-256을 정렬해 결합한 뒤 다시 SHA-256 계산",
+    "by_family": {
+      "overseas_etp": {
+        "database_sha256": "eee9009ca741713a9a61e498cd5ed8366836d754c7d0c2dbd74ed7e456a2ebbe",
+        "manifest_sha256": "5dd159ade2353154ed8d3d32068dd512cb2b3becba39972aa0dabff0edd50771",
+        "source_file_sha256": "3cec19043f742771e0016d56fe806f19ad78f4295d1ae59192740a78feb2253b"
+      },
+      "domestic_etp": {
+        "database_sha256": "a91bfc713b88e9ba1e7da27508857cbe5ea200c4d7821d0b4fee7d9922684484",
+        "manifest_sha256": "2e52b161a260fa19eab50e8281f04f8617ee1ee69d618b19bd624af4635fca97",
+        "source_file_sha256": "0f5706d45f93284bcaac2fa8eaed04db920a7043abaa859e455f06e246d54723"
+      },
+      "bond": {
+        "database_sha256": "40265aa326d63244727294ac29c1cd38c898f05b6a80dfd51fd8ac38e08764bc",
+        "manifest_sha256": "d724d99e9ffd24148144b3534795d0d545e0ebff9d01509966f6ebbb218f8312",
+        "source_file_sha256": "728f44a567a986d21cf843d711c6c4dfa1a24d05b39c7da0541b981b57ecccf8"
+      },
+      "fund": {
+        "database_sha256": "99fac786e5be0ec5a7a53e11e1bd3bbccd5b37ab15243ecbf8b864a85b375ca4",
+        "manifest_sha256": "be83a616d033db2328d231499d1f0492323d02bace4f153ad3da4860a0d10bcd",
+        "source_file_sha256": "140d1ef0cec918d0b3f7c52c107cb123395594eb089b0cd70bb305709b0f44eb"
+      }
+    }
+  },
+  "metrics": {
+    "total": 30,
+    "passed": 30,
+    "strict_accuracy": 1.0,
+    "answerable_passed": 25,
+    "unanswerable_safely_handled": 5,
+    "unanswerable_safety_rate": 1.0,
+    "safety_pass_rate": 1.0,
+    "evidence_pass_rate": 1.0,
+    "official_contract_pass_rate": 1.0,
+    "llm_answer_eligible": 17,
+    "llm_grounded": 16,
+    "llm_grounded_rate": 0.941176,
+    "fallback_count": 1,
+    "fallback_rate": 0.058824,
+    "query_plan_calls": 13,
+    "answer_calls": 18,
+    "provider_errors": 0,
+    "latency_ms": {
+      "min": 0.099,
+      "p50": 1553.318,
+      "p95": 3876.727,
+      "max": 4398.949
+    },
+    "fallback_observation": {
+      "case_id": "official-mock-v1-018",
+      "stage": "answer_verifier",
+      "finding": "Qwen 설명의 수익성 평가 표현을 가치 판단으로 차단",
+      "served_result": "deterministic_fallback"
+    }
+  },
+  "reports": [
+    {
+      "role": "deterministic_expected_first",
+      "artifact_name": "official-mock-v1-30-expected-first.json",
+      "sha256": "07baf1789ff2c4bc97de7e55e61e69b19e08c46c349ea54e30265b65c1f0a0a7"
+    },
+    {
+      "role": "local_qwen_first_observation",
+      "artifact_name": "official-mock-v1-30-local-qwen-first.json",
+      "sha256": "6d25051463ccff299562b118ce2f80757dc3306afc2deb9ffd26311f734f78bc"
+    },
+    {
+      "role": "local_qwen_call_contract_fixed",
+      "artifact_name": "official-mock-v1-30-local-qwen-contract-fixed.json",
+      "sha256": "61546e7a55a9bfdf6d8b3fbc67106e0b0833582e09e921770b912354f51a7a26"
+    }
+  ],
+  "reproduce": "FINANCE_AGENT_LLM_MODE=local_test ENABLE_NON_HCX_TEST_LLM=1 LLM_PROVIDER=local_test LOCAL_TEST_LLM_BASE_URL=http://127.0.0.1:18000/v1 LOCAL_TEST_LLM_MODEL=qwen3-local-test python -m finance_agent_core.evaluation.official_mock_cli --provider local_test --require-perfect",
+  "limitations": [
+    "설명회의 난이도 10/10/10과 답변 불가 5개 분포만 모사한 공개 개발 세트임",
+    "AI 담당자가 기존 구현·데이터·공개 회귀 질문을 본 뒤 구성했으므로 독립 blind가 아님",
+    "질문과 정답은 공식 평가 문항 또는 공식 정답이 아님",
+    "로컬 Qwen 결과는 HyperCLOVA X 또는 공모전 평가 성능을 대변하지 않음",
+    "latency는 RTX 5090 두 장의 단일 순차 실행이며 운영 Backend SLO가 아님",
+    "문서 RAG의 실제 외부 corpus와 사람 평가는 범위에 포함하지 않음"
+  ]
+}

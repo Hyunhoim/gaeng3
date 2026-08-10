@@ -13,6 +13,12 @@ from finance_agent_core.agent.fund_comparison_parser import (
     SUPPORTED_FUND_COMPARISON_FIELDS,
     FundComparisonDraft,
 )
+from finance_agent_core.agent.grounded_planning import (
+    GroundedPlanProposal,
+    build_grounded_plan_system_prompt,
+    canonicalize_grounded_plan_proposal_payload,
+    grounded_plan_proposal_schema,
+)
 from finance_agent_core.agent.linker import (
     build_lexical_hints,
     canonicalize_linked_query_plan,
@@ -23,6 +29,7 @@ from finance_agent_core.contracts import QueryPlan, load_hcx_queryplan_schema
 from finance_agent_core.contracts.hcx_schema import (
     load_internal_evaluation_queryplan_schema,
 )
+from finance_agent_core.contracts.queryplan import ProductFamily
 
 
 class LocalProviderError(RuntimeError):
@@ -78,7 +85,7 @@ class LocalTestSettings:
         return cls(base_url=base_url, model=model, timeout_seconds=timeout)
 
 
-def _field_catalog(product_family: Literal["fund"] | None = None) -> dict[str, Any]:
+def _field_catalog(product_family: str | None = None) -> dict[str, Any]:
     registry = load_field_registry()
     catalog: dict[str, Any] = {}
     for name, definition in registry.fields.items():
@@ -94,6 +101,7 @@ def _field_catalog(product_family: Literal["fund"] | None = None) -> dict[str, A
             continue
         effective = resolved[0] if len(resolved) == 1 else definition
         catalog[name] = {
+            "label": effective.label,
             "aliases": effective.aliases,
             "type": effective.value_type.value,
             "unit": effective.unit,
@@ -189,7 +197,7 @@ question_id는 {question_id!r}를 정확히 사용한다.
   핵심 ETF는 core_etf=true다. 수익률 기간은 one_day_return_pct,
   one_month_return_pct, three_month_return_pct, six_month_return_pct,
   one_year_return_pct, ytd_return_pct 중 정확히 대응하는 field를 쓴다.
-- bond의 "매수 가능"은 currently_buyable=true다. 이 필드는
+- bond의 "매수 가능"과 고객에게 "판매 가능"한 상품은 currently_buyable=true다. 이 필드는
   BUYABLE_QUANTITY가 존재하고 0보다 크며 MAT_DT가 2026-07-11 이후인 경우만
   true인 보수적 파생값이다. 결측 수량을 false나 0으로 추정하지 않는다.
 - bond의 회사채·특수채·국공채·개인투자용국채는 bond_major_class,
@@ -198,10 +206,10 @@ question_id는 {question_id!r}를 정확히 사용한다.
   after_tax_yield_pct, coupon_rate_pct이고 퍼센트포인트다. 잔존일수는
   remaining_days(day), 듀레이션은 duration_years(year), 매수가능수량은
   buyable_quantity(source_quantity)다.
-- bond 신용등급은 credit_rating exact eq/in만 허용한다. "AA- 이상"처럼
-  등급의 순서를 요구하는 조건은 unsupported_conditions에 기록하고 임의의
-  등급 목록으로 확장하지 않는다. bond_risk_code도 코드 숫자의 순서를
-  해석하지 않는다.
+- bond 신용등급 QueryPlan은 credit_rating exact eq/in만 허용한다. "AA- 이상"처럼
+  임계 등급과 방향이 명시된 조건은 서버 linker가 registry의 최고→최저 enum 순서를
+  기준으로 in 목록으로 확정한다. 모델이 임의 목록을 만들지 않는다. 임계값 없는
+  "등급이 높은" 표현과 bond_risk_code 숫자의 순서는 해석하지 않는다.
 {fund_rules}
 - "판매 가능"은 sellable=true, "판매 불가"는 sellable=false다.
   "거래 중지 아님/거래 가능"은 trading_suspended=false,
@@ -369,6 +377,78 @@ class LocalTestProvider:
                 f"local model returned an invalid QueryPlan: {error}"
             ) from error
         return canonicalize_linked_query_plan(question, plan)
+
+    def generate_grounded_plan(
+        self,
+        question: str,
+        question_id: str,
+        product_family_hint: ProductFamily | None = None,
+    ) -> GroundedPlanProposal:
+        """Return an evidence-span proposal without granting it execution authority."""
+
+        if not question.strip():
+            raise ValueError("question cannot be blank")
+        if not question_id.strip():
+            raise ValueError("question_id cannot be blank")
+        if self.internal_evaluation_family == "fund":
+            if product_family_hint not in {None, ProductFamily.FUND}:
+                raise ValueError("fund provider received a non-fund family hint")
+            families = [ProductFamily.FUND]
+        elif product_family_hint is not None:
+            families = [product_family_hint]
+        else:
+            families = [
+                ProductFamily(name) for name in load_field_registry().executable_dataset_names()
+            ]
+        catalog_family = families[0].value if len(families) == 1 else None
+        payload = {
+            "model": self.settings.model,
+            "messages": [
+                {
+                    "role": "system",
+                    "content": build_grounded_plan_system_prompt(
+                        question_id,
+                        _field_catalog(catalog_family),
+                        families,
+                    ),
+                },
+                {"role": "user", "content": question},
+            ],
+            "temperature": 0,
+            "seed": 43,
+            "max_tokens": 4096,
+            "response_format": {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "grounded_finance_plan",
+                    "strict": True,
+                    "schema": grounded_plan_proposal_schema(families),
+                },
+            },
+        }
+        response = self._request_json("chat/completions", payload)
+        try:
+            content = response["choices"][0]["message"]["content"]
+        except (KeyError, IndexError, TypeError) as error:
+            raise LocalProviderError(
+                "local grounded plan response has an unexpected shape"
+            ) from error
+        if not isinstance(content, str):
+            raise LocalProviderError("local grounded plan response content is not text")
+        try:
+            raw_proposal = json.loads(content)
+            if not isinstance(raw_proposal, dict):
+                raise ValueError("grounded proposal must be a JSON object")
+            proposal = GroundedPlanProposal.model_validate(
+                canonicalize_grounded_plan_proposal_payload(raw_proposal)
+            )
+        except (json.JSONDecodeError, ValueError) as error:
+            raise LocalProviderError(
+                f"local model returned an invalid grounded plan: {error}"
+            ) from error
+        if proposal.question_id != question_id:
+            proposal = proposal.model_copy(update={"question_id": question_id})
+        return proposal
 
 
 def build_fund_comparison_draft_system_prompt(question: str) -> str:

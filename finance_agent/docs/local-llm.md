@@ -131,6 +131,45 @@ LOCAL_TEST_LLM_MODEL=qwen3-local-test \
 [internal-red-team-v1 전체 E2E 평가](evaluation-internal-red-team.md)에
 보존한다.
 
+설명회 예상 분포의 30문항 공개 모의평가는 같은 서버에서 다음과 같이 실행한다.
+
+```bash
+FINANCE_AGENT_LLM_MODE=local_test \
+ENABLE_NON_HCX_TEST_LLM=1 \
+LLM_PROVIDER=local_test \
+LOCAL_TEST_LLM_BASE_URL=http://127.0.0.1:18000/v1 \
+LOCAL_TEST_LLM_MODEL=qwen3-local-test \
+/home/haeyeongcho/miniforge3/envs/gaeng3-dev/bin/python \
+  -m finance_agent_core.evaluation.official_mock_cli \
+  --provider local_test \
+  --require-perfect
+```
+
+최초 관측은 전체 계약 30/30, 답변 생성 16/17, 안전 fallback 1건이다. 자세한
+분포·응답시간·해석 제한은 [공식 형식 공개 모의평가](evaluation-official-mock.md)에
+기록한다.
+
+위 명령은 한 프로세스 안의 기능 E2E다. 실제 Docker FastAPI 네트워크까지 포함하려면
+Qwen Backend를 켠 상태에서 별도 터미널의 `finance_agent/`에서 실행한다
+
+```bash
+python -m finance_agent_core.evaluation.official_mock_http_cli \
+  --base-url http://127.0.0.1:18002 \
+  --backend-profile local_test \
+  --declared-model qwen3-local-test \
+  --output artifacts/evaluation/official-mock-http-v1-30-local-qwen.json
+```
+
+Docker의 `local_test`는 Qwen을 답변 생성에만 연결하고 QueryPlan은 서버 규칙으로
+확정한다. 최초 관측은 공식 5필드·60초 30/30, 의미 24/30이며, 공모펀드 공식
+실행 잠금 6건을 실패로 그대로 보존했다
+
+최초 24/30을 덮어쓰지 않고, Backend에 공모펀드만 여는 명시적
+`public_fund_v1_approved` 정책을 적용해 같은 동결 30문항을 재평가했다. 의미·형식·
+60초 30/30, Qwen 문장 검증 17/17, fallback 0건으로 통과했다. 실험 후에는 다시
+기본 `locked`로 복구했다. 이 정책은 팀 내부 배포 승인이지 주최 측의 공식 승인이
+아니다
+
 ### Docker Backend grounded answer 스모크
 
 로컬 Qwen은 개발 전용 Compose override를 통해 실제 FastAPI Backend의 최종 설명
@@ -138,22 +177,26 @@ LOCAL_TEST_LLM_MODEL=qwen3-local-test \
 결정론적 Core가 담당한다. 다음 명령은 저장소 루트에서 실행한다.
 
 ```bash
+FINANCE_BACKEND_FUND_EXECUTION_POLICY=public_fund_v1_approved \
 ./compose.sh \
   -f docker-compose.yml \
   -f fastapi_backend/docker-compose.local-llm.yml \
-  up --no-build --detach backend
+  up --no-build --detach --force-recreate --wait backend
 
 python fastapi_backend/scripts/smoke.py \
   --base-url http://127.0.0.1:18002 \
   --timeout 180 \
   --success-answer-mode llm_grounded \
-  --provider-model qwen3-local-test
+  --provider-model qwen3-local-test \
+  --expected-fund-execution-policy public_fund_v1_approved
 ```
 
 Qwen을 종료한 상태에서는 `--success-answer-mode deterministic_fallback`으로 같은
-7개 요청을 검사한다. 2026-08-05 실제 Docker HTTP 결과는 Qwen 정상 7/7, 장애
-fallback 7/7, 기본 결정론적 구성 복구 후 7/7이었다. 테스트가 끝나면 다음 명령으로
-개발 전용 override를 제거한 기본 컨테이너를 다시 만든다.
+14개 요청을 검사한다. 2026-08-07 실제 Docker HTTP 결과는 공모펀드까지 연
+Qwen 정상 14/14, 모델 중단 fallback 14/14, 기본 공모펀드 잠금·결정론적 구성
+복구 후 14/14였다. 공식 GET 7건에는 결측·공백·길이 초과·유니코드·마크업 입력도
+포함. 테스트가 끝나면 다음 명령으로 개발 전용 override를 제거한 기본 컨테이너를
+다시 만든다.
 
 ```bash
 ./compose.sh \

@@ -10,7 +10,7 @@ from finance_agent_core.contracts.queryplan import ProductFamily
 from finance_agent_core.storage import connect_read_only, load_manifest
 from pydantic import BaseModel, ConfigDict
 
-from app.config import Settings
+from app.config import FundExecutionPolicy, Settings
 from app.dependencies import get_settings
 
 router = APIRouter(tags=["health"])
@@ -27,6 +27,7 @@ class HealthResponse(BaseModel):
     ready_product_families: list[ProductFamily]
     missing_product_families: list[ProductFamily]
     unavailable_product_families: list[ProductFamily]
+    fund_execution_policy: FundExecutionPolicy
 
 
 def _database_is_ready(family: ProductFamily, path: Path) -> bool:
@@ -70,4 +71,5 @@ def health(
         ready_product_families=ready_families,
         missing_product_families=missing_families,
         unavailable_product_families=unavailable_families,
+        fund_execution_policy=settings.fund_execution_policy,
     )

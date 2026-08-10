@@ -28,11 +28,12 @@ ETF·ETN, 공모펀드를 조회·비교·계산한 뒤 근거와 기준일을 �
 | 영역 | 현재 상태 |
 | --- | --- |
 | 데이터 | 공식 XLSX에서 네 상품군 SQLite를 자동 생성·검증하는 경로 구현 |
+| Ontology | 공식 파일명 Turtle 5개를 field registry에서 자동 생성·문법·정합성 검사 |
 | AI Agent | 검색·비교·집계·근거 생성·결과 검증 구현 |
-| Backend | FastAPI `GET /health`, `POST /answer` 구현 |
+| Backend | FastAPI `GET /health`, 내부용 `POST /answer`, 평가용 `GET /answer` 구현 |
 | Frontend | 동료의 `nextjs-frontend/` 코드 합류 후 연결 예정 |
-| LLM | 로컬 Qwen은 내부 개발에만 사용, HyperCLOVA X 실제 연결은 공식 안내 후 진행 |
-| 자동 검증 | AI Core pytest 338개와 Backend·문서·Docker 검증 경로 관리 |
+| LLM | 로컬 Qwen은 내부 개발에만 사용, HyperCLOVA X는 크레딧·실제 API 규격 확보 후 연결 |
+| 자동 검증 | AI Core pytest 507개와 Backend 34개·문서·Docker 검증 경로 관리 |
 
 세부 기능과 평가 결과는 [AI Agent 작업공간](finance_agent/README.md)에서 관리
 
@@ -56,8 +57,10 @@ flowchart LR
 ```text
 gaeng3/
 ├── compose.sh                        # 전체 Docker 실행 진입점
+├── rehearse.sh                       # Docker·경계·테스트·문서 전체 리허설
 ├── docker-compose.yml               # 현재 data-init·Backend 서비스 구성
 ├── nextjs-frontend/                 # Next.js 화면(합류 예정)
+├── ontology/                        # 제출용 공통·상품군별 Turtle 5개
 ├── fastapi_backend/                 # FastAPI API·Docker·HTTP 테스트
 │   └── README.md                     # Backend 개발 안내
 ├── finance_agent/                   # 검색·검증·답변 생성 Agent Core
@@ -125,6 +128,16 @@ curl --fail-with-body \
   http://127.0.0.1:18001/answer
 ```
 
+위 `POST /answer`는 Frontend가 상품·근거·상태를 세부적으로 받기 위한 내부 API다.
+주최 측 평가 규격을 확인하는 `GET /answer`는 다음처럼 호출한다.
+
+```bash
+curl --get --fail-with-body \
+  --data-urlencode 'question_id=Q-001' \
+  --data-urlencode 'question=현재 판매 가능한 원화채권 중 AA- 이상 종목 알려줘' \
+  http://127.0.0.1:18001/answer
+```
+
 API 명세 화면은 `http://127.0.0.1:18001/docs`에서 확인
 
 ### 5.4 로그 확인
@@ -169,6 +182,20 @@ API 명세 화면은 `http://127.0.0.1:18001/docs`에서 확인
 루트 [compose.sh](compose.sh)는 한글 프로젝트 경로에서 일부 Docker Compose 버전이
 이미지 build context를 찾지 못하는 문제까지 처리하는 프로젝트 공식 실행 진입점
 
+### 5.7 한 명령 전체 리허설
+
+기본 Docker 기동, 공모펀드 잠금 확인, Backend·공식 GET 14건 스모크,
+개발/제출 경계 검사, Agent·Backend 전체 테스트와 문서 검사를 한 번에 실행
+
+```bash
+PYTHON_BIN=/home/haeyeongcho/miniforge3/envs/gaeng3-dev/bin/python \
+  ./rehearse.sh
+```
+
+이미 최신 이미지를 빌드했다면 `--no-build` 사용. 공식 범위 확인 후 로컬 LLM
+흔적을 제거한 제출 후보에서는 `--submission`을 붙이며, 현재 개발 저장소에서는
+관련 파일이 남아 있으므로 이 옵션이 실패하는 것이 정상
+
 ## 6. 영역별 개발 안내
 
 | 작업 | 시작 문서 | 실행 위치 |
@@ -176,6 +203,7 @@ API 명세 화면은 `http://127.0.0.1:18001/docs`에서 확인
 | 전체 시스템 실행 | 이 README | 저장소 루트 |
 | FastAPI·Docker·HTTP 계약 | [Backend README](fastapi_backend/README.md) | 저장소 루트 또는 `fastapi_backend/` |
 | Agent·검색·검증·평가 | [AI Agent README](finance_agent/README.md) | `finance_agent/` |
+| Ontology 생성·검사 | [Ontology 제출 계약](finance_agent/docs/ontology.md) | `finance_agent/` |
 | 팀 문서·기술 제안서 | [문서 안내](docs/README.md) | `docs/` |
 | 기술 제안서 작성 | [기술 제안서 허브](docs/proposal/README.md) | `docs/proposal/` |
 | 협업·커밋·PR | [CONTRIBUTING](CONTRIBUTING.md) | 저장소 전체 |
@@ -183,7 +211,7 @@ API 명세 화면은 `http://127.0.0.1:18001/docs`에서 확인
 ## 7. LLM과 데이터 원칙
 
 - 평가·제출 경로의 LLM은 공식 규칙에 따라 HyperCLOVA X만 사용
-- 로컬 Qwen은 HyperCLOVA X 연결 전 내부 개발과 장애 검증에만 사용
+- 로컬 Qwen은 크레딧과 실제 HCX API 규격을 확보하기 전 내부 회귀·E2E·장애 검증에만 사용
 - 공식 범위 확인 후 제출 후보에서 로컬 모델 관련 코드·설정·의존성 제거 및 검사
 - 답변의 상품명·수치·순위·출처는 제공 데이터와 결정론적 코드로 검증
 - 공식 데이터와 외부 데이터가 충돌하면 공식 데이터 우선

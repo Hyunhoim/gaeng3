@@ -1,6 +1,6 @@
 # Backend 전달용 Agent DTO v1
 
-마지막 갱신: 2026-08-05
+마지막 갱신: 2026-08-07
 
 ## 1. 목적
 
@@ -16,6 +16,8 @@ Pydantic request·response 계약이다. FastAPI route나 Next.js 타입은 이 
 - `routed_result_to_backend()` 공통 Agent 결과 adapter
 - `execute_answer_request()` 프레임워크 독립 `/answer` service adapter
 - `AnswerAdapterResult` HTTP status와 응답 DTO 결합 계약
+- `OfficialAnswerResponse` 주최 측 평가용 다섯 문자열 계약
+- `official_response_from_backend()` 내부 DTO의 평가용 변환
 
 ## 2. 요청
 
@@ -160,7 +162,38 @@ timeout·transport·응답 오류, dataset 장애, 알 수 없는 내부 오류,
 answer fallback과 민감정보 비노출을 12/12 검증한다. 이는 실제 HTTP route나
 HyperCLOVA X API 호환성 평가가 아니다.
 
-현재 FastAPI `/answer` route는 같은 DTO를 response model로 사용한다. 이후
+현재 FastAPI `POST /answer` route는 같은 DTO를 response model로 사용한다. 이후
 JSON Schema에서 OpenAPI·TypeScript 타입을 생성하거나 동일 필드를 수동 매핑한다.
 route는 DTO 필드를 삭제·재해석하지 않고 HTTP 인증, request parsing과 transport
 lifecycle만 추가한다.
+
+## 7. 주최 측 평가용 `GET /answer`
+
+Frontend에 제공하는 상세 `POST /answer`와 별개로, 공식 평가 route는 다음
+다섯 문자열만 반환한다.
+
+| 필드 | 내용 |
+| --- | --- |
+| `question_id` | 요청의 평가 질문 ID |
+| `question` | 요청 원문 |
+| `retrieved_context` | citation·근거·기준일을 JSON 문자열로 직렬화한 값 |
+| `think_trace` | intent·필터·검증·fallback의 구조화 실행 기록 JSON 문자열 |
+| `answer` | 검증된 최종 답변 또는 안전한 한계 안내 |
+
+`think_trace`는 모델의 숨은 사고과정을 노출하지 않고, 서버가 관측하고 다시
+검사할 수 있는 실행 사실만 담는다. 결정론적 답변에서 실행하지 않은
+Answer Verifier를 실행했다고 표시하지 않는다.
+
+성공·결과 없음·역질문·미지원·내부 오류와 입력 오류를 모두 같은 스키마와
+HTTP 200으로 반환한다. 이는 주최 측 계약을 위한 예외이며, 내부 `POST /answer`의
+HTTP 422·502·503·504 오류 의미를 바꾸지 않는다. 정의되지 않은 query parameter는
+무시하며, 내부 예외·credential·파일 경로는 다섯 문자열에 노출하지 않는다.
+
+Agent Core 계약 2건과 Backend의 모든 응답 상태·예외·추가 parameter 테스트로
+자동 검증한다. Docker HTTP smoke도 실제 공식 GET 응답의 필드·문자열·
+직렬화를 검사하도록 확장했다.
+
+평가 route에는 기본 55초의 바깥쪽 시간 예산을 둔다. 예산이 끝나면
+`control_code=request_timeout`, 빈 citation과 안전 문구를 담은 같은 다섯 문자열을
+HTTP 200으로 반환한다. 이 제한은 실행 중인 Python thread를 강제 종료하지 않으므로,
+실제 provider timeout은 55초보다 짧게 두고 동시 요청 상한도 별도로 확정해야 한다.

@@ -1,6 +1,6 @@
 # HyperCLOVA X 연결 전 준비 기준
 
-마지막 갱신: 2026-08-06
+마지막 갱신: 2026-08-09
 
 이 문서는 HyperCLOVA X API를 연결하기 전에 Agent Core에서 끝내야 할 구현,
 평가, 계약과 외부 확인 게이트를 추적하는 정본이다. 완료 표시는 코드·테스트·
@@ -37,7 +37,7 @@
 | 단계 | 산출물 | 완료 조건 | 상태 |
 | --- | --- | --- | --- |
 | 0 | 현재 코드·문서·평가 감사 | 시작 검사와 간극 기록 | 완료 |
-| 1 | 공통 진단·외부 holdout 프로토콜 | schema, validator, SHA 봉인, 진단 전·후 report | 내부 완료·외부 작성 대기 |
+| 1 | 공통 진단·외부 holdout 프로토콜 | schema, validator, 공개 세트 유사도 검사, SHA 봉인, 최초 1회 상태 잠금 | 내부 완료·외부 작성 대기 |
 | 2 | 네 상품군 capability matrix | QueryPlan·Oracle과 자동 정합성 검사 | 완료 |
 | 3 | fail-closed Router·공통 답변 경로 | 실행·역질문·거절이 계약대로 분리되고 E2E 검증 | 완료 |
 | 3A | 네 상품군 AGGREGATE | Decimal 계산·통화 gate·결측·기준일·독립 verifier·Backend evidence | 완료 |
@@ -46,11 +46,17 @@
 | 5 | 사람 rubric·Backend DTO | JSON 예시·schema·contract test 포함 | 계약 완료·사람 평가 대기 |
 | 6 | baseline 동결·전체 QA | 회귀·wheel·문서·hash 검증과 외부 게이트 명시 | 내부 완료 |
 | 7 | HyperCLOVA X provider 경계 | 세 operation·주입형 transport·오류·관측·전체 경로 E2E | 내부 8/8 완료·실제 HTTP 대기 |
-| 8 | `/answer` service adapter·FastAPI route | HTTP status·안전한 ERROR DTO·fallback·비노출·입력 검증 계약 | adapter 12/12·Backend 10/10·Ubuntu Docker HTTP 7/7 |
+| 8 | `/answer` service adapter·FastAPI route | HTTP status·안전한 ERROR DTO·fallback·비노출·입력 검증 계약 | adapter 12/12·Backend 34/34·Docker 기본/Qwen/장애 각 14/14 |
 | 9 | `internal-red-team-v1` | 네 상품군 40문항·10개 공격 유형·전체 `/answer` E2E | expected·수정 후 로컬 Qwen 40/40 |
 | 10 | 교차 상품군 grounded answer | family evidence 격리·교차 문구 검증·전체 fallback·무호출 | expected·로컬 Qwen 각각 4/4 |
 | 11 | 금융 도메인 QA 실험 | 담당자 작성 40문항 hash 검증·단계별 E2E·Q002 SEARCH gold | v1.2 사후 회귀 40/40·잘못된 실행 0건 |
-| 12 | 제출용 모델 경계 | 8월 6일 공식 확인·로컬 provider 제거 검사·투명한 개발·제출 분리 | release gate 문서화·공지 대기 |
+| 12 | 제출용 모델 경계 | 로컬 provider 제거 검사·투명한 개발·제출 분리 | 개발 자동 검사 통과·제출 자동 차단·공식 범위 서면 확인 대기 |
+| 13 | 공식 평가 API adapter | `GET /answer`·다섯 문자열·전 결과 HTTP 200·60초 내부 예산 | route·DTO·상태·오류·55초 외곽 예산 완료 |
+| 14 | 도메인별 Ontology | Turtle 5개·field registry 정합성·문법 검사 | 5개 생성·RDFLib 문법·registry exact-match 완료 |
+| 15 | 공식 형식 공개 모의평가 | 난이도 10/10/10·답변 불가 5개·공식 5필드·latency | expected·로컬 Qwen 30/30·생성 16/17·안전 fallback 1건 |
+| 16 | Qwen 변형·전체 Agent 스트레스 평가 | 세 표현 축·의미 선별·gold 감사·실패 단계·fallback 전후 비교 | 승인 변형 결정론적·Qwen 각각 77/77·fallback 0/61 |
+| 17 | 원문 비공개 semantic round-trip | 실행 의미만 제공·계획 지문·근거 첨부 모델 계획 gate | 생성 75·선별 64, 최초 15/64→결정론적 출력·계획 64/64; 강화 Qwen 재실행 대기 |
+| 18 | registry 기반 자동 커버리지 | 대표 계획 직접 실행·canonical 최초 관측·Qwen 자연화·shard 병합·실행 의미 감사·비교·검색 사후 회귀 | 299개 직접 실행·canonical 37/299; Qwen 897개 생성·391개 선별·네 구성 최초 exact 65/391; 비교 94/391·검색 153/391→170/391, 최신 보조 strict 242/391 |
 
 ## 2. 평가 해석 원칙
 
@@ -117,17 +123,111 @@ Backend `/answer` service adapter 결과:
 - 질문·credential·provider 본문·파일 경로 비노출 포함 동결 12개 시나리오 12/12
 - Ubuntu SSH Docker에서 health와 채권·국내 ETP·해외 ETP 실행, 공모펀드 잠금,
   역질문·미지원·HTTP 422의 7개 실제 요청 7/7
-- Backend 단위·계약 테스트 10/10
+- Backend 단위·계약 테스트 30/30
 - 실제 HyperCLOVA X·request 인증·주최 측 네트워크 transport 품질 점수가 아님
 
 `internal-red-team-v1` 전체 E2E 결과:
 
 - 네 상품군 각 10문항, 10개 공격 유형을 Router부터 Backend DTO까지 실행
-- expected provider 40/40, 최초 로컬 Qwen strict 36/40·안전 차단 40/40
+- 과거 원본 정답표 기준 expected provider 40/40, 최초 로컬 Qwen strict 36/40·안전 차단 40/40
 - 최초 네 실패는 모두 `3건`을 lexical linker가 limit 5로 해석한 `$.limit` 불일치
 - Router와 linker의 단위 문법을 맞춘 뒤 로컬 Qwen strict·safety·evidence 40/40
 - QueryPlan 12회·grounded answer 12회, provider 오류·verifier fallback 0건
+- 이후 Qwen 변형 질문 감사에서 `낮은 순`·`짧은 순` 정답 2건이 반대 방향으로
+  산출된 것을 발견함. 올바른 정렬을 적용한 현재 Agent를 변경하지 않은 원본 정답표로
+  다시 채점하면 strict 38/40, safety 40/40이며 hash-pinned 교정표를 적용한 평가는 40/40
 - 공개 내부 red-team이므로 독립 blind나 HyperCLOVA X 품질 점수가 아님
+
+공식 형식 30문항 공개 모의평가 결과:
+
+- 설명회 예상 분포대로 난이도 하·중·상 각 10문항, 답변 불가 5문항 구성
+- 검색·비교·집계·안전·근거와 공식 5필드 계약 expected·로컬 Qwen 30/30
+- 답변 생성 대상 17문항 중 16문항 grounded, 가치 판단 문구 1건은 안전 fallback
+- 로컬 순차 실행 p50 1,553.318ms, p95 3,876.727ms, 최대 4,398.949ms
+- self-authored 공개 모의평가이며 독립 blind·HyperCLOVA X·공모전 점수가 아님
+
+Qwen 변형 질문·전체 Agent 스트레스 평가 결과:
+
+- 공개 원문 30개에서 paraphrase·조건 순서 변경·무해한 부가 문장 90개 생성
+- 숫자·상품 식별자·연산자·핵심 개념 보존 validator 통과 77개, 폐기 13개
+- 최초 허용 변형 88개 중 60개 통과에서 시작해 Agent 표현 경계를 회귀로 보강
+- `낮은 순`·`짧은 순` 두 gold 정렬 오류를 DB 값으로 확인하고 원본 보존 overlay 적용
+- 교정 후 원문 30/30, 결정론적 Agent 변형 77/77, 전체 Qwen Agent 77/77
+- Qwen 계획 43회·답변 61회에서 provider 오류 0, 의미·safety·evidence 100%
+- 안전 설명문 계약 전 검증 fallback 3/61을 같은 전체 재실행에서 0/61로 감소
+- 공개 원문 파생·사후 개선 회귀이므로 독립 blind나 공식 성능으로 해석하지 않음
+
+원문 비공개 semantic round-trip 결과:
+
+- Qwen에 기존 질문 문장을 주지 않고 서버가 확정한 실행 의미만 제공
+- 정중체·구어체·전문 메모 75개 생성, 기계 의미 보존 64개 통과·11개 폐기
+- 결정론적 Agent 최초 15/64를 보존하고 라우팅·식별·비교·집계 표현 공백을 분류
+- 출력만 같고 QueryPlan이 다른 5건을 추가로 발견하도록 평가 지문 강화
+- 공통 규칙 보강 후 강화된 출력·QueryPlan 의미, safety, evidence 모두 64/64
+- Qwen grounded-plan 최초 28/64·gate 구제 9건을 관측했으나 결과 분석 후 강화한
+  prompt·gate는 같은 frozen batch에서 재실행해야 함
+- 실제 존재하지만 질문에 없는 상품 ID, 부정된 ID·조건·정렬, malformed JSON은
+  실행 권한을 얻지 못하도록 단위 회귀로 고정
+- 공개 정답 파생·사후 개선 회귀이므로 독립 blind나 공식 점수로 해석하지 않음
+
+registry 기반 자동 커버리지 최초 관측:
+
+- queryable·sortable·comparable·aggregatable 필드와 실제 DB 값을 조합해 대표
+  capability 좌표 305개를 자동 구성
+- 서로 다른 날짜·통화 값이 부족한 6개는 제외 이유를 보존하고, 나머지 정답
+  QueryPlan 299개는 Oracle·Verifier·field evidence 직접 실행에 성공
+- 같은 계획의 규칙형 질문을 현재 Agent에 넣은 최초 strict는 37/299,
+  실행 도달 254/299, 계획 의미 44/299, 근거 의미 77/299
+- 실패의 첫 단계는 질문 분류 45건, 작업 계획 210건, 근거 7건으로 자연어
+  이해층이 현재 가장 큰 병목임을 확인
+- 비교 0/72, 일반 필드 집계 0/34, 조건 검색 4/112를 숨기지 않고 최초
+  baseline으로 동결
+- Qwen은 canonical 원문 없이 의미 명세만 보고 정중체·구어체·검색창형
+  897문항을 모두 생성했고, 기계 의미 선별 391개를 hash 기반 shard로 실행·병합
+- 모델 없음·Qwen 계획만·Qwen 답변만·Qwen 계획+답변은 모두 strict 65/391
+- Qwen 계획은 2건 구제·2건 퇴행으로 순개선 0, 95% 구간 약 -1.0%p~+1.0%p,
+  Holm 보정 p=1.0이며 p95는 기준선보다 약 2.35초 증가
+- Qwen 답변만은 182회 생성에서 오류·fallback 없이 strict와 evidence를 유지
+- 기존 exact 65/391을 보존한 실행 의미 사후 감사에서 결과에 무관한 집계
+  projection과 비그룹 limit만 정규화하면 규칙 기반 134/391, Qwen 계획 132/391
+- 기능별 보조 strict는 조건 검색 6/104, 순위 검색 11/103, 비교 0/29,
+  일반 집계 69/79, 그룹 집계 48/76으로 다음 개선 우선순위는 비교와 검색
+- 정확한 두 상품 ID 비교 문법과 표준 근거 범위를 보강한 뒤 같은 공개 391문항의
+  exact는 94/391, 보조 strict는 163/391, 비교는 29/29로 개선
+- Qwen 계획 재실행도 exact 94/391·비교 29/29였지만 2건 구제·2건 퇴행,
+  보조 strict 161/391, p95 약 2.24초 증가로 계획 기본 경로 승격 근거 없음
+- 일반 ETF·ETN 상품군 표현과 검색 조건·정렬 필드 근거를 공통 경로에 보강한 뒤
+  같은 공개 문항의 규칙 기반 exact 153/391·보조 strict 222/391, 구제 59·퇴행 0
+- 명확한 총보수율과 티커 정렬 질문을 실행하도록 Router를 보강한 두 번째 검색
+  회귀는 exact 170/391·보조 strict 242/391, 구제 17·퇴행 0
+- 최신 수치는 개발에 사용한 공개 질문의 사후 회귀이며 독립 blind·공식 점수가 아님
+- 자동 생성·공개 데이터 진단이므로 독립 blind·실사용 분포·공모전 점수가 아님
+
+부정 표현 안전장치 보강 후 교차 회귀 결과:
+
+- 상품 비교 30/30, 네 상품군 검색·집계 8/8, 금융 도메인 개발 QA 40/40
+- `공모가 아닌 공모펀드`, `거래 가능하지 않은 ETF`, `AUM이 크지 않은`,
+  `특정 상품을 제외한`처럼 조건을 반대로 해석하기 쉬운 질문은 임의 실행하지 않고
+  미지원 또는 조건 확인으로 종료
+- 전체 단위·계약 테스트 496/496, lint·format 검사 통과
+- 위 결과도 이미 확인한 공개 개발 세트의 사후 회귀이며 독립 blind가 아님
+
+같은 30문항의 실제 Docker FastAPI `GET /answer` 최초 관측:
+
+- 공식 다섯 문자열과 질문당 60초 예산 30/30
+- 기대 검색·비교·집계 의미 일치 24/30, 답변 불가 안전 처리 5/5
+- 실패 6건은 모두 의도적인 공모펀드 공식 실행 잠금이며 HTTP·Qwen 오류 0건
+- Qwen 도달 13건 중 grounded 12건, 채권 가치 판단 문구 1건은 안전 fallback
+- p50 486.924ms, p95 2,491.057ms, 최대 2,885.126ms
+- 실제 배포 설정의 최초 관측이며 내부 평가 전용 30/30과 구분해 보존
+
+최초 결과 보존 후 공모펀드 명시적 v1 승인 경로 재평가:
+
+- 기본 `locked`는 유지하고 `public_fund_v1_approved`를 지정한 배포에서만 공모펀드 실행
+- 같은 동결 30문항 의미·공식 형식·60초 30/30, 답변 불가 5/5
+- Qwen 문장 검증 17/17, fallback 0건
+- 실험 후 Backend 기본 `locked` 복구와 Qwen 프로세스·GPU 메모리 종료 확인
+- 이 정책은 팀 내부 배포 승인이며 주최 측의 공식 이용 승인을 뜻하지 않음
 
 교차 상품군 grounded answer 결과:
 
@@ -159,27 +259,39 @@ Backend `/answer` service adapter 결과:
 - 봉인 이후 단 한 번 수행하는 최초 blind 실행
 - 금융 도메인 담당자와 팀원이 수행한 사람 평가 점수
 - 주최 측이 허용한 외부 비정형 문서 corpus와 사용 범위 확인
-- 2026-08-06 오프라인 설명회 참석 팀원의 기록에서 HyperCLOVA X 모델명·
-  Structured Outputs 범위·endpoint·인증·제출 범위와 공식 출처 확인
+- HyperCLOVA X 정확한 모델명·Structured Outputs 범위·endpoint·인증·제출 범위의
+  공식 서면 확인과 크레딧 수령·적용 서비스 확인
 - 위 공식 답변 확인 후의 실제 HTTP transport 연결과 공식 재현
 - 공식 답변에 따른 제출 후보의 로컬 LLM provider·설정·
   스크립트·의존성 제거와 정적·기계적 검수
 - 주최 측 실행 환경에서 Docker·포트·인증·네트워크 정책 최종 재현
 
-이 게이트가 남아 있는 동안 저장소는 “HyperCLOVA X 연결 전 내부 준비 완료”까지만
+설명회 현장 자료에서 공식 `GET /answer`와 Ontology 요구는 확인했다. 위 게이트가
+남아 있는 동안 저장소는 “HyperCLOVA X 연결 전 내부 준비 완료”까지만
 주장할 수 있고, 최종 평가 준비 완료나 일반화 성능 완료를 주장하지 않는다.
 
 ## 4. 내부 완료 QA
 
-- pytest `338 passed`
+- Agent Core pytest `507 passed`
+- Backend pytest `34 passed`
 - Ruff lint와 format 통과
-- 문서 검사 `53 Markdown files`, `28 evaluation baselines` 통과
+- 문서 검사 `59 Markdown files`, `41 evaluation baselines` 통과
 - `pip check` 통과
 - build isolation 없이 wheel 생성과 신규 JSON package data 포함 여부 통과
 - `git diff --check` 통과
 - source·test·문서·baseline·protocol tree SHA-256 manifest 검증
 - 공식 XLSX 4종에서 Docker volume의 SQLite 4개를 자동 생성하고 두 번째 실행에서
-  모두 재사용, Backend health와 실제 HTTP 스모크 7/7 통과
+  모두 재사용, 기본 Backend·공식 GET 확장 스모크 14/14 통과
+- 실제 Docker 공식 GET 30문항의 형식·60초 30/30, 의미 24/30과 공모펀드 잠금
+  6건의 최초 관측 보존
+- 명시적 공모펀드 v1 승인 경로의 동일 30문항 30/30과 실험 후 기본 잠금 복구 확인
+- 로컬 Qwen·공모펀드 승인 Docker 스모크 14/14, 모델 중단 fallback 14/14,
+  공식 모의 30문항 동시성 2에서 30/30·fallback 0 확인
+- 결정론적 공식 30문항은 동시성 1·2·4에서 모두 30/30. 단일 worker에서
+  동시성이 커질수록 지연이 증가해 처리량·SLO 근거로는 사용하지 않음
+- 외부 blind 100문항은 공개 질문 유사도 검사와 원자적 최초 실행 상태·report hash
+  결합까지 구현. 실제 질문·정답 작성과 최초 실행은 외부 게이트로 유지
+- 제출 경계 개발 프로필 통과, 제출 프로필은 현재 로컬 개발 흔적을 의도적으로 차단
 
 source freeze는
 `evaluation/protocols/pre-hcx-readiness-v1.manifest.json`에 보존한다. 외부

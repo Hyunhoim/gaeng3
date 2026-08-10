@@ -28,6 +28,7 @@ def build_agent(settings: Settings) -> RoutedFinanceAgent:
     return RoutedFinanceAgent(
         settings.database_paths,
         answer_provider=answer_provider,
+        capability_execution_overrides=settings.capability_execution_overrides,
     )
 
 

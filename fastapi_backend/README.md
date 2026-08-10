@@ -9,7 +9,7 @@
 
 ### Backend가 담당하는 것
 
-- `GET /health`, `POST /answer` FastAPI route
+- `GET /health`, 내부용 `POST /answer`, 평가용 `GET /answer` FastAPI route
 - 요청 JSON 검증과 오류 응답 변환
 - Agent Core 의존성 생성과 실행 수명주기
 - Docker 이미지와 Backend 시작 명령
@@ -72,6 +72,7 @@ Backend는 다음 Agent 공개 계약만 사용
 - 모두 준비됨: HTTP 200, `status=ok`
 - 하나라도 누락·불일치: HTTP 503, `status=degraded`
 - 파일 경로와 내부 오류 정보는 공개 응답에 노출하지 않음
+- `fund_execution_policy`는 공모펀드가 기본 잠금인지, 명시적 버전 승인으로 열렸는지 표시
 
 ```bash
 curl --fail http://127.0.0.1:18001/health
@@ -118,6 +119,31 @@ curl --fail-with-body \
 
 Swagger UI는 `http://127.0.0.1:18001/docs`, OpenAPI JSON은
 `http://127.0.0.1:18001/openapi.json`에서 확인
+
+### 평가용 `GET /answer`
+
+주최 측 평가 규격에 맞춰 `question_id`와 `question`을 query parameter로 받는다.
+
+```bash
+curl --get --fail-with-body \
+  --data-urlencode 'question_id=Q-001' \
+  --data-urlencode 'question=현재 판매 가능한 원화채권 중 AA- 이상 종목 알려줘' \
+  http://127.0.0.1:18001/answer
+```
+
+응답은 `question_id`, `question`, `retrieved_context`, `think_trace`, `answer`의
+다섯 필드만 갖고 모두 문자열이다. 정상 검색, 결과 없음, 역질문, 미지원,
+내부 오류도 같은 다섯 필드와 HTTP 200을 반환한다. 정의되지 않은 추가
+query parameter는 무시한다.
+
+`retrieved_context`와 `think_trace`는 JSON을 문자열로 직렬화한 값이다.
+`think_trace`는 모델의 숨은 사고과정이 아니라 질문 분류·필터·검증·fallback 결과처럼
+다시 확인할 수 있는 실행 기록만 담는다.
+
+전체 처리의 바깥쪽 제한은 기본 55초다. 시간이 다 되면 근거가 없는 안전한 시간 초과
+답변을 HTTP 200으로 먼저 반환한다. 실행 중인 작업을 강제로 종료하는 방식은 아니므로,
+실제 HyperCLOVA X 연결 때는 모델 호출 제한을 이 값보다 짧게 설정하고 동시 요청 수를
+별도로 제한해야 한다.
 
 ## 5. 전체 시스템에서 실행
 
@@ -179,12 +205,69 @@ python fastapi_backend/scripts/smoke.py \
 ```bash
 python fastapi_backend/scripts/smoke.py \
   --base-url http://127.0.0.1:18002 \
-  --output /tmp/gaeng3-docker-http-smoke-v1.json
+  --output /tmp/gaeng3-docker-http-smoke-v2.json
 ```
 
-스모크는 `/health`, 세 실행 상품군 검색, 공모펀드 정책 잠금, 모호한 요청, 예측·단정
-요청과 잘못된 JSON DTO를 함께 검사. 실제 평가 점수가 아니라 HTTP 배선과 안전 분기의
-회귀 여부를 확인하는 용도
+스모크는 `/health`, 내부 `POST /answer` 7건과 공식 `GET /answer` 7건을 함께
+검사. 공식 GET에는 정상 질문뿐 아니라 결측·공백·길이 초과·유니코드·마크업 형태
+입력을 포함하며, 어떤 경우에도 HTTP 200과 다섯 문자열 계약이 유지되는지 확인
+
+기본값은 `fund_execution_policy=locked`를 요구. 팀이 공모펀드 실행 정책을 명시한
+개발 리허설에서는 다음 인자를 추가
+
+```bash
+python fastapi_backend/scripts/smoke.py \
+  --base-url http://127.0.0.1:18002 \
+  --timeout 180 \
+  --success-answer-mode llm_grounded \
+  --provider-model qwen3-local-test \
+  --expected-fund-execution-policy public_fund_v1_approved
+```
+
+2026-08-07 실제 Docker에서 기본 결정론적·잠금 경로 14/14, Qwen·공모펀드 승인
+경로 14/14, Qwen 중단 후 결정론적 fallback 경로 14/14를 확인. 공개 개발
+스모크이므로 공식 점수·독립 blind·운영 지연 보장으로 해석하지 않음
+
+### 동결 30문항 실제 GET 평가
+
+단일 공식 GET뿐 아니라 설명회 분포를 모사한 동결 30문항을 실제 네트워크로
+호출할 때는 `finance_agent/`에서 다음 채점기를 실행한다
+
+```bash
+python -m finance_agent_core.evaluation.official_mock_http_cli \
+  --base-url http://127.0.0.1:18002 \
+  --backend-profile local_test \
+  --declared-model qwen3-local-test \
+  --concurrency 2 \
+  --expected-fund-execution-policy public_fund_v1_approved
+```
+
+이 채점기는 공식 다섯 문자열, 질문 보존, intent·상품군·후보 수, 상품 ID,
+비교·집계 근거와 60초 예산을 함께 검사한다. 2026-08-07 최초 관측은 형식·시간
+30/30, 의미 24/30이다. 여섯 실패는 모두 현재 Backend에서 의도적으로 잠근
+공모펀드 정상 질문이며, 모델 오류나 HTTP 오류가 아니다. 자세한 해석은
+[공식 형식 30문항 공개 모의평가](../finance_agent/docs/evaluation-official-mock.md)를 따른다
+
+최초 결과를 보존한 뒤 공모펀드만 `public_fund_v1_approved`로 열고
+같은 30문항을 재실행한 결과는 형식·시간·의미 30/30, 답변 생성
+17/17, fallback 0건이다. 최신 동시성 2 재검증도 30/30, fallback 0건,
+p95 약 3.01초·최대 약 3.04초로 통과. 단일 서버의 1회 관측이므로 부하 시험이나
+운영 SLO가 아니며, 정책값은 팀의 배포 승인을 표현할 뿐 주최 측의 공식 사용
+승인을 뜻하지 않음
+
+저장소 루트에서 다음과 같이 새 프로세스에만 적용한다
+
+```bash
+FINANCE_BACKEND_FUND_EXECUTION_POLICY=public_fund_v1_approved \
+./compose.sh -f docker-compose.yml \
+  -f fastapi_backend/docker-compose.local-llm.yml \
+  up --no-build --detach --force-recreate --wait backend
+
+curl --fail http://127.0.0.1:18002/health
+```
+
+실험이 끝나면 환경변수와 override를 빼고 Backend를 재생성한 다음,
+`fund_execution_policy=locked`를 확인한다
 
 ## 8. 주요 환경변수
 
@@ -196,7 +279,9 @@ python fastapi_backend/scripts/smoke.py \
 | `BACKEND_PORT` | `18001` | 호스트에서 접근할 Backend 포트 |
 | `FINANCE_RAW_DATA_DIR` | `../../2. Data/1. Raw/1.금융상품` | 읽기 전용 공식 XLSX 경로 |
 | `WEB_CONCURRENCY` | `1` | Uvicorn worker 수 |
+| `OFFICIAL_ANSWER_TIMEOUT_SECONDS` | `55` | 평가용 GET의 바깥쪽 응답 제한, 0초 초과 60초 미만만 허용 |
 | `FINANCE_BACKEND_ANSWER_PROVIDER` | `deterministic` | 답변 provider, 기본은 모델 미사용 |
+| `FINANCE_BACKEND_FUND_EXECUTION_POLICY` | `locked` | 공모펀드 실행 정책, 팀이 승인한 버전에서만 `public_fund_v1_approved` |
 
 Compose에서는 네 DB를 전용 volume의 `/data/*.sqlite3`로 자동 연결하므로 DB 경로를
 개인 `.env`에서 직접 지정하지 않음

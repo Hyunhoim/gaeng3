@@ -43,7 +43,7 @@ PRODUCT_COMPARE_SUITE = (
 
 LINK_PATTERN = re.compile(r"!?\[[^\]]*]\((?:<(?P<angle>[^>]+)>|(?P<plain>[^)\s]+))\)")
 SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
-FROZEN_PYTEST_PASSED = 338
+FROZEN_PYTEST_PASSED = 507
 
 REQUIRED_INDEX_TARGETS = {
     "project-baseline.md",
@@ -59,6 +59,9 @@ REQUIRED_INDEX_TARGETS = {
     "evaluation-search-aggregate-performance.md",
     "cross-family-search.md",
     "evaluation-internal-red-team.md",
+    "evaluation-official-mock.md",
+    "evaluation-qwen-metamorphic.md",
+    "evaluation-coverage-guided.md",
     "evaluation-domain-qa.md",
     "submission-model-boundary.md",
     "hyperclova-provider.md",
@@ -71,11 +74,15 @@ REQUIRED_INDEX_TARGETS = {
     "comparison-engine-design.md",
     "document-rag.md",
     "backend-contract.md",
+    "ontology.md",
     "human-evaluation.md",
     "milestones/2026-07-29-agent-core-v0.1.md",
     "../evaluation/README.md",
 }
 REQUIRED_BASELINES = {
+    "briefing-examples-v1-bond-improved.json",
+    "briefing-examples-v1-initial.json",
+    "briefing-examples-v1-safety-improved.json",
     "overseas-etp-queryplan-v1.json",
     "domestic-etp-queryplan-v1.json",
     "domestic-etp-answer-v1.json",
@@ -95,6 +102,16 @@ REQUIRED_BASELINES = {
     "hcx-contract-e2e-v1.json",
     "answer-adapter-contract-v1.json",
     "internal-red-team-v1.json",
+    "official-mock-v1-30.json",
+    "qwen-eval-lab-v1.json",
+    "semantic-roundtrip-v1.json",
+    "coverage-guided-v1.json",
+    "official-mock-http-v1-30.json",
+    "official-mock-http-fund-approved-v1-30.json",
+    "official-mock-http-concurrency-v1.json",
+    "official-mock-http-qwen-approved-c2-v1.json",
+    "docker-http-smoke-v2.json",
+    "docker-http-smoke-qwen-v2.json",
     "pre-hcx-route-diagnostic-initial-v1.json",
     "pre-hcx-route-diagnostic-improved-v1.json",
     "pre-hcx-route-diagnostic-initial-v2.json",
@@ -133,6 +150,7 @@ REQUIRED_PROPOSAL_TARGETS = {
     "briefing-2026-08-06.md",
     "technical-proposal.md",
     "evidence-map.md",
+    "research-basis.md",
     "user-scenarios.md",
     "submission-checklist.md",
     "diagrams/system-architecture.md",
@@ -402,6 +420,11 @@ def _check_baseline(path: Path) -> list[str]:
         "domain_qa_initial_observed",
         "domain_qa_gold_observed",
         "domain_qa_router_improved",
+        "briefing_examples_initial_observed",
+        "briefing_examples_safety_improved",
+        "briefing_examples_bond_improved",
+        "official_http_first_observed",
+        "coverage_diagnostic_first_observed",
     }:
         if (
             not isinstance(total, int)
@@ -464,7 +487,11 @@ def _check_product_comparison_commitment() -> list[str]:
 
 def _readiness_files() -> list[Path]:
     package_root = PROJECT_ROOT / "packages" / "finance_agent_core"
+    backend_root = REPOSITORY_ROOT / "fastapi_backend"
     files = {
+        REPOSITORY_ROOT / "compose.sh",
+        REPOSITORY_ROOT / "rehearse.sh",
+        REPOSITORY_ROOT / "docker-compose.yml",
         PROJECT_ROOT / "README.md",
         PROJECT_ROOT / "environment.yml",
         PROJECT_ROOT / "environment.local-llm.yml",
@@ -472,8 +499,17 @@ def _readiness_files() -> list[Path]:
         PROJECT_ROOT / "scripts" / "check-docs.py",
         PROJECT_ROOT / "scripts" / "run-hcx-contract-e2e.py",
         PROJECT_ROOT / "scripts" / "run-answer-adapter-contract.py",
+        PROJECT_ROOT / "scripts" / "sync-ontology.py",
+        PROJECT_ROOT / "scripts" / "generate-official-mock-suite.py",
         package_root / "README.md",
         package_root / "pyproject.toml",
+        backend_root / ".env.example",
+        backend_root / "Dockerfile",
+        backend_root / "Dockerfile.dockerignore",
+        backend_root / "README.md",
+        backend_root / "docker-compose.local-llm.yml",
+        backend_root / "pyproject.toml",
+        backend_root / "requirements.txt",
         *AREA_READMES,
     }
     files.update(
@@ -487,6 +523,17 @@ def _readiness_files() -> list[Path]:
         if path.is_file() and path.suffix in {".py", ".json", ".yaml"}
     )
     files.update((package_root / "tests").rglob("*.py"))
+    files.update(
+        path
+        for path in (PROJECT_ROOT / "scripts").rglob("*")
+        if path.is_file() and path.suffix in {".py", ".sh"}
+    )
+    files.update(
+        path
+        for path in backend_root.rglob("*")
+        if path.is_file() and path.suffix in {".py", ".sh"}
+    )
+    files.update((REPOSITORY_ROOT / "ontology").glob("*.ttl"))
     files.update((PROJECT_ROOT / "requirements").rglob("*.txt"))
     files.update(BASELINE_ROOT.glob("*.json"))
     files.update(
@@ -500,7 +547,10 @@ def _readiness_files() -> list[Path]:
 def _readiness_tree_sha256(paths: list[Path]) -> str:
     digest = hashlib.sha256()
     for path in paths:
-        relative = path.relative_to(PROJECT_ROOT).as_posix()
+        try:
+            relative = path.relative_to(PROJECT_ROOT).as_posix()
+        except ValueError:
+            relative = f"../{path.relative_to(REPOSITORY_ROOT).as_posix()}"
         digest.update(relative.encode("utf-8"))
         digest.update(b"\0")
         digest.update(_sha256(path).encode("ascii"))

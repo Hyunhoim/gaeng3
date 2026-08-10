@@ -1,0 +1,830 @@
+@prefix bond: <https://gaeng3.ai/ontology/bond_kr#> .
+@prefix ga: <https://gaeng3.ai/ontology/common#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+<https://gaeng3.ai/ontology/bond_kr>
+    a owl:Ontology ;
+    owl:imports <https://gaeng3.ai/ontology/common> ;
+    rdfs:label "국내채권 Ontology"@ko ;
+    ga:registryVersion "1.3" .
+
+bond:KoreanBondProduct
+    a owl:Class ;
+    rdfs:subClassOf ga:FinancialProduct ;
+    rdfs:label "국내채권 상품"@ko .
+
+bond:Family
+    a ga:ProductFamily ;
+    rdfs:label "국내채권"@ko ;
+    ga:registryName "bond" ;
+    ga:describedByDataset bond:Dataset ;
+    ga:hasCanonicalField bond:field_product_id ;
+    ga:hasCanonicalField bond:field_product_family ;
+    ga:hasCanonicalField bond:field_product_name ;
+    ga:hasCanonicalField bond:field_ticker ;
+    ga:hasCanonicalField bond:field_trading_currency ;
+    ga:hasCanonicalField bond:field_static_as_of ;
+    ga:hasCanonicalField bond:field_dynamic_as_of ;
+    ga:hasCanonicalField bond:field_short_name ;
+    ga:hasCanonicalField bond:field_bond_market ;
+    ga:hasCanonicalField bond:field_issuer ;
+    ga:hasCanonicalField bond:field_bond_major_class ;
+    ga:hasCanonicalField bond:field_bond_subclass ;
+    ga:hasCanonicalField bond:field_bond_type ;
+    ga:hasCanonicalField bond:field_issue_amount ;
+    ga:hasCanonicalField bond:field_issue_date ;
+    ga:hasCanonicalField bond:field_maturity_date ;
+    ga:hasCanonicalField bond:field_coupon_rate_pct ;
+    ga:hasCanonicalField bond:field_credit_rating ;
+    ga:hasCanonicalField bond:field_bond_risk_code ;
+    ga:hasCanonicalField bond:field_buy_yield_pct ;
+    ga:hasCanonicalField bond:field_after_tax_yield_pct ;
+    ga:hasCanonicalField bond:field_buyable_quantity ;
+    ga:hasCanonicalField bond:field_currently_buyable ;
+    ga:hasCanonicalField bond:field_remaining_days ;
+    ga:hasCanonicalField bond:field_duration_years .
+
+bond:Dataset
+    a ga:Dataset ;
+    ga:registryName "bond" ;
+    ga:sourceId "PRBD01N001" ;
+    ga:sourceLabel "국내채권 마스터"@ko ;
+    ga:logicalGrain "PD_NO로 식별되는 국내채권 한 종목"@ko ;
+    ga:snapshotDate "2026-07-11"^^xsd:date ;
+    ga:rowCount 42394 ;
+    ga:quarantinedRows 0 ;
+    ga:executionEnabled true ;
+    ga:primaryKey "PD_NO" ;
+    ga:rawFilePattern "PRBD01N001*_datarows*.xlsx" ;
+    ga:schemaFilePattern "PRBD01N001*_schema*.xlsx" ;
+    ga:staticAsOfColumn "__file_snapshot__" ;
+    ga:dynamicAsOfColumn "PD_STD_INFO_UPDATE" ;
+    ga:notes ""@ko .
+
+bond:field_product_id
+    a ga:CanonicalField ;
+    ga:forFamily bond:Family ;
+    ga:canonicalName "product_id" ;
+    rdfs:label "상품 식별자"@ko ;
+    skos:altLabel "상품 ID"@ko ;
+    skos:altLabel "product id"@ko ;
+    ga:valueType "string" ;
+    ga:unit "code" ;
+    ga:quality "VALID" ;
+    ga:coveragePct "100"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable false ;
+    ga:aggregatable false ;
+    ga:comparable false ;
+    ga:comparisonMode "value_only" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "in" ;
+    ga:asOfBasis "static" ;
+    ga:sourceDataset "bond" ;
+    ga:sourceColumn "PD_NO" ;
+    ga:sourceTransform "identity" ;
+    ga:notes "42,394행에서 결측과 중복이 없는 원천 기본키다."@ko .
+
+bond:field_product_family
+    a ga:CanonicalField ;
+    ga:forFamily bond:Family ;
+    ga:canonicalName "product_family" ;
+    rdfs:label "상품군"@ko ;
+    skos:altLabel "상품 유형군"@ko ;
+    skos:altLabel "product family"@ko ;
+    ga:valueType "enum" ;
+    ga:unit "code" ;
+    ga:quality "VALID" ;
+    ga:coveragePct "100"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable false ;
+    ga:aggregatable false ;
+    ga:comparable false ;
+    ga:comparisonMode "value_only" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "in" ;
+    ga:enumValue "overseas_etp" ;
+    ga:enumValue "domestic_etp" ;
+    ga:enumValue "bond" ;
+    ga:enumValue "fund" ;
+    ga:asOfBasis "static" ;
+    ga:sourceDataset "bond" ;
+    ga:sourceTransform "constant" ;
+    ga:constantValue "bond" ;
+    ga:notes "PRBD01N001 국내채권 마스터 상품군이다."@ko .
+
+bond:field_product_name
+    a ga:CanonicalField ;
+    ga:forFamily bond:Family ;
+    ga:canonicalName "product_name" ;
+    rdfs:label "상품명"@ko ;
+    skos:altLabel "종목명"@ko ;
+    skos:altLabel "펀드명"@ko ;
+    skos:altLabel "name"@ko ;
+    ga:valueType "string" ;
+    ga:unit "none" ;
+    ga:quality "VALID" ;
+    ga:coveragePct "100"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable true ;
+    ga:aggregatable false ;
+    ga:comparable true ;
+    ga:comparisonMode "value_only" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "contains" ;
+    ga:asOfBasis "static" ;
+    ga:sourceDataset "bond" ;
+    ga:sourceColumn "PD_NM" ;
+    ga:sourceTransform "identity" ;
+    ga:notes "42,394행에서 모두 존재하며 상품 식별에는 PD_NO를 사용한다."@ko .
+
+bond:field_ticker
+    a ga:CanonicalField ;
+    ga:forFamily bond:Family ;
+    ga:canonicalName "ticker" ;
+    rdfs:label "티커"@ko ;
+    skos:altLabel "종목 번호"@ko ;
+    skos:altLabel "symbol"@ko ;
+    ga:valueType "string" ;
+    ga:unit "code" ;
+    ga:quality "VALID" ;
+    ga:coveragePct "100"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable true ;
+    ga:aggregatable false ;
+    ga:comparable false ;
+    ga:comparisonMode "value_only" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "in" ;
+    ga:asOfBasis "static" ;
+    ga:sourceDataset "bond" ;
+    ga:sourceColumn "PD_NO" ;
+    ga:sourceTransform "identity" ;
+    ga:notes "별도 티커 필드가 없어 PD_NO를 사용자 표시용 채권 종목 코드로 사용한다."@ko .
+
+bond:field_trading_currency
+    a ga:CanonicalField ;
+    ga:forFamily bond:Family ;
+    ga:canonicalName "trading_currency" ;
+    rdfs:label "거래 통화"@ko ;
+    skos:altLabel "통화"@ko ;
+    skos:altLabel "currency"@ko ;
+    ga:valueType "enum" ;
+    ga:unit "code" ;
+    ga:quality "PARTIAL" ;
+    ga:coveragePct "100"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable false ;
+    ga:aggregatable false ;
+    ga:comparable true ;
+    ga:comparisonMode "value_only" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "in" ;
+    ga:enumValue "USD" ;
+    ga:enumValue "KRW" ;
+    ga:enumValue "EUR" ;
+    ga:enumValue "JPY" ;
+    ga:enumValue "000" ;
+    ga:asOfBasis "static" ;
+    ga:sourceDataset "bond" ;
+    ga:sourceColumn "CURR_CD" ;
+    ga:sourceTransform "identity" ;
+    ga:notes "KRW 42,372행 외 USD 19행, EUR·JPY·000 각 1행을 원문 그대로 보존한다. 통화 간 금액 비교는 하지 않는다."@ko .
+
+bond:field_static_as_of
+    a ga:CanonicalField ;
+    ga:forFamily bond:Family ;
+    ga:canonicalName "static_as_of" ;
+    rdfs:label "정적 속성 기준일"@ko ;
+    skos:altLabel "속성 업데이트일"@ko ;
+    skos:altLabel "static as of"@ko ;
+    ga:valueType "date" ;
+    ga:unit "date" ;
+    ga:quality "VALID" ;
+    ga:coveragePct "100"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable true ;
+    ga:aggregatable false ;
+    ga:comparable false ;
+    ga:comparisonMode "value_only" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "lt" ;
+    ga:allowedOperator "lte" ;
+    ga:allowedOperator "gt" ;
+    ga:allowedOperator "gte" ;
+    ga:allowedOperator "between" ;
+    ga:asOfBasis "snapshot" ;
+    ga:sourceDataset "bond" ;
+    ga:sourceTransform "constant" ;
+    ga:constantValue "2026-07-11" ;
+    ga:notes "정적 속성에는 독립 갱신일이 없어 파일 최종 추출일 2026-07-11을 사용한다."@ko .
+
+bond:field_dynamic_as_of
+    a ga:CanonicalField ;
+    ga:forFamily bond:Family ;
+    ga:canonicalName "dynamic_as_of" ;
+    rdfs:label "동적 지표 기준일"@ko ;
+    skos:altLabel "AUM 업데이트일"@ko ;
+    skos:altLabel "dynamic as of"@ko ;
+    ga:valueType "date" ;
+    ga:unit "date" ;
+    ga:quality "PARTIAL" ;
+    ga:coveragePct "75.0649"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable true ;
+    ga:aggregatable false ;
+    ga:comparable false ;
+    ga:comparisonMode "value_only" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "lt" ;
+    ga:allowedOperator "lte" ;
+    ga:allowedOperator "gt" ;
+    ga:allowedOperator "gte" ;
+    ga:allowedOperator "between" ;
+    ga:asOfBasis "dynamic" ;
+    ga:sourceDataset "bond" ;
+    ga:sourceColumn "PD_STD_INFO_UPDATE" ;
+    ga:sourceTransform "identity" ;
+    ga:notes "동적 매수·수익률 값이 있는 881행은 모두 2026-02-24 기준으로 파일 추출일보다 137일 오래되었다."@ko .
+
+bond:field_short_name
+    a ga:CanonicalField ;
+    ga:forFamily bond:Family ;
+    ga:canonicalName "short_name" ;
+    rdfs:label "상품 약어명"@ko ;
+    skos:altLabel "약어명"@ko ;
+    skos:altLabel "단축 상품명"@ko ;
+    skos:altLabel "short name"@ko ;
+    ga:valueType "string" ;
+    ga:unit "none" ;
+    ga:quality "PARTIAL" ;
+    ga:coveragePct "99.139"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable true ;
+    ga:aggregatable false ;
+    ga:comparable true ;
+    ga:comparisonMode "value_only" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "contains" ;
+    ga:asOfBasis "static" ;
+    ga:sourceDataset "bond" ;
+    ga:sourceColumn "PD_ABRV_NM" ;
+    ga:sourceTransform "identity" ;
+    ga:notes "365행이 결측이며 식별자로 사용하지 않는다."@ko .
+
+bond:field_bond_market
+    a ga:CanonicalField ;
+    ga:forFamily bond:Family ;
+    ga:canonicalName "bond_market" ;
+    rdfs:label "채권 거래시장"@ko ;
+    skos:altLabel "장내외 구분"@ko ;
+    skos:altLabel "거래시장"@ko ;
+    skos:altLabel "bond market"@ko ;
+    ga:valueType "enum" ;
+    ga:unit "code" ;
+    ga:quality "VALID" ;
+    ga:coveragePct "100"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable false ;
+    ga:aggregatable false ;
+    ga:comparable true ;
+    ga:comparisonMode "value_only" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "in" ;
+    ga:enumValue "장내" ;
+    ga:enumValue "장외" ;
+    ga:asOfBasis "static" ;
+    ga:sourceDataset "bond" ;
+    ga:sourceColumn "PD_EXG_MKT" ;
+    ga:sourceTransform "identity" ;
+    ga:notes "원천의 장내·장외 구분을 그대로 보존한다."@ko .
+
+bond:field_issuer
+    a ga:CanonicalField ;
+    ga:forFamily bond:Family ;
+    ga:canonicalName "issuer" ;
+    rdfs:label "발행기관"@ko ;
+    skos:altLabel "발행사"@ko ;
+    skos:altLabel "발행자"@ko ;
+    skos:altLabel "issuer"@ko ;
+    ga:valueType "string" ;
+    ga:unit "none" ;
+    ga:quality "PARTIAL" ;
+    ga:coveragePct "97.8346"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable true ;
+    ga:aggregatable false ;
+    ga:comparable true ;
+    ga:comparisonMode "value_only" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "contains" ;
+    ga:asOfBasis "static" ;
+    ga:sourceDataset "bond" ;
+    ga:sourceColumn "PD_PBCM" ;
+    ga:sourceTransform "identity" ;
+    ga:notes "918행이 결측이며 원천 표기를 그대로 보존한다."@ko .
+
+bond:field_bond_major_class
+    a ga:CanonicalField ;
+    ga:forFamily bond:Family ;
+    ga:canonicalName "bond_major_class" ;
+    rdfs:label "채권 대분류"@ko ;
+    skos:altLabel "채권 분류"@ko ;
+    skos:altLabel "대분류"@ko ;
+    ga:valueType "enum" ;
+    ga:unit "code" ;
+    ga:quality "VALID" ;
+    ga:coveragePct "100"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable false ;
+    ga:aggregatable false ;
+    ga:comparable true ;
+    ga:comparisonMode "value_only" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "in" ;
+    ga:enumValue "회사채" ;
+    ga:enumValue "특수채" ;
+    ga:enumValue "국공채" ;
+    ga:enumValue "개인투자용국채" ;
+    ga:enumValue "외화채권-회사채" ;
+    ga:enumValue "외화채권-금융채" ;
+    ga:asOfBasis "static" ;
+    ga:sourceDataset "bond" ;
+    ga:sourceColumn "STD_PD_MCLS_NM" ;
+    ga:sourceTransform "identity" ;
+    ga:notes "42,394행에서 모두 존재하는 원천 표준상품 대분류다."@ko .
+
+bond:field_bond_subclass
+    a ga:CanonicalField ;
+    ga:forFamily bond:Family ;
+    ga:canonicalName "bond_subclass" ;
+    rdfs:label "채권 소분류"@ko ;
+    skos:altLabel "소분류"@ko ;
+    skos:altLabel "bond subclass"@ko ;
+    ga:valueType "enum" ;
+    ga:unit "code" ;
+    ga:quality "PARTIAL" ;
+    ga:coveragePct "99.9693"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable false ;
+    ga:aggregatable false ;
+    ga:comparable true ;
+    ga:comparisonMode "value_only" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "in" ;
+    ga:enumValue "일반사채" ;
+    ga:enumValue "공사채" ;
+    ga:enumValue "특수은행채" ;
+    ga:enumValue "지역개발" ;
+    ga:enumValue "은행채" ;
+    ga:enumValue "국고채" ;
+    ga:enumValue "도시철도" ;
+    ga:enumValue "국민주택" ;
+    ga:enumValue "공모지방채" ;
+    ga:enumValue "중앙은행채" ;
+    ga:enumValue "기타사채" ;
+    ga:enumValue "기타국채" ;
+    ga:enumValue "개인투자용국채10년물" ;
+    ga:enumValue "개인투자용국채20년물" ;
+    ga:enumValue "개인투자용국채5년물" ;
+    ga:enumValue "물가채" ;
+    ga:asOfBasis "static" ;
+    ga:sourceDataset "bond" ;
+    ga:sourceColumn "STD_PD_SCLS_NM" ;
+    ga:sourceTransform "identity" ;
+    ga:notes "13행이 결측이며 원천 표준상품 소분류를 그대로 보존한다."@ko .
+
+bond:field_bond_type
+    a ga:CanonicalField ;
+    ga:forFamily bond:Family ;
+    ga:canonicalName "bond_type" ;
+    rdfs:label "채권 종류"@ko ;
+    skos:altLabel "채종"@ko ;
+    skos:altLabel "채권유형"@ko ;
+    skos:altLabel "bond type"@ko ;
+    ga:valueType "string" ;
+    ga:unit "code" ;
+    ga:quality "PARTIAL" ;
+    ga:coveragePct "97.8204"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable true ;
+    ga:aggregatable false ;
+    ga:comparable true ;
+    ga:comparisonMode "value_only" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "contains" ;
+    ga:asOfBasis "static" ;
+    ga:sourceDataset "bond" ;
+    ga:sourceColumn "BD_KND" ;
+    ga:sourceTransform "identity" ;
+    ga:notes "924행이 결측이고 39개 원천 유형이 있어 문자열 원문으로 보존한다."@ko .
+
+bond:field_issue_amount
+    a ga:CanonicalField ;
+    ga:forFamily bond:Family ;
+    ga:canonicalName "issue_amount" ;
+    rdfs:label "발행잔액"@ko ;
+    skos:altLabel "발행금액"@ko ;
+    skos:altLabel "발행 잔액"@ko ;
+    skos:altLabel "issue amount"@ko ;
+    ga:valueType "number" ;
+    ga:unit "source_currency_amount" ;
+    ga:quality "VALID" ;
+    ga:coveragePct "100"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable true ;
+    ga:aggregatable true ;
+    ga:comparable true ;
+    ga:comparisonMode "numeric_delta" ;
+    ga:comparisonScope "same_trading_currency" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "lt" ;
+    ga:allowedOperator "lte" ;
+    ga:allowedOperator "gt" ;
+    ga:allowedOperator "gte" ;
+    ga:allowedOperator "between" ;
+    ga:asOfBasis "static" ;
+    ga:sourceDataset "bond" ;
+    ga:sourceColumn "ISU_BAL_AMT" ;
+    ga:sourceTransform "identity" ;
+    ga:notes "원천 금액을 거래통화 단위로 보존하며 통화가 같은 채권끼리만 직접 비교한다."@ko .
+
+bond:field_issue_date
+    a ga:CanonicalField ;
+    ga:forFamily bond:Family ;
+    ga:canonicalName "issue_date" ;
+    rdfs:label "발행일"@ko ;
+    skos:altLabel "채권 발행일"@ko ;
+    skos:altLabel "issue date"@ko ;
+    ga:valueType "date" ;
+    ga:unit "date" ;
+    ga:quality "PARTIAL" ;
+    ga:coveragePct "99.2004"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable true ;
+    ga:aggregatable false ;
+    ga:comparable true ;
+    ga:comparisonMode "value_only" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "lt" ;
+    ga:allowedOperator "lte" ;
+    ga:allowedOperator "gt" ;
+    ga:allowedOperator "gte" ;
+    ga:allowedOperator "between" ;
+    ga:asOfBasis "static" ;
+    ga:sourceDataset "bond" ;
+    ga:sourceColumn "ISU_DT" ;
+    ga:sourceTransform "identity" ;
+    ga:notes "결측과 0 날짜 sentinel을 제외한 42,055행을 YYYYMMDD 원천값에서 ISO 날짜로 정규화한다."@ko .
+
+bond:field_maturity_date
+    a ga:CanonicalField ;
+    ga:forFamily bond:Family ;
+    ga:canonicalName "maturity_date" ;
+    rdfs:label "만기일"@ko ;
+    skos:altLabel "상환일"@ko ;
+    skos:altLabel "maturity date"@ko ;
+    ga:valueType "date" ;
+    ga:unit "date" ;
+    ga:quality "PARTIAL" ;
+    ga:coveragePct "99.2475"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable true ;
+    ga:aggregatable false ;
+    ga:comparable true ;
+    ga:comparisonMode "value_only" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "lt" ;
+    ga:allowedOperator "lte" ;
+    ga:allowedOperator "gt" ;
+    ga:allowedOperator "gte" ;
+    ga:allowedOperator "between" ;
+    ga:asOfBasis "static" ;
+    ga:sourceDataset "bond" ;
+    ga:sourceColumn "MAT_DT" ;
+    ga:sourceTransform "identity" ;
+    ga:notes "결측과 0 날짜 sentinel을 제외한 42,075행이 유효하다. 현재 매수 가능 검색은 파일 스냅샷보다 이른 만기 상품을 제외한다."@ko .
+
+bond:field_coupon_rate_pct
+    a ga:CanonicalField ;
+    ga:forFamily bond:Family ;
+    ga:canonicalName "coupon_rate_pct" ;
+    rdfs:label "표면이율"@ko ;
+    skos:altLabel "쿠폰금리"@ko ;
+    skos:altLabel "표면금리"@ko ;
+    skos:altLabel "coupon rate"@ko ;
+    ga:valueType "number" ;
+    ga:unit "pct_point" ;
+    ga:quality "PARTIAL" ;
+    ga:coveragePct "99.9953"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable true ;
+    ga:aggregatable true ;
+    ga:comparable true ;
+    ga:comparisonMode "numeric_delta" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "lt" ;
+    ga:allowedOperator "lte" ;
+    ga:allowedOperator "gt" ;
+    ga:allowedOperator "gte" ;
+    ga:allowedOperator "between" ;
+    ga:asOfBasis "static" ;
+    ga:sourceDataset "bond" ;
+    ga:sourceColumn "SRFC_IRT" ;
+    ga:sourceTransform "identity" ;
+    ga:notes "2행이 결측이며 원천 퍼센트포인트를 그대로 보존한다."@ko .
+
+bond:field_credit_rating
+    a ga:CanonicalField ;
+    ga:forFamily bond:Family ;
+    ga:canonicalName "credit_rating" ;
+    rdfs:label "신용등급"@ko ;
+    skos:altLabel "채권등급"@ko ;
+    skos:altLabel "credit rating"@ko ;
+    ga:valueType "enum" ;
+    ga:unit "code" ;
+    ga:quality "PARTIAL" ;
+    ga:coveragePct "58.3809"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable false ;
+    ga:aggregatable false ;
+    ga:comparable true ;
+    ga:comparisonMode "value_only" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "in" ;
+    ga:enumValue "AAA" ;
+    ga:enumValue "AA+" ;
+    ga:enumValue "AA0" ;
+    ga:enumValue "AA-" ;
+    ga:enumValue "A+" ;
+    ga:enumValue "A0" ;
+    ga:enumValue "A-" ;
+    ga:enumValue "BBB+" ;
+    ga:enumValue "BBB0" ;
+    ga:enumValue "BBB-" ;
+    ga:enumValue "BB+" ;
+    ga:enumValue "BB0" ;
+    ga:enumValue "BB-" ;
+    ga:enumValue "B+" ;
+    ga:enumValue "B0" ;
+    ga:enumValue "B-" ;
+    ga:enumValue "CCC" ;
+    ga:enumValue "CC0" ;
+    ga:enumValue "C0" ;
+    ga:enumValue "C" ;
+    ga:asOfBasis "static" ;
+    ga:sourceDataset "bond" ;
+    ga:sourceColumn "CRD_GRD" ;
+    ga:sourceTransform "identity" ;
+    ga:notes "결측이 많고 원천 등급 표기가 AA0·A0처럼 혼재한다. QueryPlan은 정확값·목록 일치만 사용하며, 명시적인 'AA- 이상' 같은 표현은 registry의 최고→최저 enum 순서를 기준으로 허용 목록(in)으로 확장한다. 임계 등급이 없는 '등급이 높은' 표현은 추정하지 않는다."@ko .
+
+bond:field_bond_risk_code
+    a ga:CanonicalField ;
+    ga:forFamily bond:Family ;
+    ga:canonicalName "bond_risk_code" ;
+    rdfs:label "원천 위험코드"@ko ;
+    skos:altLabel "위험등급코드"@ko ;
+    skos:altLabel "risk code"@ko ;
+    ga:valueType "enum" ;
+    ga:unit "code" ;
+    ga:quality "PARTIAL" ;
+    ga:coveragePct "100"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable false ;
+    ga:aggregatable false ;
+    ga:comparable true ;
+    ga:comparisonMode "value_only" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "in" ;
+    ga:enumValue "0" ;
+    ga:enumValue "1" ;
+    ga:enumValue "2" ;
+    ga:enumValue "3" ;
+    ga:enumValue "4" ;
+    ga:enumValue "5" ;
+    ga:enumValue "6" ;
+    ga:asOfBasis "static" ;
+    ga:sourceDataset "bond" ;
+    ga:sourceColumn "PD_RISK_GCD" ;
+    ga:sourceTransform "identity" ;
+    ga:notes "코드값은 모두 존재하지만 공식 코드북이 없어 숫자의 위험 순서를 추정하지 않고 정확값 조회만 허용한다."@ko .
+
+bond:field_buy_yield_pct
+    a ga:CanonicalField ;
+    ga:forFamily bond:Family ;
+    ga:canonicalName "buy_yield_pct" ;
+    rdfs:label "매수수익률"@ko ;
+    skos:altLabel "매수 수익률"@ko ;
+    skos:altLabel "세전 매수수익률"@ko ;
+    skos:altLabel "buy yield"@ko ;
+    ga:valueType "number" ;
+    ga:unit "pct_point" ;
+    ga:quality "PARTIAL" ;
+    ga:coveragePct "2.0781"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable true ;
+    ga:aggregatable true ;
+    ga:comparable true ;
+    ga:comparisonMode "numeric_delta" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "lt" ;
+    ga:allowedOperator "lte" ;
+    ga:allowedOperator "gt" ;
+    ga:allowedOperator "gte" ;
+    ga:allowedOperator "between" ;
+    ga:asOfBasis "dynamic" ;
+    ga:sourceDataset "bond" ;
+    ga:sourceColumn "BUY_YIELD" ;
+    ga:sourceTransform "identity" ;
+    ga:notes "881행에만 있고 모두 2026-02-24 기준이다. 과거 관측값이며 미래 수익을 뜻하지 않는다."@ko .
+
+bond:field_after_tax_yield_pct
+    a ga:CanonicalField ;
+    ga:forFamily bond:Family ;
+    ga:canonicalName "after_tax_yield_pct" ;
+    rdfs:label "세후수익률"@ko ;
+    skos:altLabel "세후 수익률"@ko ;
+    skos:altLabel "after-tax yield"@ko ;
+    ga:valueType "number" ;
+    ga:unit "pct_point" ;
+    ga:quality "PARTIAL" ;
+    ga:coveragePct "2.0781"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable true ;
+    ga:aggregatable true ;
+    ga:comparable true ;
+    ga:comparisonMode "numeric_delta" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "lt" ;
+    ga:allowedOperator "lte" ;
+    ga:allowedOperator "gt" ;
+    ga:allowedOperator "gte" ;
+    ga:allowedOperator "between" ;
+    ga:asOfBasis "dynamic" ;
+    ga:sourceDataset "bond" ;
+    ga:sourceColumn "AFTER_TAX_YIELD" ;
+    ga:sourceTransform "identity" ;
+    ga:notes "881행에만 있고 세제 적용 조건을 확정할 수 없으므로 원천값 비교만 지원한다."@ko .
+
+bond:field_buyable_quantity
+    a ga:CanonicalField ;
+    ga:forFamily bond:Family ;
+    ga:canonicalName "buyable_quantity" ;
+    rdfs:label "매수가능수량"@ko ;
+    skos:altLabel "매수 가능 수량"@ko ;
+    skos:altLabel "주문가능수량"@ko ;
+    skos:altLabel "buyable quantity"@ko ;
+    ga:valueType "number" ;
+    ga:unit "source_quantity" ;
+    ga:quality "PARTIAL" ;
+    ga:coveragePct "2.0781"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable true ;
+    ga:aggregatable true ;
+    ga:comparable true ;
+    ga:comparisonMode "numeric_delta" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "lt" ;
+    ga:allowedOperator "lte" ;
+    ga:allowedOperator "gt" ;
+    ga:allowedOperator "gte" ;
+    ga:allowedOperator "between" ;
+    ga:asOfBasis "dynamic" ;
+    ga:sourceDataset "bond" ;
+    ga:sourceColumn "BUYABLE_QUANTITY" ;
+    ga:sourceTransform "identity" ;
+    ga:notes "881행에만 있고 모두 2026-02-24 기준이다. 결측은 0으로 대체하지 않는다."@ko .
+
+bond:field_currently_buyable
+    a ga:CanonicalField ;
+    ga:forFamily bond:Family ;
+    ga:canonicalName "currently_buyable" ;
+    rdfs:label "스냅샷 기준 매수 가능 여부"@ko ;
+    skos:altLabel "매수 가능"@ko ;
+    skos:altLabel "현재 매수 가능"@ko ;
+    skos:altLabel "available to buy"@ko ;
+    ga:valueType "boolean" ;
+    ga:unit "boolean" ;
+    ga:quality "PARTIAL" ;
+    ga:coveragePct "2.0781"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable false ;
+    ga:aggregatable false ;
+    ga:comparable true ;
+    ga:comparisonMode "value_only" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:asOfBasis "snapshot" ;
+    ga:sourceDataset "bond" ;
+    ga:sourceColumn "BUYABLE_QUANTITY" ;
+    ga:sourceColumn "MAT_DT" ;
+    ga:sourceTransform "available_on_snapshot" ;
+    ga:notes "수량이 제공되고 0보다 크며 만기일이 2026-07-11 이후인 경우만 true다. 254행이 true이고 결측 수량은 UNKNOWN이다."@ko .
+
+bond:field_remaining_days
+    a ga:CanonicalField ;
+    ga:forFamily bond:Family ;
+    ga:canonicalName "remaining_days" ;
+    rdfs:label "스냅샷 기준 잔존일수"@ko ;
+    skos:altLabel "잔존일"@ko ;
+    skos:altLabel "만기까지 남은 일수"@ko ;
+    skos:altLabel "remaining days"@ko ;
+    ga:valueType "number" ;
+    ga:unit "day" ;
+    ga:quality "PARTIAL" ;
+    ga:coveragePct "99.2475"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable true ;
+    ga:aggregatable true ;
+    ga:comparable true ;
+    ga:comparisonMode "numeric_delta" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "lt" ;
+    ga:allowedOperator "lte" ;
+    ga:allowedOperator "gt" ;
+    ga:allowedOperator "gte" ;
+    ga:allowedOperator "between" ;
+    ga:asOfBasis "snapshot" ;
+    ga:sourceDataset "bond" ;
+    ga:sourceColumn "MAT_DT" ;
+    ga:sourceTransform "days_from_snapshot" ;
+    ga:notes "유효한 MAT_DT 42,075행에 대해 원천 REMAINING_DAYS를 사용하지 않고 MAT_DT와 2026-07-11의 차이로 재계산한다."@ko .
+
+bond:field_duration_years
+    a ga:CanonicalField ;
+    ga:forFamily bond:Family ;
+    ga:canonicalName "duration_years" ;
+    rdfs:label "듀레이션"@ko ;
+    skos:altLabel "수정 듀레이션"@ko ;
+    skos:altLabel "duration"@ko ;
+    ga:valueType "number" ;
+    ga:unit "year" ;
+    ga:quality "PARTIAL" ;
+    ga:coveragePct "68.4484"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable true ;
+    ga:aggregatable true ;
+    ga:comparable true ;
+    ga:comparisonMode "numeric_delta" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "lt" ;
+    ga:allowedOperator "lte" ;
+    ga:allowedOperator "gt" ;
+    ga:allowedOperator "gte" ;
+    ga:allowedOperator "between" ;
+    ga:asOfBasis "dynamic" ;
+    ga:sourceDataset "bond" ;
+    ga:sourceColumn "DUR" ;
+    ga:sourceTransform "identity" ;
+    ga:notes "원천 DUR을 연 단위 수치로 보존한다. 현재 매수 가능 254행에서는 모두 존재하지만 2026-02-24 기준이다."@ko .

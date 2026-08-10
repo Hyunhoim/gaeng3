@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from typing import Literal
 
-from finance_agent_core.contracts.queryplan import QueryPlan
+from finance_agent_core.agent.product_comparison import comparison_projection
+from finance_agent_core.contracts.queryplan import ProductFamily, QueryPlan
 
 
 def first_vertical_slice_plan(question_id: str) -> QueryPlan:
@@ -291,15 +292,7 @@ def fund_comparison_plan(
 ) -> QueryPlan:
     if len(product_ids) != 2 or len(set(product_ids)) != 2:
         raise ValueError("fund comparison requires exactly two unique product IDs")
-    projection = [
-        "product_id",
-        "product_name",
-        "short_name",
-        *comparison_fields,
-        *(["trading_currency"] if "aum" in comparison_fields else []),
-        "dynamic_as_of",
-    ]
-    projection = list(dict.fromkeys(projection))
+    projection = comparison_projection(ProductFamily.FUND, comparison_fields)
     return QueryPlan.model_validate(
         {
             "schema_version": "1.0",

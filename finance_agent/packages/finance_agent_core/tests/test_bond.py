@@ -22,6 +22,7 @@ def make_bond_record(
     quantity: int | None,
     maturity: int,
     major_class: str = "회사채",
+    credit_rating: str = "AA-",
 ) -> NormalizedBondRecord:
     return normalize_bond_row(
         source_row=row,
@@ -47,7 +48,7 @@ def make_bond_record(
             "BUYABLE_QUANTITY": quantity,
             "REMAINING_DAYS": 9999,
             "DUR": "0.5",
-            "CRD_GRD": "AA-",
+            "CRD_GRD": credit_rating,
         },
     )
 
@@ -67,6 +68,7 @@ def make_bond_database(tmp_path: Path) -> tuple[Path, list[NormalizedBondRecord]
             buy_yield="3.5",
             quantity=200,
             maturity=20280101,
+            credit_rating="A+",
         ),
         make_bond_record(
             row=4,
@@ -96,6 +98,7 @@ def make_bond_database(tmp_path: Path) -> tuple[Path, list[NormalizedBondRecord]
             quantity=300,
             maturity=20310101,
             major_class="국공채",
+            credit_rating="AAA",
         ),
     ]
     path = tmp_path / "bond.sqlite3"
@@ -173,6 +176,55 @@ def test_bond_mock_agent_completes_verified_vertical_slice(tmp_path: Path) -> No
     assert "매수수익률 5%" in response.answer
     assert response.source_manifest.dataset == "bond"
     assert len(response.warnings) == 2
+
+
+def test_bond_briefing_query_executes_with_sellability_and_rating_threshold(
+    tmp_path: Path,
+) -> None:
+    path, _ = make_bond_database(tmp_path)
+    result = RoutedFinanceAgent({"bond": path}).answer(
+        "현재 판매 가능한 원화채권 중 AA- 이상 종목 알려줘",
+        "briefing-bond-001",
+    )
+
+    assert result.status == "executed"
+    assert result.candidate_count == 2
+    assert [product.product_id for product in result.products] == [
+        "KRTEST000001",
+        "KRTEST000006",
+    ]
+    assert result.query_plan is not None
+    constraints = {
+        item.field: item.model_dump(mode="json") for item in result.query_plan.constraints
+    }
+    assert constraints == {
+        "trading_currency": {
+            "field": "trading_currency",
+            "operator": "eq",
+            "value": "KRW",
+            "unit": "code",
+            "strength": "locked",
+        },
+        "currently_buyable": {
+            "field": "currently_buyable",
+            "operator": "eq",
+            "value": True,
+            "unit": "boolean",
+            "strength": "locked",
+        },
+        "credit_rating": {
+            "field": "credit_rating",
+            "operator": "in",
+            "value": ["AAA", "AA+", "AA0", "AA-"],
+            "unit": "code",
+            "strength": "locked",
+        },
+    }
+    first_fields = {
+        field.canonical_field: field.normalized_value for field in result.products[0].fields
+    }
+    assert first_fields["currently_buyable"] is True
+    assert first_fields["credit_rating"] == "AA-"
 
 
 def test_bond_aggregate_uses_only_currently_buyable_yields(tmp_path: Path) -> None:

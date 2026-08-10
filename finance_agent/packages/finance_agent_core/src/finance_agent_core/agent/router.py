@@ -12,27 +12,38 @@ from finance_agent_core.contracts.routing import (
     RouteDisposition,
 )
 
-_COMPARE = re.compile(r"비교|대조|차이|나란히|versus|\bvs\b", re.IGNORECASE)
+_COMPARE = re.compile(
+    r"비교|대조|차이|나란히|versus|\bvs\b|"
+    r"(?:둘|두\s*(?:개(?:의)?|상품|공모\s*펀드|펀드|채권|ETF|ETN))"
+    r".{0,40}?중(?:에서)?|"
+    r"어느\s*(?:게|것이).{0,40}?(?:높|낮|크|작|많|적)",
+    re.IGNORECASE,
+)
 _AGGREGATE = re.compile(
     r"몇\s*개|개수|건수|평균|합계|총합|집계|분포|비중|"
+    r"(?:상품|ETF|ETN|ETP|채권|펀드)(?:의)?\s*수(?:를|가|는)?\s*(?:계산|집계|총합|알려)|"
     r"최댓값|최대값|최솟값|최소값|최고값|최저값|"
     r"(?:AUM|보수율|수익률|이율|잔존일수|듀레이션)\s*(?:최대|최소)",
     re.IGNORECASE,
 )
-_EXPLAIN = re.compile(r"설명|무슨\s*뜻|뭐(?:야|고)|의미|장점|요소|왜\s|알려")
+_EXPLAIN = re.compile(r"설명|무슨\s*뜻|뭐(?:야|고)|의미|장점|요소|왜\s")
 _DEFINITION = re.compile(r"무슨\s*뜻|뭐(?:야|고)|의미")
-_DETAIL = re.compile(r"상세|세부|정보\s*조회|상품번호|종목코드|티커")
+_DETAIL = re.compile(
+    r"상세|세부|자세히|어떤\s*상품|정보\s*조회|상품\s*(?:번호|ID|아이디)|"
+    r"종목\s*(?:코드|번호)|티커",
+    re.IGNORECASE,
+)
 _AMBIGUOUS = re.compile(
     r"적당한|괜찮은|안전한|좋은\s*상품|추천(?:해|하|받|할\s*만한)|"
     r"좀\s*낮아도|많이\s*주는|제일\s*수익률|리스크.*신경\s*안|"
     r"뭐가\s*더\s*좋|어느.*더\s*좋|"
-    r"(?:ETF|ETN).*(?:ETF|ETN).*(?:보수|수수료|비용)|"
     r"(?:가격.*왜|왜.*가격)",
     re.IGNORECASE,
 )
 _UNSUPPORTED = re.compile(
     r"전망|예측|예상\s*수익|수익\s*보장|원금\s*보장|"
-    r"매수\s*추천|투자\s*추천|사야\s*할|사면\s*좋|가장\s*좋은|"
+    r"매수(?:를)?\s*추천|투자\s*추천|사야\s*할|사면\s*좋|가장\s*좋은|"
+    r"상승할\s*것으로\s*예상|"
     r"기대되는\s*(?:고)?수익|오를\s*것|오를까|호재|악재|"
     r"유상증자|유상감자|사모\s*CB|"
     r"기관.*(?:구매|순매수|매매량)|"
@@ -52,6 +63,17 @@ _MIXED_ETP_COST = re.compile(
     r"(?=.*ETF)(?=.*ETN)(?=.*(?:보수|수수료|비용))",
     re.IGNORECASE,
 )
+_EXPLICIT_TOTAL_EXPENSE_RATIO = re.compile(r"총\s*보수(?:율)?|보수율", re.IGNORECASE)
+_TICKER_ORDERING = re.compile(
+    r"(?:티커|종목\s*코드).{0,24}"
+    r"(?:오름차순|내림차순|큰\s*순|작은\s*순|높은\s*순|낮은\s*순|순서)",
+    re.IGNORECASE,
+)
+_EXPLICIT_ETP_TYPE = re.compile(
+    r"(?:ETP\s*유형|ETF\s*여부|상품\s*유형)(?:이|가|은|는)?\s*[:：]?\s*(?:ETF|ETN)|"
+    r"(?<![A-Z])(?:ETF|ETN)(?:인(?!지)|이며|이고|인데|에\s*해당|로\s*되어)",
+    re.IGNORECASE,
+)
 _OVERSEAS_UNAVAILABLE_METRIC = re.compile(
     r"수익률|변동성|하락장|오른|S&P\s*500",
     re.IGNORECASE,
@@ -67,13 +89,22 @@ _QUOTED = (
     re.compile(r"‘([^’\n]+)’"),
 )
 _KNOWN_ID = re.compile(
-    r"(?<![A-Z0-9])(?:KR[A-Z0-9]{10}|[A-Z]{2,5}:[A-Z0-9._-]+)(?![A-Z0-9])",
+    r"(?<![A-Z0-9])(?:KR[A-Z0-9]{10}|(?:[A-Z]{2,5}|[0-9]{3}):[A-Z0-9._-]+|"
+    r"[A-Z][A-Z0-9]{0,9}\.[A-Z0-9]{1,5})(?![A-Z0-9])",
     re.IGNORECASE,
 )
 _LABELED_ID = re.compile(
-    r"(?:상품번호|종목코드|티커)\s*[:：]?\s*([A-Z0-9._:-]{2,30})",
+    r"(?:상품\s*(?:번호|ID|아이디)|종목\s*(?:코드|번호)|티커)"
+    r"(?:가|는|은|이)?\s*[:：]?\s*"
+    r"([A-Z0-9._:-]{2,30})",
     re.IGNORECASE,
 )
+_CONTROL_FAMILY_PRIORITY = {
+    ProductFamily.FUND: 0,
+    ProductFamily.BOND: 1,
+    ProductFamily.DOMESTIC_ETP: 2,
+    ProductFamily.OVERSEAS_ETP: 3,
+}
 
 
 def _ordered_unique(values: Iterable[str]) -> list[str]:
@@ -105,7 +136,7 @@ def _product_families(question: str) -> list[ProductFamily]:
     etp_token = r"(?<![A-Z])(?:ETF|ETN|ETP)(?![A-Z])"
     domestic_pattern = (
         rf"(?:국내|한국|코스피|코스닥)(?!\s*채권)[^와과,\n]{{0,20}}?{etp_token}|"
-        rf"{etp_token}\s*(?:국내|한국)"
+        rf"{etp_token}[^와과,\n]{{0,30}}?(?:국내|한국)(?!\s*채권)"
     )
     overseas_pattern = (
         rf"(?:해외|글로벌)[^와과,\n]{{0,20}}?{etp_token}|"
@@ -119,7 +150,15 @@ def _product_families(question: str) -> list[ProductFamily]:
     if re.search(etp_token, question, re.IGNORECASE):
         explicit_etp_family = domestic_matches or overseas_matches
         if not explicit_etp_family:
-            if re.search(r"NYSE|NASDAQ|AMEX", question, re.IGNORECASE):
+            if re.search(r"해외|글로벌", question, re.IGNORECASE):
+                match = re.search(r"해외|글로벌", question, re.IGNORECASE)
+                assert match is not None
+                mentions.append((match.start(), ProductFamily.OVERSEAS_ETP))
+            elif re.search(r"국내|한국", question, re.IGNORECASE):
+                match = re.search(r"국내|한국", question, re.IGNORECASE)
+                assert match is not None
+                mentions.append((match.start(), ProductFamily.DOMESTIC_ETP))
+            elif re.search(r"NYSE|NASDAQ|AMEX", question, re.IGNORECASE):
                 match = re.search(r"NYSE|NASDAQ|AMEX", question, re.IGNORECASE)
                 assert match is not None
                 mentions.append((match.start(), ProductFamily.OVERSEAS_ETP))
@@ -171,7 +210,15 @@ def _intent(question: str, families: list[ProductFamily]) -> InteractionIntent:
         or (ProductFamily.FUND in families and _FUND_UNAVAILABLE_DETAIL.search(question))
     ):
         return InteractionIntent.UNSUPPORTED
-    if _AMBIGUOUS.search(question) or _MIXED_ETP_COST.search(question):
+    exact_two_product_comparison = bool(
+        _COMPARE.search(question) and len(_product_mentions(question)) == 2
+    )
+    if _AMBIGUOUS.search(question) or (
+        _MIXED_ETP_COST.search(question)
+        and _EXPLICIT_ETP_TYPE.search(question) is None
+        and _EXPLICIT_TOTAL_EXPENSE_RATIO.search(question) is None
+        and not exact_two_product_comparison
+    ):
         return InteractionIntent.CLARIFY
     if _DEFINITION.search(question):
         return InteractionIntent.EXPLAIN
@@ -179,6 +226,8 @@ def _intent(question: str, families: list[ProductFamily]) -> InteractionIntent:
         return InteractionIntent.COMPARE
     if _AGGREGATE.search(question):
         return InteractionIntent.AGGREGATE
+    if _TICKER_ORDERING.search(question):
+        return InteractionIntent.SEARCH
     if _EXPLAIN.search(question):
         return InteractionIntent.EXPLAIN
     if _DETAIL.search(question):
@@ -201,6 +250,10 @@ class IntentRouter:
 
         families = _product_families(stripped)
         intent = _intent(stripped, families)
+        if len(families) > 1 and intent is not InteractionIntent.SEARCH:
+            # Control responses do not execute a family sequence. Keep their DTO order
+            # stable across router vocabulary changes and preserve the frozen contract.
+            families = sorted(families, key=_CONTROL_FAMILY_PRIORITY.__getitem__)
         mentions = _product_mentions(stripped)
         draft = MinimalQueryDraft(
             request_id=request_id,

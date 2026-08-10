@@ -1,6 +1,6 @@
 # HyperCLOVA X 연결 전 진단·외부 blind 프로토콜
 
-마지막 갱신: 2026-07-30
+마지막 갱신: 2026-08-07
 
 ## 1. 목적
 
@@ -67,6 +67,23 @@ v3 재현 결과:
 5. commitment를 팀 공유 위치에 먼저 보존
 6. 최초 실행을 한 번만 수행하고 원본 report를 수정 없이 보존
 7. 실패를 공개한 뒤 수정하고, 최초 결과와 사후 회귀를 분리 보고
+
+도구가 강제하는 안전장치:
+
+- 공개 suite를 `--reference-suite`로 전달하면 정규화 유사도 0.84 이상 문항 차단
+- 질문·정답·구현 commit이 commitment와 다르면 최초 실행 상태 생성 거부
+- 구현 commit의 clean checkout에서만 `claim-external-first-run` 허용
+- 상태 파일은 원자적으로 한 번만 생성되며 재실행 시 `FileExistsError`
+- 최초 실행이 중단되면 `started`를 보존하고 지운 뒤 재시도하지 않음
+- 완료 시 report 파일명·SHA-256을 상태 파일에 결합
+
+schema·검증·봉인·최초 실행 상태 명령은 다음 도움말에서 확인
+
+```bash
+python -m finance_agent_core.evaluation.pre_hcx_cli --help
+python -m finance_agent_core.evaluation.pre_hcx_cli \
+  claim-external-first-run --help
+```
 
 질문·정답 원본은 민감한 holdout이므로 Git에 커밋하지 않는다. 저장소에는 schema,
 validator, authoring guide, commitment와 집계 baseline만 둔다.

@@ -22,7 +22,10 @@ from finance_agent_core.evaluation.external_holdout import (
     EXTERNAL_INTENT_QUOTAS,
     ExternalBlindAnswerKey,
     ExternalBlindQuestionSet,
+    claim_external_blind_first_run,
+    complete_external_blind_first_run,
     create_external_blind_commitment,
+    reject_external_near_duplicates,
     validate_external_blind_bundle,
     verify_external_blind_commitment,
 )
@@ -114,6 +117,48 @@ def test_router_fails_closed_for_missing_identity_and_cross_family_question() ->
     assert cross_family.disposition is RouteDisposition.CLARIFY
     assert cross_family.reason_code == "ambiguous_product_family"
     assert cross_family.query_plan_intent is None
+    assert cross_family.draft.intent is InteractionIntent.COMPARE
+    assert cross_family.draft.product_families == [
+        ProductFamily.FUND,
+        ProductFamily.DOMESTIC_ETP,
+    ]
+
+    etp_comparison = router.route(
+        "국내 ETF와 해외 ETF의 총보수율을 비교해줘",
+        "route-003",
+    )
+    assert etp_comparison.disposition is RouteDisposition.CLARIFY
+    assert etp_comparison.reason_code == "ambiguous_product_family"
+    assert etp_comparison.draft.intent is InteractionIntent.COMPARE
+    assert etp_comparison.draft.product_families == [
+        ProductFamily.DOMESTIC_ETP,
+        ProductFamily.OVERSEAS_ETP,
+    ]
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        "국내 ETF·ETN 중 총보수율이 높은 순으로 3개 보여줘",
+        "해외 ETF나 ETN 중 총보수 0.5% 이하인 상품 3개 보여줘",
+        "국내 ETF·ETN 중 티커가 낮은 순서로 3개 보여줘",
+    ],
+)
+def test_router_executes_explicit_mixed_etp_metric_and_ticker_order(question: str) -> None:
+    decision = IntentRouter().route(question, "route-explicit-search")
+
+    assert decision.draft.intent is InteractionIntent.SEARCH
+    assert decision.disposition is RouteDisposition.EXECUTE
+
+
+def test_router_still_clarifies_unspecified_mixed_etp_cost() -> None:
+    decision = IntentRouter().route(
+        "국내 ETF와 ETN 중 운용보수가 낮은 상품을 알려줘",
+        "route-unspecified-cost",
+    )
+
+    assert decision.draft.intent is InteractionIntent.CLARIFY
+    assert decision.disposition is RouteDisposition.CLARIFY
 
 
 def test_router_generalizes_financial_safety_boundaries() -> None:
@@ -162,6 +207,39 @@ def test_router_generalizes_financial_safety_boundaries() -> None:
         assert decision.draft.intent is intent
         assert decision.disposition is disposition
         assert decision.draft.product_families == families
+
+
+def test_router_treats_polite_request_ending_as_search_not_explanation() -> None:
+    decision = IntentRouter().route(
+        "현재 판매 가능한 원화채권 중 AA- 이상 종목 알려줘",
+        "briefing-search-001",
+    )
+
+    assert decision.draft.intent is InteractionIntent.SEARCH
+    assert decision.disposition is RouteDisposition.EXECUTE
+    assert decision.draft.product_families == [ProductFamily.BOND]
+
+
+def test_router_handles_count_synonyms_numeric_market_ids_and_prediction_synonyms() -> None:
+    router = IntentRouter()
+
+    count = router.route("모든 판매 가능한 해외 ETF의 수를 계산해줘", "route-count")
+    comparison = router.route(
+        "해외 ETF 101:IVEG.O과 101:IWTR.O의 AUM 차이를 비교해줘",
+        "route-numeric-market-id",
+    )
+    unsupported = router.route(
+        "금리 하락 후 가격이 상승할 것으로 예상되는 국내채권을 매수를 추천해줘",
+        "route-forecast",
+    )
+
+    assert count.draft.intent is InteractionIntent.AGGREGATE
+    assert count.disposition is RouteDisposition.EXECUTE
+    assert comparison.draft.product_mentions == ["101:IVEG.O", "101:IWTR.O"]
+    assert comparison.draft.intent is InteractionIntent.COMPARE
+    assert comparison.disposition is RouteDisposition.EXECUTE
+    assert unsupported.draft.intent is InteractionIntent.UNSUPPORTED
+    assert unsupported.disposition is RouteDisposition.UNSUPPORTED
 
 
 def test_diagnostic_commitment_detects_tampering(tmp_path: Path) -> None:
@@ -271,4 +349,77 @@ def test_external_blind_schema_validator_and_commitment(tmp_path: Path) -> None:
             question_path,
             answer_path,
             implementation_commit="b" * 40,
+        )
+
+
+def test_external_blind_rejects_near_duplicate_public_question() -> None:
+    questions = ExternalBlindQuestionSet.model_validate(_external_question_payload())
+    reference = questions.cases[0].question.replace(" ", "")
+
+    with pytest.raises(ValueError, match="too similar to frozen references"):
+        reject_external_near_duplicates(questions, [reference])
+
+    reject_external_near_duplicates(questions, ["완전히 다른 공개 기준 질문"])
+
+
+def test_external_blind_first_run_state_is_single_use_and_report_bound(
+    tmp_path: Path,
+) -> None:
+    questions = ExternalBlindQuestionSet.model_validate(_external_question_payload())
+    answers = ExternalBlindAnswerKey.model_validate(_external_answer_payload())
+    question_path = tmp_path / "questions.json"
+    answer_path = tmp_path / "answers.json"
+    question_path.write_text(questions.model_dump_json(), encoding="utf-8")
+    answer_path.write_text(answers.model_dump_json(), encoding="utf-8")
+    commitment = create_external_blind_commitment(
+        question_path,
+        answer_path,
+        implementation_commit="a" * 40,
+        created_at_utc="2026-08-07T00:00:00Z",
+    )
+    state_path = tmp_path / "first-run.json"
+
+    started = claim_external_blind_first_run(
+        state_path,
+        commitment,
+        provider="local_test",
+        model="test-model",
+        started_at_utc="2026-08-07T00:01:00Z",
+    )
+    assert started.status == "started"
+    with pytest.raises(FileExistsError):
+        claim_external_blind_first_run(
+            state_path,
+            commitment,
+            provider="local_test",
+            model="test-model",
+            started_at_utc="2026-08-07T00:02:00Z",
+        )
+
+    report_path = tmp_path / "external-first-run-report.json"
+    report_path.write_text('{"passed": 91, "total": 100}\n', encoding="utf-8")
+    mismatched = commitment.model_copy(update={"questions_sha256": "f" * 64})
+    with pytest.raises(ValueError, match="differs from the sealed commitment"):
+        complete_external_blind_first_run(
+            state_path,
+            mismatched,
+            report_path,
+            completed_at_utc="2026-08-07T00:03:00Z",
+        )
+
+    completed = complete_external_blind_first_run(
+        state_path,
+        commitment,
+        report_path,
+        completed_at_utc="2026-08-07T00:04:00Z",
+    )
+    assert completed.status == "completed"
+    assert completed.report_name == report_path.name
+    assert completed.report_sha256 is not None
+    with pytest.raises(ValueError, match="already completed"):
+        complete_external_blind_first_run(
+            state_path,
+            commitment,
+            report_path,
+            completed_at_utc="2026-08-07T00:05:00Z",
         )

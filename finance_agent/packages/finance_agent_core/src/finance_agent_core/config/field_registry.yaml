@@ -1487,7 +1487,7 @@ fields:
     enum_values:
       [AAA, AA+, AA0, AA-, A+, A0, A-, BBB+, BBB0, BBB-, BB+, BB0, BB-,
        B+, B0, B-, CCC, CC0, C0, C]
-    notes: 결측이 많고 원천 등급 표기가 AA0·A0처럼 혼재한다. 정확값·목록 일치만 허용하고 '이상/이하' 순서 비교는 지원하지 않는다.
+    notes: 결측이 많고 원천 등급 표기가 AA0·A0처럼 혼재한다. QueryPlan은 정확값·목록 일치만 사용하며, 명시적인 'AA- 이상' 같은 표현은 registry의 최고→최저 enum 순서를 기준으로 허용 목록(in)으로 확장한다. 임계 등급이 없는 '등급이 높은' 표현은 추정하지 않는다.
 
   bond_risk_code:
     label: 원천 위험코드

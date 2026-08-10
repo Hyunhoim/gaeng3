@@ -54,6 +54,8 @@ services:
       APP_ENV: ${APP_ENV:-development}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       WEB_CONCURRENCY: ${WEB_CONCURRENCY:-1}
+      OFFICIAL_ANSWER_TIMEOUT_SECONDS: ${OFFICIAL_ANSWER_TIMEOUT_SECONDS:-55}
+      FINANCE_BACKEND_FUND_EXECUTION_POLICY: ${FINANCE_BACKEND_FUND_EXECUTION_POLICY:-locked}
       FINANCE_DB_OVERSEAS_ETP: /data/overseas_etp.sqlite3
       FINANCE_DB_DOMESTIC_ETP: /data/domestic_etp.sqlite3
       FINANCE_DB_BOND: /data/bond.sqlite3

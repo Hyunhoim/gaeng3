@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 from finance_agent_core.agent.providers import LocalProviderError
 from pydantic import ValidationError
@@ -22,6 +24,7 @@ def test_build_agent_defaults_to_deterministic_answer() -> None:
     agent = build_agent(Settings())
 
     assert agent.answer_provider is None
+    assert agent.capability_execution_overrides == frozenset()
 
 
 def test_build_agent_requires_all_local_provider_opt_ins(monkeypatch) -> None:
@@ -61,3 +64,19 @@ def test_settings_reject_local_provider_outside_development(app_env: str) -> Non
             APP_ENV=app_env,
             FINANCE_BACKEND_ANSWER_PROVIDER="local_test",
         )
+
+
+def test_fund_execution_policy_requires_database_and_enables_only_fund(
+    tmp_path: Path,
+) -> None:
+    with pytest.raises(ValidationError, match="requires FINANCE_DB_FUND"):
+        Settings(FINANCE_BACKEND_FUND_EXECUTION_POLICY="public_fund_v1_approved")
+
+    settings = Settings(
+        FINANCE_BACKEND_FUND_EXECUTION_POLICY="public_fund_v1_approved",
+        FINANCE_DB_FUND=tmp_path / "fund.sqlite3",
+    )
+    agent = build_agent(settings)
+
+    assert {family.value for family in settings.capability_execution_overrides} == {"fund"}
+    assert {family.value for family in agent.capability_execution_overrides} == {"fund"}

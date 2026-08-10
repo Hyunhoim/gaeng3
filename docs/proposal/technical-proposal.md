@@ -1,8 +1,8 @@
 # 금융상품 Agent 기술 제안서
 
-상태: 팀 검토 전 초안 v0.1
+상태: 팀 검토 전 초안 v0.2 · 설명회 계약 반영
 
-기준일: 2026-07-31
+기준일: 2026-08-08
 
 이 문서는 최종 PDF 또는 발표자료를 만들기 위한 내용 정본이다. 구현되지 않은
 기능과 외부 확인이 필요한 항목은 완료된 기능처럼 표현하지 않는다.
@@ -80,9 +80,11 @@ BM25/SQLite FTS 기반 문서 검색의 적재·필터·출처·기준일 계약
 
 [시스템 구성도 정본](diagrams/system-architecture.md)은 다음 두 범위를 분리한다.
 
-- 현재 검증 완료: Agent Core, SQLite Oracle, Verifier, evidence, Backend DTO
+- 현재 검증 완료: Agent Core, SQLite Oracle, Verifier, evidence, Backend DTO,
+  FastAPI 내부 `POST /answer`, 공식 `GET /answer` 계약, Ontology Turtle 5개,
+  Docker 데이터 준비·HTTP smoke
 - 교차 상품군 SEARCH의 family별 근거 격리·답변 검증·전체 fallback
-- 외부 통합 대기: Next.js·FastAPI, 8월 6일 공식 안내 후
+- 외부 통합 대기: Next.js, 공식 `GET /answer` 공개 통신 재현,
   HyperCLOVA X transport, 공개 API 서버
 
 목표 구조를 현재 구현 완료 상태로 오해하지 않도록 실선과 점선으로 구분한다.
@@ -133,6 +135,7 @@ BM25/SQLite FTS 기반 문서 검색의 적재·필터·출처·기준일 계약
 - 문서 corpus 승인 후 동일 citation 계약으로 비정형 설명 확장
 - compact identity cache와 필요한 필드만 읽는 projected verifier로 메모리 절감
 - Backend DTO와 공식 제출 schema를 분리해 UI·평가 API 변화에 대응
+- `GET /answer` 공식 다섯 문자열 필드는 별도 adapter로 고정해 내부 DTO 확장과 분리
 - 평가 suite·baseline·hash를 통해 기능 추가 후 회귀 여부를 자동 확인
 
 확장성은 “어떤 질문도 처리”한다는 뜻이 아니다. 새 필드·상품군·문서는 의미,
@@ -140,20 +143,57 @@ BM25/SQLite FTS 기반 문서 검색의 적재·필터·출처·기준일 계약
 
 ## 8. 기술완성도·성능·정확성 근거
 
-정량 주장과 해석 제한은 [제안서 근거 맵](evidence-map.md)을 따른다.
+정량 주장과 해석 제한은 [제안서 근거 맵](evidence-map.md)을 따름
+행동 기능 검사·구조화 출력 제약·단계별 평가·통계 비교의 출처와 실제 차용 범위는
+[연구 근거](research-basis.md)에 분리해 기록
 
 현재 대표 근거:
 
 - 4종 원천 145,393행 감사, 핵심 expectation 65/65
-- Agent Core 전체 pytest 338개 통과
+- Agent Core pytest 507개와 Backend pytest 34개 통과
 - 공식 XLSX에서 SQLite 4개를 자동 생성·검증한 뒤 Backend를 시작하는 Docker 경로 완료
 - 국내·해외 ETP 교차 SEARCH 공개 실제 데이터 회귀 4/4
 - 교차 상품군 grounded answer 공개 회귀 expected·로컬 Qwen 각각 4/4, 생성 대상 2문항 모두 grounded, 모델 호출 3회, fallback 0
 - 내부 red-team 40문항 수정 후 strict·safety·evidence 40/40
+- 공개 원문 30개에서 Qwen으로 세 표현 축 90개를 만들고 의미 보존 77개를
+  선별한 스트레스 회귀에서 결정론적·Qwen 전체 Agent 각각 77/77,
+  의미·safety·evidence 100%, 안전 설명문 개선 후 fallback 0/61
+- 변형 질문으로 기존 `낮은 순`·`짧은 순` gold 오류 2건을 발견하고 원본을
+  바꾸지 않는 hash-pinned 교정 overlay로 평가 정답 자체도 감사
+- 같은 77개를 모델 없음·Qwen 계획만·Qwen 답변만·둘 다 사용으로 나눈 ablation에서
+  모두 77/77을 확인하고, 전체 Qwen p95 4,096.584ms를 역할별 비용 기준선으로 확보
+- Qwen에 원문 문장을 숨기고 실행 의미만 주어 75개를 재생성한 더 어려운
+  semantic round-trip에서 64개를 선별하고, 최초 15/64에서 출력과 QueryPlan
+  의미까지 64/64로 개선
+- Qwen grounded-plan을 단순 JSON 정답이 아닌 원문 근거 첨부 제안으로 바꾸고,
+  registry·유일 식별자·서버 고정 조건 gate를 통과한 항목만 실행하는 계약 구현
+- 실재하지만 원문에 없는 상품 ID, 부정된 ID·필드·정렬, 서버 조건 누락,
+  malformed provider 응답이 실행 권한을 얻지 못하도록 공격 회귀로 고정
+- registry와 실제 DB에서 대표 기능 좌표 305개를 자동 구성하고 정답 계획
+  299개를 직접 실행해 검색·계산·근거 엔진의 넓은 실행 범위를 확인
+- 같은 299개 계획의 canonical 자연어 최초 strict 37/299를 보존하고,
+  질문 분류 45건·작업 계획 210건·근거 7건으로 실패 시작점을 분해해
+  다음 Qwen 자연화 897문항과 공통 문법 개선의 우선순위를 확보
+- Qwen 자연화 중 의미 선별을 통과한 공개 391문항의 최초 exact 65를 보존하고,
+  공통 비교·검색 문법을 단계적으로 개선해 94→153→170, 최신 실행 의미 보조
+  strict 242/391을 기록. 두 검색 단계는 각각 구제 59·17건, 퇴행 0건
+- 공식 예상 분포 공개 모의평가 30/30, 답변 불가 5/5 안전 처리,
+  로컬 Qwen 생성 16/17·검증 fallback 1건
+- 같은 30문항의 실제 Docker GET은 공식 형식·60초 30/30, 의미 24/30이며
+  공모펀드 공식 실행 잠금 6건을 배포 차이로 확인해 최초 결과로 보존
+- 공모펀드만 여는 명시적 v1 배포 정책을 적용한 재평가는 동일 30문항 의미·형식·
+  60초 30/30, Qwen 문장 검증 17/17, fallback 0건
 - 금융 도메인 개발 QA 40문항 Router 사후 회귀 40/40,
   잘못된 control 실행·오류 0건
 - HyperCLOVA X API 없는 provider·Agent 계약 8/8
 - Backend service adapter 오류·fallback·비노출 계약 12/12
+- 새 Docker 이미지의 Backend 7건·공식 GET 정상/예외 7건 14/14
+- 로컬 Qwen·공모펀드 승인 14/14, Qwen 중단 fallback 14/14,
+  공식 모의 30문항 동시성 2에서 30/30·fallback 0
+- 제출 경계 자동 검사로 개발용 로컬 LLM의 운영 파일 혼입과 제출 후보 잔존을
+  서로 다른 프로필로 차단
+- 설명회 현장 자료에서 평가 API 다섯 문자열 필드·미응답 HTTP 200·60초 권장과
+  도메인별 Ontology 제출 요구 확인
 
 내부 공개 평가의 100%는 배선·회귀 안정성이지 독립 blind 일반화 성능이 아니다.
 
@@ -172,5 +212,7 @@ BM25/SQLite FTS 기반 문서 검색의 적재·필터·출처·기준일 계약
 - 최소 2명의 독립 reviewer가 수행한 사람 평가
 - 허용된 실제 비정형 문서 corpus와 사용 범위
 - HyperCLOVA X 모델·endpoint·인증·Structured Outputs 확인과 실제 재현
-- FastAPI 공식 `/answer` route, Docker 환경과 공개 서버 통합
-- 공식 schema의 `retrieved_context`·`think_trace` 타입과 추가 필드 허용 여부 확인
+- FastAPI 공식 `GET /answer` Docker·공개 서버 통합
+- Ontology 용어의 금융 도메인 검수와 주최 측 최종 형식 확인
+- `think_trace`의 구조화 실행 기록에 대한 세부 평가 방식 확인
+- 크레딧 승인과 HyperCLOVA X 적용 서비스 확인

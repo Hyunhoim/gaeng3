@@ -27,6 +27,17 @@ from finance_agent_core.answering.models import (
 from finance_agent_core.config import QualityStatus, load_field_registry
 
 
+def _safe_explanation(context: GroundedAnswerContext) -> str:
+    intent = context.query_plan.intent.value
+    if intent == "compare":
+        return "선택한 근거 항목이 요청한 상품 비교 근거로 사용됐습니다."
+    if intent == "explain":
+        return "선택한 근거 항목이 요청한 상품 설명 근거로 사용됐습니다."
+    if context.query_plan.ranking:
+        return "선택한 근거 항목이 요청한 정렬 근거로 사용됐습니다."
+    return "선택한 근거 항목이 요청한 상품 조회 근거로 사용됐습니다."
+
+
 def _generation_payload(context: GroundedAnswerContext) -> dict[str, Any]:
     registry = load_field_registry()
     required = required_evidence_fields(context)
@@ -63,6 +74,7 @@ def _generation_payload(context: GroundedAnswerContext) -> dict[str, Any]:
         "comparison_fields": context.query_plan.intent_payload.comparison_fields,
         "products": products,
         "required_warning_codes": [warning.code for warning in context.warnings],
+        "safe_explanation": _safe_explanation(context),
     }
 
 
@@ -87,7 +99,8 @@ def build_grounded_answer_system_prompt(context: GroundedAnswerContext) -> str:
   서버가 검증된 근거로 별도 컴파일한다.
 - 과거 성과를 미래 성과처럼 표현하거나 매수·매도·수익 보장 표현을 쓰지 않는다.
 - 상품별 explanation은 선택한 evidence_fields가 정렬·식별 또는 비교 근거로
-  사용됐다는 사실만 짧게 설명한다. 비교 우열이나 추천을 판단하지 않는다.
+  사용됐다는 사실만 짧게 설명한다. 각 상품에 입력 safe_explanation을 글자 하나
+  바꾸지 않고 그대로 복사한다. 비교 우열이나 추천을 판단하지 않는다.
   좋음·나쁨·유리함·수익성·전망·예측 같은 평가나 투자 해석을 추가하지 않는다.
 - acknowledged_warning_codes는 required_warning_codes를 같은 순서로 정확히 복사한다.
 - 입력에 없는 경고 코드나 evidence field를 추가하지 않는다.
@@ -125,6 +138,10 @@ def _answer_schema(context: GroundedAnswerContext) -> dict[str, Any]:
         item["properties"]["evidence_fields"]["items"] = {
             "type": "string",
             "enum": usable_fields,
+        }
+        item["properties"]["explanation"] = {
+            "type": "string",
+            "const": _safe_explanation(context),
         }
         prefix_items.append(item)
     schema["properties"]["products"] = {
@@ -187,7 +204,7 @@ class ExpectedGroundedAnswerProvider:
                 ProductAnswerDraft(
                     result_ref=f"result_{index}",
                     evidence_fields=selected,
-                    explanation="검증된 검색 조건과 근거에 따라 포함된 결과입니다.",
+                    explanation=_safe_explanation(context),
                 )
             )
         return GroundedAnswerDraft(
@@ -297,7 +314,8 @@ def _hcx_grounded_answer_schema(
             },
             "explanation": {
                 "type": "string",
-                "description": ("근거 필드가 검색·식별·비교에 사용됐다는 짧은 한국어 설명"),
+                "enum": [_safe_explanation(context)],
+                "description": "서버가 제공한 안전한 근거 설명문",
             },
         },
         "required": ["result_ref", "evidence_fields", "explanation"],

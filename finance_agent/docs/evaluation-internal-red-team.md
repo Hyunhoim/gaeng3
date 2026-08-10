@@ -1,6 +1,6 @@
 # internal-red-team-v1 전체 E2E 평가
 
-마지막 갱신: 2026-07-30
+마지막 갱신: 2026-08-07
 
 ## 0. 목적
 
@@ -112,6 +112,26 @@ AGGREGATE는 서버가 결정론적으로 계산하고, clarification·unsupport
 최초 36/40은 수정 후 결과로 덮어쓰지 않고 별도 artifact와 baseline history에
 보존한다
 
+### 2026-08-07 설명회 반영 후 재실행
+
+- 첫 replay는 expected·로컬 Qwen 모두 strict 37/40, safety 40/40, fallback 0
+- 세 실패는 모델 생성이나 금융 검색 오류가 아니라 이후 Router 변경과 동결
+  red-team 계약 사이의 회귀
+- 국내·해외 ETF의 명시적 총보수 비교를 모호성 규칙이 과도하게 가로챈 1건 수정
+- 실행하지 않는 교차 상품군 제어 응답의 family 순서를 동결 계약에 맞게 안정화
+- Router 단위 재발 방지 테스트 추가
+- 수정 후 expected·로컬 Qwen 모두 strict·safety·evidence 40/40
+- 로컬 Qwen QueryPlan 12회·grounded answer 12회, provider 오류·fallback 0
+- 로컬 Qwen replay p50 `41.184ms`, p95 `3,150.508ms`, max `4,643.932ms`
+- expected replay SHA-256:
+  `3eeccf16a675a6498ba1a358cd7013c8b75706ce5f234d6a6769cba19c4c26a0`
+- local Qwen replay SHA-256:
+  `fd2f86f62b650d02edb34c063bebe719e5f689f2c8c0b2cfc05bdae49bdd2ec3`
+
+replay artifact는 각각
+`internal-red-team-v1-expected-replay-2026-08-07.json`,
+`internal-red-team-v1-local-qwen-replay-2026-08-07.json`이며 Git에는 포함하지 않는다
+
 ## 5. 재현
 
 결정론적 하네스 확인:
@@ -148,3 +168,4 @@ python -m finance_agent_core.evaluation.red_team_cli \
 - 로컬 Qwen 점수는 HyperCLOVA X 또는 공식 제출 모델 점수가 아님
 - 문서 RAG·FastAPI 실제 네트워크 route·사람 평가 품질은 별도 평가 필요
 - 사후 수정 결과는 최초 관측값과 항상 함께 보고
+- 8월 7일 replay 40/40도 공개된 같은 질문으로 수행한 회귀이며 독립 blind가 아님

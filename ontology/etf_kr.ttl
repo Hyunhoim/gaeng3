@@ -1,0 +1,1089 @@
+@prefix etfkr: <https://gaeng3.ai/ontology/etf_kr#> .
+@prefix ga: <https://gaeng3.ai/ontology/common#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+<https://gaeng3.ai/ontology/etf_kr>
+    a owl:Ontology ;
+    owl:imports <https://gaeng3.ai/ontology/common> ;
+    rdfs:label "국내 ETF·ETN Ontology"@ko ;
+    ga:registryVersion "1.3" .
+
+etfkr:KoreanETPProduct
+    a owl:Class ;
+    rdfs:subClassOf ga:FinancialProduct ;
+    rdfs:label "국내 ETF·ETN 상품"@ko .
+
+etfkr:Family
+    a ga:ProductFamily ;
+    rdfs:label "국내 ETF·ETN"@ko ;
+    ga:registryName "domestic_etp" ;
+    ga:describedByDataset etfkr:Dataset ;
+    ga:hasCanonicalField etfkr:field_product_id ;
+    ga:hasCanonicalField etfkr:field_product_family ;
+    ga:hasCanonicalField etfkr:field_product_type ;
+    ga:hasCanonicalField etfkr:field_product_name ;
+    ga:hasCanonicalField etfkr:field_exchange_code ;
+    ga:hasCanonicalField etfkr:field_ticker ;
+    ga:hasCanonicalField etfkr:field_isin ;
+    ga:hasCanonicalField etfkr:field_sellable ;
+    ga:hasCanonicalField etfkr:field_trading_suspended ;
+    ga:hasCanonicalField etfkr:field_asset_type ;
+    ga:hasCanonicalField etfkr:field_investment_region ;
+    ga:hasCanonicalField etfkr:field_total_expense_ratio_pct ;
+    ga:hasCanonicalField etfkr:field_aum ;
+    ga:hasCanonicalField etfkr:field_trading_currency ;
+    ga:hasCanonicalField etfkr:field_static_as_of ;
+    ga:hasCanonicalField etfkr:field_dynamic_as_of ;
+    ga:hasCanonicalField etfkr:field_one_day_return_pct ;
+    ga:hasCanonicalField etfkr:field_short_name ;
+    ga:hasCanonicalField etfkr:field_manager ;
+    ga:hasCanonicalField etfkr:field_base_index ;
+    ga:hasCanonicalField etfkr:field_strategy ;
+    ga:hasCanonicalField etfkr:field_leverage_factor ;
+    ga:hasCanonicalField etfkr:field_risk_level ;
+    ga:hasCanonicalField etfkr:field_pension_eligible ;
+    ga:hasCanonicalField etfkr:field_core_etf ;
+    ga:hasCanonicalField etfkr:field_close_price ;
+    ga:hasCanonicalField etfkr:field_one_month_return_pct ;
+    ga:hasCanonicalField etfkr:field_three_month_return_pct ;
+    ga:hasCanonicalField etfkr:field_six_month_return_pct ;
+    ga:hasCanonicalField etfkr:field_one_year_return_pct ;
+    ga:hasCanonicalField etfkr:field_ytd_return_pct ;
+    ga:hasCanonicalField etfkr:field_daily_trading_value .
+
+etfkr:Dataset
+    a ga:Dataset ;
+    ga:registryName "domestic_etp" ;
+    ga:sourceId "PREF01N001" ;
+    ga:sourceLabel "국내 ETF·ETN 마스터"@ko ;
+    ga:logicalGrain "pd_itm_no로 식별되는 국내 상장 ETP 한 종목"@ko ;
+    ga:snapshotDate "2026-07-11"^^xsd:date ;
+    ga:rowCount 1734 ;
+    ga:quarantinedRows 1 ;
+    ga:executionEnabled true ;
+    ga:primaryKey "pd_itm_no" ;
+    ga:rawFilePattern "PREF01N001*_datarows*.xlsx" ;
+    ga:schemaFilePattern "PREF01N001*_schema*.xlsx" ;
+    ga:staticAsOfColumn "wu_upt_dt" ;
+    ga:dynamicAsOfColumn "du_upt_dt" ;
+    ga:notes ""@ko .
+
+etfkr:field_product_id
+    a ga:CanonicalField ;
+    ga:forFamily etfkr:Family ;
+    ga:canonicalName "product_id" ;
+    rdfs:label "상품 식별자"@ko ;
+    skos:altLabel "상품 ID"@ko ;
+    skos:altLabel "product id"@ko ;
+    ga:valueType "string" ;
+    ga:unit "code" ;
+    ga:quality "VALID" ;
+    ga:coveragePct "100"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable false ;
+    ga:aggregatable false ;
+    ga:comparable false ;
+    ga:comparisonMode "value_only" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "in" ;
+    ga:asOfBasis "static" ;
+    ga:sourceDataset "domestic_etp" ;
+    ga:sourceColumn "pd_itm_no" ;
+    ga:sourceTransform "identity" ;
+    ga:notes "유효한 행에서는 pd_itm_no가 유일하다. 손상된 Excel 1155행은 격리한다."@ko .
+
+etfkr:field_product_family
+    a ga:CanonicalField ;
+    ga:forFamily etfkr:Family ;
+    ga:canonicalName "product_family" ;
+    rdfs:label "상품군"@ko ;
+    skos:altLabel "상품 유형군"@ko ;
+    skos:altLabel "product family"@ko ;
+    ga:valueType "enum" ;
+    ga:unit "code" ;
+    ga:quality "VALID" ;
+    ga:coveragePct "100"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable false ;
+    ga:aggregatable false ;
+    ga:comparable false ;
+    ga:comparisonMode "value_only" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "in" ;
+    ga:enumValue "overseas_etp" ;
+    ga:enumValue "domestic_etp" ;
+    ga:enumValue "bond" ;
+    ga:enumValue "fund" ;
+    ga:asOfBasis "static" ;
+    ga:sourceDataset "domestic_etp" ;
+    ga:sourceTransform "constant" ;
+    ga:constantValue "domestic_etp" ;
+    ga:notes "국내 ETF와 ETN을 함께 나타내는 상품군이다."@ko .
+
+etfkr:field_product_type
+    a ga:CanonicalField ;
+    ga:forFamily etfkr:Family ;
+    ga:canonicalName "product_type" ;
+    rdfs:label "ETP 유형"@ko ;
+    skos:altLabel "ETF 여부"@ko ;
+    skos:altLabel "ETF 또는 ETN"@ko ;
+    skos:altLabel "product type"@ko ;
+    ga:valueType "enum" ;
+    ga:unit "code" ;
+    ga:quality "VALID" ;
+    ga:coveragePct "100"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable false ;
+    ga:aggregatable false ;
+    ga:comparable true ;
+    ga:comparisonMode "value_only" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "neq" ;
+    ga:allowedOperator "in" ;
+    ga:allowedOperator "not_in" ;
+    ga:enumValue "ETF" ;
+    ga:enumValue "ETN" ;
+    ga:asOfBasis "static" ;
+    ga:sourceDataset "domestic_etp" ;
+    ga:sourceColumn "pd_grp_no" ;
+    ga:sourceTransform "identity" ;
+    ga:notes "격리 행을 제외하면 ETF 1,201행, ETN 532행이다."@ko .
+
+etfkr:field_product_name
+    a ga:CanonicalField ;
+    ga:forFamily etfkr:Family ;
+    ga:canonicalName "product_name" ;
+    rdfs:label "상품명"@ko ;
+    skos:altLabel "종목명"@ko ;
+    skos:altLabel "펀드명"@ko ;
+    skos:altLabel "name"@ko ;
+    ga:valueType "string" ;
+    ga:unit "none" ;
+    ga:quality "VALID" ;
+    ga:coveragePct "100"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable true ;
+    ga:aggregatable false ;
+    ga:comparable true ;
+    ga:comparisonMode "value_only" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "contains" ;
+    ga:asOfBasis "static" ;
+    ga:sourceDataset "domestic_etp" ;
+    ga:sourceColumn "pd_nm" ;
+    ga:sourceTransform "identity" ;
+    ga:notes "격리 행을 제외한 1,733행에서 모두 존재하고 유일하지만 PK로 사용하지 않는다."@ko .
+
+etfkr:field_exchange_code
+    a ga:CanonicalField ;
+    ga:forFamily etfkr:Family ;
+    ga:canonicalName "exchange_code" ;
+    rdfs:label "거래소 코드"@ko ;
+    skos:altLabel "거래소"@ko ;
+    skos:altLabel "exchange"@ko ;
+    ga:valueType "enum" ;
+    ga:unit "code" ;
+    ga:quality "VALID" ;
+    ga:coveragePct "100"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable false ;
+    ga:aggregatable false ;
+    ga:comparable true ;
+    ga:comparisonMode "value_only" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "in" ;
+    ga:enumValue "AMX" ;
+    ga:enumValue "NAS" ;
+    ga:enumValue "NYS" ;
+    ga:enumValue "101" ;
+    ga:enumValue "102" ;
+    ga:enumValue "EXG_MKT_NO_001" ;
+    ga:asOfBasis "static" ;
+    ga:sourceDataset "domestic_etp" ;
+    ga:sourceColumn "pd_exg_mkt_cd" ;
+    ga:sourceTransform "identity" ;
+    ga:notes "격리 행을 제외한 모든 값은 EXG_MKT_NO_001이다."@ko .
+
+etfkr:field_ticker
+    a ga:CanonicalField ;
+    ga:forFamily etfkr:Family ;
+    ga:canonicalName "ticker" ;
+    rdfs:label "티커"@ko ;
+    skos:altLabel "종목 번호"@ko ;
+    skos:altLabel "symbol"@ko ;
+    ga:valueType "string" ;
+    ga:unit "code" ;
+    ga:quality "VALID" ;
+    ga:coveragePct "100"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable true ;
+    ga:aggregatable false ;
+    ga:comparable false ;
+    ga:comparisonMode "value_only" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "in" ;
+    ga:asOfBasis "static" ;
+    ga:sourceDataset "domestic_etp" ;
+    ga:sourceColumn "pd_itm_no_ma" ;
+    ga:sourceTransform "identity" ;
+    ga:notes "미래에셋 상품번호를 사용자 표시용 종목 코드로 사용한다."@ko .
+
+etfkr:field_isin
+    a ga:CanonicalField ;
+    ga:forFamily etfkr:Family ;
+    ga:canonicalName "isin" ;
+    rdfs:label "ISIN"@ko ;
+    skos:altLabel "국제 증권 식별 번호"@ko ;
+    ga:valueType "string" ;
+    ga:unit "code" ;
+    ga:quality "VALID" ;
+    ga:coveragePct "100"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable false ;
+    ga:aggregatable false ;
+    ga:comparable false ;
+    ga:comparisonMode "value_only" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "in" ;
+    ga:asOfBasis "static" ;
+    ga:sourceDataset "domestic_etp" ;
+    ga:sourceColumn "pd_itm_no" ;
+    ga:sourceTransform "identity" ;
+    ga:notes "격리 행을 제외하면 전부 유효한 KR/KRG 형식이며 유일하다."@ko .
+
+etfkr:field_sellable
+    a ga:CanonicalField ;
+    ga:forFamily etfkr:Family ;
+    ga:canonicalName "sellable" ;
+    rdfs:label "판매 가능 여부"@ko ;
+    skos:altLabel "판매 여부"@ko ;
+    skos:altLabel "sale status"@ko ;
+    ga:valueType "boolean" ;
+    ga:unit "boolean" ;
+    ga:quality "PARTIAL" ;
+    ga:coveragePct "100"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable false ;
+    ga:aggregatable false ;
+    ga:comparable true ;
+    ga:comparisonMode "value_only" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:asOfBasis "static" ;
+    ga:sourceDataset "domestic_etp" ;
+    ga:sourceColumn "pd_sale_yn" ;
+    ga:sourceTransform "boolean_code" ;
+    ga:valueMapJson "{\"0\":false,\"1\":true}" ;
+    ga:notes "schema의 상품판매여부를 0=false, 1=true로 잠정 매핑하며 공식 코드북 확인 전 경고한다."@ko .
+
+etfkr:field_trading_suspended
+    a ga:CanonicalField ;
+    ga:forFamily etfkr:Family ;
+    ga:canonicalName "trading_suspended" ;
+    rdfs:label "거래 중지 여부"@ko ;
+    skos:altLabel "거래 가능 여부"@ko ;
+    skos:altLabel "거래 정지"@ko ;
+    skos:altLabel "trading status"@ko ;
+    ga:valueType "boolean" ;
+    ga:unit "boolean" ;
+    ga:quality "PARTIAL" ;
+    ga:coveragePct "100"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable false ;
+    ga:aggregatable false ;
+    ga:comparable true ;
+    ga:comparisonMode "value_only" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:asOfBasis "static" ;
+    ga:sourceDataset "domestic_etp" ;
+    ga:sourceColumn "pd_tr_yn" ;
+    ga:sourceTransform "boolean_code" ;
+    ga:valueMapJson "{\"0\":false,\"1\":true}" ;
+    ga:notes "schema의 상품거래정지여부를 0=false, 1=true로 잠정 매핑하며 공식 코드북 확인 전 경고한다."@ko .
+
+etfkr:field_asset_type
+    a ga:CanonicalField ;
+    ga:forFamily etfkr:Family ;
+    ga:canonicalName "asset_type" ;
+    rdfs:label "투자 자산 유형"@ko ;
+    skos:altLabel "자산군"@ko ;
+    skos:altLabel "기초 자산"@ko ;
+    skos:altLabel "asset class"@ko ;
+    ga:valueType "enum" ;
+    ga:unit "code" ;
+    ga:quality "VALID" ;
+    ga:coveragePct "100"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable false ;
+    ga:aggregatable false ;
+    ga:comparable true ;
+    ga:comparisonMode "value_only" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "in" ;
+    ga:enumValue "Equity" ;
+    ga:enumValue "Alternatives" ;
+    ga:enumValue "Bond" ;
+    ga:enumValue "Mixed Assets" ;
+    ga:enumValue "Commodity" ;
+    ga:enumValue "Money Market" ;
+    ga:enumValue "주식" ;
+    ga:enumValue "채권" ;
+    ga:enumValue "원자재" ;
+    ga:enumValue "혼합자산" ;
+    ga:enumValue "단기자금" ;
+    ga:enumValue "통화" ;
+    ga:enumValue "부동산" ;
+    ga:enumValue "기타" ;
+    ga:asOfBasis "static" ;
+    ga:sourceDataset "domestic_etp" ;
+    ga:sourceColumn "wu_inv_ast_type" ;
+    ga:sourceTransform "identity" ;
+    ga:notes "격리 행을 제외한 값은 8개 한국어 자산군 중 하나다."@ko .
+
+etfkr:field_investment_region
+    a ga:CanonicalField ;
+    ga:forFamily etfkr:Family ;
+    ga:canonicalName "investment_region" ;
+    rdfs:label "투자 지역"@ko ;
+    skos:altLabel "지역"@ko ;
+    skos:altLabel "국가"@ko ;
+    skos:altLabel "investment region"@ko ;
+    ga:valueType "enum" ;
+    ga:unit "code" ;
+    ga:quality "VALID" ;
+    ga:coveragePct "100"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable false ;
+    ga:aggregatable false ;
+    ga:comparable true ;
+    ga:comparisonMode "value_only" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "in" ;
+    ga:enumValue "ASEAN" ;
+    ga:enumValue "Africa" ;
+    ga:enumValue "Argentina" ;
+    ga:enumValue "Asia Pacific" ;
+    ga:enumValue "Asia Pacific ex Japan" ;
+    ga:enumValue "Australia" ;
+    ga:enumValue "Austria" ;
+    ga:enumValue "BRIC" ;
+    ga:enumValue "Belgium" ;
+    ga:enumValue "Brazil" ;
+    ga:enumValue "Canada" ;
+    ga:enumValue "Chile" ;
+    ga:enumValue "China" ;
+    ga:enumValue "Colombia" ;
+    ga:enumValue "Denmark" ;
+    ga:enumValue "EuroZone" ;
+    ga:enumValue "Europe" ;
+    ga:enumValue "Finland" ;
+    ga:enumValue "France" ;
+    ga:enumValue "Germany" ;
+    ga:enumValue "Global" ;
+    ga:enumValue "Global Emerging Markets" ;
+    ga:enumValue "Global Ex US" ;
+    ga:enumValue "Greater China" ;
+    ga:enumValue "Greece" ;
+    ga:enumValue "Hong Kong" ;
+    ga:enumValue "Iceland" ;
+    ga:enumValue "India" ;
+    ga:enumValue "Indonesia" ;
+    ga:enumValue "Ireland" ;
+    ga:enumValue "Israel" ;
+    ga:enumValue "Italy" ;
+    ga:enumValue "Japan" ;
+    ga:enumValue "Korea" ;
+    ga:enumValue "Kuwait" ;
+    ga:enumValue "Latin America" ;
+    ga:enumValue "Malaysia" ;
+    ga:enumValue "Mexico" ;
+    ga:enumValue "Netherlands" ;
+    ga:enumValue "New Zealand" ;
+    ga:enumValue "North America" ;
+    ga:enumValue "Norway" ;
+    ga:enumValue "Peru" ;
+    ga:enumValue "Philippines" ;
+    ga:enumValue "Poland" ;
+    ga:enumValue "Qatar" ;
+    ga:enumValue "Saudi Arabia" ;
+    ga:enumValue "Singapore" ;
+    ga:enumValue "South Africa" ;
+    ga:enumValue "Spain" ;
+    ga:enumValue "Sweden" ;
+    ga:enumValue "Switzerland" ;
+    ga:enumValue "Taiwan" ;
+    ga:enumValue "Thailand" ;
+    ga:enumValue "Turkey" ;
+    ga:enumValue "United Arab Emirates" ;
+    ga:enumValue "United Kingdom" ;
+    ga:enumValue "United States of America" ;
+    ga:enumValue "Vietnam" ;
+    ga:enumValue "국내" ;
+    ga:enumValue "미국" ;
+    ga:enumValue "글로벌" ;
+    ga:enumValue "중국" ;
+    ga:enumValue "아시아" ;
+    ga:enumValue "일본" ;
+    ga:enumValue "인도" ;
+    ga:enumValue "남미/북미" ;
+    ga:enumValue "유럽" ;
+    ga:enumValue "베트남" ;
+    ga:enumValue "이머징/브릭스" ;
+    ga:asOfBasis "static" ;
+    ga:sourceDataset "domestic_etp" ;
+    ga:sourceColumn "wu_inv_rgn" ;
+    ga:sourceTransform "identity" ;
+    ga:notes "격리 행을 제외한 값은 11개 한국어 투자지역 중 하나다."@ko .
+
+etfkr:field_total_expense_ratio_pct
+    a ga:CanonicalField ;
+    ga:forFamily etfkr:Family ;
+    ga:canonicalName "total_expense_ratio_pct" ;
+    rdfs:label "총보수율"@ko ;
+    skos:altLabel "총보수"@ko ;
+    skos:altLabel "보수율"@ko ;
+    skos:altLabel "expense ratio"@ko ;
+    skos:altLabel "fee"@ko ;
+    ga:valueType "number" ;
+    ga:unit "pct_point" ;
+    ga:quality "PARTIAL" ;
+    ga:coveragePct "12.5216"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable true ;
+    ga:aggregatable true ;
+    ga:comparable true ;
+    ga:comparisonMode "numeric_delta" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "lt" ;
+    ga:allowedOperator "lte" ;
+    ga:allowedOperator "gt" ;
+    ga:allowedOperator "gte" ;
+    ga:allowedOperator "between" ;
+    ga:asOfBasis "static" ;
+    ga:sourceDataset "domestic_etp" ;
+    ga:sourceColumn "cu_charge_rt" ;
+    ga:sourceTransform "identity" ;
+    ga:sentinelValuesJson "{\"0\":\"UNKNOWN\"}" ;
+    ga:notes "격리 행 제외 217행만 제공되고 그중 150행의 0은 의미 미확인이라 UNKNOWN이다."@ko .
+
+etfkr:field_aum
+    a ga:CanonicalField ;
+    ga:forFamily etfkr:Family ;
+    ga:canonicalName "aum" ;
+    rdfs:label "최근 AUM"@ko ;
+    skos:altLabel "순자산"@ko ;
+    skos:altLabel "운용 자산"@ko ;
+    skos:altLabel "assets under management"@ko ;
+    ga:valueType "number" ;
+    ga:unit "source_currency_amount" ;
+    ga:quality "PARTIAL" ;
+    ga:coveragePct "83.843"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable true ;
+    ga:aggregatable true ;
+    ga:comparable true ;
+    ga:comparisonMode "numeric_delta" ;
+    ga:comparisonScope "same_trading_currency" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "lt" ;
+    ga:allowedOperator "lte" ;
+    ga:allowedOperator "gt" ;
+    ga:allowedOperator "gte" ;
+    ga:allowedOperator "between" ;
+    ga:asOfBasis "dynamic" ;
+    ga:sourceDataset "domestic_etp" ;
+    ga:sourceColumn "du_last_aum" ;
+    ga:sourceTransform "identity" ;
+    ga:sentinelValuesJson "{\"0\":\"UNKNOWN\"}" ;
+    ga:notes "280행 결측, 411행 0이다. ETN 409행의 0을 포함해 의미 확인 전 UNKNOWN으로 처리한다."@ko .
+
+etfkr:field_trading_currency
+    a ga:CanonicalField ;
+    ga:forFamily etfkr:Family ;
+    ga:canonicalName "trading_currency" ;
+    rdfs:label "거래 통화"@ko ;
+    skos:altLabel "통화"@ko ;
+    skos:altLabel "currency"@ko ;
+    ga:valueType "enum" ;
+    ga:unit "code" ;
+    ga:quality "PARTIAL" ;
+    ga:coveragePct "99.9423"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable false ;
+    ga:aggregatable false ;
+    ga:comparable true ;
+    ga:comparisonMode "value_only" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "in" ;
+    ga:enumValue "USD" ;
+    ga:enumValue "KRW" ;
+    ga:enumValue "EUR" ;
+    ga:enumValue "JPY" ;
+    ga:enumValue "000" ;
+    ga:asOfBasis "static" ;
+    ga:sourceDataset "domestic_etp" ;
+    ga:sourceColumn "pd_curr_cd" ;
+    ga:sourceTransform "code_map" ;
+    ga:valueMapJson "{\"CURR_CD_000\":\"KRW\",\"CURR_CD_KRW\":\"KRW\"}" ;
+    ga:notes "1행의 CURR_CD_000은 해당없음이므로 행 수준 UNKNOWN으로 표시하되 비교 단위는 KRW로 보존한다."@ko .
+
+etfkr:field_static_as_of
+    a ga:CanonicalField ;
+    ga:forFamily etfkr:Family ;
+    ga:canonicalName "static_as_of" ;
+    rdfs:label "정적 속성 기준일"@ko ;
+    skos:altLabel "속성 업데이트일"@ko ;
+    skos:altLabel "static as of"@ko ;
+    ga:valueType "date" ;
+    ga:unit "date" ;
+    ga:quality "PARTIAL" ;
+    ga:coveragePct "99.7692"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable true ;
+    ga:aggregatable false ;
+    ga:comparable false ;
+    ga:comparisonMode "value_only" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "lt" ;
+    ga:allowedOperator "lte" ;
+    ga:allowedOperator "gt" ;
+    ga:allowedOperator "gte" ;
+    ga:allowedOperator "between" ;
+    ga:asOfBasis "static" ;
+    ga:sourceDataset "domestic_etp" ;
+    ga:sourceColumn "wu_upt_dt" ;
+    ga:sourceTransform "identity" ;
+    ga:notes "4행이 결측이며 결측 시 원천 스냅샷일을 보수적 기준일로 사용한다."@ko .
+
+etfkr:field_dynamic_as_of
+    a ga:CanonicalField ;
+    ga:forFamily etfkr:Family ;
+    ga:canonicalName "dynamic_as_of" ;
+    rdfs:label "동적 지표 기준일"@ko ;
+    skos:altLabel "AUM 업데이트일"@ko ;
+    skos:altLabel "dynamic as of"@ko ;
+    ga:valueType "date" ;
+    ga:unit "date" ;
+    ga:quality "PARTIAL" ;
+    ga:coveragePct "87.5361"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable true ;
+    ga:aggregatable false ;
+    ga:comparable false ;
+    ga:comparisonMode "value_only" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "lt" ;
+    ga:allowedOperator "lte" ;
+    ga:allowedOperator "gt" ;
+    ga:allowedOperator "gte" ;
+    ga:allowedOperator "between" ;
+    ga:asOfBasis "dynamic" ;
+    ga:sourceDataset "domestic_etp" ;
+    ga:sourceColumn "du_upt_dt" ;
+    ga:sourceTransform "identity" ;
+    ga:notes "216행이 결측이며 동적 수치가 결측인 행은 원천 스냅샷일을 기준일로 표시한다."@ko .
+
+etfkr:field_one_day_return_pct
+    a ga:CanonicalField ;
+    ga:forFamily etfkr:Family ;
+    ga:canonicalName "one_day_return_pct" ;
+    rdfs:label "1일 수익률"@ko ;
+    skos:altLabel "일간 수익률"@ko ;
+    skos:altLabel "one day return"@ko ;
+    ga:valueType "number" ;
+    ga:unit "pct_point" ;
+    ga:quality "PARTIAL" ;
+    ga:coveragePct "90.1327"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable true ;
+    ga:aggregatable true ;
+    ga:comparable true ;
+    ga:comparisonMode "numeric_delta" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "lt" ;
+    ga:allowedOperator "lte" ;
+    ga:allowedOperator "gt" ;
+    ga:allowedOperator "gte" ;
+    ga:allowedOperator "between" ;
+    ga:asOfBasis "dynamic" ;
+    ga:sourceDataset "domestic_etp" ;
+    ga:sourceColumn "du_er_1d" ;
+    ga:sourceTransform "identity" ;
+    ga:notes "격리 행 제외 1,562행에 실측 변동값이 있어 검색·정렬에 사용하되 결측은 UNKNOWN이다."@ko .
+
+etfkr:field_short_name
+    a ga:CanonicalField ;
+    ga:forFamily etfkr:Family ;
+    ga:canonicalName "short_name" ;
+    rdfs:label "상품 약어명"@ko ;
+    skos:altLabel "약어명"@ko ;
+    skos:altLabel "단축 상품명"@ko ;
+    skos:altLabel "short name"@ko ;
+    ga:valueType "string" ;
+    ga:unit "none" ;
+    ga:quality "VALID" ;
+    ga:coveragePct "100"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable true ;
+    ga:aggregatable false ;
+    ga:comparable true ;
+    ga:comparisonMode "value_only" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "contains" ;
+    ga:asOfBasis "static" ;
+    ga:sourceDataset "domestic_etp" ;
+    ga:sourceColumn "pd_abrv_nm" ;
+    ga:sourceTransform "identity" ;
+    ga:notes "1,733행 모두 존재하지만 7개 이름은 두 번씩 나타나므로 식별자로 사용하지 않는다."@ko .
+
+etfkr:field_manager
+    a ga:CanonicalField ;
+    ga:forFamily etfkr:Family ;
+    ga:canonicalName "manager" ;
+    rdfs:label "운용사"@ko ;
+    skos:altLabel "자산운용사"@ko ;
+    skos:altLabel "발행사"@ko ;
+    skos:altLabel "manager"@ko ;
+    ga:valueType "string" ;
+    ga:unit "none" ;
+    ga:quality "VALID" ;
+    ga:coveragePct "100"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable true ;
+    ga:aggregatable false ;
+    ga:comparable true ;
+    ga:comparisonMode "value_only" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "contains" ;
+    ga:asOfBasis "static" ;
+    ga:sourceDataset "domestic_etp" ;
+    ga:sourceColumn "cu_fund_mgmt_co" ;
+    ga:sourceTransform "identity" ;
+    ga:notes "ETF 운용사와 ETN 발행사 표기가 혼재하므로 원문을 보존한다."@ko .
+
+etfkr:field_base_index
+    a ga:CanonicalField ;
+    ga:forFamily etfkr:Family ;
+    ga:canonicalName "base_index" ;
+    rdfs:label "기초지수"@ko ;
+    skos:altLabel "추종 지수"@ko ;
+    skos:altLabel "benchmark"@ko ;
+    skos:altLabel "base index"@ko ;
+    ga:valueType "string" ;
+    ga:unit "none" ;
+    ga:quality "PARTIAL" ;
+    ga:coveragePct "3.3468"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable false ;
+    ga:aggregatable false ;
+    ga:comparable true ;
+    ga:comparisonMode "value_only" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "contains" ;
+    ga:asOfBasis "static" ;
+    ga:sourceDataset "domestic_etp" ;
+    ga:sourceColumn "cu_base_index" ;
+    ga:sourceTransform "identity" ;
+    ga:notes "58행만 제공되므로 일치 상품 탐색에는 쓸 수 있지만 결측을 지수 부재로 해석하지 않는다."@ko .
+
+etfkr:field_strategy
+    a ga:CanonicalField ;
+    ga:forFamily etfkr:Family ;
+    ga:canonicalName "strategy" ;
+    rdfs:label "운용 전략"@ko ;
+    skos:altLabel "복제 방식"@ko ;
+    skos:altLabel "strategy"@ko ;
+    ga:valueType "enum" ;
+    ga:unit "code" ;
+    ga:quality "PARTIAL" ;
+    ga:coveragePct "91.1137"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable false ;
+    ga:aggregatable false ;
+    ga:comparable true ;
+    ga:comparisonMode "value_only" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "in" ;
+    ga:enumValue "실물복제" ;
+    ga:enumValue "C" ;
+    ga:enumValue "액티브" ;
+    ga:enumValue "합성복제" ;
+    ga:asOfBasis "static" ;
+    ga:sourceDataset "domestic_etp" ;
+    ga:sourceColumn "cu_strtegy" ;
+    ga:sourceTransform "identity" ;
+    ga:notes "C는 ETN에서 관측되는 원천 코드로 의미 확인 전 그대로 보존한다."@ko .
+
+etfkr:field_leverage_factor
+    a ga:CanonicalField ;
+    ga:forFamily etfkr:Family ;
+    ga:canonicalName "leverage_factor" ;
+    rdfs:label "레버리지 배수"@ko ;
+    skos:altLabel "배수"@ko ;
+    skos:altLabel "레버리지"@ko ;
+    skos:altLabel "leverage factor"@ko ;
+    ga:valueType "number" ;
+    ga:unit "none" ;
+    ga:quality "PARTIAL" ;
+    ga:coveragePct "89.498"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable true ;
+    ga:aggregatable true ;
+    ga:comparable true ;
+    ga:comparisonMode "numeric_delta" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "lt" ;
+    ga:allowedOperator "lte" ;
+    ga:allowedOperator "gt" ;
+    ga:allowedOperator "gte" ;
+    ga:allowedOperator "between" ;
+    ga:asOfBasis "static" ;
+    ga:sourceDataset "domestic_etp" ;
+    ga:sourceColumn "cu_lev_fector" ;
+    ga:sourceTransform "identity" ;
+    ga:notes "-3배부터 3배까지 관측되며 결측 182행은 UNKNOWN이다."@ko .
+
+etfkr:field_risk_level
+    a ga:CanonicalField ;
+    ga:forFamily etfkr:Family ;
+    ga:canonicalName "risk_level" ;
+    rdfs:label "상품 위험등급"@ko ;
+    skos:altLabel "위험등급"@ko ;
+    skos:altLabel "위험도"@ko ;
+    skos:altLabel "risk level"@ko ;
+    ga:valueType "enum" ;
+    ga:unit "code" ;
+    ga:quality "VALID" ;
+    ga:coveragePct "100"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable false ;
+    ga:aggregatable false ;
+    ga:comparable true ;
+    ga:comparisonMode "value_only" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "in" ;
+    ga:enumValue "매우높은위험(1등급)" ;
+    ga:enumValue "높은위험(2등급)" ;
+    ga:enumValue "다소높은위험(3등급)" ;
+    ga:enumValue "보통위험(4등급)" ;
+    ga:enumValue "낮은위험(5등급)" ;
+    ga:enumValue "매우낮은위험(6등급)" ;
+    ga:asOfBasis "static" ;
+    ga:sourceDataset "domestic_etp" ;
+    ga:sourceColumn "pd_risk_nm" ;
+    ga:sourceTransform "identity" ;
+    ga:notes "원천 등급명을 그대로 보존하며 투자 적합성 판단을 대신하지 않는다."@ko .
+
+etfkr:field_pension_eligible
+    a ga:CanonicalField ;
+    ga:forFamily etfkr:Family ;
+    ga:canonicalName "pension_eligible" ;
+    rdfs:label "연금 거래 가능 여부"@ko ;
+    skos:altLabel "연금 가능"@ko ;
+    skos:altLabel "연금계좌 거래"@ko ;
+    skos:altLabel "pension eligible"@ko ;
+    ga:valueType "boolean" ;
+    ga:unit "boolean" ;
+    ga:quality "VALID" ;
+    ga:coveragePct "100"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable false ;
+    ga:aggregatable false ;
+    ga:comparable true ;
+    ga:comparisonMode "value_only" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:asOfBasis "static" ;
+    ga:sourceDataset "domestic_etp" ;
+    ga:sourceColumn "pd_pen_tr_yn" ;
+    ga:sourceTransform "boolean_code" ;
+    ga:valueMapJson "{\"N\":false,\"Y\":true}" ;
+    ga:notes "schema가 연금거래가능여부로 명시하고 값이 Y/N으로 완결되어 있다."@ko .
+
+etfkr:field_core_etf
+    a ga:CanonicalField ;
+    ga:forFamily etfkr:Family ;
+    ga:canonicalName "core_etf" ;
+    rdfs:label "핵심 ETF 여부"@ko ;
+    skos:altLabel "핵심 ETF"@ko ;
+    skos:altLabel "core ETF"@ko ;
+    ga:valueType "boolean" ;
+    ga:unit "boolean" ;
+    ga:quality "VALID" ;
+    ga:coveragePct "100"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable false ;
+    ga:aggregatable false ;
+    ga:comparable true ;
+    ga:comparisonMode "value_only" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:asOfBasis "static" ;
+    ga:sourceDataset "domestic_etp" ;
+    ga:sourceColumn "wu_core_yn" ;
+    ga:sourceTransform "boolean_code" ;
+    ga:valueMapJson "{\"N\":false,\"Y\":true}" ;
+    ga:notes "격리 행을 제외하면 Y 88행, N 1,645행이다."@ko .
+
+etfkr:field_close_price
+    a ga:CanonicalField ;
+    ga:forFamily etfkr:Family ;
+    ga:canonicalName "close_price" ;
+    rdfs:label "종가"@ko ;
+    skos:altLabel "마감 가격"@ko ;
+    skos:altLabel "close price"@ko ;
+    ga:valueType "number" ;
+    ga:unit "source_currency_amount" ;
+    ga:quality "PARTIAL" ;
+    ga:coveragePct "99.7692"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable true ;
+    ga:aggregatable true ;
+    ga:comparable true ;
+    ga:comparisonMode "numeric_delta" ;
+    ga:comparisonScope "same_trading_currency" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "lt" ;
+    ga:allowedOperator "lte" ;
+    ga:allowedOperator "gt" ;
+    ga:allowedOperator "gte" ;
+    ga:allowedOperator "between" ;
+    ga:asOfBasis "dynamic" ;
+    ga:sourceDataset "domestic_etp" ;
+    ga:sourceColumn "du_clpr" ;
+    ga:sourceTransform "identity" ;
+    ga:sentinelValuesJson "{\"0\":\"UNKNOWN\"}" ;
+    ga:notes "결측 4행과 0인 167행은 유효 종가로 단정하지 않고 UNKNOWN으로 처리한다."@ko .
+
+etfkr:field_one_month_return_pct
+    a ga:CanonicalField ;
+    ga:forFamily etfkr:Family ;
+    ga:canonicalName "one_month_return_pct" ;
+    rdfs:label "1개월 수익률"@ko ;
+    skos:altLabel "월간 수익률"@ko ;
+    skos:altLabel "1M 수익률"@ko ;
+    skos:altLabel "one month return"@ko ;
+    ga:valueType "number" ;
+    ga:unit "pct_point" ;
+    ga:quality "PARTIAL" ;
+    ga:coveragePct "88.8632"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable true ;
+    ga:aggregatable true ;
+    ga:comparable true ;
+    ga:comparisonMode "numeric_delta" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "lt" ;
+    ga:allowedOperator "lte" ;
+    ga:allowedOperator "gt" ;
+    ga:allowedOperator "gte" ;
+    ga:allowedOperator "between" ;
+    ga:asOfBasis "dynamic" ;
+    ga:sourceDataset "domestic_etp" ;
+    ga:sourceColumn "du_er_1m" ;
+    ga:sourceTransform "identity" ;
+    ga:notes "값이 있는 1,540행은 원천 퍼센트포인트를 그대로 보존하고 결측은 UNKNOWN이다."@ko .
+
+etfkr:field_three_month_return_pct
+    a ga:CanonicalField ;
+    ga:forFamily etfkr:Family ;
+    ga:canonicalName "three_month_return_pct" ;
+    rdfs:label "3개월 수익률"@ko ;
+    skos:altLabel "3M 수익률"@ko ;
+    skos:altLabel "three month return"@ko ;
+    ga:valueType "number" ;
+    ga:unit "pct_point" ;
+    ga:quality "PARTIAL" ;
+    ga:coveragePct "86.8436"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable true ;
+    ga:aggregatable true ;
+    ga:comparable true ;
+    ga:comparisonMode "numeric_delta" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "lt" ;
+    ga:allowedOperator "lte" ;
+    ga:allowedOperator "gt" ;
+    ga:allowedOperator "gte" ;
+    ga:allowedOperator "between" ;
+    ga:asOfBasis "dynamic" ;
+    ga:sourceDataset "domestic_etp" ;
+    ga:sourceColumn "du_er_3m" ;
+    ga:sourceTransform "identity" ;
+    ga:notes "값이 있는 1,505행은 원천 퍼센트포인트를 그대로 보존하고 결측은 UNKNOWN이다."@ko .
+
+etfkr:field_six_month_return_pct
+    a ga:CanonicalField ;
+    ga:forFamily etfkr:Family ;
+    ga:canonicalName "six_month_return_pct" ;
+    rdfs:label "6개월 수익률"@ko ;
+    skos:altLabel "6M 수익률"@ko ;
+    skos:altLabel "six month return"@ko ;
+    ga:valueType "number" ;
+    ga:unit "pct_point" ;
+    ga:quality "PARTIAL" ;
+    ga:coveragePct "85.1702"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable true ;
+    ga:aggregatable true ;
+    ga:comparable true ;
+    ga:comparisonMode "numeric_delta" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "lt" ;
+    ga:allowedOperator "lte" ;
+    ga:allowedOperator "gt" ;
+    ga:allowedOperator "gte" ;
+    ga:allowedOperator "between" ;
+    ga:asOfBasis "dynamic" ;
+    ga:sourceDataset "domestic_etp" ;
+    ga:sourceColumn "du_er_6m" ;
+    ga:sourceTransform "identity" ;
+    ga:notes "값이 있는 1,476행은 원천 퍼센트포인트를 그대로 보존하고 결측은 UNKNOWN이다."@ko .
+
+etfkr:field_one_year_return_pct
+    a ga:CanonicalField ;
+    ga:forFamily etfkr:Family ;
+    ga:canonicalName "one_year_return_pct" ;
+    rdfs:label "1년 수익률"@ko ;
+    skos:altLabel "연간 수익률"@ko ;
+    skos:altLabel "1Y 수익률"@ko ;
+    skos:altLabel "one year return"@ko ;
+    ga:valueType "number" ;
+    ga:unit "pct_point" ;
+    ga:quality "PARTIAL" ;
+    ga:coveragePct "79.4576"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable true ;
+    ga:aggregatable true ;
+    ga:comparable true ;
+    ga:comparisonMode "numeric_delta" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "lt" ;
+    ga:allowedOperator "lte" ;
+    ga:allowedOperator "gt" ;
+    ga:allowedOperator "gte" ;
+    ga:allowedOperator "between" ;
+    ga:asOfBasis "dynamic" ;
+    ga:sourceDataset "domestic_etp" ;
+    ga:sourceColumn "du_er_1y" ;
+    ga:sourceTransform "identity" ;
+    ga:notes "값이 있는 1,377행은 원천 퍼센트포인트를 그대로 보존하고 결측은 UNKNOWN이다."@ko .
+
+etfkr:field_ytd_return_pct
+    a ga:CanonicalField ;
+    ga:forFamily etfkr:Family ;
+    ga:canonicalName "ytd_return_pct" ;
+    rdfs:label "연초 이후 수익률"@ko ;
+    skos:altLabel "YTD 수익률"@ko ;
+    skos:altLabel "연초대비 수익률"@ko ;
+    ga:valueType "number" ;
+    ga:unit "pct_point" ;
+    ga:quality "PARTIAL" ;
+    ga:coveragePct "85.2279"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable true ;
+    ga:aggregatable true ;
+    ga:comparable true ;
+    ga:comparisonMode "numeric_delta" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "lt" ;
+    ga:allowedOperator "lte" ;
+    ga:allowedOperator "gt" ;
+    ga:allowedOperator "gte" ;
+    ga:allowedOperator "between" ;
+    ga:asOfBasis "dynamic" ;
+    ga:sourceDataset "domestic_etp" ;
+    ga:sourceColumn "du_er_ytd" ;
+    ga:sourceTransform "identity" ;
+    ga:notes "값이 있는 1,477행은 원천 퍼센트포인트를 그대로 보존하고 결측은 UNKNOWN이다."@ko .
+
+etfkr:field_daily_trading_value
+    a ga:CanonicalField ;
+    ga:forFamily etfkr:Family ;
+    ga:canonicalName "daily_trading_value" ;
+    rdfs:label "일 거래대금"@ko ;
+    skos:altLabel "거래대금"@ko ;
+    skos:altLabel "일간 거래대금"@ko ;
+    skos:altLabel "daily trading value"@ko ;
+    ga:valueType "number" ;
+    ga:unit "source_currency_amount" ;
+    ga:quality "PARTIAL" ;
+    ga:coveragePct "99.7692"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable true ;
+    ga:aggregatable true ;
+    ga:comparable true ;
+    ga:comparisonMode "numeric_delta" ;
+    ga:comparisonScope "same_trading_currency" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "lt" ;
+    ga:allowedOperator "lte" ;
+    ga:allowedOperator "gt" ;
+    ga:allowedOperator "gte" ;
+    ga:allowedOperator "between" ;
+    ga:asOfBasis "dynamic" ;
+    ga:sourceDataset "domestic_etp" ;
+    ga:sourceColumn "du_val_1d" ;
+    ga:sourceTransform "identity" ;
+    ga:notes "0은 거래 없음으로 유효하게 보존하고 결측 4행만 UNKNOWN이다."@ko .

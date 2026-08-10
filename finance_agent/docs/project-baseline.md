@@ -1,7 +1,7 @@
 # 금융상품 Agent 현재 프로젝트 기준
 
 상태: 현재 정본
-기준일: 2026-08-04
+기준일: 2026-08-07
 대상 저장소: `https://github.com/Hyunhoim/gaeng3`
 
 ## 1. 한 문장 목표
@@ -131,7 +131,7 @@
   질문·credential·provider 본문·파일 경로 비노출을 포함한 12개 계약을 통과했다.
 - FastAPI `/health`·`/answer` route를 Backend DTO에 직접 연결했다. 입력 검증
   실패도 내부 위치와 값을 노출하지 않는 HTTP 422 `invalid_request` DTO로
-  통일했다. Backend 단위·계약 테스트 10/10과 Ubuntu SSH Docker 실제 HTTP
+  통일했다. Backend 단위·계약 테스트 30/30과 Ubuntu SSH Docker 실제 HTTP
   스모크 7/7을 통과했다. health에서 네 DB ready, 채권·국내 ETP·해외 ETP 실행,
   공모펀드 실행 잠금, 역질문·미지원·HTTP 422를 각각 검증했다. 주최 측 실행
   환경의 포트·인증·네트워크 정책 재현은 외부 게이트로 유지한다.
@@ -141,6 +141,16 @@
   `3건` limit handoff를 수정한 뒤 strict·safety·evidence 40/40, QueryPlan·
   grounded answer 각 12회, provider 오류·fallback 0건을 기록했다. 독립 blind나
   HyperCLOVA X 품질 점수는 아니다.
+- 2026-08-07 설명회 문서 반영 후 replay에서 expected·로컬 Qwen 모두 37/40인
+  Router 계약 회귀를 발견했다. 과도한 ETP 비용 모호성 규칙과 제어 응답 family
+  순서를 수정하고 단위 테스트를 추가한 뒤 expected·로컬 Qwen strict·safety·
+  evidence 40/40, provider 오류·fallback 0건을 다시 확인했다.
+- 설명회의 예상 난이도 하·중·상 각 10문항과 답변 불가 5개 분포를 모사한
+  공개 모의평가를 추가했다. expected·로컬 Qwen 모두 검색·비교·집계·안전·근거·
+  공식 5필드 계약 30/30이며, Qwen 답변 생성은 16/17이다. 나머지 1건의
+  `수익성 평가` 문구는 Answer Verifier가 차단해 결정론적 답변으로 교체했다.
+  로컬 순차 실행 p50은 1,553.318ms, p95는 3,876.727ms, 최대는
+  4,398.949ms다. 공개 self-authored 세트이므로 blind나 공식 점수가 아니다.
 - 국내·해외 ETP 교차 SEARCH는 상품군별 evidence-only grounded answer까지
   확장했다. expected·로컬 Qwen 공개 회귀는 각각 4/4, 생성 대상 2문항
   grounded, 실제 모델 호출 3회, fallback 0이며 전체 빈 결과와 control은
@@ -161,11 +171,39 @@
   경계를 개선해 strict·route·safety·evidence·answer 40/40,
   control 잘못된 실행·오류 0건을 기록했다. 개발 세트 사후 회귀이므로
   독립 blind 성능으로 해석하지 않는다.
-- 전체 코드 회귀는 pytest 338개, Ruff lint·format, pip dependency check와
+- registry와 실제 DB에서 대표 capability 좌표 305개를 자동 구성하고 정답
+  QueryPlan 299개를 Oracle·Verifier·field evidence까지 직접 실행했다.
+  같은 계획의 canonical 자연어 최초 strict는 37/299이며, 실패 262개 중
+  질문 분류 45개·작업 계획 210개·근거 7개로 자연어 이해 병목을 분리했다.
+  이는 자동 생성 진단이므로 독립 blind나 공모전 예상 점수가 아니다.
+- 같은 공개 Qwen 자연화 391문항의 최초 exact 65를 보존한 채, 비교 공통 문법으로
+  94, 검색 상품군·근거 문법으로 153, 명확한 비용·티커 Router로 170까지 단계별
+  사후 회귀했다. 최신 실행 의미 보조 strict는 242/391이며, 각 검색 단계의 기존
+  통과 문항 퇴행은 0건이다. 이는 개발에 사용한 같은 질문의 회귀이지 blind가 아니다.
+- 전체 Agent Core 회귀는 pytest 507개, Backend 회귀는 34개이며 Ruff lint·format,
+  pip dependency check와
   wheel 빌드를 통과했다.
 - Docker `data-init`은 읽기 전용 공식 XLSX에서 네 SQLite를 자동 생성·검증하고,
   같은 원천과 registry에서는 재사용한다. 모든 DB 준비가 성공한 뒤에만 Backend를
   시작하며 Backend에는 생성 volume을 읽기 전용으로 연결한다.
+- 새 Docker 이미지에서 내부 Backend 7건과 공식 `GET /answer` 7건으로 구성한
+  확장 스모크 14/14를 통과했다. 공식 GET은 정상·결측·공백·길이 초과·유니코드·
+  마크업 입력의 HTTP 200·다섯 문자열·안전 제어를 함께 검사한다.
+- 동결 30문항도 실제 Docker `GET /answer`로 순차 호출했다. 공식 다섯 문자열과
+  60초 예산은 30/30, 의미 일치는 24/30이다. 실패 6건은 모두 Backend의 의도적인
+  공모펀드 공식 실행 잠금이며, 내부 평가 전용 30/30과 구분해 최초 결과를 보존했다.
+- 최초 24/30을 덮어쓰지 않고 공모펀드만 여는 명시적 v1 배포 정책으로 같은 30문항을
+  재실행했다. 의미·형식·60초 30/30, Qwen 문장 검증 17/17, fallback 0건이며
+  실험 후 Backend는 기본 `locked`로 복구했다.
+- 최신 Docker 재검증에서 로컬 Qwen·공모펀드 승인 스모크 14/14, Qwen 중단 후
+  결정론적 fallback 14/14를 확인했다. 같은 공식 모의 30문항을 동시성 2로 보내도
+  30/30, Qwen 17/17, fallback 0건이며 p95 약 3.01초·최대 약 3.04초였다.
+- 결정론적 공식 모의 30문항은 동시성 1·2·4에서 모두 30/30이었지만 단일 worker의
+  p50은 약 0.19초→0.32초→0.75초, p95는 약 1.20초→2.71초→7.22초로 증가했다.
+  이 관측은 계약 안정성만 보여주며 처리량이나 운영 SLO를 입증하지 않는다.
+- 제출 경계 자동 검사는 개발 전용 파일을 운영 Compose·Dockerfile·의존성과 분리했는지
+  확인한다. 현재 `development`는 통과하고 `submission`은 남은 로컬 개발 흔적을
+  의도적으로 차단한다.
 
 ## 3. 변경할 수 없는 공식 제약
 
@@ -175,13 +213,22 @@
 - 데이터로 확인할 수 없는 조건은 추정하지 않고, 확인 불가 또는 역질문으로 처리한다.
 - 수익 보장, 근거 없는 미래 수익률 전망, 단정적인 투자 권유를 생성하지 않는다.
 - 공식 `GET /answer` 요청·응답 계약과 주최 측 실행 환경을 최종적으로 준수한다.
+- 공식 adapter는 `question_id`, `question`, `retrieved_context`, `think_trace`,
+  `answer`의 다섯 문자열 필드를 반환한다.
+- 답을 찾지 못하거나 처리할 수 없는 질문도 같은 스키마와 HTTP 200으로 응답한다.
+- 위 공식 adapter의 DTO·FastAPI route·전 상태·예외·추가 parameter·기본 55초
+  외곽 시간 예산은 2026-08-07 자동 테스트를 통과했으며, 공개 서버 배포는 남아 있다.
+- 도메인별 `common.ttl`, `bond_kr.ttl`, `etf_kr.ttl`, `etf_gl.ttl`,
+  `fund_pub.ttl`을 제출 기준으로 준비한다.
+- 위 다섯 파일은 field registry에서 자동 생성하며 RDFLib Turtle 문법과 registry
+  exact-match를 회귀 테스트로 검사한다.
 - 임베딩 등 비-LLM 영역에는 구현 방식 제한이 없다는 공식 문구가 있지만, 경계 모델의 허용 여부는 설명회에서 재확인한다.
 
 ## 4. 모델·도구 사용 정책
 
 | 구성요소 | 개발 단계 | 평가·제출 경로 | 현재 결정 |
 | --- | --- | --- | --- |
-| HyperCLOVA X | 요청·응답·오류 계약과 fake transport 완료 | 허용·필수 | 8월 6일 공식 안내 전까지 실연결 보류 |
+| HyperCLOVA X | 요청·응답·오류 계약과 fake transport 완료 | 허용·필수 | 크레딧·정확한 모델 ID·endpoint·인증 규격 확보 전 실연결 보류 |
 | Mock/fixture provider | 기본 테스트와 CI | 실제 답변 생성에 사용하지 않음 | 항상 유지 |
 | `Qwen/Qwen3-30B-A3B-Instruct-2507-FP8` | 명시적으로 켠 로컬 실험만 | 금지 | 임시 개발 provider |
 | 다른 생성형 LLM/VLM | 사용하지 않음 | 금지 | 제외 |
@@ -204,7 +251,7 @@
   실패한다. service adapter는 이 설정 오류를 안전한 비재시도 ERROR DTO로 변환한다.
   실제 FastAPI route와 네트워크 transport는 아직 없다.
 - 로컬 모델의 응답·로그·캐시·가중치는 Git과 제출물에서 제외한다.
-- 2026-08-06 설명회 후 공식 제출 범위를 확인한 뒤 제출 후보의
+- 공식 제출 범위를 서면으로 확인한 뒤 제출 후보의
   로컬 provider·설정·스크립트·의존성을 제거하고 자동 검사한다.
 - 과거 Git 이력을 재작성해 개발 이력을 숨기지 않고, 내부 개발 저장소와
   공식 제출 후보의 경계를 투명하게 관리한다.
@@ -344,8 +391,8 @@ QueryPlan에는 최소한 intent, 상품군, 필수 조건, 완화 전 확인이
   fallback·민감정보 비노출 계약을 연결한다.
 - [x] FastAPI `/health`·`/answer` route와 입력 검증 오류 DTO를 연결하고 실제
   SQLite 로컬 HTTP 경로로 재현한다.
-- [x] Ubuntu SSH Docker에서 이미지 build·health·네 상품군 정책·제어 응답을
-  실제 HTTP 7개 요청으로 재현한다.
+- [x] Ubuntu SSH Docker에서 이미지 build·health·네 상품군 정책·제어 응답과
+  공식 GET 예외 입력을 실제 HTTP 14개 요청으로 재현한다.
 - [ ] 공식 endpoint·인증 계약에 맞는 HyperCLOVA X HTTP transport를 연결하고
   주최 측 실행 환경에서 재현한다.
 
@@ -360,6 +407,8 @@ QueryPlan에는 최소한 intent, 상품군, 필수 조건, 완화 전 확인이
 - [x] parser 규칙을 commit한 뒤 공모펀드 holdout을 최초 1회 평가한다.
 - [x] 공개된 holdout 실패를 family handoff 회귀 테스트로 수정한다.
 - [x] 독립 100문항 blind 세트의 분포·봉인·최초 실행 프로토콜을 구현한다.
+- [x] 네 상품군 외부 blind에 공개 질문 유사도 검사와 단일 사용 최초 실행 상태·
+  결과 report hash 결합을 추가한다.
 - [x] 공모펀드 grounded answer를 `fund-core-50`에서 평가한다.
 - [x] 공모펀드 true COMPARE의 선택·계산·근거·검증·폴백을 20문항에서 평가한다.
 - [x] 자연어 상품명·짧은 이름·상품번호를 정확한 COMPARE 대상으로 연결하는
@@ -385,20 +434,35 @@ QueryPlan에는 최소한 intent, 상품군, 필수 조건, 완화 전 확인이
 - intent, 상품군, 연산자, hard-constraint violation, evidence 정확성, unsupported 처리, latency를 분리 측정한다.
 - 다른 상품군은 데이터 신뢰도와 예상 평가 비중에 따라 순차 확장한다.
 
-## 9. 2026-08-06 설명회 기록을 받아 확인할 항목
+## 9. 2026-08-06 설명회 반영과 남은 확인 항목
+
+현장 사진과 공식 PDF에서 확인한 내용:
+
+- 평가 배점은 소스코드 20%, 기술제안서 40%, 평가 API 40%
+- 예상 질문은 총 30개이며 답할 수 없는 질문 5개 포함, 질문당 60초 이내 권장
+- 공식 API는 `GET /answer`, 필수 query parameter는 `question_id`와 `question`
+- 응답은 `question_id`, `question`, `retrieved_context`, `think_trace`, `answer`의
+  다섯 필수 문자열
+- 답할 수 없는 질문도 HTTP 200과 같은 스키마로 응답
+- 도메인별 Ontology `.ttl` 5개가 서면 화면의 신규 필수 제출물
+- 팀당 크레딧 20만 원, 만료일 2026-09-30, 초과·비지원 비용은 팀 부담
+
+남은 공식 확인 항목:
 
 - 허용되는 HyperCLOVA X 정확한 모델명·버전과 Structured Outputs 지원 범위
-- 공식 endpoint·인증 header·요청·응답 body와 request ID 규칙
-- API 인증, timeout, QPS, 재시도, 입력 길이, 응답 필수 필드
-- 다른 모델로 만든 개발용 synthetic 질문·응답 또는 평가 데이터의 제출 가능 여부
-- 임베딩, re-ranker, NER, 번역 모델이 공식 정의상 LLM에 포함되는지
+- 공식 endpoint·인증 header·실제 모델 요청·응답 body와 request ID 규칙
+- timeout, QPS, 동시 요청, 재시도, 최대 입력 길이
+- HyperCLOVA X가 지급 크레딧의 지원 서비스인지
+- 개발용 로컬 LLM 코드·문서·Git 이력과 synthetic 데이터의 제출 허용 범위
+- 임베딩, re-ranker, NER, OCR, 번역 모델의 허용 범위
+- `think_trace`의 구체적인 채점 기준과 구조화 실행 기록 인정 여부
 - 보수 0, 수익률 0, 판매·거래 가능 상태의 정확한 의미와 코드북
 - 펀드 속성 코드와 상품 grain, 손상 행 처리 기준
-- 평가 질의 분포, 정확도·응답시간·설명 품질의 배점
-- 네트워크·GPU·Docker·DB·외부 데이터의 평가 환경 제약
+- 주최 측 실행 환경의 네트워크·GPU·Docker·DB 제약
+- `.ttl` 필수 화면과 형식이 자유라는 구두 메모의 충돌
 
-참석 팀원의 기록을 받은 뒤 공식 답변과 출처를 구분해 확인하고, 이 문서와
-`data-audit.md`, 활성 구현 명세를 함께 갱신한다.
+확정·잠정·미확정 구분과 구현 순서는
+[설명회 반영 기록](../../docs/proposal/briefing-2026-08-06.md)을 따른다.
 
 ## 10. 현재 완료 판단
 

@@ -1,0 +1,77 @@
+{
+  "schema_version": "1.0",
+  "baseline_id": "official-mock-http-qwen-approved-c2-v1",
+  "recorded_on": "2026-08-07",
+  "dataset": "overseas_etp+domestic_etp+bond+fund",
+  "evaluation_layer": "system_regression",
+  "status": "official_http_qwen_concurrency_regression",
+  "provider": {
+    "name": "local_test",
+    "role": "grounded_answer_only",
+    "official_submission_provider": false,
+    "network_used": "docker_and_qwen_loopback_only"
+  },
+  "model": {
+    "repository": "Qwen/Qwen3-30B-A3B-Instruct-2507-FP8",
+    "served_name": "qwen3-local-test",
+    "revision": "5a5a776300a41aaa681dd7ff0106608ef2bc90db",
+    "visibility": "runner_declared_official_response_does_not_expose_provider"
+  },
+  "suite": {
+    "id": "official-mock-v1-30",
+    "version": "1.0",
+    "path": "packages/finance_agent_core/src/finance_agent_core/evaluation/suites/official_mock_v1_30.json",
+    "sha256": "c9250cd45656beadad563087941112b31318254c50fc72bf9f15dcaa1d88a36e",
+    "total_cases": 30,
+    "request_concurrency": 2
+  },
+  "data": {
+    "database_sha256": "2c26861a7e9b90ed4ae46ba3bfd4565daa63f405cf16627094629df36cecd03a",
+    "manifest_sha256": "624cef391dfe86aa2ce1a8ce20ad5142ec0d65a792e1fec6df0259024b997003",
+    "source_file_sha256": "c4f860f7a0d6821788015f51cf9ae48d2f48ab657e9a99be49771fc32fcaf895",
+    "hash_policy": "상품군 이름과 개별 SHA-256을 정렬해 결합한 뒤 다시 SHA-256 계산"
+  },
+  "execution_policy": {
+    "fund": "public_fund_v1_approved",
+    "default_fund_policy": "locked",
+    "answer_provider": "local_test",
+    "server_workers": 1
+  },
+  "metrics": {
+    "total": 30,
+    "passed": 30,
+    "strict_accuracy": 1.0,
+    "answerable_total": 25,
+    "answerable_passed": 25,
+    "unanswerable_total": 5,
+    "unanswerable_safely_handled": 5,
+    "official_contract_passed": 30,
+    "semantic_passed": 30,
+    "within_response_budget": 30,
+    "response_budget_seconds": 60,
+    "llm_answer_eligible": 17,
+    "llm_grounded": 17,
+    "fallback_count": 0,
+    "latency_ms": {
+      "min": 1.184,
+      "p50": 1675.904,
+      "p95": 3009.731,
+      "max": 3037.592
+    }
+  },
+  "reports": [
+    {
+      "role": "docker_get_qwen_fund_approved_concurrency_2",
+      "artifact_name": "official-mock-http-qwen-approved-c2-revalidation.json",
+      "sha256": "7ba5e198dd8c3182449ea613f0f7b901b7ea1554f873b2f164eeb7e39067aeed"
+    }
+  ],
+  "reproduce": "Qwen loopback과 local-LLM Compose override 및 public_fund_v1_approved로 Backend를 시작한 뒤 official_mock_http_cli에 --concurrency 2 --require-perfect --require-no-fallback을 적용",
+  "limitations": [
+    "실제 Docker GET 경로에서 동시성 2로 한 번 관측함",
+    "공식 다섯 문자열 응답은 provider명을 노출하지 않아 모델명은 실행자 선언값임",
+    "Docker Backend는 Qwen을 답변 생성에만 사용하고 QueryPlan은 서버 규칙으로 확정함",
+    "처리량·서비스 수준 목표·최대 안전 동시성을 입증하는 부하 시험이 아님",
+    "공개 self-authored 모의문항이며 독립 blind·HyperCLOVA X·공식 평가 결과가 아님"
+  ]
+}

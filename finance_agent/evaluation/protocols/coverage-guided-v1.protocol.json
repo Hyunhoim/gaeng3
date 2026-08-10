@@ -1,0 +1,76 @@
+{
+  "schema_version": "1.0",
+  "protocol_id": "coverage-guided-v1",
+  "recorded_on": "2026-08-08",
+  "status": "internal_synthetic_not_blind",
+  "objective": "필드 registry와 실제 정규화 DB에서 대표 QueryPlan을 자동 생성해 실행 가능 범위와 자연어 이해 공백을 분리 측정",
+  "registry": {
+    "schema_version": "1.3",
+    "path": "packages/finance_agent_core/src/finance_agent_core/config/field_registry.yaml",
+    "sha256": "5887c4dba17fd33d0c20b550adf564796de508e3dcafc2a2e7bb3796603a73b5"
+  },
+  "selection_contract": {
+    "search_constraint": "상품군별 queryable 필드마다 대표 연산자 한 건과 누락 연산자 클래스 보충",
+    "search_ranking": "sortable 필드마다 결정론적 방향 한 건과 상품군별 오름차순·내림차순 보충",
+    "compare_field": "comparable 필드마다 같은 통화·기준일 범위를 만족하는 두 상품 한 쌍",
+    "aggregate_field": "aggregatable 필드마다 유효 함수 한 건과 COUNT·MIN·MAX·AVG·허용 SUM 클래스 보충",
+    "group_by_field": "식별자가 아닌 enum·boolean 필드마다 COUNT(product_id) 한 건"
+  },
+  "direct_plan_bank": {
+    "attempted_cells": 305,
+    "executable_cases": 299,
+    "excluded_cells": 6,
+    "execution_rate": 0.980328,
+    "suite_artifact_name": "coverage-guided-plan-v1-canonical-screened-v2.json",
+    "suite_artifact_sha256": "72546a055c989e3e798bd7350cbdb6869ab500808aaaea20980473cd9b7070e1",
+    "suite_semantic_sha256": "0dfca5e5f706c1886953525e3f28d223209a8f5b8d9f4f051a829b4ca3361b3d",
+    "canonical_renderer_version": "coverage-canonical-v2"
+  },
+  "canonical_agent_first_observation": {
+    "total": 299,
+    "passed": 37,
+    "strict_accuracy": 0.123746,
+    "executed": 254,
+    "execution_rate": 0.849498,
+    "plan_semantic_passed": 44,
+    "plan_semantic_rate": 0.147157,
+    "evidence_semantic_passed": 77,
+    "evidence_semantic_rate": 0.257525,
+    "first_failure_stages": {
+      "routing": 45,
+      "planning": 210,
+      "evidence": 7
+    },
+    "report_artifact_name": "coverage-guided-plan-v1-canonical-screened-v2-first-observation.json",
+    "report_artifact_sha256": "8b6ebc6630f3b16976a48d40f918b27e67a50ca73a481c2f1fdd96820f6676d2",
+    "diagnosis_artifact_name": "coverage-guided-plan-v1-canonical-screened-v2-diagnosis.json",
+    "diagnosis_artifact_sha256": "d2735678ae41d6cdf4169d2b7bc498deb5c7f517d2d4627f3719872a46df037d"
+  },
+  "qwen_naturalization_contract": {
+    "source_wording_visible_to_generator": false,
+    "input": "상품군·의도·필드 label과 alias·연산자·값·정렬·개수·비교·집계 의미 명세",
+    "axes": [
+      "semantic_formal",
+      "semantic_colloquial",
+      "semantic_telegraphic"
+    ],
+    "questions_requested_if_all_299_sources_run": 897,
+    "mechanical_screen": "상품군·의도·필드·값·연산자·정렬·개수·금지 의도·원문 유사도 검사",
+    "execution_rule": "기계 의미 보존을 통과한 질문만 Agent에 입력하고 거절·생성 실패도 전체 분모에 보존",
+    "sharding": "질문 batch와 Agent run report를 각각 hash 검증 후 중복 없는 campaign으로 병합"
+  },
+  "data_sha256_by_family": {
+    "bond": "40265aa326d63244727294ac29c1cd38c898f05b6a80dfd51fd8ac38e08764bc",
+    "domestic_etp": "a91bfc713b88e9ba1e7da27508857cbe5ea200c4d7821d0b4fee7d9922684484",
+    "overseas_etp": "eee9009ca741713a9a61e498cd5ed8366836d754c7d0c2dbd74ed7e456a2ebbe",
+    "fund": "99fac786e5be0ec5a7a53e11e1bd3bbccd5b37ab15243ecbf8b864a85b375ca4"
+  },
+  "interpretation_limits": [
+    "305개는 모든 필드와 연산자의 완전한 데카르트 곱이 아니라 registry capability를 대표하도록 선택한 좌표 수임",
+    "299개 직접 실행 성공은 자연어를 해석하지 않고 정답 QueryPlan을 실행한 결과임",
+    "canonical 질문은 규칙으로 만든 진단 문장이며 실제 사용자 질문 분포나 공모전 문항을 대표하지 않음",
+    "37/299는 현재 자연어 경계의 최초 관측이며 공모전 예상 점수나 독립 blind 성능이 아님",
+    "Qwen 자연화와 이후 사후 수정 결과는 별도 artifact와 baseline으로 분리해야 함",
+    "로컬 Qwen은 개발 전용이며 공식 평가·제출 LLM은 HyperCLOVA X 경계를 따름"
+  ]
+}

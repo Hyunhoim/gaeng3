@@ -1,6 +1,6 @@
 # AI 기술문서 상세 인덱스
 
-마지막 갱신: 2026-08-06
+마지막 갱신: 2026-08-09
 
 이 문서는 금융상품 Agent의 전체 기술문서와 상태를 추적하는 상세 장부다. 간단한
 길잡이가 필요하면 먼저 [AI 기술문서 안내](README.md)를 확인한다. 연구 요청·외부
@@ -16,8 +16,9 @@
 3. [HyperCLOVA X 연결 전 준비 기준](pre-hcx-readiness.md) — 완료된 일과 남은 게이트
 4. [재현 가능한 평가 baseline](../evaluation/README.md) — 성능 수치와 실험 해석
 
-2026-08-06 설명회 질문은 확정했으며 현재 [참석 팀원의 기록 전달을 기다리는 중](../../docs/proposal/briefing-2026-08-06.md)이다.
-공식 답변과 출처를 기록하기 전에는 기존의 보수적인 모델·데이터 정책을 유지한다.
+2026-08-06 설명회 자료는 [반영 기록](../../docs/proposal/briefing-2026-08-06.md)에
+확정·잠정·미확정으로 나눠 정리했다. 평가 API와 Ontology 요구는 확인됐지만 정확한
+HCX 모델·endpoint·인증과 크레딧 적용 범위는 남아 있어 기존의 보수적인 모델 정책을 유지한다.
 
 ## 2. 역할별 읽기 경로
 
@@ -43,6 +44,7 @@
 - [데이터 감사 기준](data-audit.md)
 - [공모펀드 원천 데이터 계약](public-fund-contract.md)
 - [Field Registry와 QueryPlan 계약](contracts.md)
+- [Ontology 제출 계약](ontology.md)
 - [capability matrix](capability-matrix.md)
 - [Backend DTO](backend-contract.md)
 - [HyperCLOVA X provider 계약](hyperclova-provider.md)
@@ -62,6 +64,9 @@
 - [COMPARE 공개 회귀](evaluation-product-comparison.md)
 - [SEARCH·AGGREGATE 성능](evaluation-search-aggregate-performance.md)
 - [internal red-team](evaluation-internal-red-team.md)
+- [공식 형식 30문항 공개 모의평가](evaluation-official-mock.md)
+- [Qwen 변형 질문·전체 Agent 스트레스 평가](evaluation-qwen-metamorphic.md)
+- [네 상품군 자동 커버리지·Qwen 자연화 평가](evaluation-coverage-guided.md)
 - [금융 도메인 QA](evaluation-domain-qa.md)
 - [사람 평가 rubric](human-evaluation.md)
 - [전체 평가 baseline](../evaluation/README.md)
@@ -84,6 +89,7 @@
 | [공모펀드 원천 데이터 계약](public-fund-contract.md) | 공모펀드 grain·field capability·품질 규칙·실행 승인 조건 | P1 정본 |
 | [공모펀드 계약 감사 노트북](../notebooks/public-fund-contract-audit.ipynb) | product-grain 전수 감사 재현 흐름과 품질 회귀 | 재현 보조 |
 | [Field Registry와 QueryPlan 계약](contracts.md) | 네 상품군 field capability, 서버 QueryPlan, HCX schema subset | P1 정본 |
+| [Ontology 제출 계약](ontology.md) | 공식 Turtle 5개·registry 기반 생성·문법·정합성 검사 | v1.0 구현 |
 | [해외 ETP 핵심 평가 기준선](evaluation.md) | 동결 50문항, oracle·채점 규칙, 최초 holdout과 사후 회귀 결과 | v1.0 정본 |
 | [국내 ETP 핵심 평가 기준선](evaluation-domestic-etp.md) | 국내 ETP 동결 50문항, 품질 계약, local-inference split 결과 | v1.0 정본 |
 | [국내채권 핵심 평가 기준선](evaluation-domestic-bond.md) | 국내채권 동결 50문항, stale·날짜 계약, 로컬 Qwen·답변 결과 | v1.0 정본 |
@@ -104,6 +110,9 @@
 | [교차 상품군 병렬 SEARCH와 grounded answer v2](cross-family-search.md) | 상품군별 QueryPlan·병렬 Oracle·evidence 격리 생성·교차 문구 검증·전체 fallback 계약 | v2.0 정본 |
 | [HyperCLOVA X provider 계약](hyperclova-provider.md) | 세 LLM 역할의 요청·응답·오류·관측 계약과 API 없는 전체 Agent E2E | 계약·E2E 8/8 완료·실제 HTTP 대기 |
 | [internal-red-team-v1 전체 E2E 평가](evaluation-internal-red-team.md) | 네 상품군 40문항의 공격 유형·전체 `/answer` 경로·최초 실패·수정 후 회귀 | v1.0 정본 |
+| [공식 형식 30문항 공개 모의평가](evaluation-official-mock.md) | 최초 Docker GET 의미 24/30 보존·명시적 공모펀드 v1 승인 경로 30/30 | v1.2 HTTP 재평가 |
+| [Qwen 변형 질문·전체 Agent 스트레스 평가](evaluation-qwen-metamorphic.md) | 세 표현 축·원문 비공개 의미 재구성·gold 감사·전체 Qwen E2E·grounded-plan gate | v1.1 공개 회귀 |
+| [네 상품군 자동 커버리지·Qwen 자연화 평가](evaluation-coverage-guided.md) | 대표 계획 305개·직접 실행 299개, Qwen 897질문·391개 선별·최초 exact 보존·비교와 검색 2단계 사후 회귀 | v1.4 검색 개선 회귀 |
 | [금융 도메인 QA 실험 파이프라인](evaluation-domain-qa.md) | 금융 도메인 담당자 40문항의 hash 검증·단계별 채점·Q002 QueryPlan·Oracle·evidence gold | v1.2 Router 회귀 40/40 |
 | [제출용 모델 경계와 로컬 LLM 정리 메모](submission-model-boundary.md) | 8월 6일 공식 확인, 제출 후보의 로컬 provider·설정·의존성 제거, 투명한 개발·제출 경계 | release gate |
 | [BM25/SQLite FTS 문서 RAG](document-rag.md) | 승인 문서 적재·BM25 검색·필터·근거·기준일·not-found 계약 | 최소 기능 완료 |
@@ -194,8 +203,8 @@
 - 금융 도메인 QA: v1 개발 40문항 최초 strict 1/40,
   safety·evidence 각각 32/40을 보존하고 v1.2 Router·linker 회귀에서
   모든 계약 40/40·잘못된 실행 0건, dependency pending 13건은 유지
-- 코드 회귀 기준: 전체 pytest 338개, Ruff lint·format, pip dependency check,
-  wheel과 필수 package data 검사
+- 코드 회귀 기준: Agent Core pytest 507개·Backend pytest 34개, Ruff lint·format,
+  pip dependency check, wheel과 필수 package data 검사
 - 로컬 Qwen 평가 기준: 동결 50문항에서 최초 미사용 holdout 9/10,
   오류 수정 후 전체 회귀 50/50을 연속 2회 재현
 - 국내 ETP 로컬 Qwen 기준: development 40/40, local-inference holdout 첫 실행 10/10
@@ -208,17 +217,33 @@
 - 다음 외부 게이트: 금융 도메인 담당자의 external blind 100문항·비공개 정답키,
   승인 corpus, 실제 사람 평가
 - Ubuntu SSH Docker 통합: 실제 이미지 build, 네 DB health, 채권·국내 ETP·
-  해외 ETP 실행, 공모펀드 잠금, 역질문·미지원·HTTP 422 스모크 7/7 완료
+  해외 ETP 실행, 공모펀드 잠금, 역질문·미지원·HTTP 422 Backend 7건과
+  공식 GET 정상·예외 7건의 확장 스모크 14/14 완료
+- 동결 30문항의 실제 Docker 공식 GET: 형식·60초 30/30, 의미 24/30,
+  공모펀드 공식 실행 잠금 6건을 최초 관측 baseline으로 보존
+- 공모펀드만 여는 명시적 v1 배포 정책으로 동일 30문항 의미·형식·60초 30/30,
+  Qwen 17/17, fallback 0건 재평가. 실험 후 기본 `locked`로 복구
+- 제한 동시성 회귀: 결정론적 1·2·4에서 각 30/30, Qwen·공모펀드 승인
+  동시성 2에서 30/30·fallback 0. 부하·운영 SLO가 아닌 계약 안정성 관측
+- Qwen 정상 스모크 14/14, Qwen 중단 fallback 14/14, 종료 후 포트·GPU 해제와
+  기본 공모펀드 잠금 Backend 복구 확인
+- 외부 blind는 공개 세트 유사도 검사·SHA 봉인·최초 1회 상태·report hash 결합 완료,
+  실제 100문항 작성과 최초 실행은 금융 도메인 담당자 외부 게이트
+- 제출 경계 자동 검사: 개발 프로필 통과, 현재 제출 프로필 차단. 공식 범위 확인 후
+  로컬 개발 파일을 제거한 release 후보에서 재검사
 - Docker 데이터 준비: 읽기 전용 공식 XLSX에서 네 SQLite를 자동 생성·검증하고
   두 번째 실행에서 네 DB 모두 재사용, 성공 후에만 Backend 시작
-- 다음 기술 통합: 2026-08-06 설명회 공지 후 공식 endpoint·인증
-  계약 기반 HyperCLOVA X HTTP transport와 Next.js 화면 연결. 주최 측 실행
-  환경의 포트·인증·네트워크 정책은 별도 재현 필요
+- 다음 기술 통합: 공식 `GET /answer` 계약·기본 55초 외곽 시간 예산,
+  Docker 공식 GET smoke와 도메인별 Ontology `.ttl` 5개는 구현·테스트 완료.
+  이후 크레딧·정확한 model ID·endpoint·
+  인증 계약을 확보하면 HyperCLOVA X HTTP transport를 연결. 주최 측 실행 환경의
+  포트·인증·네트워크 정책은 별도 재현 필요
 
 ## 6. 저장소 밖의 근거 자료
 
 - [공식 과제 소개자료](<../../../../0. Official Materials/(배표용)과제소개자료_금융상품Agent.pdf>)
 - [공식 공지 정리](<../../../../0. Official Materials/07-28(화) - 공지사항 정리하기.md>)
+- [8월 6일 설명회 분석](<../../../../0. Official Materials/2026-08-06 오프라인 설명회 분석/2026-08-06 오프라인 설명회 분석.md>)
 - [원천 데이터](<../../../../2. Data/1. Raw/1.금융상품/>)
 - [원천 데이터 ZIP](<../../../../2. Data/0. Source Archive/1.금융상품.zip>)
 - [프로젝트 시작 안내](<../../../../README.md>)
@@ -244,8 +269,8 @@
 - 데이터 수치나 지원 범위가 바뀌면 `data-audit.md`와 관련 계약 테스트를 함께 갱신한다.
 - 평가 질문을 튜닝에 사용한 뒤에는 기존 holdout 성능으로 주장하지 않고 새
   미사용 split을 만든다.
-- 2026-08-06 설명회 참석 팀원의 기록을 받은 뒤 공식 답변과 출처를 확인하고
-  참고 질의 세트·모델·API·데이터 정책을 다시 동결한다.
+- 설명회 자료에서 확인되지 않은 모델 ID·API 인증·보조 모델 범위는 추측하지 않고
+  공식 서면 답변을 받은 뒤 모델·API·데이터 정책을 다시 동결한다.
 
 새 문서를 만들 때는 다음 위치를 사용한다.
 

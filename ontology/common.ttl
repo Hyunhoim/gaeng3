@@ -1,0 +1,193 @@
+@prefix ga: <https://gaeng3.ai/ontology/common#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+<https://gaeng3.ai/ontology/common>
+    a owl:Ontology ;
+    rdfs:label "금융상품 Agent 공통 Ontology"@ko ;
+    ga:registryVersion "1.3" .
+
+ga:FinancialProduct
+    a owl:Class ;
+    rdfs:label "financial product" .
+
+ga:ProductFamily
+    a owl:Class ;
+    rdfs:label "product family" .
+
+ga:Dataset
+    a owl:Class ;
+    rdfs:label "source dataset" .
+
+ga:CanonicalField
+    a owl:Class ;
+    rdfs:label "canonical field" .
+
+ga:describedByDataset
+    a owl:ObjectProperty ;
+    rdfs:domain ga:ProductFamily ;
+    rdfs:range ga:Dataset .
+
+ga:hasCanonicalField
+    a owl:ObjectProperty ;
+    rdfs:domain ga:ProductFamily ;
+    rdfs:range ga:CanonicalField .
+
+ga:forFamily
+    a owl:ObjectProperty ;
+    rdfs:domain ga:CanonicalField ;
+    rdfs:range ga:ProductFamily .
+
+ga:registryVersion
+    a owl:DatatypeProperty ;
+    rdfs:label "registry version" .
+
+ga:registryName
+    a owl:DatatypeProperty ;
+    rdfs:label "canonical registry name" .
+
+ga:sourceId
+    a owl:DatatypeProperty ;
+    rdfs:label "official source identifier" .
+
+ga:sourceLabel
+    a owl:DatatypeProperty ;
+    rdfs:label "official source label" .
+
+ga:logicalGrain
+    a owl:DatatypeProperty ;
+    rdfs:label "logical row grain" .
+
+ga:snapshotDate
+    a owl:DatatypeProperty ;
+    rdfs:label "source snapshot date" .
+
+ga:rowCount
+    a owl:DatatypeProperty ;
+    rdfs:label "raw row count" .
+
+ga:logicalRowCount
+    a owl:DatatypeProperty ;
+    rdfs:label "logical product count" .
+
+ga:quarantinedRows
+    a owl:DatatypeProperty ;
+    rdfs:label "quarantined row count" .
+
+ga:executionEnabled
+    a owl:DatatypeProperty ;
+    rdfs:label "execution enabled" .
+
+ga:primaryKey
+    a owl:DatatypeProperty ;
+    rdfs:label "logical primary key column" .
+
+ga:rawPrimaryKey
+    a owl:DatatypeProperty ;
+    rdfs:label "raw primary key column" .
+
+ga:rawFilePattern
+    a owl:DatatypeProperty ;
+    rdfs:label "raw workbook pattern" .
+
+ga:schemaFilePattern
+    a owl:DatatypeProperty ;
+    rdfs:label "schema workbook pattern" .
+
+ga:staticAsOfColumn
+    a owl:DatatypeProperty ;
+    rdfs:label "static as-of source column" .
+
+ga:dynamicAsOfColumn
+    a owl:DatatypeProperty ;
+    rdfs:label "dynamic as-of source column" .
+
+ga:canonicalName
+    a owl:DatatypeProperty ;
+    rdfs:label "canonical field name" .
+
+ga:valueType
+    a owl:DatatypeProperty ;
+    rdfs:label "canonical value type" .
+
+ga:unit
+    a owl:DatatypeProperty ;
+    rdfs:label "canonical unit" .
+
+ga:quality
+    a owl:DatatypeProperty ;
+    rdfs:label "field quality status" .
+
+ga:coveragePct
+    a owl:DatatypeProperty ;
+    rdfs:label "non-missing coverage percentage" .
+
+ga:queryable
+    a owl:DatatypeProperty ;
+    rdfs:label "query filtering capability" .
+
+ga:selectable
+    a owl:DatatypeProperty ;
+    rdfs:label "answer selection capability" .
+
+ga:sortable
+    a owl:DatatypeProperty ;
+    rdfs:label "sorting capability" .
+
+ga:aggregatable
+    a owl:DatatypeProperty ;
+    rdfs:label "aggregation capability" .
+
+ga:comparable
+    a owl:DatatypeProperty ;
+    rdfs:label "comparison capability" .
+
+ga:comparisonMode
+    a owl:DatatypeProperty ;
+    rdfs:label "comparison calculation mode" .
+
+ga:comparisonScope
+    a owl:DatatypeProperty ;
+    rdfs:label "comparison compatibility scope" .
+
+ga:allowedOperator
+    a owl:DatatypeProperty ;
+    rdfs:label "allowed QueryPlan operator" .
+
+ga:enumValue
+    a owl:DatatypeProperty ;
+    rdfs:label "allowed enum value" .
+
+ga:asOfBasis
+    a owl:DatatypeProperty ;
+    rdfs:label "field as-of basis" .
+
+ga:sourceDataset
+    a owl:DatatypeProperty ;
+    rdfs:label "source dataset registry name" .
+
+ga:sourceColumn
+    a owl:DatatypeProperty ;
+    rdfs:label "source workbook column" .
+
+ga:sourceTransform
+    a owl:DatatypeProperty ;
+    rdfs:label "normalization transform" .
+
+ga:constantValue
+    a owl:DatatypeProperty ;
+    rdfs:label "constant source value" .
+
+ga:valueMapJson
+    a owl:DatatypeProperty ;
+    rdfs:label "source value map encoded as JSON" .
+
+ga:sentinelValuesJson
+    a owl:DatatypeProperty ;
+    rdfs:label "sentinel quality map encoded as JSON" .
+
+ga:notes
+    a owl:DatatypeProperty ;
+    rdfs:label "registry notes" .

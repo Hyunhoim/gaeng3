@@ -1,0 +1,204 @@
+{
+  "schema_version": "1.0",
+  "baseline_id": "qwen-eval-lab-v1",
+  "recorded_on": "2026-08-08",
+  "dataset": "overseas_etp+domestic_etp+bond+fund",
+  "evaluation_layer": "system_regression",
+  "status": "qwen_metamorphic_regression_not_blind",
+  "provider": {
+    "name": "local_test",
+    "official_submission_provider": false,
+    "network_used": "loopback_only"
+  },
+  "model": {
+    "repository": "Qwen/Qwen3-30B-A3B-Instruct-2507-FP8",
+    "served_name": "qwen3-local-test",
+    "revision": "5a5a776300a41aaa681dd7ff0106608ef2bc90db"
+  },
+  "suite": {
+    "id": "qwen-eval-lab-v1",
+    "version": "1.0",
+    "path": "packages/finance_agent_core/src/finance_agent_core/evaluation/suites/qwen_eval_lab_v1.json",
+    "sha256": "bdfc81b8f9ff3af8fdc9821f253e5530fe32ee691b797502641c1733195f1740",
+    "source_suite_id": "official-mock-v1-30",
+    "source_suite_sha256": "c9250cd45656beadad563087941112b31318254c50fc72bf9f15dcaa1d88a36e",
+    "source_cases": 30,
+    "requested_mutations": 90,
+    "mutation_axes": [
+      "paraphrase",
+      "clause_reordering",
+      "distractor_resistance"
+    ],
+    "gold_audit": {
+      "id": "official-mock-v1-gold-audit-v1",
+      "path": "packages/finance_agent_core/src/finance_agent_core/evaluation/suites/official_mock_v1_gold_audit_v1.json",
+      "sha256": "0bf5474ec05d0d390d279f8b07245cb6c1d7a899f0f812a5650f0fbab6ef32df",
+      "corrected_cases": 2
+    },
+    "frozen_mutation_batch": {
+      "artifact_name": "qwen-eval-lab-v1-local-mutations-screened-v2.json",
+      "sha256": "ebe797beb6ce819cb154d5444af93a4b8887f50647c3c693e8647b52af1a9342",
+      "semantic_sha256": "9ae81b5289df5a61aa81d9e847b5c710fccac3e37891e3c8cf2b8c420be47c52"
+    }
+  },
+  "data": {
+    "database_sha256": "2c26861a7e9b90ed4ae46ba3bfd4565daa63f405cf16627094629df36cecd03a",
+    "manifest_sha256": "624cef391dfe86aa2ce1a8ce20ad5142ec0d65a792e1fec6df0259024b997003",
+    "source_file_sha256": "c4f860f7a0d6821788015f51cf9ae48d2f48ab657e9a99be49771fc32fcaf895",
+    "hash_policy": "상품군 이름과 개별 SHA-256을 정렬해 결합한 뒤 다시 SHA-256 계산",
+    "by_family": {
+      "overseas_etp": {
+        "database_sha256": "eee9009ca741713a9a61e498cd5ed8366836d754c7d0c2dbd74ed7e456a2ebbe",
+        "manifest_sha256": "5dd159ade2353154ed8d3d32068dd512cb2b3becba39972aa0dabff0edd50771",
+        "source_file_sha256": "3cec19043f742771e0016d56fe806f19ad78f4295d1ae59192740a78feb2253b"
+      },
+      "domestic_etp": {
+        "database_sha256": "a91bfc713b88e9ba1e7da27508857cbe5ea200c4d7821d0b4fee7d9922684484",
+        "manifest_sha256": "2e52b161a260fa19eab50e8281f04f8617ee1ee69d618b19bd624af4635fca97",
+        "source_file_sha256": "0f5706d45f93284bcaac2fa8eaed04db920a7043abaa859e455f06e246d54723"
+      },
+      "bond": {
+        "database_sha256": "40265aa326d63244727294ac29c1cd38c898f05b6a80dfd51fd8ac38e08764bc",
+        "manifest_sha256": "d724d99e9ffd24148144b3534795d0d545e0ebff9d01509966f6ebbb218f8312",
+        "source_file_sha256": "728f44a567a986d21cf843d711c6c4dfa1a24d05b39c7da0541b981b57ecccf8"
+      },
+      "fund": {
+        "database_sha256": "99fac786e5be0ec5a7a53e11e1bd3bbccd5b37ab15243ecbf8b864a85b375ca4",
+        "manifest_sha256": "be83a616d033db2328d231499d1f0492323d02bace4f153ad3da4860a0d10bcd",
+        "source_file_sha256": "140d1ef0cec918d0b3f7c52c107cb123395594eb089b0cd70bb305709b0f44eb"
+      }
+    }
+  },
+  "metrics": {
+    "total": 77,
+    "passed": 77,
+    "strict_accuracy": 1.0,
+    "source_total": 30,
+    "source_passed": 30,
+    "mutation_requested": 90,
+    "mutation_accepted": 77,
+    "mutation_rejected_before_execution": 13,
+    "mutation_integrity_rate": 0.855556,
+    "semantic_consistency_rate": 1.0,
+    "safety_pass_rate": 1.0,
+    "evidence_pass_rate": 1.0,
+    "by_axis": {
+      "paraphrase": 1.0,
+      "clause_reordering": 1.0,
+      "distractor_resistance": 1.0
+    },
+    "by_product_family": {
+      "overseas_etp": 1.0,
+      "domestic_etp": 1.0,
+      "bond": 1.0,
+      "fund": 1.0
+    },
+    "qwen_full_path": {
+      "query_plan_calls": 43,
+      "query_plan_errors": 0,
+      "answer_calls": 61,
+      "answer_errors": 0,
+      "llm_grounded": 59,
+      "deterministic": 34,
+      "control": 14,
+      "fallback_before_safe_explanation": 3,
+      "fallback_after_safe_explanation": 0,
+      "answer_fallback_rate_before": 0.04918,
+      "answer_fallback_rate_after": 0.0,
+      "latency_ms_after": {
+        "min": 0.077,
+        "p50": 1226.605,
+        "p95": 4096.584,
+        "max": 4552.117
+      }
+    },
+    "ablation": {
+      "model_free": {
+        "query_plan_calls": 0,
+        "local_answer_calls": 0,
+        "p50_ms": 75.116,
+        "p95_ms": 1069.531
+      },
+      "qwen_plan_only": {
+        "query_plan_calls": 43,
+        "local_answer_calls": 0,
+        "p50_ms": 336.677,
+        "p95_ms": 2939.42
+      },
+      "qwen_answer_only": {
+        "query_plan_calls": 0,
+        "local_answer_calls": 61,
+        "p50_ms": 1193.25,
+        "p95_ms": 2287.549
+      },
+      "qwen_plan_and_answer": {
+        "query_plan_calls": 43,
+        "local_answer_calls": 61,
+        "p50_ms": 1226.605,
+        "p95_ms": 4096.584
+      },
+      "strict_accuracy_all_profiles": 1.0,
+      "fallback_all_profiles_after_safe_explanation": 0
+    },
+    "first_observation": {
+      "accepted": 88,
+      "passed": 60,
+      "strict_accuracy": 0.681818,
+      "safety_pass_rate": 1.0
+    }
+  },
+  "findings": [
+    "Qwen 생성 질문의 숫자·식별자·연산자 보존 검사를 실행 전에 적용해 의미가 변한 13건을 폐기함",
+    "변형 질문이 낮은 순과 짧은 순 정답을 일관되게 뒤집어 기존 gold 정렬 방향 오류 2건을 발견함",
+    "원본 suite는 보존하고 source suite와 DB hash가 일치할 때만 별도 gold audit overlay를 적용함",
+    "Agent 자연어 경계를 보강한 뒤 결정론적 경로와 전체 Qwen 경로가 승인 변형 77/77에서 같은 실행 의미를 냄",
+    "가치판단 가능 문구 3건은 검증기가 안전하게 fallback했고 안전 설명문 계약 후 같은 전체 평가에서 fallback 0건으로 감소함"
+  ],
+  "reports": [
+    {
+      "role": "local_qwen_generator_first_observation",
+      "artifact_name": "qwen-eval-lab-v1-local-generator-expected-agent-first.json",
+      "sha256": "d6130dfe4e0e46adb4c2c075c460cde6964358a7aa1e27efeda5bb6d5f1752ff"
+    },
+    {
+      "role": "screened_mutations_before_agent_fixes",
+      "artifact_name": "qwen-eval-lab-v1-local-generator-expected-agent-screened-v2.json",
+      "sha256": "1e44da25a3627eb2e8e285461fb9b001394344ea0478f085d4de5f02e9837c58"
+    },
+    {
+      "role": "audited_deterministic_agent_regression",
+      "artifact_name": "qwen-eval-lab-v1-local-generator-expected-agent-audited-v1.json",
+      "sha256": "f63c94294e223949037741c91f06c8d08746108eb877c4fafdf6112ddfccf550"
+    },
+    {
+      "role": "full_qwen_before_safe_explanation",
+      "artifact_name": "qwen-eval-lab-v1-local-generator-local-agent-audited-v2.json",
+      "sha256": "ac980efcad673799089a814210ef9a348d8ca228fd5254c0e807ba1720af33bd"
+    },
+    {
+      "role": "full_qwen_after_safe_explanation",
+      "artifact_name": "qwen-eval-lab-v1-local-generator-local-agent-audited-v3.json",
+      "sha256": "a8428a16a0157e42b5095437cceb9aa54fd508aed070f62abb3d1077f34cc859"
+    },
+    {
+      "role": "qwen_query_plan_only_ablation",
+      "artifact_name": "qwen-eval-lab-v1-ablation-plan-only-v1.json",
+      "sha256": "45f4a44fe698ea4a1d7979a0137bb40ff7b9e2b722bba397b113fed58d0d9888"
+    },
+    {
+      "role": "qwen_grounded_answer_only_ablation",
+      "artifact_name": "qwen-eval-lab-v1-ablation-answer-only-v1.json",
+      "sha256": "243239c90d79bf6a74cb9032cc379884c256ddd41ac845eed5d6ce925172aa3a"
+    }
+  ],
+  "reproduce": "FINANCE_AGENT_LLM_MODE=local_test ENABLE_NON_HCX_TEST_LLM=1 LLM_PROVIDER=local_test LOCAL_TEST_LLM_BASE_URL=http://127.0.0.1:18000/v1 LOCAL_TEST_LLM_MODEL=qwen3-local-test python -m finance_agent_core.evaluation.metamorphic_run_cli --batch-input artifacts/evaluation/qwen-eval-lab-v1-local-mutations-screened-v2.json --agent-provider local_test --output artifacts/evaluation/qwen-eval-lab-v1-local-generator-local-agent-audited-v3.json",
+  "limitations": [
+    "원문 30개는 AI 담당자가 만든 공개 모의평가이며 변형 90개도 그 질문에서 파생돼 독립 blind가 아님",
+    "Qwen 생성 90개 중 의미 보존 validator를 통과한 77개만 Agent 성능 분모로 사용하며 폐기 13개를 숨기지 않음",
+    "Agent와 정답 개선에 사용한 질문을 다시 실행한 사후 회귀이므로 일반화 성능이나 공모전 예상 점수가 아님",
+    "gold audit 2건은 제공 데이터와 정렬 의미를 재검증한 개발용 교정이며 공모전 공식 정답 수정이 아님",
+    "로컬 Qwen은 개발 전용이며 HyperCLOVA X의 품질·비용·API 호환성을 대변하지 않음",
+    "latency는 RTX 5090 두 장에서 단일 순차 실행한 값이며 Backend 네트워크나 운영 SLO가 아님",
+    "문서 RAG의 실제 corpus, 외부 blind, 금융 도메인 사람 평가와 공식 평가 서버는 범위 밖임"
+  ]
+}
