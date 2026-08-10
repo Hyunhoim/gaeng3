@@ -25,6 +25,10 @@ from finance_agent_core.agent.providers.local_test import (
 )
 from finance_agent_core.contracts import QueryPlan, load_hcx_queryplan_schema
 from finance_agent_core.contracts.hcx_schema import validate_hcx_schema
+from finance_agent_core.deadline import (
+    RequestDeadlineExceeded,
+    remaining_request_timeout,
+)
 
 type HyperClovaXOperation = Literal[
     "query_plan",
@@ -223,6 +227,12 @@ class HyperClovaXClient:
             raise HyperClovaXConfigurationError(
                 "response schema is outside the documented HyperCLOVA X subset"
             ) from error
+        started = time.perf_counter()
+        try:
+            timeout_seconds = remaining_request_timeout(self.settings.timeout_seconds)
+        except RequestDeadlineExceeded:
+            self._emit(operation=operation, outcome="timeout", started=started)
+            raise HyperClovaXTimeoutError("HyperCLOVA X request timed out") from None
         request = HyperClovaXStructuredRequest(
             operation=operation,
             model=self.settings.model,
@@ -231,9 +241,8 @@ class HyperClovaXClient:
             schema_name=schema_name,
             response_schema=response_schema,
             max_output_tokens=max_output_tokens,
-            timeout_seconds=self.settings.timeout_seconds,
+            timeout_seconds=timeout_seconds,
         )
-        started = time.perf_counter()
         try:
             raw_response = self.transport.complete(request)
         except TimeoutError:

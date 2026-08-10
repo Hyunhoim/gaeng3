@@ -35,3 +35,7 @@ coverage/
 # Logs
 *.log
 logs/
+
+# Locally held keys/source for the sealed safety-blind evaluation.
+# Public questions and encrypted expectations are versioned separately.
+finance_agent/evaluation/safety_blind/.private/

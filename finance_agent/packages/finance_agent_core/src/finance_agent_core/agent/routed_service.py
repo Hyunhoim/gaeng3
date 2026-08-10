@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextvars
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
@@ -62,6 +63,7 @@ from finance_agent_core.execution.verifier_projection import (
 from finance_agent_core.storage import (
     ProductIdentitySnapshotCache,
     RecordSnapshotCache,
+    require_approved_database_paths,
 )
 
 
@@ -156,10 +158,12 @@ class RoutedAgentResult(RoutedServiceModel):
             ):
                 raise ValueError("executed result requires plan, count, and source manifest")
         elif (
-            self.candidate_count is not None
+            self.query_plan is not None
+            or self.candidate_count is not None
             or self.products
             or self.aggregates
             or self.comparisons
+            or self.warnings
             or self.source_manifest is not None
             or self.answer_composition is not None
             or self.family_searches
@@ -213,6 +217,7 @@ class RoutedFinanceAgent:
         answer_provider: GroundedAnswerProvider | None = None,
         allow_internal_disabled_dataset: bool = False,
         capability_execution_overrides: set[ProductFamily | str] | None = None,
+        require_approved_databases: bool = False,
         record_cache: RecordSnapshotCache | None = None,
         identity_cache: ProductIdentitySnapshotCache | None = None,
     ) -> None:
@@ -243,6 +248,7 @@ class RoutedFinanceAgent:
         self.capability_execution_overrides = frozenset(
             ProductFamily(family) for family in capability_execution_overrides or set()
         )
+        self.require_approved_databases = require_approved_databases
 
     def _record_universe(self, database_path: Path, plan: QueryPlan):
         if self._record_cache_enabled:
@@ -250,8 +256,34 @@ class RoutedFinanceAgent:
         return load_projected_verifier_records(database_path, plan)
 
     def answer(self, question: str, request_id: str) -> RoutedAgentResult:
+        if self.require_approved_databases:
+            require_approved_database_paths(self.database_paths)
+        try:
+            return self._answer_once(question, request_id)
+        finally:
+            # Detect a path replacement that occurred after the pre-execution
+            # approval check.  A changed inode/ctime invalidates the cached
+            # approval and the result is discarded before it can be served.
+            if self.require_approved_databases:
+                require_approved_database_paths(self.database_paths)
+
+    def _answer_once(self, question: str, request_id: str) -> RoutedAgentResult:
         decision = self.router.route(question, request_id)
+        question = decision.draft.question
         decision = self._resolve_exact_identity_family(decision)
+        if (
+            decision.disposition is RouteDisposition.EXECUTE
+            and ProductFamily.FUND in decision.draft.product_families
+            and not self._fund_execution_enabled()
+        ):
+            return self._control_result(
+                decision,
+                disposition=RouteDisposition.UNSUPPORTED,
+                reason=(
+                    "공모펀드 공식 실행은 승인 플래그가 잠겨 있어 현재 공개 경로에서 "
+                    "처리할 수 없습니다."
+                ),
+            )
         if len(decision.draft.product_families) > 1:
             if decision.disposition is not RouteDisposition.EXECUTE:
                 return self._control_result(decision)
@@ -275,6 +307,7 @@ class RoutedFinanceAgent:
         decision, plan, used_grounded_plan = compiled
 
         try:
+            self._require_execution_authority(decision, plan)
             self._require_execution(plan)
         except PlanExecutionBlockedError as error:
             disposition = (
@@ -532,6 +565,7 @@ class RoutedFinanceAgent:
                 )
         try:
             for plan in plans:
+                self._require_execution_authority(decision, plan)
                 self._require_execution(plan)
         except PlanExecutionBlockedError as error:
             disposition = (
@@ -546,7 +580,15 @@ class RoutedFinanceAgent:
             )
 
         with ThreadPoolExecutor(max_workers=len(searches)) as executor:
-            executions = list(executor.map(self._execute_family_search, searches))
+            futures = [
+                executor.submit(
+                    contextvars.copy_context().run,
+                    self._execute_family_search,
+                    search,
+                )
+                for search in searches
+            ]
+            executions = [future.result() for future in futures]
 
         deterministic_searches = [execution.result for execution in executions]
         family_searches = deterministic_searches
@@ -718,6 +760,24 @@ class RoutedFinanceAgent:
         else:
             require_executable_search(plan)
 
+    def _fund_execution_enabled(self) -> bool:
+        return self.allow_internal_disabled_dataset or (
+            ProductFamily.FUND in self.capability_execution_overrides
+        )
+
+    @staticmethod
+    def _require_execution_authority(decision: RouteDecision, plan: QueryPlan) -> None:
+        """Recheck server-owned authority immediately before an Oracle boundary."""
+
+        if decision.disposition is not RouteDisposition.EXECUTE:
+            raise PlanExecutionBlockedError("control disposition cannot reach an Oracle")
+        if decision.query_plan_intent is not plan.intent:
+            raise PlanExecutionBlockedError("route and QueryPlan intents do not match")
+        if plan.ambiguities or plan.unsupported_conditions:
+            raise PlanExecutionBlockedError(
+                "ambiguous or unsupported QueryPlan cannot reach an Oracle"
+            )
+
     def _control_result(
         self,
         decision: RouteDecision,
@@ -730,12 +790,30 @@ class RoutedFinanceAgent:
         status: Literal["clarify", "unsupported"] = (
             "clarify" if actual_disposition is RouteDisposition.CLARIFY else "unsupported"
         )
+        control_intent = (
+            InteractionIntent.CLARIFY
+            if actual_disposition is RouteDisposition.CLARIFY
+            else InteractionIntent.UNSUPPORTED
+        )
+        control_reason = reason or decision.reason
+        if decision.disposition is not actual_disposition or decision.query_plan_intent is not None:
+            decision = RouteDecision(
+                draft=decision.draft.model_copy(update={"intent": control_intent}),
+                disposition=actual_disposition,
+                reason_code=f"{control_intent.value}_execution_blocked",
+                reason=control_reason,
+                query_plan_intent=None,
+                capability_matrix_version=decision.capability_matrix_version,
+            )
         return RoutedAgentResult(
             request_id=decision.draft.request_id,
             status=status,
             decision=decision,
-            answer=_control_answer(actual_disposition, reason or decision.reason),
-            query_plan=plan,
+            answer=_control_answer(actual_disposition, control_reason),
+            # A control response never exports a partially compiled plan.  This
+            # keeps execution authority and evidence unambiguously absent at
+            # every public boundary, even when compilation found a later issue.
+            query_plan=None,
             candidate_count=None,
             products=[],
             aggregates=[],

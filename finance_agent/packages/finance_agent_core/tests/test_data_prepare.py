@@ -6,10 +6,16 @@ import sqlite3
 from collections.abc import Callable
 from pathlib import Path
 
+import pytest
+
 from finance_agent_core.audit.registry import DATASET_BY_NAME, resolve_inputs
 from finance_agent_core.config import load_field_registry
 from finance_agent_core.domain import DatabaseManifest
 from finance_agent_core.storage import prepare
+from finance_agent_core.storage.approval import (
+    DatasetApprovalError,
+    load_approved_dataset_manifest,
+)
 
 
 def _sha256(path: Path) -> str:
@@ -179,3 +185,22 @@ def test_prepare_rejects_output_inside_raw_data(tmp_path: Path) -> None:
         assert "cannot be inside" in str(error)
     else:
         raise AssertionError("raw data safety boundary was not enforced")
+
+
+def test_prepare_rejects_nonapproved_sources_before_building(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    raw = _raw_directory(tmp_path)
+    output = tmp_path / "normalized"
+    calls: list[str] = []
+    monkeypatch.setattr(prepare, "BUILDERS", _fake_builders(calls))
+
+    with pytest.raises(DatasetApprovalError, match="approved competition release"):
+        prepare.prepare_databases(
+            raw,
+            output,
+            approval=load_approved_dataset_manifest(),
+        )
+
+    assert calls == []

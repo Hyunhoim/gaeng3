@@ -46,13 +46,18 @@ finance-analyze-coverage = "finance_agent_core.evaluation.coverage_analysis_cli:
 finance-compare-coverage-profiles = "finance_agent_core.evaluation.coverage_ablation_cli:main"
 finance-run-coverage-campaign = "finance_agent_core.evaluation.coverage_campaign_cli:main"
 finance-render-coverage-report = "finance_agent_core.evaluation.coverage_report_cli:main"
+finance-evaluate-safety-blind = "finance_agent_core.evaluation.safety_blind_cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
 "finance_agent_core.audit" = ["expectations.json"]
-"finance_agent_core.config" = ["field_registry.yaml", "capability_matrix.json"]
+"finance_agent_core.config" = [
+    "field_registry.yaml",
+    "capability_matrix.json",
+    "approved_dataset_manifest.json",
+]
 "finance_agent_core.contracts" = ["queryplan.hcx.schema.json"]
 "finance_agent_core.contracts.examples" = ["*.json"]
 "finance_agent_core.evaluation.suites" = ["*.json"]

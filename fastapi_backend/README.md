@@ -67,7 +67,9 @@ Backend는 다음 Agent 공개 계약만 사용
 
 ### `GET /health`
 
-네 SQLite가 단순히 설정됐는지만 확인하지 않고 각 manifest의 상품군까지 검증
+네 SQLite가 단순히 설정됐는지만 확인하지 않고 각 manifest의 상품군까지 검증한다.
+Compose 기본값인 `APP_ENV=evaluation` 또는 `production`에서는 패키지에 동결된 공식 데이터 승인
+manifest와 source hash·행 수·기준일·DB hash가 모두 일치해야 준비 상태가 된다.
 
 - 모두 준비됨: HTTP 200, `status=ok`
 - 하나라도 누락·불일치: HTTP 503, `status=degraded`
@@ -278,13 +280,22 @@ curl --fail http://127.0.0.1:18002/health
 | `BACKEND_BIND_ADDRESS` | `127.0.0.1` | 호스트 바인딩 주소 |
 | `BACKEND_PORT` | `18001` | 호스트에서 접근할 Backend 포트 |
 | `FINANCE_RAW_DATA_DIR` | `../../2. Data/1. Raw/1.금융상품` | 읽기 전용 공식 XLSX 경로 |
+| `APP_ENV` | `evaluation` | Compose 대회 실행 모드. 공식 release manifest와 네 DB fingerprint를 강제 |
 | `WEB_CONCURRENCY` | `1` | Uvicorn worker 수 |
 | `OFFICIAL_ANSWER_TIMEOUT_SECONDS` | `55` | 평가용 GET의 바깥쪽 응답 제한, 0초 초과 60초 미만만 허용 |
+| `OFFICIAL_ANSWER_MAX_INFLIGHT` | `2` | 프로세스당 동시 Agent 작업 상한(허용 1~8). timeout 뒤에도 실제 worker 종료까지 자리를 유지하며 초과 요청은 실행 전에 거절 |
 | `FINANCE_BACKEND_ANSWER_PROVIDER` | `deterministic` | 답변 provider, 기본은 모델 미사용 |
 | `FINANCE_BACKEND_FUND_EXECUTION_POLICY` | `locked` | 공모펀드 실행 정책, 팀이 승인한 버전에서만 `public_fund_v1_approved` |
 
 Compose에서는 네 DB를 전용 volume의 `/data/*.sqlite3`로 자동 연결하므로 DB 경로를
 개인 `.env`에서 직접 지정하지 않음
+
+`OFFICIAL_ANSWER_MAX_INFLIGHT`는 Uvicorn **프로세스마다** 적용되므로 전체 이론 상한은
+`WEB_CONCURRENCY × OFFICIAL_ANSWER_MAX_INFLIGHT`다. 현재는 예측 가능한 자원 사용을 위해
+`WEB_CONCURRENCY=1`을 유지한다. 2026-08-10 격리 실측에서는 동일한 채권 검색을 8개씩
+보냈을 때 동시 1·2개는 전부 성공했지만, 동시 4개부터 처리량이 감소하고 동시 8개는
+10초 시험 제한에서 모두 timeout됐다. 따라서 기본값 2를 유지하고 실제 NCP 사양과 평가
+호출 패턴을 확인한 뒤에만 상향한다.
 
 공인망에 열어야 할 때만 `BACKEND_BIND_ADDRESS=0.0.0.0` 검토. 그 전에 인증·방화벽·
 허용 IP·TLS 요구사항을 먼저 확정하며 연구실 서버에서는 `127.0.0.1` 유지

@@ -55,7 +55,7 @@ def test_grounded_answer_compiles_only_verified_values(
         DomesticMockProvider(),
         answer_provider=ExpectedGroundedAnswerProvider(),
     ).answer_with_composition(
-        "미국 주식형 국내 ETF 중 연금 거래 가능한 상품을 수익률 순으로 보여줘",
+        "미국 주식형 국내 ETF 중 연금 거래 가능한 상품을 1개월 수익률 순으로 보여줘",
         "answer-agent-001",
     )
 

@@ -42,6 +42,12 @@ class Settings(BaseSettings):
         lt=60,
         validation_alias="OFFICIAL_ANSWER_TIMEOUT_SECONDS",
     )
+    official_answer_max_inflight: int = Field(
+        default=2,
+        ge=1,
+        le=8,
+        validation_alias="OFFICIAL_ANSWER_MAX_INFLIGHT",
+    )
     fund_execution_policy: FundExecutionPolicy = Field(
         default="locked",
         validation_alias="FINANCE_BACKEND_FUND_EXECUTION_POLICY",

@@ -9,11 +9,14 @@ from pathlib import Path
 
 from finance_agent_core.config import QualityStatus, ValueType, load_field_registry
 from finance_agent_core.contracts import QueryPlan
+from finance_agent_core.deadline import raise_if_request_stopped
 from finance_agent_core.execution.sql_schema import (
     SQL_FIELDS_BY_FAMILY,
     TABLE_BY_FAMILY,
 )
 from finance_agent_core.storage import connect_read_only, load_manifest
+
+_DEADLINE_CHECK_INTERVAL = 256
 
 
 @dataclass(frozen=True, slots=True)
@@ -115,7 +118,9 @@ def project_verifier_rows(
     scales = tuple(sql_fields[field_name].scale for field_name in fields)
     quality_columns = tuple(sql_fields[field_name].quality_column for field_name in fields)
     records: list[ProjectedVerifierRecord] = []
-    for row in rows:
+    for index, row in enumerate(rows):
+        if index % _DEADLINE_CHECK_INTERVAL == 0:
+            raise_if_request_stopped()
         values = tuple(
             _canonical_value(
                 field_name=field_name,
@@ -144,6 +149,7 @@ def project_verifier_rows(
                 qualities=qualities,
             )
         )
+    raise_if_request_stopped()
     return records
 
 

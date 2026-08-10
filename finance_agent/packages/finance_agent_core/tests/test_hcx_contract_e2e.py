@@ -434,7 +434,8 @@ def test_hcx_offline_disabled_fund_stops_before_model_and_database() -> None:
         "hcx-e2e-fund-disabled-001",
     )
 
-    assert result.status == "clarify"
+    assert result.status == "unsupported"
+    assert result.query_plan is None
     assert result.products == []
     assert result.answer_composition is None
     assert transport.requests == []

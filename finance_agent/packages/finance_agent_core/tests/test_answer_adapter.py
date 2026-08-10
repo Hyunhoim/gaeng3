@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sqlite3
 from pathlib import Path
 
 import pytest
@@ -25,6 +26,7 @@ from finance_agent_core.contracts.backend import (
     BackendErrorCode,
     BackendStatus,
 )
+from finance_agent_core.deadline import RequestDeadline, bind_request_deadline
 from finance_agent_core.domain import (
     DatabaseManifest,
     NormalizedOverseasEtpRecord,
@@ -271,6 +273,31 @@ def test_answer_adapter_maps_missing_database_to_retryable_dataset_error(
     assert result.response.error.code is BackendErrorCode.DATASET_UNAVAILABLE
     assert result.response.error.retryable
     assert str(missing) not in result.model_dump_json()
+
+
+def test_answer_adapter_maps_deadline_sqlite_interrupt_to_timeout() -> None:
+    class InterruptedService:
+        router = IntentRouter()
+
+        def answer(self, question: str, request_id: str):
+            raise sqlite3.OperationalError("interrupted")
+
+    deadline = RequestDeadline.after(5)
+    deadline.cancel()
+    with bind_request_deadline(deadline):
+        result = execute_answer_request(
+            InterruptedService(),
+            BackendAgentRequest(
+                request_id="answer-adapter-deadline-sqlite-001",
+                question=_QUESTION,
+            ),
+        )
+
+    assert result.http_status_code == 504
+    assert result.response.error is not None
+    assert result.response.error.code is BackendErrorCode.PROVIDER_UNAVAILABLE
+    assert result.response.error.retryable
+    assert "시간이 초과" in result.response.answer
 
 
 def test_answer_adapter_maps_unexpected_failure_without_exception_text() -> None:

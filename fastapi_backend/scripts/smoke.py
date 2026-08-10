@@ -96,10 +96,9 @@ CASES = (
             "당사에서 판매 중인 해외 주식형 공모펀드 중 3개월 수익률이 높은 상품 5개 보여줘."
         ),
         expected_http_status=200,
-        expected_status="clarification",
-        expected_intent="search",
+        expected_status="unsupported",
+        expected_intent="unsupported",
         expected_families=("fund",),
-        expected_clarification_code="capability_executable",
     ),
     SmokeCase(
         case_id="docker-smoke-clarification-001",
@@ -201,6 +200,7 @@ def smoke_cases(fund_execution_policy: str) -> tuple[SmokeCase, ...]:
             case,
             case_id="docker-smoke-fund-approved-001",
             expected_status="success",
+            expected_intent="search",
             expected_answer_mode="deterministic",
             expected_product_count=5,
             expected_dataset="fund",

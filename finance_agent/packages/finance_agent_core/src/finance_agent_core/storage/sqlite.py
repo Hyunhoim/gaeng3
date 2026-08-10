@@ -13,6 +13,7 @@ from urllib.parse import quote
 
 from finance_agent_core.audit.registry import DATASET_BY_NAME, resolve_inputs
 from finance_agent_core.config import QualityStatus, load_field_registry
+from finance_agent_core.deadline import current_request_deadline
 from finance_agent_core.domain import (
     DatabaseManifest,
     NormalizedOverseasEtpRecord,
@@ -288,10 +289,15 @@ def connect_read_only(path: str | Path) -> sqlite3.Connection:
     database = Path(path).resolve()
     if not database.is_file():
         raise FileNotFoundError(f"normalized database does not exist: {database}")
-    uri = f"file:{quote(str(database))}?mode=ro"
+    # Normalized product databases are immutable snapshots.  Ignore auxiliary
+    # journals and prevent SQLite from creating any query-visible sidecar.
+    uri = f"file:{quote(str(database))}?mode=ro&immutable=1"
     connection = sqlite3.connect(uri, uri=True)
     connection.row_factory = sqlite3.Row
     connection.execute("PRAGMA query_only = ON")
+    deadline = current_request_deadline()
+    if deadline is not None:
+        connection.set_progress_handler(lambda: int(deadline.should_stop()), 1_000)
     return connection
 
 

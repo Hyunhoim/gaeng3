@@ -7,7 +7,12 @@ from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Response, status
 from finance_agent_core.contracts.queryplan import ProductFamily
-from finance_agent_core.storage import connect_read_only, load_manifest
+from finance_agent_core.storage import (
+    DatasetApprovalError,
+    connect_read_only,
+    load_manifest,
+    require_approved_database,
+)
 from pydantic import BaseModel, ConfigDict
 
 from app.config import FundExecutionPolicy, Settings
@@ -30,7 +35,12 @@ class HealthResponse(BaseModel):
     fund_execution_policy: FundExecutionPolicy
 
 
-def _database_is_ready(family: ProductFamily, path: Path) -> bool:
+def _database_is_ready(
+    family: ProductFamily,
+    path: Path,
+    *,
+    require_approval: bool,
+) -> bool:
     """Verify that the configured file is a readable DB for the expected family."""
 
     try:
@@ -38,7 +48,14 @@ def _database_is_ready(family: ProductFamily, path: Path) -> bool:
             manifest = load_manifest(connection)
     except (OSError, sqlite3.Error, ValueError):
         return False
-    return manifest.dataset == family.value
+    if manifest.dataset != family.value:
+        return False
+    if require_approval:
+        try:
+            require_approved_database(family.value, path)
+        except DatasetApprovalError:
+            return False
+    return True
 
 
 @router.get(
@@ -51,12 +68,17 @@ def health(
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> HealthResponse:
     database_paths = settings.database_paths
+    require_approval = settings.app_env in {"evaluation", "production"}
     configured_families = [family for family in ProductFamily if family in database_paths]
     missing_families = [family for family in ProductFamily if family not in database_paths]
     ready_families = [
         family
         for family in configured_families
-        if _database_is_ready(family, database_paths[family])
+        if _database_is_ready(
+            family,
+            database_paths[family],
+            require_approval=require_approval,
+        )
     ]
     unavailable_families = [
         family for family in configured_families if family not in ready_families

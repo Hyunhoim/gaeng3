@@ -4,6 +4,11 @@ import pytest
 
 from finance_agent_core.agent import RoutedFinanceAgent
 from finance_agent_core.agent.providers import first_vertical_slice_plan
+from finance_agent_core.deadline import (
+    RequestDeadline,
+    RequestDeadlineExceeded,
+    bind_request_deadline,
+)
 from finance_agent_core.domain import DatabaseManifest, NormalizedOverseasEtpRecord
 from finance_agent_core.execution import (
     AggregateResultVerifier,
@@ -40,6 +45,22 @@ def test_sql_oracle_and_python_verifier_agree(
         "B3",
     ]
     assert "Z0" not in {record.ticker for record in verified.records}
+
+
+def test_python_verifier_stops_after_request_cancellation(
+    sample_database: tuple[Path, list[NormalizedOverseasEtpRecord], DatabaseManifest],
+) -> None:
+    path, _, _ = sample_database
+    plan = first_vertical_slice_plan("oracle-cancelled")
+    executed = SQLiteOracle(path).execute(plan)
+    with connect_read_only(path) as connection:
+        universe = load_all_records(connection)
+    deadline = RequestDeadline.after(5)
+    deadline.cancel()
+
+    with bind_request_deadline(deadline):
+        with pytest.raises(RequestDeadlineExceeded):
+            ResultVerifier().verify(plan, executed, universe)
 
 
 def test_verifier_rejects_tampered_order(
@@ -129,6 +150,26 @@ def test_aggregate_verifier_rejects_tampered_metric(
 
     with pytest.raises(ResultVerificationError, match="groups or metrics differ"):
         AggregateResultVerifier().verify(plan, tampered, universe)
+
+
+def test_python_aggregate_verifier_stops_after_request_cancellation(
+    sample_database: tuple[Path, list[NormalizedOverseasEtpRecord], DatabaseManifest],
+) -> None:
+    path, _, _ = sample_database
+    agent = RoutedFinanceAgent({"overseas_etp": path})
+    decision = agent.router.route(
+        "해외 ETF의 총보수율 평균을 집계해줘",
+        "aggregate-cancelled",
+    )
+    plan = agent.compiler.compile(decision)
+    executed = SQLiteAggregateOracle(path).execute(plan)
+    universe = load_projected_verifier_records(path, plan)
+    deadline = RequestDeadline.after(5)
+    deadline.cancel()
+
+    with bind_request_deadline(deadline):
+        with pytest.raises(RequestDeadlineExceeded):
+            AggregateResultVerifier().verify(plan, executed, universe)
 
 
 def test_overseas_verifier_projection_matches_normalized_records(

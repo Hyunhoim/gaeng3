@@ -137,20 +137,16 @@ def test_routed_agent_never_touches_tools_for_control_route() -> None:
     assert clarify.status == "clarify"
     assert clarify.query_plan is None
     assert negated_public.status == "unsupported"
-    assert negated_public.query_plan is not None
-    assert negated_public.query_plan.unsupported_conditions
+    assert negated_public.query_plan is None
     assert negated_public.products == []
     assert negated_trade.status == "clarify"
-    assert negated_trade.query_plan is not None
-    assert negated_trade.query_plan.ambiguities
+    assert negated_trade.query_plan is None
     assert negated_trade.products == []
     assert negated_rank.status == "clarify"
-    assert negated_rank.query_plan is not None
-    assert negated_rank.query_plan.ambiguities
+    assert negated_rank.query_plan is None
     assert negated_rank.products == []
     assert excluded_identity.status == "clarify"
-    assert excluded_identity.query_plan is not None
-    assert excluded_identity.query_plan.ambiguities
+    assert excluded_identity.query_plan is None
     assert excluded_identity.products == []
 
 

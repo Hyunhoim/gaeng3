@@ -486,8 +486,12 @@ def test_grounded_gate_rejects_ranking_subspan_hidden_inside_negation() -> None:
         }
     )
 
+    # The public router now rejects this phrase before a grounded provider can
+    # run.  Use an independently executable route here so this lower-level gate
+    # remains covered as defense in depth against a caller that reaches it.
+    decision = IntentRouter().route(_QUESTION, proposal.question_id)
     with pytest.raises(GroundedPlanRejectedError, match="ranking evidence is negated"):
-        _compile(proposal, question)
+        GroundedPlanGate({}).compile(question, decision, proposal)
 
 
 def test_grounded_gate_does_not_turn_negated_public_fund_into_public_scope() -> None:

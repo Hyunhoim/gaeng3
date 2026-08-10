@@ -16,6 +16,11 @@ from finance_agent_core.contracts.backend import (
 )
 from finance_agent_core.contracts.queryplan import Intent, ProductFamily
 from finance_agent_core.contracts.routing import RouteDisposition
+from finance_agent_core.deadline import (
+    RequestDeadline,
+    bind_request_deadline,
+    current_request_deadline,
+)
 from finance_agent_core.domain import (
     DatabaseManifest,
     NormalizedDomesticEtpRecord,
@@ -318,18 +323,21 @@ def test_cross_family_search_skips_query_plan_provider_and_executes_concurrently
     barrier = Barrier(2)
     lock = Lock()
     thread_ids: set[int] = set()
+    deadline = RequestDeadline.after(5)
 
     def synchronized_execute(plan):
+        assert current_request_deadline() is deadline
         with lock:
             thread_ids.add(get_ident())
         barrier.wait(timeout=3)
         return original(plan)
 
     agent._execute_family_search = synchronized_execute  # type: ignore[method-assign]
-    result = agent.answer(
-        "국내 ETF와 해외 ETF를 각각 2개 보여줘",
-        "cross-search-004",
-    )
+    with bind_request_deadline(deadline):
+        result = agent.answer(
+            "국내 ETF와 해외 ETF를 각각 2개 보여줘",
+            "cross-search-004",
+        )
 
     assert result.status == "executed"
     assert len(thread_ids) == 2

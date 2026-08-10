@@ -30,6 +30,29 @@
 
 생성 결과는 `artifacts/data-audit/`에 기록하고 Git에서 제외한다.
 
+### 승인된 대회 데이터 release 경계
+
+평가·운영 환경은 현재 디렉터리에 놓인 파일을 새 정본으로 신뢰하지 않는다.
+패키지의
+[`approved_dataset_manifest.json`](../packages/finance_agent_core/src/finance_agent_core/config/approved_dataset_manifest.json)에
+다음 값을 release 단위로 고정한다.
+
+- 네 datarows와 네 schema workbook의 파일 크기와 SHA-256
+- source ID, 원천 행 수, 검색 가능·격리·논리 상품 수와 2026-07-11 기준일
+- Field Registry schema version
+- 승인된 normalizer가 생성한 네 SQLite의 파일 크기와 SHA-256
+
+Docker `data-init`은 원천 workbook을 열기 전에 data·schema hash를 모두 검사하고,
+정규화 후 SQLite manifest·무결성·파일 hash를 다시 검사한다. 하나라도 다르면 기존
+파일을 승인된 것으로 간주하지 않으며, 재구축 결과도 승인 hash와 다르면 배포를
+중단한다. `APP_ENV=evaluation|production` Backend도 Agent를 만들기 전에 네 DB를
+같은 release와 대조한다. `/health`는 경로나 hash를 공개하지 않고 승인 실패
+상품군만 `unavailable`로 표시한다.
+
+원천 수정, registry/normalizer 변경 또는 SQLite 생성 방식 변경은 자동 승인하지
+않는다. 네 workbook 재감사와 독립 재구축을 마친 뒤 새 versioned release로 manifest를
+명시적으로 갱신해야 한다.
+
 해외 ETP 정규화 적재도 같은 원천에서 재현한다.
 
 ```bash

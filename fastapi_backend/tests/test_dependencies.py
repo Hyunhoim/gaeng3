@@ -25,6 +25,14 @@ def test_build_agent_defaults_to_deterministic_answer() -> None:
 
     assert agent.answer_provider is None
     assert agent.capability_execution_overrides == frozenset()
+    assert agent.require_approved_databases is False
+
+
+@pytest.mark.parametrize("app_env", ["evaluation", "production"])
+def test_build_agent_enables_request_time_approval_in_deployments(app_env: str) -> None:
+    agent = build_agent(Settings(APP_ENV=app_env))
+
+    assert agent.require_approved_databases is True
 
 
 def test_build_agent_requires_all_local_provider_opt_ins(monkeypatch) -> None:

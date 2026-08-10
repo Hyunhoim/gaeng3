@@ -30,6 +30,7 @@ from finance_agent_core.answering import (
     build_grounded_answer_context,
 )
 from finance_agent_core.contracts.hcx_schema import validate_hcx_schema
+from finance_agent_core.deadline import RequestDeadline, bind_request_deadline
 from finance_agent_core.domain import DatabaseManifest, NormalizedDomesticEtpRecord
 from finance_agent_core.execution import (
     ResultVerifier,
@@ -157,6 +158,33 @@ def test_hcx_query_plan_provider_uses_semantic_structured_request() -> None:
     )
     assert "system_prompt" not in records[0].model_dump()
     assert "user_prompt" not in records[0].model_dump()
+
+
+def test_hcx_provider_timeout_is_clamped_to_remaining_request_budget() -> None:
+    content = first_vertical_slice_plan("model-generated-id").model_dump_json()
+    transport = FakeHyperClovaXTransport(_response(content))
+    provider = HyperClovaXQueryPlanProvider(_settings(), transport)
+    deadline = RequestDeadline.after(2)
+
+    with bind_request_deadline(deadline):
+        provider.generate_query_plan("테스트 질문", "trusted-request-id")
+
+    assert len(transport.requests) == 1
+    assert 0 < transport.requests[0].timeout_seconds <= 2
+    assert transport.requests[0].timeout_seconds < _settings().timeout_seconds
+
+
+def test_hcx_provider_does_not_call_transport_after_request_cancellation() -> None:
+    transport = FakeHyperClovaXTransport(_response('{"value":"unused"}'))
+    provider = HyperClovaXQueryPlanProvider(_settings(), transport)
+    deadline = RequestDeadline.after(2)
+    deadline.cancel()
+
+    with bind_request_deadline(deadline):
+        with pytest.raises(HyperClovaXTimeoutError):
+            provider.generate_query_plan("테스트 질문", "trusted-request-id")
+
+    assert transport.requests == []
 
 
 def test_hcx_fund_comparison_provider_uses_minimum_privilege_schema() -> None:

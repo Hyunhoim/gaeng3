@@ -188,24 +188,45 @@ class BackendAgentResponse(BackendContractModel):
             if self.clarification is None or self.error is not None:
                 raise ValueError("clarification response requires clarification details")
             if (
-                self.products
-                or self.comparisons
-                or self.aggregates
-                or self.documents
-                or self.candidate_count is not None
-            ):
-                raise ValueError("clarification response cannot contain executed results")
-        elif self.status is BackendStatus.UNSUPPORTED:
-            if (
-                self.error is not None
+                self.query_plan is not None
                 or self.products
                 or self.comparisons
                 or self.aggregates
                 or self.documents
+                or self.citations
+                or self.as_of_dates
+                or self.warnings
+                or self.candidate_count is not None
+                or self.provider_model is not None
+                or self.source_manifest is not None
+                or self.family_searches
+                or self.source_manifests
             ):
-                raise ValueError("unsupported response cannot contain error or evidence")
+                raise ValueError("clarification response cannot contain executed state")
+            if self.answer_mode is not BackendAnswerMode.CONTROL or self.fallback_used:
+                raise ValueError("clarification response requires control mode without fallback")
+        elif self.status is BackendStatus.UNSUPPORTED:
+            if (
+                self.error is not None
+                or self.clarification is not None
+                or self.query_plan is not None
+                or self.products
+                or self.comparisons
+                or self.aggregates
+                or self.documents
+                or self.citations
+                or self.as_of_dates
+                or self.warnings
+                or self.provider_model is not None
+                or self.source_manifest is not None
+                or self.family_searches
+                or self.source_manifests
+            ):
+                raise ValueError("unsupported response cannot contain control or executed state")
             if self.candidate_count is not None:
                 raise ValueError("unsupported response cannot contain candidate_count")
+            if self.answer_mode is not BackendAnswerMode.CONTROL or self.fallback_used:
+                raise ValueError("unsupported response requires control mode without fallback")
         elif self.status is BackendStatus.ERROR:
             if self.error is None:
                 raise ValueError("error response requires an error object")

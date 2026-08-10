@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import asyncio
+from functools import partial
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, Response
@@ -13,8 +13,18 @@ from finance_agent_core.agent import (
 from finance_agent_core.contracts.backend import BackendAgentRequest, BackendAgentResponse
 from finance_agent_core.contracts.official import OfficialAnswerResponse
 
+from app.answer_controls import (
+    backend_overloaded_response,
+    backend_timeout_response,
+    official_overloaded_response,
+)
 from app.config import Settings
 from app.dependencies import AgentService, get_agent, get_settings
+from app.request_execution import (
+    RequestExecutionTimeoutError,
+    RequestOverloadedError,
+    execute_bounded_request,
+)
 
 router = APIRouter(tags=["answer"])
 
@@ -28,14 +38,26 @@ _ERROR_RESPONSES = {
     response_model=BackendAgentResponse,
     responses=_ERROR_RESPONSES,
 )
-def answer(
+async def answer(
     request: BackendAgentRequest,
     response: Response,
     service: Annotated[AgentService, Depends(get_agent)],
+    settings: Annotated[Settings, Depends(get_settings)],
 ) -> BackendAgentResponse:
     """Expose the framework-neutral adapter without changing its DTO semantics."""
 
-    result = execute_answer_request(service, request)
+    try:
+        result = await execute_bounded_request(
+            partial(execute_answer_request, service, request),
+            timeout_seconds=settings.official_answer_timeout_seconds,
+            max_inflight=settings.official_answer_max_inflight,
+        )
+    except RequestOverloadedError:
+        response.status_code = 503
+        return backend_overloaded_response(request.request_id)
+    except RequestExecutionTimeoutError:
+        response.status_code = 504
+        return backend_timeout_response(request.request_id)
     response.status_code = result.http_status_code
     return result.response
 
@@ -66,11 +88,22 @@ async def official_answer(
         )
     request = BackendAgentRequest(request_id=question_id, question=question)
     try:
-        result = await asyncio.wait_for(
-            asyncio.to_thread(execute_answer_request, service, request),
-            timeout=settings.official_answer_timeout_seconds,
+        result = await execute_bounded_request(
+            partial(execute_answer_request, service, request),
+            timeout_seconds=settings.official_answer_timeout_seconds,
+            max_inflight=settings.official_answer_max_inflight,
         )
-    except TimeoutError:
+    except RequestOverloadedError:
+        return official_overloaded_response(
+            question_id=question_id,
+            question=question,
+        )
+    except RequestExecutionTimeoutError:
+        return official_timeout_response(
+            question_id=question_id,
+            question=question,
+        )
+    if result.http_status_code == 504:
         return official_timeout_response(
             question_id=question_id,
             question=question,

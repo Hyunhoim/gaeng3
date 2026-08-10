@@ -281,7 +281,9 @@ def test_routed_fund_execution_requires_explicit_family_override(
         capability_execution_overrides={"fund"},
     ).answer(question, "fund-approved-001")
 
-    assert locked.status == "clarify"
+    assert locked.status == "unsupported"
+    assert locked.query_plan is None
+    assert locked.decision.draft.intent.value == "unsupported"
     assert approved.status == "executed"
     assert approved.query_plan is not None
     assert approved.query_plan.product_families == [ProductFamily.FUND]
