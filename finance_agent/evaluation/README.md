@@ -13,9 +13,11 @@ baseline에는 다음을 포함한다.
 - 재현 명령과 해석 한계
 
 `schema-embedding-cpu-public-v1.json`은 네 상품군 공개 200문항에서 고정된
-오픈소스 임베딩 7개를 CPU로 비교한 집계다. BGE-M3와 Lexical 우선 결합이 공개
-품질 문턱을 통과했지만 모델·결합 선택에 같은 질문을 사용했으므로 독립 blind나
-production 채택 결과가 아니다. 상세 해석은
+오픈소스 임베딩 7개를 RRF와 Lexical 우선 방식에 각각 적용한 집계다. BGE-M3와
+Lexical 우선 결합이 공개 품질 문턱을 통과했지만 개선 8문항은 해외 ETP에 집중됐고,
+KURE-v1과 strict exact도 동률이다. paired 통계와 6개 실패 사례는
+`schema-embedding-cpu-public-v1-statistics.json`에 별도로 동결했다. 모델·결합 선택에
+같은 질문을 사용했으므로 독립 blind나 production 채택 결과가 아니다. 상세 해석은
 [Schema Dense CPU 비교](../docs/evaluation-schema-embedding-cpu.md)를 따른다.
 
 개별 상품명, 상품 ID, 원천 행 값, 전체 답변과 모델 로그는 포함하지 않는다.
@@ -71,6 +73,11 @@ DB, 원천 XLSX, 전체 report, 모델 가중치는 계속 `artifacts/` 또는 �
 | [Stage 3 release 계약](baselines/stage3-release-contract-2026-08-12.json) | Manifest·Binding·anti-replay·trust·rollback harness·SQLite 실행 권한 145건 |
 | [Stage 3 localhost OCI·rollback](baselines/stage3-local-oci-rollback-2026-08-12.json) | 합성 Registry exact digest와 격리 N-1→N→N-1 실기동; 외부 trust는 stub임을 함께 동결 |
 | [Schema Dense CPU 임베딩 비교](baselines/schema-embedding-cpu-public-v1.json) | 네 상품군 공개 200문항에서 7개 모델을 비교하고 BGE-M3·Lexical 우선 결합을 blind 후보로 선정 |
+| [Schema Dense paired 통계·실패 분석](analysis/schema-embedding-cpu-public-v1-statistics.json) | 7개 Lexical 우선 결과의 질문별 bootstrap, 상품군 점수 분포, BGE strict 실패 6건 |
+
+Schema Dense의 독립 외부 평가 설정은 질문을 받기 전에
+[동결 protocol](protocols/schema-embedding-external-blind-v1.protocol.json)로 고정했다.
+현재는 외부 질문·비공개 정답·commitment를 받지 않아 독립 점수가 없다
 
 자연어 비교 E2E baseline은 실행 16문항의 실제 `ComparisonCell.value`와 field
 evidence provenance를 서로 별도의 fingerprint로 동결한다. parser 안전 계약은

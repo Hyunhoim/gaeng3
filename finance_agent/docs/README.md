@@ -29,6 +29,7 @@
 | HyperCLOVA X 연결 전에 무엇이 남았는지 | [연결 전 준비 기준](pre-hcx-readiness.md) |
 | Dense 도입 판단과 현재 SQL·BM25 수치가 궁금한지 | [Dense Schema Linker 오프라인 컴포넌트 평가](evaluation-dense-schema-linker-shadow.md) |
 | 실제 Schema Dense 임베딩 7개 CPU 비교가 궁금한지 | [Schema Dense CPU 임베딩 모델 비교](evaluation-schema-embedding-cpu.md) |
+| 다음 독립 blind·OOD 평가 절차가 궁금한지 | [Schema Dense 외부 평가 인계서](../evaluation/schema_embedding_external/README.md) |
 
 ## 목적별 위치
 
