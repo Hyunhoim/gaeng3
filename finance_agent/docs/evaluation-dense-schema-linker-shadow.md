@@ -3,6 +3,11 @@
 측정일: 2026-08-11
 상태: 구현 완료·production OFF·AI Core 담당자 검토 필요
 
+후속 업데이트: 2026-08-12 실제 임베딩 7개를 CPU에서 비교해 BGE-M3와 Lexical
+우선 결합을 독립 blind 후보로 선정했다. 이 문서의 fake Dense 결과는 최초 계약
+기준선으로 보존하며, 실제 모델 결과는
+[Schema Dense CPU 임베딩 모델 비교](evaluation-schema-embedding-cpu.md)를 따른다.
+
 ## 1. 최종 판단
 
 - 현재 승인 DB를 사용한 SQL 검색·집계 공개 회귀 8문항은 **8/8 정확

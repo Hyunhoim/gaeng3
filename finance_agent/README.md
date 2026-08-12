@@ -77,6 +77,9 @@ finance_agent/
 └── environment.yml               # Conda 개발 환경
 ```
 
+Schema Dense 임베딩 비교는 운영 환경과 분리된
+`environment.embedding-eval.yml`·`requirements/embedding-eval.txt`를 사용
+
 ### 디렉터리별 시작 문서
 
 | 디렉터리 | 먼저 볼 문서 | 역할 |
@@ -186,7 +189,27 @@ index·공식 데이터·Docker image가 같은 release인지도 검증한다. �
 - [로컬 LLM 테스트 런타임](docs/local-llm.md)
 - [HyperCLOVA X provider 계약](docs/hyperclova-provider.md)
 
-## 10. 문서 읽는 순서
+## 10. Schema Dense CPU 비교
+
+실제 임베딩 모델은 일반 개발·Backend Docker 의존성에 포함하지 않고 별도 환경에서
+평가한다. 현재 공개 개발 세트의 7개 모델 비교에서는 BGE-M3와 Lexical 우선 결합이
+1순위이며, 독립 blind·OOD 기권 검증 전까지 production 기능은 계속 OFF다.
+
+```bash
+conda env create -f environment.embedding-eval.yml
+conda run -n gaeng3-embedding-eval \
+  python -m pip install --no-build-isolation -r requirements/embedding-eval.txt
+conda run -n gaeng3-embedding-eval \
+  finance-benchmark-schema-embeddings \
+  --model bge-m3 \
+  --fusion-strategy lexical_first \
+  --require-contract
+```
+
+결과와 한계는 [Schema Dense CPU 임베딩 모델 비교](docs/evaluation-schema-embedding-cpu.md)를
+기준으로 확인
+
+## 11. 문서 읽는 순서
 
 처음 Agent 작업을 시작한다면 다음 순서를 권장
 

@@ -66,6 +66,7 @@ HCX 모델·endpoint·인증과 크레딧 적용 범위는 남아 있어 기존�
 - [교차 상품군 SEARCH](cross-family-search.md)
 - [BM25/SQLite FTS 문서 RAG](document-rag.md)
 - [Dense Schema Linker 오프라인 컴포넌트 평가](evaluation-dense-schema-linker-shadow.md)
+- [Schema Dense CPU 임베딩 모델 비교](evaluation-schema-embedding-cpu.md)
 - [근거 기반 최종 답변](evaluation-grounded-answers.md)
 
 ### 평가와 품질
@@ -136,6 +137,7 @@ HCX 모델·endpoint·인증과 크레딧 적용 범위는 남아 있어 기존�
 | [제출용 모델 경계와 로컬 LLM 정리 메모](submission-model-boundary.md) | 8월 6일 공식 확인, 제출 후보의 로컬 provider·설정·의존성 제거, 투명한 개발·제출 경계 | release gate |
 | [BM25/SQLite FTS 문서 RAG](document-rag.md) | 승인 문서 적재·BM25 검색·필터·근거·기준일·not-found 계약 | 최소 기능 완료 |
 | [Dense Schema Linker 오프라인 컴포넌트 평가](evaluation-dense-schema-linker-shadow.md) | 현재 승인 SQL·합성 BM25 기준선, fake embedding·index manifest·production OFF와 채택 gate | 컴포넌트 구현·채택 보류 |
+| [Schema Dense CPU 임베딩 모델 비교](evaluation-schema-embedding-cpu.md) | 7개 고정 모델 CPU 비교, Lexical 우선 결합, BGE-M3 후보와 안전·속도 gate | 공개 개발 완료·독립 blind 대기·production OFF |
 | [Backend 전달용 Agent DTO](backend-contract.md) | 프레임워크 독립 request·response·citation·fallback·HTTP 오류 adapter와 JSON 예시 | v1.0·adapter 12/12 |
 | [금융상품 Agent 사람 평가 rubric](human-evaluation.md) | 6개 평가 축·critical gate·독립 reviewer·집계 계약 | rubric 완료·실평가 대기 |
 | [저장소 부트스트랩 작업 명세](prompts/01-repository-bootstrap.md) | 최초 Agent Core를 구현할 때 Codex에 전달한 실행 명세 | 완료 기록 |

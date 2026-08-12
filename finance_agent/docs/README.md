@@ -28,6 +28,7 @@
 | 전체 필드의 미시험 구간과 다음 Qwen 실험이 궁금한지 | [자동 커버리지 평가](evaluation-coverage-guided.md) |
 | HyperCLOVA X 연결 전에 무엇이 남았는지 | [연결 전 준비 기준](pre-hcx-readiness.md) |
 | Dense 도입 판단과 현재 SQL·BM25 수치가 궁금한지 | [Dense Schema Linker 오프라인 컴포넌트 평가](evaluation-dense-schema-linker-shadow.md) |
+| 실제 Schema Dense 임베딩 7개 CPU 비교가 궁금한지 | [Schema Dense CPU 임베딩 모델 비교](evaluation-schema-embedding-cpu.md) |
 
 ## 목적별 위치
 

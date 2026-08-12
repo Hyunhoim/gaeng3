@@ -87,6 +87,7 @@ Answer Verifier, 결정론적 evidence compiler와 safe fallback으로 구성한
 - [internal-red-team-v1](../../docs/evaluation-internal-red-team.md): 네 상품군 전체 E2E·안전 회귀
 - [공식 형식 30문항 공개 모의평가](../../docs/evaluation-official-mock.md): 난이도 10/10/10·답변 불가 5개 전체 경로
 - [자동 커버리지·Qwen 자연화 평가](../../docs/evaluation-coverage-guided.md): 대표 계획 305개·단계별 병목·shard 실험 계약
+- [Schema Dense CPU 모델 비교](../../docs/evaluation-schema-embedding-cpu.md): 7개 고정 임베딩·Lexical 우선 결합·독립 blind 진입 기준
 
 ## 상품군 vertical slice
 

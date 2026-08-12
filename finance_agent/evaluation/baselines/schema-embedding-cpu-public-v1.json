@@ -1,0 +1,229 @@
+{
+  "schema_version": "1.0",
+  "baseline_id": "schema-embedding-cpu-public-v1",
+  "recorded_on": "2026-08-12",
+  "dataset": "four-family-public-core-schema-linking-v1",
+  "evaluation_layer": "schema_retrieval",
+  "status": "public_development_not_blind",
+  "provider": {
+    "name": "sentence-transformers-cpu",
+    "official_submission_provider": false
+  },
+  "model": {
+    "repository": "BAAI/bge-m3",
+    "served_name": null,
+    "revision": "5617a9f61b028005a4858fdac845db406aefb181",
+    "reason": "CPU 공개 개발 평가의 최종 blind 후보이며 production에는 아직 연결하지 않음"
+  },
+  "scope": "schema_field_linking_with_gold_product_family",
+  "routing_quality_included": false,
+  "environment": {
+    "device": "cpu",
+    "cpu_model": "INTEL(R) XEON(R) SILVER 4510",
+    "logical_cpu_count": 24,
+    "configured_cpu_threads": 12,
+    "python": "3.12.13",
+    "torch": "2.13.0+cpu",
+    "transformers": "5.15.0",
+    "sentence_transformers": "5.7.0",
+    "huggingface_hub": "1.27.0"
+  },
+  "suite": {
+    "id": "schema-embedding-cpu-public-v1",
+    "version": "1.0",
+    "path": "packages/finance_agent_core/src/finance_agent_core/evaluation/suites/schema_embedding_cpu_public_v1.json",
+    "sha256": "3de391e925a5b2a661a8e191778a906644d46b72a465df70284e8c8e37a46fc2",
+    "total_cases": 200,
+    "case_count": 200,
+    "current_policy_execute_cases": 181,
+    "current_policy_blocked_cases": 19,
+    "gold_field_count": 527,
+    "schema_field_document_count": 100
+  },
+  "data": {
+    "field_registry_sha256": "5887c4dba17fd33d0c20b550adf564796de508e3dcafc2a2e7bb3796603a73b5",
+    "model_registry_sha256": "25bce2f973c9685d94d6895c183f04006bf42a13e406a0f2a9624ee65ed7b653",
+    "not_applicable_reason": "상품 행 검색이 아니라 field registry와 공개 질문의 schema field 연결을 평가하므로 상품 DB·원천 파일 hash는 사용하지 않음"
+  },
+  "metrics": {
+    "total": 181,
+    "passed": 175,
+    "strict_accuracy": 0.966851,
+    "lexical_exact_field_set": 0.922652,
+    "lexical_recall_at_5": 0.969639,
+    "selected_hybrid_exact_field_set": 0.966851,
+    "selected_hybrid_recall_at_5": 0.988615,
+    "selected_hybrid_recall_at_10": 1.0,
+    "selected_dense_p95_ms": 91.485176,
+    "blocked_without_embedding_calls": 19,
+    "blocked_case_count": 19
+  },
+  "lexical_baseline": {
+    "exact_field_set": 0.922652,
+    "recall_at_5": 0.969639,
+    "mrr": 0.994475,
+    "ndcg_at_5": 0.981472,
+    "missed_fields_at_5": 16
+  },
+  "rrf_screening": [
+    {
+      "model": "BAAI/bge-m3",
+      "revision": "5617a9f61b028005a4858fdac845db406aefb181",
+      "license": "mit",
+      "dense_recall_at_5": 0.753321,
+      "hybrid_exact_field_set": 0.939227,
+      "hybrid_recall_at_5": 0.979127,
+      "dense_missed_field_recovery": 0.9375,
+      "dense_p95_ms": 93.750329,
+      "report_sha256_without_timestamp": "039b2ef0c0f0938b5c284dd2be90c7834b0c8eb5646a27b92d8af87059074547"
+    },
+    {
+      "model": "nlpai-lab/KURE-v1",
+      "revision": "d14c8a9423946e268a0c9952fecf3a7aabd73bd9",
+      "license": "mit",
+      "dense_recall_at_5": 0.728653,
+      "hybrid_exact_field_set": 0.922652,
+      "hybrid_recall_at_5": 0.979127,
+      "dense_missed_field_recovery": 0.9375,
+      "dense_p95_ms": 89.885347,
+      "report_sha256_without_timestamp": "059d08f3b92c4afe2ad69e23d8f90a60acc0be081a685405ed82b16bd953687e"
+    },
+    {
+      "model": "nomic-ai/nomic-embed-text-v2-moe",
+      "revision": "1066b6599d099fbb93dfcb64f9c37a7c9e503e85",
+      "remote_code_model": "nomic-ai/nomic-bert-2048",
+      "remote_code_revision": "7710840340a098cfb869c4f65e87cf2b1b70caca",
+      "license": "apache-2.0",
+      "dense_recall_at_5": 0.698292,
+      "hybrid_exact_field_set": 0.917127,
+      "hybrid_recall_at_5": 0.982922,
+      "dense_missed_field_recovery": 0.9375,
+      "dense_p95_ms": 51.113185,
+      "report_sha256_without_timestamp": "20b6e056ad8646d54533525c71e0489c2e1484767ff7d0b789ef0d5c2609b884"
+    },
+    {
+      "model": "nlpai-lab/KoE5",
+      "revision": "bc6d284c60fe5a973e74c1751b92594c9f581213",
+      "license": "mit",
+      "dense_recall_at_5": 0.709677,
+      "hybrid_exact_field_set": 0.845304,
+      "hybrid_recall_at_5": 0.97723,
+      "dense_missed_field_recovery": 0.75,
+      "dense_p95_ms": 95.215603,
+      "report_sha256_without_timestamp": "dd81cd98acdc01034ee81748f8b351cd7d4cb9a418b211f817350671ded2e7e2"
+    },
+    {
+      "model": "intfloat/multilingual-e5-large-instruct",
+      "revision": "274baa43b0e13e37fafa6428dbc7938e62e5c439",
+      "license": "mit",
+      "dense_recall_at_5": 0.633776,
+      "hybrid_exact_field_set": 0.867403,
+      "hybrid_recall_at_5": 0.97723,
+      "dense_missed_field_recovery": 0.75,
+      "dense_p95_ms": 88.487024,
+      "report_sha256_without_timestamp": "7e1426fe2a4dd714c76daf73809029549d89c2fe6f5706f092fbfef28958924a"
+    },
+    {
+      "model": "Snowflake/snowflake-arctic-embed-l-v2.0",
+      "revision": "ac6544c8a46e00af67e330e85a9028c66b8cfd9a",
+      "license": "apache-2.0",
+      "dense_recall_at_5": 0.666034,
+      "hybrid_exact_field_set": 0.872928,
+      "hybrid_recall_at_5": 0.97723,
+      "dense_missed_field_recovery": 0.9375,
+      "dense_p95_ms": 93.567848,
+      "report_sha256_without_timestamp": "def3dc14c4d55d93a8050be6c3c785c2120ac5514d4c08dda4dfb5834fa4e9c4"
+    },
+    {
+      "model": "Qwen/Qwen3-Embedding-0.6B",
+      "revision": "97b0c614be4d77ee51c0cef4e5f07c00f9eb65b3",
+      "license": "apache-2.0",
+      "dense_recall_at_5": 0.573055,
+      "hybrid_exact_field_set": 0.679558,
+      "hybrid_recall_at_5": 0.960152,
+      "dense_missed_field_recovery": 0.625,
+      "dense_p95_ms": 80.607601,
+      "report_sha256_without_timestamp": "0a8de69b6aea015f5590e037773e8d782c6952095d23b33b0c433d5825c3d8a3"
+    }
+  ],
+  "lexical_first_finalists": [
+    {
+      "rank": 1,
+      "model": "BAAI/bge-m3",
+      "hybrid_exact_field_set": 0.966851,
+      "exact_delta": 0.044199,
+      "hybrid_recall_at_5": 0.988615,
+      "recall_delta": 0.018976,
+      "hybrid_recall_at_10": 1.0,
+      "dense_p95_ms": 91.485176,
+      "process_peak_rss_kib": 2468668,
+      "eligible_for_blind": true,
+      "report_sha256_without_timestamp": "32d0d8c966d30ccd5e8458f8e4f2b61e86a769befa98aa99dbd3b4ed3e169a47"
+    },
+    {
+      "rank": 2,
+      "model": "nlpai-lab/KURE-v1",
+      "hybrid_exact_field_set": 0.966851,
+      "exact_delta": 0.044199,
+      "hybrid_recall_at_5": 0.986717,
+      "recall_delta": 0.017078,
+      "hybrid_recall_at_10": 1.0,
+      "dense_p95_ms": 95.04913,
+      "process_peak_rss_kib": 2426576,
+      "eligible_for_blind": true,
+      "report_sha256_without_timestamp": "e7ac2ee60571a668f1a19b0d5017c3738d9b0fd1b623941e107817f8a5562978"
+    },
+    {
+      "rank": 3,
+      "model": "nomic-ai/nomic-embed-text-v2-moe",
+      "hybrid_exact_field_set": 0.961326,
+      "exact_delta": 0.038674,
+      "hybrid_recall_at_5": 0.988615,
+      "recall_delta": 0.018976,
+      "hybrid_recall_at_10": 1.0,
+      "dense_p95_ms": 51.202249,
+      "process_peak_rss_kib": 4162348,
+      "eligible_for_blind": true,
+      "report_sha256_without_timestamp": "8faf307e0c36f90b044a4354ce2e7d9d088261d171ddce35b535c736669beae0"
+    },
+    {
+      "rank": 4,
+      "model": "Snowflake/snowflake-arctic-embed-l-v2.0",
+      "hybrid_exact_field_set": 0.961326,
+      "exact_delta": 0.038674,
+      "hybrid_recall_at_5": 0.986717,
+      "recall_delta": 0.017078,
+      "hybrid_recall_at_10": 1.0,
+      "dense_p95_ms": 91.00371,
+      "process_peak_rss_kib": 2400936,
+      "eligible_for_blind": true,
+      "report_sha256_without_timestamp": "f51d7147f9274f2fe6f633eaf3a8503cf7eab7f1068647d184f1f3ddcda58c02"
+    }
+  ],
+  "safety": {
+    "blocked_without_embedding_calls": "19/19",
+    "out_of_registry_candidates": 0,
+    "out_of_family_candidates": 0,
+    "production_feature_enabled": false
+  },
+  "selection": {
+    "recommended_blind_candidate": "BAAI/bge-m3",
+    "recommended_fusion": "lexical_first",
+    "reason": "최고 exact field-set, 공동 최고 Recall@5, 원격 코드 불필요, CPU p95 문턱 통과",
+    "production_adoption": "blocked_pending_independent_blind_and_ood_abstention"
+  },
+  "reports": [
+    {
+      "role": "selected_bge_m3_lexical_first_public_report",
+      "artifact_name": "bge-m3-cpu-public-v1-lexical-first.json",
+      "sha256": "62492e24f662dd30d53d8a5d00cb1dac5dc2ea4aed41b4aa2097b76ffbaafe5d"
+    }
+  ],
+  "reproduce": "conda run -n gaeng3-embedding-eval finance-benchmark-schema-embeddings --model bge-m3 --fusion-strategy lexical_first --cpu-threads 12 --batch-size 16 --require-contract",
+  "limitations": [
+    "모델과 결합 방식을 고르는 데 사용한 공개 개발 질문이므로 독립 blind 결과가 아니다.",
+    "정답 상품군을 미리 고정한 field-linking 평가이며 Router·SQL 상품 검색·HCLX 답변 품질을 포함하지 않는다.",
+    "CPU 지연시간은 단일 warm component 측정이며 Backend HTTP·동시 요청·Docker 시작 시간을 포함하지 않는다.",
+    "OOD score·margin 기권 임계값을 아직 정하지 않아 production feature는 비활성이다."
+  ]
+}
