@@ -35,7 +35,7 @@
     "id": "schema-embedding-cpu-public-v1",
     "version": "1.0",
     "path": "packages/finance_agent_core/src/finance_agent_core/evaluation/suites/schema_embedding_cpu_public_v1.json",
-    "sha256": "5593ee7548441186461387cad7aa5280cb793f352bc9b184353b8c79596d87b6",
+    "sha256": "1cfb2f5a1aeb9faffa1acbc2a6ad0966f05796e33248fd78e0292609031479db",
     "total_cases": 200,
     "current_policy_execute_cases": 181,
     "current_policy_blocked_cases": 19,

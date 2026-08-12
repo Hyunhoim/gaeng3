@@ -142,11 +142,7 @@ def _quantiles(values: list[float]) -> ScoreQuantiles:
 def _outcome(case: SchemaCaseDiagnostic, source: Literal["lexical", "hybrid"]) -> _CaseOutcome:
     predicted = case.lexical_fields if source == "lexical" else case.hybrid_fields
     gold = set(case.gold_fields)
-    exact = (
-        case.lexical_exact
-        if source == "lexical"
-        else case.hybrid_exact
-    )
+    exact = case.lexical_exact if source == "lexical" else case.hybrid_exact
     return _CaseOutcome(
         exact=exact,
         hits_at_5=len(gold & set(predicted[:5])),
@@ -242,16 +238,13 @@ def paired_bootstrap_comparison(
         case_count=case_count,
         gold_field_count=gold_count,
         selected_only_exact_cases=sum(
-            left.exact and not right.exact
-            for left, right in zip(selected, comparator, strict=True)
+            left.exact and not right.exact for left, right in zip(selected, comparator, strict=True)
         ),
         comparator_only_exact_cases=sum(
-            right.exact and not left.exact
-            for left, right in zip(selected, comparator, strict=True)
+            right.exact and not left.exact for left, right in zip(selected, comparator, strict=True)
         ),
         both_exact_cases=sum(
-            left.exact and right.exact
-            for left, right in zip(selected, comparator, strict=True)
+            left.exact and right.exact for left, right in zip(selected, comparator, strict=True)
         ),
         neither_exact_cases=sum(
             not left.exact and not right.exact
@@ -360,11 +353,7 @@ def build_schema_embedding_statistical_analysis(
         ConfidenceProfile(
             group=group,
             top_1_score=_quantiles(
-                [
-                    item.dense_top_1_score
-                    for item in cases
-                    if item.dense_top_1_score is not None
-                ]
+                [item.dense_top_1_score for item in cases if item.dense_top_1_score is not None]
             ),
             top_1_top_2_margin=_quantiles(
                 [
@@ -398,9 +387,7 @@ def build_schema_embedding_statistical_analysis(
         if len(item.gold_fields) > 5 and item.hybrid_missing_at_5
     )
     selected_hits_at_5 = sum(item.hits_at_5 for item in selected_outcomes)
-    maximum_possible_hits_at_5 = sum(
-        min(5, item.gold_count) for item in selected_outcomes
-    )
+    maximum_possible_hits_at_5 = sum(min(5, item.gold_count) for item in selected_outcomes)
     return SchemaEmbeddingStatisticalAnalysis(
         bootstrap_iterations=iterations,
         random_seed=seed,

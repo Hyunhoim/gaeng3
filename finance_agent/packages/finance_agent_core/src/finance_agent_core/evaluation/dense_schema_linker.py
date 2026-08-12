@@ -715,18 +715,14 @@ def run_dense_schema_linker_evaluation(
     )
     diagnostics = [_case_diagnostic(item) for item in observations]
     hybrid_failures = tuple(
-        item
-        for item in diagnostics
-        if not item.hybrid_exact or item.hybrid_missing_at_5
+        item for item in diagnostics if not item.hybrid_exact or item.hybrid_missing_at_5
     )
     lexical_recoveries = tuple(
         item
         for item in diagnostics
         if (
             (not item.lexical_exact and item.hybrid_exact)
-            or (
-                len(item.hybrid_missing_at_5) < len(item.lexical_missing_at_5)
-            )
+            or (len(item.hybrid_missing_at_5) < len(item.lexical_missing_at_5))
         )
     )
     return DenseSchemaEvaluationReport(

@@ -38,12 +38,14 @@ def test_fake_dense_schema_evaluation_is_safe_but_never_adoption_evidence() -> N
         "overseas_etp",
     }
     assert set(report.metrics_by_split) == {"development", "holdout"}
-    assert sum(
-        item.hybrid.scored_cases for item in report.metrics_by_family.values()
-    ) == report.hybrid.scored_cases
-    assert sum(
-        item.hybrid.gold_field_count for item in report.metrics_by_family.values()
-    ) == report.hybrid.gold_field_count
+    assert (
+        sum(item.hybrid.scored_cases for item in report.metrics_by_family.values())
+        == report.hybrid.scored_cases
+    )
+    assert (
+        sum(item.hybrid.gold_field_count for item in report.metrics_by_family.values())
+        == report.hybrid.gold_field_count
+    )
     assert len(report.case_diagnostics) == report.hybrid.scored_cases
     assert all(
         len(item.dense_fields) == len(item.dense_scores)
