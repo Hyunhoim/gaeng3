@@ -20,7 +20,10 @@ from finance_agent_core.agent.linker import build_lexical_hints
 from finance_agent_core.config import load_field_registry
 from finance_agent_core.contracts.queryplan import ProductFamily
 from finance_agent_core.contracts.routing import RouteDisposition
-from finance_agent_core.evaluation.models import ExpectedDisposition
+from finance_agent_core.evaluation.models import (
+    EvaluationSplit,
+    ExpectedDisposition,
+)
 from finance_agent_core.evaluation.suite import load_core_evaluation_suite
 from finance_agent_core.retrieval.schema_dense import (
     DenseSchemaIndex,
@@ -123,6 +126,33 @@ class MissedFieldRecovery(DenseEvaluationModel):
     dense_recovery_rate_at_5: float = Field(ge=0, le=1)
 
 
+class SchemaRetrievalBreakdown(DenseEvaluationModel):
+    lexical: FieldRetrievalMetrics
+    dense: FieldRetrievalMetrics
+    hybrid: FieldRetrievalMetrics
+
+
+class SchemaCaseDiagnostic(DenseEvaluationModel):
+    case_id: str = Field(min_length=1, max_length=128)
+    product_family: ProductFamily
+    split: EvaluationSplit
+    category: str = Field(min_length=1, max_length=64)
+    question: str = Field(min_length=1, max_length=1000)
+    gold_fields: tuple[str, ...] = Field(min_length=1)
+    lexical_fields: tuple[str, ...]
+    dense_fields: tuple[str, ...]
+    dense_scores: tuple[float, ...]
+    dense_top_1_score: float | None = Field(default=None, ge=-1.000001, le=1.000001)
+    dense_top_2_score: float | None = Field(default=None, ge=-1.000001, le=1.000001)
+    dense_margin_top_1_top_2: float | None = Field(default=None, ge=0, le=2.000002)
+    hybrid_fields: tuple[str, ...]
+    lexical_exact: bool
+    hybrid_exact: bool
+    lexical_missing_at_5: tuple[str, ...]
+    hybrid_missing_at_5: tuple[str, ...]
+    dense_recovered_lexical_misses_at_5: tuple[str, ...]
+
+
 class DenseSchemaDecision(DenseEvaluationModel):
     evidence_status: Literal["insufficient_evidence"] = "insufficient_evidence"
     real_embedding_required: Literal[True] = True
@@ -158,6 +188,12 @@ class DenseSchemaEvaluationReport(DenseEvaluationModel):
     lexical: FieldRetrievalMetrics
     fake_dense: FieldRetrievalMetrics
     hybrid: FieldRetrievalMetrics
+    metrics_by_family: dict[str, SchemaRetrievalBreakdown]
+    metrics_by_split: dict[str, SchemaRetrievalBreakdown]
+    metrics_by_category: dict[str, SchemaRetrievalBreakdown]
+    case_diagnostics: tuple[SchemaCaseDiagnostic, ...]
+    hybrid_failure_cases: tuple[SchemaCaseDiagnostic, ...]
+    lexical_recovery_cases: tuple[SchemaCaseDiagnostic, ...]
     missed_field_recovery: MissedFieldRecovery
     safety: SchemaSafetyMetrics
     runtime: SchemaRuntimeMetrics
@@ -168,6 +204,8 @@ class DenseSchemaEvaluationReport(DenseEvaluationModel):
 class _EvaluationCase:
     case_id: str
     family: ProductFamily
+    split: EvaluationSplit
+    category: str
     question: str
     legacy_expected_disposition: ExpectedDisposition
     current_expected_disposition: ExpectedDisposition
@@ -176,9 +214,15 @@ class _EvaluationCase:
 
 @dataclass(frozen=True)
 class _Observation:
+    case_id: str
+    family: ProductFamily
+    split: EvaluationSplit
+    category: str
+    question: str
     gold: frozenset[str]
     lexical: tuple[str, ...]
     dense: tuple[str, ...]
+    dense_scores: tuple[float, ...]
     hybrid: tuple[str, ...]
 
 
@@ -426,6 +470,60 @@ def _retrieval_metrics(
     )
 
 
+def _breakdowns(
+    observations: Sequence[_Observation],
+    attribute: Literal["family", "split", "category"],
+) -> dict[str, SchemaRetrievalBreakdown]:
+    grouped: dict[str, list[_Observation]] = {}
+    for item in observations:
+        raw_key = getattr(item, attribute)
+        key = raw_key.value if isinstance(raw_key, (ProductFamily, EvaluationSplit)) else raw_key
+        grouped.setdefault(str(key), []).append(item)
+    return {
+        key: SchemaRetrievalBreakdown(
+            lexical=_retrieval_metrics(group, "lexical"),
+            dense=_retrieval_metrics(group, "dense"),
+            hybrid=_retrieval_metrics(group, "hybrid"),
+        )
+        for key, group in sorted(grouped.items())
+    }
+
+
+def _is_exact(item: _Observation, predicted: Sequence[str]) -> bool:
+    return len(predicted) >= len(item.gold) and set(predicted[: len(item.gold)]) == item.gold
+
+
+def _case_diagnostic(item: _Observation) -> SchemaCaseDiagnostic:
+    lexical_top_5 = set(item.lexical[:5])
+    dense_top_5 = set(item.dense[:5])
+    hybrid_top_5 = set(item.hybrid[:5])
+    lexical_misses = item.gold - lexical_top_5
+    return SchemaCaseDiagnostic(
+        case_id=item.case_id,
+        product_family=item.family,
+        split=item.split,
+        category=item.category,
+        question=item.question,
+        gold_fields=tuple(sorted(item.gold)),
+        lexical_fields=item.lexical,
+        dense_fields=item.dense,
+        dense_scores=item.dense_scores,
+        dense_top_1_score=item.dense_scores[0] if item.dense_scores else None,
+        dense_top_2_score=item.dense_scores[1] if len(item.dense_scores) >= 2 else None,
+        dense_margin_top_1_top_2=(
+            round(item.dense_scores[0] - item.dense_scores[1], 9)
+            if len(item.dense_scores) >= 2
+            else None
+        ),
+        hybrid_fields=item.hybrid,
+        lexical_exact=_is_exact(item, item.lexical),
+        hybrid_exact=_is_exact(item, item.hybrid),
+        lexical_missing_at_5=tuple(sorted(lexical_misses)),
+        hybrid_missing_at_5=tuple(sorted(item.gold - hybrid_top_5)),
+        dense_recovered_lexical_misses_at_5=tuple(sorted(lexical_misses & dense_top_5)),
+    )
+
+
 def _load_cases() -> tuple[
     list[_EvaluationCase],
     dict[str, str],
@@ -477,6 +575,8 @@ def _load_cases() -> tuple[
                 _EvaluationCase(
                     case_id=case.id,
                     family=family,
+                    split=case.split,
+                    category=case.category,
                     question=case.question,
                     legacy_expected_disposition=case.disposition,
                     current_expected_disposition=current_disposition,
@@ -548,6 +648,7 @@ def run_dense_schema_linker_evaluation(
 
         lexical_fields: tuple[str, ...]
         dense_fields: tuple[str, ...] = ()
+        dense_scores: tuple[float, ...] = ()
         hybrid_fields: tuple[str, ...] = ()
         lexical_started = time.perf_counter()
         lexical_fields, lexical_blocked = _lexical_result(case.question, case.family)
@@ -564,6 +665,7 @@ def run_dense_schema_linker_evaluation(
             candidates = index.search(case.question, case.family, top_k=10)
             dense_ms = (time.perf_counter() - dense_started) * 1000
             dense_fields = tuple(candidate.field_id for candidate in candidates)
+            dense_scores = tuple(candidate.score for candidate in candidates)
 
             fusion_started = time.perf_counter()
             hybrid_fields = _fuse_fields(
@@ -591,9 +693,15 @@ def run_dense_schema_linker_evaluation(
         if not is_expected_block and case.gold_fields:
             observations.append(
                 _Observation(
+                    case_id=case.case_id,
+                    family=case.family,
+                    split=case.split,
+                    category=case.category,
+                    question=case.question,
                     gold=frozenset(case.gold_fields),
                     lexical=lexical_fields,
                     dense=dense_fields,
+                    dense_scores=dense_scores,
                     hybrid=hybrid_fields,
                 )
             )
@@ -604,6 +712,22 @@ def run_dense_schema_linker_evaluation(
     lexical_missed = sum(len(item.gold - set(item.lexical[:5])) for item in observations)
     dense_recovered = sum(
         len((item.gold - set(item.lexical[:5])) & set(item.dense[:5])) for item in observations
+    )
+    diagnostics = [_case_diagnostic(item) for item in observations]
+    hybrid_failures = tuple(
+        item
+        for item in diagnostics
+        if not item.hybrid_exact or item.hybrid_missing_at_5
+    )
+    lexical_recoveries = tuple(
+        item
+        for item in diagnostics
+        if (
+            (not item.lexical_exact and item.hybrid_exact)
+            or (
+                len(item.hybrid_missing_at_5) < len(item.lexical_missing_at_5)
+            )
+        )
     )
     return DenseSchemaEvaluationReport(
         suite_case_count=len(cases),
@@ -617,6 +741,12 @@ def run_dense_schema_linker_evaluation(
         lexical=lexical_metrics,
         fake_dense=dense_metrics,
         hybrid=hybrid_metrics,
+        metrics_by_family=_breakdowns(observations, "family"),
+        metrics_by_split=_breakdowns(observations, "split"),
+        metrics_by_category=_breakdowns(observations, "category"),
+        case_diagnostics=tuple(diagnostics),
+        hybrid_failure_cases=hybrid_failures,
+        lexical_recovery_cases=lexical_recoveries,
         missed_field_recovery=MissedFieldRecovery(
             lexical_missed_fields_at_5=lexical_missed,
             dense_recovered_fields_at_5=dense_recovered,
@@ -680,6 +810,8 @@ __all__ = [
     "DenseSchemaEvaluationReport",
     "FakeHashEmbeddingProvider",
     "FieldRetrievalMetrics",
+    "SchemaCaseDiagnostic",
+    "SchemaRetrievalBreakdown",
     "report_fingerprint",
     "run_dense_schema_linker_evaluation",
 ]

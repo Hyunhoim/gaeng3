@@ -31,6 +31,33 @@ def test_fake_dense_schema_evaluation_is_safe_but_never_adoption_evidence() -> N
     assert report.lexical.micro_precision_among_returned_at_5 == 0.994163
     assert report.lexical.fixed_k_micro_precision_at_5 == 0.564641
     assert report.hybrid.fixed_k_micro_precision_at_5 == 0.561326
+    assert set(report.metrics_by_family) == {
+        "bond",
+        "domestic_etp",
+        "fund",
+        "overseas_etp",
+    }
+    assert set(report.metrics_by_split) == {"development", "holdout"}
+    assert sum(
+        item.hybrid.scored_cases for item in report.metrics_by_family.values()
+    ) == report.hybrid.scored_cases
+    assert sum(
+        item.hybrid.gold_field_count for item in report.metrics_by_family.values()
+    ) == report.hybrid.gold_field_count
+    assert len(report.case_diagnostics) == report.hybrid.scored_cases
+    assert all(
+        len(item.dense_fields) == len(item.dense_scores)
+        and item.dense_top_1_score == item.dense_scores[0]
+        and item.dense_margin_top_1_top_2 is not None
+        and item.dense_margin_top_1_top_2 >= 0
+        for item in report.case_diagnostics
+    )
+    assert all(item.case_id and item.question for item in report.hybrid_failure_cases)
+    assert all(
+        (not item.lexical_exact and item.hybrid_exact)
+        or len(item.hybrid_missing_at_5) < len(item.lexical_missing_at_5)
+        for item in report.lexical_recovery_cases
+    )
     assert report.decision.evidence_status == "insufficient_evidence"
     assert report.decision.production_adoption == "rejected_for_now"
     assert report.decision.product_semantic_search == "deferred"

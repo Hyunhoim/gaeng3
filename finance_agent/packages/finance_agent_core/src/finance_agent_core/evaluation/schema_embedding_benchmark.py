@@ -13,6 +13,8 @@ from pydantic import BaseModel, ConfigDict, Field
 from finance_agent_core.evaluation.dense_schema_linker import (
     FieldRetrievalMetrics,
     MissedFieldRecovery,
+    SchemaCaseDiagnostic,
+    SchemaRetrievalBreakdown,
     SchemaRuntimeMetrics,
     SchemaSafetyMetrics,
     run_dense_schema_linker_evaluation,
@@ -90,6 +92,12 @@ class SchemaEmbeddingBenchmarkReport(SchemaEmbeddingBenchmarkModel):
     lexical: FieldRetrievalMetrics
     dense: FieldRetrievalMetrics
     lexical_plus_dense_rrf: FieldRetrievalMetrics
+    metrics_by_family: dict[str, SchemaRetrievalBreakdown]
+    metrics_by_split: dict[str, SchemaRetrievalBreakdown]
+    metrics_by_category: dict[str, SchemaRetrievalBreakdown]
+    case_diagnostics: tuple[SchemaCaseDiagnostic, ...]
+    hybrid_failure_cases: tuple[SchemaCaseDiagnostic, ...]
+    lexical_recovery_cases: tuple[SchemaCaseDiagnostic, ...]
     dense_minus_lexical: RetrievalMetricDeltas
     hybrid_minus_lexical: RetrievalMetricDeltas
     missed_field_recovery: MissedFieldRecovery
@@ -208,6 +216,12 @@ def run_schema_embedding_benchmark(
         lexical=component.lexical,
         dense=component.fake_dense,
         lexical_plus_dense_rrf=component.hybrid,
+        metrics_by_family=component.metrics_by_family,
+        metrics_by_split=component.metrics_by_split,
+        metrics_by_category=component.metrics_by_category,
+        case_diagnostics=component.case_diagnostics,
+        hybrid_failure_cases=component.hybrid_failure_cases,
+        lexical_recovery_cases=component.lexical_recovery_cases,
         dense_minus_lexical=dense_delta,
         hybrid_minus_lexical=hybrid_delta,
         missed_field_recovery=component.missed_field_recovery,
