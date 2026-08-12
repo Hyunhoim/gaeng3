@@ -47,6 +47,10 @@ finance-compare-coverage-profiles = "finance_agent_core.evaluation.coverage_abla
 finance-run-coverage-campaign = "finance_agent_core.evaluation.coverage_campaign_cli:main"
 finance-render-coverage-report = "finance_agent_core.evaluation.coverage_report_cli:main"
 finance-evaluate-safety-blind = "finance_agent_core.evaluation.safety_blind_cli:main"
+finance-evaluate-dense-schema-linker = "finance_agent_core.evaluation.dense_schema_linker_cli:main"
+finance-evaluate-approved-sql = "finance_agent_core.evaluation.approved_sql_baseline_cli:main"
+finance-benchmark-bm25-contract = "finance_agent_core.evaluation.bm25_contract_benchmark_cli:main"
+finance-build-agent-release = "finance_agent_core.release_cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

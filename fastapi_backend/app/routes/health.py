@@ -5,8 +5,9 @@ from contextlib import closing
 from pathlib import Path
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, Depends, Request, Response, status
 from finance_agent_core.contracts.queryplan import ProductFamily
+from finance_agent_core.release import ResolvedAgentRelease
 from finance_agent_core.storage import (
     DatasetApprovalError,
     connect_read_only,
@@ -64,6 +65,7 @@ def _database_is_ready(
     responses={status.HTTP_503_SERVICE_UNAVAILABLE: {"model": HealthResponse}},
 )
 def health(
+    request: Request,
     response: Response,
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> HealthResponse:
@@ -83,7 +85,17 @@ def health(
     unavailable_families = [
         family for family in configured_families if family not in ready_families
     ]
-    is_ready = len(ready_families) == len(ProductFamily)
+    release_ready = True
+    if require_approval:
+        release_guard = getattr(request.app.state, "release_guard", None)
+        if type(release_guard) is not ResolvedAgentRelease:
+            release_ready = False
+        else:
+            try:
+                release_guard.assert_current()
+            except Exception:  # noqa: BLE001 - readiness must not expose release details
+                release_ready = False
+    is_ready = len(ready_families) == len(ProductFamily) and release_ready
     if not is_ready:
         response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
     return HealthResponse(

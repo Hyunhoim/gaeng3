@@ -41,6 +41,7 @@ from finance_agent_core.execution import (
     ResultVerifier,
     SQLiteAggregateOracle,
     SQLiteOracle,
+    authorize_internal_evaluation_plan,
     build_aggregate_evidence,
     build_comparison_evidence,
     build_product_comparison,
@@ -1161,7 +1162,9 @@ def execute_coverage_plan(
     aggregates: list[BaseModel] = []
     if plan.intent is Intent.AGGREGATE:
         require_internal_evaluation_aggregation(plan)
-        executed = SQLiteAggregateOracle(database_path).execute(plan)
+        validated_plan = authorize_internal_evaluation_plan(plan, database_path)
+        plan = validated_plan.canonical_plan
+        executed = SQLiteAggregateOracle(database_path).execute(validated_plan)
         verified = AggregateResultVerifier().verify(
             plan,
             executed,
@@ -1175,7 +1178,9 @@ def execute_coverage_plan(
             require_internal_evaluation_comparison(plan)
         else:
             require_internal_evaluation_search(plan)
-        executed_search = SQLiteOracle(database_path).execute(plan)
+        validated_plan = authorize_internal_evaluation_plan(plan, database_path)
+        plan = validated_plan.canonical_plan
+        executed_search = SQLiteOracle(database_path).execute(validated_plan)
         universe = (
             None if plan.intent is Intent.COMPARE else record_cache.get(database_path).records
         )

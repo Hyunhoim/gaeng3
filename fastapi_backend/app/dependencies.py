@@ -1,16 +1,36 @@
 from __future__ import annotations
 
+import os
+import stat
 from pathlib import Path
 from typing import Protocol, cast
 
 from fastapi import Request
 from finance_agent_core.agent import IntentRouter, RoutedAgentResult, RoutedFinanceAgent
-from finance_agent_core.agent.providers import LocalTestSettings
-from finance_agent_core.answering import LocalGroundedAnswerProvider
-from finance_agent_core.contracts.queryplan import ProductFamily
-from finance_agent_core.storage import require_approved_database_paths
+from finance_agent_core.agent.compiler import ServerQueryPlanCompiler
+from finance_agent_core.agent.grounded_planning import GroundedPlanGate
+from finance_agent_core.agent.providers import (
+    HyperClovaXHTTPTransport,
+    HyperClovaXQueryPlanProvider,
+    HyperClovaXSettings,
+    HyperClovaXTransport,
+    LocalTestSettings,
+)
+from finance_agent_core.answering import (
+    HyperClovaXGroundedAnswerProvider,
+    LocalGroundedAnswerProvider,
+)
+from finance_agent_core.execution import PlanAuthorityGate
+from finance_agent_core.release import (
+    ResolvedAgentRelease,
+    RuntimeReleaseInputs,
+    resolve_agent_release,
+)
+from finance_agent_core.storage import ProductIdentitySnapshotCache, RecordSnapshotCache
 
 from app.config import Settings
+
+_MAX_HCX_API_KEY_FILE_BYTES = 4096
 
 
 class AgentService(Protocol):
@@ -21,51 +41,231 @@ class AgentService(Protocol):
     def answer(self, question: str, request_id: str) -> RoutedAgentResult: ...
 
 
-class ApprovalValidatedAgentService:
-    """Apply the immutable release guard to an injected deployment service."""
+def _provider_assembly_matches(service: RoutedFinanceAgent, settings: Settings) -> bool:
+    if service.grounded_plan_provider is not None:
+        return False
+    transports: list[object] = []
+    if settings.hcx_query_plan_enabled:
+        provider = service.query_plan_provider
+        if type(provider) is not HyperClovaXQueryPlanProvider:
+            return False
+        if (
+            provider.model_name != settings.hcx_model
+            or provider._client.settings.timeout_seconds != settings.hcx_timeout_seconds
+        ):
+            return False
+        transports.append(provider._client.transport)
+    elif service.query_plan_provider is not None:
+        return False
 
-    def __init__(
-        self,
-        delegate: AgentService,
-        database_paths: dict[ProductFamily, Path],
-    ) -> None:
-        self._delegate = delegate
-        self._database_paths = dict(database_paths)
-        self.router = delegate.router
-
-    def answer(self, question: str, request_id: str) -> RoutedAgentResult:
-        require_approved_database_paths(self._database_paths)
-        try:
-            return self._delegate.answer(question, request_id)
-        finally:
-            require_approved_database_paths(self._database_paths)
+    if settings.answer_provider == "hyperclova":
+        answer_provider = service.answer_provider
+        if type(answer_provider) is not HyperClovaXGroundedAnswerProvider:
+            return False
+        if (
+            answer_provider.model_name != settings.hcx_model
+            or answer_provider._client.settings.timeout_seconds != settings.hcx_timeout_seconds
+        ):
+            return False
+        transports.append(answer_provider._client.transport)
+    elif service.answer_provider is not None:
+        return False
+    if any(type(transport) is not HyperClovaXHTTPTransport for transport in transports):
+        return False
+    return len(transports) < 2 or transports[0] is transports[1]
 
 
 def require_approval_guard(
     service: AgentService,
     settings: Settings,
+    release_guard: ResolvedAgentRelease | None = None,
 ) -> AgentService:
-    """Ensure evaluation/production injection cannot bypass request-time approval."""
+    """Accept only the internally assembled authority-aware production service."""
 
     if settings.app_env not in {"evaluation", "production"}:
         return service
-    if isinstance(service, RoutedFinanceAgent) and service.require_approved_databases:
-        return service
-    return ApprovalValidatedAgentService(service, settings.database_paths)
+    if type(service) is not RoutedFinanceAgent:
+        raise RuntimeError(
+            "evaluation/production requires the approved RoutedFinanceAgent assembly"
+        )
+    gate = service.plan_authority_gate
+    if (
+        not service.require_approved_databases
+        or service.database_paths != settings.database_paths
+        or type(gate) is not PlanAuthorityGate
+        or not gate.require_approved_databases
+        or not gate.require_request_deadline
+        or gate.database_paths != settings.database_paths
+        or gate.allow_internal_disabled_dataset
+        or gate.allow_internal_evaluation_issuance
+        or gate.capability_execution_overrides != frozenset(settings.capability_execution_overrides)
+        or type(service.router) is not IntentRouter
+        or type(service.compiler) is not ServerQueryPlanCompiler
+        or type(service.grounded_plan_gate) is not GroundedPlanGate
+        or service._record_cache_enabled
+        or type(service.record_cache) is not RecordSnapshotCache
+        or type(service.identity_cache) is not ProductIdentitySnapshotCache
+        or service.compiler.record_cache is not service.record_cache
+        or service.compiler.identity_cache is not service.identity_cache
+        or service.grounded_plan_gate.identity_cache is not service.identity_cache
+        or service.allow_internal_disabled_dataset
+        or service.capability_execution_overrides
+        != frozenset(settings.capability_execution_overrides)
+        or service.hclx_planning_enabled != settings.hcx_query_plan_enabled
+        or not _provider_assembly_matches(service, settings)
+        or type(release_guard) is not ResolvedAgentRelease
+        or service.release_guard is not release_guard
+        or not service.require_agent_release
+        or gate.release_guard is not release_guard
+        or not gate.require_agent_release
+    ):
+        raise RuntimeError(
+            "evaluation/production requires the approved RoutedFinanceAgent assembly"
+        )
+    return service
 
 
-def build_agent(settings: Settings) -> RoutedFinanceAgent:
+def resolve_runtime_release(settings: Settings) -> ResolvedAgentRelease | None:
+    """Resolve the immutable evaluation/production release before Agent assembly."""
+
+    if settings.app_env not in {"evaluation", "production"}:
+        return None
+    if not settings.has_release_configuration:
+        raise RuntimeError("evaluation/production requires a complete Agent release configuration")
+    assert settings.release_manifest_file is not None
+    assert settings.deployment_binding_file is not None
+    assert settings.deployment_binding_sha256 is not None
+    assert settings.source_commit is not None
+    assert settings.runtime_image_reference is not None
+    inputs = RuntimeReleaseInputs(
+        environment=settings.app_env,
+        source_commit=settings.source_commit,
+        image_reference=settings.runtime_image_reference,
+        backend_version=settings.app_version,
+        backend_root=Path(__file__).resolve().parent,
+        answer_provider=settings.answer_provider,
+        hcx_queryplan_enabled=settings.hcx_query_plan_enabled,
+        hcx_model=settings.hcx_model,
+        fund_execution_policy=settings.fund_execution_policy,
+        schema_dense_enabled=settings.dense_schema_linker_enabled,
+        product_dense_enabled=settings.product_dense_enabled,
+        platform=settings.runtime_platform,
+        hcx_timeout_seconds=settings.hcx_timeout_seconds,
+        official_answer_timeout_seconds=settings.official_answer_timeout_seconds,
+        official_answer_max_inflight=settings.official_answer_max_inflight,
+        worker_count=settings.web_concurrency,
+    )
+    return resolve_agent_release(
+        manifest_path=settings.release_manifest_file,
+        binding_path=settings.deployment_binding_file,
+        expected_binding_sha256=settings.deployment_binding_sha256,
+        runtime_inputs=inputs,
+    )
+
+
+def _load_hcx_api_key(settings: Settings) -> str:
+    key_file = settings.clovastudio_api_key_file
+    if key_file is None:
+        raise RuntimeError("HyperCLOVA X credential is unavailable")
+    descriptor: int | None = None
+    try:
+        flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
+        descriptor = os.open(key_file, flags)
+        before = os.fstat(descriptor)
+        if (
+            not stat.S_ISREG(before.st_mode)
+            or before.st_nlink != 1
+            or before.st_uid not in {0, os.geteuid()}
+            or before.st_mode & (stat.S_IRWXG | stat.S_IRWXO)
+            or not 0 < before.st_size <= _MAX_HCX_API_KEY_FILE_BYTES
+        ):
+            raise RuntimeError("HyperCLOVA X credential file is insecure")
+        chunks: list[bytes] = []
+        remaining = before.st_size
+        while remaining:
+            chunk = os.read(descriptor, remaining)
+            if not chunk:
+                raise RuntimeError("HyperCLOVA X credential file changed while loading")
+            chunks.append(chunk)
+            remaining -= len(chunk)
+        if os.read(descriptor, 1):
+            raise RuntimeError("HyperCLOVA X credential file changed while loading")
+        payload = b"".join(chunks)
+        after = os.fstat(descriptor)
+        current = key_file.stat(follow_symlinks=False)
+
+        def fingerprint(item: os.stat_result) -> tuple[int, ...]:
+            return (
+                item.st_dev,
+                item.st_ino,
+                item.st_mode,
+                item.st_uid,
+                item.st_nlink,
+                item.st_size,
+                item.st_mtime_ns,
+                item.st_ctime_ns,
+            )
+
+        if fingerprint(before) != fingerprint(after) or fingerprint(after) != fingerprint(current):
+            raise RuntimeError("HyperCLOVA X credential file changed while loading")
+        value = payload.decode("utf-8")
+    except RuntimeError:
+        raise
+    except (OSError, UnicodeError):
+        raise RuntimeError("HyperCLOVA X credential file is unreadable") from None
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
+    value = value.rstrip("\r\n")
+    if not value:
+        raise RuntimeError("HyperCLOVA X credential file is invalid")
+    return value
+
+
+def build_agent(
+    settings: Settings,
+    *,
+    hcx_transport: HyperClovaXTransport | None = None,
+    release_guard: ResolvedAgentRelease | None = None,
+) -> RoutedFinanceAgent:
     """Create the core Agent without making an eager database connection."""
 
+    if hcx_transport is not None:
+        if settings.app_env in {"evaluation", "production"}:
+            raise RuntimeError(
+                "evaluation/production forbids caller-injected HyperCLOVA transport; "
+                "use CLOVASTUDIO_API_KEY_FILE"
+            )
+        raise RuntimeError("caller-injected HyperCLOVA transport is unsupported")
+    if (
+        settings.app_env in {"evaluation", "production"}
+        and type(release_guard) is not ResolvedAgentRelease
+    ):
+        raise RuntimeError("evaluation/production Agent assembly requires a resolved release")
     answer_provider = None
+    query_plan_provider = None
     if settings.answer_provider == "local_test":
         answer_provider = LocalGroundedAnswerProvider(LocalTestSettings.from_environment())
         answer_provider.healthcheck()
+    if settings.uses_hyperclova:
+        hcx_settings = HyperClovaXSettings(
+            model=settings.hcx_model or "",
+            timeout_seconds=settings.hcx_timeout_seconds,
+        )
+        transport = HyperClovaXHTTPTransport(api_key=_load_hcx_api_key(settings))
+        if settings.hcx_query_plan_enabled:
+            query_plan_provider = HyperClovaXQueryPlanProvider(hcx_settings, transport)
+        if settings.answer_provider == "hyperclova":
+            answer_provider = HyperClovaXGroundedAnswerProvider(hcx_settings, transport)
     return RoutedFinanceAgent(
         settings.database_paths,
+        query_plan_provider=query_plan_provider,
         answer_provider=answer_provider,
+        hclx_planning_enabled=settings.hcx_query_plan_enabled,
         capability_execution_overrides=settings.capability_execution_overrides,
         require_approved_databases=settings.app_env in {"evaluation", "production"},
+        release_guard=release_guard,
+        require_agent_release=settings.app_env in {"evaluation", "production"},
     )
 
 

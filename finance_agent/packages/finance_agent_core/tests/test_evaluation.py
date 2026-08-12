@@ -65,7 +65,11 @@ def test_agent_blocks_unsupported_plan_before_oracle(
             )
 
     with pytest.raises(PlanExecutionBlockedError, match="unsupported"):
-        FinanceAgent(path, UnsupportedProvider()).answer(
+        FinanceAgent(
+            path,
+            UnsupportedProvider(),
+            allow_unapproved_database=True,
+        ).answer(
             "배당수익률이 높은 ETF",
             "blocked-001",
         )

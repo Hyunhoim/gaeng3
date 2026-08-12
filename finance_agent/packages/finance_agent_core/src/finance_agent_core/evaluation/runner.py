@@ -22,6 +22,7 @@ from finance_agent_core.execution import (
     PlanExecutionBlockedError,
     ResultVerifier,
     SQLiteOracle,
+    authorize_internal_evaluation_plan,
     require_executable_search,
     require_internal_evaluation_search,
 )
@@ -238,7 +239,11 @@ class EvaluationRunner:
                 except PlanExecutionBlockedError as exception:
                     checks["execution_allowed"] = False
                     raise exception
-                executed = self.oracle.execute(plan)
+                validated_plan = authorize_internal_evaluation_plan(
+                    plan,
+                    self.database_path,
+                )
+                executed = self.oracle.execute(validated_plan)
                 verified = self.verifier.verify(plan, executed, self.universe)
                 checks["verifier"] = True
                 candidate_count = verified.candidate_count

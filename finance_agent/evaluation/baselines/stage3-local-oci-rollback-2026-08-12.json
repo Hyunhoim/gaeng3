@@ -1,0 +1,56 @@
+{
+  "schema_version": "1.0",
+  "baseline_id": "stage3-local-oci-rollback-2026-08-12",
+  "recorded_on": "2026-08-12",
+  "dataset": "synthetic_release_specific_four_family_volumes",
+  "evaluation_layer": "system_contract",
+  "status": "stage3_local_oci_rollback_frozen",
+  "provider": {
+    "name": "deterministic_server_with_isolated_trust_stub",
+    "official_submission_provider": false
+  },
+  "model": {
+    "repository": null,
+    "served_name": null,
+    "revision": null,
+    "reason": "합성 rollback 기동에서 생성형 모델을 호출하지 않음"
+  },
+  "suite": {
+    "id": "stage3-local-oci-rollback-20260812",
+    "version": "1.0",
+    "path": "packages/finance_agent_core/src/finance_agent_core/evaluation/suites/stage3_local_oci_rollback_20260812.json",
+    "sha256": "549b1efe702cbe10e90a393bbe36ed828207b1f21dd408a3864458b646a1dcd2",
+    "total_cases": 7
+  },
+  "data": {
+    "fixture_definition_sha256": "549b1efe702cbe10e90a393bbe36ed828207b1f21dd408a3864458b646a1dcd2",
+    "not_applicable_reason": "합성 release별 DB volume의 내용 hash가 아니라 OCI와 rollback mechanics를 동결하며 공식 네 DB hash는 Stage 2 baseline에 별도 보존"
+  },
+  "metrics": {
+    "total": 7,
+    "passed": 7,
+    "strict_accuracy": 1.0,
+    "code_only_oci_index_digest": "sha256:043e19a7b26747ca540e55c9e1d63dfe88c130f66c31cc841f97ce215cebaaaa",
+    "manifest_bound_oci_index_digest": "sha256:4188daf98cae0d136ea37cd7978d0ee00289bc9d233818f0fd1cfc8a89dd17d5",
+    "rollback_boots": 3,
+    "health_probes_passed": 3,
+    "representative_api_probes_passed": 3,
+    "hclx_calls": 0,
+    "qwen_calls": 0
+  },
+  "reports": [
+    {
+      "role": "local_oci_and_rollback_evidence",
+      "artifact_name": "stage3-local-oci-rollback-2026-08-12.json",
+      "sha256": "6dc2d0dbc815259087d83ecef09ca0344e590181f126744f8402570a40f0ecf4"
+    }
+  ],
+  "reproduce": "Create disposable synthetic N-1 and N artifacts, then run fastapi_backend/scripts/rollback_drill.py with an isolated project, localhost port, and --execute.",
+  "limitations": [
+    "일회용 localhost Registry 결과이며 NCP Container Registry 결과가 아니다.",
+    "dirty working tree의 합성 artifact여서 공식 release가 아니다.",
+    "GitHub OIDC·cosign 서명이 없어 trust verifier만 격리된 test stub으로 대체했다.",
+    "NCP Server, public traffic, load balancer, production rollback을 검증하지 않았다.",
+    "공개 self-authored mechanics 시험이며 독립 평가가 아니다."
+  ]
+}

@@ -61,6 +61,9 @@ DB, 원천 XLSX, 전체 report, 모델 가중치는 계속 `artifacts/` 또는 �
 | [연결 전 라우팅 개선 진단 v2](baselines/pre-hcx-route-diagnostic-improved-v2.json) | 네 상품군 AGGREGATE 실행을 포함한 현재 회귀 28/28 |
 | [연결 전 라우팅 초기 진단 v3](baselines/pre-hcx-route-diagnostic-initial-v3.json) | AGGREGATE·COMPARE 기대값을 적용한 도입 전 replay 4/28 |
 | [연결 전 라우팅 개선 진단 v3](baselines/pre-hcx-route-diagnostic-improved-v3.json) | 네 상품군 AGGREGATE·same-family COMPARE 실행을 포함한 현재 회귀 28/28 |
+| [Stage 2 승인 DB 재검증](baselines/stage2-approved-db-revalidation-2026-08-12.json) | 네 상품군 62건과 SQLite 교체·복원 race 방어를 실제 read-only DB에서 재검증 |
+| [Stage 3 release 계약](baselines/stage3-release-contract-2026-08-12.json) | Manifest·Binding·anti-replay·trust·rollback harness·SQLite 실행 권한 145건 |
+| [Stage 3 localhost OCI·rollback](baselines/stage3-local-oci-rollback-2026-08-12.json) | 합성 Registry exact digest와 격리 N-1→N→N-1 실기동; 외부 trust는 stub임을 함께 동결 |
 
 자연어 비교 E2E baseline은 실행 16문항의 실제 `ComparisonCell.value`와 field
 evidence provenance를 서로 별도의 fingerprint로 동결한다. parser 안전 계약은

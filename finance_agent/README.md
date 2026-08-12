@@ -18,7 +18,7 @@
 - 결과와 최종 답변의 상품명·수치·순위·출처 검증
 - 공개 회귀·blind·red-team·사람 평가를 위한 도구와 기준선
 - field registry에서 제출용 Ontology Turtle 5개를 생성·검사하는 도구
-- 개발 전용 로컬 Qwen과 향후 HyperCLOVA X provider 계약
+- 개발 전용 로컬 Qwen과 HyperCLOVA X provider·공식 HTTP transport 계약
 
 ### 포함하지 않는 것
 
@@ -168,6 +168,10 @@ Backend는 Agent 내부 SQL·검색·검증을 다시 구현하지 않고 다음
 `fastapi_backend/` 테스트를 함께 수정. Frontend와 Backend는 응답 문자열만 보지 않고
 `status`, `answer_mode`, `fallback_used`, `products`, `comparisons`, `aggregates`,
 `citations`, `as_of_dates`, `warnings`를 용도에 맞게 사용
+
+evaluation/production에서는 일반 `QueryPlan` 실행 권한뿐 아니라 코드·Prompt·Model·
+index·공식 데이터·Docker image가 같은 release인지도 검증한다. 상세 발급·시작·실패
+계약은 [AgentReleaseManifest 배포 계약](docs/agent-release-manifest.md)을 따른다.
 
 ## 9. LLM 사용 경계
 

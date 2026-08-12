@@ -72,6 +72,7 @@ from finance_agent_core.execution import (
     PlanExecutionBlockedError,
     ResultVerifier,
     SQLiteOracle,
+    authorize_internal_evaluation_plan,
     build_fund_comparison,
     build_product_evidence,
     render_verified_comparison,
@@ -99,6 +100,10 @@ from finance_agent_core.storage import (
     load_public_fund_quarantine,
     write_public_fund_database,
 )
+
+
+def _validated(plan: QueryPlan, path: Path):
+    return authorize_internal_evaluation_plan(plan, path)
 
 
 def fund_product(
@@ -314,7 +319,7 @@ def test_fund_aggregate_groups_risk_levels_in_public_scope(tmp_path: Path) -> No
 
 
 def test_fund_verifier_projection_matches_normalized_records(tmp_path: Path) -> None:
-    path, records, _ = write_comparison_fund_database(tmp_path)
+    path, records, manifest = write_sample_fund_database(tmp_path)
     agent = RoutedFinanceAgent(
         {"fund": path},
         allow_internal_disabled_dataset=True,
@@ -324,9 +329,12 @@ def test_fund_verifier_projection_matches_normalized_records(tmp_path: Path) -> 
         "projection-fund-001",
     )
     plan = agent.compiler.compile(decision)
-    projected = load_projected_verifier_records(path, plan)
+    validated = _validated(plan, path)
+    projected = load_projected_verifier_records(path, validated)
     expected = {record.product_id: record for record in records.products}
 
+    assert validated.receipt.max_verifier_rows == manifest.logical_product_rows
+    assert validated.receipt.max_verifier_rows != manifest.total_rows
     assert [record.product_id for record in projected] == sorted(expected)
     for record in projected:
         original = expected[record.product_id]
@@ -484,7 +492,7 @@ def test_public_fund_oracle_verifier_evidence_and_renderer_agree(
     path, _, _ = write_sample_fund_database(tmp_path)
     plan = fund_vertical_slice_plan("fund-oracle-001")
 
-    executed = SQLiteOracle(path).execute(plan)
+    executed = SQLiteOracle(path).execute(_validated(plan, path))
     with connect_read_only(path) as connection:
         universe = load_all_records(connection)
     verified = ResultVerifier().verify(plan, executed, universe)
@@ -514,7 +522,7 @@ def test_public_fund_grounded_answer_compiles_and_verifies_field_evidence(
 ) -> None:
     path, _, _ = write_sample_fund_database(tmp_path)
     plan = fund_vertical_slice_plan("fund-answer-001")
-    executed = SQLiteOracle(path).execute(plan)
+    executed = SQLiteOracle(path).execute(_validated(plan, path))
     with connect_read_only(path) as connection:
         universe = load_all_records(connection)
     verified = ResultVerifier().verify(plan, executed, universe)
@@ -552,7 +560,7 @@ def test_public_fund_answer_verifier_fails_closed_on_product_claim(
 ) -> None:
     path, _, _ = write_sample_fund_database(tmp_path)
     plan = fund_vertical_slice_plan("fund-answer-fallback-001")
-    executed = SQLiteOracle(path).execute(plan)
+    executed = SQLiteOracle(path).execute(_validated(plan, path))
     with connect_read_only(path) as connection:
         universe = load_all_records(connection)
     verified = ResultVerifier().verify(plan, executed, universe)
@@ -768,7 +776,7 @@ def test_public_fund_compare_engine_preserves_requested_order_and_deltas(
         ["KR0000000002", "KR0000000001"],
         ["risk_level", "three_month_return_pct", "aum"],
     )
-    executed = SQLiteOracle(path).execute(plan)
+    executed = SQLiteOracle(path).execute(_validated(plan, path))
     with connect_read_only(path) as connection:
         universe = load_all_records(connection)
     verified = ResultVerifier().verify(plan, executed, universe)
@@ -818,7 +826,7 @@ def test_public_fund_compare_handles_currency_mismatch_and_missing_values(
         ["KR0000000001", "KR0000000002"],
         ["aum", "three_month_return_pct"],
     )
-    executed = SQLiteOracle(cross_path).execute(plan)
+    executed = SQLiteOracle(cross_path).execute(_validated(plan, cross_path))
     with connect_read_only(cross_path) as connection:
         universe = load_all_records(connection)
     verified = ResultVerifier().verify(plan, executed, universe)
@@ -836,7 +844,7 @@ def test_public_fund_compare_handles_currency_mismatch_and_missing_values(
         tmp_path,
         second_three_month_return=None,
     )
-    executed = SQLiteOracle(missing_path).execute(plan)
+    executed = SQLiteOracle(missing_path).execute(_validated(plan, missing_path))
     with connect_read_only(missing_path) as connection:
         universe = load_all_records(connection)
     verified = ResultVerifier().verify(plan, executed, universe)
@@ -856,7 +864,7 @@ def test_public_fund_compare_blocks_aum_delta_when_both_currencies_are_missing(
         ["KR0000000001", "KR0000000002"],
         ["aum"],
     )
-    executed = SQLiteOracle(path).execute(plan)
+    executed = SQLiteOracle(path).execute(_validated(plan, path))
     with connect_read_only(path) as connection:
         universe = load_all_records(connection)
     verified = ResultVerifier().verify(plan, executed, universe)
@@ -895,7 +903,7 @@ def test_public_fund_compare_rejects_duplicate_product_evidence(
         ["KR0000000001", "KR0000000002"],
         ["aum"],
     )
-    executed = SQLiteOracle(path).execute(plan)
+    executed = SQLiteOracle(path).execute(_validated(plan, path))
     with connect_read_only(path) as connection:
         universe = load_all_records(connection)
     verified = ResultVerifier().verify(plan, executed, universe)
@@ -914,7 +922,7 @@ def test_public_fund_compare_grounded_answer_and_missing_product_fallback(
         ["KR0000000002", "KR0000000001"],
         ["risk_level", "three_month_return_pct", "aum"],
     )
-    executed = SQLiteOracle(path).execute(plan)
+    executed = SQLiteOracle(path).execute(_validated(plan, path))
     with connect_read_only(path) as connection:
         universe = load_all_records(connection)
     verified = ResultVerifier().verify(plan, executed, universe)
@@ -938,7 +946,7 @@ def test_public_fund_compare_grounded_answer_and_missing_product_fallback(
         ["KR0000000999", "KR0000000001"],
         ["three_month_return_pct"],
     )
-    executed = SQLiteOracle(path).execute(missing_plan)
+    executed = SQLiteOracle(path).execute(_validated(missing_plan, path))
     verified = ResultVerifier().verify(missing_plan, executed, universe)
     evidence = build_product_evidence(missing_plan, verified)
     comparison = build_fund_comparison(missing_plan, verified, evidence)
@@ -1111,7 +1119,7 @@ def _synthetic_e2e_expectations(
     oracle = SQLiteOracle(database_path)
     verified = ResultVerifier().verify(
         compiled.plan,
-        oracle.execute(compiled.plan),
+        oracle.execute(_validated(compiled.plan, database_path)),
         universe,
     )
     comparison = build_fund_comparison(
@@ -1329,7 +1337,7 @@ def test_fund_compare_cell_fingerprint_uses_actual_comparison_value(
     oracle = SQLiteOracle(path)
     verified = ResultVerifier().verify(
         compiled.plan,
-        oracle.execute(compiled.plan),
+        oracle.execute(_validated(compiled.plan, path)),
         universe,
     )
     comparison = build_fund_comparison(
@@ -1546,4 +1554,4 @@ def test_public_fund_unknown_sentinels_cannot_match_oracle_filters(
             )
         payload = {**base, "constraints": constraints}
         plan = QueryPlan.model_validate(payload)
-        assert SQLiteOracle(path).execute(plan).candidate_count == 0
+        assert SQLiteOracle(path).execute(_validated(plan, path)).candidate_count == 0

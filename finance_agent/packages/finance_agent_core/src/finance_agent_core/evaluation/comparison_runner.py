@@ -23,6 +23,7 @@ from finance_agent_core.evaluation.models import EvaluationSplit
 from finance_agent_core.execution import (
     ResultVerifier,
     SQLiteOracle,
+    authorize_internal_evaluation_plan,
     build_fund_comparison,
     build_product_evidence,
     require_internal_evaluation_comparison,
@@ -237,7 +238,11 @@ class FundComparisonEvaluationRunner:
                 case.comparison_fields,
             )
             require_internal_evaluation_comparison(plan)
-            executed = self.oracle.execute(plan)
+            validated_plan = authorize_internal_evaluation_plan(
+                plan,
+                self.database_path,
+            )
+            executed = self.oracle.execute(validated_plan)
             verified = self.verifier.verify(plan, executed, self.universe)
             products = build_product_evidence(plan, verified)
             comparison = build_fund_comparison(plan, verified, products)

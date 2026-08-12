@@ -19,7 +19,11 @@ def test_mock_agent_completes_verified_vertical_slice(
     sample_database: tuple[Path, list[NormalizedOverseasEtpRecord], DatabaseManifest],
 ) -> None:
     path, _, _ = sample_database
-    response = FinanceAgent(path, MockProvider()).answer(
+    response = FinanceAgent(
+        path,
+        MockProvider(),
+        allow_unapproved_database=True,
+    ).answer(
         "미국 채권형 해외 ETF 중 총보수 0.20% 이하를 AUM 순으로 보여줘",
         "agent-001",
     )
@@ -35,6 +39,17 @@ def test_mock_agent_completes_verified_vertical_slice(
     ]
     assert "수익을 보장" in response.answer
     assert len(response.warnings) == 3
+
+
+def test_legacy_agent_requires_explicit_offline_unapproved_mode(sample_database) -> None:
+    path, _, _ = sample_database
+
+    with pytest.raises(ValueError, match="offline-only"):
+        FinanceAgent(
+            path,
+            MockProvider(),
+            allow_unapproved_database=False,
+        )
 
 
 def test_routed_agent_completes_server_compiled_grounded_path(

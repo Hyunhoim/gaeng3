@@ -19,6 +19,7 @@ from finance_agent_core.domain import DatabaseManifest, NormalizedDomesticEtpRec
 from finance_agent_core.execution import (
     ResultVerifier,
     SQLiteOracle,
+    authorize_internal_evaluation_plan,
     build_product_evidence,
 )
 from finance_agent_core.storage import connect_read_only, load_all_records
@@ -28,7 +29,8 @@ def _verified_domestic_context(
     database: Path,
 ):
     plan = domestic_vertical_slice_plan("answer-001")
-    executed = SQLiteOracle(database).execute(plan)
+    validated_plan = authorize_internal_evaluation_plan(plan, database)
+    executed = SQLiteOracle(database).execute(validated_plan)
     with connect_read_only(database) as connection:
         universe = load_all_records(connection)
     verified = ResultVerifier().verify(plan, executed, universe)
@@ -54,6 +56,7 @@ def test_grounded_answer_compiles_only_verified_values(
         path,
         DomesticMockProvider(),
         answer_provider=ExpectedGroundedAnswerProvider(),
+        allow_unapproved_database=True,
     ).answer_with_composition(
         "미국 주식형 국내 ETF 중 연금 거래 가능한 상품을 1개월 수익률 순으로 보여줘",
         "answer-agent-001",

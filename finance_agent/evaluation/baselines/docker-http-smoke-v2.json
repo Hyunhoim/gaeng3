@@ -22,6 +22,8 @@
     "version": "1.1",
     "path": "../fastapi_backend/scripts/smoke.py",
     "sha256": "6c341163b12d5e7584663c25877bf7d57a57e9c1a4dc407c82908950748ef975",
+    "tracked_contract_sha256": "a9b9389952e0e8f011bbf96df6cd247c268945a370c79b14a8c59a3c011e1576",
+    "historical_contract_reason": "2026-08-10 P0 변경으로 locked 공모펀드가 clarify 대신 unsupported로 고정되어, 최초 관측 suite hash와 metrics는 보존하고 현재 회귀 script hash를 별도로 추적함",
     "backend_cases": 7,
     "official_get_cases": 7
   },

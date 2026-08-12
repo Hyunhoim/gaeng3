@@ -18,6 +18,7 @@ from finance_agent_core.agent.providers.hyperclova import (
     HyperClovaXTransportError,
     HyperClovaXTransportResponse,
 )
+from finance_agent_core.agent.providers.hyperclova_http import HyperClovaXHTTPTransport
 from finance_agent_core.agent.providers.local_test import (
     LocalFundComparisonDraftProvider,
     LocalProviderError,
@@ -43,6 +44,7 @@ __all__ = [
     "HyperClovaXClient",
     "HyperClovaXConfigurationError",
     "HyperClovaXFundComparisonDraftProvider",
+    "HyperClovaXHTTPTransport",
     "HyperClovaXProviderError",
     "HyperClovaXQueryPlanProvider",
     "HyperClovaXRateLimitError",

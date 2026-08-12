@@ -176,7 +176,11 @@ def execute_benchmark_case(
     started = time.perf_counter()
     try:
         if case.executor == "domestic_mock":
-            result = FinanceAgent(database_path, DomesticMockProvider()).answer(
+            result = FinanceAgent(
+                database_path,
+                DomesticMockProvider(),
+                allow_unapproved_database=True,
+            ).answer(
                 case.question,
                 case.id,
             )

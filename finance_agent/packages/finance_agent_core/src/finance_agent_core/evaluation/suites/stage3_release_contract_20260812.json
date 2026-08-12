@@ -1,0 +1,38 @@
+{
+  "schema_version": "1.0",
+  "suite_id": "stage3-release-contract-20260812",
+  "recorded_on": "2026-08-12",
+  "purpose": "Agent release, host activation anti-replay, trust verification, rollback harness, and pinned SQLite authority regression contract",
+  "test_files": [
+    "finance_agent/packages/finance_agent_core/tests/test_agent_release.py",
+    "finance_agent/packages/finance_agent_core/tests/test_release_cli.py",
+    "finance_agent/packages/finance_agent_core/tests/test_plan_authority.py",
+    "fastapi_backend/tests/test_release_activation.py",
+    "fastapi_backend/tests/test_release_ci_contract.py",
+    "fastapi_backend/tests/test_release_deployment_contract.py",
+    "fastapi_backend/tests/test_release_rollback_drill.py",
+    "fastapi_backend/tests/test_release_startup.py",
+    "fastapi_backend/tests/test_release_trust.py"
+  ],
+  "test_file_sha256": {
+    "finance_agent/packages/finance_agent_core/tests/test_agent_release.py": "50ea401b3ddb08ac0c4e8f4e176cc1a0a45f4f14e9d22e3831a44c0f8e54ac34",
+    "finance_agent/packages/finance_agent_core/tests/test_release_cli.py": "9620b4242a299763da83f16441004a1f3b7d80a26250ab21de0f90b8a2d09e43",
+    "finance_agent/packages/finance_agent_core/tests/test_plan_authority.py": "3aba955f23fab36d2a6374c28d27ae8b1c30054601bdf83a2f691b80e96bea46",
+    "fastapi_backend/tests/test_release_activation.py": "eb28c2ff8a487747652db615c8f600890dfa0c185b9063d9ab4bf739340e013a",
+    "fastapi_backend/tests/test_release_ci_contract.py": "599e6ed4c56ba78651114e1ee27fac7aa0a000329e6c5d58a8401c34b4fd9c20",
+    "fastapi_backend/tests/test_release_deployment_contract.py": "bf26b4392e70a1f896b920abba0a7de2a51a14e6c35cb46e39bece938586b4cb",
+    "fastapi_backend/tests/test_release_rollback_drill.py": "33d2d03533bf074058598c5e8c0e00e5fd8e196d852062327ea8737c6f5bf558",
+    "fastapi_backend/tests/test_release_startup.py": "0e9ac52fca4dbe700979cbf40d14500b9d283bbecab14b4199e9c4a6c96ca642",
+    "fastapi_backend/tests/test_release_trust.py": "88f6201a5ae158e7014d90ba615a095a79faf47718496e769982ef591f864736"
+  },
+  "required_properties": [
+    "release manifest and deployment binding mismatch fails closed",
+    "host activation is serialized and rejects replayed signed bindings",
+    "new activation generation advances by exactly one and pins the active rollback target",
+    "health succeeds before active state is committed atomically",
+    "image and blob trust verification uses the exact workflow identity and OIDC issuer",
+    "rollback drill isolates project, port, binding, image, and database volume",
+    "SQLite execution remains pinned to the approved inode during replacement races"
+  ],
+  "external_calls_allowed": false
+}

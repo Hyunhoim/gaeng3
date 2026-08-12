@@ -7,7 +7,12 @@ from finance_agent_core.agent.providers import (
 )
 from finance_agent_core.config import QualityStatus
 from finance_agent_core.domain import DatabaseManifest, NormalizedDomesticEtpRecord
-from finance_agent_core.execution import ResultVerifier, SQLiteOracle, build_product_evidence
+from finance_agent_core.execution import (
+    ResultVerifier,
+    SQLiteOracle,
+    authorize_internal_evaluation_plan,
+    build_product_evidence,
+)
 from finance_agent_core.execution.verifier_projection import (
     load_projected_verifier_records,
     verifier_projection_fields,
@@ -25,7 +30,7 @@ def test_domestic_sqlite_oracle_verifier_and_evidence_agree(
 ) -> None:
     path, _, expected_manifest = domestic_sample_database
     plan = domestic_vertical_slice_plan("domestic-oracle-001")
-    executed = SQLiteOracle(path).execute(plan)
+    executed = SQLiteOracle(path).execute(authorize_internal_evaluation_plan(plan, path))
     with connect_read_only(path) as connection:
         universe = load_all_records(connection)
         manifest = load_manifest(connection)
@@ -58,7 +63,11 @@ def test_domestic_mock_agent_completes_verified_vertical_slice(
     ],
 ) -> None:
     path, _, _ = domestic_sample_database
-    response = FinanceAgent(path, DomesticMockProvider()).answer(
+    response = FinanceAgent(
+        path,
+        DomesticMockProvider(),
+        allow_unapproved_database=True,
+    ).answer(
         "미국 주식형 국내 ETF 중 연금 거래 가능한 상품을 1개월 수익률 순으로 보여줘",
         "domestic-agent-001",
     )
@@ -134,7 +143,10 @@ def test_domestic_verifier_projection_matches_normalized_records(
         "projection-domestic-001",
     )
     plan = agent.compiler.compile(decision)
-    projected = load_projected_verifier_records(path, plan)
+    projected = load_projected_verifier_records(
+        path,
+        authorize_internal_evaluation_plan(plan, path),
+    )
     expected = {record.product_id: record for record in records}
 
     assert [record.product_id for record in projected] == sorted(expected)

@@ -1,0 +1,84 @@
+{
+  "schema_version": "1.0",
+  "baseline_id": "stage2-approved-db-revalidation-2026-08-12",
+  "recorded_on": "2026-08-12",
+  "dataset": "overseas_etp+domestic_etp+bond+fund",
+  "evaluation_layer": "system_regression",
+  "status": "public_stage2_approved_db_revalidation",
+  "provider": {
+    "name": "deterministic_server_and_expected_fixture",
+    "official_submission_provider": false
+  },
+  "model": {
+    "repository": null,
+    "served_name": null,
+    "revision": null,
+    "reason": "HCLX·Qwen 호출 없이 서버 결정론 경로와 expected fixture로 동결 결과를 재검산"
+  },
+  "suite": {
+    "id": "stage2-approved-db-contract-20260812",
+    "version": "1.0",
+    "path": "packages/finance_agent_core/src/finance_agent_core/evaluation/suites/stage2_approved_db_contract_20260812.json",
+    "sha256": "e9b8729046a59f3a89be3232119388f17938a9a7abe9ed50170a3db734a88709",
+    "total_cases": 62,
+    "component_suites": {
+      "search_aggregate": "2b3aff29930d098df78003cf914f0fa2660d93dba4d2fe2112cb0daf5b7420d7",
+      "product_compare": "7eec27471f2dbd218b0ed056f03b02ef69aed6b283055d72d98ff7d423e411ee",
+      "fund_compare_parser": "9e2bd72c001f6384a08111ae195de0bf1a962fe6aafa46b52df012917c1b4c9c",
+      "fund_compare_e2e": "5f1511c8dea53b13d1207ee1c80adcf6db4c431581ca8b15d5d683951bc7f88c"
+    }
+  },
+  "data": {
+    "database_sha256": "dc287ef93727144972e92def7b39de914183ddac88ecba5dbf83d9a676468f9c",
+    "manifest_sha256": "cecc1fd1b60cf1550083def8a90b1d1b75d58f433475504485fc02615d62da2e",
+    "source_file_sha256": "6d85131d1372233a2df7d69cc5557a659095dae8b24c9f7feba1d58197e76203",
+    "hash_policy": "상품군 이름, NUL, 상품군별 SHA-256, LF를 이름순으로 결합한 뒤 다시 SHA-256 계산",
+    "access": "running approved backend volume mounted read-only into an isolated one-shot container",
+    "existing_service_mutated": false
+  },
+  "metrics": {
+    "total": 62,
+    "passed": 62,
+    "strict_accuracy": 1.0,
+    "search_aggregate": {
+      "total": 8,
+      "passed": 8,
+      "latency_ms": {"p50": 409.284, "p95": 1791.651, "max": 1791.651},
+      "max_rss_delta_kib": {"p50": 11436, "p95": 47128, "max": 47128}
+    },
+    "three_family_product_compare": {
+      "total": 30,
+      "passed": 30,
+      "latency_ms": {"p50": 13.703, "p95": 134.78, "max": 439.605}
+    },
+    "fund_compare": {
+      "total": 24,
+      "passed": 24,
+      "latency_ms": {"p50": 12.871, "p95": 15.591, "max": 138.596}
+    },
+    "pinned_sqlite_authority": {
+      "test_plan_authority_total": 44,
+      "test_plan_authority_passed": 44,
+      "concurrency_repetitions_total": 10,
+      "concurrency_repetitions_passed": 10,
+      "replacement_paths": 3
+    },
+    "hclx_calls": 0,
+    "qwen_calls": 0
+  },
+  "reports": [
+    {
+      "role": "isolated_stage2_revalidation_summary",
+      "artifact_name": "stage2-approved-db-revalidation-2026-08-12.json",
+      "sha256": "3e33a500c84dbad28a9d2a8a447db7cdb57a9c2adb9103261764a22bd746cce4"
+    }
+  ],
+  "reproduce": "FINANCE_STAGE2_DATABASE_DIR=/data python -m pytest -q packages/finance_agent_core/tests/test_stage2_regression_contract.py",
+  "limitations": [
+    "공개 고정 suite 62건의 회귀 재검증이며 독립 blind 일반화 성능이 아니다.",
+    "latency와 RSS는 2026-08-12 연구실 서버의 단일 isolated run 값이며 운영 SLO가 아니다.",
+    "공모펀드 비교는 외부 생성형 모델이 아닌 expected provider로 deterministic core와 근거 계약을 검증했다.",
+    "현재 승인 DB packaging hash 변경 후 기존 동결 result fingerprint가 유지되는지 확인한 기록이다.",
+    "승인 시 연 SQLite inode를 실행까지 고정하는 교체·복원 race 방어를 추가한 뒤 같은 62건을 재검증했다."
+  ]
+}

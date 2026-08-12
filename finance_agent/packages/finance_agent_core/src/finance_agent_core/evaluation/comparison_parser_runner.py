@@ -27,6 +27,7 @@ from finance_agent_core.execution import (
     PlanExecutionBlockedError,
     ResultVerifier,
     SQLiteOracle,
+    authorize_internal_evaluation_plan,
     build_fund_comparison,
     build_product_evidence,
     fund_comparison_product_ids,
@@ -383,7 +384,11 @@ class FundComparisonParserEvaluationRunner:
                 checks["identity_constraint_exact"] = (
                     fund_comparison_product_ids(compiled.plan) == case.expected.resolved_product_ids
                 )
-                executed = self.oracle.execute(compiled.plan)
+                validated_plan = authorize_internal_evaluation_plan(
+                    compiled.plan,
+                    self.database_path,
+                )
+                executed = self.oracle.execute(validated_plan)
                 verified = self.verifier.verify(
                     compiled.plan,
                     executed,

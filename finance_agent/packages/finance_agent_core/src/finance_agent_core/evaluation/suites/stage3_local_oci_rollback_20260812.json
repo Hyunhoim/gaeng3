@@ -1,0 +1,32 @@
+{
+  "schema_version": "1.0",
+  "suite_id": "stage3-local-oci-rollback-20260812",
+  "recorded_on": "2026-08-12",
+  "purpose": "Local synthetic OCI Registry and rollback mechanics evidence contract",
+  "required_assertions": [
+    "code-only OCI index is pushed, resolved by digest, and pulled by exact reference",
+    "manifest-bound release OCI index is pushed, resolved by digest, and pulled by exact reference",
+    "the runnable release manifest is linux/amd64 and attestations are not counted as runnable images",
+    "source, release, backend-base, and Python-base OCI labels match the build inputs",
+    "synthetic N-1 starts healthy and serves the representative API probe",
+    "synthetic N starts healthy and serves the representative API probe",
+    "the preserved N-1 image, binding, and database volume restart healthy after N"
+  ],
+  "safety_constraints": [
+    "never use the existing hyunholim-finance-agent compose project",
+    "bind only to an isolated localhost port",
+    "do not prune or delete unrelated images, containers, networks, or volumes",
+    "do not claim NCP, Sigstore, or production traffic verification from synthetic evidence"
+  ],
+  "implementation_sha256": {
+    "compose-release.sh": "f0ba1f89ba597ea123af2cafdbfc28b2891aa53d972e34e1d640bea795236e20",
+    "fastapi_backend/Dockerfile": "63b3d6873b448d8ebd1cfe59f1842beefd95641c77f9703eebd3136ac88b0f9a",
+    "fastapi_backend/Dockerfile.release": "945828e4807411a3d3b23acd6b82199cfccc9c86823d905421b5a77318a10084",
+    "fastapi_backend/docker-compose.release.yml": "d25d7011b474183d913eaaa49eb5d3349af22964f31f2ac7bb6296cc10848f45",
+    "fastapi_backend/scripts/release_activation.py": "69b7ca1fb427f4733e540a2a684cbfd59d3ff923a1a868992c922269c75eaced",
+    "fastapi_backend/scripts/release_ci.py": "24190da5935dfa3a26f47e14bcd95749c262e4d4e99bae6172f272a0493da5a7",
+    "fastapi_backend/scripts/release_trust.py": "8bbd7079861b4bf6a6119f9a374a79b08e54dd63c5d5604ca0887183fa3591f9",
+    "fastapi_backend/scripts/rollback_drill.py": "0c78ba6073bdc1ce873926687ec96860c376095f91fa90be4f78bf3548665f01"
+  },
+  "external_provider_calls_allowed": false
+}

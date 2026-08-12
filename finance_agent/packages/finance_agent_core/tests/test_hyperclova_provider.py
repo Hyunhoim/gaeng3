@@ -35,6 +35,7 @@ from finance_agent_core.domain import DatabaseManifest, NormalizedDomesticEtpRec
 from finance_agent_core.execution import (
     ResultVerifier,
     SQLiteOracle,
+    authorize_internal_evaluation_plan,
     build_product_evidence,
 )
 from finance_agent_core.execution.verifier_projection import (
@@ -220,8 +221,9 @@ def test_hcx_grounded_answer_provider_uses_evidence_only_hcx_schema(
 ) -> None:
     path, _, _ = domestic_sample_database
     plan = domestic_vertical_slice_plan("hcx-answer-001")
-    executed = SQLiteOracle(path).execute(plan)
-    universe = load_projected_verifier_records(path, plan)
+    validated_plan = authorize_internal_evaluation_plan(plan, path)
+    executed = SQLiteOracle(path).execute(validated_plan)
+    universe = load_projected_verifier_records(path, validated_plan)
     verified = ResultVerifier().verify(plan, executed, universe)
     products = build_product_evidence(plan, verified)
     context = build_grounded_answer_context(
@@ -247,6 +249,27 @@ def test_hcx_grounded_answer_provider_uses_evidence_only_hcx_schema(
     assert request.response_schema["properties"]["products"]["items"]["properties"]["explanation"][
         "enum"
     ] == ["선택한 근거 항목이 요청한 정렬 근거로 사용됐습니다."]
+
+    unsafe_lead = expected.model_copy(update={"lead": "모델이 임의로 만든 일반 금융 설명입니다."})
+    unsafe_lead_provider = HyperClovaXGroundedAnswerProvider(
+        _settings(),
+        FakeHyperClovaXTransport(_response(unsafe_lead.model_dump_json())),
+    )
+    with pytest.raises(HyperClovaXResponseError, match="invalid grounded answer"):
+        unsafe_lead_provider.generate_grounded_answer(context)
+
+    unsafe_product = expected.products[0].model_copy(
+        update={"explanation": "모델이 근거 밖의 해석을 덧붙였습니다."}
+    )
+    unsafe_explanation = expected.model_copy(
+        update={"products": [unsafe_product, *expected.products[1:]]}
+    )
+    unsafe_explanation_provider = HyperClovaXGroundedAnswerProvider(
+        _settings(),
+        FakeHyperClovaXTransport(_response(unsafe_explanation.model_dump_json())),
+    )
+    with pytest.raises(HyperClovaXResponseError, match="invalid grounded answer"):
+        unsafe_explanation_provider.generate_grounded_answer(context)
 
 
 @pytest.mark.parametrize(

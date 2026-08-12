@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from dataclasses import dataclass
 from decimal import Decimal
@@ -8,6 +9,7 @@ from finance_agent_core.config import FieldRegistry, load_field_registry
 
 COMMON_IRI = "https://gaeng3.ai/ontology/common"
 COMMON_NAMESPACE = f"{COMMON_IRI}#"
+ONTOLOGY_RENDERER_VERSION = "registry-derived-turtle-v1"
 
 
 @dataclass(frozen=True, slots=True)
@@ -332,3 +334,18 @@ def render_ontology_bundle(
         {domain.filename: _render_domain(resolved, domain) for domain in ONTOLOGY_DOMAINS}
     )
     return bundle
+
+
+def ontology_bundle_sha256(registry: FieldRegistry | None = None) -> str:
+    """Return the one canonical Ontology identity used by release and authority."""
+
+    bundle = render_ontology_bundle(registry)
+    payload = [{"filename": filename, "content": bundle[filename]} for filename in sorted(bundle)]
+    canonical = json.dumps(
+        payload,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    ).encode("utf-8")
+    return hashlib.sha256(canonical).hexdigest()

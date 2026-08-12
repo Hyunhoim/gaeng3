@@ -13,6 +13,7 @@ from finance_agent_core.answering import (
 from finance_agent_core.contracts.queryplan import Intent
 from finance_agent_core.domain import AgentResponse
 from finance_agent_core.execution import (
+    PlanAuthorityGate,
     PlanExecutionBlockedError,
     ResultVerifier,
     SQLiteOracle,
@@ -21,6 +22,11 @@ from finance_agent_core.execution import (
     render_verified_search,
     require_executable_comparison,
     require_executable_search,
+)
+from finance_agent_core.execution.authority import (
+    require_manifest_binding,
+    require_validated_plan,
+    require_verifier_budget,
 )
 from finance_agent_core.execution.verifier_projection import (
     load_projected_verifier_records,
@@ -35,13 +41,19 @@ class FinanceAgent:
         provider: QueryPlanProvider,
         answer_provider: GroundedAnswerProvider | None = None,
         record_cache: RecordSnapshotCache | None = None,
+        *,
+        allow_unapproved_database: bool,
     ) -> None:
+        if allow_unapproved_database is not True:
+            raise ValueError(
+                "legacy FinanceAgent is offline-only; production must use "
+                "RoutedFinanceAgent with approved databases"
+            )
         self.database_path = Path(database_path)
         self.provider = provider
         self.answer_provider = answer_provider
         self.record_cache = record_cache or RecordSnapshotCache(max_entries=1)
         self._record_cache_enabled = record_cache is not None
-        self.oracle = SQLiteOracle(self.database_path)
         self.verifier = ResultVerifier()
         self.safety_envelope = SafetyEnvelope()
         self.semantic_coverage_gate = SemanticCoverageGate()
@@ -82,16 +94,33 @@ class FinanceAgent:
             require_executable_comparison(plan)
         else:
             require_executable_search(plan)
-        executed = self.oracle.execute(plan)
-        universe = (
-            None
-            if plan.intent is Intent.COMPARE
-            else (
-                self.record_cache.get(self.database_path).records
-                if self._record_cache_enabled
-                else load_projected_verifier_records(self.database_path, plan)
-            )
+        family = plan.product_families[0]
+        validated_plan = PlanAuthorityGate(
+            {family: self.database_path},
+            require_approved_databases=False,
+        ).validate_legacy_provider(
+            plan,
+            request_id=request_id,
+            normalized_question=question,
+            proposal_provider_name=self.provider.provider_name,
+            proposal_model_name=getattr(self.provider, "model_name", None),
         )
+        plan = validated_plan.canonical_plan
+        executed = SQLiteOracle(self.database_path).execute(validated_plan)
+        universe = None
+        if plan.intent is not Intent.COMPARE:
+            if self._record_cache_enabled:
+                require_validated_plan(validated_plan, self.database_path)
+                snapshot = self.record_cache.get(self.database_path)
+                require_manifest_binding(validated_plan, snapshot.manifest)
+                require_verifier_budget(validated_plan, len(snapshot.records))
+                require_validated_plan(validated_plan, self.database_path)
+                universe = snapshot.records
+            else:
+                universe = load_projected_verifier_records(
+                    self.database_path,
+                    validated_plan,
+                )
         verified = self.verifier.verify(plan, executed, universe)
         products = build_product_evidence(plan, verified)
         if plan.intent is Intent.COMPARE:

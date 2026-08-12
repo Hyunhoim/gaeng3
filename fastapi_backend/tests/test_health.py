@@ -7,7 +7,6 @@ import pytest
 from fastapi.testclient import TestClient
 from finance_agent_core.contracts.queryplan import ProductFamily
 from finance_agent_core.domain import DatabaseManifest
-from finance_agent_core.storage import DatasetApprovalError
 
 from app.config import Settings
 from app.main import create_app
@@ -99,7 +98,7 @@ def test_health_is_ok_when_every_database_manifest_is_ready(tmp_path: Path) -> N
     assert response.json()["fund_execution_policy"] == "locked"
 
 
-def test_evaluation_startup_rejects_unapproved_databases_even_with_injected_agent(
+def test_evaluation_startup_rejects_injected_agent_before_readiness(
     tmp_path: Path,
 ) -> None:
     paths = {family: tmp_path / f"{family.value}.sqlite3" for family in ProductFamily}
@@ -113,5 +112,5 @@ def test_evaluation_startup_rejects_unapproved_databases_even_with_injected_agen
         bond_db=paths[ProductFamily.BOND],
         fund_db=paths[ProductFamily.FUND],
     )
-    with pytest.raises(DatasetApprovalError):
+    with pytest.raises(RuntimeError, match="forbids externally injected"):
         create_app(settings=settings, agent=FakeAgentService())

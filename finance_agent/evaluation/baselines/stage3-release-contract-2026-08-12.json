@@ -1,0 +1,54 @@
+{
+  "schema_version": "1.0",
+  "baseline_id": "stage3-release-contract-2026-08-12",
+  "recorded_on": "2026-08-12",
+  "dataset": "not_applicable_release_and_authority_contract",
+  "evaluation_layer": "system_contract",
+  "status": "stage3_release_contract_frozen",
+  "provider": {
+    "name": "deterministic_no_network_contract",
+    "official_submission_provider": false
+  },
+  "model": {
+    "repository": null,
+    "served_name": null,
+    "revision": null,
+    "reason": "HCLX와 Qwen 호출 없이 release·activation·trust·rollback·SQLite 권한 계약을 검증"
+  },
+  "suite": {
+    "id": "stage3-release-contract-20260812",
+    "version": "1.0",
+    "path": "packages/finance_agent_core/src/finance_agent_core/evaluation/suites/stage3_release_contract_20260812.json",
+    "sha256": "2ecffbed7aa2a17bf7b822a99b317f2d7e2fed924903c45f6e2470a857e82a6e",
+    "total_cases": 145
+  },
+  "data": {
+    "fixture_definition_sha256": "2ecffbed7aa2a17bf7b822a99b317f2d7e2fed924903c45f6e2470a857e82a6e",
+    "not_applicable_reason": "release와 실행 권한의 코드 계약이며 상품 데이터 정확도 baseline은 Stage 2의 별도 4상품군 기록으로 검증"
+  },
+  "metrics": {
+    "total": 145,
+    "passed": 145,
+    "strict_accuracy": 1.0,
+    "elapsed_seconds": 12.44,
+    "full_agent_core_passed": 1061,
+    "full_agent_core_external_db_skipped": 1,
+    "full_backend_passed": 162,
+    "hclx_calls": 0,
+    "qwen_calls": 0
+  },
+  "reports": [
+    {
+      "role": "stage3_release_contract_summary",
+      "artifact_name": "stage3-release-contract-2026-08-12.json",
+      "sha256": "456164368d8d1af8f8bb1eef5f60b7a3c730d0b6c8665a85f9c22fbe1b13db31"
+    }
+  ],
+  "reproduce": "PYTHONPATH=fastapi_backend:finance_agent/packages/finance_agent_core/src python -m pytest -q <the nine test files pinned by the suite>",
+  "limitations": [
+    "네트워크를 차단한 공개 계약 회귀이며 실제 NCP Registry·NCP Server 검증이 아니다.",
+    "GitHub OIDC 신원, Sigstore 인증서, Rekor entry를 실제 발급하지 않았다.",
+    "Backend 경고 2건은 activation lock 동시성 시험의 Python fork deprecation warning이다.",
+    "독립 blind 금융 질의 정확도나 운영 SLO를 측정한 결과가 아니다."
+  ]
+}

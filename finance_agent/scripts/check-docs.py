@@ -44,6 +44,8 @@ PRODUCT_COMPARE_SUITE = (
 LINK_PATTERN = re.compile(r"!?\[[^\]]*]\((?:<(?P<angle>[^>]+)>|(?P<plain>[^)\s]+))\)")
 SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 FROZEN_PYTEST_PASSED = 507
+FROZEN_READINESS_MARKDOWN_FILES = 59
+FROZEN_READINESS_BASELINES = 41
 
 REQUIRED_INDEX_TARGETS = {
     "project-baseline.md",
@@ -121,6 +123,9 @@ REQUIRED_BASELINES = {
     "domain-qa-e2e-v1.json",
     "domain-qa-e2e-v1.1-gold.json",
     "domain-qa-e2e-v1.2-router.json",
+    "stage2-approved-db-revalidation-2026-08-12.json",
+    "stage3-release-contract-2026-08-12.json",
+    "stage3-local-oci-rollback-2026-08-12.json",
 }
 REQUIRED_BASELINE_KEYS = {
     "schema_version",
@@ -283,9 +288,11 @@ def _check_proposal_content() -> list[str]:
         if axis not in proposal_index:
             errors.append(f"docs/proposal/README.md is missing evaluation axis: {axis}")
     readiness = (DOCS_ROOT / "pre-hcx-readiness.md").read_text(encoding="utf-8")
+    # pre-hcx-readiness.md is historical evidence for the frozen pre-HCX gate.
+    # New release documents and baselines must not rewrite what that run counted.
     expected_documentation_count = (
-        f"`{len(_markdown_files())} Markdown files`, "
-        f"`{len(REQUIRED_BASELINES)} evaluation baselines`"
+        f"`{FROZEN_READINESS_MARKDOWN_FILES} Markdown files`, "
+        f"`{FROZEN_READINESS_BASELINES} evaluation baselines`"
     )
     if expected_documentation_count not in readiness:
         errors.append("pre-hcx-readiness.md documentation counts differ")
@@ -354,10 +361,60 @@ def _check_baseline(path: Path) -> list[str]:
     suite = payload["suite"]
     suite_path = PROJECT_ROOT / suite.get("path", "")
     _require_sha256(errors, name, "suite.sha256", suite.get("sha256"))
+    tracked_contract_sha256 = suite.get("tracked_contract_sha256", suite.get("sha256"))
+    if "tracked_contract_sha256" in suite:
+        _require_sha256(
+            errors,
+            name,
+            "suite.tracked_contract_sha256",
+            tracked_contract_sha256,
+        )
+        if tracked_contract_sha256 != suite.get("sha256") and not suite.get(
+            "historical_contract_reason"
+        ):
+            errors.append(
+                f"{name}: historical suite requires historical_contract_reason"
+            )
     if not suite_path.is_file():
         errors.append(f"{name}: suite path does not exist")
-    elif _sha256(suite_path) != suite.get("sha256"):
-        errors.append(f"{name}: suite SHA-256 differs from the tracked suite")
+    elif _sha256(suite_path) != tracked_contract_sha256:
+        errors.append(f"{name}: tracked suite SHA-256 differs")
+    else:
+        try:
+            suite_payload = json.loads(suite_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            suite_payload = None
+        if isinstance(suite_payload, dict):
+            for hash_map_name in ("test_file_sha256", "implementation_sha256"):
+                component_hashes = suite_payload.get(hash_map_name)
+                if component_hashes is None:
+                    continue
+                if not isinstance(component_hashes, dict) or not component_hashes:
+                    errors.append(
+                        f"{name}: suite {hash_map_name} must be a non-empty object"
+                    )
+                    continue
+                for component_name, expected_hash in component_hashes.items():
+                    _require_sha256(
+                        errors,
+                        name,
+                        f"suite.{hash_map_name}.{component_name}",
+                        expected_hash,
+                    )
+                    if not isinstance(component_name, str):
+                        continue
+                    component_path = (REPOSITORY_ROOT / component_name).resolve()
+                    if (
+                        not _is_within(component_path, REPOSITORY_ROOT)
+                        or not component_path.is_file()
+                    ):
+                        errors.append(
+                            f"{name}: suite component does not exist: {component_name}"
+                        )
+                    elif expected_hash != _sha256(component_path):
+                        errors.append(
+                            f"{name}: suite component SHA-256 differs: {component_name}"
+                        )
 
     data = payload["data"]
     if payload["evaluation_layer"] == "intent_route":
@@ -566,31 +623,33 @@ def _check_readiness_manifest() -> list[str]:
     except (OSError, json.JSONDecodeError) as error:
         return [f"cannot load pre-HCX readiness source manifest: {error}"]
     errors: list[str] = []
-    paths = _readiness_files()
-    expected_sha256 = _readiness_tree_sha256(paths)
     if payload.get("schema_version") != "1.0":
         errors.append("pre-HCX source manifest has unsupported schema_version")
     if payload.get("baseline_id") != "pre-hcx-readiness-v1":
         errors.append("pre-HCX source manifest baseline_id differs")
     if payload.get("status") != "internal_ready_external_gates_pending":
         errors.append("pre-HCX source manifest status overclaims or differs")
-    if payload.get("file_count") != len(paths):
+    if not isinstance(payload.get("file_count"), int) or payload["file_count"] <= 0:
+        errors.append("pre-HCX historical source manifest file_count is invalid")
+    _require_sha256(
+        errors,
+        "pre-hcx-readiness-v1.manifest.json",
+        "tree_sha256",
+        payload.get("tree_sha256"),
+    )
+    if not re.fullmatch(r"[0-9a-f]{40}", str(payload.get("git_commit", ""))):
+        errors.append("pre-HCX historical source manifest git_commit is invalid")
+    if payload.get("generated_from_dirty_worktree") is not False:
         errors.append(
-            "pre-HCX source manifest file_count differs: "
-            f"expected {len(paths)}, got {payload.get('file_count')}"
-        )
-    if payload.get("tree_sha256") != expected_sha256:
-        errors.append(
-            "pre-HCX source tree SHA-256 differs: "
-            f"expected {expected_sha256}, got {payload.get('tree_sha256')}"
+            "pre-HCX historical source manifest must remain clean-commit evidence"
         )
     if not payload.get("external_gates"):
         errors.append("pre-HCX source manifest must preserve external gates")
     qa = payload.get("qa", {})
     if qa.get("pytest_passed") != FROZEN_PYTEST_PASSED:
         errors.append("pre-HCX source manifest pytest count differs from frozen QA")
-    if qa.get("documentation_baselines") != len(REQUIRED_BASELINES):
-        errors.append("pre-HCX source manifest baseline count differs")
+    if qa.get("documentation_baselines") != FROZEN_READINESS_BASELINES:
+        errors.append("pre-HCX historical baseline count differs from its frozen QA")
     return errors
 
 

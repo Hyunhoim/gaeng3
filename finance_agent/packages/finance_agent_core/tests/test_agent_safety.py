@@ -622,7 +622,11 @@ def test_legacy_agent_blocks_before_provider_execution() -> None:
         def generate_query_plan(self, question: str, question_id: str):
             raise AssertionError("provider must not run")
 
-    agent = FinanceAgent(Path("does-not-exist.sqlite3"), ExplodingProvider())
+    agent = FinanceAgent(
+        Path("does-not-exist.sqlite3"),
+        ExplodingProvider(),
+        allow_unapproved_database=True,
+    )
 
     with pytest.raises(PlanExecutionBlockedError, match="safety envelope"):
         agent.answer("다음 달에 오를 해외 ETF를 예측해줘", "legacy-safety")
@@ -644,7 +648,11 @@ def test_legacy_compare_cannot_bypass_semantic_gate(question: str) -> None:
         def generate_query_plan(self, question: str, question_id: str):
             raise AssertionError("provider must not run")
 
-    agent = FinanceAgent(Path("does-not-exist.sqlite3"), ExplodingProvider())
+    agent = FinanceAgent(
+        Path("does-not-exist.sqlite3"),
+        ExplodingProvider(),
+        allow_unapproved_database=True,
+    )
 
     with pytest.raises(PlanExecutionBlockedError, match="semantic coverage"):
         agent.answer(question, f"legacy-compare-{abs(hash(question))}")

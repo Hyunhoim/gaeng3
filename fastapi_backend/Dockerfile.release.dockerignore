@@ -1,0 +1,5 @@
+**
+!fastapi_backend/
+fastapi_backend/**
+!fastapi_backend/release/
+!fastapi_backend/release/agent-release-manifest.json

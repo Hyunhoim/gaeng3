@@ -1,5 +1,5 @@
 x-backend-image: &backend-image
-  image: gaeng3-backend:local
+  image: ${FINANCE_IMAGE_REFERENCE:-gaeng3-backend:local}
   build:
     context: .
     dockerfile: fastapi_backend/Dockerfile
@@ -53,7 +53,9 @@ services:
     environment:
       # Competition-facing Compose is fail-closed: approved DB fingerprints
       # are enforced unless a development override explicitly opts out.
-      APP_ENV: ${APP_ENV:-evaluation}
+      # This base Compose file is the research-server development path.
+      # Evaluation/production must add docker-compose.release.yml.
+      APP_ENV: ${APP_ENV:-development}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       WEB_CONCURRENCY: ${WEB_CONCURRENCY:-1}
       OFFICIAL_ANSWER_TIMEOUT_SECONDS: ${OFFICIAL_ANSWER_TIMEOUT_SECONDS:-55}

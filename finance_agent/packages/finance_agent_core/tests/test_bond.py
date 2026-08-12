@@ -5,7 +5,12 @@ from finance_agent_core.agent import FinanceAgent, RoutedFinanceAgent
 from finance_agent_core.agent.providers import BondMockProvider, bond_vertical_slice_plan
 from finance_agent_core.config import QualityStatus
 from finance_agent_core.domain import DatabaseManifest, NormalizedBondRecord
-from finance_agent_core.execution import ResultVerifier, SQLiteOracle, build_product_evidence
+from finance_agent_core.execution import (
+    ResultVerifier,
+    SQLiteOracle,
+    authorize_internal_evaluation_plan,
+    build_product_evidence,
+)
 from finance_agent_core.execution.verifier_projection import (
     load_projected_verifier_records,
     verifier_projection_fields,
@@ -144,7 +149,7 @@ def test_bond_normalization_recomputes_availability_and_remaining_days() -> None
 def test_bond_sqlite_oracle_verifier_and_evidence_agree(tmp_path: Path) -> None:
     path, _ = make_bond_database(tmp_path)
     plan = bond_vertical_slice_plan("bond-oracle-001")
-    executed = SQLiteOracle(path).execute(plan)
+    executed = SQLiteOracle(path).execute(authorize_internal_evaluation_plan(plan, path))
     with connect_read_only(path) as connection:
         universe = load_all_records(connection)
     verified = ResultVerifier().verify(plan, executed, universe)
@@ -166,7 +171,11 @@ def test_bond_sqlite_oracle_verifier_and_evidence_agree(tmp_path: Path) -> None:
 
 def test_bond_mock_agent_completes_verified_vertical_slice(tmp_path: Path) -> None:
     path, _ = make_bond_database(tmp_path)
-    response = FinanceAgent(path, BondMockProvider()).answer(
+    response = FinanceAgent(
+        path,
+        BondMockProvider(),
+        allow_unapproved_database=True,
+    ).answer(
         "매수 가능한 국내채권을 매수수익률 높은 순으로 보여줘",
         "bond-agent-001",
     )
@@ -252,7 +261,10 @@ def test_bond_verifier_projection_matches_normalized_records(tmp_path: Path) -> 
         "projection-bond-001",
     )
     plan = agent.compiler.compile(decision)
-    projected = load_projected_verifier_records(path, plan)
+    projected = load_projected_verifier_records(
+        path,
+        authorize_internal_evaluation_plan(plan, path),
+    )
     expected = {record.product_id: record for record in records}
 
     assert [record.product_id for record in projected] == sorted(expected)

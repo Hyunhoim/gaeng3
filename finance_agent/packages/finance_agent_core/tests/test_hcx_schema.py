@@ -6,6 +6,7 @@ from finance_agent_core.contracts.hcx_schema import (
     HCX_SCHEMA_KEYWORDS,
     load_hcx_queryplan_schema,
     load_internal_evaluation_queryplan_schema,
+    validate_hcx_payload,
     validate_hcx_schema,
     validate_hcx_schema_registry_alignment,
 )
@@ -54,3 +55,46 @@ def test_every_hcx_object_property_is_required() -> None:
 
     with pytest.raises(ValueError, match="require every property"):
         validate_hcx_schema(schema)
+
+
+def test_hcx_payload_validator_enforces_enum_shape_and_array_bounds() -> None:
+    schema = {
+        "type": "object",
+        "properties": {
+            "mode": {"type": "string", "enum": ["safe"]},
+            "values": {
+                "type": "array",
+                "items": {"type": "integer", "minimum": 1, "maximum": 3},
+                "minItems": 1,
+                "maxItems": 2,
+            },
+        },
+        "required": ["mode", "values"],
+    }
+
+    validate_hcx_payload(schema, {"mode": "safe", "values": [1, 3]})
+
+    for unsafe in (
+        {"mode": "model-chosen", "values": [1]},
+        {"mode": "safe", "values": []},
+        {"mode": "safe", "values": [1, 2, 3]},
+        {"mode": "safe", "values": [0]},
+        {"mode": "safe", "values": [True]},
+        {"mode": "safe", "values": [1], "extra": "not-declared"},
+    ):
+        with pytest.raises(ValueError):
+            validate_hcx_payload(schema, unsafe)
+
+
+def test_hcx_payload_validator_requires_at_least_one_anyof_branch() -> None:
+    schema = {
+        "anyOf": [
+            {"type": "number"},
+            {"type": "integer"},
+        ]
+    }
+
+    validate_hcx_payload(schema, 1)
+
+    with pytest.raises(ValueError, match="at least one"):
+        validate_hcx_payload(schema, False)

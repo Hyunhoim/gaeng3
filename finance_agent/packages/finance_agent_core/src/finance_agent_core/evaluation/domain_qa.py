@@ -26,7 +26,12 @@ from finance_agent_core.contracts.backend import (
 from finance_agent_core.contracts.queryplan import Intent as QueryPlanIntent
 from finance_agent_core.contracts.queryplan import ProductFamily, QueryPlan
 from finance_agent_core.contracts.routing import InteractionIntent
-from finance_agent_core.execution import ResultVerifier, SQLiteOracle, build_product_evidence
+from finance_agent_core.execution import (
+    ResultVerifier,
+    SQLiteOracle,
+    authorize_internal_evaluation_plan,
+    build_product_evidence,
+)
 from finance_agent_core.execution.verifier_projection import (
     load_projected_verifier_records,
 )
@@ -632,10 +637,15 @@ def verify_domain_qa_search_gold(
             database_path = normalized[family]
         except KeyError as error:
             raise ValueError(f"{case.id}: gold database is not configured") from error
-        executed = SQLiteOracle(database_path).execute(gold.query_plan)
-        universe = load_projected_verifier_records(database_path, gold.query_plan)
-        verified = ResultVerifier().verify(gold.query_plan, executed, universe)
-        evidence = build_product_evidence(gold.query_plan, verified)
+        validated_plan = authorize_internal_evaluation_plan(
+            gold.query_plan,
+            database_path,
+        )
+        plan = validated_plan.canonical_plan
+        executed = SQLiteOracle(database_path).execute(validated_plan)
+        universe = load_projected_verifier_records(database_path, validated_plan)
+        verified = ResultVerifier().verify(plan, executed, universe)
+        evidence = build_product_evidence(plan, verified)
         top_product_ids = [record.product_id for record in verified.records]
         evidence_payload = [item.model_dump(mode="json") for item in evidence]
         evidence_sha256 = _canonical_sha256(evidence_payload)

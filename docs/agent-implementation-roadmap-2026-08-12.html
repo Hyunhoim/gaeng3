@@ -1,0 +1,1244 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="description" content="미래에셋증권 AI Festival 금융상품 Agent의 1~9단계 구현 방향과 검증 기준을 팀원용으로 정리한 문서">
+  <title>금융상품 Agent 1~9단계 구현 로드맵</title>
+  <!--
+    후속 팀 공유 HTML 작성 원칙
+    1) 구현 완료와 계획을 명확히 분리한다.
+    2) 단계마다 목적·구현·완료 기준·3줄 요약을 유지한다.
+    3) 수치와 완료 주장은 실제 코드·테스트·평가 근거가 있을 때만 적는다.
+  -->
+  <style>
+    :root {
+      --bg: #f3f6fa;
+      --surface: #ffffff;
+      --surface-soft: #edf3f8;
+      --surface-blue: #edf6ff;
+      --text: #172033;
+      --muted: #5f6b7e;
+      --line: #d4deea;
+      --navy: #12365e;
+      --blue: #176aa6;
+      --blue-strong: #0d5b96;
+      --green: #147454;
+      --green-bg: #e9f7f0;
+      --amber: #8d5d08;
+      --amber-bg: #fff6dc;
+      --red: #a0343e;
+      --red-bg: #fff0f1;
+      --purple: #6547a8;
+      --purple-bg: #f2eefc;
+      --shadow: 0 10px 30px rgba(20, 42, 70, .08);
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      color: var(--text);
+      background: var(--bg);
+      font-family: Pretendard, "Noto Sans KR", "Apple SD Gothic Neo", system-ui, sans-serif;
+      line-height: 1.68;
+      word-break: keep-all;
+    }
+    a { color: var(--blue); text-underline-offset: 3px; }
+    code {
+      padding: .08rem .34rem;
+      border: 1px solid var(--line);
+      border-radius: 5px;
+      background: var(--surface-soft);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: .91em;
+      word-break: break-all;
+    }
+    h1, h2, h3, h4 { line-height: 1.3; letter-spacing: -.025em; }
+    h1 { margin: 0; font-size: clamp(2rem, 4.4vw, 3.35rem); }
+    h2 { margin: 0 0 18px; color: var(--navy); font-size: clamp(1.48rem, 3vw, 2.05rem); }
+    h3 { margin: 0 0 10px; color: var(--navy); font-size: 1.2rem; }
+    h4 { margin: 20px 0 8px; color: var(--navy); font-size: 1rem; }
+    p { margin: 8px 0 14px; }
+    ul, ol { margin: 8px 0; padding-left: 1.35rem; }
+    li + li { margin-top: .4rem; }
+    pre {
+      margin: 14px 0;
+      padding: 16px;
+      overflow-x: auto;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      color: var(--text);
+      background: var(--surface-soft);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: .84rem;
+      line-height: 1.58;
+      white-space: pre;
+    }
+
+    .page { max-width: 1180px; margin: 0 auto; padding: 28px 24px 80px; }
+    .hero {
+      padding: clamp(28px, 5vw, 54px);
+      border-radius: 22px;
+      color: #fff;
+      background: linear-gradient(135deg, #102f55 0%, #15507c 55%, #1b6b8c 100%);
+      box-shadow: var(--shadow);
+    }
+    .eyebrow {
+      margin: 0 0 9px;
+      font-size: .82rem;
+      font-weight: 800;
+      letter-spacing: .11em;
+      opacity: .84;
+    }
+    .hero .lead { max-width: 940px; margin-top: 18px; font-size: 1.06rem; opacity: .96; }
+    .meta { display: flex; flex-wrap: wrap; gap: 7px 10px; margin-top: 24px; }
+    .meta span {
+      padding: 5px 10px;
+      border: 1px solid rgba(255, 255, 255, .26);
+      border-radius: 999px;
+      background: rgba(255, 255, 255, .08);
+      font-size: .8rem;
+    }
+
+    nav {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px 7px;
+      margin: 18px 0 0;
+      padding: 11px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: var(--surface);
+      background: color-mix(in srgb, var(--surface) 94%, transparent);
+      box-shadow: 0 4px 18px rgba(20, 42, 70, .05);
+      backdrop-filter: blur(10px);
+    }
+    nav a {
+      padding: 6px 9px;
+      border-radius: 7px;
+      color: var(--text);
+      font-size: .84rem;
+      font-weight: 670;
+      text-decoration: none;
+    }
+    nav a:hover, nav a:focus-visible { background: var(--surface-soft); }
+    main section { scroll-margin-top: 86px; margin-top: 56px; }
+
+    .callout {
+      margin: 18px 0;
+      padding: 16px 18px;
+      border-left: 5px solid var(--blue);
+      border-radius: 9px;
+      background: var(--surface-soft);
+    }
+    .callout.success { border-left-color: var(--green); background: var(--green-bg); }
+    .callout.warning { border-left-color: var(--amber); background: var(--amber-bg); }
+    .callout.danger { border-left-color: var(--red); background: var(--red-bg); }
+    .callout p:last-child { margin-bottom: 0; }
+
+    .grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 14px; }
+    .card {
+      grid-column: span 6;
+      padding: 20px;
+      border: 1px solid var(--line);
+      border-radius: 13px;
+      background: var(--surface);
+      box-shadow: 0 4px 16px rgba(20, 42, 70, .04);
+    }
+    .card.third { grid-column: span 4; }
+    .card.quarter { grid-column: span 3; }
+    .card.full { grid-column: 1 / -1; }
+    .card h3 { margin-top: 2px; }
+    .card p:last-child, .card ul:last-child { margin-bottom: 0; }
+
+    .status {
+      display: inline-block;
+      padding: 3px 9px;
+      border-radius: 999px;
+      font-size: .74rem;
+      font-weight: 800;
+      vertical-align: middle;
+    }
+    .fixed { color: var(--green); background: var(--green-bg); }
+    .now { color: var(--blue-strong); background: var(--surface-blue); }
+    .shadow { color: var(--purple); background: var(--purple-bg); }
+    .later { color: var(--amber); background: var(--amber-bg); }
+    .blocked { color: var(--red); background: var(--red-bg); }
+
+    .table-wrap {
+      margin: 16px 0 24px;
+      overflow-x: auto;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+    }
+    table { width: 100%; border-collapse: collapse; background: var(--surface); font-size: .89rem; }
+    th, td { padding: 12px 13px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+    th { color: var(--navy); background: var(--surface-soft); font-size: .8rem; white-space: nowrap; }
+    tr:last-child td { border-bottom: 0; }
+
+    .flow {
+      display: flex;
+      align-items: stretch;
+      gap: 7px;
+      margin: 18px 0;
+      overflow-x: auto;
+      padding-bottom: 8px;
+    }
+    .flow-step {
+      min-width: 134px;
+      flex: 1;
+      padding: 13px 10px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: var(--surface);
+      text-align: center;
+      font-size: .8rem;
+    }
+    .flow-step strong { display: block; margin-bottom: 4px; color: var(--navy); font-size: .86rem; }
+    .arrow { align-self: center; color: var(--muted); font-weight: 900; }
+
+    .stage {
+      position: relative;
+      padding: 25px;
+      border: 1px solid var(--line);
+      border-radius: 17px;
+      background: var(--surface);
+      box-shadow: var(--shadow);
+    }
+    .stage + .stage { margin-top: 24px; }
+    .stage-head { display: flex; align-items: flex-start; gap: 15px; }
+    .stage-number {
+      display: grid;
+      min-width: 48px;
+      height: 48px;
+      place-items: center;
+      border-radius: 13px;
+      color: #fff;
+      background: var(--navy);
+      font-size: 1.25rem;
+      font-weight: 900;
+      box-shadow: 0 6px 16px rgba(18, 54, 94, .18);
+    }
+    .stage-title { flex: 1; }
+    .stage-title h3 { margin: 1px 0 5px; font-size: 1.3rem; }
+    .stage-title p { margin: 0; color: var(--muted); }
+    .stage-body { margin-top: 20px; }
+    .purpose {
+      padding: 15px 17px;
+      border: 1px solid #bfd8eb;
+      border-radius: 10px;
+      background: var(--surface-blue);
+    }
+    .purpose strong { color: var(--navy); }
+    .mini-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 13px; margin: 15px 0; }
+    .mini-card {
+      padding: 15px 16px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: var(--surface-soft);
+    }
+    .mini-card strong { display: block; margin-bottom: 5px; color: var(--navy); }
+    .mini-card p { margin: 0; font-size: .9rem; }
+
+    details {
+      margin-top: 12px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: var(--surface);
+    }
+    summary {
+      cursor: pointer;
+      padding: 12px 14px;
+      color: var(--navy);
+      font-weight: 780;
+    }
+    details > div { padding: 0 15px 15px; }
+
+    .checklist { list-style: none; padding-left: 0; }
+    .checklist li { position: relative; padding-left: 1.65rem; }
+    .checklist li::before {
+      position: absolute;
+      left: 0;
+      content: "✓";
+      color: var(--green);
+      font-weight: 900;
+    }
+
+    .three-lines {
+      margin-top: 18px;
+      padding: 15px 17px;
+      border: 1px solid #cfc2ec;
+      border-radius: 10px;
+      background: var(--purple-bg);
+    }
+    .three-lines > strong { display: block; margin-bottom: 8px; color: var(--purple); }
+    .three-lines ol { margin: 0; padding-left: 1.25rem; }
+    .three-lines li { margin: 0; font-size: .9rem; }
+    .three-lines li + li { margin-top: .28rem; }
+
+    .gate {
+      display: grid;
+      grid-template-columns: 175px 1fr;
+      gap: 13px;
+      padding: 14px 0;
+      border-bottom: 1px solid var(--line);
+    }
+    .gate:last-child { border-bottom: 0; }
+    .gate strong { color: var(--navy); }
+
+    .term-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+    .term {
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: var(--surface);
+    }
+    .term dt { color: var(--navy); font-weight: 830; }
+    .term dd { margin: 5px 0 0; color: var(--muted); font-size: .87rem; }
+
+    .small { color: var(--muted); font-size: .82rem; }
+    footer { margin-top: 62px; padding-top: 22px; border-top: 1px solid var(--line); color: var(--muted); font-size: .82rem; }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #111827;
+        --surface: #182235;
+        --surface-soft: #202d42;
+        --surface-blue: #183149;
+        --text: #edf2f7;
+        --muted: #b1bed0;
+        --line: #35445a;
+        --navy: #b9dafa;
+        --blue: #7fc4f3;
+        --blue-strong: #a5d9f8;
+        --green: #92e0bd;
+        --green-bg: #183b32;
+        --amber: #f0ca76;
+        --amber-bg: #40351e;
+        --red: #ffabb1;
+        --red-bg: #48262b;
+        --purple: #d0b9ff;
+        --purple-bg: #33294a;
+      }
+      .purpose { border-color: #31506b; }
+      .three-lines { border-color: #4b4168; }
+      .stage-number { color: #fff; background: #245f8d; }
+    }
+
+    @media (max-width: 820px) {
+      .page { padding: 14px 12px 58px; }
+      .hero { border-radius: 15px; }
+      nav { position: static; }
+      .card, .card.third, .card.quarter { grid-column: 1 / -1; }
+      .mini-grid, .term-list { grid-template-columns: 1fr; }
+      .flow { flex-direction: column; overflow: visible; }
+      .arrow { transform: rotate(90deg); }
+      .gate { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 520px) {
+      .stage { padding: 19px 16px; }
+      .stage-head { gap: 11px; }
+      .stage-number { min-width: 42px; height: 42px; }
+      .stage-title h3 { font-size: 1.16rem; }
+    }
+
+    @media print {
+      :root {
+        --bg: #fff; --surface: #fff; --surface-soft: #f5f5f5; --surface-blue: #f5f8fb;
+        --text: #111; --muted: #555; --line: #bbb; --navy: #111;
+      }
+      .page { max-width: none; padding: 0; }
+      nav { display: none; }
+      .hero { color: #111; background: #fff; border: 2px solid #111; box-shadow: none; }
+      .stage, .card { box-shadow: none; break-inside: avoid; }
+      details { break-inside: avoid; }
+      details > div { display: block; }
+      a { color: #111; text-decoration: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header class="hero">
+      <p class="eyebrow">미래에셋증권 AI Festival · 금융상품 Agent</p>
+      <h1>1~9단계 구현 방향 로드맵</h1>
+      <p class="lead">
+        예선의 핵심인 <strong>안전성·정확성·저지연</strong>을 먼저 지키고,
+        이후 Schema Dense·HCLX·Product Dense를 검증된 경계 안에 단계적으로 연결하는 구현 가이드다.
+        각 단계는 독립적으로 테스트하고 되돌릴 수 있어야 하며, 이전 단계를 통과하기 전에는 다음 기능을 운영 경로에 활성화하지 않는다.
+      </p>
+      <div class="meta">
+        <span>기준일 2026-08-12</span>
+        <span>문서 종류: 구현 방향 가이드</span>
+        <span>대상: 팀원 공유용</span>
+        <span>범위: 단계 1~9</span>
+        <span>상태: 완료 보고서 아님</span>
+      </div>
+    </header>
+
+    <nav aria-label="문서 목차">
+      <a href="#overview">한눈에 보기</a>
+      <a href="#rules">공통 원칙</a>
+      <a href="#stages-1-3">1~3단계</a>
+      <a href="#stages-4-6">4~6단계</a>
+      <a href="#stages-7-9">7~9단계</a>
+      <a href="#gates">진입·배포 기준</a>
+      <a href="#terms">용어</a>
+      <a href="#update-rule">후속 문서 원칙</a>
+    </nav>
+
+    <main>
+      <section id="overview">
+        <h2>1. 한눈에 보는 구현 방향</h2>
+        <div class="callout success">
+          <strong>핵심 결론:</strong>
+          기존 SafetyEnvelope와 결정론적 SQL·Python·Verifier 경계는 유지한다.
+          새 모델은 모두 <strong>후보 또는 계획을 제안할 뿐</strong>이며, 서버가 승인한 <code>ValidatedPlan</code>만 실제 상품 데이터 조회에 사용할 수 있다.
+        </div>
+
+        <div class="grid" aria-label="현재 방향 요약">
+          <article class="card quarter">
+            <span class="status fixed">유지</span>
+            <h3>Fast Path</h3>
+            <p>완전히 명확한 질문은 HCLX·Dense 없이 기존 규칙과 SQL로 처리한다.</p>
+          </article>
+          <article class="card quarter">
+            <span class="status shadow">오프라인</span>
+            <h3>Schema Dense</h3>
+            <p>사용자 표현을 field 후보에 연결한다. 현재 운영 경로에는 연결하지 않는다.</p>
+          </article>
+          <article class="card quarter">
+            <span class="status later">확장 설계</span>
+            <h3>Product Dense</h3>
+            <p>실서비스에서 SQL 후보 안의 의미 검색을 담당할 모듈 골격만 준비한다.</p>
+          </article>
+          <article class="card quarter">
+            <span class="status blocked">현재 미사용</span>
+            <h3>Vector DB</h3>
+            <p>필요성이 측정되기 전에는 도입하지 않는다. 작은 Schema index는 exact 검색이 우선이다.</p>
+          </article>
+        </div>
+
+        <h3 style="margin-top: 28px;">목표 처리 흐름</h3>
+        <div class="flow" aria-label="목표 처리 흐름">
+          <div class="flow-step"><strong>SafetyEnvelope</strong>금지·범위 밖 차단</div>
+          <div class="arrow">→</div>
+          <div class="flow-step"><strong>PlanningDecision</strong>질문 경로 선택</div>
+          <div class="arrow">→</div>
+          <div class="flow-step"><strong>Schema Linking</strong>field 후보 연결</div>
+          <div class="arrow">→</div>
+          <div class="flow-step"><strong>Typed QueryPlan</strong>제한된 계획 제안</div>
+          <div class="arrow">→</div>
+          <div class="flow-step"><strong>ValidatedPlan</strong>서버 실행 승인</div>
+          <div class="arrow">→</div>
+          <div class="flow-step"><strong>Oracle·Verifier</strong>조회·독립 검산</div>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>구간</th>
+                <th>단계</th>
+                <th>핵심 결과물</th>
+                <th>운영 영향</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><span class="status now">즉시 기반</span></td>
+                <td>1~4</td>
+                <td>경로 분류, 실행권한 분리, Release 고정, 감사·관측</td>
+                <td>기존 응답을 바꾸지 않는 것이 원칙</td>
+              </tr>
+              <tr>
+                <td><span class="status shadow">검증 확장</span></td>
+                <td>5~7</td>
+                <td>Schema Dense shadow, HCLX fake·실제 shadow</td>
+                <td>독립 평가 전 SQL 실행에 영향 금지</td>
+              </tr>
+              <tr>
+                <td><span class="status later">운영·실서비스</span></td>
+                <td>8~9</td>
+                <td>동시성·장애대응, ExecutionAdapter, Product Dense 확장</td>
+                <td>실측과 공식 계약이 준비된 뒤 단계 도입</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="callout warning">
+          <strong>시작 전 확인:</strong>
+          직전 점검 시 HCLX HTTP·Dense 평가 관련 미커밋 변경이 여러 파일에 존재했다.
+          실제 구현을 시작하기 전 현재 branch·status·diff·테스트 기준선을 다시 확인하고,
+          기존 변경과 새 아키텍처 변경을 같은 PR에 섞지 않는다.
+        </div>
+      </section>
+
+      <section id="rules">
+        <h2>2. 모든 단계에 적용할 공통 원칙</h2>
+        <div class="grid">
+          <article class="card">
+            <h3>모델은 실행 권한이 없다</h3>
+            <ul>
+              <li>Dense는 field 또는 product ID 후보만 제안한다.</li>
+              <li>HCLX는 허용된 field 안에서 Typed QueryPlan만 제안한다.</li>
+              <li>Raw SQL, DB 경로, credential, 자유로운 tool 호출을 모델에 주지 않는다.</li>
+            </ul>
+          </article>
+          <article class="card">
+            <h3>모호하면 추측하지 않는다</h3>
+            <ul>
+              <li>실제 조건 누락은 <code>CLARIFY</code>로 종료한다.</li>
+              <li>제공 데이터 밖 기능은 <code>UNSUPPORTED</code>로 종료한다.</li>
+              <li>Dense top-1이나 HCLX confidence를 실행 근거로 사용하지 않는다.</li>
+            </ul>
+          </article>
+          <article class="card">
+            <h3>수치와 상품은 DB가 확정한다</h3>
+            <ul>
+              <li>수익률·보수·가격·정렬·집계는 SQL/Python이 계산한다.</li>
+              <li>모델 검색 후에도 최종 product ID와 수치는 원천 DB에서 재조회한다.</li>
+              <li>Verifier 실패 결과는 성공 응답으로 반환하지 않는다.</li>
+            </ul>
+          </article>
+          <article class="card">
+            <h3>활성화는 단계적으로 한다</h3>
+            <ul>
+              <li><code>off → shadow → canary → enforce</code> 순서를 지킨다.</li>
+              <li>shadow는 기록만 하고 응답·SQL에는 영향을 주지 않는다.</li>
+              <li>기능별 독립 blind 평가와 rollback 경로가 있어야 다음 단계로 간다.</li>
+            </ul>
+          </article>
+        </div>
+      </section>
+
+      <section id="stages-1-3">
+        <h2>3. 1~3단계 — 실행 경계부터 고정</h2>
+
+        <article class="stage" id="stage-1">
+          <div class="stage-head">
+            <div class="stage-number">1</div>
+            <div class="stage-title">
+              <h3>PlanningDecision을 Shadow로 추가</h3>
+              <p>질문이 어떤 경로로 가야 하는지 서버가 먼저 분류하되, 아직 기존 응답에는 영향을 주지 않는다.</p>
+            </div>
+            <span class="status now">첫 구현</span>
+          </div>
+          <div class="stage-body">
+            <div class="purpose">
+              <strong>쉬운 설명:</strong>
+              “바로 검색할 질문”, “표현만 새로워 Dense가 도울 질문”, “조건이 빠져 역질문할 질문”, “처리하면 안 되는 질문”을 먼저 구분하는 교통정리 단계다.
+            </div>
+            <div class="mini-grid">
+              <div class="mini-card">
+                <strong>추가할 분류</strong>
+                <p><code>TRUE_AMBIGUITY</code>, <code>SCHEMA_LINK_GAP</code>, <code>UNSUPPORTED</code>, <code>NONE</code></p>
+              </div>
+              <div class="mini-card">
+                <strong>추가할 권한</strong>
+                <p><code>dense_allowed</code>, <code>hclx_allowed</code>, <code>sql_allowed</code>를 서버가 결정한다.</p>
+              </div>
+            </div>
+            <details>
+              <summary>세부 구현 지침</summary>
+              <div>
+                <ul>
+                  <li><code>PlanningDecision</code> 내부 DTO에 policy version, path, semantic issue, unresolved span, product family, reason code를 담는다.</li>
+                  <li>금지·범위 밖 질문은 Dense·HCLX·Compiler·Oracle 호출 권한을 모두 false로 고정한다.</li>
+                  <li>“수익률 좋은 ETF”처럼 기간이 빠진 질문은 Dense가 의미를 대신 정하지 못하게 즉시 CLARIFY한다.</li>
+                  <li>처음에는 <code>adaptive_shadow</code>로 판단만 기록하고 현재 Router 결과와 응답을 그대로 사용한다.</li>
+                  <li>영향 예상: <code>semantic_gate.py</code>, <code>router.py</code>, 신규 <code>planning_policy.py</code>, 무호출 테스트.</li>
+                </ul>
+              </div>
+            </details>
+            <details>
+              <summary>완료 기준</summary>
+              <div>
+                <ul class="checklist">
+                  <li>기존 명확 질문의 QueryPlan·상품 ID·수치 fingerprint가 완전히 동일하다.</li>
+                  <li>금지 질문에서 Compiler·Dense·HCLX·Oracle 호출이 모두 0회다.</li>
+                  <li>실제 모호성과 Schema Link Gap이 서로 다른 reason code로 기록된다.</li>
+                  <li>Planning Policy 오류 시 기존 fail-closed 경로로 종료한다.</li>
+                </ul>
+              </div>
+            </details>
+            <div class="three-lines">
+              <strong>3줄 요약</strong>
+              <ol>
+                <li>질문을 명확·표현 미해결·실제 모호·미지원으로 먼저 나눈다.</li>
+                <li>처음에는 기록만 하고 기존 답변과 SQL 실행은 바꾸지 않는다.</li>
+                <li>금지·실제 모호 질문은 Dense·HCLX·Oracle을 호출하지 않는다.</li>
+              </ol>
+            </div>
+          </div>
+        </article>
+
+        <article class="stage" id="stage-2">
+          <div class="stage-head">
+            <div class="stage-number">2</div>
+            <div class="stage-title">
+              <h3>제안 계획과 실행 가능 계획을 분리</h3>
+              <p><code>ProposedQueryPlan → PlanAuthorityGate → ValidatedPlan → Oracle</code> 경계를 타입으로 강제한다.</p>
+            </div>
+            <span class="status now">핵심 경계</span>
+          </div>
+          <div class="stage-body">
+            <div class="purpose">
+              <strong>쉬운 설명:</strong>
+              모델이나 규칙이 만든 계획은 “신청서”일 뿐이다. 서버 검사를 모두 통과해 “실행 허가증”을 받은 계획만 DB 조회에 사용할 수 있게 만든다.
+            </div>
+            <div class="mini-grid">
+              <div class="mini-card">
+                <strong>ProposedQueryPlan</strong>
+                <p>아직 신뢰하지 않는 계획이다. HCLX 또는 서버 규칙이 만들 수 있지만 실행할 수는 없다.</p>
+              </div>
+              <div class="mini-card">
+                <strong>ValidatedPlan</strong>
+                <p>field·연산자·단위·dataset·권한·budget 검사를 모두 통과한 서버 발급 실행 객체다.</p>
+              </div>
+            </div>
+            <details>
+              <summary>세부 구현 지침</summary>
+              <div>
+                <ul>
+                  <li><code>ValidatedPlan</code>은 frozen·extra-forbid 형태로 만들고 내부에 canonical QueryPlan과 검증 영수증을 담는다.</li>
+                  <li>영수증에는 plan hash, planning/capability/ontology/registry/dataset/compiler/verifier version과 deadline·row budget을 넣는다.</li>
+                  <li><code>PlanAuthorityGate</code>가 field 존재, queryable/sortable/aggregatable, operator, type, unit, period, direction, limit, 승인 dataset을 검사한다.</li>
+                  <li><code>SQLiteOracle.execute()</code>와 Aggregate Oracle은 장기적으로 <code>ValidatedPlan</code>만 받게 한다.</li>
+                  <li>공개 Backend DTO는 바꾸지 않고 Core 내부 계약으로 먼저 도입한다.</li>
+                </ul>
+              </div>
+            </details>
+            <details>
+              <summary>완료 기준</summary>
+              <div>
+                <ul class="checklist">
+                  <li>일반 QueryPlan을 Oracle에 전달하는 우회 테스트가 실패한다.</li>
+                  <li>모호성·미지원 조건이 하나라도 남으면 ValidatedPlan이 발급되지 않는다.</li>
+                  <li>기존 SEARCH·COMPARE·AGGREGATE의 결과와 근거가 변하지 않는다.</li>
+                  <li>ValidatedPlan의 release·snapshot 정보만으로 실행 조건을 재현할 수 있다.</li>
+                </ul>
+              </div>
+            </details>
+            <div class="three-lines">
+              <strong>3줄 요약</strong>
+              <ol>
+                <li>QueryPlan을 만들었다고 바로 실행하지 않고 서버 검증을 다시 거친다.</li>
+                <li>모든 검사를 통과한 ValidatedPlan만 Oracle에 들어갈 수 있다.</li>
+                <li>이 경계가 완성돼야 Dense와 HCLX를 안전하게 연결할 수 있다.</li>
+              </ol>
+            </div>
+          </div>
+        </article>
+
+        <article class="stage" id="stage-3">
+          <div class="stage-head">
+            <div class="stage-number">3</div>
+            <div class="stage-title">
+              <h3>AgentReleaseManifest로 버전을 하나로 묶기</h3>
+              <p>Ontology·Field Registry·Dataset·Prompt·Model·Index가 서로 다른 버전으로 섞이지 않게 한다.</p>
+            </div>
+            <span class="status now">코드 경계 구현</span>
+          </div>
+          <div class="stage-body">
+            <div class="purpose">
+              <strong>쉬운 설명:</strong>
+              DB는 어제 버전인데 Dense index는 오늘 버전인 상태를 막는다. Image 안의 AgentReleaseManifest와 push 후 만드는 외부 DeploymentBinding을 연결해 순환 참조 없이 한 release로 묶는다.
+            </div>
+            <details open>
+              <summary>Release에 포함할 핵심 항목</summary>
+              <div>
+                <pre>release_id
+code_tree_sha256
+queryplan_schema_sha256
+ontology_bundle_sha256
+field_registry_raw_and_contract_sha256
+capability_matrix_raw_and_contract_sha256
+approved_dataset_release_and_four_snapshots
+prompt_and_generation_contract_sha256
+hcx_model_and_operation_profile
+dense_bm25_reranker_explicit_state
+compiler_and_verifier_versions
+timeout_concurrency_profile
+source_commit
+deployment_binding.image_reference</pre>
+              </div>
+            </details>
+            <details>
+              <summary>세부 구현·완료 기준</summary>
+              <div>
+                <ul>
+                  <li>서버 시작 시 모든 hash를 확인하고 하나라도 다르면 readiness를 실패시킨다.</li>
+                  <li>하나의 요청은 시작부터 답변 완료까지 동일한 release ID를 사용한다.</li>
+                  <li>요청 도중 release 또는 승인 manifest가 바뀌면 실행하지 않는다.</li>
+                  <li>이전 Binding·image·release별 DB volume을 보관하고 실제 배포 환경에서 rollback drill을 수행한다.</li>
+                  <li>Field Registry·Dense index, QueryPlan schema·Compiler 불일치 테스트가 모두 fail-closed여야 한다.</li>
+                </ul>
+                <p>현재 애플리케이션 fail-closed 계약과 Docker 배선은 구현됐다. Dirty working tree에서는 공식 manifest 발급을 거부하며, 실제 registry image push·digest 확인·무중단 rollback은 NCP 준비 후 검증한다.</p>
+              </div>
+            </details>
+            <div class="three-lines">
+              <strong>3줄 요약</strong>
+              <ol>
+                <li>데이터·Ontology·Prompt·Model·Index 버전을 release ID 하나로 묶는다.</li>
+                <li>버전이나 hash가 하나라도 다르면 서버가 실행되지 않게 한다.</li>
+                <li>같은 release와 snapshot으로 같은 실행을 재현할 수 있어야 한다.</li>
+              </ol>
+            </div>
+          </div>
+        </article>
+      </section>
+
+      <section id="stages-4-6">
+        <h2>4. 4~6단계 — 측정한 뒤 모델을 Shadow로 연결</h2>
+
+        <article class="stage" id="stage-4">
+          <div class="stage-head">
+            <div class="stage-number">4</div>
+            <div class="stage-title">
+              <h3>관측·감사 계약 추가</h3>
+              <p>어떤 경로와 모델이 호출됐고 왜 차단·실행됐는지 민감정보 없이 추적한다.</p>
+            </div>
+            <span class="status now">선행 필수</span>
+          </div>
+          <div class="stage-body">
+            <div class="purpose">
+              <strong>쉬운 설명:</strong>
+              Dense와 HCLX를 붙이기 전에 “언제 호출됐고, 얼마나 걸렸고, 왜 실패했는지” 볼 수 있는 계기판과 블랙박스를 먼저 만든다.
+            </div>
+            <div class="mini-grid">
+              <div class="mini-card">
+                <strong>운영 Metric</strong>
+                <p>경로별 호출 수, p50·p95·p99 latency, timeout, fallback, verifier 실패, queue·inflight를 집계한다.</p>
+              </div>
+              <div class="mini-card">
+                <strong>Audit Event</strong>
+                <p>request ID, release ID, reason code, plan hash, snapshot, product ID, evidence ID로 실행을 재구성한다.</p>
+              </div>
+            </div>
+            <details>
+              <summary>세부 구현 지침</summary>
+              <div>
+                <ul>
+                  <li>Safety, Planning, Lexical, Dense, HCLX, Compiler, SQL, Verifier, Renderer 단계를 각각 측정한다.</li>
+                  <li>금지 질문의 Dense·HCLX·Oracle 무호출률, 과도한 CLARIFY, evidence completeness를 별도 지표로 둔다.</li>
+                  <li>일반 로그에 API key, Authorization header, DB 경로, blind 정답, Chain-of-Thought를 기록하지 않는다.</li>
+                  <li>원문 질문 보관이 꼭 필요하면 일반 로그와 분리된 암호화·접근통제 저장소를 사용한다.</li>
+                  <li>secret·PII fixture가 일반 로그에 나타나지 않는 자동 테스트를 추가한다.</li>
+                </ul>
+              </div>
+            </details>
+            <details>
+              <summary>완료 기준</summary>
+              <div>
+                <ul class="checklist">
+                  <li>request ID 하나로 route·plan·snapshot·verifier 결과를 재구성한다.</li>
+                  <li>금지 질문이 어느 하위 계층도 호출하지 않았음을 지표로 증명한다.</li>
+                  <li>일반 로그의 API key·PII·DB 경로 노출이 0건이다.</li>
+                  <li>관측 시스템 장애가 Agent 성공 응답을 조용히 왜곡하지 않는다.</li>
+                </ul>
+              </div>
+            </details>
+            <div class="three-lines">
+              <strong>3줄 요약</strong>
+              <ol>
+                <li>Dense·HCLX를 붙이기 전에 호출·지연·차단 이유를 측정한다.</li>
+                <li>감사에는 hash와 ID를 남기고 secret·개인정보는 일반 로그에서 제외한다.</li>
+                <li>무호출·fallback·Verifier 실패를 자동으로 확인할 수 있어야 한다.</li>
+              </ol>
+            </div>
+          </div>
+        </article>
+
+        <article class="stage" id="stage-5">
+          <div class="stage-head">
+            <div class="stage-number">5</div>
+            <div class="stage-title">
+              <h3>Hybrid Schema Linker를 Shadow로 연결</h3>
+              <p>Lexical과 Schema Dense를 함께 사용하되, 미해결 표현의 field 후보만 제안한다.</p>
+            </div>
+            <span class="status shadow">Shadow</span>
+          </div>
+          <div class="stage-body">
+            <div class="purpose">
+              <strong>쉬운 설명:</strong>
+              사용자가 데이터 컬럼명과 다른 표현을 썼을 때 비슷한 field를 찾는다. 단, Dense가 고른 1등을 그대로 실행하지 않고 충돌 여부까지 서버가 검사한다.
+            </div>
+            <div class="mini-grid">
+              <div class="mini-card">
+                <strong>Schema Dense가 하는 일</strong>
+                <p>“최근 한 달 성과” 같은 표현을 <code>one_month_return_pct</code> 등의 field 후보로 연결한다.</p>
+              </div>
+              <div class="mini-card">
+                <strong>Schema Dense가 하지 않는 일</strong>
+                <p>상품 검색, QueryPlan 확정, 누락 조건 추측, 숫자·정렬 방향 결정은 하지 않는다.</p>
+              </div>
+            </div>
+            <details>
+              <summary>세부 구현 지침</summary>
+              <div>
+                <ul>
+                  <li>평가 코드와 분리된 운영용 <code>SchemaLinkDecision</code> 계약을 만든다.</li>
+                  <li>결과 상태는 <code>found</code>, <code>conflict</code>, <code>abstain</code>, <code>disabled</code>로 제한한다.</li>
+                  <li>후보에는 field ID, lexical rank, dense score, fused rank, capability, top1-top2 margin, registry/index version을 담는다.</li>
+                  <li>현재 상품군 Field Registry 밖 후보와 intent capability가 맞지 않는 field는 제거한다.</li>
+                  <li>현재 약 100개 field는 Vector DB 없이 exact cosine 전체 비교를 사용한다.</li>
+                  <li>실제 Embedding 모델·revision·license·dimension·전처리를 manifest에 고정하기 전에는 enforce를 허용하지 않는다.</li>
+                </ul>
+              </div>
+            </details>
+            <details>
+              <summary>완료·활성화 기준</summary>
+              <div>
+                <ul class="checklist">
+                  <li>금지·실제 모호 질문의 Dense 호출이 0회다.</li>
+                  <li>Registry·상품군 밖 field가 0건이다.</li>
+                  <li>low-margin·분포 밖 표현에서는 실행 대신 abstain한다.</li>
+                  <li>기존 Fast Path 회귀가 0건이다.</li>
+                  <li>독립 blind 표현에서 Lexical 대비 정확도 개선과 latency budget을 모두 충족한다.</li>
+                </ul>
+              </div>
+            </details>
+            <div class="three-lines">
+              <strong>3줄 요약</strong>
+              <ol>
+                <li>Schema Dense는 사용자 표현을 field 후보에 연결하는 보조 검색이다.</li>
+                <li>충돌하거나 확신할 수 없으면 실행하지 않고 abstain·CLARIFY한다.</li>
+                <li>현재 규모에서는 Vector DB 없이 exact 검색으로 충분하다.</li>
+              </ol>
+            </div>
+          </div>
+        </article>
+
+        <article class="stage" id="stage-6">
+          <div class="stage-head">
+            <div class="stage-number">6</div>
+            <div class="stage-title">
+              <h3>HCLX GroundedPlanProvider를 Fake로 구현</h3>
+              <p>실제 API를 호출하기 전에 제한된 입력·출력·오류·fallback 계약을 테스트 대역으로 완성한다.</p>
+            </div>
+            <span class="status shadow">Fake Transport</span>
+          </div>
+          <div class="stage-body">
+            <div class="purpose">
+              <strong>쉬운 설명:</strong>
+              HCLX가 자유롭게 SQL을 만드는 것이 아니라, 서버가 허용한 field 카드 안에서만 조건 조합 초안을 작성하게 만든다.
+            </div>
+            <details open>
+              <summary>HCLX에 전달할 제한된 Context</summary>
+              <div>
+                <pre>GroundedPlanningContext
+- question
+- question_id
+- product_family
+- allowed_field_candidates
+- candidate_policy_version
+- field_registry_sha256
+- capability_matrix_version</pre>
+              </div>
+            </details>
+            <details>
+              <summary>세부 구현 지침</summary>
+              <div>
+                <ul>
+                  <li>HCLX에는 전체 DB schema가 아니라 Hybrid Linker가 승인한 field 후보만 enum으로 제공한다.</li>
+                  <li>모든 constraint·ranking·aggregation에 사용자 질문의 원문 <code>evidence_span</code>을 요구한다.</li>
+                  <li>후보 밖 field, 질문에 없는 숫자, 연산자·방향·상품군 변경, 조건 누락은 전체 계획을 거부한다.</li>
+                  <li>HCLX에 raw SQL, DB·URL·shell·credential 접근 권한을 제공하지 않는다.</li>
+                  <li>명확한 질문에서는 Provider를 호출하지 않고, 장애 시 서버 Fast Path가 있으면 재사용한다.</li>
+                  <li>서버 계획이 없고 모델 계획도 검증되지 않으면 임의 추론 대신 CLARIFY한다.</li>
+                </ul>
+              </div>
+            </details>
+            <details>
+              <summary>완료 기준</summary>
+              <div>
+                <ul class="checklist">
+                  <li>명확 질문에서 fake HCLX 호출이 0회다.</li>
+                  <li>복잡한 조건 조합으로 분류된 질문에서만 Provider 호출이 허용된다.</li>
+                  <li>schema·field·숫자·operator·direction 변조가 모두 차단된다.</li>
+                  <li>Provider 오류가 HTTP 500 또는 미검증 SQL 실행으로 이어지지 않는다.</li>
+                  <li>기존 legacy QueryPlan equality flag를 목표 구조의 완성형으로 사용하지 않는다.</li>
+                </ul>
+              </div>
+            </details>
+            <div class="three-lines">
+              <strong>3줄 요약</strong>
+              <ol>
+                <li>HCLX는 서버가 승인한 field 후보 안에서만 Typed QueryPlan을 제안한다.</li>
+                <li>질문 근거가 없는 숫자·조건·방향을 추가하면 계획 전체를 거부한다.</li>
+                <li>실제 API 연결 전에 fake transport로 안전·오류·fallback을 먼저 완성한다.</li>
+              </ol>
+            </div>
+          </div>
+        </article>
+      </section>
+
+      <section id="stages-7-9">
+        <h2>5. 7~9단계 — 실제 연결·운영·실서비스 확장</h2>
+
+        <article class="stage" id="stage-7">
+          <div class="stage-head">
+            <div class="stage-number">7</div>
+            <div class="stage-title">
+              <h3>실제 HCLX를 Shadow로 연결</h3>
+              <p>API Key·HCX-007 권한·공식 응답이 확인된 뒤 실제 계획을 생성하되, 먼저 SQL 실행에는 사용하지 않는다.</p>
+            </div>
+            <span class="status later">Credential 이후</span>
+          </div>
+          <div class="stage-body">
+            <div class="purpose">
+              <strong>쉬운 설명:</strong>
+              실제 HCLX의 답을 바로 믿지 않고 서버 계획과 나란히 비교하며 정확도·속도·오류를 먼저 측정한다.
+            </div>
+            <div class="mini-grid">
+              <div class="mini-card">
+                <strong>품질 측정</strong>
+                <p>product family, field ID, operator, value, unit, direction, 누락·추가 조건을 exact 기준으로 비교한다.</p>
+              </div>
+              <div class="mini-card">
+                <strong>운영 측정</strong>
+                <p>p50·p95·p99 latency, token, timeout, rate limit, malformed, fallback 원인을 분리한다.</p>
+              </div>
+            </div>
+            <details>
+              <summary>보안·운영 지침</summary>
+              <div>
+                <ul>
+                  <li>Provider Egress Gateway를 두고 HCLX에 전송 가능한 DTO를 allowlist로 제한한다.</li>
+                  <li>PII, 계좌번호, 카드·인증정보, API key, 내부 경로가 발견되면 외부 전송 없이 종료한다.</li>
+                  <li>HCLX 전용 semaphore, connect/read timeout, 전체 deadline보다 짧은 stage budget, Circuit Breaker를 둔다.</li>
+                  <li>실제 모델 계획은 shadow에서 기록만 하고 기존 deterministic 응답과 SQL을 유지한다.</li>
+                  <li>독립 blind 평가와 장애 평가를 통과한 release만 제한 canary로 올린다.</li>
+                </ul>
+              </div>
+            </details>
+            <details>
+              <summary>Canary 진입 기준</summary>
+              <div>
+                <ul class="checklist">
+                  <li>금지 질문의 HCLX outbound call이 0회다.</li>
+                  <li>미검증 HCLX 결과가 실행 권한을 얻는 경우가 0건이다.</li>
+                  <li>Provider 장애 중에도 deterministic Fast Path가 정상 처리된다.</li>
+                  <li>충돌·조건 누락·저신뢰 계획은 모두 CLARIFY로 종료한다.</li>
+                  <li>기존 결정론적 회귀가 0건이다.</li>
+                </ul>
+              </div>
+            </details>
+            <div class="three-lines">
+              <strong>3줄 요약</strong>
+              <ol>
+                <li>실제 HCLX 연결 후에도 먼저 계획만 만들고 실행에는 사용하지 않는다.</li>
+                <li>정확한 field·조건·방향과 latency·token·오류를 독립 평가한다.</li>
+                <li>보안·정확도·fallback 기준을 모두 통과한 일부 유형만 canary로 연다.</li>
+              </ol>
+            </div>
+          </div>
+        </article>
+
+        <article class="stage" id="stage-8">
+          <div class="stage-head">
+            <div class="stage-number">8</div>
+            <div class="stage-title">
+              <h3>동시성·Timeout·장애 대응 보강</h3>
+              <p>Dense·HCLX·DB 중 하나가 느리거나 고장 나도 전체 Agent가 같이 멈추지 않게 자원을 분리한다.</p>
+            </div>
+            <span class="status later">운영 준비</span>
+          </div>
+          <div class="stage-body">
+            <div class="purpose">
+              <strong>쉬운 설명:</strong>
+              요청이 몰리거나 HCLX가 늦어져도 스레드와 메모리가 무한히 쌓이지 않도록, 단계별 제한과 안전한 실패 규칙을 만든다.
+            </div>
+            <details open>
+              <summary>장애별 허용 동작</summary>
+              <div>
+                <div class="table-wrap">
+                  <table>
+                    <thead><tr><th>장애</th><th>허용 동작</th></tr></thead>
+                    <tbody>
+                      <tr><td>HCLX 장애</td><td>Fast Path 유지, HCLX가 꼭 필요한 질문은 CLARIFY</td></tr>
+                      <tr><td>Dense 장애</td><td>Lexical 유지, 미해결 표현은 추측하지 않고 CLARIFY</td></tr>
+                      <tr><td>DB manifest 불일치</td><td>해당 상품군 readiness=false, 실행 금지</td></tr>
+                      <tr><td>Verifier 실패</td><td>성공 응답 금지</td></tr>
+                      <tr><td>Release hash 불일치</td><td>인스턴스 기동·트래픽 수신 금지</td></tr>
+                      <tr><td>Overload</td><td>무한 대기 대신 제한된 오류로 빠르게 거절</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </details>
+            <details>
+              <summary>세부 구현 지침</summary>
+              <div>
+                <ul>
+                  <li>요청마다 생성하는 교차 상품군 ThreadPool을 공유 bounded executor 또는 전역 budget으로 교체한다.</li>
+                  <li>HCLX·Embedding·DB에 서로 다른 semaphore와 stage timeout을 둔다.</li>
+                  <li>timeout 이후 background worker가 계속 capacity를 점유하는지 지표로 노출한다.</li>
+                  <li>per-client/IP/global rate limit과 request·row·payload 크기 제한을 둔다.</li>
+                  <li>공식 평가 API 인증 계약이 확정되면 API key·허용 IP·TLS를 별도 배포 계약으로 적용한다.</li>
+                </ul>
+              </div>
+            </details>
+            <details>
+              <summary>완료 기준</summary>
+              <div>
+                <ul class="checklist">
+                  <li>1×·4×·16× 동시 요청에서 상품 ID·수치·근거가 동일하다.</li>
+                  <li>Overload 시 스레드·메모리·queue가 무한히 증가하지 않는다.</li>
+                  <li>HCLX timeout이 deterministic Fast Path의 latency를 같이 끌어올리지 않는다.</li>
+                  <li>provider·DB·index fault injection 결과가 정해진 fallback matrix와 일치한다.</li>
+                </ul>
+              </div>
+            </details>
+            <div class="three-lines">
+              <strong>3줄 요약</strong>
+              <ol>
+                <li>HCLX·Dense·DB의 자원과 timeout을 서로 분리한다.</li>
+                <li>장애 시 무한 대기하거나 추측하지 않고 정해진 fallback으로 종료한다.</li>
+                <li>동시 요청과 fault injection으로 정확성·메모리·queue를 함께 검증한다.</li>
+              </ol>
+            </div>
+          </div>
+        </article>
+
+        <article class="stage" id="stage-9">
+          <div class="stage-head">
+            <div class="stage-number">9</div>
+            <div class="stage-title">
+              <h3>실제 미래에셋증권 규모로 확장</h3>
+              <p>현재 안전 계약을 유지하면서 저장소·트래픽·상품 문서 규모에 맞게 실행 인프라를 교체한다.</p>
+            </div>
+            <span class="status later">실서비스 확장</span>
+          </div>
+          <div class="stage-body">
+            <div class="purpose">
+              <strong>쉬운 설명:</strong>
+              현재 SQLite를 당장 버리는 것이 아니라, QueryPlan과 검증 규칙은 그대로 두고 실제 사내 DB·상품 API·검색 인프라로 갈아 끼울 수 있게 만든다.
+            </div>
+            <div class="mini-grid">
+              <div class="mini-card">
+                <strong>ExecutionAdapter</strong>
+                <p>SQLite·PostgreSQL·사내 Product API·Warehouse를 동일한 ValidatedPlan 뒤에 연결하는 교체 지점이다.</p>
+              </div>
+              <div class="mini-card">
+                <strong>ProductRetriever</strong>
+                <p>SQL이 허용한 상품 후보 안에서만 BM25·Product Dense를 실행하는 확장 모듈 계약이다.</p>
+              </div>
+            </div>
+            <details open>
+              <summary>Product Dense와 Vector DB 방향</summary>
+              <div>
+                <pre>질문
+→ QueryPlan
+→ SQL Hard Filter
+→ 승인된 CandidateUniverse
+→ BM25 + Product Dense
+→ 필요한 경우에만 Re-ranker
+→ 최종 product ID·수치 DB 재조회
+→ Verifier</pre>
+                <ul>
+                  <li>현재는 <code>ProductRetriever</code>, <code>CandidateUniverse</code>, <code>NullProductRetriever</code>, design-only Index Manifest와 계약 테스트만 준비한다.</li>
+                  <li>Product Dense는 수익률·보수·가격을 반환하지 않고 product ID 후보만 반환한다.</li>
+                  <li>Schema Dense와 Product Dense의 index·manifest·평가를 서로 분리한다.</li>
+                  <li>전용 Vector DB는 상품·문서 수, SQL 필터 후 후보 수, QPS, p95 latency, 갱신·HA 요구가 실제로 커질 때 검토한다.</li>
+                  <li>초기 Product Dense shadow는 exact 검색 또는 PostgreSQL+pgvector 같은 단순한 실행 계층부터 비교한다.</li>
+                </ul>
+              </div>
+            </details>
+            <details>
+              <summary>엔터프라이즈 구현 항목</summary>
+              <div>
+                <ul>
+                  <li>Stateless API replica, load balancer, multi-AZ, read replica, connection pool, blue/green·canary·rollback을 도입한다.</li>
+                  <li>사용자·서비스 identity와 RBAC, row/column 접근정책, Provider outbound 제한을 적용한다.</li>
+                  <li>상품군·시장·지역별 partition과 승인된 serving view를 사용하고 원천 OLTP를 Agent가 직접 조회하지 않게 한다.</li>
+                  <li>field evidence는 내부에서 유지하되 외부 응답은 evidence ID 또는 pagination으로 payload를 줄인다.</li>
+                  <li>상품 Finder와 추천·가입·주문 Agent는 identity·권한·감사·승인 체계를 분리한다.</li>
+                </ul>
+              </div>
+            </details>
+            <details>
+              <summary>완료 기준</summary>
+              <div>
+                <ul class="checklist">
+                  <li>SQLite와 새 Adapter가 동일한 canonical 결과를 반환하는 계약 테스트를 통과한다.</li>
+                  <li>Product Dense가 CandidateUniverse 밖 product ID를 반환할 수 없다.</li>
+                  <li>Product Dense 장애 시 기존 SQL/BM25 결과가 유지된다.</li>
+                  <li>새 index·DB·release rollback과 backup restore가 실제 훈련으로 검증된다.</li>
+                  <li>추천·주문 기능이 Finder 권한으로 실행되는 경로가 없다.</li>
+                </ul>
+              </div>
+            </details>
+            <div class="three-lines">
+              <strong>3줄 요약</strong>
+              <ol>
+                <li>QueryPlan·ValidatedPlan·Verifier는 유지하고 DB와 검색 인프라만 Adapter로 교체한다.</li>
+                <li>Product Dense는 SQL 후보군 안에서만 상품 ID 후보를 제안하며 현재는 골격만 둔다.</li>
+                <li>Vector DB와 Re-ranker는 실제 규모·정확도·latency 필요성이 입증될 때만 도입한다.</li>
+              </ol>
+            </div>
+          </div>
+        </article>
+      </section>
+
+      <section id="gates">
+        <h2>6. 단계 진입·배포 승인 기준</h2>
+        <div class="callout danger">
+          <strong>0건이어야 하는 보안 불변식:</strong>
+          미검증 QueryPlan 실행, 범위 밖 상품·field 실행, 쓰기 SQL, 금지·실제 모호 질문의 Oracle 실행,
+          PII·secret 외부 전송, Verifier 실패 결과의 success 응답, 승인 manifest 불일치 상태 실행.
+        </div>
+
+        <div class="card full">
+          <div class="gate">
+            <strong>1 → 2단계</strong>
+            <span>PlanningDecision shadow가 기존 응답을 바꾸지 않고 무호출 정책을 정확히 기록해야 한다.</span>
+          </div>
+          <div class="gate">
+            <strong>2 → 3단계</strong>
+            <span>일반 QueryPlan이 Oracle 실행 권한을 얻을 수 없고 모든 실행이 ValidatedPlan을 거쳐야 한다.</span>
+          </div>
+          <div class="gate">
+            <strong>3 → 4단계</strong>
+            <span>하나의 요청이 동일 release로 처리되고 version/hash mismatch가 fail-closed여야 한다.</span>
+          </div>
+          <div class="gate">
+            <strong>4 → 5단계</strong>
+            <span>Dense 호출·latency·abstain·오류와 금지 질문 무호출을 민감정보 없이 측정할 수 있어야 한다.</span>
+          </div>
+          <div class="gate">
+            <strong>5 → 6단계</strong>
+            <span>Schema Dense가 Registry 밖 field를 반환하지 않고 low-margin에서 실행 대신 abstain해야 한다.</span>
+          </div>
+          <div class="gate">
+            <strong>6 → 7단계</strong>
+            <span>Fake HCLX의 malformed·field·숫자·operator·direction 공격과 장애 fallback 테스트를 모두 통과해야 한다.</span>
+          </div>
+          <div class="gate">
+            <strong>7 → Canary</strong>
+            <span>실제 HCLX blind 평가, outbound 보안, latency·token budget, Fast Path 무회귀를 모두 충족해야 한다.</span>
+          </div>
+          <div class="gate">
+            <strong>8 → 운영 배포</strong>
+            <span>동시성·overload·timeout·provider 장애·DB mismatch fault injection 결과가 정해진 정책과 일치해야 한다.</span>
+          </div>
+          <div class="gate">
+            <strong>9 → 실서비스</strong>
+            <span>인증·권한·HA·DR·감사·rollback과 Product Dense 후보 범위 제한이 실제 환경에서 검증돼야 한다.</span>
+          </div>
+        </div>
+
+        <h3 style="margin-top: 28px;">권장 PR 분리</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>PR</th><th>포함 범위</th><th>포함하지 않을 것</th></tr></thead>
+            <tbody>
+              <tr><td>PR 1</td><td>PlanningDecision·adaptive shadow·무호출 테스트</td><td>Dense/HCLX 운영 배선</td></tr>
+              <tr><td>PR 2</td><td>ValidatedPlan·PlanAuthorityGate·Oracle 계약</td><td>공개 Backend DTO 변경</td></tr>
+              <tr><td>PR 3</td><td>AgentReleaseManifest·startup fail-closed</td><td>실제 Embedding index</td></tr>
+              <tr><td>PR 4</td><td>AuditEvent·Metric·민감정보 제거 테스트</td><td>원문 질문의 무제한 로그</td></tr>
+              <tr><td>PR 5</td><td>Hybrid Schema Linker shadow</td><td>Vector DB·enforce 활성화</td></tr>
+              <tr><td>PR 6</td><td>HCLX GroundedPlan fake provider</td><td>실제 API 호출</td></tr>
+              <tr><td>PR 7</td><td>실제 HCLX shadow·Egress·Circuit Breaker</td><td>전체 질문 HCLX 호출</td></tr>
+              <tr><td>PR 8</td><td>공유 자원 budget·동시성·장애 대응</td><td>대규모 DB 마이그레이션</td></tr>
+              <tr><td>PR 9</td><td>ExecutionAdapter·ProductRetriever 확장 계약</td><td>필요성이 미검증된 Vector DB·Re-ranker</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="terms">
+        <h2>7. 자주 나오는 용어</h2>
+        <dl class="term-list">
+          <div class="term"><dt>SafetyEnvelope</dt><dd>탈옥·범위 밖·거래·전망 등 실행하면 안 되는 질문을 첫 단계에서 차단하는 고정 방어막.</dd></div>
+          <div class="term"><dt>Ontology</dt><dd>금융상품의 업무 개념과 데이터 field의 의미·관계를 정의한 사전.</dd></div>
+          <div class="term"><dt>Lexical</dt><dd>문자열·키워드·alias를 이용해 질문 표현과 field를 연결하는 결정론적 방법.</dd></div>
+          <div class="term"><dt>Dense Retrieval</dt><dd>Embedding으로 문장의 의미를 벡터화해 의미가 가까운 field·문서·상품을 찾는 검색.</dd></div>
+          <div class="term"><dt>Embedding</dt><dd>텍스트 의미를 유사도 계산이 가능한 숫자 배열로 바꾼 표현.</dd></div>
+          <div class="term"><dt>Schema Dense</dt><dd>사용자의 새로운 표현이 어떤 데이터 field를 뜻하는지 후보를 찾는 Dense 검색.</dd></div>
+          <div class="term"><dt>Product Dense</dt><dd>SQL로 제한된 실제 상품 중 자연어 의미와 가까운 product ID 후보를 찾는 Dense 검색.</dd></div>
+          <div class="term"><dt>QueryPlan</dt><dd>질문의 상품군·필터·정렬·비교·집계 조건을 허용된 형식으로 구조화한 계획.</dd></div>
+          <div class="term"><dt>ValidatedPlan</dt><dd>서버 검증을 모두 통과해 Oracle 실행 권한을 받은 QueryPlan과 검증 영수증.</dd></div>
+          <div class="term"><dt>Oracle</dt><dd>ValidatedPlan을 read-only SQL과 Python으로 실행해 상품과 수치를 결정하는 실행기.</dd></div>
+          <div class="term"><dt>Verifier</dt><dd>상품 ID·필터·정렬·수치·근거를 원천 데이터와 독립적으로 다시 확인하는 검증기.</dd></div>
+          <div class="term"><dt>BM25</dt><dd>문서나 상품 설명에서 검색어의 중요도를 계산하는 키워드 검색 방식.</dd></div>
+          <div class="term"><dt>Re-ranker</dt><dd>이미 찾은 소수 후보를 더 비싼 모델로 다시 비교해 순서를 정밀하게 조정하는 단계.</dd></div>
+          <div class="term"><dt>Vector DB</dt><dd>대규모 Embedding 벡터를 저장하고 ANN 등으로 빠르게 검색하는 전용 저장소.</dd></div>
+          <div class="term"><dt>Shadow</dt><dd>새 기능 결과를 기록·평가만 하고 실제 응답이나 SQL 실행에는 반영하지 않는 상태.</dd></div>
+          <div class="term"><dt>Canary</dt><dd>검증된 일부 질문이나 소수 트래픽에만 새 기능을 적용해 위험을 제한하는 단계.</dd></div>
+          <div class="term"><dt>Circuit Breaker</dt><dd>외부 Provider 오류가 반복되면 호출을 잠시 차단해 전체 서비스 장애를 막는 장치.</dd></div>
+          <div class="term"><dt>ExecutionAdapter</dt><dd>동일한 ValidatedPlan을 SQLite·PostgreSQL·사내 API 등 서로 다른 저장소에 연결하는 교체 지점.</dd></div>
+        </dl>
+      </section>
+
+      <section id="update-rule">
+        <h2>8. 후속 공유 HTML 작성 원칙</h2>
+        <p>
+          이후 구현에 큰 변경이 생겨 새 HTML을 요청할 경우, 다음 형식을 기본 템플릿으로 사용한다.
+          이 규칙은 완료되지 않은 기능을 완료된 것처럼 보이게 하지 않고, 팀원이 변경 영향과 다음 행동을 빠르게 판단하도록 하기 위한 것이다.
+        </p>
+        <div class="grid">
+          <article class="card">
+            <h3>문서 상단에 반드시 표시</h3>
+            <ul>
+              <li>기준일·대상 branch 또는 release</li>
+              <li>완료 보고서인지 구현 계획인지</li>
+              <li>실제 배포·운영 반영 여부</li>
+              <li>검증한 테스트와 아직 검증하지 않은 항목</li>
+            </ul>
+          </article>
+          <article class="card">
+            <h3>각 변경 단계의 고정 구조</h3>
+            <ol>
+              <li>목적과 쉬운 설명</li>
+              <li>핵심 구현·영향 범위</li>
+              <li>완료·활성화 기준</li>
+              <li>단계 하단 3줄 요약</li>
+            </ol>
+          </article>
+          <article class="card">
+            <h3>주장과 상태 표기</h3>
+            <ul>
+              <li><span class="status fixed">검증 완료</span> 실제 코드·테스트 근거가 있는 상태</li>
+              <li><span class="status shadow">Shadow</span> 평가만 하며 응답에는 영향이 없는 상태</li>
+              <li><span class="status later">계획</span> 구현 또는 독립 검증이 남은 상태</li>
+              <li><span class="status blocked">운영 금지</span> 승인 조건 전에는 켤 수 없는 상태</li>
+            </ul>
+          </article>
+          <article class="card">
+            <h3>보안·협업 원칙</h3>
+            <ul>
+              <li>API key·환경변수·DB 경로·blind 정답을 문서에 노출하지 않는다.</li>
+              <li>Core·Backend 공개 계약 변경은 합의 여부를 표시한다.</li>
+              <li>큰 변경마다 날짜가 포함된 새 snapshot HTML을 만들고 이전 문서를 보존한다.</li>
+              <li>문서 허브에는 최신 문서 링크와 상태를 갱신한다.</li>
+            </ul>
+          </article>
+        </div>
+        <div class="callout">
+          <strong>권장 파일명:</strong>
+          <code>docs/agent-implementation-report-YYYY-MM-DD.html</code> 또는
+          <code>docs/agent-implementation-roadmap-YYYY-MM-DD.html</code>.
+          실제 완료 보고서에는 커밋·테스트·배포 상태를 검증한 뒤에만 완료 표현을 사용한다.
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <p><strong>문서 위치:</strong> <code>docs/agent-implementation-roadmap-2026-08-12.html</code></p>
+      <p>
+        이 문서는 2026-08-12 기준 구현 방향을 설명하는 팀 공유용 로드맵이다.
+        실제 구현 상태와 수치는 저장소 코드·테스트·평가 보고서를 우선한다.
+      </p>
+    </footer>
+  </div>
+</body>
+</html>

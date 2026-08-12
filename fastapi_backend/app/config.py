@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from finance_agent_core.contracts.queryplan import ProductFamily
 from pydantic import Field, model_validator
@@ -17,7 +18,9 @@ class Settings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         extra="ignore",
+        hide_input_in_errors=True,
         populate_by_name=True,
+        frozen=True,
     )
 
     app_name: str = Field(
@@ -32,9 +35,35 @@ class Settings(BaseSettings):
         default="development",
         validation_alias="APP_ENV",
     )
-    answer_provider: Literal["deterministic", "local_test"] = Field(
+    answer_provider: Literal["deterministic", "local_test", "hyperclova"] = Field(
         default="deterministic",
         validation_alias="FINANCE_BACKEND_ANSWER_PROVIDER",
+    )
+    hcx_query_plan_enabled: bool = Field(
+        default=False,
+        validation_alias="FINANCE_BACKEND_HCX_QUERY_PLAN_ENABLED",
+    )
+    llm_mode: Literal["disabled", "local_test", "evaluation", "production"] = Field(
+        default="disabled",
+        validation_alias="FINANCE_AGENT_LLM_MODE",
+    )
+    llm_provider: Literal["disabled", "local_test", "hyperclova"] = Field(
+        default="disabled",
+        validation_alias="LLM_PROVIDER",
+    )
+    hcx_model: str | None = Field(
+        default=None,
+        validation_alias="HCX_MODEL",
+    )
+    hcx_timeout_seconds: float = Field(
+        default=45.0,
+        gt=0,
+        le=300,
+        validation_alias="HCX_TIMEOUT_SECONDS",
+    )
+    clovastudio_api_key_file: Path | None = Field(
+        default=None,
+        validation_alias="CLOVASTUDIO_API_KEY_FILE",
     )
     official_answer_timeout_seconds: float = Field(
         default=55.0,
@@ -48,9 +77,50 @@ class Settings(BaseSettings):
         le=8,
         validation_alias="OFFICIAL_ANSWER_MAX_INFLIGHT",
     )
+    web_concurrency: int = Field(
+        default=1,
+        ge=1,
+        le=8,
+        validation_alias="WEB_CONCURRENCY",
+    )
     fund_execution_policy: FundExecutionPolicy = Field(
         default="locked",
         validation_alias="FINANCE_BACKEND_FUND_EXECUTION_POLICY",
+    )
+    release_manifest_file: Path | None = Field(
+        default=None,
+        validation_alias="FINANCE_RELEASE_MANIFEST_FILE",
+    )
+    deployment_binding_file: Path | None = Field(
+        default=None,
+        validation_alias="FINANCE_DEPLOYMENT_BINDING_FILE",
+    )
+    deployment_binding_sha256: str | None = Field(
+        default=None,
+        pattern=r"^[0-9a-f]{64}$",
+        validation_alias="FINANCE_DEPLOYMENT_BINDING_SHA256",
+    )
+    source_commit: str | None = Field(
+        default=None,
+        pattern=r"^(?:[0-9a-f]{40}|[0-9a-f]{64})$",
+        validation_alias="FINANCE_SOURCE_COMMIT",
+    )
+    runtime_image_reference: str | None = Field(
+        default=None,
+        pattern=r"^[a-z0-9][a-z0-9._:/-]{2,255}@sha256:[0-9a-f]{64}$",
+        validation_alias="FINANCE_RUNTIME_IMAGE_REFERENCE",
+    )
+    runtime_platform: Literal["linux/amd64", "linux/arm64"] = Field(
+        default="linux/amd64",
+        validation_alias="FINANCE_RUNTIME_PLATFORM",
+    )
+    dense_schema_linker_enabled: bool = Field(
+        default=False,
+        validation_alias="FINANCE_DENSE_SCHEMA_LINKER_ENABLED",
+    )
+    product_dense_enabled: bool = Field(
+        default=False,
+        validation_alias="FINANCE_PRODUCT_DENSE_ENABLED",
     )
     overseas_etp_db: Path | None = Field(
         default=None,
@@ -69,6 +139,20 @@ class Settings(BaseSettings):
         validation_alias="FINANCE_DB_FUND",
     )
 
+    @model_validator(mode="before")
+    @classmethod
+    def reject_inline_hcx_credential_without_loading_it(cls, values: Any) -> Any:
+        """Reject the forbidden variable by name; never ingest its secret value."""
+
+        explicit_names = (
+            {str(name).casefold() for name in values} if isinstance(values, dict) else set()
+        )
+        if "CLOVASTUDIO_API_KEY" in os.environ or "clovastudio_api_key" in explicit_names:
+            raise ValueError(
+                "inline HyperCLOVA credential is forbidden; use CLOVASTUDIO_API_KEY_FILE"
+            )
+        return values
+
     @model_validator(mode="after")
     def require_development_for_local_provider(self) -> Settings:
         """Keep provider and capability opt-ins fail-closed."""
@@ -77,9 +161,55 @@ class Settings(BaseSettings):
             raise ValueError(
                 "FINANCE_BACKEND_ANSWER_PROVIDER=local_test is allowed only in development"
             )
+        if self.uses_hyperclova:
+            if self.app_env not in {"evaluation", "production"}:
+                raise ValueError("HyperCLOVA X is allowed only in evaluation or production")
+            if self.llm_mode != self.app_env or self.llm_provider != "hyperclova":
+                raise ValueError(
+                    "HyperCLOVA X requires FINANCE_AGENT_LLM_MODE to match APP_ENV "
+                    "and LLM_PROVIDER=hyperclova"
+                )
+            if self.hcx_model != "HCX-007":
+                raise ValueError("Structured Outputs currently require HCX_MODEL=HCX-007")
+            if self.clovastudio_api_key_file is None:
+                raise ValueError("HyperCLOVA X requires CLOVASTUDIO_API_KEY_FILE")
         if self.fund_execution_policy == "public_fund_v1_approved" and self.fund_db is None:
             raise ValueError("approved public fund execution requires FINANCE_DB_FUND")
+        release_values = (
+            self.release_manifest_file,
+            self.deployment_binding_file,
+            self.deployment_binding_sha256,
+            self.source_commit,
+            self.runtime_image_reference,
+        )
+        if any(value is not None for value in release_values) and not all(
+            value is not None for value in release_values
+        ):
+            raise ValueError("Agent release configuration must be supplied as one complete set")
+        if self.app_env in {"evaluation", "production"} and (
+            self.dense_schema_linker_enabled or self.product_dense_enabled
+        ):
+            raise ValueError("production Dense retrieval remains disabled in release schema v1")
         return self
+
+    @property
+    def has_release_configuration(self) -> bool:
+        return all(
+            value is not None
+            for value in (
+                self.release_manifest_file,
+                self.deployment_binding_file,
+                self.deployment_binding_sha256,
+                self.source_commit,
+                self.runtime_image_reference,
+            )
+        )
+
+    @property
+    def uses_hyperclova(self) -> bool:
+        """Return whether any request path needs the official HCLX transport."""
+
+        return self.answer_provider == "hyperclova" or self.hcx_query_plan_enabled
 
     @property
     def capability_execution_overrides(self) -> set[ProductFamily]:

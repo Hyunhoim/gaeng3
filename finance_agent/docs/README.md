@@ -13,23 +13,31 @@
 | 어떤 질문이 가능한지 | [Capability matrix](capability-matrix.md) |
 | 데이터에서 무엇을 믿을 수 있는지 | [데이터 감사 기준](data-audit.md) |
 | Backend와 어떤 JSON을 주고받는지 | [Backend DTO](backend-contract.md) |
+| 어떤 계획만 DB를 실행할 수 있는지 | [QueryPlan 실행 권한 경계](plan-authority.md) |
+| 코드·Prompt·Model·index·Docker image를 어떻게 한 release로 묶는지 | [AgentReleaseManifest 배포 계약](agent-release-manifest.md) |
+| NCP Registry push·OCI 검증·cosign 서명을 어떻게 수행하는지 | [NCP immutable release CI](immutable-ncp-release-ci.md) |
+| N-1 → N → N-1 rollback을 어떻게 검증하는지 | [Rollback drill runbook](../../fastapi_backend/ROLLBACK_DRILL.md) |
 | 제출용 Ontology가 무엇인지 | [Ontology 제출 계약](ontology.md) |
 | 평가 수치를 어떻게 해석하는지 | [평가 README](../evaluation/README.md) |
+| 현재 승인 DB로 Stage 2 지문을 다시 계산한 결과 | [Stage 2 승인 DB 재검증 baseline](../evaluation/baselines/stage2-approved-db-revalidation-2026-08-12.json) |
+| Stage 3 release·anti-replay 자동 계약 결과 | [Stage 3 release 계약 baseline](../evaluation/baselines/stage3-release-contract-2026-08-12.json) |
+| localhost OCI push·합성 rollback 실기동 결과 | [Stage 3 OCI·rollback baseline](../evaluation/baselines/stage3-local-oci-rollback-2026-08-12.json) |
 | 설명회 형식 30문항 결과가 궁금한지 | [공식 형식 공개 모의평가](evaluation-official-mock.md) |
 | 질문 표현을 바꾼 Qwen 스트레스 평가가 궁금한지 | [Qwen 변형 질문 평가](evaluation-qwen-metamorphic.md) |
 | 원문을 숨긴 의미 재구성·모델 계획 gate가 궁금한지 | [Qwen 변형 질문 평가 9절](evaluation-qwen-metamorphic.md#9-원문-표현을-숨긴-semantic-round-trip) |
 | 전체 필드의 미시험 구간과 다음 Qwen 실험이 궁금한지 | [자동 커버리지 평가](evaluation-coverage-guided.md) |
 | HyperCLOVA X 연결 전에 무엇이 남았는지 | [연결 전 준비 기준](pre-hcx-readiness.md) |
+| Dense 도입 판단과 현재 SQL·BM25 수치가 궁금한지 | [Dense Schema Linker 오프라인 컴포넌트 평가](evaluation-dense-schema-linker-shadow.md) |
 
 ## 목적별 위치
 
 | 구분 | 내용 | 대표 문서 |
 | --- | --- | --- |
 | 현재 기준 | 공식 제약, 구현 상태, 우선순위 | [프로젝트 기준](project-baseline.md) |
-| 데이터·계약 | 원천 데이터 품질, 필드, QueryPlan, API DTO | [데이터 감사](data-audit.md), [계약](contracts.md) |
+| 데이터·계약 | 원천 데이터 품질, 필드, QueryPlan, 실행 권한, 배포 release, rollback, API DTO | [데이터 감사](data-audit.md), [계약](contracts.md), [실행 권한](plan-authority.md), [배포 계약](agent-release-manifest.md), [rollback runbook](../../fastapi_backend/ROLLBACK_DRILL.md) |
 | Ontology | 공식 Turtle 5개, 생성·문법·registry 정합성 | [Ontology 제출 계약](ontology.md) |
 | 기능 설계 | 검색, 비교, 집계, 문서 RAG, 답변 검증 | [상세 문서 인덱스](project-index.md) |
-| 평가 해석 | 공개 회귀, blind, red-team, 사람 평가 | [평가 README](../evaluation/README.md) |
+| 평가 해석 | 공개 회귀, Stage 2 승인 DB, Stage 3 release·rollback, blind, red-team, 사람 평가 | [평가 README](../evaluation/README.md), [Stage 2 baseline](../evaluation/baselines/stage2-approved-db-revalidation-2026-08-12.json), [Stage 3 release baseline](../evaluation/baselines/stage3-release-contract-2026-08-12.json), [Stage 3 rollback baseline](../evaluation/baselines/stage3-local-oci-rollback-2026-08-12.json) |
 | 개발 전용 | 로컬 Qwen 실행과 안전 경계 | [로컬 LLM](local-llm.md) |
 | 과거 기록 | 초기 프롬프트와 외부 연구 답변 | `prompts/`, `research/` |
 

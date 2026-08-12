@@ -36,8 +36,11 @@ fastapi_backend/
 ├── tests/                       # Backend 단위·계약 테스트
 ├── scripts/smoke.py             # 실행 중인 HTTP API 스모크
 ├── Dockerfile                   # Backend 이미지
+├── Dockerfile.release           # manifest를 넣는 digest 기반 release layer
 ├── start.sh                     # 컨테이너 시작 명령
 ├── .env.example                 # Compose 환경변수 예시
+├── .env.release.example         # 비밀값이 없는 release identity 예시
+├── docker-compose.release.yml   # mutable build를 제거하는 공식 override
 ├── docker-compose.local-llm.yml # 개발 전용 로컬 Qwen override
 ├── compose.sh                   # 과거 명령 호환용, 루트 스크립트로 위임
 └── pyproject.toml               # Backend Python package·의존성
@@ -68,8 +71,9 @@ Backend는 다음 Agent 공개 계약만 사용
 ### `GET /health`
 
 네 SQLite가 단순히 설정됐는지만 확인하지 않고 각 manifest의 상품군까지 검증한다.
-Compose 기본값인 `APP_ENV=evaluation` 또는 `production`에서는 패키지에 동결된 공식 데이터 승인
-manifest와 source hash·행 수·기준일·DB hash가 모두 일치해야 준비 상태가 된다.
+`APP_ENV=evaluation` 또는 `production` release에서는 `AgentReleaseManifest`와 패키지에
+동결된 공식 데이터 승인 manifest의 source hash·행 수·기준일·DB hash가 모두
+일치해야 준비 상태가 된다.
 
 - 모두 준비됨: HTTP 200, `status=ok`
 - 하나라도 누락·불일치: HTTP 503, `status=degraded`
@@ -159,6 +163,42 @@ test -f fastapi_backend/.env || \
 
 이미지 빌드, 공식 XLSX 정규화·검증, Backend 시작은 루트 스크립트가 순서대로 처리.
 자세한 사용법은 [루트 전체 시스템 실행](../README.md#5-전체-시스템-실행) 참고
+
+기본 `docker-compose.yml`은 `APP_ENV=development`인 로컬 개발 경로다. 기존 개인
+`.env`에 `evaluation` 또는 `production`이 남아 있으면 다음 재생성부터 release 설정
+없이는 의도적으로 시작이 실패하므로, 로컬 개발은 `APP_ENV=development`를 사용한다.
+현재 실행 중인 컨테이너 설정은 파일을 수정했다고 자동으로 바뀌지 않는다.
+
+평가·운영 release는 mutable local build를 허용하는 `compose.sh`가 아니라 다음 전용
+진입점을 사용한다.
+
+```bash
+RELEASE_ENV_FILE=fastapi_backend/.env.release \
+./compose-release.sh up --detach --wait
+```
+
+이 경로는 코드·Prompt·Model·index·공식 데이터 manifest가 고정된 image digest만
+실행하며 release별 SQLite volume도 read-only로 연결한다. 따라서 해당 volume은
+배포 전에 승인된 image/data 준비 job으로 생성·검증돼 있어야 한다. Manifest/Binding
+생성 순서, localhost에서 완료한 Registry·합성 rollback 검증과 아직 남은 NCP 공식 검증은
+[AgentReleaseManifest 배포 계약](../finance_agent/docs/agent-release-manifest.md)을 따른다.
+HCLX release도 임의 `-f` override를 추가하지 않고 `.env.release`의 manifest와 동일한
+provider profile 및 read-only host secret file 경로를 사용한다.
+
+실제 evaluation/production host에서는 root 관리자가 다음 두 경로를 미리 만들고 일반
+사용자가 쓰지 못하게 해야 한다.
+
+```text
+/var/lib/finance-agent-release/active-binding.json
+/run/lock/finance-agent-release/activation.lock
+```
+
+`compose-release.sh up`은 이 host activation broker를 반드시 거친다. broker는 서명·hash
+검증과 generation 전환을 lock 안에서 수행하고, 현재와 같은 Binding의 재시작 또는 현재보다
+정확히 1 큰 새 Binding만 허용한다. 과거 Binding replay는 차단되며, rollback도 이전 image를
+가리키는 **새 generation·새 서명 Binding**으로 수행한다. health 성공 뒤에만 활성 상태가
+원자적으로 기록된다. 실제 NCP에서는 launcher·Python·Docker 실행 경로 자체도 root-controlled
+설치본으로 배포해야 하며, 개발자가 쓸 수 있는 checkout에서 직접 root 실행하지 않는다.
 
 `fastapi_backend/compose.sh`는 이전 명령과의 호환을 위해 루트 스크립트로 위임할 뿐임.
 새 문서와 자동화에서는 사용하지 않음
@@ -280,12 +320,24 @@ curl --fail http://127.0.0.1:18002/health
 | `BACKEND_BIND_ADDRESS` | `127.0.0.1` | 호스트 바인딩 주소 |
 | `BACKEND_PORT` | `18001` | 호스트에서 접근할 Backend 포트 |
 | `FINANCE_RAW_DATA_DIR` | `../../2. Data/1. Raw/1.금융상품` | 읽기 전용 공식 XLSX 경로 |
-| `APP_ENV` | `evaluation` | Compose 대회 실행 모드. 공식 release manifest와 네 DB fingerprint를 강제 |
+| `APP_ENV` | `development` | 기본 Compose는 로컬 개발. `evaluation`·`production`은 전용 release manifest·Binding을 강제 |
 | `WEB_CONCURRENCY` | `1` | Uvicorn worker 수 |
 | `OFFICIAL_ANSWER_TIMEOUT_SECONDS` | `55` | 평가용 GET의 바깥쪽 응답 제한, 0초 초과 60초 미만만 허용 |
 | `OFFICIAL_ANSWER_MAX_INFLIGHT` | `2` | 프로세스당 동시 Agent 작업 상한(허용 1~8). timeout 뒤에도 실제 worker 종료까지 자리를 유지하며 초과 요청은 실행 전에 거절 |
 | `FINANCE_BACKEND_ANSWER_PROVIDER` | `deterministic` | 답변 provider, 기본은 모델 미사용 |
+| `FINANCE_BACKEND_HCX_QUERY_PLAN_ENABLED` | `false` | HCLX QueryPlan 선택 기능. 독립 품질·지연 평가 전에는 비활성 유지 |
+| `FINANCE_AGENT_LLM_MODE` | `disabled` | HCLX 사용 시 `APP_ENV`와 같은 `evaluation` 또는 `production` |
+| `LLM_PROVIDER` | `disabled` | HCLX 사용 시에만 `hyperclova` |
+| `HCX_MODEL` | 미설정 | Structured Outputs 사용 경로는 현재 `HCX-007`만 허용 |
+| `HCX_TIMEOUT_SECONDS` | `45` | HCLX 단일 HTTP 요청 상한. 전체 요청 deadline이 더 짧으면 자동 축소 |
+| `CLOVASTUDIO_API_KEY_FILE` | 미설정 | evaluation/production에서만 허용되는 credential 파일의 컨테이너 내부 경로. inline `CLOVASTUDIO_API_KEY`는 거부 |
 | `FINANCE_BACKEND_FUND_EXECUTION_POLICY` | `locked` | 공모펀드 실행 정책, 팀이 승인한 버전에서만 `public_fund_v1_approved` |
+| `FINANCE_RELEASE_MANIFEST_FILE` | 미설정 | evaluation/production image 안의 read-only AgentReleaseManifest 경로 |
+| `FINANCE_DEPLOYMENT_BINDING_FILE` | 미설정 | image digest와 manifest를 잇는 read-only DeploymentBinding 경로 |
+| `FINANCE_DEPLOYMENT_BINDING_SHA256` | 미설정 | 배포 control plane이 주입하는 Binding file 신뢰 hash |
+| `FINANCE_SOURCE_COMMIT` | 미설정 | clean release source commit |
+| `FINANCE_RUNTIME_IMAGE_REFERENCE` | 미설정 | `repository@sha256` 형식의 실행 image |
+| `FINANCE_RUNTIME_PLATFORM` | `linux/amd64` | Binding·Compose·runtime이 함께 확인하는 image platform |
 
 Compose에서는 네 DB를 전용 volume의 `/data/*.sqlite3`로 자동 연결하므로 DB 경로를
 개인 `.env`에서 직접 지정하지 않음
@@ -300,9 +352,54 @@ Compose에서는 네 DB를 전용 volume의 `/data/*.sqlite3`로 자동 연결�
 공인망에 열어야 할 때만 `BACKEND_BIND_ADDRESS=0.0.0.0` 검토. 그 전에 인증·방화벽·
 허용 IP·TLS 요구사항을 먼저 확정하며 연구실 서버에서는 `127.0.0.1` 유지
 
-## 9. 개발 전용 로컬 Qwen 연결
+## 9. HyperCLOVA X 연결 경계
 
-로컬 Qwen은 HyperCLOVA X 연결 전 내부 개발에만 사용. 평가·제출·운영 경로가 아니며
+2026-08-11 공식 계약에 맞춰 Direct Chat Completions v3 HTTP transport와 FastAPI
+의존성 주입을 구현했다. endpoint는
+`https://clovastudio.stream.ntruss.com/v3/chat-completions/HCX-007`로 고정하고,
+`Authorization: Bearer`와 Structured Outputs를 사용한다. 구형 API Gateway URL과
+구형 이중 인증 header는 사용하지 않는다.
+
+기본 연결 순서는 다음과 같다.
+
+```text
+서버 QueryPlan → SQLite/Python → Verifier → HCLX grounded answer
+→ 로컬 schema/Answer Verifier → 검증된 DB 수치·근거를 서버가 최종 조립
+```
+
+즉 HCLX는 상품명·수치·순위·출처를 새로 만들 수 없다. 허용 문장, result 순서,
+evidence field와 warning이 하나라도 다르면 모델 초안을 폐기하고 결정론적 답변으로
+fallback한다. QueryPlan 호출은 질문당 모델 호출 수와 지연을 늘리므로 별도 flag의
+기본값을 `false`로 유지한다.
+
+evaluation/production에서는 실제 키를 container environment에 넣지 않는다. 공식
+`docker-compose.release.yml`이 저장소 밖의 read-only host 파일을 Docker secret으로
+마운트하고, 애플리케이션은 AgentReleaseManifest·DeploymentBinding·승인 DB 검증을
+끝낸 뒤에만 파일을 읽는다. inline `CLOVASTUDIO_API_KEY`는 설정 단계에서 거부한다.
+caller가 API Key를 넣어 만든 임의 transport나 Agent를 주입하는 seam도 evaluation과
+production에서는 거부하므로, 공식 조립은 `CLOVASTUDIO_API_KEY_FILE`을 읽는 한 경로뿐이다.
+
+clean release artifact와 Git에서 제외되는 `.env.release`를 준비한 뒤 다음처럼
+**release 설정만** 검증할 수 있다.
+
+```bash
+RELEASE_ENV_FILE=fastapi_backend/.env.release \
+./compose-release.sh config --quiet
+```
+
+`.env.release`에는 credential 값이 아니라 `CLOVASTUDIO_API_KEY_HOST_FILE`의 절대
+경로와 컨테이너 경로 `/run/secrets/clovastudio_api_key`만 기록한다. 위 명령은 HCLX를
+호출하지 않는다. 애플리케이션 시작도 API healthcheck를 보내지 않지만, HCLX release로
+실제 `/answer`를 요청하면 과금 가능한 호출이 발생한다. 최초 실제 호출은 팀 승인 후
+한 건만 수행하고 인증·모델 사용 권한·응답 schema·latency를 별도 기록한다.
+
+- [CLOVA Studio API 개요](https://api.ncloud-docs.com/docs/ai-naver-clovastudio-summary)
+- [Structured Outputs](https://api.ncloud-docs.com/docs/clovastudio-chatcompletionsv3-so)
+- [API 키 가이드](https://guide.ncloud-docs.com/docs/clovastudio-apikey)
+
+## 10. 개발 전용 로컬 Qwen 연결
+
+로컬 Qwen은 내부 개발 회귀에만 사용. 실제 HyperCLOVA X 평가·제출·운영 경로가 아니며
 `docker-compose.local-llm.yml`도 제출 후보에서 제거할 대상
 
 Backend에서는 검증된 검색 결과와 field-level evidence를 설명하는 단계에만 연결.
@@ -311,7 +408,7 @@ Backend에서는 검증된 검색 결과와 field-level evidence를 설명하는
 실행 순서와 장애 fallback 검증은
 [로컬 LLM 테스트 런타임](../finance_agent/docs/local-llm.md)을 기준으로 사용
 
-## 10. `nextjs-frontend` 연결 약속
+## 11. `nextjs-frontend` 연결 약속
 
 Frontend가 합류하면 다음 최소 범위부터 연결
 
@@ -327,7 +424,7 @@ Frontend가 합류하면 다음 최소 범위부터 연결
 첫 통합 목표는 디자인 완성이 아니라 질문 한 건이 Frontend→Backend→Agent를 거쳐
 근거 포함 응답으로 돌아오는지 확인하는 것
 
-## 11. 문제 해결
+## 12. 문제 해결
 
 | 증상 | 확인할 것 |
 | --- | --- |

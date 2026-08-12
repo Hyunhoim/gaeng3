@@ -21,8 +21,10 @@ docs/
 | 목적 | 시작 문서 | 독자 |
 | --- | --- | --- |
 | 프로젝트 전체 파악 | [저장소 README](../README.md) | 전체 팀 |
+| Agent 1~9단계 구현 방향 | [단계별 구현 로드맵](agent-implementation-roadmap-2026-08-12.html) | 전체 팀 |
 | 기술 제안서·제출 준비 | [기술 제안서 작성 허브](proposal/README.md) | 전체 팀 |
 | AI 구현·데이터·평가 확인 | [AI 기술문서 안내](../finance_agent/docs/README.md) | AI·Backend 담당 |
+| Agent release·Docker 배포 고정 | [AgentReleaseManifest 배포 계약](../finance_agent/docs/agent-release-manifest.md) | AI·Backend·배포 담당 |
 | Backend 연동 | [Backend DTO](../finance_agent/docs/backend-contract.md) | AI·Backend 담당 |
 | 개발·커밋 규칙 | [CONTRIBUTING](../CONTRIBUTING.md) | 코드 기여자 |
 

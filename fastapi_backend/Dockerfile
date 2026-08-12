@@ -1,11 +1,18 @@
 # syntax=docker/dockerfile:1.7
 
-FROM python:3.12-slim-bookworm
+# Default verified on 2026-08-12. Release CI passes the same immutable index
+# explicitly and records the selected platform manifest in its provenance.
+ARG PYTHON_BASE_IMAGE=docker.io/library/python@sha256:4766d8b510c428e595d74b9cc5bbb2fae8e26316fffb4adc89908d79aacd58a2
+FROM ${PYTHON_BASE_IMAGE}
+
+ARG PYTHON_BASE_IMAGE
+ARG FINANCE_SOURCE_COMMIT=development
 
 LABEL org.opencontainers.image.title="Mirae Asset Finance Agent Backend" \
       org.opencontainers.image.description="FastAPI transport layer for the finance product agent" \
       org.opencontainers.image.source="https://github.com/Hyunhoim/gaeng3" \
-      org.opencontainers.image.base.name="docker.io/library/python:3.12-slim-bookworm"
+      org.opencontainers.image.revision="${FINANCE_SOURCE_COMMIT}" \
+      org.opencontainers.image.base.name="${PYTHON_BASE_IMAGE}"
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \

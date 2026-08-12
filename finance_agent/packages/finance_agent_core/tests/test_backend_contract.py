@@ -59,6 +59,33 @@ def test_backend_contract_forbids_extra_fields_and_invalid_state() -> None:
         BackendAgentResponse.model_validate(payload)
 
 
+def test_internal_plan_authority_never_leaks_into_backend_dto(
+    sample_database: tuple[Path, list[NormalizedOverseasEtpRecord], DatabaseManifest],
+) -> None:
+    path, _, _ = sample_database
+    routed = RoutedFinanceAgent({"overseas_etp": path}).answer(
+        "총보수율이 낮은 해외 ETF 3개를 보여줘",
+        "backend-authority-private-001",
+    )
+    payload = routed_result_to_backend(routed).model_dump(mode="json")
+    forbidden = {
+        "validated_plan",
+        "validation_receipt",
+        "receipt",
+        "authority_seal",
+        "canonical_plan_json",
+    }
+
+    def collect_keys(value: object) -> set[str]:
+        if isinstance(value, dict):
+            return set(value) | {key for child in value.values() for key in collect_keys(child)}
+        if isinstance(value, list):
+            return {key for child in value for key in collect_keys(child)}
+        return set()
+
+    assert forbidden.isdisjoint(collect_keys(payload))
+
+
 @pytest.mark.parametrize("status", ["clarification", "unsupported"])
 def test_backend_control_contract_rejects_partial_query_plan(status: str) -> None:
     control = BackendAgentResponse.model_validate(

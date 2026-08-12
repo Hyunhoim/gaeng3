@@ -12,10 +12,27 @@ class SemanticCoverageDecision:
 
     ambiguity_spans: tuple[str, ...] = ()
     unsupported_spans: tuple[str, ...] = ()
+    # Reserved for a trusted, server-owned Schema Linker signal.  The default
+    # lexical gate deliberately does not infer this from an unknown phrase.
+    schema_link_gap_spans: tuple[str, ...] = ()
+
+    @property
+    def has_control_issue(self) -> bool:
+        """Whether the request is truly ambiguous or outside supported actions."""
+
+        return bool(self.ambiguity_spans or self.unsupported_spans)
+
+    @property
+    def has_unresolved_semantics(self) -> bool:
+        """Whether normal planning must stop for any semantic reason."""
+
+        return bool(self.has_control_issue or self.schema_link_gap_spans)
 
     @property
     def blocked(self) -> bool:
-        return bool(self.ambiguity_spans or self.unsupported_spans)
+        """Preserve the legacy control contract for existing consumers."""
+
+        return self.has_control_issue
 
 
 _TRANSACTIONAL_ACTION = re.compile(
