@@ -6,7 +6,7 @@ Conda는 Python 실행 환경을 관리하고, 이 디렉터리의 파일은 pip
 | --- | --- |
 | `base.txt` | Agent Core 실행에 필요한 최소 의존성 |
 | `constraints.txt` | 공통 버전 상한·하한과 재현 가능한 설치 기준 |
-| `dev.txt` | 테스트, lint, build와 Turtle 문법 검사를 포함한 기본 개발 환경 |
+| `dev.txt` | 테스트, lint, build, Turtle 문법 검사와 Safety Blind 봉인 검증을 포함한 기본 개발 환경 |
 | `local-llm.txt` | 개발 전용 로컬 Qwen·vLLM 환경 |
 
 일반 개발은 `environment.yml`과 `dev.txt`, 로컬 모델 실험은
@@ -17,3 +17,7 @@ Conda는 Python 실행 환경을 관리하고, 이 디렉터리의 파일은 pip
 
 `rdflib`는 제출 필수 Ontology의 Turtle 문법을 실제 parser로 검사하는 개발
 의존성이며 생성형 모델이나 LLM이 아님
+
+`cryptography`는 Safety Blind 평가의 정답을 평문으로 Git에 남기지 않고
+AES-GCM으로 봉인하고 검증하는 개발·평가 의존성이다. Agent 운영 요청 경로에서는
+사용하지 않는다.

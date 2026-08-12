@@ -1,0 +1,82 @@
+#!/bin/sh
+set -eu
+
+printf '%s\n' "$*" >> "$ROLLBACK_DRILL_CAPTURE_FILE"
+
+if [ "$1" = "ps" ]; then
+    exit 0
+fi
+if [ "$1" = "network" ] && [ "$2" = "inspect" ]; then
+    exit 1
+fi
+if [ "$1" = "image" ] && [ "$2" = "inspect" ]; then
+    exit 0
+fi
+if [ "$1" = "volume" ] && [ "$2" = "inspect" ]; then
+    exit 0
+fi
+if [ "$1" = "inspect" ]; then
+    format=$3
+    case "$format" in
+        *Health.Status*)
+            printf '%s\n' healthy
+            ;;
+        *Config.Image*)
+            sed -n '1p' "$ROLLBACK_DRILL_STATE_FILE"
+            ;;
+        *'/data'*)
+            sed -n '2p' "$ROLLBACK_DRILL_STATE_FILE"
+            ;;
+        *deployment-binding.json*)
+            sed -n '3p' "$ROLLBACK_DRILL_STATE_FILE"
+            ;;
+        *)
+            exit 2
+            ;;
+    esac
+    exit 0
+fi
+if [ "$1" = "exec" ]; then
+    printf '%s\n' 'unrelated container diagnostic'
+    printf '%s\n' 'FINANCE_ROLLBACK_PROBE_RESULT={"status":"success","intent":"search"}'
+    exit 0
+fi
+
+if [ "$1" = "compose" ]; then
+    shift
+    env_file=
+    while [ "$#" -gt 0 ]; do
+        if [ "$1" = "--env-file" ]; then
+            env_file=$2
+            shift 2
+            continue
+        fi
+        case "$1" in
+            config)
+                exit 0
+                ;;
+            up)
+                image=$(sed -n 's/^FINANCE_IMAGE_REFERENCE=//p' "$env_file")
+                volume=$(sed -n 's/^FINANCE_DATA_VOLUME_NAME=//p' "$env_file")
+                binding=$(sed -n 's/^FINANCE_DEPLOYMENT_BINDING_HOST_FILE=//p' "$env_file")
+                printf '%s\n%s\n%s\n' "$image" "$volume" "$binding" \
+                    > "$ROLLBACK_DRILL_STATE_FILE"
+                exit 0
+                ;;
+            ps)
+                printf '%s\n' rollback-drill-backend
+                exit 0
+                ;;
+            down)
+                if [ "${ROLLBACK_DRILL_FAIL_DOWN:-0}" = "1" ]; then
+                    exit 9
+                fi
+                : > "$ROLLBACK_DRILL_STATE_FILE"
+                exit 0
+                ;;
+        esac
+        shift
+    done
+fi
+
+exit 2

@@ -1,0 +1,130 @@
+# Stage 3 로컬 rollback drill
+
+이 drill은 현재 운영 중인 `hyunholim-finance-agent` Compose project를 사용하지 않는다.
+사용자가 명시한 `finance-agent-rollback-drill-...` 전용 project와 포트에서만 다음 순서를
+검증한다.
+
+```text
+generation N-1 기동·health 확인
+  → 대표 /answer 확인
+  → generation N 기동·health·대표 /answer 확인
+  → N-1 image·DB volume 보존 확인
+  → 동일 Binding으로 N-1 재기동·health·대표 /answer 확인
+  → N image·DB volume 보존 확인
+```
+
+각 기동에서는 실행 container의 image reference, `/data` volume,
+`DeploymentBinding` mount가 해당 release와 정확히 일치하는지도 검사한다. 대표
+`POST /answer`는 국내채권 SEARCH 한 건이 `status=success`, `intent=search`인지 확인한다.
+이는 질문 전체의 품질 평가가 아니라 rollback 뒤 실제 Agent 경로가 동작하는지 확인하는
+최소 smoke probe(대표 동작 점검)다.
+
+실제 기동 전에는 cosign(서명 검증 도구)으로 각 release image와
+`AgentReleaseManifest`·`DeploymentBinding`의 Sigstore bundle을 검증한다. 허용된
+`main` release workflow identity로 서명되지 않았거나 Binding SHA-256·Manifest SHA-256·
+image reference 연결이 다르면 container를 만들기 전에 중단한다.
+
+검증 후에는 drill container와 network, 임시 env·Binding snapshot을 항상 정리한다.
+`--volumes`와 `--rmi`는 사용하지 않으므로 두 release의 image와 DB volume은 rollback
+근거로 의도적으로 남는다. 성공 기준의 “잔여물 없음”은 격리 container·network·임시
+snapshot이 없다는 뜻이지 image·DB volume 삭제를 뜻하지 않는다.
+
+## 준비물
+
+- 연속된 generation의 read-only `DeploymentBinding` 두 개
+- 각 Binding과 일치하는 `.env.release` 두 개
+- 각 release의 `AgentReleaseManifest`, Manifest Sigstore bundle, Binding Sigstore bundle
+- `/usr/local/bin/cosign`에 설치된 고정 `v3.1.3` 검증기
+- 로컬 Docker에 존재하는 두 개의 digest-pinned release image
+- 이미 적재·승인된 서로 다른 release-specific DB volume 두 개
+- 다른 사용자나 기존 project가 사용하지 않는 localhost 포트
+
+현재 release를 N, 직전 release를 N-1이라고 할 때 N의 `rollback` 필드는 N-1의 release,
+manifest hash, Binding file hash, image digest, generation, environment, platform을 모두
+정확히 고정해야 한다.
+
+## 1. Dry-run
+
+Dry-run은 Docker를 호출하지 않는다. 두 env·Binding의 hash와 rollback chain, 서로 다른
+image·volume 이름, 격리 project·port와 provider profile만 검증한다. cosign 서명과 실제
+image·volume·API 동작은 `--execute`에서만 검증한다.
+
+```bash
+python fastapi_backend/scripts/rollback_drill.py \
+  --previous-env /absolute/release-n-1/.env.release \
+  --current-env /absolute/release-n/.env.release \
+  --project-name finance-agent-rollback-drill-team01 \
+  --port 19081
+```
+
+성공 기준은 종료 코드 `0`과 JSON의 `status=validated`다. 이 결과만으로 image·volume의
+실재나 실제 rollback 성공을 주장하면 안 된다.
+
+## 2. 격리된 실제 Docker drill
+
+Dry-run이 통과하고 명시한 포트가 비어 있을 때만 `--execute`를 추가한다.
+
+```bash
+python fastapi_backend/scripts/rollback_drill.py \
+  --previous-env /absolute/release-n-1/.env.release \
+  --current-env /absolute/release-n/.env.release \
+  --project-name finance-agent-rollback-drill-team01 \
+  --port 19081 \
+  --execute
+```
+
+성공 기준은 종료 코드 `0`, JSON의 `status=verified`,
+`artifacts_preserved=true`, `containers_stopped_after_verification=true`다. Docker image나
+volume이 없거나, cosign image/blob 검증이 실패하거나, 기존 drill project의
+container/network가 발견되거나, 어느 generation 하나라도 healthy·대표 `/answer` 계약을
+통과하지 못하면 fail-closed로 종료한다.
+
+`--leave-running`은 immutable snapshot(실행 중 교체되지 않게 복사한 배포 파일)과 자동
+정리 계약에 맞지 않아 명시적으로 거부한다. drill에서 검증한 N-1을 계속 실행하는 방식으로
+실제 traffic을 전환하지 않는다. 운영 rollback은 별도 승인된 배포 절차로 다시 기동한다.
+
+이 격리 drill runner는 production host의 active-state broker를 대신하지 않는다. 기계적인
+N-1→N→N-1 복귀 가능성을 별도 project에서 확인하기 위해 같은 N-1 Binding을 재사용하지만,
+실제 운영 host는 이미 활성 이력보다 오래된 서명 Binding을 replay로 차단한다. 운영 rollback은
+복귀할 N-1 image·manifest·DB volume을 가리키면서도 현재 활성 값보다 정확히 1 큰 generation을
+가진 **새 DeploymentBinding을 발급·서명**한 뒤 activation broker로 실행해야 한다.
+
+## 안전 경계
+
+- `hyunholim-finance-agent` project는 입력으로 허용하지 않는다.
+- project override용 Compose 환경변수와 release identity shell 변수를 제거한다.
+- `127.0.0.1:<명시한 포트>`로만 bind한다.
+- 전역 prune, image 삭제, volume 삭제, 다른 project 조작을 수행하지 않는다.
+- HCLX inline API key를 거부하고 secret 값은 결과나 오류에 출력하지 않는다.
+- evaluation/production HCLX profile은 `CLOVASTUDIO_API_KEY_HOST_FILE`만 허용한다. host
+  secret은 절대경로의 단일 regular file, UID `10001` 소유, hardlink 1개, group·other
+  권한 0이어야 하며 container에서는 `/run/secrets/clovastudio_api_key`로만 읽는다.
+- deterministic profile은 HCLX model·provider·credential 설정이 있으면 거부한다.
+- 실제 traffic 전환과 NCP rollback은 별도의 배포 승인·load balancer 절차가 필요하다.
+- production active-state 파일과 lock, launcher는 root-controlled 경로에 설치해야 하며
+  새 host·재해복구 시 상태 복원은 외부 불변 archive 절차를 따른다.
+
+현재는 연속된 두 개의 공식 clean NCP release image·Binding·Sigstore bundle·승인 DB
+volume이 없으므로 실제 공식 `--execute`를 수행하지 않았다. 준비물이 생기기 전에도 아래
+무외부 계약을 독립 검증한다.
+
+```bash
+pytest -q fastapi_backend/tests/test_release_rollback_drill.py
+```
+
+## 로컬 합성 실기동 기록 — 2026-08-12
+
+localhost 일회용 Registry에 서로 다른 합성 N-1·N image를 실제 push하고, 각 release 전용
+네 상품군 승인 DB volume과 Binding을 연결해 production `rollback_drill.py --execute`를
+실행했다. `synthetic-nminus1-local12 → synthetic-current-local12 →
+synthetic-nminus1-local12` 세 기동에서 exact image·volume·Binding, health, 대표
+`/answer`가 모두 통과했고 자동 `down`도 확인했다.
+
+공용 서버의 umask `0077`에서도 UID `10001`이 Binding을 읽도록 snapshot directory를
+`0711`, Binding을 명시적 `0444`로 고정했고, container 진단 로그와 probe JSON을 구분하는
+marker 계약도 이 실기동에서 검증했다. 합성 image·volume·Registry·임시 project는 검증 후
+정확한 이름으로 삭제했으며 기존 `hyunholim-finance-agent`는 계속 healthy였다.
+
+단, 합성 artifact에는 GitHub OIDC·cosign 서명이 없어서 `release_trust.py` 호출만 격리된
+test stub으로 대체했다. 따라서 이 결과는 rollback mechanics(실제 복귀 동작) 검증이며,
+NCP Registry·Sigstore 외부 trust anchor·운영 traffic 전환 검증은 아니다.

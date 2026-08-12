@@ -26,7 +26,21 @@ from finance_agent_core.contracts.backend import (
     BackendStatus,
     routed_result_to_backend,
 )
-from finance_agent_core.contracts.routing import RouteDecision
+from finance_agent_core.contracts.routing import (
+    InteractionIntent,
+    RouteDecision,
+    RoutedExecutionError,
+)
+from finance_agent_core.deadline import (
+    RequestDeadlineExceeded,
+    current_request_deadline,
+)
+from finance_agent_core.execution.authority import (
+    PlanAuthorityCode,
+    PlanAuthorityError,
+)
+from finance_agent_core.release import AgentReleaseError
+from finance_agent_core.storage import DatasetApprovalError
 
 
 class RoutedAnswerService(Protocol):
@@ -65,10 +79,65 @@ _PROVIDER_INVALID_RESPONSE = (
     "AI provider 응답을 안전하게 검증하지 못했습니다. 잠시 후 다시 시도해 주세요."
 )
 _DATASET_UNAVAILABLE = "금융상품 데이터에 접근할 수 없습니다. 잠시 후 다시 시도해 주세요."
+_REQUEST_TIMEOUT = "요청 처리 시간이 초과되었습니다. 잠시 후 다시 시도해 주세요."
+_RELEASE_UNAVAILABLE = "승인된 Agent 배포 상태를 확인할 수 없습니다. 잠시 후 다시 시도해 주세요."
 _INTERNAL_ERROR = "요청 처리 중 내부 오류가 발생했습니다."
 
 
 def _map_error(error: Exception) -> _ErrorMapping:
+    if isinstance(error, RequestDeadlineExceeded):
+        return _ErrorMapping(
+            http_status_code=504,
+            code=BackendErrorCode.PROVIDER_UNAVAILABLE,
+            message=_REQUEST_TIMEOUT,
+            retryable=True,
+        )
+    if isinstance(error, AgentReleaseError):
+        return _ErrorMapping(
+            http_status_code=503,
+            code=BackendErrorCode.INTERNAL_ERROR,
+            message=_RELEASE_UNAVAILABLE,
+            retryable=True,
+        )
+    if isinstance(error, PlanAuthorityError):
+        if error.code is PlanAuthorityCode.DEADLINE_EXCEEDED:
+            return _ErrorMapping(
+                http_status_code=504,
+                code=BackendErrorCode.PROVIDER_UNAVAILABLE,
+                message=_REQUEST_TIMEOUT,
+                retryable=True,
+            )
+        if error.code is PlanAuthorityCode.RELEASE_MISMATCH:
+            return _ErrorMapping(
+                http_status_code=503,
+                code=BackendErrorCode.INTERNAL_ERROR,
+                message=_RELEASE_UNAVAILABLE,
+                retryable=True,
+            )
+        if error.code in {
+            PlanAuthorityCode.DATASET_NOT_CONFIGURED,
+            PlanAuthorityCode.DATASET_MISMATCH,
+            PlanAuthorityCode.STALE_AUTHORITY_CONTEXT,
+        }:
+            return _ErrorMapping(
+                http_status_code=503,
+                code=BackendErrorCode.DATASET_UNAVAILABLE,
+                message=_DATASET_UNAVAILABLE,
+                retryable=True,
+            )
+    deadline = current_request_deadline()
+    if (
+        isinstance(error, sqlite3.OperationalError)
+        and "interrupted" in str(error).casefold()
+        and deadline is not None
+        and deadline.should_stop()
+    ):
+        return _ErrorMapping(
+            http_status_code=504,
+            code=BackendErrorCode.PROVIDER_UNAVAILABLE,
+            message=_REQUEST_TIMEOUT,
+            retryable=True,
+        )
     if isinstance(
         error,
         (HyperClovaXConfigurationError, HyperClovaXAuthenticationError),
@@ -108,7 +177,7 @@ def _map_error(error: Exception) -> _ErrorMapping:
             message=_PROVIDER_UNAVAILABLE,
             retryable=True,
         )
-    if isinstance(error, (sqlite3.Error, OSError)):
+    if isinstance(error, (DatasetApprovalError, sqlite3.Error, OSError)):
         return _ErrorMapping(
             http_status_code=503,
             code=BackendErrorCode.DATASET_UNAVAILABLE,
@@ -125,14 +194,14 @@ def _map_error(error: Exception) -> _ErrorMapping:
 
 def _error_response(
     request: BackendAgentRequest,
-    decision: RouteDecision,
+    decision: RouteDecision | None,
     mapping: _ErrorMapping,
 ) -> BackendAgentResponse:
     return BackendAgentResponse(
         request_id=request.request_id,
         status=BackendStatus.ERROR,
-        intent=decision.draft.intent,
-        product_families=decision.draft.product_families,
+        intent=(decision.draft.intent if decision is not None else InteractionIntent.UNSUPPORTED),
+        product_families=(decision.draft.product_families if decision is not None else []),
         answer=mapping.message,
         query_plan=None,
         candidate_count=None,
@@ -162,7 +231,32 @@ def execute_answer_request(
 ) -> AnswerAdapterResult:
     """Run one validated request and normalize safe HTTP/body semantics."""
 
-    decision = service.router.route(request.question, request.request_id)
+    answer_atomically = getattr(service, "_answer_atomically", None)
+    if callable(answer_atomically):
+        try:
+            routed = answer_atomically(request.question, request.request_id)
+            response = routed_result_to_backend(routed)
+            return AnswerAdapterResult(http_status_code=200, response=response)
+        except Exception as error:  # noqa: BLE001 - outer application boundary
+            trusted_decision = None
+            actual_error = error
+            if isinstance(error, RoutedExecutionError):
+                trusted_decision = error.decision
+                actual_error = error.cause
+            mapping = _map_error(actual_error)
+            return AnswerAdapterResult(
+                http_status_code=mapping.http_status_code,
+                response=_error_response(request, trusted_decision, mapping),
+            )
+
+    try:
+        decision = service.router.route(request.question, request.request_id)
+    except Exception as error:  # noqa: BLE001 - normalize the outer routing boundary
+        mapping = _map_error(error)
+        return AnswerAdapterResult(
+            http_status_code=mapping.http_status_code,
+            response=_error_response(request, None, mapping),
+        )
     try:
         routed = service.answer(request.question, request.request_id)
         response = routed_result_to_backend(routed)

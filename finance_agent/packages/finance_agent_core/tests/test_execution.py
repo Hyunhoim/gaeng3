@@ -4,6 +4,11 @@ import pytest
 
 from finance_agent_core.agent import RoutedFinanceAgent
 from finance_agent_core.agent.providers import first_vertical_slice_plan
+from finance_agent_core.deadline import (
+    RequestDeadline,
+    RequestDeadlineExceeded,
+    bind_request_deadline,
+)
 from finance_agent_core.domain import DatabaseManifest, NormalizedOverseasEtpRecord
 from finance_agent_core.execution import (
     AggregateResultVerifier,
@@ -11,6 +16,7 @@ from finance_agent_core.execution import (
     ResultVerifier,
     SQLiteAggregateOracle,
     SQLiteOracle,
+    authorize_internal_evaluation_plan,
     build_product_evidence,
 )
 from finance_agent_core.execution.verifier_projection import (
@@ -20,12 +26,16 @@ from finance_agent_core.execution.verifier_projection import (
 from finance_agent_core.storage import connect_read_only, load_all_records
 
 
+def _validated(plan, path: Path):
+    return authorize_internal_evaluation_plan(plan, path)
+
+
 def test_sql_oracle_and_python_verifier_agree(
     sample_database: tuple[Path, list[NormalizedOverseasEtpRecord], DatabaseManifest],
 ) -> None:
     path, _, _ = sample_database
     plan = first_vertical_slice_plan("oracle-001")
-    executed = SQLiteOracle(path).execute(plan)
+    executed = SQLiteOracle(path).execute(_validated(plan, path))
     with connect_read_only(path) as connection:
         universe = load_all_records(connection)
 
@@ -42,12 +52,28 @@ def test_sql_oracle_and_python_verifier_agree(
     assert "Z0" not in {record.ticker for record in verified.records}
 
 
+def test_python_verifier_stops_after_request_cancellation(
+    sample_database: tuple[Path, list[NormalizedOverseasEtpRecord], DatabaseManifest],
+) -> None:
+    path, _, _ = sample_database
+    plan = first_vertical_slice_plan("oracle-cancelled")
+    executed = SQLiteOracle(path).execute(_validated(plan, path))
+    with connect_read_only(path) as connection:
+        universe = load_all_records(connection)
+    deadline = RequestDeadline.after(5)
+    deadline.cancel()
+
+    with bind_request_deadline(deadline):
+        with pytest.raises(RequestDeadlineExceeded):
+            ResultVerifier().verify(plan, executed, universe)
+
+
 def test_verifier_rejects_tampered_order(
     sample_database: tuple[Path, list[NormalizedOverseasEtpRecord], DatabaseManifest],
 ) -> None:
     path, _, _ = sample_database
     plan = first_vertical_slice_plan("oracle-002")
-    executed = SQLiteOracle(path).execute(plan)
+    executed = SQLiteOracle(path).execute(_validated(plan, path))
     tampered = executed.model_copy(update={"records": list(reversed(executed.records))})
     with connect_read_only(path) as connection:
         universe = load_all_records(connection)
@@ -61,9 +87,10 @@ def test_projected_verifier_rejects_tampered_order(
 ) -> None:
     path, _, _ = sample_database
     plan = first_vertical_slice_plan("oracle-projected-001")
-    executed = SQLiteOracle(path).execute(plan)
+    validated_plan = _validated(plan, path)
+    executed = SQLiteOracle(path).execute(validated_plan)
     tampered = executed.model_copy(update={"records": list(reversed(executed.records))})
-    universe = load_projected_verifier_records(path, plan)
+    universe = load_projected_verifier_records(path, validated_plan)
 
     with pytest.raises(ResultVerificationError, match="top results mismatch"):
         ResultVerifier().verify(plan, tampered, universe)
@@ -74,7 +101,7 @@ def test_field_evidence_contains_raw_source_and_field_date(
 ) -> None:
     path, _, _ = sample_database
     plan = first_vertical_slice_plan("oracle-003")
-    executed = SQLiteOracle(path).execute(plan)
+    executed = SQLiteOracle(path).execute(_validated(plan, path))
     with connect_read_only(path) as connection:
         universe = load_all_records(connection)
     verified = ResultVerifier().verify(plan, executed, universe)
@@ -121,14 +148,36 @@ def test_aggregate_verifier_rejects_tampered_metric(
         "aggregate-overseas-002",
     )
     plan = agent.compiler.compile(decision)
-    executed = SQLiteAggregateOracle(path).execute(plan)
+    validated_plan = _validated(plan, path)
+    executed = SQLiteAggregateOracle(path).execute(validated_plan)
     metric = executed.groups[0].metrics[0].model_copy(update={"value": "999"})
     group = executed.groups[0].model_copy(update={"metrics": [metric]})
     tampered = executed.model_copy(update={"groups": [group]})
-    universe = load_projected_verifier_records(path, plan)
+    universe = load_projected_verifier_records(path, validated_plan)
 
     with pytest.raises(ResultVerificationError, match="groups or metrics differ"):
         AggregateResultVerifier().verify(plan, tampered, universe)
+
+
+def test_python_aggregate_verifier_stops_after_request_cancellation(
+    sample_database: tuple[Path, list[NormalizedOverseasEtpRecord], DatabaseManifest],
+) -> None:
+    path, _, _ = sample_database
+    agent = RoutedFinanceAgent({"overseas_etp": path})
+    decision = agent.router.route(
+        "해외 ETF의 총보수율 평균을 집계해줘",
+        "aggregate-cancelled",
+    )
+    plan = agent.compiler.compile(decision)
+    validated_plan = _validated(plan, path)
+    executed = SQLiteAggregateOracle(path).execute(validated_plan)
+    universe = load_projected_verifier_records(path, validated_plan)
+    deadline = RequestDeadline.after(5)
+    deadline.cancel()
+
+    with bind_request_deadline(deadline):
+        with pytest.raises(RequestDeadlineExceeded):
+            AggregateResultVerifier().verify(plan, executed, universe)
 
 
 def test_overseas_verifier_projection_matches_normalized_records(
@@ -141,7 +190,7 @@ def test_overseas_verifier_projection_matches_normalized_records(
         "projection-overseas-001",
     )
     plan = agent.compiler.compile(decision)
-    projected = load_projected_verifier_records(path, plan)
+    projected = load_projected_verifier_records(path, _validated(plan, path))
     expected = {record.product_id: record for record in records}
 
     assert [record.product_id for record in projected] == sorted(expected)

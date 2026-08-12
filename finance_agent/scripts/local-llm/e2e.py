@@ -68,7 +68,11 @@ def main() -> int:
     provider = LocalTestProvider(settings)
     health = provider.healthcheck()
     request_id = "local-qwen-e2e-001"
-    response = FinanceAgent(arguments.database, provider).answer(
+    response = FinanceAgent(
+        arguments.database,
+        provider,
+        allow_unapproved_database=True,
+    ).answer(
         DEFAULT_QUESTION,
         request_id,
     )

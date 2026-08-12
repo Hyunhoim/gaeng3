@@ -25,6 +25,7 @@ from finance_agent_core.execution import (
     PlanExecutionBlockedError,
     ResultVerifier,
     SQLiteOracle,
+    authorize_internal_evaluation_plan,
     build_product_evidence,
     render_blocked_plan,
     require_executable_search,
@@ -243,7 +244,11 @@ class AnswerEvaluationRunner:
 
         try:
             self._require_search(plan)
-            executed = self.oracle.execute(plan)
+            validated_plan = authorize_internal_evaluation_plan(
+                plan,
+                self.database_path,
+            )
+            executed = self.oracle.execute(validated_plan)
             verified = self.verifier.verify(plan, executed, self.universe)
             products = build_product_evidence(plan, verified)
             assert case.oracle is not None

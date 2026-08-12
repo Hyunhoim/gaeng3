@@ -15,6 +15,7 @@ from finance_agent_core.contracts.queryplan import (
     Ranking,
     SortDirection,
 )
+from finance_agent_core.deadline import raise_if_request_stopped
 from finance_agent_core.domain import (
     AggregateGroup,
     AggregateGroupKey,
@@ -38,6 +39,12 @@ class ResultVerificationError(ValueError):
 
 
 _AVERAGE_QUANTUM = Decimal("0.000000000001")
+_DEADLINE_CHECK_INTERVAL = 256
+
+
+def _periodic_deadline_check(index: int) -> None:
+    if index % _DEADLINE_CHECK_INTERVAL == 0:
+        raise_if_request_stopped()
 
 
 def _comparable_value(record: VerifierRecord, field_name: str) -> object | None:
@@ -120,10 +127,15 @@ def _compare_values(
 
 
 def _record_comparator(plan: QueryPlan):
+    comparison_count = 0
+
     def compare(
         left: VerifierRecord,
         right: VerifierRecord,
     ) -> int:
+        nonlocal comparison_count
+        comparison_count += 1
+        _periodic_deadline_check(comparison_count)
         for ranking in plan.ranking:
             comparison = _compare_values(
                 _comparable_value(left, ranking.field),
@@ -144,6 +156,7 @@ class ResultVerifier:
         executed: ExecutedSearch,
         universe: list[VerifierRecord] | None = None,
     ) -> VerifiedSearch:
+        raise_if_request_stopped()
         if plan.intent is Intent.COMPARE:
             require_comparison_contract(plan)
         if executed.question_id != plan.question_id:
@@ -184,13 +197,16 @@ class ResultVerifier:
         require_fund_public_scope(plan)
         if universe is None:
             raise ResultVerificationError("search verification requires the record universe")
-        candidates = [
-            record
-            for record in universe
-            if not record.is_quarantined
-            and all(_matches_constraint(record, item) for item in plan.constraints)
-        ]
+        candidates: list[VerifierRecord] = []
+        for index, record in enumerate(universe):
+            _periodic_deadline_check(index)
+            if not record.is_quarantined and all(
+                _matches_constraint(record, item) for item in plan.constraints
+            ):
+                candidates.append(record)
+        raise_if_request_stopped()
         candidates.sort(key=cmp_to_key(_record_comparator(plan)))
+        raise_if_request_stopped()
         expected = candidates[: plan.limit]
         expected_ids = [record.product_id for record in expected]
         actual_ids = [record.product_id for record in executed.records]
@@ -273,13 +289,47 @@ def _verifier_decimal_text(value: Decimal) -> str:
 
 
 def _verifier_average(values: list[Decimal]) -> Decimal:
-    largest_digits = max(len(value.as_tuple().digits) for value in values)
+    largest_digits = 0
+    for index, value in enumerate(values):
+        _periodic_deadline_check(index)
+        largest_digits = max(largest_digits, len(value.as_tuple().digits))
+    raise_if_request_stopped()
     with localcontext() as context:
         context.prec = max(50, largest_digits + 20)
-        return (sum(values, Decimal("0")) / Decimal(len(values))).quantize(
+        total = Decimal("0")
+        for index, value in enumerate(values):
+            _periodic_deadline_check(index)
+            total += value
+        return (total / Decimal(len(values))).quantize(
             _AVERAGE_QUANTUM,
             rounding=ROUND_HALF_EVEN,
         )
+
+
+def _verifier_reduce_numeric(
+    function: AggregateFunction,
+    values: list[Decimal],
+) -> Decimal:
+    if function is AggregateFunction.AVG:
+        return _verifier_average(values)
+    if function is AggregateFunction.SUM:
+        reduced = Decimal("0")
+        for index, value in enumerate(values):
+            _periodic_deadline_check(index)
+            reduced += value
+        return reduced
+    reduced = values[0]
+    for index, value in enumerate(values):
+        if index == 0:
+            continue
+        _periodic_deadline_check(index)
+        if function is AggregateFunction.MIN:
+            reduced = min(reduced, value)
+        elif function is AggregateFunction.MAX:
+            reduced = max(reduced, value)
+        else:  # pragma: no cover - enum exhaustiveness guard
+            raise ResultVerificationError(f"unsupported aggregate function: {function}")
+    return reduced
 
 
 def _verifier_metric(
@@ -289,13 +339,17 @@ def _verifier_metric(
     field_name: str,
     group_values: dict[str, str | int | bool | None],
 ) -> AggregateMetric:
+    raise_if_request_stopped()
     definition = load_field_registry().require_field(
         field_name,
         [plan.product_families[0].value],
     )
-    valid_records = [
-        record for record in records if _verifier_usable(record, field_name) is not None
-    ]
+    valid_records: list[VerifierRecord] = []
+    for index, record in enumerate(records):
+        _periodic_deadline_check(index)
+        if _verifier_usable(record, field_name) is not None:
+            valid_records.append(record)
+    raise_if_request_stopped()
     currency_unknown = (
         function is not AggregateFunction.COUNT
         and definition.unit == "source_currency_amount"
@@ -304,20 +358,24 @@ def _verifier_metric(
     )
     if currency_unknown:
         valid_records = []
-    values = [record.canonical_value(field_name) for record in valid_records]
+    values: list[object] = []
+    for index, record in enumerate(valid_records):
+        _periodic_deadline_check(index)
+        value = record.canonical_value(field_name)
+        assert value is not None
+        values.append(value)
+    raise_if_request_stopped()
     if function is AggregateFunction.COUNT:
         value: str | int | None = len(valid_records)
     elif not values:
         value = None
     else:
-        numeric = [_verifier_decimal(item) for item in values]
-        reducers = {
-            AggregateFunction.MIN: lambda: min(numeric),
-            AggregateFunction.MAX: lambda: max(numeric),
-            AggregateFunction.SUM: lambda: sum(numeric, Decimal("0")),
-            AggregateFunction.AVG: lambda: _verifier_average(numeric),
-        }
-        value = _verifier_decimal_text(reducers[function]())
+        numeric: list[Decimal] = []
+        for index, item in enumerate(values):
+            _periodic_deadline_check(index)
+            numeric.append(_verifier_decimal(item))
+        raise_if_request_stopped()
+        value = _verifier_decimal_text(_verifier_reduce_numeric(function, numeric))
 
     if not valid_records:
         quality = QualityStatus.UNKNOWN
@@ -327,8 +385,12 @@ def _verifier_metric(
             else "all_values_missing_or_unusable"
         )
     else:
-        statuses = [_verifier_quality(record, field_name) for record in valid_records]
-        dates = {_verifier_as_of(record, field_name) for record in valid_records}
+        statuses: list[QualityStatus] = []
+        dates: set[date] = set()
+        for index, record in enumerate(valid_records):
+            _periodic_deadline_check(index)
+            statuses.append(_verifier_quality(record, field_name))
+            dates.add(_verifier_as_of(record, field_name))
         missing = len(records) - len(valid_records)
         reasons: list[str] = []
         if missing:
@@ -343,7 +405,10 @@ def _verifier_metric(
         else:
             quality = QualityStatus.VALID
         reason = "; ".join(reasons) or None
-    as_of_dates = [_verifier_as_of(record, field_name) for record in valid_records]
+    as_of_dates: list[date] = []
+    for index, record in enumerate(valid_records):
+        _periodic_deadline_check(index)
+        as_of_dates.append(_verifier_as_of(record, field_name))
     return AggregateMetric(
         function=function,
         field=field_name,
@@ -362,6 +427,7 @@ def _expected_aggregate_groups(
     plan: QueryPlan,
     records: list[VerifierRecord],
 ) -> tuple[int, list[AggregateGroup]]:
+    raise_if_request_stopped()
     if not records:
         return 0, []
     grouped: dict[
@@ -369,9 +435,11 @@ def _expected_aggregate_groups(
         list[VerifierRecord],
     ] = {}
     fields = plan.intent_payload.group_by
-    for record in records:
+    for index, record in enumerate(records):
+        _periodic_deadline_check(index)
         key = tuple(_verifier_scalar(_verifier_usable(record, field)) for field in fields)
         grouped.setdefault(key, []).append(record)
+    raise_if_request_stopped()
 
     def sort_key(
         item: tuple[
@@ -379,6 +447,7 @@ def _expected_aggregate_groups(
             list[VerifierRecord],
         ],
     ) -> tuple[object, ...]:
+        raise_if_request_stopped()
         key, group_records = item
         rendered = tuple(
             (value is None, type(value).__name__, "" if value is None else str(value).casefold())
@@ -389,7 +458,8 @@ def _expected_aggregate_groups(
     expected: list[AggregateGroup] = []
     family = plan.product_families[0].value
     registry = load_field_registry()
-    for key, group_records in sorted(grouped.items(), key=sort_key):
+    for group_index, (key, group_records) in enumerate(sorted(grouped.items(), key=sort_key)):
+        _periodic_deadline_check(group_index)
         values = dict(zip(fields, key, strict=True))
         expected.append(
             AggregateGroup(
@@ -414,6 +484,7 @@ def _expected_aggregate_groups(
                 ],
             )
         )
+    raise_if_request_stopped()
     return len(expected), expected[: plan.limit]
 
 
@@ -426,17 +497,20 @@ class AggregateResultVerifier:
         executed: ExecutedAggregation,
         universe: list[VerifierRecord],
     ) -> VerifiedAggregation:
+        raise_if_request_stopped()
         require_aggregate_contract(plan)
         if executed.question_id != plan.question_id:
             raise ResultVerificationError("question_id changed during aggregate execution")
         if executed.manifest.dataset != plan.product_families[0].value:
             raise ResultVerificationError("aggregate manifest dataset differs from the plan")
-        candidates = [
-            record
-            for record in universe
-            if not record.is_quarantined
-            and all(_matches_constraint(record, item) for item in plan.constraints)
-        ]
+        candidates: list[VerifierRecord] = []
+        for index, record in enumerate(universe):
+            _periodic_deadline_check(index)
+            if not record.is_quarantined and all(
+                _matches_constraint(record, item) for item in plan.constraints
+            ):
+                candidates.append(record)
+        raise_if_request_stopped()
         total_group_count, expected_groups = _expected_aggregate_groups(plan, candidates)
         if executed.candidate_count != len(candidates):
             raise ResultVerificationError(

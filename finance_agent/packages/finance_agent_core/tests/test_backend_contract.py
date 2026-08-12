@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from copy import deepcopy
 from importlib.resources import files
 from pathlib import Path
 
@@ -56,6 +57,92 @@ def test_backend_contract_forbids_extra_fields_and_invalid_state() -> None:
         match="requires product, aggregate, or document evidence",
     ):
         BackendAgentResponse.model_validate(payload)
+
+
+def test_internal_plan_authority_never_leaks_into_backend_dto(
+    sample_database: tuple[Path, list[NormalizedOverseasEtpRecord], DatabaseManifest],
+) -> None:
+    path, _, _ = sample_database
+    routed = RoutedFinanceAgent({"overseas_etp": path}).answer(
+        "총보수율이 낮은 해외 ETF 3개를 보여줘",
+        "backend-authority-private-001",
+    )
+    payload = routed_result_to_backend(routed).model_dump(mode="json")
+    forbidden = {
+        "validated_plan",
+        "validation_receipt",
+        "receipt",
+        "authority_seal",
+        "canonical_plan_json",
+    }
+
+    def collect_keys(value: object) -> set[str]:
+        if isinstance(value, dict):
+            return set(value) | {key for child in value.values() for key in collect_keys(child)}
+        if isinstance(value, list):
+            return {key for child in value for key in collect_keys(child)}
+        return set()
+
+    assert forbidden.isdisjoint(collect_keys(payload))
+
+
+@pytest.mark.parametrize("status", ["clarification", "unsupported"])
+def test_backend_control_contract_rejects_partial_query_plan(status: str) -> None:
+    control = BackendAgentResponse.model_validate(
+        _example("backend_clarification_response_v1.json")
+    ).model_dump(mode="json")
+    if status == "unsupported":
+        control.update(
+            {
+                "status": "unsupported",
+                "intent": "unsupported",
+                "clarification": None,
+            }
+        )
+    plan = _example("backend_aggregate_response_v1.json")["query_plan"]
+    assert isinstance(plan, dict)
+    plan = deepcopy(plan)
+    plan["question_id"] = control["request_id"]
+    control["query_plan"] = plan
+
+    expected = (
+        "clarification response cannot contain executed state"
+        if status == "clarification"
+        else "unsupported response cannot contain control or executed state"
+    )
+    with pytest.raises(ValidationError, match=expected):
+        BackendAgentResponse.model_validate(control)
+
+
+@pytest.mark.parametrize(
+    "field",
+    ["citations", "as_of_dates", "warnings", "source_manifest"],
+)
+def test_clarification_contract_rejects_all_executed_evidence_fields(field: str) -> None:
+    control = BackendAgentResponse.model_validate(
+        _example("backend_clarification_response_v1.json")
+    ).model_dump(mode="json")
+    executed = _example("backend_aggregate_response_v1.json")
+    control[field] = deepcopy(executed[field])
+
+    with pytest.raises(
+        ValidationError,
+        match="clarification response cannot contain executed state",
+    ):
+        BackendAgentResponse.model_validate(control)
+
+
+def test_backend_control_contract_requires_control_answer_mode() -> None:
+    control = BackendAgentResponse.model_validate(
+        _example("backend_clarification_response_v1.json")
+    ).model_dump(mode="json")
+    control["answer_mode"] = "deterministic"
+
+    with pytest.raises(
+        ValidationError,
+        match="clarification response requires control mode without fallback",
+    ):
+        BackendAgentResponse.model_validate(control)
 
 
 def test_routed_product_result_adapts_to_backend_contract(

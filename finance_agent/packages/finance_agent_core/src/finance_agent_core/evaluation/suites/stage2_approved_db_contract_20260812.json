@@ -1,0 +1,45 @@
+{
+  "schema_version": "1.0",
+  "contract_id": "stage2-approved-db-contract-20260812",
+  "recorded_on": "2026-08-12",
+  "source_suites": {
+    "search_aggregate": {
+      "id": "search-aggregate-performance-8",
+      "sha256": "2b3aff29930d098df78003cf914f0fa2660d93dba4d2fe2112cb0daf5b7420d7"
+    },
+    "product_compare": {
+      "id": "product-compare-core-30",
+      "sha256": "7eec27471f2dbd218b0ed056f03b02ef69aed6b283055d72d98ff7d423e411ee"
+    },
+    "fund_compare_parser": {
+      "id": "fund-compare-parser-core-24",
+      "sha256": "9e2bd72c001f6384a08111ae195de0bf1a962fe6aafa46b52df012917c1b4c9c"
+    },
+    "fund_compare_e2e": {
+      "id": "fund-compare-e2e-core-24",
+      "sha256": "5f1511c8dea53b13d1207ee1c80adcf6db4c431581ca8b15d5d683951bc7f88c"
+    }
+  },
+  "data": {
+    "bond": {
+      "database_sha256": "ee37ee75ef87a44ca992e6d93867406c64b827c0482fb0df808b5acb26e1ef8e",
+      "manifest_sha256": "8adbfff77f766d534334e611c24427f0d14675f5dd65131c71eba82ec59b7a51",
+      "source_file_sha256": "728f44a567a986d21cf843d711c6c4dfa1a24d05b39c7da0541b981b57ecccf8"
+    },
+    "domestic_etp": {
+      "database_sha256": "55646843e0932448fb1bb015aa28f7469a303ce24945023d1168e48623c0491e",
+      "manifest_sha256": "bcf0fc8fc2827c6b3f0cac35349c4a068d91498ecd955d71c4d12ec68c55456a",
+      "source_file_sha256": "0f5706d45f93284bcaac2fa8eaed04db920a7043abaa859e455f06e246d54723"
+    },
+    "overseas_etp": {
+      "database_sha256": "d405e132909676f559ffeb330825fd616f3c84b1e3ecfb7abd1ad2f344167de2",
+      "manifest_sha256": "f21566db8c474d5708dbce178eedd8a550f2b11901fa2ab21abf8b6babe9fe7c",
+      "source_file_sha256": "3cec19043f742771e0016d56fe806f19ad78f4295d1ae59192740a78feb2253b"
+    },
+    "fund": {
+      "database_sha256": "299a70baee4123360d9f61040ed834cd06d72d4ce4dbaf7aa87e3d7bc0b96518",
+      "manifest_sha256": "be83a616d033db2328d231499d1f0492323d02bace4f153ad3da4860a0d10bcd",
+      "source_file_sha256": "140d1ef0cec918d0b3f7c52c107cb123395594eb089b0cd70bb305709b0f44eb"
+    }
+  }
+}

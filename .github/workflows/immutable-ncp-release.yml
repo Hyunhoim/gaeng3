@@ -1,0 +1,364 @@
+name: Immutable NCP release
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_id:
+        description: Unique lowercase release ID (8-100 characters)
+        required: true
+        type: string
+      environment:
+        description: Protected GitHub Environment holding credentials and rollback state
+        required: true
+        type: choice
+        options:
+          - evaluation
+          - production
+      activation_generation:
+        description: 1 for bootstrap; otherwise previous generation plus one
+        required: true
+        default: "1"
+        type: string
+      answer_provider:
+        description: Final answer provider pinned into AgentReleaseManifest
+        required: true
+        default: deterministic
+        type: choice
+        options:
+          - deterministic
+          - hyperclova
+      hcx_queryplan_enabled:
+        description: Pin the HCLX QueryPlan operation into AgentReleaseManifest
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: immutable-finance-release-${{ inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build, verify, bind, and keyless-sign
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    environment: ${{ inputs.environment }}
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      RELEASE_OUTPUT_DIR: ${{ github.workspace }}/fastapi_backend/release
+      PINNED_PYTHON_BASE_IMAGE: docker.io/library/python@sha256:4766d8b510c428e595d74b9cc5bbb2fae8e26316fffb4adc89908d79aacd58a2
+      PINNED_RUNTIME_PLATFORM: linux/amd64
+      WORKFLOW_IDENTITY: ${{ github.server_url }}/${{ github.repository }}/.github/workflows/immutable-ncp-release.yml@refs/heads/main
+      OIDC_ISSUER: https://token.actions.githubusercontent.com
+      TRUSTED_NCP_REGISTRY: ${{ vars.NCP_REGISTRY_HOST }}
+      TRUSTED_NCP_REPOSITORY: ${{ vars.NCP_IMAGE_REPOSITORY }}
+
+    steps:
+      - name: Check out the exact source commit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Validate protected source and all operator inputs
+        id: release_inputs
+        env:
+          INPUT_RELEASE_ID: ${{ inputs.release_id }}
+          INPUT_ENVIRONMENT: ${{ inputs.environment }}
+          INPUT_ACTIVATION_GENERATION: ${{ inputs.activation_generation }}
+          TRUSTED_PREVIOUS_BINDING_SHA256: ${{ secrets.PREVIOUS_DEPLOYMENT_BINDING_SHA256 }}
+          INPUT_ANSWER_PROVIDER: ${{ inputs.answer_provider }}
+          INPUT_HCX_QUERYPLAN_ENABLED: ${{ inputs.hcx_queryplan_enabled }}
+          TRUSTED_SOURCE_COMMIT: ${{ github.sha }}
+          TRUSTED_GITHUB_REF: ${{ github.ref }}
+          TRUSTED_GITHUB_REF_PROTECTED: ${{ github.ref_protected }}
+        run: |
+          set -euo pipefail
+          python3 fastapi_backend/scripts/release_ci.py validate-inputs \
+            --release-id "$INPUT_RELEASE_ID" \
+            --environment "$INPUT_ENVIRONMENT" \
+            --registry "$TRUSTED_NCP_REGISTRY" \
+            --repository "$TRUSTED_NCP_REPOSITORY" \
+            --python-base-image "$PINNED_PYTHON_BASE_IMAGE" \
+            --platform "$PINNED_RUNTIME_PLATFORM" \
+            --activation-generation "$INPUT_ACTIVATION_GENERATION" \
+            --previous-binding-sha256 "$TRUSTED_PREVIOUS_BINDING_SHA256" \
+            --answer-provider "$INPUT_ANSWER_PROVIDER" \
+            --hcx-queryplan-enabled "$INPUT_HCX_QUERYPLAN_ENABLED" \
+            --source-commit "$TRUSTED_SOURCE_COMMIT" \
+            --github-ref "$TRUSTED_GITHUB_REF" \
+            --github-ref-protected "$TRUSTED_GITHUB_REF_PROTECTED" \
+            --github-output "$GITHUB_OUTPUT"
+          test "$(git rev-parse HEAD)" = "$TRUSTED_SOURCE_COMMIT"
+          test -z "$(git status --porcelain=v1 --untracked-files=all)"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - name: Log in to NCP Container Registry
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ${{ steps.release_inputs.outputs.registry }}
+          username: ${{ secrets.NCP_REGISTRY_USERNAME }}
+          password: ${{ secrets.NCP_REGISTRY_PASSWORD }}
+
+      - name: Build and push the code-only base image
+        id: base_build
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          file: fastapi_backend/Dockerfile
+          platforms: ${{ steps.release_inputs.outputs.platform }}
+          push: true
+          provenance: mode=max
+          sbom: true
+          tags: ${{ steps.release_inputs.outputs.base_tag }}
+          build-args: |
+            PYTHON_BASE_IMAGE=${{ steps.release_inputs.outputs.python_base_image }}
+            FINANCE_SOURCE_COMMIT=${{ steps.release_inputs.outputs.source_commit }}
+
+      - name: Resolve the exact base image digest
+        id: base_image
+        env:
+          BUILD_DIGEST: ${{ steps.base_build.outputs.digest }}
+          IMAGE_REPOSITORY: ${{ steps.release_inputs.outputs.image_repository }}
+        run: |
+          set -euo pipefail
+          python3 fastapi_backend/scripts/release_ci.py bind-digest \
+            --digest "$BUILD_DIGEST" \
+            --image-repository "$IMAGE_REPOSITORY" \
+            --github-output "$GITHUB_OUTPUT"
+
+      - name: Create AgentReleaseManifest from the clean checkout
+        env:
+          RELEASE_ID: ${{ steps.release_inputs.outputs.release_id }}
+          RELEASE_ENVIRONMENT: ${{ steps.release_inputs.outputs.environment }}
+          SOURCE_COMMIT: ${{ steps.release_inputs.outputs.source_commit }}
+          RUNTIME_PLATFORM: ${{ steps.release_inputs.outputs.platform }}
+          ANSWER_PROVIDER: ${{ steps.release_inputs.outputs.answer_provider }}
+          HCX_QUERYPLAN_ENABLED: ${{ steps.release_inputs.outputs.hcx_queryplan_enabled }}
+          MODEL_ID: ${{ steps.release_inputs.outputs.model_id }}
+        run: |
+          set -euo pipefail
+          python3 -c 'import sys; assert sys.version_info[:2] == (3, 12)'
+          python3 -m venv "$RUNNER_TEMP/release-venv"
+          "$RUNNER_TEMP/release-venv/bin/python" -m pip install \
+            --disable-pip-version-check \
+            --requirement fastapi_backend/requirements.txt
+          manifest_arguments=(
+            --release-id "$RELEASE_ID"
+            --environment "$RELEASE_ENVIRONMENT"
+            --source-commit "$SOURCE_COMMIT"
+            --git-root "$GITHUB_WORKSPACE"
+            --backend-root "$GITHUB_WORKSPACE/fastapi_backend/app"
+            --platform "$RUNTIME_PLATFORM"
+            --answer-provider "$ANSWER_PROVIDER"
+            --output "$RELEASE_OUTPUT_DIR/agent-release-manifest.json"
+          )
+          if [ "$MODEL_ID" = "HCX-007" ]; then
+            manifest_arguments+=(--hcx-model HCX-007)
+          fi
+          if [ "$HCX_QUERYPLAN_ENABLED" = "true" ]; then
+            manifest_arguments+=(--hcx-queryplan-enabled)
+          fi
+          PYTHONPATH="$GITHUB_WORKSPACE/finance_agent/packages/finance_agent_core/src" \
+            "$RUNNER_TEMP/release-venv/bin/python" \
+            -m finance_agent_core.release_cli manifest "${manifest_arguments[@]}"
+
+      - name: Build and push the manifest-bound release image
+        id: release_build
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          file: fastapi_backend/Dockerfile.release
+          platforms: ${{ steps.release_inputs.outputs.platform }}
+          push: true
+          provenance: mode=max
+          sbom: true
+          tags: ${{ steps.release_inputs.outputs.release_tag }}
+          build-args: |
+            BACKEND_BASE_IMAGE=${{ steps.base_image.outputs.image_reference }}
+            PYTHON_BASE_IMAGE=${{ steps.release_inputs.outputs.python_base_image }}
+            FINANCE_SOURCE_COMMIT=${{ steps.release_inputs.outputs.source_commit }}
+            FINANCE_RELEASE_ID=${{ steps.release_inputs.outputs.release_id }}
+
+      - name: Resolve the exact release image digest
+        id: release_image
+        env:
+          BUILD_DIGEST: ${{ steps.release_build.outputs.digest }}
+          IMAGE_REPOSITORY: ${{ steps.release_inputs.outputs.image_repository }}
+        run: |
+          set -euo pipefail
+          python3 fastapi_backend/scripts/release_ci.py bind-digest \
+            --digest "$BUILD_DIGEST" \
+            --image-repository "$IMAGE_REPOSITORY" \
+            --github-output "$GITHUB_OUTPUT"
+
+      - name: Pull and verify the exact OCI image platform and labels
+        env:
+          IMAGE_REFERENCE: ${{ steps.release_image.outputs.image_reference }}
+          RUNTIME_PLATFORM: ${{ steps.release_inputs.outputs.platform }}
+          SOURCE_COMMIT: ${{ steps.release_inputs.outputs.source_commit }}
+          RELEASE_ID: ${{ steps.release_inputs.outputs.release_id }}
+          BACKEND_BASE_IMAGE: ${{ steps.base_image.outputs.image_reference }}
+          PYTHON_BASE_IMAGE: ${{ steps.release_inputs.outputs.python_base_image }}
+        run: |
+          set -euo pipefail
+          docker pull --platform "$RUNTIME_PLATFORM" "$IMAGE_REFERENCE"
+          docker image inspect "$IMAGE_REFERENCE" > "$RELEASE_OUTPUT_DIR/release-image-inspect.json"
+          docker buildx imagetools inspect --raw "$IMAGE_REFERENCE" \
+            > "$RELEASE_OUTPUT_DIR/release-image-manifest.json"
+          python3 fastapi_backend/scripts/release_ci.py inspect-remote-manifest \
+            --manifest-file "$RELEASE_OUTPUT_DIR/release-image-manifest.json" \
+            --image-reference "$IMAGE_REFERENCE" \
+            --platform "$RUNTIME_PLATFORM"
+          python3 fastapi_backend/scripts/release_ci.py inspect-image \
+            --inspect-file "$RELEASE_OUTPUT_DIR/release-image-inspect.json" \
+            --image-reference "$IMAGE_REFERENCE" \
+            --platform "$RUNTIME_PLATFORM" \
+            --source-commit "$SOURCE_COMMIT" \
+            --release-id "$RELEASE_ID" \
+            --backend-base-image "$BACKEND_BASE_IMAGE" \
+            --python-base-image "$PYTHON_BASE_IMAGE"
+
+      - name: Restore the independently trusted previous Binding
+        if: steps.release_inputs.outputs.rollback_mode == 'pinned_previous_release'
+        env:
+          PREVIOUS_DEPLOYMENT_BINDING_B64: ${{ secrets.PREVIOUS_DEPLOYMENT_BINDING_B64 }}
+          PREVIOUS_DEPLOYMENT_BINDING_SHA256: ${{ secrets.PREVIOUS_DEPLOYMENT_BINDING_SHA256 }}
+        run: |
+          set -euo pipefail
+          python3 fastapi_backend/scripts/release_ci.py materialize-previous-binding \
+            --output "$RUNNER_TEMP/previous-deployment-binding.json"
+
+      - name: Create DeploymentBinding
+        env:
+          IMAGE_REFERENCE: ${{ steps.release_image.outputs.image_reference }}
+          RUNTIME_PLATFORM: ${{ steps.release_inputs.outputs.platform }}
+          ACTIVATION_GENERATION: ${{ steps.release_inputs.outputs.activation_generation }}
+          ROLLBACK_MODE: ${{ steps.release_inputs.outputs.rollback_mode }}
+          TRUSTED_PREVIOUS_BINDING_SHA256: ${{ secrets.PREVIOUS_DEPLOYMENT_BINDING_SHA256 }}
+        run: |
+          set -euo pipefail
+          binding_arguments=(
+            --manifest "$RELEASE_OUTPUT_DIR/agent-release-manifest.json"
+            --image-reference "$IMAGE_REFERENCE"
+            --platform "$RUNTIME_PLATFORM"
+            --activation-generation "$ACTIVATION_GENERATION"
+            --rollback-mode "$ROLLBACK_MODE"
+            --output "$RELEASE_OUTPUT_DIR/deployment-binding.json"
+          )
+          if [ "$ROLLBACK_MODE" = "pinned_previous_release" ]; then
+            binding_arguments+=(
+              --rollback-binding "$RUNNER_TEMP/previous-deployment-binding.json"
+              --rollback-binding-sha256 "$TRUSTED_PREVIOUS_BINDING_SHA256"
+            )
+          fi
+          PYTHONPATH="$GITHUB_WORKSPACE/finance_agent/packages/finance_agent_core/src" \
+            "$RUNNER_TEMP/release-venv/bin/python" \
+            -m finance_agent_core.release_cli binding "${binding_arguments[@]}"
+
+      - name: Install cosign from a commit-pinned action
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        with:
+          cosign-release: v3.1.3
+
+      - name: Keyless-sign and verify both immutable images
+        env:
+          BASE_IMAGE_REFERENCE: ${{ steps.base_image.outputs.image_reference }}
+          RELEASE_IMAGE_REFERENCE: ${{ steps.release_image.outputs.image_reference }}
+        run: |
+          set -euo pipefail
+          cosign sign --yes "$BASE_IMAGE_REFERENCE"
+          cosign sign --yes "$RELEASE_IMAGE_REFERENCE"
+          cosign verify \
+            --certificate-identity "$WORKFLOW_IDENTITY" \
+            --certificate-oidc-issuer "$OIDC_ISSUER" \
+            "$BASE_IMAGE_REFERENCE" \
+            > "$RELEASE_OUTPUT_DIR/base-image-cosign-verification.json"
+          cosign verify \
+            --certificate-identity "$WORKFLOW_IDENTITY" \
+            --certificate-oidc-issuer "$OIDC_ISSUER" \
+            "$RELEASE_IMAGE_REFERENCE" \
+            > "$RELEASE_OUTPUT_DIR/release-image-cosign-verification.json"
+
+      - name: Keyless-sign and verify release control-plane files
+        run: |
+          set -euo pipefail
+          cosign sign-blob --yes \
+            --bundle "$RELEASE_OUTPUT_DIR/agent-release-manifest.sigstore.json" \
+            "$RELEASE_OUTPUT_DIR/agent-release-manifest.json"
+          cosign sign-blob --yes \
+            --bundle "$RELEASE_OUTPUT_DIR/deployment-binding.sigstore.json" \
+            "$RELEASE_OUTPUT_DIR/deployment-binding.json"
+          cosign verify-blob \
+            --bundle "$RELEASE_OUTPUT_DIR/agent-release-manifest.sigstore.json" \
+            --certificate-identity "$WORKFLOW_IDENTITY" \
+            --certificate-oidc-issuer "$OIDC_ISSUER" \
+            "$RELEASE_OUTPUT_DIR/agent-release-manifest.json" \
+            > "$RELEASE_OUTPUT_DIR/agent-release-manifest-verification.txt"
+          cosign verify-blob \
+            --bundle "$RELEASE_OUTPUT_DIR/deployment-binding.sigstore.json" \
+            --certificate-identity "$WORKFLOW_IDENTITY" \
+            --certificate-oidc-issuer "$OIDC_ISSUER" \
+            "$RELEASE_OUTPUT_DIR/deployment-binding.json" \
+            > "$RELEASE_OUTPUT_DIR/deployment-binding-verification.txt"
+
+      - name: Record non-secret release evidence
+        env:
+          SOURCE_COMMIT: ${{ steps.release_inputs.outputs.source_commit }}
+          RELEASE_ID: ${{ steps.release_inputs.outputs.release_id }}
+          RELEASE_ENVIRONMENT: ${{ steps.release_inputs.outputs.environment }}
+          RUNTIME_PLATFORM: ${{ steps.release_inputs.outputs.platform }}
+          BASE_IMAGE_REFERENCE: ${{ steps.base_image.outputs.image_reference }}
+          RELEASE_IMAGE_REFERENCE: ${{ steps.release_image.outputs.image_reference }}
+          TRUSTED_RUN_ID: ${{ github.run_id }}
+          TRUSTED_RUN_ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          set -euo pipefail
+          manifest_sha256="$(sha256sum "$RELEASE_OUTPUT_DIR/agent-release-manifest.json" | cut -d ' ' -f 1)"
+          binding_sha256="$(sha256sum "$RELEASE_OUTPUT_DIR/deployment-binding.json" | cut -d ' ' -f 1)"
+          python3 fastapi_backend/scripts/release_ci.py write-metadata \
+            --output "$RELEASE_OUTPUT_DIR/release-metadata.json" \
+            --workflow-identity "$WORKFLOW_IDENTITY" \
+            --source-commit "$SOURCE_COMMIT" \
+            --release-id "$RELEASE_ID" \
+            --environment "$RELEASE_ENVIRONMENT" \
+            --platform "$RUNTIME_PLATFORM" \
+            --base-image-reference "$BASE_IMAGE_REFERENCE" \
+            --release-image-reference "$RELEASE_IMAGE_REFERENCE" \
+            --manifest-sha256 "$manifest_sha256" \
+            --binding-sha256 "$binding_sha256" \
+            --github-run-id "$TRUSTED_RUN_ID" \
+            --github-run-attempt "$TRUSTED_RUN_ATTEMPT"
+          sha256sum \
+            "$RELEASE_OUTPUT_DIR/agent-release-manifest.json" \
+            "$RELEASE_OUTPUT_DIR/deployment-binding.json" \
+            "$RELEASE_OUTPUT_DIR/release-metadata.json" \
+            > "$RELEASE_OUTPUT_DIR/release-artifacts.sha256"
+
+      - name: Upload non-secret immutable release evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: immutable-release-${{ steps.release_inputs.outputs.release_id }}
+          path: |
+            fastapi_backend/release/agent-release-manifest.json
+            fastapi_backend/release/deployment-binding.json
+            fastapi_backend/release/release-metadata.json
+            fastapi_backend/release/release-artifacts.sha256
+            fastapi_backend/release/release-image-inspect.json
+            fastapi_backend/release/release-image-manifest.json
+            fastapi_backend/release/base-image-cosign-verification.json
+            fastapi_backend/release/release-image-cosign-verification.json
+            fastapi_backend/release/agent-release-manifest.sigstore.json
+            fastapi_backend/release/deployment-binding.sigstore.json
+            fastapi_backend/release/agent-release-manifest-verification.txt
+            fastapi_backend/release/deployment-binding-verification.txt
+          if-no-files-found: error
+          retention-days: 90

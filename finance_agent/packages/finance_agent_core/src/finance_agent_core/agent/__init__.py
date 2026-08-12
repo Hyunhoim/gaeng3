@@ -32,6 +32,17 @@ from finance_agent_core.agent.routed_service import (
     RoutedFinanceAgent,
 )
 from finance_agent_core.agent.router import IntentRouter
+from finance_agent_core.agent.safety import (
+    SafetyDisposition,
+    SafetyEnvelope,
+    SafetyEnvelopeDecision,
+    SafetyGate,
+    normalize_user_question,
+)
+from finance_agent_core.agent.semantic_gate import (
+    SemanticCoverageDecision,
+    SemanticCoverageGate,
+)
 from finance_agent_core.agent.service import FinanceAgent
 
 __all__ = [
@@ -49,6 +60,12 @@ __all__ = [
     "RoutedAgentResult",
     "RoutedFinanceAgent",
     "RuleFundComparisonDraftProvider",
+    "SafetyDisposition",
+    "SafetyEnvelope",
+    "SafetyEnvelopeDecision",
+    "SafetyGate",
+    "SemanticCoverageDecision",
+    "SemanticCoverageGate",
     "ServerQueryPlanCompiler",
     "compile_fund_comparison_query_plan",
     "execute_answer_request",
@@ -56,6 +73,7 @@ __all__ = [
     "extract_fund_comparison_fields",
     "normalize_fund_mention",
     "invalid_official_request_response",
+    "normalize_user_question",
     "official_response_from_backend",
     "official_timeout_response",
 ]

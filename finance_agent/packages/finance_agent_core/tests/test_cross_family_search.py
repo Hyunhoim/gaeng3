@@ -3,6 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 from threading import Barrier, Lock, get_ident
 
+import pytest
+
 from finance_agent_core.agent import IntentRouter, RoutedFinanceAgent
 from finance_agent_core.answering import (
     ExpectedGroundedAnswerProvider,
@@ -16,6 +18,11 @@ from finance_agent_core.contracts.backend import (
 )
 from finance_agent_core.contracts.queryplan import Intent, ProductFamily
 from finance_agent_core.contracts.routing import RouteDisposition
+from finance_agent_core.deadline import (
+    RequestDeadline,
+    bind_request_deadline,
+    current_request_deadline,
+)
 from finance_agent_core.domain import (
     DatabaseManifest,
     NormalizedDomesticEtpRecord,
@@ -24,6 +31,7 @@ from finance_agent_core.domain import (
 from finance_agent_core.evaluation.cross_family_search import (
     load_cross_family_search_suite,
 )
+from finance_agent_core.execution import PlanAuthorityCode, PlanAuthorityError
 
 
 def _cross_family_agent(
@@ -318,18 +326,21 @@ def test_cross_family_search_skips_query_plan_provider_and_executes_concurrently
     barrier = Barrier(2)
     lock = Lock()
     thread_ids: set[int] = set()
+    deadline = RequestDeadline.after(5)
 
-    def synchronized_execute(plan):
+    def synchronized_execute(search, validated_plan):
+        assert current_request_deadline() is deadline
         with lock:
             thread_ids.add(get_ident())
         barrier.wait(timeout=3)
-        return original(plan)
+        return original(search, validated_plan)
 
     agent._execute_family_search = synchronized_execute  # type: ignore[method-assign]
-    result = agent.answer(
-        "국내 ETF와 해외 ETF를 각각 2개 보여줘",
-        "cross-search-004",
-    )
+    with bind_request_deadline(deadline):
+        result = agent.answer(
+            "국내 ETF와 해외 ETF를 각각 2개 보여줘",
+            "cross-search-004",
+        )
 
     assert result.status == "executed"
     assert len(thread_ids) == 2
@@ -528,3 +539,61 @@ def test_cross_family_search_clarifies_asymmetric_family_conditions(
     assert result.family_searches == []
     assert result.products == []
     assert "서로 다른 조건은 아직 지원하지 않습니다" in result.answer
+
+
+def test_cross_family_authorizes_the_whole_batch_before_any_oracle_call(
+    sample_database: tuple[
+        Path,
+        list[NormalizedOverseasEtpRecord],
+        DatabaseManifest,
+    ],
+    domestic_sample_database: tuple[
+        Path,
+        list[NormalizedDomesticEtpRecord],
+        DatabaseManifest,
+    ],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    agent = _cross_family_agent(sample_database, domestic_sample_database)
+    original_validate = agent.plan_authority_gate.validate_routed
+    validation_calls = 0
+    oracle_calls = 0
+
+    def fail_second_validation(proposal, route_decision, **kwargs):
+        nonlocal validation_calls
+        validation_calls += 1
+        if validation_calls == 2:
+            raise PlanAuthorityError(
+                PlanAuthorityCode.ROUTE_MISMATCH,
+                "synthetic second-child rejection",
+            )
+        return original_validate(proposal, route_decision, **kwargs)
+
+    class CountingOracle:
+        def __init__(self, database_path):
+            del database_path
+
+        def execute(self, validated_plan):
+            nonlocal oracle_calls
+            oracle_calls += 1
+            raise AssertionError("Oracle must not run after partial batch authorization")
+
+    monkeypatch.setattr(
+        agent.plan_authority_gate,
+        "validate_routed",
+        fail_second_validation,
+    )
+    monkeypatch.setattr(
+        "finance_agent_core.agent.routed_service.SQLiteOracle",
+        CountingOracle,
+    )
+
+    with pytest.raises(PlanAuthorityError) as raised:
+        agent.answer(
+            "국내 ETF와 해외 ETF를 각각 2개 보여줘",
+            "cross-authority-all-or-none",
+        )
+
+    assert raised.value.code is PlanAuthorityCode.ROUTE_MISMATCH
+    assert validation_calls == 2
+    assert oracle_calls == 0

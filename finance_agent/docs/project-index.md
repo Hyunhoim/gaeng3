@@ -1,6 +1,6 @@
 # AI 기술문서 상세 인덱스
 
-마지막 갱신: 2026-08-09
+마지막 갱신: 2026-08-12
 
 이 문서는 금융상품 Agent의 전체 기술문서와 상태를 추적하는 상세 장부다. 간단한
 길잡이가 필요하면 먼저 [AI 기술문서 안내](README.md)를 확인한다. 연구 요청·외부
@@ -9,12 +9,17 @@
 
 ## 1. 빠른 시작
 
-모든 문서를 순서대로 읽을 필요는 없다. 처음에는 다음 네 문서만 확인한다.
+모든 문서를 순서대로 읽을 필요는 없다. 처음에는 다음 문서만 확인한다.
 
 1. [현재 프로젝트 기준](project-baseline.md) — 목표, 공식 제약, 역할과 현재 상태
 2. [금융상품 Agent capability matrix](capability-matrix.md) — 지금 가능한 질문과 불가능한 질문
 3. [HyperCLOVA X 연결 전 준비 기준](pre-hcx-readiness.md) — 완료된 일과 남은 게이트
 4. [재현 가능한 평가 baseline](../evaluation/README.md) — 성능 수치와 실험 해석
+
+배포·복구 담당자는 [NCP immutable release CI](immutable-ncp-release-ci.md)와
+[Rollback drill runbook](../../fastapi_backend/ROLLBACK_DRILL.md)을 추가로 확인한다. 현재
+승인 DB로 Stage 2 실행 결과를 다시 계산한 증거는
+[Stage 2 승인 DB 재검증 baseline](../evaluation/baselines/stage2-approved-db-revalidation-2026-08-12.json)이다.
 
 2026-08-06 설명회 자료는 [반영 기록](../../docs/proposal/briefing-2026-08-06.md)에
 확정·잠정·미확정으로 나눠 정리했다. 평가 API와 Ontology 요구는 확인됐지만 정확한
@@ -29,6 +34,7 @@ HCX 모델·endpoint·인증과 크레딧 적용 범위는 남아 있어 기존�
 | 금융 도메인 담당 | [capability matrix](capability-matrix.md) | [데이터 감사](data-audit.md) → [사람 평가 rubric](human-evaluation.md) → [금융 도메인 QA 평가](evaluation-domain-qa.md) |
 | 기술 제안서 작성자 | [기술 제안서 허브](../../docs/proposal/README.md) | [현재 프로젝트 기준](project-baseline.md) → [평가 baseline](../evaluation/README.md) |
 | 제출 전 검수자 | [제출 체크리스트](../../docs/proposal/submission-checklist.md) | [모델 경계](submission-model-boundary.md) → [연결 전 준비 기준](pre-hcx-readiness.md) |
+| 배포·복구 담당 | [NCP immutable release CI](immutable-ncp-release-ci.md) | [AgentReleaseManifest](agent-release-manifest.md) → [Rollback drill runbook](../../fastapi_backend/ROLLBACK_DRILL.md) |
 
 ## 3. 목적별 문서 분류
 
@@ -44,6 +50,10 @@ HCX 모델·endpoint·인증과 크레딧 적용 범위는 남아 있어 기존�
 - [데이터 감사 기준](data-audit.md)
 - [공모펀드 원천 데이터 계약](public-fund-contract.md)
 - [Field Registry와 QueryPlan 계약](contracts.md)
+- [QueryPlan 실행 권한 경계](plan-authority.md)
+- [AgentReleaseManifest 배포 계약](agent-release-manifest.md)
+- [NCP immutable release CI](immutable-ncp-release-ci.md)
+- [Rollback drill runbook](../../fastapi_backend/ROLLBACK_DRILL.md)
 - [Ontology 제출 계약](ontology.md)
 - [capability matrix](capability-matrix.md)
 - [Backend DTO](backend-contract.md)
@@ -55,6 +65,7 @@ HCX 모델·endpoint·인증과 크레딧 적용 범위는 남아 있어 기존�
 - [네 상품군 공통 COMPARE](comparison-engine-design.md)
 - [교차 상품군 SEARCH](cross-family-search.md)
 - [BM25/SQLite FTS 문서 RAG](document-rag.md)
+- [Dense Schema Linker 오프라인 컴포넌트 평가](evaluation-dense-schema-linker-shadow.md)
 - [근거 기반 최종 답변](evaluation-grounded-answers.md)
 
 ### 평가와 품질
@@ -70,6 +81,7 @@ HCX 모델·endpoint·인증과 크레딧 적용 범위는 남아 있어 기존�
 - [금융 도메인 QA](evaluation-domain-qa.md)
 - [사람 평가 rubric](human-evaluation.md)
 - [전체 평가 baseline](../evaluation/README.md)
+- [Stage 2 승인 DB 재검증 baseline](../evaluation/baselines/stage2-approved-db-revalidation-2026-08-12.json)
 
 ### 과거 기록과 연구 근거
 
@@ -89,6 +101,10 @@ HCX 모델·endpoint·인증과 크레딧 적용 범위는 남아 있어 기존�
 | [공모펀드 원천 데이터 계약](public-fund-contract.md) | 공모펀드 grain·field capability·품질 규칙·실행 승인 조건 | P1 정본 |
 | [공모펀드 계약 감사 노트북](../notebooks/public-fund-contract-audit.ipynb) | product-grain 전수 감사 재현 흐름과 품질 회귀 | 재현 보조 |
 | [Field Registry와 QueryPlan 계약](contracts.md) | 네 상품군 field capability, 서버 QueryPlan, HCX schema subset | P1 정본 |
+| [QueryPlan 실행 권한 경계](plan-authority.md) | ProposedQueryPlan→ValidatedPlan 발급, receipt·seal·dataset/deadline/row budget, Oracle 우회 차단 | Stage 2 구현 |
+| [AgentReleaseManifest 배포 계약](agent-release-manifest.md) | 코드·Prompt·Model·index·공식 데이터와 detached Docker image binding, startup·host anti-replay fail-closed | Stage 3 코드 경계 구현·NCP release 대기 |
+| [NCP immutable release CI](immutable-ncp-release-ci.md) | 보호된 main에서 NCP push·exact digest·OCI platform/label·cosign OIDC 서명 검증 | 코드 계약 구현·외부 Registry 실행 대기 |
+| [Rollback drill runbook](../../fastapi_backend/ROLLBACK_DRILL.md) | N-1 → N → N-1 image·Binding·DB volume·health·대표 `/answer` 복귀 검증 | localhost 합성 실기동 완료·공식 NCP 두 release 대기 |
 | [Ontology 제출 계약](ontology.md) | 공식 Turtle 5개·registry 기반 생성·문법·정합성 검사 | v1.0 구현 |
 | [해외 ETP 핵심 평가 기준선](evaluation.md) | 동결 50문항, oracle·채점 규칙, 최초 holdout과 사후 회귀 결과 | v1.0 정본 |
 | [국내 ETP 핵심 평가 기준선](evaluation-domestic-etp.md) | 국내 ETP 동결 50문항, 품질 계약, local-inference split 결과 | v1.0 정본 |
@@ -100,6 +116,9 @@ HCX 모델·endpoint·인증과 크레딧 적용 범위는 남아 있어 기존�
 | [로컬 LLM 테스트 런타임](local-llm.md) | 격리된 Qwen/vLLM 환경, 안전 경계, 재현 가능한 E2E | 개발 전용 |
 | [Agent Core v0.1 마일스톤](milestones/2026-07-29-agent-core-v0.1.md) | 시작 상태, 채택 결정, 구현·실험·검증·다음 단계 인수인계 | 완료 |
 | [재현 가능한 평가 baseline](../evaluation/README.md) | Git에서 제외된 전체 report 대신 집계 지표·hash·재현 조건 보존 | v1.0 |
+| [Stage 2 승인 DB 재검증 baseline](../evaluation/baselines/stage2-approved-db-revalidation-2026-08-12.json) | 현재 승인 네 DB로 SEARCH·AGGREGATE·COMPARE 62건 지문을 다시 계산한 공개 회귀 | 62/62·독립 blind 아님 |
+| [Stage 3 release 계약 baseline](../evaluation/baselines/stage3-release-contract-2026-08-12.json) | Manifest·Binding·activation anti-replay·trust·rollback harness·SQLite authority 계약 | 145/145·무네트워크 |
+| [Stage 3 localhost OCI·rollback baseline](../evaluation/baselines/stage3-local-oci-rollback-2026-08-12.json) | exact Registry digest와 합성 N-1→N→N-1 실기동 | 7/7·trust stub·NCP 아님 |
 | [HyperCLOVA X 연결 전 준비 기준](pre-hcx-readiness.md) | API 연결 전 구현·진단·계약·외부 게이트와 단계별 증거 추적 | 진행 중 |
 | [연결 전 진단·외부 blind 프로토콜](evaluation-pre-hcx-diagnostic.md) | 네 상품군·일곱 intent 내부 진단과 금융 도메인 담당자 external blind 봉인 | v1.0 |
 | [금융상품 Agent capability matrix](capability-matrix.md) | 네 상품군·일곱 intent 실행·역질문·미지원 범위와 자동 정합성 검사 | v1.0 |
@@ -108,7 +127,7 @@ HCX 모델·endpoint·인증과 크레딧 적용 범위는 남아 있어 기존�
 | [네 상품군 자연어 COMPARE 공개 회귀](evaluation-product-comparison.md) | 세 상품군 신규 30문항과 기존 공모펀드 24문항의 비교 배선·안전 경계 | v1.0 정본 |
 | [SEARCH·AGGREGATE 성능 기준선](evaluation-search-aggregate-performance.md) | 네 상품군 8문항의 결과 지문·새 프로세스 지연·RSS와 projected verifier 전후 비교 | v1.0 정본 |
 | [교차 상품군 병렬 SEARCH와 grounded answer v2](cross-family-search.md) | 상품군별 QueryPlan·병렬 Oracle·evidence 격리 생성·교차 문구 검증·전체 fallback 계약 | v2.0 정본 |
-| [HyperCLOVA X provider 계약](hyperclova-provider.md) | 세 LLM 역할의 요청·응답·오류·관측 계약과 API 없는 전체 Agent E2E | 계약·E2E 8/8 완료·실제 HTTP 대기 |
+| [HyperCLOVA X provider 계약](hyperclova-provider.md) | 공식 HTTP transport, optional QueryPlan·grounded answer 배선, planning 권한·오류·관측 계약 | 무호출 검증 완료·실제 credential 호출 대기·HCLX grounded plan 미배선 |
 | [internal-red-team-v1 전체 E2E 평가](evaluation-internal-red-team.md) | 네 상품군 40문항의 공격 유형·전체 `/answer` 경로·최초 실패·수정 후 회귀 | v1.0 정본 |
 | [공식 형식 30문항 공개 모의평가](evaluation-official-mock.md) | 최초 Docker GET 의미 24/30 보존·명시적 공모펀드 v1 승인 경로 30/30 | v1.2 HTTP 재평가 |
 | [Qwen 변형 질문·전체 Agent 스트레스 평가](evaluation-qwen-metamorphic.md) | 세 표현 축·원문 비공개 의미 재구성·gold 감사·전체 Qwen E2E·grounded-plan gate | v1.1 공개 회귀 |
@@ -116,6 +135,7 @@ HCX 모델·endpoint·인증과 크레딧 적용 범위는 남아 있어 기존�
 | [금융 도메인 QA 실험 파이프라인](evaluation-domain-qa.md) | 금융 도메인 담당자 40문항의 hash 검증·단계별 채점·Q002 QueryPlan·Oracle·evidence gold | v1.2 Router 회귀 40/40 |
 | [제출용 모델 경계와 로컬 LLM 정리 메모](submission-model-boundary.md) | 8월 6일 공식 확인, 제출 후보의 로컬 provider·설정·의존성 제거, 투명한 개발·제출 경계 | release gate |
 | [BM25/SQLite FTS 문서 RAG](document-rag.md) | 승인 문서 적재·BM25 검색·필터·근거·기준일·not-found 계약 | 최소 기능 완료 |
+| [Dense Schema Linker 오프라인 컴포넌트 평가](evaluation-dense-schema-linker-shadow.md) | 현재 승인 SQL·합성 BM25 기준선, fake embedding·index manifest·production OFF와 채택 gate | 컴포넌트 구현·채택 보류 |
 | [Backend 전달용 Agent DTO](backend-contract.md) | 프레임워크 독립 request·response·citation·fallback·HTTP 오류 adapter와 JSON 예시 | v1.0·adapter 12/12 |
 | [금융상품 Agent 사람 평가 rubric](human-evaluation.md) | 6개 평가 축·critical gate·독립 reviewer·집계 계약 | rubric 완료·실평가 대기 |
 | [저장소 부트스트랩 작업 명세](prompts/01-repository-bootstrap.md) | 최초 Agent Core를 구현할 때 Codex에 전달한 실행 명세 | 완료 기록 |
@@ -187,7 +207,8 @@ HCX 모델·endpoint·인증과 크레딧 적용 범위는 남아 있어 기존�
   structured request, 공식 mode/provider gate, HCX schema 검사, token·latency
   call record와 fake transport 오류 계약 완료
 - HyperCLOVA X API 없는 전체 경로: 해외·국내 ETP·국내채권 SEARCH와
-  fallback·timeout·무호출 정책·서버 계획 guard 8/8, 실제 HTTP transport는 대기
+  fallback·timeout·무호출 정책·서버 계획 guard 8/8; Direct v3 HTTP transport와
+  FastAPI QueryPlan·grounded answer 무호출 배선 완료, 실제 credential 호출은 대기
 - `/answer` service adapter: 정상·fallback·provider·dataset·내부 오류의
   HTTP status와 안전한 ERROR DTO, 민감정보 비노출 계약 12/12
 - 공모펀드 평가 경계: 동결 expected QueryPlan의 SEARCH·COMPARE 답변 격리
@@ -203,8 +224,9 @@ HCX 모델·endpoint·인증과 크레딧 적용 범위는 남아 있어 기존�
 - 금융 도메인 QA: v1 개발 40문항 최초 strict 1/40,
   safety·evidence 각각 32/40을 보존하고 v1.2 Router·linker 회귀에서
   모든 계약 40/40·잘못된 실행 0건, dependency pending 13건은 유지
-- 코드 회귀 기준: Agent Core pytest 507개·Backend pytest 34개, Ruff lint·format,
-  pip dependency check, wheel과 필수 package data 검사
+- 코드 회귀 기준: pre-HCX 동결 507개·Backend 34개를 역사 기록으로 보존하고, 현재 작업
+  트리는 Agent Core 1,061개·Backend 162개 통과. Ruff lint·format, pip dependency check,
+  wheel과 필수 package data 검사
 - 로컬 Qwen 평가 기준: 동결 50문항에서 최초 미사용 holdout 9/10,
   오류 수정 후 전체 회귀 50/50을 연속 2회 재현
 - 국내 ETP 로컬 Qwen 기준: development 40/40, local-inference holdout 첫 실행 10/10

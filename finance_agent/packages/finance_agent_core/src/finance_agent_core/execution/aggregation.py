@@ -6,6 +6,7 @@ from decimal import ROUND_HALF_EVEN, Decimal, localcontext
 
 from finance_agent_core.config import AsOfBasis, QualityStatus, load_field_registry
 from finance_agent_core.contracts.queryplan import AggregateFunction, QueryPlan
+from finance_agent_core.deadline import raise_if_request_stopped
 from finance_agent_core.domain import (
     AggregateEvidence,
     AggregateGroup,
@@ -21,6 +22,12 @@ _EXCLUDED_QUALITIES = {
     QualityStatus.UNSUPPORTED,
 }
 _AVERAGE_QUANTUM = Decimal("0.000000000001")
+_DEADLINE_CHECK_INTERVAL = 256
+
+
+def _periodic_deadline_check(index: int) -> None:
+    if index % _DEADLINE_CHECK_INTERVAL == 0:
+        raise_if_request_stopped()
 
 
 def _field_quality(
@@ -89,13 +96,47 @@ def _decimal_text(value: Decimal) -> str:
 
 
 def _average(values: list[Decimal]) -> Decimal:
-    largest_digits = max(len(value.as_tuple().digits) for value in values)
+    largest_digits = 0
+    for index, value in enumerate(values):
+        _periodic_deadline_check(index)
+        largest_digits = max(largest_digits, len(value.as_tuple().digits))
+    raise_if_request_stopped()
     with localcontext() as context:
         context.prec = max(50, largest_digits + 20)
-        return (sum(values, Decimal("0")) / Decimal(len(values))).quantize(
+        total = Decimal("0")
+        for index, value in enumerate(values):
+            _periodic_deadline_check(index)
+            total += value
+        return (total / Decimal(len(values))).quantize(
             _AVERAGE_QUANTUM,
             rounding=ROUND_HALF_EVEN,
         )
+
+
+def _reduce_numeric(
+    function: AggregateFunction,
+    values: list[Decimal],
+) -> Decimal:
+    if function is AggregateFunction.AVG:
+        return _average(values)
+    if function is AggregateFunction.SUM:
+        reduced = Decimal("0")
+        for index, value in enumerate(values):
+            _periodic_deadline_check(index)
+            reduced += value
+        return reduced
+    reduced = values[0]
+    for index, value in enumerate(values):
+        if index == 0:
+            continue
+        _periodic_deadline_check(index)
+        if function is AggregateFunction.MIN:
+            reduced = min(reduced, value)
+        elif function is AggregateFunction.MAX:
+            reduced = max(reduced, value)
+        else:  # pragma: no cover - enum exhaustiveness guard
+            raise ValueError(f"unsupported aggregate function: {function}")
+    return reduced
 
 
 def _group_key(
@@ -108,6 +149,7 @@ def _group_key(
 def _group_sort_key(
     item: tuple[tuple[str | int | bool | None, ...], list[VerifierRecord]],
 ) -> tuple[object, ...]:
+    raise_if_request_stopped()
     key, records = item
     rendered = tuple(
         (value is None, type(value).__name__, "" if value is None else str(value).casefold())
@@ -122,10 +164,16 @@ def _aggregate_quality(
     records: list[VerifierRecord],
     valid_records: list[VerifierRecord],
 ) -> tuple[QualityStatus, str | None]:
+    raise_if_request_stopped()
     if not valid_records:
         return QualityStatus.UNKNOWN, "all_values_missing_or_unusable"
-    statuses = [_field_quality(record, field_name)[0] for record in valid_records]
-    as_of_dates = {_field_as_of(record, field_name) for record in valid_records}
+    statuses: list[QualityStatus] = []
+    as_of_dates: set[date] = set()
+    for index, record in enumerate(valid_records):
+        _periodic_deadline_check(index)
+        statuses.append(_field_quality(record, field_name)[0])
+        as_of_dates.add(_field_as_of(record, field_name))
+    raise_if_request_stopped()
     reasons: list[str] = []
     missing_count = len(records) - len(valid_records)
     if missing_count:
@@ -150,10 +198,16 @@ def _metric(
     field_name: str,
     group_values: dict[str, str | int | bool | None],
 ) -> AggregateMetric:
+    raise_if_request_stopped()
     registry = load_field_registry()
     family = plan.product_families[0].value
     definition = registry.require_field(field_name, [family])
-    valid_records = [record for record in records if _usable_value(record, field_name) is not None]
+    valid_records: list[VerifierRecord] = []
+    for index, record in enumerate(records):
+        _periodic_deadline_check(index)
+        if _usable_value(record, field_name) is not None:
+            valid_records.append(record)
+    raise_if_request_stopped()
 
     currency_unknown = (
         function is not AggregateFunction.COUNT
@@ -164,23 +218,24 @@ def _metric(
     if currency_unknown:
         valid_records = []
 
-    values = [record.canonical_value(field_name) for record in valid_records]
+    values: list[object] = []
+    for index, record in enumerate(valid_records):
+        _periodic_deadline_check(index)
+        value = record.canonical_value(field_name)
+        assert value is not None
+        values.append(value)
+    raise_if_request_stopped()
     if function is AggregateFunction.COUNT:
         value: str | int | None = len(valid_records)
     elif not values:
         value = None
     else:
-        numeric = [_decimal_value(item) for item in values]
-        if function is AggregateFunction.MIN:
-            reduced = min(numeric)
-        elif function is AggregateFunction.MAX:
-            reduced = max(numeric)
-        elif function is AggregateFunction.SUM:
-            reduced = sum(numeric, Decimal("0"))
-        elif function is AggregateFunction.AVG:
-            reduced = _average(numeric)
-        else:  # pragma: no cover - enum exhaustiveness guard
-            raise ValueError(f"unsupported aggregate function: {function}")
+        numeric: list[Decimal] = []
+        for index, item in enumerate(values):
+            _periodic_deadline_check(index)
+            numeric.append(_decimal_value(item))
+        raise_if_request_stopped()
+        reduced = _reduce_numeric(function, numeric)
         value = _decimal_text(reduced)
 
     quality, quality_reason = _aggregate_quality(
@@ -190,7 +245,10 @@ def _metric(
     )
     if currency_unknown:
         quality_reason = "trading_currency_unknown_for_amount_group"
-    as_of_dates = [_field_as_of(record, field_name) for record in valid_records]
+    metric_as_of_dates: list[date] = []
+    for index, record in enumerate(valid_records):
+        _periodic_deadline_check(index)
+        metric_as_of_dates.append(_field_as_of(record, field_name))
     return AggregateMetric(
         function=function,
         field=field_name,
@@ -198,8 +256,8 @@ def _metric(
         unit=definition.unit,
         valid_count=len(valid_records),
         missing_count=len(records) - len(valid_records),
-        as_of_start=min(as_of_dates) if as_of_dates else None,
-        as_of_end=max(as_of_dates) if as_of_dates else None,
+        as_of_start=min(metric_as_of_dates) if metric_as_of_dates else None,
+        as_of_end=max(metric_as_of_dates) if metric_as_of_dates else None,
         quality=quality,
         quality_reason=quality_reason,
     )
@@ -216,7 +274,12 @@ def aggregate_records(
     full group count for truncation disclosure.
     """
 
-    selected = list(records)
+    raise_if_request_stopped()
+    selected: list[VerifierRecord] = []
+    for index, record in enumerate(records):
+        _periodic_deadline_check(index)
+        selected.append(record)
+    raise_if_request_stopped()
     if not selected:
         return 0, []
     grouped: dict[
@@ -224,12 +287,16 @@ def aggregate_records(
         list[VerifierRecord],
     ] = {}
     group_fields = plan.intent_payload.group_by
-    for record in selected:
+    for index, record in enumerate(selected):
+        _periodic_deadline_check(index)
         key = _group_key(record, group_fields)
         grouped.setdefault(key, []).append(record)
 
     groups: list[AggregateGroup] = []
-    for key, group_records in sorted(grouped.items(), key=_group_sort_key):
+    for group_index, (key, group_records) in enumerate(
+        sorted(grouped.items(), key=_group_sort_key)
+    ):
+        _periodic_deadline_check(group_index)
         group_values = dict(zip(group_fields, key, strict=True))
         groups.append(
             AggregateGroup(
@@ -256,6 +323,7 @@ def aggregate_records(
                 ],
             )
         )
+    raise_if_request_stopped()
     return len(groups), groups[: plan.limit]
 
 

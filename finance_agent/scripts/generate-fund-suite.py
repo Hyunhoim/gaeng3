@@ -7,7 +7,11 @@ from typing import Any
 
 from finance_agent_core.evaluation.models import EvaluationCase
 from finance_agent_core.evaluation.runner import sha256_file
-from finance_agent_core.execution import ResultVerifier, SQLiteOracle
+from finance_agent_core.execution import (
+    ResultVerifier,
+    SQLiteOracle,
+    authorize_internal_evaluation_plan,
+)
 from finance_agent_core.storage import connect_read_only, load_all_records
 
 
@@ -527,7 +531,8 @@ def main() -> int:
         case = EvaluationCase.model_validate(payload)
         if disposition == "execute":
             plan = case.expected_plan("fund")
-            executed = oracle.execute(plan)
+            validated_plan = authorize_internal_evaluation_plan(plan, arguments.database)
+            executed = oracle.execute(validated_plan)
             verified = verifier.verify(plan, executed, universe)
             payload["oracle"] = {
                 "candidate_count": verified.candidate_count,

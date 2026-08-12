@@ -1,0 +1,63 @@
+services:
+  data-init:
+    image: ${FINANCE_IMAGE_REFERENCE:?FINANCE_IMAGE_REFERENCE must use repository@sha256}
+    build: !reset null
+    platform: ${FINANCE_RUNTIME_PLATFORM:-linux/amd64}
+    user: "10001:10001"
+    command:
+      - python
+      - -c
+      - >-
+        from finance_agent_core.storage import require_approved_database_paths;
+        require_approved_database_paths({
+          'overseas_etp': '/data/overseas_etp.sqlite3',
+          'domestic_etp': '/data/domestic_etp.sqlite3',
+          'bond': '/data/bond.sqlite3',
+          'fund': '/data/fund.sqlite3',
+        })
+    volumes: !override
+      - type: volume
+        source: finance-data
+        target: /data
+        read_only: true
+
+  backend:
+    image: ${FINANCE_IMAGE_REFERENCE:?FINANCE_IMAGE_REFERENCE must use repository@sha256}
+    build: !reset null
+    platform: ${FINANCE_RUNTIME_PLATFORM:-linux/amd64}
+    user: "10001:10001"
+    environment:
+      APP_ENV: ${APP_ENV:-evaluation}
+      FINANCE_RELEASE_MANIFEST_FILE: /app/release/agent-release-manifest.json
+      FINANCE_DEPLOYMENT_BINDING_FILE: /run/finance-release/deployment-binding.json
+      FINANCE_DEPLOYMENT_BINDING_SHA256: ${FINANCE_DEPLOYMENT_BINDING_SHA256:?required}
+      FINANCE_SOURCE_COMMIT: ${FINANCE_SOURCE_COMMIT:?required}
+      FINANCE_RUNTIME_IMAGE_REFERENCE: ${FINANCE_IMAGE_REFERENCE:?required}
+      FINANCE_RUNTIME_PLATFORM: ${FINANCE_RUNTIME_PLATFORM:-linux/amd64}
+      FINANCE_DENSE_SCHEMA_LINKER_ENABLED: "false"
+      FINANCE_PRODUCT_DENSE_ENABLED: "false"
+      FINANCE_BACKEND_ANSWER_PROVIDER: ${FINANCE_BACKEND_ANSWER_PROVIDER:-deterministic}
+      FINANCE_BACKEND_HCX_QUERY_PLAN_ENABLED: ${FINANCE_BACKEND_HCX_QUERY_PLAN_ENABLED:-false}
+      FINANCE_AGENT_LLM_MODE: ${FINANCE_AGENT_LLM_MODE:-disabled}
+      LLM_PROVIDER: ${LLM_PROVIDER:-disabled}
+      HCX_MODEL: ${HCX_MODEL:-}
+      HCX_TIMEOUT_SECONDS: ${HCX_TIMEOUT_SECONDS:-45}
+      CLOVASTUDIO_API_KEY_FILE: ${CLOVASTUDIO_API_KEY_FILE:-}
+    volumes:
+      - type: bind
+        source: ${FINANCE_DEPLOYMENT_BINDING_HOST_FILE:?required}
+        target: /run/finance-release/deployment-binding.json
+        read_only: true
+        bind:
+          create_host_path: false
+    secrets:
+      - source: clovastudio_api_key
+        target: clovastudio_api_key
+
+secrets:
+  clovastudio_api_key:
+    file: ${CLOVASTUDIO_API_KEY_HOST_FILE:-/dev/null}
+
+volumes:
+  finance-data:
+    name: ${FINANCE_DATA_VOLUME_NAME:?release-specific data volume is required}

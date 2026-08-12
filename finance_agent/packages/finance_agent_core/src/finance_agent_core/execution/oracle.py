@@ -14,6 +14,11 @@ from finance_agent_core.contracts.queryplan import (
 )
 from finance_agent_core.domain import ExecutedAggregation, ExecutedSearch
 from finance_agent_core.execution.aggregation import aggregate_records
+from finance_agent_core.execution.authority import (
+    ValidatedPlan,
+    open_validated_database,
+    require_candidate_budget,
+)
 from finance_agent_core.execution.policy import (
     require_aggregate_contract,
     require_comparison_contract,
@@ -30,11 +35,7 @@ from finance_agent_core.execution.verifier_projection import (
     verifier_projection_fields,
     verifier_select_columns,
 )
-from finance_agent_core.storage.sqlite import (
-    connect_read_only,
-    load_manifest,
-    row_to_record,
-)
+from finance_agent_core.storage.sqlite import row_to_record
 
 ORACLE_SUPPORTED_INTENTS = frozenset({Intent.SEARCH, Intent.COMPARE, Intent.AGGREGATE})
 ORACLE_COMPARABLE_FAMILIES = frozenset(ProductFamily)
@@ -193,25 +194,25 @@ class SQLiteOracle:
     def __init__(self, database_path: str | Path) -> None:
         self.database_path = Path(database_path)
 
-    def execute(self, plan: QueryPlan) -> ExecutedSearch:
-        select_sql, count_sql, parameters = compile_search_sql(plan)
-        with connect_read_only(self.database_path) as connection:
-            manifest = load_manifest(connection)
-            family = plan.product_families[0].value
-            if manifest.dataset != family:
-                raise ValueError(
-                    f"plan requests {family}, but database contains {manifest.dataset}"
-                )
+    def execute(self, validated_plan: ValidatedPlan) -> ExecutedSearch:
+        with open_validated_database(
+            validated_plan,
+            self.database_path,
+            oracle_kind="search",
+        ) as (plan, connection, manifest):
+            select_sql, count_sql, parameters = compile_search_sql(plan)
             count_row = connection.execute(count_sql, parameters).fetchone()
             if count_row is None:
                 raise sqlite3.DatabaseError("candidate count query returned no row")
+            candidate_count = int(count_row["candidate_count"])
+            require_candidate_budget(validated_plan, candidate_count)
             rows = connection.execute(
                 select_sql,
                 [*parameters, plan.limit],
             ).fetchall()
         return ExecutedSearch(
             question_id=plan.question_id,
-            candidate_count=int(count_row["candidate_count"]),
+            candidate_count=candidate_count,
             records=[row_to_record(row) for row in rows],
             manifest=manifest,
             sql_template=select_sql,
@@ -225,16 +226,21 @@ class SQLiteAggregateOracle:
     def __init__(self, database_path: str | Path) -> None:
         self.database_path = Path(database_path)
 
-    def execute(self, plan: QueryPlan) -> ExecutedAggregation:
-        select_sql, parameters = compile_aggregate_sql(plan)
-        with connect_read_only(self.database_path) as connection:
-            manifest = load_manifest(connection)
-            family = plan.product_families[0].value
-            if manifest.dataset != family:
-                raise ValueError(
-                    f"plan requests {family}, but database contains {manifest.dataset}"
-                )
-            rows = connection.execute(select_sql, parameters).fetchall()
+    def execute(self, validated_plan: ValidatedPlan) -> ExecutedAggregation:
+        with open_validated_database(
+            validated_plan,
+            self.database_path,
+            oracle_kind="aggregate",
+        ) as (plan, connection, manifest):
+            select_sql, parameters = compile_aggregate_sql(plan)
+            bounded_sql = f"{select_sql} LIMIT ?"
+            bounded_parameters = [
+                *parameters,
+                validated_plan.receipt.max_candidate_rows + 1,
+            ]
+            rows = connection.execute(bounded_sql, bounded_parameters).fetchall()
+        require_candidate_budget(validated_plan, len(rows))
+        family = plan.product_families[0].value
         records = project_verifier_rows(
             rows,
             family=family,
@@ -247,6 +253,6 @@ class SQLiteAggregateOracle:
             total_group_count=total_group_count,
             groups=groups,
             manifest=manifest,
-            sql_template=select_sql,
-            sql_parameters=parameters,
+            sql_template=bounded_sql,
+            sql_parameters=bounded_parameters,
         )

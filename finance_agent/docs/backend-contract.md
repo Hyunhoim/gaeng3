@@ -1,6 +1,6 @@
 # Backend 전달용 Agent DTO v1
 
-마지막 갱신: 2026-08-07
+마지막 갱신: 2026-08-10
 
 ## 1. 목적
 
@@ -40,8 +40,18 @@ Pydantic request·response 계약이다. FastAPI route나 Next.js 타입은 이 
 | `not_found` | 잠긴 조건에서 결과 0건 | 조건 자동 완화 없이 수정 유도 |
 | `error` | 시스템 오류 | error code와 retryable에 따라 처리 |
 
-응답은 원래 intent, 상품군, 서버 QueryPlan, 후보 수, 상품·비교·집계·문서 evidence,
-구조화 citation, 기준일, warning, 답변 mode와 fallback 여부를 분리해 제공한다.
+`success`와 `not_found` 응답은 실행한 intent, 상품군, 서버 QueryPlan, 후보 수,
+상품·비교·집계·문서 evidence, 구조화 citation, 기준일, warning, 답변 mode와
+fallback 여부를 분리해 제공한다.
+
+`clarification`과 `unsupported`는 **실행 금지 control 응답**이다. 서버는 이 상태에서
+Oracle(SQL/Python 실행기)이나 생성 provider를 호출하지 않으며 QueryPlan, 후보 수,
+상품·비교·집계·문서 evidence, citation, 기준일, warning, provider model과 source
+manifest를 반환하지 않는다. intent도 부분 해석 결과를 보존하지 않고 각각
+`clarify` 또는 `unsupported`로 정규화한다. `clarification`만 필요한 조건을 구조화한
+`clarification` 객체를 포함하며, 두 상태 모두 `answer_mode=control`,
+`fallback_used=false`다. 공식 실행이 잠긴 공모펀드 요청도 현재는 실행 없이
+`unsupported`로 반환한다.
 
 복수 상품군 SEARCH에서는 최상위 `query_plan`·`source_manifest` 대신
 `family_searches`와 `source_manifests`를 사용한다. 각 family item은
@@ -110,6 +120,19 @@ QueryPlan provider 장애처럼 근거 실행을 시작하지 못한 시스템 �
 | 비정상 JSON·응답 계약 실패 | 502 | `provider_unavailable` | `true` |
 | SQLite·dataset I/O 실패 | 503 | `dataset_unavailable` | `true` |
 | 분류하지 못한 내부 예외 | 500 | `internal_error` | `false` |
+
+FastAPI는 위 Agent 내부 오류 경계 바깥에 프로세스 단위 실행 제한을 하나 더 둔다.
+기본 동시 Agent 작업 상한은 2개이며 환경설정으로 1~8 범위에서 조정한다. 대기열은
+만들지 않고 자리가 없으면 `POST /answer`는 HTTP 503, 바깥쪽 요청 시간이 끝나면
+HTTP 504를 반환한다. 두 경우 모두 현재 공개 error code는
+`provider_unavailable`, `retryable=true`를 재사용하며 상품·근거·QueryPlan을
+포함하지 않는다. 이는 provider 자체 장애와 실행 제어를 아직 별도 오류 enum으로
+분리하지 않은 현재 계약이다.
+
+timeout은 Python worker를 강제 종료하지 않고 협력적 deadline(남은 시간 신호)을
+전달한다. 따라서 provider나 하위 작업이 이 신호에 협력하지 않으면 HTTP 응답 뒤에도
+worker가 끝날 때까지 동시성 자리를 점유한다. 새 요청을 무제한으로 쌓지는 않지만,
+실제 HyperCLOVA X 연결 전 provider별 connect/read timeout을 더 짧게 확정해야 한다.
 
 상위 서비스가 요청 질문·credential·provider 오류 본문·파일 경로를 포함한
 예외를 던지더라도 공개 DTO에는 고정된 안전 문구만 사용한다. `error` 응답은
@@ -196,4 +219,6 @@ Agent Core 계약 2건과 Backend의 모든 응답 상태·예외·추가 parame
 평가 route에는 기본 55초의 바깥쪽 시간 예산을 둔다. 예산이 끝나면
 `control_code=request_timeout`, 빈 citation과 안전 문구를 담은 같은 다섯 문자열을
 HTTP 200으로 반환한다. 이 제한은 실행 중인 Python thread를 강제 종료하지 않으므로,
-실제 provider timeout은 55초보다 짧게 두고 동시 요청 상한도 별도로 확정해야 한다.
+실제 provider timeout은 55초보다 짧게 둬야 한다. 프로세스 동시 Agent 작업은
+기본 2개(허용 1~8)로 제한하고, 상한을 넘긴 요청은 실행하지 않은 채
+`control_code=request_overloaded`와 빈 citation을 같은 HTTP 200 계약으로 반환한다.

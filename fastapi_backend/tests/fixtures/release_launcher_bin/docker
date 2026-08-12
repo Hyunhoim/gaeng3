@@ -1,0 +1,5 @@
+#!/bin/sh
+printf "%s\n" "$@" > "$CAPTURE_FILE"
+if [ -n "${CAPTURE_ENV_FILE:-}" ]; then
+    env | sort > "$CAPTURE_ENV_FILE"
+fi

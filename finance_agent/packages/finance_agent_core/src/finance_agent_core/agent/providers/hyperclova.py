@@ -24,7 +24,14 @@ from finance_agent_core.agent.providers.local_test import (
     build_query_plan_system_prompt,
 )
 from finance_agent_core.contracts import QueryPlan, load_hcx_queryplan_schema
-from finance_agent_core.contracts.hcx_schema import validate_hcx_schema
+from finance_agent_core.contracts.hcx_schema import (
+    validate_hcx_payload,
+    validate_hcx_schema,
+)
+from finance_agent_core.deadline import (
+    RequestDeadlineExceeded,
+    remaining_request_timeout,
+)
 
 type HyperClovaXOperation = Literal[
     "query_plan",
@@ -223,6 +230,12 @@ class HyperClovaXClient:
             raise HyperClovaXConfigurationError(
                 "response schema is outside the documented HyperCLOVA X subset"
             ) from error
+        started = time.perf_counter()
+        try:
+            timeout_seconds = remaining_request_timeout(self.settings.timeout_seconds)
+        except RequestDeadlineExceeded:
+            self._emit(operation=operation, outcome="timeout", started=started)
+            raise HyperClovaXTimeoutError("HyperCLOVA X request timed out") from None
         request = HyperClovaXStructuredRequest(
             operation=operation,
             model=self.settings.model,
@@ -231,9 +244,8 @@ class HyperClovaXClient:
             schema_name=schema_name,
             response_schema=response_schema,
             max_output_tokens=max_output_tokens,
-            timeout_seconds=self.settings.timeout_seconds,
+            timeout_seconds=timeout_seconds,
         )
-        started = time.perf_counter()
         try:
             raw_response = self.transport.complete(request)
         except TimeoutError:
@@ -351,17 +363,19 @@ class HyperClovaXQueryPlanProvider:
             raise ValueError("question cannot be blank")
         if not question_id.strip():
             raise ValueError("question_id cannot be blank")
+        response_schema = load_hcx_queryplan_schema()
         content = self._client.complete(
             operation="query_plan",
             system_prompt=build_query_plan_system_prompt(question_id, question),
             user_prompt=question,
             schema_name="finance_query_plan",
-            response_schema=load_hcx_queryplan_schema(),
+            response_schema=response_schema,
             max_output_tokens=4096,
         )
         payload = parse_hcx_json_object(content, "QueryPlan")
         payload["question_id"] = question_id
         try:
+            validate_hcx_payload(response_schema, payload)
             payload = canonicalize_query_plan_payload(question, payload)
             payload["question_id"] = question_id
             plan = QueryPlan.model_validate(payload)
@@ -398,16 +412,18 @@ class HyperClovaXFundComparisonDraftProvider:
             raise ValueError("question cannot be blank")
         if not question_id.strip():
             raise ValueError("question_id cannot be blank")
+        response_schema = _fund_comparison_hcx_schema()
         content = self._client.complete(
             operation="fund_comparison_draft",
             system_prompt=build_fund_comparison_draft_system_prompt(question),
             user_prompt="질문에 실제로 적힌 비교 대상과 비교 항목만 추출해줘.",
             schema_name="fund_comparison_draft",
-            response_schema=_fund_comparison_hcx_schema(),
+            response_schema=response_schema,
             max_output_tokens=1024,
         )
         payload = parse_hcx_json_object(content, "fund comparison draft")
         try:
+            validate_hcx_payload(response_schema, payload)
             return FundComparisonDraft.model_validate(payload)
         except ValueError:
             raise HyperClovaXResponseError(

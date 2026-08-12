@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
+from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
 from finance_agent_core.agent import IntentRouter, RoutedFinanceAgent
+from finance_agent_core.release import ResolvedAgentRelease
 
 from app.config import Settings
 from app.main import create_app
@@ -24,6 +27,21 @@ class FakeAgentService:
         if self.error is not None:
             raise self.error
         return self._delegate.answer(question, request_id)
+
+
+def stub_resolved_release() -> ResolvedAgentRelease:
+    """Exact nominal release object for assembly-only tests that never execute it."""
+
+    return ResolvedAgentRelease(
+        manifest=SimpleNamespace(release_id="finance-agent-test-v1"),  # type: ignore[arg-type]
+        binding=SimpleNamespace(),  # type: ignore[arg-type]
+        manifest_path=Path("/nonexistent/test-agent-release.json"),
+        binding_path=Path("/nonexistent/test-deployment-binding.json"),
+        manifest_file_sha256="a" * 64,
+        binding_file_sha256="b" * 64,
+        release_context_sha256="c" * 64,
+        runtime_inputs=SimpleNamespace(),  # type: ignore[arg-type]
+    )
 
 
 @pytest.fixture

@@ -1,0 +1,24 @@
+# syntax=docker/dockerfile:1.7
+
+# Build the code-only base first with fastapi_backend/Dockerfile, push it, and
+# pass its immutable registry digest.  A mutable local-tag default is forbidden.
+ARG BACKEND_BASE_IMAGE
+FROM ${BACKEND_BASE_IMAGE}
+
+ARG BACKEND_BASE_IMAGE
+ARG FINANCE_SOURCE_COMMIT
+ARG FINANCE_RELEASE_ID
+ARG PYTHON_BASE_IMAGE
+
+USER root
+RUN install -d -o app -g app -m 0755 /app/release
+COPY --chown=app:app fastapi_backend/release/agent-release-manifest.json \
+    /app/release/agent-release-manifest.json
+RUN chmod 0444 /app/release/agent-release-manifest.json
+
+LABEL org.opencontainers.image.revision="${FINANCE_SOURCE_COMMIT}" \
+      org.opencontainers.image.base.name="${BACKEND_BASE_IMAGE}" \
+      ai.gaeng3.finance.python-base.name="${PYTHON_BASE_IMAGE}" \
+      ai.gaeng3.finance.release.id="${FINANCE_RELEASE_ID}"
+
+USER app

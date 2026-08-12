@@ -13,6 +13,13 @@ from typing import Any
 from finance_agent_core.audit.registry import DATASET_BY_NAME, resolve_inputs
 from finance_agent_core.config import load_field_registry
 from finance_agent_core.domain import DatabaseManifest
+from finance_agent_core.storage.approval import (
+    ApprovedDatasetManifest,
+    DatasetApprovalError,
+    load_approved_dataset_manifest,
+    require_approved_database,
+    require_approved_source_files,
+)
 from finance_agent_core.storage.bond import build_bond_database
 from finance_agent_core.storage.domestic_etp import build_domestic_etp_database
 from finance_agent_core.storage.public_fund import build_public_fund_database
@@ -22,7 +29,7 @@ from finance_agent_core.storage.sqlite import (
     load_manifest,
 )
 
-PREPARATION_CONTRACT_VERSION = "1"
+PREPARATION_CONTRACT_VERSION = "2"
 STATE_FILE_NAME = ".finance-data-state.json"
 DATASETS = ("bond", "domestic_etp", "overseas_etp", "fund")
 
@@ -169,6 +176,7 @@ def prepare_databases(
     force: bool = False,
     owner_uid: int | None = None,
     owner_gid: int | None = None,
+    approval: ApprovedDatasetManifest | None = None,
 ) -> dict[str, Any]:
     """Build or reuse all four normalized databases, then publish one ready state."""
 
@@ -184,6 +192,10 @@ def prepare_databases(
     destination_dir.mkdir(parents=True, exist_ok=True)
 
     registry_version = load_field_registry().schema_version
+    if approval is not None and approval.registry_schema_version != registry_version:
+        raise DatasetApprovalError(
+            "approved dataset registry version differs from the active field registry"
+        )
     previous_state = _load_state(destination_dir / STATE_FILE_NAME)
     contract_changed = (
         previous_state is None
@@ -192,7 +204,14 @@ def prepare_databases(
     results: dict[str, dict[str, Any]] = {}
 
     for dataset in DATASETS:
-        source_path, _ = resolve_inputs(source_dir, DATASET_BY_NAME[dataset])
+        source_path, schema_path = resolve_inputs(source_dir, DATASET_BY_NAME[dataset])
+        if approval is not None:
+            require_approved_source_files(
+                dataset,  # type: ignore[arg-type]
+                source_path,
+                schema_path,
+                approval=approval,
+            )
         source_sha256 = _sha256(source_path)
         database_path = destination_dir / f"{dataset}.sqlite3"
         ready, reason, _ = validate_prepared_database(
@@ -202,6 +221,16 @@ def prepare_databases(
             source_sha256=source_sha256,
             registry_schema_version=registry_version,
         )
+        if ready and approval is not None:
+            try:
+                require_approved_database(
+                    dataset,  # type: ignore[arg-type]
+                    database_path,
+                    approval=approval,
+                )
+            except DatasetApprovalError:
+                ready = False
+                reason = "database_approval_mismatch"
         previous_datasets = previous_state.get("datasets", {}) if previous_state else {}
         previous_dataset = (
             previous_datasets.get(dataset, {}) if isinstance(previous_datasets, dict) else {}
@@ -232,6 +261,12 @@ def prepare_databases(
             )
             if not ready or manifest is None:
                 raise RuntimeError(f"prepared {dataset} database failed validation: {reason}")
+            if approval is not None:
+                require_approved_database(
+                    dataset,  # type: ignore[arg-type]
+                    database_path,
+                    approval=approval,
+                )
             action = "built"
         else:
             action = "reused"
@@ -250,6 +285,9 @@ def prepare_databases(
         "registry_schema_version": registry_version,
         "datasets": results,
     }
+    if approval is not None:
+        state["approved_release_id"] = approval.release_id
+        state["approved_manifest_sha256"] = approval.canonical_sha256
     _write_state(destination_dir / STATE_FILE_NAME, state)
     _secure_outputs(destination_dir, owner_uid, owner_gid)
     return state
@@ -269,12 +307,14 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     arguments = build_parser().parse_args(argv)
+    approval = load_approved_dataset_manifest()
     state = prepare_databases(
         arguments.data_dir,
         arguments.output_dir,
         force=arguments.force,
         owner_uid=arguments.owner_uid,
         owner_gid=arguments.owner_gid,
+        approval=approval,
     )
     print(json.dumps(state, ensure_ascii=False, indent=2, sort_keys=True))
     return 0

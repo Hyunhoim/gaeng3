@@ -70,6 +70,9 @@ _CURATED_GROUP_PHRASES = {
     "investor_type": ("투자자유형", "투자자 유형"),
     "currency_hedged": ("환헤지여부", "환헤지 여부"),
 }
+_CURATED_NUMERIC_PHRASES = {
+    "aum": ("운용규모", "운용 규모"),
+}
 
 
 def _field_phrases(field_name: str, definition: Any) -> list[str]:
@@ -95,7 +98,11 @@ def _numeric_mentions(question: str, family: ProductFamily) -> list[_Mention]:
         if not definition.aggregatable or definition.value_type is not ValueType.NUMBER:
             continue
         best_by_span: dict[tuple[int, int], _Mention] = {}
-        for phrase in _field_phrases(field_name, definition):
+        phrases = {
+            *_field_phrases(field_name, definition),
+            *_CURATED_NUMERIC_PHRASES.get(field_name, ()),
+        }
+        for phrase in sorted(phrases, key=lambda value: (-len(value), value)):
             for match in re.finditer(re.escape(phrase), question, flags=re.IGNORECASE):
                 mention = _Mention(field_name, match.start(), match.end(), match.group(0))
                 span = (mention.start, mention.end)
@@ -139,7 +146,12 @@ def _group_fields(question: str, family: ProductFamily) -> list[str]:
     distribution_requested = _DISTRIBUTION.search(question) is not None
     explicit_etp_type_grouping = re.search(
         r"ETF인지\s*ETN인지|ETF와\s*ETN으로\s*(?:분류|구분)|"
-        r"ETF\s*여부별|ETP\s*유형별",
+        r"ETF\s*여부별|ETP\s*유형별|ETF\s*[·/]\s*ETN\s*유형별",
+        question,
+        flags=re.IGNORECASE,
+    )
+    explicit_bond_market_grouping = re.search(
+        r"장내\s*[·/]\s*장외\s*시장별",
         question,
         flags=re.IGNORECASE,
     )
@@ -159,6 +171,9 @@ def _group_fields(question: str, family: ProductFamily) -> list[str]:
         }
         if field_name == "product_type" and explicit_etp_type_grouping is not None:
             candidates.append((explicit_etp_type_grouping.start(), field_name))
+            continue
+        if field_name == "bond_market" and explicit_bond_market_grouping is not None:
+            candidates.append((explicit_bond_market_grouping.start(), field_name))
             continue
         for phrase in sorted(phrases, key=lambda value: (-len(value), value)):
             by_match = re.search(

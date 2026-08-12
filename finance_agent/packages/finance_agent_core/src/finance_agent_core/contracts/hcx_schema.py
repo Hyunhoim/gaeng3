@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 from importlib.resources import files
 from typing import Any, Literal
 
@@ -118,6 +119,99 @@ def validate_hcx_schema(schema: dict[str, Any]) -> None:
                 visit(child, f"{path}.anyOf[{index}]")
 
     visit(schema, "$")
+
+
+def validate_hcx_payload(schema: dict[str, Any], payload: Any) -> None:
+    """Validate one model response locally against the supported HCX schema subset.
+
+    Structured Outputs narrows model output, but it is not a trust boundary.  The
+    server repeats the relevant type, enum, range and object-shape checks before a
+    response can enter the finance contracts.
+    """
+
+    validate_hcx_schema(schema)
+
+    def is_number(value: Any) -> bool:
+        has_numeric_type = isinstance(value, (int, float)) and not isinstance(value, bool)
+        return has_numeric_type and math.isfinite(value)
+
+    def enum_contains(options: list[Any], value: Any) -> bool:
+        for option in options:
+            if isinstance(option, bool) != isinstance(value, bool):
+                continue
+            if option == value:
+                return True
+        return False
+
+    def visit(node: dict[str, Any], value: Any, path: str) -> None:
+        alternatives = node.get("anyOf")
+        if alternatives is not None:
+            matched = False
+            for child in alternatives:
+                try:
+                    visit(child, value, path)
+                except ValueError:
+                    continue
+                matched = True
+                break
+            if not matched:
+                raise ValueError(f"{path} must match at least one anyOf alternative")
+
+        node_type = node.get("type")
+        type_matches = {
+            "string": isinstance(value, str),
+            "number": is_number(value),
+            "boolean": isinstance(value, bool),
+            "integer": isinstance(value, int) and not isinstance(value, bool),
+            "object": isinstance(value, dict),
+            "array": isinstance(value, list),
+        }
+        if node_type is not None and not type_matches[node_type]:
+            raise ValueError(f"{path} does not match schema type {node_type}")
+
+        options = node.get("enum")
+        if options is not None and not enum_contains(options, value):
+            raise ValueError(f"{path} is outside the allowed enum")
+
+        if node_type in {"number", "integer"}:
+            minimum = node.get("minimum")
+            maximum = node.get("maximum")
+            if minimum is not None and value < minimum:
+                raise ValueError(f"{path} is below the allowed minimum")
+            if maximum is not None and value > maximum:
+                raise ValueError(f"{path} is above the allowed maximum")
+
+        if node_type == "object":
+            properties = node.get("properties", {})
+            required = node.get("required", [])
+            missing = [name for name in required if name not in value]
+            if missing:
+                raise ValueError(f"{path} is missing required properties")
+            extra = set(value) - set(properties)
+            if extra:
+                raise ValueError(f"{path} contains undeclared properties")
+            for name, child in properties.items():
+                if name in value:
+                    visit(child, value[name], f"{path}.{name}")
+
+        if node_type == "array":
+            minimum_items = node.get("minItems")
+            maximum_items = node.get("maxItems")
+            if minimum_items is not None and len(value) < minimum_items:
+                raise ValueError(f"{path} has fewer than the allowed items")
+            if maximum_items is not None and len(value) > maximum_items:
+                raise ValueError(f"{path} has more than the allowed items")
+            item_schema = node.get("items")
+            if item_schema is not None:
+                for index, item in enumerate(value):
+                    visit(item_schema, item, f"{path}[{index}]")
+
+        if node.get("format") is not None:
+            # Current finance response schemas do not use format.  Refuse to
+            # claim validation until a format receives an explicit local check.
+            raise ValueError(f"{path} uses an unsupported local format validator")
+
+    visit(schema, payload, "$")
 
 
 def validate_hcx_schema_registry_alignment(schema: dict[str, Any]) -> None:

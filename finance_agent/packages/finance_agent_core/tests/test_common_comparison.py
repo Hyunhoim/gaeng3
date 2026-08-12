@@ -19,6 +19,7 @@ from finance_agent_core.execution import (
     ComparisonResultVerifier,
     ResultVerifier,
     SQLiteOracle,
+    authorize_internal_evaluation_plan,
     build_product_comparison,
     build_product_evidence,
 )
@@ -263,7 +264,7 @@ def test_comparison_result_verifier_rejects_tampered_delta(
         "compare-overseas-003",
     )
     plan = agent.compiler.compile(decision)
-    executed = SQLiteOracle(path).execute(plan)
+    executed = SQLiteOracle(path).execute(authorize_internal_evaluation_plan(plan, path))
     with connect_read_only(path) as connection:
         universe = load_all_records(connection)
     verified = ResultVerifier().verify(plan, executed, universe)
@@ -301,7 +302,7 @@ def test_comparison_surfaces_as_of_and_stale_states(
         f"compare-overseas-{expected_status}",
     )
     plan = agent.compiler.compile(decision)
-    executed = SQLiteOracle(path).execute(plan)
+    executed = SQLiteOracle(path).execute(authorize_internal_evaluation_plan(plan, path))
     with connect_read_only(path) as connection:
         universe = load_all_records(connection)
     verified = ResultVerifier().verify(plan, executed, universe)

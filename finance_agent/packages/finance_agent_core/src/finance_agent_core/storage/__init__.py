@@ -1,3 +1,12 @@
+from finance_agent_core.storage.approval import (
+    ApprovedDataset,
+    ApprovedDatasetManifest,
+    DatasetApprovalError,
+    load_approved_dataset_manifest,
+    require_approved_database,
+    require_approved_database_paths,
+    require_approved_source_files,
+)
 from finance_agent_core.storage.bond import (
     build_bond_database,
     load_all_bond_records,
@@ -41,17 +50,21 @@ from finance_agent_core.storage.sqlite import (
 )
 
 __all__ = [
+    "ApprovedDataset",
+    "ApprovedDatasetManifest",
     "build_bond_database",
     "build_domestic_etp_database",
     "build_overseas_etp_database",
     "build_public_fund_database",
     "connect_read_only",
+    "DatasetApprovalError",
     "DatabaseFileVersion",
     "load_all_bond_records",
     "load_all_domestic_etp_records",
     "load_all_public_fund_records",
     "load_all_records",
     "load_manifest",
+    "load_approved_dataset_manifest",
     "load_product_identities",
     "load_record_snapshot_uncached",
     "load_public_fund_attributes",
@@ -62,6 +75,9 @@ __all__ = [
     "RecordCacheStats",
     "RecordSnapshot",
     "RecordSnapshotCache",
+    "require_approved_database",
+    "require_approved_database_paths",
+    "require_approved_source_files",
     "ProductIdentityCacheStats",
     "ProductIdentityRecord",
     "ProductIdentitySnapshot",

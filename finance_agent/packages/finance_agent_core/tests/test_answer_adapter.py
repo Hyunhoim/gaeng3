@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sqlite3
 from pathlib import Path
 
 import pytest
@@ -25,10 +26,14 @@ from finance_agent_core.contracts.backend import (
     BackendErrorCode,
     BackendStatus,
 )
+from finance_agent_core.contracts.queryplan import ProductFamily
+from finance_agent_core.contracts.routing import InteractionIntent
+from finance_agent_core.deadline import RequestDeadline, bind_request_deadline
 from finance_agent_core.domain import (
     DatabaseManifest,
     NormalizedOverseasEtpRecord,
 )
+from finance_agent_core.release import AgentReleaseCode, AgentReleaseError
 
 _QUESTION = (
     "미국 채권형 해외 ETF 중 현재 거래 가능한 상품에서 "
@@ -87,6 +92,7 @@ def _service(
             _SETTINGS,
             transport,
         ),
+        hclx_planning_enabled=True,
     )
 
 
@@ -120,76 +126,70 @@ def test_answer_adapter_returns_http_200_for_verified_result(
 
 
 @pytest.mark.parametrize(
-    ("transport_result", "expected_status", "expected_retryable"),
+    "transport_result",
     [
-        (
-            _transport_response(status_code=401, content=_SECRET),
-            503,
-            False,
-        ),
-        (
-            _transport_response(status_code=429, content=_SECRET),
-            503,
-            True,
-        ),
-        (
-            _transport_response(status_code=500, content=_SECRET),
-            503,
-            True,
-        ),
-        (
-            TimeoutError(_SECRET),
-            504,
-            True,
-        ),
-        (
-            ConnectionError(_SECRET),
-            503,
-            True,
-        ),
-        (
-            _transport_response(status_code=200, content="not-json"),
-            502,
-            True,
-        ),
+        _transport_response(status_code=401, content=_SECRET),
+        _transport_response(status_code=429, content=_SECRET),
+        _transport_response(status_code=500, content=_SECRET),
+        ConnectionError(_SECRET),
+        _transport_response(status_code=200, content="not-json"),
     ],
     ids=[
         "authentication",
         "rate_limit",
         "service",
-        "timeout",
         "transport",
         "invalid_response",
     ],
 )
-def test_answer_adapter_maps_provider_failure_without_leaking_details(
+def test_answer_adapter_keeps_non_timeout_planning_failure_on_server_plan(
     sample_database: tuple[
         Path,
         list[NormalizedOverseasEtpRecord],
         DatabaseManifest,
     ],
     transport_result: object,
-    expected_status: int,
-    expected_retryable: bool,
 ) -> None:
     path, _, _ = sample_database
     transport = ScriptedTransport(transport_result)
 
     result = execute_answer_request(
         _service(path, transport),
-        _request(f"answer-adapter-provider-{expected_status}"),
+        _request("answer-adapter-provider-server-plan"),
     )
     serialized = result.model_dump_json()
 
-    assert result.http_status_code == expected_status
+    assert result.http_status_code == 200
+    assert result.response.status is BackendStatus.SUCCESS
+    assert result.response.error is None
+    assert result.response.answer_mode is BackendAnswerMode.DETERMINISTIC
+    assert not result.response.fallback_used
+    assert result.response.products
+    assert _SECRET not in serialized
+
+
+def test_answer_adapter_maps_planning_timeout_without_leaking_details(
+    sample_database: tuple[
+        Path,
+        list[NormalizedOverseasEtpRecord],
+        DatabaseManifest,
+    ],
+) -> None:
+    path, _, _ = sample_database
+    result = execute_answer_request(
+        _service(path, ScriptedTransport(TimeoutError(_SECRET))),
+        _request("answer-adapter-provider-timeout"),
+    )
+
+    assert result.http_status_code == 504
     assert result.response.status is BackendStatus.ERROR
     assert result.response.error is not None
     assert result.response.error.code is BackendErrorCode.PROVIDER_UNAVAILABLE
-    assert result.response.error.retryable is expected_retryable
+    assert result.response.error.retryable
     assert result.response.answer_mode is BackendAnswerMode.CONTROL
     assert not result.response.fallback_used
     assert result.response.products == []
-    assert _SECRET not in serialized
+    assert _SECRET not in result.model_dump_json()
 
 
 def test_answer_adapter_maps_configuration_failure_as_non_retryable() -> None:
@@ -270,7 +270,60 @@ def test_answer_adapter_maps_missing_database_to_retryable_dataset_error(
     assert result.response.error is not None
     assert result.response.error.code is BackendErrorCode.DATASET_UNAVAILABLE
     assert result.response.error.retryable
+    assert result.response.intent is InteractionIntent.SEARCH
+    assert result.response.product_families == [ProductFamily.OVERSEAS_ETP]
     assert str(missing) not in result.model_dump_json()
+
+
+def test_answer_adapter_maps_stale_release_without_exposing_details() -> None:
+    class StaleReleaseService:
+        router = IntentRouter()
+
+        def answer(self, question: str, request_id: str):
+            raise AgentReleaseError(
+                AgentReleaseCode.STALE_RELEASE,
+                f"{_SECRET} /private/release/path",
+            )
+
+    result = execute_answer_request(
+        StaleReleaseService(),
+        BackendAgentRequest(
+            request_id="answer-adapter-release-001",
+            question=_QUESTION,
+        ),
+    )
+
+    assert result.http_status_code == 503
+    assert result.response.error is not None
+    assert result.response.error.code is BackendErrorCode.INTERNAL_ERROR
+    assert result.response.error.retryable
+    assert _SECRET not in result.model_dump_json()
+    assert "/private/release/path" not in result.model_dump_json()
+
+
+def test_answer_adapter_maps_deadline_sqlite_interrupt_to_timeout() -> None:
+    class InterruptedService:
+        router = IntentRouter()
+
+        def answer(self, question: str, request_id: str):
+            raise sqlite3.OperationalError("interrupted")
+
+    deadline = RequestDeadline.after(5)
+    deadline.cancel()
+    with bind_request_deadline(deadline):
+        result = execute_answer_request(
+            InterruptedService(),
+            BackendAgentRequest(
+                request_id="answer-adapter-deadline-sqlite-001",
+                question=_QUESTION,
+            ),
+        )
+
+    assert result.http_status_code == 504
+    assert result.response.error is not None
+    assert result.response.error.code is BackendErrorCode.PROVIDER_UNAVAILABLE
+    assert result.response.error.retryable
+    assert "시간이 초과" in result.response.answer
 
 
 def test_answer_adapter_maps_unexpected_failure_without_exception_text() -> None:

@@ -76,8 +76,9 @@ def test_smoke_cases_switch_only_fund_expectation_for_approved_policy() -> None:
     locked_fund = next(case for case in locked if "fund" in case.case_id)
     approved_fund = next(case for case in approved if "fund" in case.case_id)
 
-    assert locked_fund.expected_status == "clarification"
-    assert locked_fund.expected_clarification_code == "capability_executable"
+    assert locked_fund.expected_status == "unsupported"
+    assert locked_fund.expected_intent == "unsupported"
+    assert locked_fund.expected_clarification_code is None
     assert approved_fund.case_id == "docker-smoke-fund-approved-001"
     assert approved_fund.expected_status == "success"
     assert approved_fund.expected_product_count == 5

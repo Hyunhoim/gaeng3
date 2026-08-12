@@ -76,3 +76,12 @@ class RouteDecision(RoutingModel):
             }:
                 raise ValueError("clarification route requires a clarification reason")
         return self
+
+
+class RoutedExecutionError(RuntimeError):
+    """Carry the last trusted route across the private atomic error seam."""
+
+    def __init__(self, decision: RouteDecision, cause: Exception) -> None:
+        self.decision = RouteDecision.model_validate_json(decision.model_dump_json())
+        self.cause = cause
+        super().__init__("routed execution failed after a trusted route was established")

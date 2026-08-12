@@ -1,0 +1,523 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>금융상품 Agent P0 구현 전·후 핵심 보고서</title>
+  <style>
+    :root {
+      --bg: #f3f6fa;
+      --surface: #ffffff;
+      --surface-soft: #edf3f8;
+      --text: #172033;
+      --muted: #5f6b7e;
+      --line: #d4deea;
+      --navy: #12365e;
+      --blue: #176aa6;
+      --green: #147454;
+      --green-bg: #e9f7f0;
+      --amber: #8d5d08;
+      --amber-bg: #fff6dc;
+      --red: #a0343e;
+      --red-bg: #fff0f1;
+      --purple: #6547a8;
+      --purple-bg: #f2eefc;
+      --shadow: 0 10px 30px rgba(20, 42, 70, .08);
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      color: var(--text);
+      background: var(--bg);
+      font-family: Pretendard, "Noto Sans KR", "Apple SD Gothic Neo", system-ui, sans-serif;
+      line-height: 1.68;
+      word-break: keep-all;
+    }
+    a { color: var(--blue); text-underline-offset: 3px; }
+    code {
+      padding: .08rem .3rem;
+      border: 1px solid var(--line);
+      border-radius: 5px;
+      background: var(--surface-soft);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: .91em;
+      word-break: break-all;
+    }
+    .page { max-width: 1180px; margin: 0 auto; padding: 28px 24px 80px; }
+    .hero {
+      padding: clamp(28px, 5vw, 54px);
+      border-radius: 22px;
+      color: #fff;
+      background: linear-gradient(135deg, #102f55, #1b5d8a);
+      box-shadow: var(--shadow);
+    }
+    .eyebrow { margin: 0 0 9px; font-size: .82rem; font-weight: 800; letter-spacing: .11em; opacity: .82; }
+    h1, h2, h3 { line-height: 1.3; letter-spacing: -.025em; }
+    h1 { margin: 0; font-size: clamp(2rem, 4.5vw, 3.3rem); }
+    h2 { margin: 0 0 18px; color: var(--navy); font-size: clamp(1.5rem, 3vw, 2rem); }
+    h3 { margin: 24px 0 9px; color: var(--navy); font-size: 1.18rem; }
+    p { margin: 8px 0 14px; }
+    ul, ol { margin: 8px 0; padding-left: 1.35rem; }
+    li + li { margin-top: .38rem; }
+    .hero .lead { max-width: 900px; margin-top: 18px; font-size: 1.06rem; opacity: .95; }
+    .meta { display: flex; flex-wrap: wrap; gap: 6px 18px; margin-top: 22px; font-size: .85rem; opacity: .84; }
+    nav {
+      position: sticky;
+      top: 0;
+      z-index: 5;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px 8px;
+      margin: 18px 0 0;
+      padding: 11px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: color-mix(in srgb, var(--surface) 94%, transparent);
+      backdrop-filter: blur(10px);
+    }
+    nav a { padding: 6px 9px; border-radius: 7px; color: var(--text); font-size: .86rem; text-decoration: none; }
+    nav a:hover, nav a:focus-visible { background: var(--surface-soft); }
+    main section { scroll-margin-top: 82px; margin-top: 58px; }
+    .callout {
+      margin: 18px 0;
+      padding: 16px 18px;
+      border-left: 5px solid var(--blue);
+      border-radius: 8px;
+      background: var(--surface-soft);
+    }
+    .callout.success { border-left-color: var(--green); background: var(--green-bg); }
+    .callout.warning { border-left-color: var(--amber); background: var(--amber-bg); }
+    .callout.danger { border-left-color: var(--red); background: var(--red-bg); }
+    .callout p:last-child { margin-bottom: 0; }
+    .grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 14px; }
+    .card {
+      grid-column: span 6;
+      padding: 20px;
+      border: 1px solid var(--line);
+      border-radius: 13px;
+      background: var(--surface);
+      box-shadow: 0 4px 16px rgba(20, 42, 70, .04);
+    }
+    .card.third { grid-column: span 4; }
+    .card.full { grid-column: 1 / -1; }
+    .card h3 { margin-top: 3px; }
+    .metric .label { color: var(--muted); font-size: .8rem; font-weight: 750; }
+    .metric .value { margin: 5px 0 2px; color: var(--navy); font-size: 1.7rem; font-weight: 850; }
+    .metric .note { color: var(--muted); font-size: .82rem; }
+    .status {
+      display: inline-block;
+      padding: 3px 9px;
+      border-radius: 999px;
+      font-size: .75rem;
+      font-weight: 800;
+    }
+    .done { color: var(--green); background: var(--green-bg); }
+    .partial { color: var(--amber); background: var(--amber-bg); }
+    .blocked { color: var(--red); background: var(--red-bg); }
+    .planned { color: var(--purple); background: var(--purple-bg); }
+    .table-wrap { margin: 16px 0 24px; overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; }
+    table { width: 100%; border-collapse: collapse; background: var(--surface); font-size: .9rem; }
+    th, td { padding: 12px 13px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+    th { color: var(--navy); background: var(--surface-soft); font-size: .81rem; white-space: nowrap; }
+    tr:last-child td { border-bottom: 0; }
+    .number { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .flow {
+      display: flex;
+      align-items: stretch;
+      gap: 7px;
+      margin: 18px 0;
+      overflow-x: auto;
+      padding-bottom: 7px;
+    }
+    .flow-step {
+      min-width: 138px;
+      flex: 1;
+      padding: 13px 10px;
+      border: 1px solid var(--line);
+      border-radius: 9px;
+      background: var(--surface);
+      text-align: center;
+      font-size: .83rem;
+    }
+    .flow-step strong { display: block; margin-bottom: 4px; color: var(--navy); }
+    .arrow { align-self: center; color: var(--muted); font-weight: 900; }
+    .priority {
+      display: grid;
+      grid-template-columns: 54px minmax(160px, .7fr) minmax(280px, 1.8fr);
+      gap: 12px;
+      padding: 14px 0;
+      border-bottom: 1px solid var(--line);
+      font-size: .9rem;
+    }
+    .priority:last-child { border-bottom: 0; }
+    .priority > div:first-child { color: var(--navy); font-weight: 850; }
+    details { margin-top: 18px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+    summary { cursor: pointer; padding: 12px 14px; color: var(--navy); font-weight: 780; }
+    details > div { padding: 0 15px 15px; }
+    .small { color: var(--muted); font-size: .82rem; }
+    footer { margin-top: 62px; padding-top: 22px; border-top: 1px solid var(--line); color: var(--muted); font-size: .82rem; }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #111827; --surface: #182235; --surface-soft: #202d42; --text: #edf2f7;
+        --muted: #b1bed0; --line: #35445a; --navy: #b9dafa; --blue: #7fc4f3;
+        --green: #92e0bd; --green-bg: #183b32; --amber: #f0ca76; --amber-bg: #40351e;
+        --red: #ffabb1; --red-bg: #48262b; --purple: #d0b9ff; --purple-bg: #33294a;
+      }
+    }
+    @media (max-width: 760px) {
+      .page { padding: 14px 12px 58px; }
+      .hero { border-radius: 15px; }
+      nav { position: static; }
+      .card, .card.third { grid-column: 1 / -1; }
+      .flow { flex-direction: column; overflow: visible; }
+      .arrow { transform: rotate(90deg); }
+      .priority { grid-template-columns: 1fr; }
+    }
+    @media print {
+      :root { --bg: #fff; --surface: #fff; --surface-soft: #f5f5f5; --text: #111; --muted: #555; --line: #bbb; --navy: #111; }
+      .page { max-width: none; padding: 0; }
+      nav { display: none; }
+      .hero { color: #111; background: #fff; border: 2px solid #111; box-shadow: none; }
+      .card { box-shadow: none; break-inside: avoid; }
+      a { color: #111; text-decoration: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header class="hero">
+      <p class="eyebrow">미래에셋증권 AI Festival · 금융상품 Agent</p>
+      <h1>P0 구현 전·후 핵심 정리</h1>
+      <p class="lead">
+        이번 작업은 기존 검색 엔진을 새로 만든 것이 아니라, 심사 질문이 모호하거나 공격적이어도
+        <strong>주최 제공 데이터 밖으로 벗어나지 않도록 안전 경계를 강화한 작업</strong>이다.
+        팀원이 현재 수준과 다음 우선순위를 빠르게 이해할 수 있도록 핵심만 정리했다.
+      </p>
+      <div class="meta">
+        <span>기준일 2026-08-10</span>
+        <span>branch <strong>hyunhoim</strong></span>
+        <span>상태: P0 코드 구현·내부 검증 완료</span>
+        <span>Git 상태: hyunhoim → main PR 검토 단계</span>
+        <span>현 서비스 미배포</span>
+      </div>
+    </header>
+
+    <nav aria-label="보고서 목차">
+      <a href="#summary">한눈에 보기</a>
+      <a href="#before">변경 전</a>
+      <a href="#changes">핵심 보완</a>
+      <a href="#after">변경 후 흐름</a>
+      <a href="#verification">검증 결과</a>
+      <a href="#remaining">남은 과제</a>
+      <a href="#terms">용어 설명</a>
+    </nav>
+
+    <main>
+      <section id="summary">
+        <h2>1. 한눈에 보는 현재 상태</h2>
+        <div class="callout success">
+          <strong>핵심 결론:</strong> 요청한 P0 안전 보완 6개는 코드와 내부 테스트까지 완료했다.
+          수정 후 재시험 범위에서는 실행하면 안 되는 질문에 QueryPlan·상품·근거 같은 실행 결과가 노출되는 문제가 0건이었다.
+          다만 신규 독립 질문에 대한 일반화 검증과 실제 HyperCLOVA X 연결은 아직 남아 있다.
+        </div>
+
+        <div class="grid" aria-label="핵심 지표">
+          <div class="card third metric">
+            <div class="label">P0 요청 항목</div>
+            <div class="value">6 / 6</div>
+            <div class="note">코드 구현·내부 검증 완료</div>
+          </div>
+          <div class="card third metric">
+            <div class="label">전체 회귀 테스트</div>
+            <div class="value">892 + 54</div>
+            <div class="note">Agent Core 892, Backend 54 통과</div>
+          </div>
+          <div class="card third metric">
+            <div class="label">실서비스 반영</div>
+            <div class="value">대기</div>
+            <div class="note">현재 18001·18002는 기존 코드</div>
+          </div>
+        </div>
+
+        <h3>이 프로젝트가 지키는 기본 원칙</h3>
+        <ul>
+          <li><strong>싱글턴</strong>: 질문 1개에 독립 답변 1개만 처리한다. 이전 대화에 기대지 않는다.</li>
+          <li><strong>제공 데이터 우선</strong>: 국내채권 42,394행, 국내 ETP 1,734행, 해외 ETP 5,646행, 공모펀드 원천 95,619행(논리 상품으로 정규화)을 기준으로 답한다.</li>
+          <li><strong>숫자는 코드가 계산</strong>: LLM이 수치·순위·상품을 만들어내지 않고 SQLite/Python이 계산한다.</li>
+          <li><strong>확인 불가 시 멈춤</strong>: 데이터로 확인할 수 없거나 기준이 모호하면 역질문 또는 미지원으로 처리한다.</li>
+          <li><strong>평가·제출 LLM은 HCLX만</strong>: Qwen은 이번 작업에 사용하지 않았고 평가 경로에도 사용할 수 없다.</li>
+        </ul>
+      </section>
+
+      <section id="before">
+        <h2>2. 변경 전 구현 단계</h2>
+        <p>
+          변경 전에도 금융상품 검색의 중심 구조는 이미 있었다.
+          QueryPlan(질문을 DB가 실행할 수 있는 조건표), Oracle(SQLite/Python으로 정답을 계산하는 실행기),
+          Verifier(결과를 다시 확인하는 재검산기), 근거·기준일 출력까지 연결돼 있었다.
+        </p>
+
+        <div class="flow" aria-label="변경 전 처리 흐름">
+          <div class="flow-step"><strong>질문</strong>자연어 입력</div><div class="arrow">→</div>
+          <div class="flow-step"><strong>Router</strong>의도·상품군 분류</div><div class="arrow">→</div>
+          <div class="flow-step"><strong>QueryPlan</strong>조건표 생성</div><div class="arrow">→</div>
+          <div class="flow-step"><strong>Oracle</strong>DB 검색·계산</div><div class="arrow">→</div>
+          <div class="flow-step"><strong>Verifier</strong>결과 재검산</div><div class="arrow">→</div>
+          <div class="flow-step"><strong>답변</strong>근거·기준일 포함</div>
+        </div>
+
+        <div class="callout warning">
+          문제는 검색·계산 기능 자체보다 <strong>질문이 실행되기 전의 안전 검사</strong>가 충분하지 않았다는 점이다.
+          공격 문장, 제공 데이터 밖 상품, 모호한 조건, 잘못된 정렬 방향이 DB 실행 단계까지 내려갈 가능성이 있었고,
+          역질문·미지원 응답에도 부분 QueryPlan이나 상품 근거가 남을 수 있었다.
+        </div>
+      </section>
+
+      <section id="changes">
+        <h2>3. 핵심 수정·보완 내용</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>항목</th><th>변경 전 문제</th><th>핵심 보완</th><th>변경 후 효과</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>SafetyEnvelope</strong><br><span class="small">안전 출입문</span></td>
+                <td>공격 지시·실거래·실시간 정보·데이터 밖 질문을 한곳에서 선차단하지 못함</td>
+                <td>Router보다 먼저 질문을 검사해 보안 우회, 가짜·외부 상품, 주문 실행, 미래 전망, 비금융 요청 등을 차단</td>
+                <td>위험 질문이 QueryPlan·DB 실행으로 내려가기 전에 중단</td>
+              </tr>
+              <tr>
+                <td><strong>Semantic Coverage Gate</strong><br><span class="small">의미 누락 검사</span></td>
+                <td>“수익률 높은”, “규모 큰”, “안전한”처럼 기준이 여러 개인 표현이 축소 해석될 수 있음</td>
+                <td>질문의 조건이 실제 필드와 연산자로 빠짐없이 표현되는지 검사</td>
+                <td>기간·통화·지표를 확정할 수 없으면 추측 실행 대신 역질문</td>
+              </tr>
+              <tr>
+                <td><strong>모호 조건·방향 보완</strong></td>
+                <td>가나다순, 오래된/빠른 날짜, 운용규모=AUM, 제외 조건, “하나 보여줘” 등의 해석이 불완전</td>
+                <td>정렬 방향을 대상 필드와 묶고, 별칭·제외·결과 개수 표현을 보완</td>
+                <td>엉뚱한 필드 정렬과 반대 조건 실행을 줄임</td>
+              </tr>
+              <tr>
+                <td><strong>Manifest</strong><br><span class="small">허용 데이터 목록</span></td>
+                <td>DB가 스스로 일관적인지는 확인했지만, 주최 제공 파일 중 어떤 묶음을 허용할지 고정하지 않음</td>
+                <td>주최 제공 파일을 팀이 hash·크기·행 수·기준일로 고정한 manifest 추가</td>
+                <td>evaluation/production에서 다른 원천이나 변조 DB가 섞이면 시작·요청·health 단계에서 거절</td>
+              </tr>
+              <tr>
+                <td><strong>Safety blind</strong><br><span class="small">봉인 최초 시험</span></td>
+                <td>기존 공개 회귀만으로 새 공격 질문에 대한 안전성을 판단하기 어려움</td>
+                <td>192개 질문과 기대값을 실행 전에 봉인하고 최초 결과를 보존</td>
+                <td>실패를 숨기지 않고 봉인 최초 실행 70/192와 수정 후 재시험 135/192를 분리 관리</td>
+              </tr>
+              <tr>
+                <td><strong>Timeout·동시성</strong></td>
+                <td>응답 timeout 뒤 내부 작업이 계속되거나 요청이 쌓일 수 있음</td>
+                <td>전체 시간 예산과 기본 동시 실행 2개를 두고, 내부 계산과 provider에도 남은 시간을 전달</td>
+                <td>과부하 시 무한 대기열 대신 안전한 overload/timeout 응답</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="callout">
+          <strong>추가 경계 강화:</strong> Oracle 직전에 실행 권한을 한 번 더 확인한다.
+          clarification/unsupported 같은 control 응답은 QueryPlan, 후보 수, 상품, citation, manifest 등 실행 상태를 포함할 수 없도록 DTO(외부 응답 형식) 규칙도 강화했다.
+          이 DTO 의미 변경은 조해영 담당 Core 계약과 연결되므로 main merge 전에 계약 리뷰와 합의가 필요하다.
+        </div>
+      </section>
+
+      <section id="after">
+        <h2>4. 변경 후 구현 단계</h2>
+        <div class="flow" aria-label="변경 후 처리 흐름">
+          <div class="flow-step"><strong>요청 제한</strong>시간·동시성 확인</div><div class="arrow">→</div>
+          <div class="flow-step"><strong>SafetyEnvelope</strong>위험·범위 검사</div><div class="arrow">→</div>
+          <div class="flow-step"><strong>Router + Gate</strong>의도·모호성 확인</div><div class="arrow">→</div>
+          <div class="flow-step"><strong>QueryPlan</strong>실행 조건 확정</div><div class="arrow">→</div>
+          <div class="flow-step"><strong>권한 재확인</strong>실행 가능 여부 검사</div><div class="arrow">→</div>
+          <div class="flow-step"><strong>Oracle + Verifier</strong>검색·계산·재검산</div><div class="arrow">→</div>
+          <div class="flow-step"><strong>DTO</strong>근거 있는 답변</div>
+        </div>
+
+        <div class="grid">
+          <article class="card">
+            <span class="status done">현재 구현</span>
+            <h3>결정론적 경로</h3>
+            <p>현재 실제 <code>/answer</code>는 HCLX를 호출하지 않는다. SQLite/Python과 규칙 기반 renderer가 검색·계산·답변을 처리하며 <code>provider_model=null</code>이다.</p>
+          </article>
+          <article class="card">
+            <span class="status partial">공개 잠금</span>
+            <h3>공모펀드</h3>
+            <p>데이터·Oracle·Verifier 내부 경로는 구현돼 있지만, 기본 Backend에서는 공개 실행 flag가 잠겨 있다. 팀 검수와 별도 승인 전에는 실행하지 않는다.</p>
+          </article>
+          <article class="card">
+            <span class="status partial">계약만 완료</span>
+            <h3>HyperCLOVA X</h3>
+            <p>QueryPlan·비교 draft·근거 답변을 위한 HCLX provider(모델 호출 모듈)의 연결 규칙과 모의 통신은 있다. 실제 HCLX HTTP 통신, 인증정보, FastAPI 연결은 아직 없다.</p>
+          </article>
+          <article class="card">
+            <span class="status planned">미구현</span>
+            <h3>Dense Retrieval·Re-ranker</h3>
+            <p>현재는 구현하지 않았다. BM25/lexical 검색 실패가 새 blind에서 확인되고 정확도 개선과 지연 비용이 입증될 때만 추가한다.</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="verification">
+        <h2>5. 검증 결과와 올바른 해석</h2>
+        <div class="grid">
+          <div class="card third metric">
+            <div class="label">Agent Core</div>
+            <div class="value">892 / 892</div>
+            <div class="note">전체 pytest 통과</div>
+          </div>
+          <div class="card third metric">
+            <div class="label">FastAPI Backend</div>
+            <div class="value">54 / 54</div>
+            <div class="note">route·승인·timeout 포함</div>
+          </div>
+          <div class="card third metric">
+            <div class="label">실제 HTTP·Docker</div>
+            <div class="value">11 + 14</div>
+            <div class="note">안전 HTTP 11, smoke 14 통과</div>
+          </div>
+        </div>
+
+        <div class="grid" style="margin-top:14px">
+          <article class="card">
+            <span class="status blocked">봉인 최초 실행</span>
+            <h3>Safety blind v2: 70 / 192</h3>
+            <p>Agent 응답을 보기 전에 Codex가 질문과 기대값을 작성·봉인한 runtime-behavior-blind 결과다. 사람 금융 전문가가 만든 독립 도메인 blind나 double-blind는 아니다.</p>
+          </article>
+          <article class="card">
+            <span class="status partial">수정 후 재시험</span>
+            <h3>Non-blind Remediation: 135 / 192</h3>
+            <p>같은 문제의 실패를 본 뒤 수정 효과를 확인한 결과다. 개선 확인에는 유용하지만 새로운 blind 점수로 발표하면 안 된다.</p>
+          </article>
+        </div>
+
+        <div class="callout success">
+          수정 후 재시험 범위에서는 실행하면 안 되는 control 응답에 QueryPlan·상품·근거·manifest 같은 실행 DTO가 노출되는 실패가 0건이었다.
+          남은 실패 57건은 대부분 응답 label 차이, 공모펀드 잠금 정책, 원 문항 오타, 통화 기준 차이였다.
+        </div>
+        <div class="callout warning">
+          이 결과가 모든 새 질문의 안전성을 보장하는 것은 아니다. 또한 provider 호출을 별도로 계측해 “실제 호출 0건”을 증명한 결과도 아니다.
+          현재 테스트 수치는 이 보고서와 함께 PR에 포함되는 P0 후보 코드 기준이며, 운영 중인 18001·18002 서비스에는 아직 반영되지 않았다.
+        </div>
+      </section>
+
+      <section id="remaining">
+        <h2>6. 남은 핵심 과제</h2>
+        <h3>가장 먼저 할 일</h3>
+        <div class="priority">
+          <div>1</div><div><strong>Core·DTO 계약 리뷰</strong></div>
+          <div>조해영과 control 응답의 QueryPlan·근거 금지 규칙, timeout 오류 표현을 합의한다.</div>
+        </div>
+        <div class="priority">
+          <div>2</div><div><strong>Staging 재검증</strong></div>
+          <div>팀이 고정한 DB를 처음부터 다시 만드는 경우와 기존 DB를 재사용하는 경우를 모두 확인한다. 전체 테스트, 공식 모의평가, 공격 질문(red-team), 금융 도메인 QA, Docker smoke를 다시 실행해 새 평가 결과 파일로 보존하고 기존 최초 결과는 덮어쓰지 않는다.</div>
+        </div>
+        <div class="priority">
+          <div>3</div><div><strong>신규 사람 작성 blind</strong></div>
+          <div>박재모가 안전 경계와 도메인 정확도 질문을 새로 작성하고, 코드 freeze 후 정답을 봉인해 최초 한 번 평가한다.</div>
+        </div>
+        <div class="priority">
+          <div>4</div><div><strong>질문 로그 보호</strong></div>
+          <div>공식 GET query string의 평가 질문이 Uvicorn·proxy 로그에 원문으로 남지 않도록 질문 원문을 가린다. 노출 확인용 가짜 질문으로 통합 테스트한다.</div>
+        </div>
+
+        <h3>제출 전에 반드시 필요한 일</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>우선 과제</th><th>현재 상태</th><th>완료 기준</th></tr></thead>
+            <tbody>
+              <tr>
+                <td><strong>실제 HCLX 연결</strong></td>
+                <td>HCLX 연결 규칙과 모의 통신만 구현</td>
+                <td>공식 endpoint·model ID·인증 header 확인, 비밀정보를 안전하게 주입하고 실제 HCLX HTTP 통신을 Backend에 연결한다. 인증·과부하·서버 오류·timeout도 검증한다. QueryPlan 오류는 DB 실행 없이 안전 오류로 끝내고, 답변 생성 오류는 검증된 deterministic fallback(규칙 기반 대체 답변)을 사용한다.</td>
+              </tr>
+              <tr>
+                <td><strong>공모펀드 공개 flag 승인</strong></td>
+                <td>내부 기능 완료·기본 locked</td>
+                <td>SEARCH/DETAIL/COMPARE/AGGREGATE/EXPLAIN 공식 GET, 통화·기준일·근거·장애 회귀 후 versioned flag 승인.</td>
+              </tr>
+              <tr>
+                <td><strong>NCP Public API</strong></td>
+                <td>현재 127.0.0.1 내부 bind</td>
+                <td>공식 인증·IP·TLS·QPS 확인, Public endpoint, 방화벽, 자동 재기동, health/alert, 평가기간 가용성 검증.</td>
+              </tr>
+              <tr>
+                <td><strong>성능·응답 크기</strong></td>
+                <td>기본 동시 실행 2로 안전 제한</td>
+                <td>NCP에서 서버 첫 실행(cold)과 재실행(warm), 동시 요청 1/2/4/8, 일반·지연 응답시간, CPU·메모리, 응답 크기, HCLX token·비용을 측정한다. 완전히 멈춘 모델 호출은 작업 프로세스를 재시작해 회수한다.</td>
+              </tr>
+              <tr>
+                <td><strong>데이터 기준일 확정</strong></td>
+                <td>설명회 7월 10일, manifest 7월 11일, 상품별 동적 기준일이 함께 존재</td>
+                <td>날짜 의미와 0·결측·판매/거래 코드 의미를 공식 schema·서면으로 확인하고 registry·근거·문서를 함께 갱신.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>필요성이 확인될 때만 추가</h3>
+        <ul>
+          <li><strong>문서 RAG</strong>: 현재 BM25/SQLite FTS 최소 기능만 있다. 출처·라이선스·기준일이 승인된 실제 corpus를 확보한 뒤 연결한다.</li>
+          <li><strong>Dense Retrieval·Re-ranker</strong>: 새 blind에서 의미 검색 실패가 확인되고 정확도 향상과 지연 비용이 입증될 때만 도입한다.</li>
+          <li><strong>Ontology·Frontend</strong>: TTL 5개는 구현돼 있다. 금융 label 검수와 주최 형식 확인 후, 본선 시연 필요가 확정되면 얇은 UI를 연결한다.</li>
+        </ul>
+
+        <div class="callout danger">
+          <strong>계속 차단해야 하는 범위:</strong> 멀티턴, 실시간 시세·뉴스, 실제 주문·계좌 접근, 수익 전망·보장,
+          제공 데이터 밖 상품 추천, 상품군 간 근거 없는 합산은 “남은 기능”이 아니라 현재 정책상 미지원이다.
+        </div>
+      </section>
+
+      <section id="terms">
+        <h2>7. 핵심 용어 쉬운 설명</h2>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>용어</th><th>쉬운 설명</th></tr></thead>
+            <tbody>
+              <tr><td>QueryPlan</td><td>질문을 DB가 실행할 수 있도록 상품군·필터·정렬·계산을 적은 조건표</td></tr>
+              <tr><td>Oracle</td><td>SQLite/Python으로 실제 상품과 숫자를 계산하는 정답 계산기</td></tr>
+              <tr><td>Verifier</td><td>Oracle 결과의 상품 ID·수치·순위·근거를 다시 확인하는 재검산기</td></tr>
+              <tr><td>SafetyEnvelope</td><td>질문이 내부 실행으로 들어가기 전 위험·범위 위반을 막는 안전 출입문</td></tr>
+              <tr><td>Semantic Coverage Gate</td><td>질문의 조건이 QueryPlan에 빠짐없이 반영됐는지 확인하는 검사</td></tr>
+              <tr><td>Manifest</td><td>허용한 데이터 파일의 hash·행 수·기준일을 적은 목록</td></tr>
+              <tr><td>DTO</td><td>Backend가 외부에 반환하는 응답 데이터 형식</td></tr>
+              <tr><td>Blind 평가</td><td>구현자가 실행 결과를 보기 전에 문제와 정답을 봉인하고 치르는 첫 시험</td></tr>
+              <tr><td>Remediation</td><td>실패를 본 뒤 수정 효과를 확인하는 재시험. 새 blind 점수는 아님</td></tr>
+              <tr><td>Fail-closed</td><td>애매하거나 검증에 실패하면 추측 실행하지 않고 멈추는 원칙</td></tr>
+              <tr><td>RAG</td><td>관련 문서를 먼저 찾고 그 근거로 답하는 방식</td></tr>
+              <tr><td>Dense Retrieval / Re-ranker</td><td>문장 의미로 후보를 찾고, 1차 후보를 다시 정교하게 정렬하는 검색 단계</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <details>
+          <summary>핵심 코드·평가 파일</summary>
+          <div>
+            <ul>
+              <li><a href="../finance_agent/packages/finance_agent_core/src/finance_agent_core/agent/safety.py">SafetyEnvelope 코드</a></li>
+              <li><a href="../finance_agent/packages/finance_agent_core/src/finance_agent_core/agent/semantic_gate.py">Semantic Coverage Gate 코드</a></li>
+              <li><a href="../finance_agent/packages/finance_agent_core/src/finance_agent_core/storage/approval.py">데이터 manifest 검증 코드</a></li>
+              <li><a href="../fastapi_backend/app/request_execution.py">Timeout·동시성 코드</a></li>
+              <li><a href="../finance_agent/evaluation/safety_blind_v2/README.md">Safety blind v2 설명</a></li>
+              <li><a href="../finance_agent/evaluation/safety_blind_v2_remediation/README.md">Remediation 설명</a></li>
+            </ul>
+          </div>
+        </details>
+      </section>
+    </main>
+
+    <footer>
+      <p><strong>정확한 현재 단계:</strong> P0 코드 구현과 내부 검증 완료 → Core 계약 리뷰·staging·신규 사람 작성 blind 대기.</p>
+      <p>이 변경은 hyunhoim → main PR에서 검토하며, merge와 운영 배포는 별도 승인 후 진행한다.</p>
+    </footer>
+  </div>
+</body>
+</html>

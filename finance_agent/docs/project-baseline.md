@@ -1,7 +1,7 @@
 # 금융상품 Agent 현재 프로젝트 기준
 
 상태: 현재 정본
-기준일: 2026-08-07
+기준일: 2026-08-12
 대상 저장소: `https://github.com/Hyunhoim/gaeng3`
 
 ## 1. 한 문장 목표
@@ -118,8 +118,10 @@
 - HyperCLOVA X QueryPlan·공모펀드 비교 초안·근거 답변 provider가 공유하는
   semantic structured request와 주입형 transport 계약을 구현했다. 공식
   mode/provider gate, HCX schema subset, token·latency 관측, 인증·rate limit·
-  timeout·서비스·응답 오류를 fake transport로 검증했다. 실제 endpoint·인증
-  header·HTTP transport와 공식 재현은 아직 외부 게이트다.
+  timeout·서비스·응답 오류를 fake transport로 검증했다. 공식 Direct v3 endpoint,
+  Bearer 인증, Structured Outputs HTTP transport와 FastAPI optional QueryPlan·grounded
+  answer 무호출 배선까지 구현했다. 실제 API Key 인증·HCX-007 권한·응답 호환성·latency는
+  아직 외부 게이트다. HCLX grounded planning provider의 production 배선은 아직 없다.
 - SEARCH는 공통 Router와 서버 기준 QueryPlan을 먼저 통과한 뒤 HCX QueryPlan이
   완전히 일치할 때만 Oracle을 실행하도록 선택 주입했다. API 없는 전체 경로
   8개 시나리오에서 세 실행 상품군 Backend DTO, Answer Verifier fallback,
@@ -180,9 +182,9 @@
   94, 검색 상품군·근거 문법으로 153, 명확한 비용·티커 Router로 170까지 단계별
   사후 회귀했다. 최신 실행 의미 보조 strict는 242/391이며, 각 검색 단계의 기존
   통과 문항 퇴행은 0건이다. 이는 개발에 사용한 같은 질문의 회귀이지 blind가 아니다.
-- 전체 Agent Core 회귀는 pytest 507개, Backend 회귀는 34개이며 Ruff lint·format,
-  pip dependency check와
-  wheel 빌드를 통과했다.
+- pre-HCX 동결 시점의 Agent Core pytest 507개·Backend 34개 기록은 역사 baseline으로
+  보존한다. 현재 작업 트리 전체 회귀는 Agent Core 1,061개·Backend 162개이며 Ruff
+  lint·format을 통과했다.
 - Docker `data-init`은 읽기 전용 공식 XLSX에서 네 SQLite를 자동 생성·검증하고,
   같은 원천과 registry에서는 재사용한다. 모든 DB 준비가 성공한 뒤에만 Backend를
   시작하며 Backend에는 생성 volume을 읽기 전용으로 연결한다.
@@ -228,7 +230,7 @@
 
 | 구성요소 | 개발 단계 | 평가·제출 경로 | 현재 결정 |
 | --- | --- | --- | --- |
-| HyperCLOVA X | 요청·응답·오류 계약과 fake transport 완료 | 허용·필수 | 크레딧·정확한 모델 ID·endpoint·인증 규격 확보 전 실연결 보류 |
+| HyperCLOVA X | 요청·응답·오류 계약, Direct v3 HTTP transport와 FastAPI 무호출 배선 완료 | 허용·필수 | 실제 API Key·HCX-007 권한·응답 호환성 확인 전 호출 보류 |
 | Mock/fixture provider | 기본 테스트와 CI | 실제 답변 생성에 사용하지 않음 | 항상 유지 |
 | `Qwen/Qwen3-30B-A3B-Instruct-2507-FP8` | 명시적으로 켠 로컬 실험만 | 금지 | 임시 개발 provider |
 | 다른 생성형 LLM/VLM | 사용하지 않음 | 금지 | 제외 |
@@ -249,7 +251,9 @@
 - 로컬 endpoint는 기본적으로 `http://127.0.0.1:18000/v1`에만 노출한다.
 - evaluation·production 설정은 provider가 HyperCLOVA X가 아니면 시작 단계에서
   실패한다. service adapter는 이 설정 오류를 안전한 비재시도 ERROR DTO로 변환한다.
-  실제 FastAPI route와 네트워크 transport는 아직 없다.
+  실제 FastAPI route와 Direct v3 HTTP transport는 구현했지만, API Key 파일을 사용한
+  외부 호출은 아직 수행하지 않았다. QueryPlan과 grounded answer만 production 조립하며
+  HCLX grounded planning provider는 별도 평가 전까지 미배선이다.
 - 로컬 모델의 응답·로그·캐시·가중치는 Git과 제출물에서 제외한다.
 - 공식 제출 범위를 서면으로 확인한 뒤 제출 후보의
   로컬 provider·설정·스크립트·의존성을 제거하고 자동 검사한다.
@@ -393,8 +397,10 @@ QueryPlan에는 최소한 intent, 상품군, 필수 조건, 완화 전 확인이
   SQLite 로컬 HTTP 경로로 재현한다.
 - [x] Ubuntu SSH Docker에서 이미지 build·health·네 상품군 정책·제어 응답과
   공식 GET 예외 입력을 실제 HTTP 14개 요청으로 재현한다.
-- [ ] 공식 endpoint·인증 계약에 맞는 HyperCLOVA X HTTP transport를 연결하고
-  주최 측 실행 환경에서 재현한다.
+- [x] 공식 endpoint·Bearer 인증·Structured Outputs 계약에 맞는 HyperCLOVA X HTTP
+  transport와 FastAPI 무호출 조립을 구현한다.
+- [ ] 실제 API Key로 인증·HCX-007 권한·응답 호환성을 확인하고 NCP 실행 환경에서
+  최소 호출을 재현한다.
 
 ### P3 — 평가 확장
 

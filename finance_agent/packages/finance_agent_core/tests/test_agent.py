@@ -19,7 +19,11 @@ def test_mock_agent_completes_verified_vertical_slice(
     sample_database: tuple[Path, list[NormalizedOverseasEtpRecord], DatabaseManifest],
 ) -> None:
     path, _, _ = sample_database
-    response = FinanceAgent(path, MockProvider()).answer(
+    response = FinanceAgent(
+        path,
+        MockProvider(),
+        allow_unapproved_database=True,
+    ).answer(
         "미국 채권형 해외 ETF 중 총보수 0.20% 이하를 AUM 순으로 보여줘",
         "agent-001",
     )
@@ -35,6 +39,17 @@ def test_mock_agent_completes_verified_vertical_slice(
     ]
     assert "수익을 보장" in response.answer
     assert len(response.warnings) == 3
+
+
+def test_legacy_agent_requires_explicit_offline_unapproved_mode(sample_database) -> None:
+    path, _, _ = sample_database
+
+    with pytest.raises(ValueError, match="offline-only"):
+        FinanceAgent(
+            path,
+            MockProvider(),
+            allow_unapproved_database=False,
+        )
 
 
 def test_routed_agent_completes_server_compiled_grounded_path(
@@ -137,20 +152,16 @@ def test_routed_agent_never_touches_tools_for_control_route() -> None:
     assert clarify.status == "clarify"
     assert clarify.query_plan is None
     assert negated_public.status == "unsupported"
-    assert negated_public.query_plan is not None
-    assert negated_public.query_plan.unsupported_conditions
+    assert negated_public.query_plan is None
     assert negated_public.products == []
     assert negated_trade.status == "clarify"
-    assert negated_trade.query_plan is not None
-    assert negated_trade.query_plan.ambiguities
+    assert negated_trade.query_plan is None
     assert negated_trade.products == []
     assert negated_rank.status == "clarify"
-    assert negated_rank.query_plan is not None
-    assert negated_rank.query_plan.ambiguities
+    assert negated_rank.query_plan is None
     assert negated_rank.products == []
     assert excluded_identity.status == "clarify"
-    assert excluded_identity.query_plan is not None
-    assert excluded_identity.query_plan.ambiguities
+    assert excluded_identity.query_plan is None
     assert excluded_identity.products == []
 
 

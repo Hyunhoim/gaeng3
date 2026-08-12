@@ -25,6 +25,7 @@ from finance_agent_core.contracts.queryplan import (
     SortDirection,
 )
 from finance_agent_core.domain import DatabaseManifest, NormalizedOverseasEtpRecord
+from finance_agent_core.execution import PlanCompilerKind
 from finance_agent_core.storage import write_database
 
 _QUESTION = (
@@ -486,8 +487,12 @@ def test_grounded_gate_rejects_ranking_subspan_hidden_inside_negation() -> None:
         }
     )
 
+    # The public router now rejects this phrase before a grounded provider can
+    # run.  Use an independently executable route here so this lower-level gate
+    # remains covered as defense in depth against a caller that reaches it.
+    decision = IntentRouter().route(_QUESTION, proposal.question_id)
     with pytest.raises(GroundedPlanRejectedError, match="ranking evidence is negated"):
-        _compile(proposal, question)
+        GroundedPlanGate({}).compile(question, decision, proposal)
 
 
 def test_grounded_gate_does_not_turn_negated_public_fund_into_public_scope() -> None:
@@ -656,6 +661,61 @@ def test_local_provider_rejects_malformed_grounded_transport_payload(
         )
 
 
+class _StaticGroundedPlanProvider:
+    @property
+    def provider_name(self) -> str:
+        return "static_test"
+
+    @property
+    def model_name(self) -> str:
+        return "static-grounded-model"
+
+    def generate_grounded_plan(
+        self,
+        question: str,
+        question_id: str,
+        product_family_hint: ProductFamily | None = None,
+    ) -> GroundedPlanProposal:
+        del question, product_family_hint
+        return _proposal(question_id)
+
+
+def test_grounded_execution_rebinds_planning_and_records_true_provenance(
+    sample_database: tuple[Path, list[NormalizedOverseasEtpRecord], DatabaseManifest],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    path, _, _ = sample_database
+    agent = RoutedFinanceAgent(
+        {"overseas_etp": path},
+        grounded_plan_provider=_StaticGroundedPlanProvider(),
+        hclx_planning_enabled=True,
+    )
+    issued = []
+    original_validate = agent.plan_authority_gate.validate_routed
+
+    def capture_authority(*args: object, **kwargs: object):
+        validated = original_validate(*args, **kwargs)
+        issued.append(validated)
+        return validated
+
+    monkeypatch.setattr(
+        agent.plan_authority_gate,
+        "validate_routed",
+        capture_authority,
+    )
+
+    result = agent.answer(_QUESTION, "grounded-provenance-001")
+
+    assert result.status == "executed"
+    assert result.decision.reason_code == "grounded_model_plan_accepted"
+    assert len(issued) == 1
+    receipt = issued[0].receipt
+    assert receipt.compiler_kind is PlanCompilerKind.GROUNDED_PLAN_GATE
+    assert receipt.compiler_version == "grounded-plan-gate-v1"
+    assert receipt.proposal_provider_name == "static_test"
+    assert receipt.proposal_model_name == "static-grounded-model"
+
+
 class _FailingGroundedPlanProvider:
     @property
     def provider_name(self) -> str:
@@ -667,6 +727,29 @@ class _FailingGroundedPlanProvider:
 
     def generate_grounded_plan(self, *args: object, **kwargs: object) -> GroundedPlanProposal:
         raise RuntimeError("simulated malformed provider output")
+
+
+class _TimeoutGroundedPlanProvider(_FailingGroundedPlanProvider):
+    def generate_grounded_plan(self, *args: object, **kwargs: object) -> GroundedPlanProposal:
+        raise TimeoutError("simulated grounded provider timeout")
+
+
+def test_grounded_provider_timeout_is_not_downgraded_to_server_fallback(
+    sample_database: tuple[Path, list[NormalizedOverseasEtpRecord], DatabaseManifest],
+) -> None:
+    path, _, _ = sample_database
+    agent = RoutedFinanceAgent(
+        {"overseas_etp": path},
+        grounded_plan_provider=_TimeoutGroundedPlanProvider(),
+        hclx_planning_enabled=True,
+    )
+
+    with pytest.raises(TimeoutError, match="grounded provider timeout"):
+        agent.answer(
+            "현재 거래 가능한 미국 채권형 해외 ETF 중 총보수 0.20% 이하를 "
+            "AUM 높은 순으로 3개 보여줘",
+            "grounded-provider-timeout-001",
+        )
 
 
 def test_grounded_provider_failure_reuses_server_plan(

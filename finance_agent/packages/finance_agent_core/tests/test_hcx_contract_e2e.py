@@ -82,7 +82,7 @@ class OfflineHyperClovaXTransport:
                 {
                     "result_ref": product["result_ref"],
                     "evidence_fields": required,
-                    "explanation": "검증된 검색 조건과 근거에 따라 포함된 결과입니다.",
+                    "explanation": payload["safe_explanation"],
                 }
             )
         if self.answer_mode == _REVERSED_ANSWER:
@@ -148,6 +148,7 @@ def _run_success_path(
             transport,
             on_call=records.append,
         ),
+        hclx_planning_enabled=True,
     ).answer(question, request_id)
     backend = routed_result_to_backend(result)
 
@@ -337,6 +338,7 @@ def test_hcx_offline_answer_verifier_falls_back_on_reordered_results(
             transport,
             on_call=records.append,
         ),
+        hclx_planning_enabled=True,
     ).answer(question, request_id)
     backend = routed_result_to_backend(result)
 
@@ -383,6 +385,7 @@ def test_hcx_offline_query_timeout_stops_before_oracle_and_answer(
             transport,
             on_call=records.append,
         ),
+        hclx_planning_enabled=True,
     )
 
     with pytest.raises(HyperClovaXTimeoutError) as caught:
@@ -405,6 +408,7 @@ def test_hcx_offline_router_control_skips_all_model_calls() -> None:
         {},
         query_plan_provider=HyperClovaXQueryPlanProvider(_SETTINGS, transport),
         answer_provider=HyperClovaXGroundedAnswerProvider(_SETTINGS, transport),
+        hclx_planning_enabled=True,
     ).answer(
         "내일 가장 오를 해외 ETF를 예측해서 매수 추천해줘",
         "hcx-e2e-control-001",
@@ -429,12 +433,14 @@ def test_hcx_offline_disabled_fund_stops_before_model_and_database() -> None:
         {"fund": Path("/tmp/not-used-fund.sqlite3")},
         query_plan_provider=HyperClovaXQueryPlanProvider(_SETTINGS, transport),
         answer_provider=HyperClovaXGroundedAnswerProvider(_SETTINGS, transport),
+        hclx_planning_enabled=True,
     ).answer(
         "해외 주식형 공모펀드를 3개월 수익률 높은 순으로 5개 보여줘",
         "hcx-e2e-fund-disabled-001",
     )
 
-    assert result.status == "clarify"
+    assert result.status == "unsupported"
+    assert result.query_plan is None
     assert result.products == []
     assert result.answer_composition is None
     assert transport.requests == []
@@ -468,6 +474,7 @@ def test_hcx_offline_server_guard_blocks_mismatched_provider_plan(
     result = RoutedFinanceAgent(
         {"overseas_etp": path},
         query_plan_provider=MismatchedProvider(),
+        hclx_planning_enabled=True,
     ).answer(question, request_id)
 
     assert result.status == "clarify"

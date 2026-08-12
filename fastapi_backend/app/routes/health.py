@@ -5,9 +5,15 @@ from contextlib import closing
 from pathlib import Path
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, Depends, Request, Response, status
 from finance_agent_core.contracts.queryplan import ProductFamily
-from finance_agent_core.storage import connect_read_only, load_manifest
+from finance_agent_core.release import ResolvedAgentRelease
+from finance_agent_core.storage import (
+    DatasetApprovalError,
+    connect_read_only,
+    load_manifest,
+    require_approved_database,
+)
 from pydantic import BaseModel, ConfigDict
 
 from app.config import FundExecutionPolicy, Settings
@@ -30,7 +36,12 @@ class HealthResponse(BaseModel):
     fund_execution_policy: FundExecutionPolicy
 
 
-def _database_is_ready(family: ProductFamily, path: Path) -> bool:
+def _database_is_ready(
+    family: ProductFamily,
+    path: Path,
+    *,
+    require_approval: bool,
+) -> bool:
     """Verify that the configured file is a readable DB for the expected family."""
 
     try:
@@ -38,7 +49,14 @@ def _database_is_ready(family: ProductFamily, path: Path) -> bool:
             manifest = load_manifest(connection)
     except (OSError, sqlite3.Error, ValueError):
         return False
-    return manifest.dataset == family.value
+    if manifest.dataset != family.value:
+        return False
+    if require_approval:
+        try:
+            require_approved_database(family.value, path)
+        except DatasetApprovalError:
+            return False
+    return True
 
 
 @router.get(
@@ -47,21 +65,37 @@ def _database_is_ready(family: ProductFamily, path: Path) -> bool:
     responses={status.HTTP_503_SERVICE_UNAVAILABLE: {"model": HealthResponse}},
 )
 def health(
+    request: Request,
     response: Response,
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> HealthResponse:
     database_paths = settings.database_paths
+    require_approval = settings.app_env in {"evaluation", "production"}
     configured_families = [family for family in ProductFamily if family in database_paths]
     missing_families = [family for family in ProductFamily if family not in database_paths]
     ready_families = [
         family
         for family in configured_families
-        if _database_is_ready(family, database_paths[family])
+        if _database_is_ready(
+            family,
+            database_paths[family],
+            require_approval=require_approval,
+        )
     ]
     unavailable_families = [
         family for family in configured_families if family not in ready_families
     ]
-    is_ready = len(ready_families) == len(ProductFamily)
+    release_ready = True
+    if require_approval:
+        release_guard = getattr(request.app.state, "release_guard", None)
+        if type(release_guard) is not ResolvedAgentRelease:
+            release_ready = False
+        else:
+            try:
+                release_guard.assert_current()
+            except Exception:  # noqa: BLE001 - readiness must not expose release details
+                release_ready = False
+    is_ready = len(ready_families) == len(ProductFamily) and release_ready
     if not is_ready:
         response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
     return HealthResponse(

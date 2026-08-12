@@ -76,6 +76,7 @@ def main(argv: list[str] | None = None) -> int:
         database_path=arguments.database,
         provider=_provider(arguments.provider, arguments.database),
         answer_provider=answer_provider,
+        allow_unapproved_database=True,
     )
     response, composition = agent.answer_with_composition(question, arguments.request_id)
     if composition is None:

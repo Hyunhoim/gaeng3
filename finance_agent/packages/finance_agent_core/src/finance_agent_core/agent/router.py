@@ -3,6 +3,21 @@ from __future__ import annotations
 import re
 from collections.abc import Iterable
 
+from finance_agent_core.agent.planning_policy import (
+    AdaptiveShadowPlanningPolicy,
+    PlanningDecision,
+    PlanningPolicy,
+    PlanningTrace,
+)
+from finance_agent_core.agent.safety import (
+    SafetyDisposition,
+    SafetyEnvelope,
+    safety_policy_surface,
+)
+from finance_agent_core.agent.semantic_gate import (
+    SemanticCoverageDecision,
+    SemanticCoverageGate,
+)
 from finance_agent_core.config.capability import CapabilityMatrix, load_capability_matrix
 from finance_agent_core.contracts.queryplan import Intent, ProductFamily
 from finance_agent_core.contracts.routing import (
@@ -20,7 +35,7 @@ _COMPARE = re.compile(
     re.IGNORECASE,
 )
 _AGGREGATE = re.compile(
-    r"몇\s*개|개수|건수|평균|합계|총합|집계|분포|비중|"
+    r"몇\s*개|개수(?!\s*[:：]\s*\d+)|건수|평균|합계|총합|집계|분포|비중|"
     r"(?:상품|ETF|ETN|ETP|채권|펀드)(?:의)?\s*수(?:를|가|는)?\s*(?:계산|집계|총합|알려)|"
     r"최댓값|최대값|최솟값|최소값|최고값|최저값|"
     r"(?:AUM|보수율|수익률|이율|잔존일수|듀레이션)\s*(?:최대|최소)",
@@ -69,6 +84,13 @@ _TICKER_ORDERING = re.compile(
     r"(?:오름차순|내림차순|큰\s*순|작은\s*순|높은\s*순|낮은\s*순|순서)",
     re.IGNORECASE,
 )
+_RANKED_SET_SEARCH = re.compile(
+    r"끼리(?:만)?.{0,100}?"
+    r"(?:오름차순|내림차순|높은\s*순|낮은\s*순|큰\s*순|작은\s*순|"
+    r"많은\s*순|적은\s*순|상위|하위|ascending|descending|"
+    r"highest\s*[- ]to\s*[- ]lowest|lowest\s*[- ]to\s*[- ]highest)",
+    re.IGNORECASE,
+)
 _EXPLICIT_ETP_TYPE = re.compile(
     r"(?:ETP\s*유형|ETF\s*여부|상품\s*유형)(?:이|가|은|는)?\s*[:：]?\s*(?:ETF|ETN)|"
     r"(?<![A-Z])(?:ETF|ETN)(?:인(?!지)|이며|이고|인데|에\s*해당|로\s*되어)",
@@ -76,6 +98,14 @@ _EXPLICIT_ETP_TYPE = re.compile(
 )
 _OVERSEAS_UNAVAILABLE_METRIC = re.compile(
     r"수익률|변동성|하락장|오른|S&P\s*500",
+    re.IGNORECASE,
+)
+_FINANCE_SCOPE_SIGNAL = re.compile(
+    r"(?<![A-Z])(?:ETF|ETN|ETP)(?![A-Z])|공모\s*펀드|국내\s*채권|"
+    r"(?:금융|투자)\s*상품|"
+    r"상품(?:군|유형|목록|조회|검색|추천|을|를|이|가|은|는|중|\s*있(?:어|나|나요))|"
+    r"AUM|수익률|총\s*보수|보수율|매수\s*수익률|잔존\s*일수|듀레이션|"
+    r"종목\s*코드|티커|만기|채권|펀드",
     re.IGNORECASE,
 )
 _FUND_UNAVAILABLE_DETAIL = re.compile(
@@ -128,9 +158,11 @@ def _product_families(question: str) -> list[ProductFamily]:
 
     add_matches(r"공모\s*펀드|공모펀드", ProductFamily.FUND, flags=re.IGNORECASE)
     add_matches(
-        r"국내\s*채권|국내채권|회사채|국채|국공채|국고채|특수채|금융채|"
+        r"국내\s*채권(?!\s*형[^와과,\n]{0,12}?(?:ETF|ETN|ETP))|"
+        r"회사채|국채|국공채|국고채|특수채|금융채|"
         r"지역개발채|도시철도공채|채권\s*상품|채권(?!형)",
         ProductFamily.BOND,
+        flags=re.IGNORECASE,
     )
 
     etp_token = r"(?<![A-Z])(?:ETF|ETN|ETP)(?![A-Z])"
@@ -144,6 +176,16 @@ def _product_families(question: str) -> list[ProductFamily]:
     )
     domestic_matches = list(re.finditer(domestic_pattern, question, re.IGNORECASE))
     overseas_matches = list(re.finditer(overseas_pattern, question, re.IGNORECASE))
+    overseas_matches = [
+        match
+        for match in overseas_matches
+        if re.search(
+            rf"(?:국내|한국)[^와과,\n]{{0,20}}?{etp_token}",
+            match.group(0),
+            re.IGNORECASE,
+        )
+        is None
+    ]
     mentions.extend((match.start(), ProductFamily.DOMESTIC_ETP) for match in domestic_matches)
     mentions.extend((match.start(), ProductFamily.OVERSEAS_ETP) for match in overseas_matches)
 
@@ -190,6 +232,21 @@ def _product_families(question: str) -> list[ProductFamily]:
 
 
 def _requested_limit(question: str) -> int | None:
+    labeled_matches = re.findall(
+        r"(?:개수|제한)\s*[:：]\s*(\d+)",
+        question,
+        flags=re.IGNORECASE,
+    )
+    if labeled_matches:
+        value = int(labeled_matches[-1])
+        return value if 1 <= value <= 100 else None
+    if re.search(
+        r"(?:^|\s)(?:하나|한\s*개)(?:만)?\s*"
+        r"(?:보여|알려|찾아|골라|선정|추천|조회)",
+        question,
+        flags=re.IGNORECASE,
+    ):
+        return 1
     matches = re.findall(r"(\d+)\s*(?:개|건)(?!월)", question)
     if not matches:
         return None
@@ -198,8 +255,9 @@ def _requested_limit(question: str) -> int | None:
 
 
 def _intent(question: str, families: list[ProductFamily]) -> InteractionIntent:
+    policy_surface = safety_policy_surface(question)
     if (
-        _UNSUPPORTED.search(question)
+        _UNSUPPORTED.search(policy_surface)
         or _EXTERNAL_POLICY.search(question)
         or _UNAVAILABLE_MARKET_DATA.search(question)
         or (
@@ -213,7 +271,7 @@ def _intent(question: str, families: list[ProductFamily]) -> InteractionIntent:
     exact_two_product_comparison = bool(
         _COMPARE.search(question) and len(_product_mentions(question)) == 2
     )
-    if _AMBIGUOUS.search(question) or (
+    if _AMBIGUOUS.search(policy_surface) or (
         _MIXED_ETP_COST.search(question)
         and _EXPLICIT_ETP_TYPE.search(question) is None
         and _EXPLICIT_TOTAL_EXPENSE_RATIO.search(question) is None
@@ -222,6 +280,8 @@ def _intent(question: str, families: list[ProductFamily]) -> InteractionIntent:
         return InteractionIntent.CLARIFY
     if _DEFINITION.search(question):
         return InteractionIntent.EXPLAIN
+    if _RANKED_SET_SEARCH.search(question) and len(_product_mentions(question)) != 2:
+        return InteractionIntent.SEARCH
     if _COMPARE.search(question):
         return InteractionIntent.COMPARE
     if _AGGREGATE.search(question):
@@ -238,11 +298,127 @@ def _intent(question: str, families: list[ProductFamily]) -> InteractionIntent:
 class IntentRouter:
     """Deterministic, fail-closed router in front of any model-generated plan."""
 
-    def __init__(self, matrix: CapabilityMatrix | None = None) -> None:
+    def __init__(
+        self,
+        matrix: CapabilityMatrix | None = None,
+        *,
+        safety_envelope: SafetyEnvelope | None = None,
+        semantic_coverage_gate: SemanticCoverageGate | None = None,
+        planning_policy: PlanningPolicy | None = None,
+        hclx_planning_enabled: bool = False,
+    ) -> None:
+        if type(hclx_planning_enabled) is not bool:
+            raise TypeError("hclx_planning_enabled must be a boolean")
         self.matrix = matrix or load_capability_matrix()
+        self.safety_envelope = safety_envelope or SafetyEnvelope()
+        self.semantic_coverage_gate = semantic_coverage_gate or SemanticCoverageGate()
+        self._authority_planning_policy = AdaptiveShadowPlanningPolicy(
+            hclx_planning_enabled=hclx_planning_enabled
+        )
+        self.planning_policy = planning_policy or self._authority_planning_policy
 
     def route(self, question: str, request_id: str) -> RouteDecision:
-        stripped = question.strip()
+        """Return the frozen legacy contract while evaluating Stage 1 shadow policy."""
+
+        return self.route_with_planning(question, request_id).route_decision
+
+    def route_with_planning(self, question: str, request_id: str) -> PlanningTrace:
+        """Pair the legacy route with non-enforcing, server-owned shadow metadata."""
+
+        return self._evaluate_with_planning(question, request_id)
+
+    def _planning_trace(
+        self,
+        route_decision: RouteDecision,
+        coverage: SemanticCoverageDecision,
+    ) -> PlanningTrace:
+        # Pydantic frozen models are shallow: nested product-family and mention
+        # lists can still be changed in place. Snapshot the authoritative route
+        # before an injected shadow policy sees an isolated copy.
+        trusted_route = RouteDecision.model_validate_json(route_decision.model_dump_json())
+        try:
+            planning_coverage = coverage
+            if (
+                trusted_route.draft.intent
+                in {InteractionIntent.CLARIFY, InteractionIntent.UNSUPPORTED}
+                and not coverage.unsupported_spans
+            ):
+                # The legacy gate intentionally skips deeper scanning when the
+                # lexical router already chose a control intent. Shadow policy
+                # performs an additional read-only scan so an unsupported
+                # action (for example CSV export) still outranks ambiguity,
+                # without changing the frozen legacy RouteDecision.
+                supplemental = self.semantic_coverage_gate.evaluate(
+                    trusted_route.draft.question,
+                    interaction_intent=None,
+                    check_exclusions=False,
+                )
+                if supplemental.unsupported_spans:
+                    planning_coverage = SemanticCoverageDecision(
+                        ambiguity_spans=coverage.ambiguity_spans,
+                        unsupported_spans=tuple(
+                            dict.fromkeys(
+                                (
+                                    *coverage.unsupported_spans,
+                                    *supplemental.unsupported_spans,
+                                )
+                            )
+                        ),
+                        schema_link_gap_spans=coverage.schema_link_gap_spans,
+                    )
+            authoritative = self._authority_planning_policy.decide(
+                RouteDecision.model_validate_json(trusted_route.model_dump_json()),
+                planning_coverage,
+            )
+            candidate = authoritative
+            if self.planning_policy is not self._authority_planning_policy:
+                candidate = self.planning_policy.decide(
+                    RouteDecision.model_validate_json(trusted_route.model_dump_json()),
+                    planning_coverage,
+                )
+            if not isinstance(candidate, PlanningDecision):
+                raise TypeError("planning policy must return PlanningDecision")
+            # Pydantic model_copy(update=...) does not re-run validators. Treat
+            # an injected policy as untrusted and rebuild from plain data before
+            # accepting its authority flags.
+            planning_decision = PlanningDecision.model_validate(candidate.model_dump(mode="python"))
+            if planning_decision != authoritative:
+                raise ValueError("planning policy differs from adaptive-shadow-v1 authority")
+            return PlanningTrace(
+                route_decision=trusted_route,
+                planning_decision=planning_decision,
+            )
+        except Exception:
+            # A malformed or escalating policy result must not reach Compiler,
+            # HCLX, SQL, or Oracle. Existing control reasons remain intact; an
+            # otherwise executable route is converted to a stable fail-closed
+            # response without exposing the exception text.
+            if trusted_route.disposition is RouteDisposition.EXECUTE:
+                closed_draft = MinimalQueryDraft.model_validate(
+                    {
+                        **trusted_route.draft.model_dump(mode="python"),
+                        "intent": InteractionIntent.UNSUPPORTED,
+                    }
+                )
+                trusted_route = self._control(
+                    closed_draft,
+                    RouteDisposition.UNSUPPORTED,
+                    "planning_policy_error",
+                    "내부 계획 정책을 안전하게 검증하지 못해 요청을 실행하지 않았습니다.",
+                )
+            planning_decision = PlanningDecision.fail_closed(trusted_route)
+        return PlanningTrace(
+            route_decision=trusted_route,
+            planning_decision=planning_decision,
+        )
+
+    def _evaluate_with_planning(
+        self,
+        question: str,
+        request_id: str,
+    ) -> PlanningTrace:
+        safety = self.safety_envelope.evaluate(question)
+        stripped = safety.normalized_question
         if not stripped:
             raise ValueError("question cannot be blank")
         if not request_id.strip():
@@ -250,6 +426,18 @@ class IntentRouter:
 
         families = _product_families(stripped)
         intent = _intent(stripped, families)
+        cross_family_control = len(families) > 1 and intent is not InteractionIntent.SEARCH
+        coverage = self.semantic_coverage_gate.evaluate(
+            stripped,
+            interaction_intent=intent.value,
+            check_exclusions=False,
+        )
+        if safety.disposition is SafetyDisposition.UNSUPPORTED or coverage.unsupported_spans:
+            intent = InteractionIntent.UNSUPPORTED
+        elif safety.disposition is SafetyDisposition.CLARIFY or (
+            coverage.ambiguity_spans and not cross_family_control
+        ):
+            intent = InteractionIntent.CLARIFY
         if len(families) > 1 and intent is not InteractionIntent.SEARCH:
             # Control responses do not execute a family sequence. Keep their DTO order
             # stable across router vocabulary changes and preserve the frozen contract.
@@ -264,34 +452,95 @@ class IntentRouter:
             requested_limit=_requested_limit(stripped),
         )
 
+        if safety.blocked:
+            assert safety.gate is not None
+            assert safety.reason is not None
+            disposition = (
+                RouteDisposition.CLARIFY
+                if safety.disposition is SafetyDisposition.CLARIFY
+                else RouteDisposition.UNSUPPORTED
+            )
+            return self._planning_trace(
+                self._control(
+                    draft,
+                    disposition,
+                    f"safety_{safety.gate.value}",
+                    safety.reason,
+                ),
+                coverage,
+            )
+        if coverage.unsupported_spans:
+            spans = ", ".join(coverage.unsupported_spans)
+            return self._planning_trace(
+                self._control(
+                    draft,
+                    RouteDisposition.UNSUPPORTED,
+                    "semantic_unmapped_action",
+                    (f"읽기 전용 데이터 조회로 실행할 수 없는 조건·행동: {spans}")[:500],
+                ),
+                coverage,
+            )
+        if coverage.ambiguity_spans and not cross_family_control:
+            spans = ", ".join(coverage.ambiguity_spans)
+            return self._planning_trace(
+                self._control(
+                    draft,
+                    RouteDisposition.CLARIFY,
+                    "semantic_coverage_incomplete",
+                    f"필드나 기준을 하나로 확정할 수 없는 조건: {spans}"[:500],
+                ),
+                coverage,
+            )
+        if not families and _FINANCE_SCOPE_SIGNAL.search(stripped) is None:
+            return self._planning_trace(
+                self._control(
+                    draft,
+                    RouteDisposition.UNSUPPORTED,
+                    "safety_scope",
+                    "현재 서비스는 승인된 금융상품 데이터 조회만 지원합니다.",
+                ),
+                coverage,
+            )
         if intent is InteractionIntent.UNSUPPORTED:
-            return self._control(
-                draft,
-                RouteDisposition.UNSUPPORTED,
-                "prohibited_financial_request",
-                "제공 데이터로 검증할 수 없는 예측·보장·단정적 추천 요청",
+            return self._planning_trace(
+                self._control(
+                    draft,
+                    RouteDisposition.UNSUPPORTED,
+                    "prohibited_financial_request",
+                    "제공 데이터로 검증할 수 없는 예측·보장·단정적 추천 요청",
+                ),
+                coverage,
             )
         if intent is InteractionIntent.CLARIFY:
-            return self._control(
-                draft,
-                RouteDisposition.CLARIFY,
-                "subjective_condition",
-                "판단 기준이나 임계값이 명시되지 않은 주관적 조건",
+            return self._planning_trace(
+                self._control(
+                    draft,
+                    RouteDisposition.CLARIFY,
+                    "subjective_condition",
+                    "판단 기준이나 임계값이 명시되지 않은 주관적 조건",
+                ),
+                coverage,
             )
         if not families:
-            return self._control(
-                draft,
-                RouteDisposition.CLARIFY,
-                "ambiguous_product_family",
-                "실행할 상품군을 확정할 수 없음",
-            )
-        if len(families) > 1:
-            if intent is not InteractionIntent.SEARCH:
-                return self._control(
+            return self._planning_trace(
+                self._control(
                     draft,
                     RouteDisposition.CLARIFY,
                     "ambiguous_product_family",
-                    "복수 상품군은 현재 상품군별 독립 검색만 지원",
+                    "실행할 상품군을 확정할 수 없음",
+                ),
+                coverage,
+            )
+        if len(families) > 1:
+            if intent is not InteractionIntent.SEARCH:
+                return self._planning_trace(
+                    self._control(
+                        draft,
+                        RouteDisposition.CLARIFY,
+                        "ambiguous_product_family",
+                        "복수 상품군은 현재 상품군별 독립 검색만 지원",
+                    ),
+                    coverage,
                 )
             capabilities = [
                 self.matrix.require(family, InteractionIntent.SEARCH) for family in families
@@ -306,42 +555,57 @@ class IntentRouter:
                 None,
             )
             if blocked is not None:
-                return self._control(
-                    draft,
-                    RouteDisposition.UNSUPPORTED,
-                    "capability_not_implemented",
-                    blocked.reason,
+                return self._planning_trace(
+                    self._control(
+                        draft,
+                        RouteDisposition.UNSUPPORTED,
+                        "capability_not_implemented",
+                        blocked.reason,
+                    ),
+                    coverage,
                 )
-            return RouteDecision(
-                draft=draft,
-                disposition=RouteDisposition.EXECUTE,
-                reason_code="cross_family_search_executable",
-                reason="복수 상품군을 각각 독립적으로 검색하고 검증",
-                query_plan_intent=Intent.SEARCH,
-                capability_matrix_version=self.matrix.matrix_version,
+            return self._planning_trace(
+                RouteDecision(
+                    draft=draft,
+                    disposition=RouteDisposition.EXECUTE,
+                    reason_code="cross_family_search_executable",
+                    reason="복수 상품군을 각각 독립적으로 검색하고 검증",
+                    query_plan_intent=Intent.SEARCH,
+                    capability_matrix_version=self.matrix.matrix_version,
+                ),
+                coverage,
             )
         if intent in {InteractionIntent.DETAIL, InteractionIntent.EXPLAIN} and not mentions:
-            return self._control(
-                draft,
-                RouteDisposition.CLARIFY,
-                "missing_product_identity",
-                "상세 조회·설명에는 정확한 상품번호나 종목코드가 필요",
+            return self._planning_trace(
+                self._control(
+                    draft,
+                    RouteDisposition.CLARIFY,
+                    "missing_product_identity",
+                    "상세 조회·설명에는 정확한 상품번호나 종목코드가 필요",
+                ),
+                coverage,
             )
         if intent is InteractionIntent.COMPARE and len(mentions) != 2:
-            return self._control(
-                draft,
-                RouteDisposition.CLARIFY,
-                "missing_product_identity",
-                "비교에는 서로 다른 두 상품의 정확한 식별자가 필요",
+            return self._planning_trace(
+                self._control(
+                    draft,
+                    RouteDisposition.CLARIFY,
+                    "missing_product_identity",
+                    "비교에는 서로 다른 두 상품의 정확한 식별자가 필요",
+                ),
+                coverage,
             )
 
         capability = self.matrix.require(families[0], intent)
         if capability.status == "unsupported":
-            return self._control(
-                draft,
-                RouteDisposition.UNSUPPORTED,
-                "capability_not_implemented",
-                capability.reason,
+            return self._planning_trace(
+                self._control(
+                    draft,
+                    RouteDisposition.UNSUPPORTED,
+                    "capability_not_implemented",
+                    capability.reason,
+                ),
+                coverage,
             )
         if capability.status == "control":
             disposition = (
@@ -349,19 +613,25 @@ class IntentRouter:
                 if intent is InteractionIntent.CLARIFY
                 else RouteDisposition.UNSUPPORTED
             )
-            return self._control(
-                draft,
-                disposition,
-                f"{intent.value}_control",
-                capability.reason,
+            return self._planning_trace(
+                self._control(
+                    draft,
+                    disposition,
+                    f"{intent.value}_control",
+                    capability.reason,
+                ),
+                coverage,
             )
-        return RouteDecision(
-            draft=draft,
-            disposition=RouteDisposition.EXECUTE,
-            reason_code="capability_executable",
-            reason=capability.reason,
-            query_plan_intent=capability.query_plan_intent,
-            capability_matrix_version=self.matrix.matrix_version,
+        return self._planning_trace(
+            RouteDecision(
+                draft=draft,
+                disposition=RouteDisposition.EXECUTE,
+                reason_code="capability_executable",
+                reason=capability.reason,
+                query_plan_intent=capability.query_plan_intent,
+                capability_matrix_version=self.matrix.matrix_version,
+            ),
+            coverage,
         )
 
     def _control(

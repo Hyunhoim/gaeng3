@@ -1,14 +1,14 @@
 # 제출용 모델 경계와 로컬 LLM 정리 메모
 
-기준일: 2026-08-07
+기준일: 2026-08-11
 
 ## 0. 결정
 
 - 현재 로컬 Qwen 연결 코드와 실험 기록은 HyperCLOVA X가 없던
   개발 단계의 내부 검증용으로만 관리
 - 예선 평가·제출물에서 실행되는 LLM은 HyperCLOVA X로 제한
-- 설명회 자료를 검토했지만 정확한 HCX API 규격·크레딧 적용·로컬 LLM 제출 범위는
-  확인되지 않았으므로 실제 HTTP transport나 credential 연결을 시도하지 않음
+- 공식 Direct v3 API 규격을 확인해 HTTP transport와 FastAPI 의존성 조립까지
+  구현했지만, credential을 사용한 실제 호출은 키 확보와 팀 승인 전까지 보류
 - 공식 서면 답변으로 제출 범위가 확정되면 로컬 LLM 코드·설정·의존성·
   실행 명령을 제출 후보에서 제거하고 기계적으로 검사
 
@@ -33,7 +33,8 @@
 
 ## 2. 지금 지우지 않는 이유
 
-- 설명회 자료에는 평가 adapter 규격만 있고 HyperCLOVA X의 실제 요청·응답 방식은 없음
+- 공식 문서에서 HyperCLOVA X의 요청·응답 규격은 확인했지만 실제 credential 인증,
+  응답 품질, latency, quota는 아직 검증하지 않음
 - 현재 로컬 provider는 Router·Oracle·Verifier·fallback을 저비용으로
   반복 검사하는 개발 도구임
 - 먼저 삭제하면 HyperCLOVA X adapter와 비교할 기준을 잃을 수 있음
@@ -57,7 +58,7 @@
 ## 4. 공식 답변 확인 후 제출 후보 정리 순서
 
 1. 공식 답변으로 제출 범위 확정
-2. HyperCLOVA X 실제 transport와 최소 smoke test 완료
+2. 발급받은 credential로 HyperCLOVA X 최초 1회 smoke test 완료
 3. 로컬 provider 없이 같은 QueryPlan·Oracle·Verifier 회귀 통과
 4. 제출 후보에서 로컬 provider·스크립트·설정·의존성 제거
 5. 로컬 모델명·실행 명령·실험 baseline이 제출 문서에 섞이지 않았는지 검사
@@ -111,7 +112,8 @@ python finance_agent/scripts/check-submission-boundary.py \
 - 로컬 provider는 아직 개발 저장소에 존재
 - 평가·production 모드의 HyperCLOVA X 제한 게이트는 구현 완료
 - HyperCLOVA X fake transport·오류·fallback 계약은 구현 완료
-- 실제 HyperCLOVA X 연결은 크레딧·정확한 모델 ID·endpoint·인증 규격 확보 후로 보류
+- 공식 Direct v3 HTTP transport와 FastAPI answer-only 배선은 구현 완료
+- 실제 credential 인증·HCX-007 호출 검증은 키 확보와 팀 승인 전까지 보류
 - 그 전까지 로컬 Qwen은 내부 회귀·E2E·fallback 시험에 계속 사용
 - 로컬 LLM 제거 작업은 공식 제출 범위 확정 후 수행
 - 자동 경계 검사는 구현 완료. 현재 개발 프로필은 통과하고 제출 프로필은 남아 있는

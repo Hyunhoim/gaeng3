@@ -30,6 +30,7 @@ from finance_agent_core.contracts.hcx_schema import (
     load_internal_evaluation_queryplan_schema,
 )
 from finance_agent_core.contracts.queryplan import ProductFamily
+from finance_agent_core.deadline import remaining_request_timeout
 
 
 class LocalProviderError(RuntimeError):
@@ -299,8 +300,9 @@ class LocalTestProvider:
             headers={"Content-Type": "application/json"},
             method=method,
         )
+        timeout_seconds = remaining_request_timeout(self.settings.timeout_seconds)
         try:
-            with urlopen(request, timeout=self.settings.timeout_seconds) as response:
+            with urlopen(request, timeout=timeout_seconds) as response:
                 return json.loads(response.read().decode("utf-8"))
         except HTTPError as error:
             detail = error.read(2000).decode("utf-8", errors="replace")

@@ -1,0 +1,22 @@
+{
+  "schema_version": "1.0",
+  "suite_id": "schema-linker-policy-migrations-v1",
+  "status": "developer_authored_pending_finance_domain_review",
+  "base_suite_sha256_by_family": {
+    "bond": "b2d19e3af43fb8d6d4be03895088380b263bb8aca2c53c29b32de622a29c4178"
+  },
+  "migrations": [
+    {
+      "case_id": "bond-049",
+      "product_family": "bond",
+      "question_sha256": "726c26e1abc66d6ea27bf14d91d959af18613168b729f1fecc477046d3078294",
+      "legacy_disposition": "block",
+      "current_disposition": "execute",
+      "gold_field_ids": [
+        "credit_rating"
+      ],
+      "reason_code": "ordered_credit_rating_deterministic_lowering",
+      "review_status": "pending_finance_domain_review"
+    }
+  ]
+}
