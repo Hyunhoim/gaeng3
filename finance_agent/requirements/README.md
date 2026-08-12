@@ -8,9 +8,13 @@ Conda는 Python 실행 환경을 관리하고, 이 디렉터리의 파일은 pip
 | `constraints.txt` | 공통 버전 상한·하한과 재현 가능한 설치 기준 |
 | `dev.txt` | 테스트, lint, build, Turtle 문법 검사와 Safety Blind 봉인 검증을 포함한 기본 개발 환경 |
 | `local-llm.txt` | 개발 전용 로컬 Qwen·vLLM 환경 |
+| `embedding-eval.txt` | CPU Schema Dense 모델 비교 전용 환경 |
 
 일반 개발은 `environment.yml`과 `dev.txt`, 로컬 모델 실험은
 `environment.local-llm.yml`과 `local-llm.txt`를 함께 사용
+
+Schema Dense 모델 비교는 운영·일반 개발 환경에 PyTorch를 추가하지 않도록
+`environment.embedding-eval.yml`과 `embedding-eval.txt`를 별도로 사용
 
 정확한 설치 명령은 [finance_agent README](../README.md#5-개발-환경), 로컬 모델의
 제출 경계는 [로컬 LLM 문서](../docs/local-llm.md)에서 확인

@@ -1,0 +1,144 @@
+{
+  "schema_version": "1.0",
+  "protocol_id": "schema-embedding-external-blind-v1",
+  "recorded_on": "2026-08-12",
+  "status": "locked_awaiting_external_question_and_answer_bundle",
+  "purpose": "공개 개발 질문으로 고른 Schema Dense 후보의 독립 일반화와 OOD 기권 가능성을 최초 1회 평가",
+  "source_bundle": {
+    "suite_id": "external-blind-v1-100",
+    "question_count": 100,
+    "author_role": "financial_domain",
+    "question_and_answer_visibility": "AI 구현 담당자에게 최초 봉인 전 비공개",
+    "question_schema": "finance_agent_core.evaluation.external_holdout.ExternalBlindQuestionSet",
+    "answer_schema": "finance_agent_core.evaluation.external_holdout.ExternalBlindAnswerKey",
+    "commitment_schema": "finance_agent_core.evaluation.external_holdout.ExternalBlindCommitment",
+    "near_duplicate_max_similarity": 0.84
+  },
+  "implementation_lock": {
+    "schema_linker_commit": "c55b771dd7dac46c7e1436c9054af2039f67791d",
+    "field_registry_sha256": "5887c4dba17fd33d0c20b550adf564796de508e3dcafc2a2e7bb3796603a73b5",
+    "fusion_strategy": "lexical_first",
+    "top_k": 10,
+    "production_feature_enabled": false
+  },
+  "candidate_lock": [
+    {
+      "priority": 1,
+      "alias": "bge-m3",
+      "repository": "BAAI/bge-m3",
+      "revision": "5617a9f61b028005a4858fdac845db406aefb181",
+      "role": "public_development_leader"
+    },
+    {
+      "priority": 2,
+      "alias": "kure-v1",
+      "repository": "nlpai-lab/KURE-v1",
+      "revision": "d14c8a9423946e268a0c9952fecf3a7aabd73bd9",
+      "role": "statistically_tied_korean_runner_up"
+    }
+  ],
+  "gold_field_extraction": {
+    "execute_cases_only": true,
+    "included_query_plan_paths": [
+      "constraints[].field",
+      "ranking[].field",
+      "intent_payload.comparison_fields[]",
+      "intent_payload.group_by[]",
+      "intent_payload.aggregations[].field"
+    ],
+    "excluded_query_plan_paths": [
+      "projection[]"
+    ],
+    "projection_exclusion_reason": "projection에는 화면 표시용 기본 evidence 필드가 자동 추가되므로 사용자 표현의 schema linking 정답으로 사용하지 않음",
+    "deduplication": "ordered_unique_then_set_scoring"
+  },
+  "retrieval_evaluation": {
+    "population": "expected_disposition_execute",
+    "primary_metric": "exact_at_gold_cardinality",
+    "secondary_metrics": [
+      "micro_recall_at_5",
+      "micro_recall_at_10",
+      "full_recall_case_rate_at_5",
+      "mrr",
+      "ndcg_at_5"
+    ],
+    "mandatory_breakdowns": [
+      "product_family",
+      "interaction_intent",
+      "gold_field_count",
+      "lexical_resolved_vs_unresolved"
+    ],
+    "paired_comparisons": [
+      "bge-m3_vs_lexical",
+      "kure-v1_vs_lexical",
+      "bge-m3_vs_kure-v1"
+    ],
+    "uncertainty_method": {
+      "name": "paired_case_resampling_percentile_bootstrap",
+      "iterations": 10000,
+      "random_seed": 20260812,
+      "confidence_level": 0.95
+    }
+  },
+  "ood_abstention_evaluation": {
+    "population": "all_external_cases",
+    "positive_label": "expected_disposition_execute",
+    "negative_labels": [
+      "clarify",
+      "unsupported"
+    ],
+    "features": [
+      "dense_top_1_cosine_score",
+      "dense_top_1_top_2_margin"
+    ],
+    "split_rule": {
+      "method": "sha256_ordered_half_split",
+      "key_format": "schema-embedding-external-blind-v1:{case_id}",
+      "calibration": "SHA-256 오름차순 앞 50문항",
+      "test": "SHA-256 오름차순 뒤 50문항",
+      "locked_before_questions": true
+    },
+    "threshold_search": {
+      "calibration_only": true,
+      "accept_rule": "top_1_score >= score_threshold AND margin >= margin_threshold",
+      "objective_order": [
+        "OOD false accept 0건인 조합만 유지",
+        "execute true accept 최대화",
+        "동률이면 더 높은 score threshold",
+        "다시 동률이면 더 높은 margin threshold"
+      ],
+      "fallback_when_no_usable_threshold": "score_based_abstention_rejected_keep_router_and_server_gate_only"
+    },
+    "test_gate": {
+      "ood_false_accept_count": 0,
+      "maximum_execute_false_reject_rate": 0.05,
+      "threshold_change_after_test": false
+    }
+  },
+  "blind_entry_gate": {
+    "public_candidate_quality_gate_passed": true,
+    "public_safety_contract_passed": true,
+    "public_cpu_p95_gate_passed": true,
+    "external_bundle_received": false,
+    "external_commitment_verified": false
+  },
+  "production_gate": {
+    "minimum_exact_or_recall_improvement_over_lexical": 0.02,
+    "maximum_dense_p95_ms": 250,
+    "blocked_question_embedding_calls": 0,
+    "out_of_registry_candidates": 0,
+    "out_of_family_candidates": 0,
+    "independent_blind_required": true,
+    "ood_test_required": true,
+    "backend_shadow_before_user_visible_activation": true,
+    "current_decision": "blocked"
+  },
+  "reporting_rules": [
+    "최초 실행 원본 report와 SHA-256을 수정 없이 보존",
+    "최초 실행 이후 수정 결과는 post-blind regression으로 별도 표기",
+    "공개 개발 결과·독립 blind 결과·OOD test 결과를 한 점수로 합치지 않음",
+    "상품군별 표본 수와 실패 질문 ID를 함께 보고",
+    "BGE-M3와 KURE-v1 차이의 95% paired bootstrap 구간을 함께 보고"
+  ],
+  "blocked_reason": "외부 작성 질문·비공개 정답키·commitment가 아직 전달되지 않아 독립 점수를 생성할 수 없음"
+}

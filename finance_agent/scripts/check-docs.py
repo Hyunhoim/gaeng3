@@ -65,6 +65,7 @@ REQUIRED_INDEX_TARGETS = {
     "evaluation-qwen-metamorphic.md",
     "evaluation-coverage-guided.md",
     "evaluation-domain-qa.md",
+    "evaluation-schema-embedding-cpu.md",
     "submission-model-boundary.md",
     "hyperclova-provider.md",
     "evaluation-pre-hcx-diagnostic.md",
@@ -126,6 +127,7 @@ REQUIRED_BASELINES = {
     "stage2-approved-db-revalidation-2026-08-12.json",
     "stage3-release-contract-2026-08-12.json",
     "stage3-local-oci-rollback-2026-08-12.json",
+    "schema-embedding-cpu-public-v1.json",
 }
 REQUIRED_BASELINE_KEYS = {
     "schema_version",
@@ -346,6 +348,7 @@ def _check_baseline(path: Path) -> list[str]:
         "system_performance",
         "system_contract",
         "system_regression",
+        "schema_retrieval",
     }:
         errors.append(f"{name}: invalid evaluation_layer")
     if payload["provider"].get("official_submission_provider") is not False:
@@ -385,7 +388,11 @@ def _check_baseline(path: Path) -> list[str]:
         except (OSError, json.JSONDecodeError):
             suite_payload = None
         if isinstance(suite_payload, dict):
-            for hash_map_name in ("test_file_sha256", "implementation_sha256"):
+            for hash_map_name in (
+                "input_file_sha256",
+                "test_file_sha256",
+                "implementation_sha256",
+            ):
                 component_hashes = suite_payload.get(hash_map_name)
                 if component_hashes is None:
                     continue
@@ -437,6 +444,13 @@ def _check_baseline(path: Path) -> list[str]:
             errors.append(
                 f"{name}: system contract baseline requires data not-applicable reason"
             )
+    elif payload["evaluation_layer"] == "schema_retrieval":
+        for field_name in ("field_registry_sha256", "model_registry_sha256"):
+            _require_sha256(errors, name, f"data.{field_name}", data.get(field_name))
+        if not data.get("not_applicable_reason"):
+            errors.append(
+                f"{name}: schema retrieval baseline requires data not-applicable reason"
+            )
     else:
         for field_name in ("database_sha256", "manifest_sha256", "source_file_sha256"):
             _require_sha256(errors, name, f"data.{field_name}", data.get(field_name))
@@ -482,6 +496,7 @@ def _check_baseline(path: Path) -> list[str]:
         "briefing_examples_bond_improved",
         "official_http_first_observed",
         "coverage_diagnostic_first_observed",
+        "public_development_not_blind",
     }:
         if (
             not isinstance(total, int)
