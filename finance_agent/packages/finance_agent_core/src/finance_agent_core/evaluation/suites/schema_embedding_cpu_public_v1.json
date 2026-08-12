@@ -1,0 +1,52 @@
+{
+  "schema_version": "1.0",
+  "suite_id": "schema-embedding-cpu-public-v1",
+  "recorded_on": "2026-08-12",
+  "purpose": "네 상품군 공개 core 질문으로 Schema Dense CPU 임베딩 후보를 동일 조건에서 비교",
+  "input_files": [
+    "finance_agent/packages/finance_agent_core/src/finance_agent_core/config/field_registry.yaml",
+    "finance_agent/packages/finance_agent_core/src/finance_agent_core/evaluation/schema_embedding_models_v1.json",
+    "finance_agent/packages/finance_agent_core/src/finance_agent_core/evaluation/suites/bond_core_50.json",
+    "finance_agent/packages/finance_agent_core/src/finance_agent_core/evaluation/suites/domestic_etp_core_50.json",
+    "finance_agent/packages/finance_agent_core/src/finance_agent_core/evaluation/suites/overseas_etp_core_50.json",
+    "finance_agent/packages/finance_agent_core/src/finance_agent_core/evaluation/suites/fund_core_50.json",
+    "finance_agent/packages/finance_agent_core/src/finance_agent_core/evaluation/suites/schema_linker_policy_migrations_v1.json"
+  ],
+  "input_file_sha256": {
+    "finance_agent/packages/finance_agent_core/src/finance_agent_core/config/field_registry.yaml": "5887c4dba17fd33d0c20b550adf564796de508e3dcafc2a2e7bb3796603a73b5",
+    "finance_agent/packages/finance_agent_core/src/finance_agent_core/evaluation/schema_embedding_models_v1.json": "25bce2f973c9685d94d6895c183f04006bf42a13e406a0f2a9624ee65ed7b653",
+    "finance_agent/packages/finance_agent_core/src/finance_agent_core/evaluation/suites/bond_core_50.json": "b2d19e3af43fb8d6d4be03895088380b263bb8aca2c53c29b32de622a29c4178",
+    "finance_agent/packages/finance_agent_core/src/finance_agent_core/evaluation/suites/domestic_etp_core_50.json": "c407cca721e1087ef1cab16368352c21cd7df75ea2b5a6f051e3ba978a6ce098",
+    "finance_agent/packages/finance_agent_core/src/finance_agent_core/evaluation/suites/overseas_etp_core_50.json": "166a233166af22cfddee1cf12d96066d133f64a4e5ec3d2f68e6634f7eafa53d",
+    "finance_agent/packages/finance_agent_core/src/finance_agent_core/evaluation/suites/fund_core_50.json": "77d9be9ca86d9654fb61a52290ca08eadff6b618f861b985367b05d195c582b2",
+    "finance_agent/packages/finance_agent_core/src/finance_agent_core/evaluation/suites/schema_linker_policy_migrations_v1.json": "82613954ce1734f34f51f1254d7d8e65d34c966b5048984b9a535d1c45ad5405"
+  },
+  "implementation_files": [
+    "finance_agent/packages/finance_agent_core/src/finance_agent_core/evaluation/dense_schema_linker.py",
+    "finance_agent/packages/finance_agent_core/src/finance_agent_core/evaluation/schema_embedding_benchmark.py",
+    "finance_agent/packages/finance_agent_core/src/finance_agent_core/evaluation/schema_embedding_benchmark_cli.py",
+    "finance_agent/packages/finance_agent_core/src/finance_agent_core/evaluation/schema_embedding_models.py"
+  ],
+  "implementation_sha256": {
+    "finance_agent/packages/finance_agent_core/src/finance_agent_core/evaluation/dense_schema_linker.py": "e7c1b4172b5665ec7aa4c8d2a1a5293752a506caa07b739e7a3393a6c6d536b1",
+    "finance_agent/packages/finance_agent_core/src/finance_agent_core/evaluation/schema_embedding_benchmark.py": "1b38ef2bc0d8b4113d80d8626331b4dd2e26e02a752604e3e3682772559cae18",
+    "finance_agent/packages/finance_agent_core/src/finance_agent_core/evaluation/schema_embedding_benchmark_cli.py": "274c5ec651df74269ced9b79ed05b8b3557cdf443c19705e5f1d2bd18edde799",
+    "finance_agent/packages/finance_agent_core/src/finance_agent_core/evaluation/schema_embedding_models.py": "0c71f294fec32643a4b66379191dcc4b9555bed079e90bef5e59fa19d0f39302"
+  },
+  "test_files": [
+    "finance_agent/packages/finance_agent_core/tests/test_dense_schema_linker_evaluation.py",
+    "finance_agent/packages/finance_agent_core/tests/test_schema_embedding_models.py"
+  ],
+  "test_file_sha256": {
+    "finance_agent/packages/finance_agent_core/tests/test_dense_schema_linker_evaluation.py": "5858e324f4c9b2b28063a647bfeea4886e2ef7f48ae33553b5306fb3aee21af8",
+    "finance_agent/packages/finance_agent_core/tests/test_schema_embedding_models.py": "714027d57c481ae326d3d9f6eed7016a76940683e24a00af57d47ca839d78ddc"
+  },
+  "required_properties": [
+    "Lexical 후보 순서는 Dense가 변경하지 않는다",
+    "차단 질문은 embedding provider를 호출하지 않는다",
+    "후보 field는 registry와 지정 상품군 안에만 존재한다",
+    "production feature는 독립 blind와 OOD 기권 검증 전까지 비활성이다"
+  ],
+  "initial_model_download_requires_network": true,
+  "evaluation_network_allowed_after_cache_warmup": false
+}

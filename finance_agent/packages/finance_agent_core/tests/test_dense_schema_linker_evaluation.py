@@ -1,4 +1,6 @@
 from finance_agent_core.evaluation.dense_schema_linker import (
+    FakeHashEmbeddingProvider,
+    _fuse_fields,
     run_dense_schema_linker_evaluation,
 )
 
@@ -33,3 +35,19 @@ def test_fake_dense_schema_evaluation_is_safe_but_never_adoption_evidence() -> N
     assert report.decision.production_adoption == "rejected_for_now"
     assert report.decision.product_semantic_search == "deferred"
     assert report.decision.abstention_policy_status == "not_calibrated"
+
+
+def test_lexical_first_fusion_preserves_the_lexical_priority_contract() -> None:
+    assert _fuse_fields(
+        ("fee", "aum"),
+        ("aum", "inception_date"),
+        strategy="lexical_first",
+    ) == ("fee", "aum", "inception_date")
+
+    report = run_dense_schema_linker_evaluation(
+        FakeHashEmbeddingProvider(),
+        fusion_strategy="lexical_first",
+    )
+
+    assert report.hybrid.exact_at_gold_cardinality >= report.lexical.exact_at_gold_cardinality
+    assert report.hybrid.micro_recall_at_5 >= report.lexical.micro_recall_at_5

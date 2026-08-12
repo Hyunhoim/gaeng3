@@ -316,15 +316,42 @@ def _lexical_result(
     return fields, blocked
 
 
-def _rrf(lexical: Sequence[str], dense: Sequence[str], top_k: int = 10) -> tuple[str, ...]:
+def _rrf(
+    lexical: Sequence[str],
+    dense: Sequence[str],
+    top_k: int = 10,
+    *,
+    lexical_weight: float = 1.0,
+    dense_weight: float = 1.0,
+) -> tuple[str, ...]:
     scores: dict[str, float] = {}
     best_rank: dict[str, int] = {}
-    for ranking in (lexical, dense):
+    for ranking, weight in ((lexical, lexical_weight), (dense, dense_weight)):
         for rank, field_id in enumerate(ranking, start=1):
-            scores[field_id] = scores.get(field_id, 0.0) + 1.0 / (60 + rank)
+            scores[field_id] = scores.get(field_id, 0.0) + weight / (60 + rank)
             best_rank[field_id] = min(best_rank.get(field_id, rank), rank)
     ordered = sorted(scores, key=lambda field: (-scores[field], best_rank[field], field))
     return tuple(ordered[:top_k])
+
+
+def _fuse_fields(
+    lexical: Sequence[str],
+    dense: Sequence[str],
+    *,
+    strategy: Literal["rrf", "lexical_first"],
+    top_k: int = 10,
+    lexical_weight: float = 1.0,
+    dense_weight: float = 1.0,
+) -> tuple[str, ...]:
+    if strategy == "lexical_first":
+        return _ordered_unique([*lexical, *dense])[:top_k]
+    return _rrf(
+        lexical,
+        dense,
+        top_k,
+        lexical_weight=lexical_weight,
+        dense_weight=dense_weight,
+    )
 
 
 def _dcg(predicted: Sequence[str], gold: frozenset[str], k: int) -> float:
@@ -463,7 +490,13 @@ def _load_cases() -> tuple[
 
 def run_dense_schema_linker_evaluation(
     provider: FakeHashEmbeddingProvider | None = None,
+    *,
+    fusion_strategy: Literal["rrf", "lexical_first"] = "rrf",
+    lexical_weight: float = 1.0,
+    dense_weight: float = 1.0,
 ) -> DenseSchemaEvaluationReport:
+    if lexical_weight <= 0 or dense_weight <= 0:
+        raise ValueError("fusion weights must be positive")
     fake = provider or FakeHashEmbeddingProvider()
     entries = build_schema_field_entries()
     rss_before_index = _rss_kib()
@@ -533,7 +566,14 @@ def run_dense_schema_linker_evaluation(
             dense_fields = tuple(candidate.field_id for candidate in candidates)
 
             fusion_started = time.perf_counter()
-            hybrid_fields = _rrf(lexical_fields, dense_fields, top_k=10)
+            hybrid_fields = _fuse_fields(
+                lexical_fields,
+                dense_fields,
+                strategy=fusion_strategy,
+                top_k=10,
+                lexical_weight=lexical_weight,
+                dense_weight=dense_weight,
+            )
             fusion_ms = (time.perf_counter() - fusion_started) * 1000
             dense_latencies.append(dense_ms)
             hybrid_latencies.append(lexical_ms + dense_ms + fusion_ms)

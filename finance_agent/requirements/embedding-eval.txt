@@ -1,0 +1,13 @@
+--extra-index-url https://download.pytorch.org/whl/cpu
+
+-e ./packages/finance_agent_core
+
+torch==2.13.0+cpu
+sentence-transformers==5.7.0
+transformers==5.15.0
+huggingface-hub==1.27.0
+einops==0.8.2
+pydantic==2.13.4
+PyYAML==6.0.3
+pytest==9.1.1
+ruff==0.16.0
