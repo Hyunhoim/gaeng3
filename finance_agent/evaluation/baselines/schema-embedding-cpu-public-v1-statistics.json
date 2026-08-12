@@ -1,0 +1,489 @@
+{
+  "schema_version": "1.0",
+  "analysis_id": "schema-embedding-cpu-public-v1-statistics",
+  "status": "public_development_not_blind",
+  "selected_model_alias": "bge-m3",
+  "fusion_strategy": "lexical_first",
+  "bootstrap_method": "paired_case_resampling_percentile",
+  "bootstrap_iterations": 10000,
+  "random_seed": 20260812,
+  "selected_report_fingerprint": "d3f17242e362c9fa45c1f55a77a2e4ea01c9cb67cdf558a93f908d015f795887",
+  "comparisons": [
+    {
+      "comparator": "lexical_baseline",
+      "case_count": 181,
+      "gold_field_count": 527,
+      "selected_only_exact_cases": 8,
+      "comparator_only_exact_cases": 0,
+      "both_exact_cases": 167,
+      "neither_exact_cases": 6,
+      "exact": {
+        "selected_value": 0.966851,
+        "comparator_value": 0.922652,
+        "observed_delta": 0.044199,
+        "ci95_lower": 0.016575,
+        "ci95_upper": 0.077348,
+        "probability_selected_greater": 0.9996,
+        "probability_equal": 0.0004
+      },
+      "recall_at_5": {
+        "selected_value": 0.988615,
+        "comparator_value": 0.969639,
+        "observed_delta": 0.018975,
+        "ci95_lower": 0.007812,
+        "ci95_upper": 0.031008,
+        "probability_selected_greater": 1.0,
+        "probability_equal": 0.0
+      }
+    },
+    {
+      "comparator": "kure-v1",
+      "case_count": 181,
+      "gold_field_count": 527,
+      "selected_only_exact_cases": 1,
+      "comparator_only_exact_cases": 1,
+      "both_exact_cases": 174,
+      "neither_exact_cases": 5,
+      "exact": {
+        "selected_value": 0.966851,
+        "comparator_value": 0.966851,
+        "observed_delta": 0.0,
+        "ci95_lower": -0.016575,
+        "ci95_upper": 0.016575,
+        "probability_selected_greater": 0.3492,
+        "probability_equal": 0.3067
+      },
+      "recall_at_5": {
+        "selected_value": 0.988615,
+        "comparator_value": 0.986717,
+        "observed_delta": 0.001898,
+        "ci95_lower": 0.0,
+        "ci95_upper": 0.005859,
+        "probability_selected_greater": 0.6315,
+        "probability_equal": 0.3685
+      }
+    },
+    {
+      "comparator": "qwen3-embedding-0.6b",
+      "case_count": 181,
+      "gold_field_count": 527,
+      "selected_only_exact_cases": 5,
+      "comparator_only_exact_cases": 2,
+      "both_exact_cases": 170,
+      "neither_exact_cases": 4,
+      "exact": {
+        "selected_value": 0.966851,
+        "comparator_value": 0.950276,
+        "observed_delta": 0.016575,
+        "ci95_lower": -0.01105,
+        "ci95_upper": 0.044199,
+        "probability_selected_greater": 0.828,
+        "probability_equal": 0.088
+      },
+      "recall_at_5": {
+        "selected_value": 0.988615,
+        "comparator_value": 0.981025,
+        "observed_delta": 0.00759,
+        "ci95_lower": 0.001838,
+        "ci95_upper": 0.015355,
+        "probability_selected_greater": 0.9817,
+        "probability_equal": 0.0183
+      }
+    },
+    {
+      "comparator": "koe5",
+      "case_count": 181,
+      "gold_field_count": 527,
+      "selected_only_exact_cases": 5,
+      "comparator_only_exact_cases": 0,
+      "both_exact_cases": 170,
+      "neither_exact_cases": 6,
+      "exact": {
+        "selected_value": 0.966851,
+        "comparator_value": 0.939227,
+        "observed_delta": 0.027624,
+        "ci95_lower": 0.005525,
+        "ci95_upper": 0.055249,
+        "probability_selected_greater": 0.9935,
+        "probability_equal": 0.0065
+      },
+      "recall_at_5": {
+        "selected_value": 0.988615,
+        "comparator_value": 0.986717,
+        "observed_delta": 0.001898,
+        "ci95_lower": 0.0,
+        "ci95_upper": 0.005859,
+        "probability_selected_greater": 0.6432,
+        "probability_equal": 0.3568
+      }
+    },
+    {
+      "comparator": "multilingual-e5-large-instruct",
+      "case_count": 181,
+      "gold_field_count": 527,
+      "selected_only_exact_cases": 4,
+      "comparator_only_exact_cases": 0,
+      "both_exact_cases": 171,
+      "neither_exact_cases": 6,
+      "exact": {
+        "selected_value": 0.966851,
+        "comparator_value": 0.944751,
+        "observed_delta": 0.022099,
+        "ci95_lower": 0.005525,
+        "ci95_upper": 0.044199,
+        "probability_selected_greater": 0.9833,
+        "probability_equal": 0.0167
+      },
+      "recall_at_5": {
+        "selected_value": 0.988615,
+        "comparator_value": 0.986717,
+        "observed_delta": 0.001898,
+        "ci95_lower": 0.0,
+        "ci95_upper": 0.005883,
+        "probability_selected_greater": 0.6343,
+        "probability_equal": 0.3657
+      }
+    },
+    {
+      "comparator": "snowflake-arctic-l-v2",
+      "case_count": 181,
+      "gold_field_count": 527,
+      "selected_only_exact_cases": 2,
+      "comparator_only_exact_cases": 1,
+      "both_exact_cases": 173,
+      "neither_exact_cases": 5,
+      "exact": {
+        "selected_value": 0.966851,
+        "comparator_value": 0.961326,
+        "observed_delta": 0.005525,
+        "ci95_lower": -0.01105,
+        "ci95_upper": 0.027624,
+        "probability_selected_greater": 0.6012,
+        "probability_equal": 0.2108
+      },
+      "recall_at_5": {
+        "selected_value": 0.988615,
+        "comparator_value": 0.986717,
+        "observed_delta": 0.001898,
+        "ci95_lower": 0.0,
+        "ci95_upper": 0.005894,
+        "probability_selected_greater": 0.6278,
+        "probability_equal": 0.3722
+      }
+    },
+    {
+      "comparator": "nomic-v2-moe",
+      "case_count": 181,
+      "gold_field_count": 527,
+      "selected_only_exact_cases": 2,
+      "comparator_only_exact_cases": 1,
+      "both_exact_cases": 173,
+      "neither_exact_cases": 5,
+      "exact": {
+        "selected_value": 0.966851,
+        "comparator_value": 0.961326,
+        "observed_delta": 0.005525,
+        "ci95_lower": -0.01105,
+        "ci95_upper": 0.027624,
+        "probability_selected_greater": 0.6034,
+        "probability_equal": 0.2172
+      },
+      "recall_at_5": {
+        "selected_value": 0.988615,
+        "comparator_value": 0.988615,
+        "observed_delta": 0.0,
+        "ci95_lower": 0.0,
+        "ci95_upper": 0.0,
+        "probability_selected_greater": 0.0,
+        "probability_equal": 1.0
+      }
+    }
+  ],
+  "confidence_profiles": [
+    {
+      "group": "all",
+      "top_1_score": {
+        "case_count": 181,
+        "minimum": 0.504416,
+        "p05": 0.540394,
+        "p25": 0.567659,
+        "p50": 0.601098,
+        "p75": 0.628641,
+        "p95": 0.6626,
+        "maximum": 0.730996
+      },
+      "top_1_top_2_margin": {
+        "case_count": 181,
+        "minimum": 0.000024,
+        "p05": 0.001814,
+        "p25": 0.008755,
+        "p50": 0.019534,
+        "p75": 0.036873,
+        "p95": 0.073323,
+        "maximum": 0.154725
+      }
+    },
+    {
+      "group": "hybrid_exact",
+      "top_1_score": {
+        "case_count": 175,
+        "minimum": 0.504416,
+        "p05": 0.540734,
+        "p25": 0.567661,
+        "p50": 0.600643,
+        "p75": 0.628625,
+        "p95": 0.663443,
+        "maximum": 0.730996
+      },
+      "top_1_top_2_margin": {
+        "case_count": 175,
+        "minimum": 0.000024,
+        "p05": 0.00188,
+        "p25": 0.008858,
+        "p50": 0.020098,
+        "p75": 0.036888,
+        "p95": 0.073396,
+        "maximum": 0.154725
+      }
+    },
+    {
+      "group": "hybrid_not_exact",
+      "top_1_score": {
+        "case_count": 6,
+        "minimum": 0.529294,
+        "p05": 0.535553,
+        "p25": 0.566467,
+        "p50": 0.615316,
+        "p75": 0.632042,
+        "p95": 0.638739,
+        "maximum": 0.640495
+      },
+      "top_1_top_2_margin": {
+        "case_count": 6,
+        "minimum": 0.001322,
+        "p05": 0.002611,
+        "p25": 0.007296,
+        "p50": 0.010091,
+        "p75": 0.026203,
+        "p95": 0.060291,
+        "maximum": 0.069902
+      }
+    },
+    {
+      "group": "bond",
+      "top_1_score": {
+        "case_count": 48,
+        "minimum": 0.504416,
+        "p05": 0.528557,
+        "p25": 0.55665,
+        "p50": 0.567775,
+        "p75": 0.61202,
+        "p95": 0.658157,
+        "maximum": 0.704415
+      },
+      "top_1_top_2_margin": {
+        "case_count": 48,
+        "minimum": 0.000024,
+        "p05": 0.001896,
+        "p25": 0.008909,
+        "p50": 0.018011,
+        "p75": 0.04058,
+        "p95": 0.099099,
+        "maximum": 0.154725
+      }
+    },
+    {
+      "group": "domestic_etp",
+      "top_1_score": {
+        "case_count": 47,
+        "minimum": 0.53366,
+        "p05": 0.538328,
+        "p25": 0.566918,
+        "p50": 0.58868,
+        "p75": 0.604816,
+        "p95": 0.63523,
+        "maximum": 0.643422
+      },
+      "top_1_top_2_margin": {
+        "case_count": 47,
+        "minimum": 0.00065,
+        "p05": 0.004278,
+        "p25": 0.015127,
+        "p50": 0.024121,
+        "p75": 0.044622,
+        "p95": 0.081262,
+        "maximum": 0.100136
+      }
+    },
+    {
+      "group": "fund",
+      "top_1_score": {
+        "case_count": 44,
+        "minimum": 0.531962,
+        "p05": 0.544608,
+        "p25": 0.599547,
+        "p50": 0.621656,
+        "p75": 0.634743,
+        "p95": 0.659142,
+        "maximum": 0.691131
+      },
+      "top_1_top_2_margin": {
+        "case_count": 44,
+        "minimum": 0.000341,
+        "p05": 0.000956,
+        "p25": 0.005976,
+        "p50": 0.014788,
+        "p75": 0.024464,
+        "p95": 0.036821,
+        "maximum": 0.058974
+      }
+    },
+    {
+      "group": "overseas_etp",
+      "top_1_score": {
+        "case_count": 42,
+        "minimum": 0.529294,
+        "p05": 0.554589,
+        "p25": 0.587073,
+        "p50": 0.617099,
+        "p75": 0.636741,
+        "p95": 0.683734,
+        "maximum": 0.730996
+      },
+      "top_1_top_2_margin": {
+        "case_count": 42,
+        "minimum": 0.001322,
+        "p05": 0.003295,
+        "p25": 0.008899,
+        "p50": 0.02367,
+        "p75": 0.041726,
+        "p95": 0.063275,
+        "maximum": 0.142407
+      }
+    }
+  ],
+  "exact_failure_cases": [
+    {
+      "case_id": "etp-core-022",
+      "product_family": "overseas_etp",
+      "split": "development",
+      "category": "identifier",
+      "question": "ISIN이 US4642872000인 해외 ETP를 찾아줘.",
+      "gold_fields": [
+        "isin"
+      ],
+      "predicted_at_gold_cardinality": [
+        "product_name"
+      ],
+      "missing_at_5": [],
+      "dense_top_1_score": 0.554329957,
+      "dense_margin_top_1_top_2": 0.009750291
+    },
+    {
+      "case_id": "etp-core-024",
+      "product_family": "overseas_etp",
+      "split": "development",
+      "category": "name",
+      "question": "이름에 iShares Core가 포함된 해외 ETF를 보수가 낮은 순으로 10개 찾아줘.",
+      "gold_fields": [
+        "product_name",
+        "product_type",
+        "total_expense_ratio_pct"
+      ],
+      "predicted_at_gold_cardinality": [
+        "product_type",
+        "total_expense_ratio_pct",
+        "isin"
+      ],
+      "missing_at_5": [],
+      "dense_top_1_score": 0.52929445,
+      "dense_margin_top_1_top_2": 0.001322118
+    },
+    {
+      "case_id": "etp-core-032",
+      "product_family": "overseas_etp",
+      "split": "development",
+      "category": "aum",
+      "question": "AUM이 1,000억 USD 이상인 해외 ETF를 AUM 내림차순으로 10개 보여줘.",
+      "gold_fields": [
+        "aum",
+        "product_type"
+      ],
+      "predicted_at_gold_cardinality": [
+        "product_type",
+        "trading_currency"
+      ],
+      "missing_at_5": [],
+      "dense_top_1_score": 0.62775296,
+      "dense_margin_top_1_top_2": 0.031459561
+    },
+    {
+      "case_id": "etp-core-033",
+      "product_family": "overseas_etp",
+      "split": "development",
+      "category": "aum",
+      "question": "AUM이 100억 USD에서 500억 USD 사이인 채권형 해외 ETF를 AUM 큰 순으로 5개 찾아줘.",
+      "gold_fields": [
+        "asset_type",
+        "aum",
+        "product_type"
+      ],
+      "predicted_at_gold_cardinality": [
+        "product_type",
+        "asset_type",
+        "trading_currency"
+      ],
+      "missing_at_5": [],
+      "dense_top_1_score": 0.602878432,
+      "dense_margin_top_1_top_2": 0.01043228
+    },
+    {
+      "case_id": "etp-core-034",
+      "product_family": "overseas_etp",
+      "split": "development",
+      "category": "aum",
+      "question": "AUM이 100만 USD 미만인 해외 ETF를 AUM 오름차순으로 10개 보여줘.",
+      "gold_fields": [
+        "aum",
+        "product_type"
+      ],
+      "predicted_at_gold_cardinality": [
+        "product_type",
+        "trading_currency"
+      ],
+      "missing_at_5": [],
+      "dense_top_1_score": 0.633472326,
+      "dense_margin_top_1_top_2": 0.069901503
+    },
+    {
+      "case_id": "etp-core-041",
+      "product_family": "overseas_etp",
+      "split": "development",
+      "category": "date",
+      "question": "AUM 업데이트일이 2026-06-13부터 2026-06-16 사이인 해외 ETF를 AUM 내림차순으로 5개 보여줘.",
+      "gold_fields": [
+        "aum",
+        "dynamic_as_of",
+        "product_type"
+      ],
+      "predicted_at_gold_cardinality": [
+        "product_type",
+        "aum",
+        "static_as_of"
+      ],
+      "missing_at_5": [],
+      "dense_top_1_score": 0.640495094,
+      "dense_margin_top_1_top_2": 0.006478381
+    }
+  ],
+  "top_5_capacity_limited_case_ids": [
+    "detp-041",
+    "etp-core-001",
+    "etp-core-002",
+    "fund-033"
+  ],
+  "selected_hits_at_5": 521,
+  "maximum_possible_hits_at_5": 521,
+  "capacity_adjusted_recall_at_5": 1.0,
+  "interpretation_guard": "confidence_intervals_describe_this_public_suite_not_external_generalization"
+}
