@@ -66,7 +66,7 @@ HCX 모델·endpoint·인증과 크레딧 적용 범위는 남아 있어 기존�
 - [교차 상품군 SEARCH](cross-family-search.md)
 - [BM25/SQLite FTS 문서 RAG](document-rag.md)
 - [Dense Schema Linker 오프라인 컴포넌트 평가](evaluation-dense-schema-linker-shadow.md)
-- [Schema Dense CPU 임베딩 모델 비교](evaluation-schema-embedding-cpu.md)
+- [Schema Dense CPU 임베딩 모델 비교](evaluation-schema-embedding-cpu.md) · [팀 공유용 HTML](evaluation-schema-embedding-cpu.html)
 - [근거 기반 최종 답변](evaluation-grounded-answers.md)
 
 ### 평가와 품질
@@ -137,7 +137,7 @@ HCX 모델·endpoint·인증과 크레딧 적용 범위는 남아 있어 기존�
 | [제출용 모델 경계와 로컬 LLM 정리 메모](submission-model-boundary.md) | 8월 6일 공식 확인, 제출 후보의 로컬 provider·설정·의존성 제거, 투명한 개발·제출 경계 | release gate |
 | [BM25/SQLite FTS 문서 RAG](document-rag.md) | 승인 문서 적재·BM25 검색·필터·근거·기준일·not-found 계약 | 최소 기능 완료 |
 | [Dense Schema Linker 오프라인 컴포넌트 평가](evaluation-dense-schema-linker-shadow.md) | 현재 승인 SQL·합성 BM25 기준선, fake embedding·index manifest·production OFF와 채택 gate | 컴포넌트 구현·채택 보류 |
-| [Schema Dense CPU 임베딩 모델 비교](evaluation-schema-embedding-cpu.md) | 7개×두 결합 방식, 상품군·6개 실패·paired bootstrap 분석, BGE·KURE blind 후보 | 공개 후보 압축 완료·독립 blind/OOD 대기·production OFF |
+| [Schema Dense CPU 임베딩 모델 비교](evaluation-schema-embedding-cpu.md) · [팀 공유용 HTML](evaluation-schema-embedding-cpu.html) | 7개×두 결합 방식, 상품군·6개 실패·paired bootstrap 분석, BGE·KURE blind 후보 | 공개 후보 압축 완료·HTML 공유본 생성·독립 blind/OOD 대기·production OFF |
 | [Schema Dense 외부 평가 인계서](../evaluation/schema_embedding_external/README.md) | 외부 100문항 gold field 추출, BGE·KURE 비교, OOD calibration/test 사전 동결 | protocol 완료·외부 bundle 대기 |
 | [Backend 전달용 Agent DTO](backend-contract.md) | 프레임워크 독립 request·response·citation·fallback·HTTP 오류 adapter와 JSON 예시 | v1.0·adapter 12/12 |
 | [금융상품 Agent 사람 평가 rubric](human-evaluation.md) | 6개 평가 축·critical gate·독립 reviewer·집계 계약 | rubric 완료·실평가 대기 |

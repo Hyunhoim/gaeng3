@@ -20,6 +20,7 @@ LLM 실행 도구를 보관하는 곳
 | `blind-fund-eval.py` | 봉인된 공모펀드 blind 평가 실행 보조 |
 | `run-hcx-contract-e2e.py` | 실제 API 없이 HyperCLOVA X provider 계약 검사 |
 | `run-answer-adapter-contract.py` | Agent 응답과 Backend adapter 계약 검사 |
+| `build-schema-embedding-html.mjs` | Schema Dense 상세 Markdown과 동결 수치를 팀 공유용 단일 HTML로 패키징 |
 | `local-llm/` | 개발 전용 Qwen 서버와 E2E 실행 도구 |
 
 registry 전체 Qwen 자연화·Agent 역할 비교는 패키지 명령

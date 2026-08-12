@@ -13,6 +13,9 @@
 처음 읽는 경우에는 `0. 한눈에 보는 결론` → `2. 먼저 알아둘 용어` → `6. 실험 절차`
 → `8. 평가 지표` → `9. 실험 결과` → `13. 주의할 점` 순서로 읽으면 된다
 
+팀원에게 공유할 때는 핵심 지표 카드·모델 비교 차트·전체 상세 내용을 한 파일에 담은
+[팀 공유용 HTML 완성본](evaluation-schema-embedding-cpu.html)을 먼저 전달하면 된다
+
 ## 0. 한눈에 보는 결론
 
 우리가 해결하려는 문제는 **상품을 직접 찾는 것**이 아니라, 사용자의 표현을 데이터베이스의
@@ -995,12 +998,26 @@ conda run -n gaeng3-dev \
 - 원시 결과 JSON은 `artifacts/evaluation/schema-embedding/`에 생성되며 Git에서 제외
 - Git에는 아래 동결 baseline과 재현에 필요한 suite·registry·코드만 보존
 
+팀 공유용 HTML은 다음 명령으로 Markdown 원문과 동결 수치를 다시 패키징한다
+
+```bash
+node scripts/build-schema-embedding-html.mjs
+```
+
+- `evaluation-schema-embedding-cpu.artifact.json`: 검증 가능한 보고서 입력
+- `evaluation-schema-embedding-cpu.html`: 외부 파일이나 서버가 필요 없는 단일 HTML
+- 생성기는 설치된 Codex Data Analytics plugin의 portable report builder를 사용
+- plugin 위치가 기본 cache와 다르면 `DATA_ANALYTICS_PLUGIN_ROOT`로 root 지정
+
 ## 16. 근거 파일
 
 ### 실험 정의와 동결 결과
 
 - [동결 baseline](../evaluation/baselines/schema-embedding-cpu-public-v1.json)
 - [paired 통계·실패 분석](../evaluation/analysis/schema-embedding-cpu-public-v1-statistics.json)
+- [HTML 차트·표 snapshot SQL](../evaluation/analysis/schema-embedding-cpu-public-v1-report.sql)
+- [팀 공유용 HTML](evaluation-schema-embedding-cpu.html)
+- [HTML 검증 artifact](evaluation-schema-embedding-cpu.artifact.json)
 - [실험 suite](../packages/finance_agent_core/src/finance_agent_core/evaluation/suites/schema_embedding_cpu_public_v1.json)
 - [모델 registry](../packages/finance_agent_core/src/finance_agent_core/evaluation/schema_embedding_models_v1.json)
 - [field registry](../packages/finance_agent_core/src/finance_agent_core/config/field_registry.yaml)
