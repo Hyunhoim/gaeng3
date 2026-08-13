@@ -32,6 +32,11 @@ from finance_agent_core.evaluation.cross_family_search import (
     load_cross_family_search_suite,
 )
 from finance_agent_core.execution import PlanAuthorityCode, PlanAuthorityError
+from finance_agent_core.observability import (
+    BoundedAsyncAuditSink,
+    InMemoryAuditSink,
+    MetricCounter,
+)
 
 
 def _cross_family_agent(
@@ -142,13 +147,17 @@ def test_cross_family_search_preserves_verified_family_boundaries_and_backend_dt
         DatabaseManifest,
     ],
 ) -> None:
+    memory = InMemoryAuditSink(max_events=1_000)
+    audit = BoundedAsyncAuditSink(memory, queue_capacity=256)
     result = _cross_family_agent(
         sample_database,
         domestic_sample_database,
+        audit_sink=audit,
     ).answer(
         "국내 ETF와 해외 ETF를 각각 3개 보여줘",
         "cross-search-001",
     )
+    assert audit.close(timeout_seconds=2)
 
     assert result.status == "executed"
     assert result.query_plan is None
@@ -177,6 +186,10 @@ def test_cross_family_search_preserves_verified_family_boundaries_and_backend_dt
     ]
     assert len(response.products) == 6
     assert response.citations
+    counters = audit.metrics.snapshot().counters
+    assert counters[MetricCounter.EVIDENCE_EXPECTED.value] == 1
+    assert counters[MetricCounter.EVIDENCE_PRESENT.value] == 1
+    assert counters.get(MetricCounter.EVIDENCE_INCOMPLETE.value, 0) == 0
 
 
 def test_cross_family_search_preserves_success_when_one_family_is_empty(

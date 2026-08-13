@@ -7,7 +7,11 @@ from time import monotonic, sleep
 import pytest
 
 from app import request_execution as execution_module
-from app.request_execution import execute_bounded_request, request_execution_stats
+from app.request_execution import (
+    execute_bounded_request,
+    request_execution_stats,
+    wait_for_request_workers,
+)
 
 
 def _wait_for_active(expected: int, timeout_seconds: float = 1.0) -> None:
@@ -91,4 +95,29 @@ def test_async_caller_cancellation_holds_permit_until_worker_cleanup() -> None:
         assert await asyncio.to_thread(cleaned.wait, 1)
 
     asyncio.run(scenario())
+    _wait_for_active(0)
+
+
+def test_shutdown_wait_tracks_timed_out_worker_until_cleanup() -> None:
+    _wait_for_active(0)
+    started = Event()
+    release = Event()
+
+    def blocking_operation() -> None:
+        started.set()
+        assert release.wait(1)
+
+    async def scenario() -> None:
+        with pytest.raises(TimeoutError):
+            await execute_bounded_request(
+                blocking_operation,
+                timeout_seconds=0.01,
+                max_inflight=1,
+            )
+
+    asyncio.run(scenario())
+    assert started.is_set()
+    assert wait_for_request_workers(timeout_seconds=0.001) is False
+    release.set()
+    assert wait_for_request_workers(timeout_seconds=1) is True
     _wait_for_active(0)

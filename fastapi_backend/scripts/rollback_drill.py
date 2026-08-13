@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import os
 import re
 import stat
@@ -11,7 +12,9 @@ import sys
 import tempfile
 from collections.abc import Sequence
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
+from time import monotonic, sleep
 from typing import Any
 
 _IMAGE_REFERENCE = re.compile(r"[a-z0-9][a-z0-9._:/-]{2,255}@sha256:[0-9a-f]{64}")
@@ -21,6 +24,133 @@ _SOURCE_COMMIT = re.compile(r"[0-9a-f]{40}")
 _PROJECT_NAME = re.compile(r"finance-agent-rollback-drill-[a-z0-9][a-z0-9-]{2,31}")
 _PROTECTED_PROJECT = "hyunholim-finance-agent"
 _BINDING_MOUNT = "/run/finance-release/deployment-binding.json"
+_RELEASE_BACKEND_UID = 10001
+_AUDIT_FILE_NAME = "events.jsonl"
+_AUDIT_PROBE_TIMEOUT_SECONDS = 10.0
+_MAX_AUDIT_PROBE_BYTES = 2 * 1024 * 1024
+_MAX_AUDIT_EVENT_BYTES = 64 * 1024
+_PROBE_REQUEST_ID = "rollback-drill-probe"
+_PROBE_QUESTION = "매수 가능한 국내채권을 매수수익률 높은 순으로 1개 보여줘."
+_PROBE_REQUEST_SHA256 = hashlib.sha256(_PROBE_REQUEST_ID.encode()).hexdigest()
+_PROBE_QUESTION_SHA256 = hashlib.sha256(_PROBE_QUESTION.encode()).hexdigest()
+_EMPTY_SHA256 = hashlib.sha256(b"").hexdigest()
+_AUDIT_REASON_CODE = re.compile(r"[a-z0-9][a-z0-9._-]{0,99}")
+_AUDIT_SENSITIVE_REASON = re.compile(
+    r"(?:question|prompt|answer|gold|expected|chain.?of.?thought|cot|reasoning|"
+    r"authorization|cookie|secret|token|api.?key|database|sqlite|path|header|body)",
+    re.IGNORECASE,
+)
+_AUDIT_STAGES = {
+    "request",
+    "route",
+    "safety",
+    "plan",
+    "planning",
+    "lexical",
+    "dense",
+    "schema_link_shadow",
+    "hclx",
+    "compiler",
+    "authority",
+    "execution",
+    "oracle",
+    "sql",
+    "verifier",
+    "renderer",
+    "answer",
+}
+_AUDIT_OUTCOMES = {
+    "started",
+    "succeeded",
+    "clarified",
+    "unsupported",
+    "blocked",
+    "timed_out",
+    "failed",
+}
+_AUDIT_ROUTE_DISPOSITIONS = {"execute", "clarify", "unsupported"}
+_AUDIT_INTERACTION_INTENTS = {
+    "search",
+    "detail",
+    "compare",
+    "aggregate",
+    "explain",
+    "clarify",
+    "unsupported",
+}
+_AUDIT_PRODUCT_FAMILIES = {"bond", "domestic_etp", "overseas_etp", "fund"}
+_AUDIT_EVENT_V11_FIELDS = frozenset(
+    {
+        "schema_version",
+        "observed_at_utc",
+        "stage",
+        "outcome",
+        "reason_code",
+        "duration_ms",
+        "request_id_sha256",
+        "question_sha256",
+        "invocation_id_sha256",
+        "event_sequence",
+        "route_disposition",
+        "interaction_intent",
+        "product_families",
+        "agent_release_id_sha256",
+        "agent_release_manifest_sha256",
+        "deployment_binding_sha256",
+        "release_context_sha256",
+        "dataset_release_id_sha256",
+        "approved_dataset_manifest_sha256",
+        "database_manifest_sha256",
+        "database_snapshot_sha256",
+        "source_snapshot_sha256",
+        "plan_sha256",
+        "plan_bundle_sha256",
+        "dataset_bundle_sha256",
+        "model_revision_sha256",
+        "model_snapshot_manifest_sha256",
+        "index_manifest_sha256",
+        "product_family_count",
+        "candidate_count",
+        "result_count",
+        "evidence_count",
+        "shadow_candidate_count",
+        "product_id_sha256s",
+        "evidence_id_sha256s",
+    }
+)
+_AUDIT_OPTIONAL_SHA256_FIELDS = {
+    "invocation_id_sha256",
+    "agent_release_id_sha256",
+    "agent_release_manifest_sha256",
+    "deployment_binding_sha256",
+    "release_context_sha256",
+    "dataset_release_id_sha256",
+    "approved_dataset_manifest_sha256",
+    "database_manifest_sha256",
+    "database_snapshot_sha256",
+    "source_snapshot_sha256",
+    "plan_sha256",
+    "plan_bundle_sha256",
+    "dataset_bundle_sha256",
+    "model_revision_sha256",
+    "model_snapshot_manifest_sha256",
+    "index_manifest_sha256",
+}
+_EXPECTED_PROBE_AUDIT_PATH = (
+    ("request", "started", "received"),
+    ("safety", "succeeded", "guard_allowed"),
+    ("lexical", "succeeded", "lexical_completed"),
+    ("planning", "succeeded", "policy_completed"),
+    ("route", "succeeded", "routed_execute"),
+    ("compiler", "succeeded", "plan_compiled"),
+    ("authority", "succeeded", "authority_granted"),
+    ("sql", "succeeded", "parameterized_statement_completed"),
+    ("oracle", "succeeded", "oracle_completed"),
+    ("verifier", "succeeded", "verification_passed"),
+    ("renderer", "succeeded", "rendering_completed"),
+    ("answer", "succeeded", "execution_completed"),
+    ("request", "succeeded", "response_completed"),
+)
 _ANSWER_PROBE_MARKER = "FINANCE_ROLLBACK_PROBE_RESULT="
 _ANSWER_PROBE = """
 import json
@@ -40,7 +170,12 @@ with urllib.request.urlopen(request, timeout=20) as response:
     body = json.load(response)
 if body.get("status") != "success" or body.get("intent") != "search":
     raise SystemExit("representative answer contract failed")
+with urllib.request.urlopen("http://127.0.0.1:8000/health", timeout=20) as response:
+    health = json.load(response)
+if health.get("status") != "ok" or health.get("audit_status") != "ok":
+    raise SystemExit("representative health audit contract failed")
 print("FINANCE_ROLLBACK_PROBE_RESULT=" + json.dumps({
+    "audit_status": health["audit_status"],
     "status": body["status"],
     "intent": body["intent"],
 }, separators=(",", ":")))
@@ -56,6 +191,10 @@ _ALLOWED_RELEASE_KEYS = {
     "FINANCE_RELEASE_MANIFEST_HOST_FILE",
     "FINANCE_RELEASE_MANIFEST_SIGSTORE_BUNDLE_HOST_FILE",
     "FINANCE_DEPLOYMENT_BINDING_SIGSTORE_BUNDLE_HOST_FILE",
+    "FINANCE_AUDIT_HOST_DIR",
+    "FINANCE_AUDIT_QUEUE_CAPACITY",
+    "FINANCE_AUDIT_SHUTDOWN_TIMEOUT_SECONDS",
+    "FINANCE_AUDIT_FSYNC_EACH_EVENT",
     "BACKEND_BIND_ADDRESS",
     "BACKEND_PORT",
     "LOG_LEVEL",
@@ -110,6 +249,248 @@ def _strict_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
             raise RollbackDrillError(f"duplicate JSON key in DeploymentBinding: {key}")
         result[key] = value
     return result
+
+
+def _canonical_sha256(value: object) -> str:
+    payload = json.dumps(
+        value,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    ).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
+
+
+def _reject_non_finite_json(value: str) -> None:
+    raise RollbackDrillError(f"non-finite JSON number is forbidden: {value}")
+
+
+def _is_sha256(value: object) -> bool:
+    return isinstance(value, str) and _SHA256.fullmatch(value) is not None
+
+
+def _is_bounded_integer(value: object, *, minimum: int, maximum: int) -> bool:
+    return type(value) is int and minimum <= value <= maximum
+
+
+def _require_audit_reader_identity() -> None:
+    if os.geteuid() not in {0, _RELEASE_BACKEND_UID}:
+        raise RollbackDrillError("rollback audit verification must run as root or UID 10001")
+
+
+def _validate_audit_event_v11(event: dict[str, Any]) -> None:
+    """Validate the complete serialized AuditEvent v1.1 wire contract.
+
+    The rollback host intentionally cannot import the application package.  This
+    closed, stdlib-only mirror therefore rejects omitted default fields as well
+    as unknown fields; a real ``AuditEvent.model_dump_json()`` emits every key.
+    """
+
+    if set(event) != _AUDIT_EVENT_V11_FIELDS:
+        raise RollbackDrillError("rollback audit event does not match AuditEvent v1.1")
+    if event["schema_version"] != "1.1":
+        raise RollbackDrillError("rollback audit event schema version is invalid")
+    observed_at = event["observed_at_utc"]
+    if not isinstance(observed_at, str):
+        raise RollbackDrillError("rollback audit timestamp is invalid")
+    try:
+        parsed_at = datetime.fromisoformat(
+            observed_at[:-1] + "+00:00" if observed_at.endswith("Z") else observed_at
+        )
+    except ValueError as error:
+        raise RollbackDrillError("rollback audit timestamp is invalid") from error
+    if parsed_at.tzinfo is None or parsed_at.utcoffset() is None:
+        raise RollbackDrillError("rollback audit timestamp is invalid")
+    if event["stage"] not in _AUDIT_STAGES or event["outcome"] not in _AUDIT_OUTCOMES:
+        raise RollbackDrillError("rollback audit stage or outcome is invalid")
+    reason_code = event["reason_code"]
+    if (
+        not isinstance(reason_code, str)
+        or _AUDIT_REASON_CODE.fullmatch(reason_code) is None
+        or _AUDIT_SENSITIVE_REASON.search(reason_code) is not None
+    ):
+        raise RollbackDrillError("rollback audit reason code is invalid")
+    duration_ms = event["duration_ms"]
+    if (
+        isinstance(duration_ms, bool)
+        or not isinstance(duration_ms, (int, float))
+        or not math.isfinite(float(duration_ms))
+        or not 0 <= duration_ms <= 3_600_000
+    ):
+        raise RollbackDrillError("rollback audit duration is invalid")
+    if not _is_sha256(event["request_id_sha256"]) or not _is_sha256(event["question_sha256"]):
+        raise RollbackDrillError("rollback audit request linkage is invalid")
+    for field in _AUDIT_OPTIONAL_SHA256_FIELDS:
+        value = event[field]
+        if value is not None and not _is_sha256(value):
+            raise RollbackDrillError("rollback audit SHA-256 linkage is invalid")
+
+    invocation = event["invocation_id_sha256"]
+    sequence = event["event_sequence"]
+    if (invocation is None) != (sequence is None) or (
+        sequence is not None
+        and not _is_bounded_integer(
+            sequence,
+            minimum=1,
+            maximum=9_223_372_036_854_775_807,
+        )
+    ):
+        raise RollbackDrillError("rollback audit invocation linkage is invalid")
+
+    families = event["product_families"]
+    if (
+        not isinstance(families, list)
+        or len(families) > 4
+        or any(family not in _AUDIT_PRODUCT_FAMILIES for family in families)
+        or len(families) != len(set(families))
+    ):
+        raise RollbackDrillError("rollback audit product families are invalid")
+    if not _is_bounded_integer(event["product_family_count"], minimum=0, maximum=4) or event[
+        "product_family_count"
+    ] != len(families):
+        raise RollbackDrillError("rollback audit product family count is invalid")
+
+    disposition = event["route_disposition"]
+    intent = event["interaction_intent"]
+    if (disposition is None) != (intent is None):
+        raise RollbackDrillError("rollback audit route linkage is incomplete")
+    if disposition is not None and (
+        disposition not in _AUDIT_ROUTE_DISPOSITIONS or intent not in _AUDIT_INTERACTION_INTENTS
+    ):
+        raise RollbackDrillError("rollback audit route linkage is invalid")
+    if disposition == "execute" and (not families or intent in {"clarify", "unsupported"}):
+        raise RollbackDrillError("rollback audit executable route is invalid")
+    if disposition == "unsupported" and intent != "unsupported":
+        raise RollbackDrillError("rollback audit unsupported route is invalid")
+    if disposition != "execute" and event["plan_sha256"] is not None:
+        raise RollbackDrillError("rollback audit non-executable route carries a plan")
+
+    release_fields = (
+        "agent_release_id_sha256",
+        "agent_release_manifest_sha256",
+        "deployment_binding_sha256",
+        "release_context_sha256",
+    )
+    if any(event[field] is not None for field in release_fields) != all(
+        event[field] is not None for field in release_fields
+    ):
+        raise RollbackDrillError("rollback audit release linkage is incomplete")
+    dataset_fields = (
+        "dataset_release_id_sha256",
+        "approved_dataset_manifest_sha256",
+        "database_manifest_sha256",
+        "database_snapshot_sha256",
+        "source_snapshot_sha256",
+    )
+    if any(event[field] is not None for field in dataset_fields) != all(
+        event[field] is not None for field in dataset_fields
+    ):
+        raise RollbackDrillError("rollback audit dataset linkage is incomplete")
+
+    count_limits = {
+        "candidate_count": 1_000_000,
+        "result_count": 100_000,
+        "evidence_count": 100_000,
+        "shadow_candidate_count": 100_000,
+    }
+    for field, maximum in count_limits.items():
+        if not _is_bounded_integer(event[field], minimum=0, maximum=maximum):
+            raise RollbackDrillError("rollback audit count is invalid")
+    if event["result_count"] > event["candidate_count"]:
+        raise RollbackDrillError("rollback audit result count exceeds candidates")
+
+    linkage_fields = (
+        ("product_id_sha256s", 100, "result_count"),
+        ("evidence_id_sha256s", 2_000, "evidence_count"),
+    )
+    for field, maximum, count_field in linkage_fields:
+        values = event[field]
+        if (
+            not isinstance(values, list)
+            or len(values) > maximum
+            or any(not _is_sha256(value) for value in values)
+            or len(values) != len(set(values))
+            or (values and len(values) != event[count_field])
+        ):
+            raise RollbackDrillError("rollback audit identifier linkage is invalid")
+
+
+def _open_secure_audit_directory(audit_root: Path) -> int:
+    """Open an absolute directory through a no-symlink component walk."""
+
+    normalized = Path(os.path.abspath(audit_root))
+    if not audit_root.is_absolute() or audit_root != normalized:
+        raise RollbackDrillError("rollback audit directory path is not canonical")
+    flags = (
+        os.O_RDONLY
+        | getattr(os, "O_CLOEXEC", 0)
+        | getattr(os, "O_DIRECTORY", 0)
+        | getattr(os, "O_NOFOLLOW", 0)
+    )
+    descriptor: int | None = None
+    try:
+        descriptor = os.open("/", flags)
+        for component in audit_root.parts[1:]:
+            child = os.open(component, flags, dir_fd=descriptor)
+            os.close(descriptor)
+            descriptor = child
+        metadata = os.fstat(descriptor)
+        if (
+            not stat.S_ISDIR(metadata.st_mode)
+            or metadata.st_uid != _RELEASE_BACKEND_UID
+            or metadata.st_mode & (stat.S_IRWXG | stat.S_IRWXO)
+        ):
+            raise RollbackDrillError(
+                "rollback audit directory must be owned by UID 10001 and owner-only"
+            )
+        return descriptor
+    except OSError as error:
+        if descriptor is not None:
+            os.close(descriptor)
+        raise RollbackDrillError(
+            "rollback audit directory is unavailable or uses a symlink"
+        ) from error
+    except Exception:
+        if descriptor is not None:
+            os.close(descriptor)
+        raise
+
+
+def _audit_directory_identity(descriptor: int) -> tuple[int, int]:
+    metadata = os.fstat(descriptor)
+    return metadata.st_dev, metadata.st_ino
+
+
+def _require_current_audit_directory(audit_root: Path, descriptor: int) -> None:
+    current_descriptor = _open_secure_audit_directory(audit_root)
+    try:
+        if _audit_directory_identity(current_descriptor) != _audit_directory_identity(descriptor):
+            raise RollbackDrillError("rollback audit directory changed during verification")
+    finally:
+        os.close(current_descriptor)
+
+
+def _secure_audit_file(metadata: os.stat_result) -> bool:
+    return (
+        stat.S_ISREG(metadata.st_mode)
+        and metadata.st_uid == _RELEASE_BACKEND_UID
+        and metadata.st_nlink == 1
+        and not metadata.st_mode & (stat.S_IRWXG | stat.S_IRWXO)
+    )
+
+
+def _audit_file_fingerprint(metadata: os.stat_result) -> tuple[int, ...]:
+    return (
+        metadata.st_dev,
+        metadata.st_ino,
+        metadata.st_mode,
+        metadata.st_uid,
+        metadata.st_nlink,
+        metadata.st_size,
+        metadata.st_mtime_ns,
+        metadata.st_ctime_ns,
+    )
 
 
 def _require_regular_file(path: Path, *, read_only: bool) -> Path:
@@ -171,30 +552,9 @@ def _validate_provider_profile(environment: dict[str, str]) -> None:
         raise RollbackDrillError("release HCLX QueryPlan flag is invalid")
     uses_hcx = answer_provider == "hyperclova" or hcx_query_plan == "true"
     if uses_hcx:
-        if (
-            environment.get("FINANCE_AGENT_LLM_MODE") != environment["APP_ENV"]
-            or environment.get("LLM_PROVIDER") != "hyperclova"
-            or environment.get("HCX_MODEL") != "HCX-007"
-            or environment.get("CLOVASTUDIO_API_KEY_FILE") != "/run/secrets/clovastudio_api_key"
-        ):
-            raise RollbackDrillError("HyperCLOVA release provider profile is incomplete")
-        secret_text = environment.get("CLOVASTUDIO_API_KEY_HOST_FILE", "")
-        if not secret_text:
-            raise RollbackDrillError("HyperCLOVA release secret file is missing")
-        secret = Path(secret_text)
-        try:
-            metadata = secret.stat(follow_symlinks=False)
-        except OSError as error:
-            raise RollbackDrillError("HyperCLOVA release secret is unavailable") from error
-        if (
-            not secret.is_absolute()
-            or not stat.S_ISREG(metadata.st_mode)
-            or metadata.st_uid != 10001
-            or metadata.st_nlink != 1
-            or metadata.st_mode & 0o077
-        ):
-            raise RollbackDrillError("HyperCLOVA release secret file is insecure")
-        return
+        raise RollbackDrillError(
+            "rollback audit drill supports only the deterministic HCLX-disabled profile"
+        )
 
     if environment.get("FINANCE_AGENT_LLM_MODE", "disabled") != "disabled":
         raise RollbackDrillError("deterministic release must disable LLM mode")
@@ -211,6 +571,29 @@ def _validate_provider_profile(environment: dict[str, str]) -> None:
         raise RollbackDrillError("deterministic release must not configure HCLX credentials")
 
 
+def _validate_audit_profile(environment: dict[str, str]) -> Path:
+    if environment.get("WEB_CONCURRENCY") != "1":
+        raise RollbackDrillError("rollback releases require WEB_CONCURRENCY=1")
+    if environment.get("FINANCE_AUDIT_FSYNC_EACH_EVENT", "true").lower() != "true":
+        raise RollbackDrillError("rollback releases require durable audit fsync")
+    queue_capacity = environment.get("FINANCE_AUDIT_QUEUE_CAPACITY", "2048")
+    if re.fullmatch(r"[0-9]+", queue_capacity) is None or not 1 <= int(queue_capacity) <= 100_000:
+        raise RollbackDrillError("rollback audit queue capacity is invalid")
+    try:
+        shutdown_timeout = float(environment.get("FINANCE_AUDIT_SHUTDOWN_TIMEOUT_SECONDS", "5"))
+    except ValueError as error:
+        raise RollbackDrillError("rollback audit shutdown timeout is invalid") from error
+    if not math.isfinite(shutdown_timeout) or not 0 < shutdown_timeout <= 60:
+        raise RollbackDrillError("rollback audit shutdown timeout is invalid")
+    audit_root = Path(environment["FINANCE_AUDIT_HOST_DIR"])
+    descriptor = _open_secure_audit_directory(audit_root)
+    try:
+        _require_current_audit_directory(audit_root, descriptor)
+    finally:
+        os.close(descriptor)
+    return audit_root
+
+
 def _load_target(path: Path) -> ReleaseTarget:
     env_file, environment = _load_environment(path)
     required = {
@@ -221,6 +604,8 @@ def _load_target(path: Path) -> ReleaseTarget:
         "FINANCE_DEPLOYMENT_BINDING_HOST_FILE",
         "FINANCE_DEPLOYMENT_BINDING_SHA256",
         "FINANCE_DATA_VOLUME_NAME",
+        "FINANCE_AUDIT_HOST_DIR",
+        "WEB_CONCURRENCY",
     }
     missing = sorted(name for name in required if not environment.get(name))
     if missing:
@@ -230,6 +615,7 @@ def _load_target(path: Path) -> ReleaseTarget:
     if environment["FINANCE_RUNTIME_PLATFORM"] != "linux/amd64":
         raise RollbackDrillError("official rollback platform must be linux/amd64")
     _validate_provider_profile(environment)
+    environment["FINANCE_AUDIT_HOST_DIR"] = str(_validate_audit_profile(environment))
     _require_pattern(
         environment["FINANCE_IMAGE_REFERENCE"],
         _IMAGE_REFERENCE,
@@ -318,6 +704,11 @@ def _verify_chain(previous: ReleaseTarget, current: ReleaseTarget) -> None:
         raise RollbackDrillError("rollback releases must use the same platform")
     if current.activation_generation != previous.activation_generation + 1:
         raise RollbackDrillError("current generation must immediately follow the previous one")
+    if (
+        previous.environment["FINANCE_AUDIT_HOST_DIR"]
+        != current.environment["FINANCE_AUDIT_HOST_DIR"]
+    ):
+        raise RollbackDrillError("rollback releases must preserve one append-only audit directory")
     rollback = current.binding["rollback"]
     expected = {
         "mode": "pinned_previous_release",
@@ -402,6 +793,7 @@ class DockerClient:
         self.project = project
         self.port = port
         self._all_release_keys: set[str] = set()
+        self.audit_observations: list[dict[str, Any]] = []
 
     def register(self, *targets: ReleaseTarget) -> None:
         for target in targets:
@@ -515,6 +907,7 @@ class DockerClient:
         self.compose(target, ["config", "--quiet"])
 
     def activate_and_verify(self, target: ReleaseTarget) -> None:
+        audit_checkpoint = self._audit_checkpoint(target)
         self.compose(
             target,
             ["up", "--detach", "--wait", "--no-build", "--force-recreate"],
@@ -573,8 +966,223 @@ class DockerClient:
             raise RollbackDrillError(
                 "representative /answer probe returned invalid JSON"
             ) from error
-        if probe_result != {"status": "success", "intent": "search"}:
+        if probe_result != {"audit_status": "ok", "status": "success", "intent": "search"}:
             raise RollbackDrillError("representative /answer probe failed")
+        self.audit_observations.append(self._wait_for_audit_chain(target, audit_checkpoint))
+
+    @staticmethod
+    def _audit_checkpoint(target: ReleaseTarget) -> tuple[tuple[int, int] | None, int]:
+        _require_audit_reader_identity()
+        audit_root = Path(target.environment["FINANCE_AUDIT_HOST_DIR"])
+        directory_descriptor = _open_secure_audit_directory(audit_root)
+        descriptor: int | None = None
+        try:
+            flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
+            try:
+                descriptor = os.open(_AUDIT_FILE_NAME, flags, dir_fd=directory_descriptor)
+            except FileNotFoundError:
+                _require_current_audit_directory(audit_root, directory_descriptor)
+                return None, 0
+            metadata = os.fstat(descriptor)
+            current = os.stat(
+                _AUDIT_FILE_NAME,
+                dir_fd=directory_descriptor,
+                follow_symlinks=False,
+            )
+            if (
+                not _secure_audit_file(metadata)
+                or not _secure_audit_file(current)
+                or _audit_file_fingerprint(metadata) != _audit_file_fingerprint(current)
+            ):
+                raise RollbackDrillError("rollback audit file is not a secure regular file")
+            _require_current_audit_directory(audit_root, directory_descriptor)
+            return (metadata.st_dev, metadata.st_ino), metadata.st_size
+        except OSError as error:
+            raise RollbackDrillError("rollback audit file is unavailable") from error
+        finally:
+            if descriptor is not None:
+                os.close(descriptor)
+            os.close(directory_descriptor)
+
+    @staticmethod
+    def _read_audit_append(
+        target: ReleaseTarget,
+        checkpoint: tuple[tuple[int, int] | None, int],
+    ) -> bytes:
+        _require_audit_reader_identity()
+        expected_identity, start_offset = checkpoint
+        audit_root = Path(target.environment["FINANCE_AUDIT_HOST_DIR"])
+        directory_descriptor = _open_secure_audit_directory(audit_root)
+        flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
+        try:
+            descriptor = os.open(_AUDIT_FILE_NAME, flags, dir_fd=directory_descriptor)
+        except OSError as error:
+            os.close(directory_descriptor)
+            raise RollbackDrillError("rollback audit file was not created") from error
+        try:
+            metadata = os.fstat(descriptor)
+            current = os.stat(
+                _AUDIT_FILE_NAME,
+                dir_fd=directory_descriptor,
+                follow_symlinks=False,
+            )
+            identity = (metadata.st_dev, metadata.st_ino)
+            if (
+                not _secure_audit_file(metadata)
+                or not _secure_audit_file(current)
+                or _audit_file_fingerprint(metadata) != _audit_file_fingerprint(current)
+                or (expected_identity is not None and identity != expected_identity)
+                or metadata.st_size <= start_offset
+                or metadata.st_size - start_offset > _MAX_AUDIT_PROBE_BYTES
+            ):
+                raise RollbackDrillError("rollback audit append boundary is invalid")
+            appended = os.pread(descriptor, metadata.st_size - start_offset, start_offset)
+            after = os.fstat(descriptor)
+            try:
+                current_after = os.stat(
+                    _AUDIT_FILE_NAME,
+                    dir_fd=directory_descriptor,
+                    follow_symlinks=False,
+                )
+                _require_current_audit_directory(audit_root, directory_descriptor)
+            except OSError as error:
+                raise RollbackDrillError(
+                    "rollback audit file changed while it was verified"
+                ) from error
+            if (
+                len(appended) != metadata.st_size - start_offset
+                or _audit_file_fingerprint(after) != _audit_file_fingerprint(metadata)
+                or _audit_file_fingerprint(after) != _audit_file_fingerprint(current_after)
+                or not _secure_audit_file(after)
+                or not _secure_audit_file(current_after)
+            ):
+                raise RollbackDrillError("rollback audit file changed while it was verified")
+            return appended
+        finally:
+            os.close(descriptor)
+            os.close(directory_descriptor)
+
+    @classmethod
+    def _wait_for_audit_chain(
+        cls,
+        target: ReleaseTarget,
+        checkpoint: tuple[tuple[int, int] | None, int],
+    ) -> dict[str, Any]:
+        deadline = monotonic() + _AUDIT_PROBE_TIMEOUT_SECONDS
+        last_error: RollbackDrillError | None = None
+        while monotonic() < deadline:
+            try:
+                appended = cls._read_audit_append(target, checkpoint)
+                return cls._verify_audit_chain(target, appended)
+            except RollbackDrillError as error:
+                last_error = error
+                sleep(0.05)
+        raise RollbackDrillError(
+            "rollback audit chain did not become durable in time"
+        ) from last_error
+
+    @staticmethod
+    def _verify_audit_chain(target: ReleaseTarget, appended: bytes) -> dict[str, Any]:
+        if not appended.endswith(b"\n"):
+            raise RollbackDrillError("rollback audit append has a partial final record")
+        try:
+            events = [
+                json.loads(
+                    line,
+                    object_pairs_hook=_strict_object,
+                    parse_constant=_reject_non_finite_json,
+                )
+                for line in appended.splitlines()
+            ]
+        except (UnicodeError, json.JSONDecodeError) as error:
+            raise RollbackDrillError("rollback audit append is not valid JSONL") from error
+        if not events or any(not isinstance(event, dict) for event in events):
+            raise RollbackDrillError("rollback audit append must contain JSON objects")
+        if any(len(line) + 1 > _MAX_AUDIT_EVENT_BYTES for line in appended.splitlines()):
+            raise RollbackDrillError("rollback audit event exceeds the AuditEvent size limit")
+        for event in events:
+            _validate_audit_event_v11(event)
+        answer_events = [
+            event
+            for event in events
+            if event.get("stage") == "answer"
+            and event.get("outcome") == "succeeded"
+            and event.get("request_id_sha256") == _PROBE_REQUEST_SHA256
+        ]
+        if len(answer_events) != 1:
+            raise RollbackDrillError("rollback audit append lacks one successful answer event")
+        answer = answer_events[0]
+        invocation = answer.get("invocation_id_sha256")
+        if not isinstance(invocation, str) or _SHA256.fullmatch(invocation) is None:
+            raise RollbackDrillError("rollback audit invocation identity is invalid")
+        chain = [event for event in events if event.get("invocation_id_sha256") == invocation]
+        sequences = [event.get("event_sequence") for event in chain]
+        if sequences != list(range(1, len(chain) + 1)):
+            raise RollbackDrillError("rollback audit invocation sequence is not contiguous")
+        if (
+            chain[0].get("request_id_sha256") != _EMPTY_SHA256
+            or chain[0].get("question_sha256") != _EMPTY_SHA256
+            or any(
+                event.get("request_id_sha256") != _PROBE_REQUEST_SHA256
+                or event.get("question_sha256") != _PROBE_QUESTION_SHA256
+                for event in chain[1:]
+            )
+        ):
+            raise RollbackDrillError("rollback audit invocation is not linked to the probe")
+        observed_path = tuple(
+            (event["stage"], event["outcome"], event["reason_code"]) for event in chain
+        )
+        if observed_path != _EXPECTED_PROBE_AUDIT_PATH:
+            raise RollbackDrillError("rollback audit invocation path is not exactly deterministic")
+        expected_release_id = hashlib.sha256(target.release_id.encode()).hexdigest()
+        expected_release_context = _canonical_sha256(
+            {
+                "release_id": target.release_id,
+                "manifest_file_sha256": target.binding["release_manifest_sha256"],
+                "binding_file_sha256": target.binding_sha256,
+                "image_reference": target.image_reference,
+                "activation_generation": target.activation_generation,
+            }
+        )
+        for event in events:
+            if (
+                event.get("agent_release_id_sha256") != expected_release_id
+                or event.get("agent_release_manifest_sha256")
+                != target.binding["release_manifest_sha256"]
+                or event.get("deployment_binding_sha256") != target.binding_sha256
+                or event.get("release_context_sha256") != expected_release_context
+            ):
+                raise RollbackDrillError("rollback audit release linkage is incomplete")
+        if any(
+            not isinstance(answer.get(field), str) or _SHA256.fullmatch(answer[field]) is None
+            for field in (
+                "dataset_release_id_sha256",
+                "approved_dataset_manifest_sha256",
+                "database_manifest_sha256",
+                "database_snapshot_sha256",
+                "source_snapshot_sha256",
+                "plan_sha256",
+            )
+        ):
+            raise RollbackDrillError("rollback audit answer lacks dataset or plan linkage")
+        if (
+            answer["route_disposition"] != "execute"
+            or answer["interaction_intent"] != "search"
+            or answer["product_families"] != ["bond"]
+            or answer["product_family_count"] != 1
+            or answer["candidate_count"] < 1
+            or answer["result_count"] != 1
+            or answer["evidence_count"] < 1
+            or len(answer["product_id_sha256s"]) != 1
+            or len(answer["evidence_id_sha256s"]) != answer["evidence_count"]
+        ):
+            raise RollbackDrillError("rollback audit answer semantics are incomplete")
+        return {
+            "release_id": target.release_id,
+            "event_count": len(chain),
+            "invocation_id_sha256": invocation,
+            "terminal_sequence": sequences[-1],
+        }
 
     def stop_isolated_project(self, target: ReleaseTarget) -> None:
         down = self.compose(target, ["down"], allow_failure=True)
@@ -607,6 +1215,7 @@ def _result(
     previous: ReleaseTarget,
     current: ReleaseTarget,
     stopped: bool,
+    audit_observations: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     return {
         "schema_version": "1.0",
@@ -634,6 +1243,8 @@ def _result(
         },
         "artifacts_preserved": mode == "execute",
         "containers_stopped_after_verification": stopped,
+        "audit_chain_verified": mode == "execute" and len(audit_observations or []) == 3,
+        "audit_observations": audit_observations or [],
     }
 
 
@@ -673,6 +1284,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             raise RollbackDrillError(
                 "--leave-running is incompatible with immutable rollback snapshots"
             )
+        if arguments.execute:
+            _require_audit_reader_identity()
         previous = _load_target(arguments.previous_env)
         current = _load_target(arguments.current_env)
         _verify_chain(previous, current)
@@ -686,6 +1299,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                         previous=previous,
                         current=current,
                         stopped=False,
+                        audit_observations=[],
                     ),
                     ensure_ascii=False,
                     sort_keys=True,
@@ -728,6 +1342,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     previous=previous,
                     current=current,
                     stopped=True,
+                    audit_observations=docker.audit_observations,
                 ),
                 ensure_ascii=False,
                 sort_keys=True,

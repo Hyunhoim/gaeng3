@@ -50,6 +50,8 @@ finance-evaluate-safety-blind = "finance_agent_core.evaluation.safety_blind_cli:
 finance-evaluate-dense-schema-linker = "finance_agent_core.evaluation.dense_schema_linker_cli:main"
 finance-benchmark-schema-embeddings = "finance_agent_core.evaluation.schema_embedding_benchmark_cli:main"
 finance-analyze-schema-embeddings = "finance_agent_core.evaluation.schema_embedding_analysis_cli:main"
+finance-evaluate-schema-embedding-external-v2 = "finance_agent_core.evaluation.schema_embedding_external_v2_cli:main"
+finance-benchmark-schema-embedding-runtime = "finance_agent_core.evaluation.schema_embedding_runtime_benchmark:main"
 finance-evaluate-approved-sql = "finance_agent_core.evaluation.approved_sql_baseline_cli:main"
 finance-benchmark-bm25-contract = "finance_agent_core.evaluation.bm25_contract_benchmark_cli:main"
 finance-build-agent-release = "finance_agent_core.release_cli:main"
@@ -68,7 +70,10 @@ where = ["src"]
 "finance_agent_core.contracts.examples" = ["*.json"]
 "finance_agent_core.evaluation.suites" = ["*.json"]
 "finance_agent_core.evaluation.rubrics" = ["*.json"]
-"finance_agent_core.evaluation" = ["schema_embedding_models_v1.json"]
+"finance_agent_core.evaluation" = [
+    "schema_embedding_models_v1.json",
+    "schema_embedding_snapshot_manifest_v2.schema.json",
+]
 
 [tool.pytest.ini_options]
 addopts = "-ra"

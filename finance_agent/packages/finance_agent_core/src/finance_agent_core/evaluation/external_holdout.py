@@ -4,9 +4,10 @@ import hashlib
 import json
 import re
 from collections import Counter
+from collections.abc import Sequence
 from difflib import SequenceMatcher
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -186,31 +187,61 @@ def _normalize_question(question: str) -> str:
     return re.sub(r"[\W_]+", "", question.casefold())
 
 
+class ExternalQuestionText(Protocol):
+    """Minimal question shape shared by the v1 and label-free v2 blind sets."""
+
+    id: str
+    question: str
+
+
+def assess_external_near_duplicates(
+    cases: Sequence[ExternalQuestionText],
+    reference_questions: Sequence[str],
+    *,
+    max_similarity: float = 0.84,
+) -> tuple[float, tuple[str, ...]]:
+    """Return the maximum similarity and violating case IDs without label access."""
+
+    if not 0 < max_similarity <= 1:
+        raise ValueError("max_similarity must be in (0, 1]")
+    if not reference_questions:
+        raise ValueError("near-duplicate assessment requires frozen reference questions")
+    normalized_references = tuple(_normalize_question(question) for question in reference_questions)
+    if any(not reference for reference in normalized_references):
+        raise ValueError("near-duplicate reference questions cannot normalize to empty text")
+
+    maximum_observed = 0.0
+    violations: list[str] = []
+    for case in cases:
+        normalized = _normalize_question(case.question)
+        if not normalized:
+            raise ValueError(f"{case.id}: external blind question normalizes to empty text")
+        case_maximum = max(
+            SequenceMatcher(None, normalized, reference).ratio()
+            for reference in normalized_references
+        )
+        maximum_observed = max(maximum_observed, case_maximum)
+        if case_maximum >= max_similarity:
+            violations.append(case.id)
+    return round(maximum_observed, 9), tuple(violations)
+
+
 def reject_external_near_duplicates(
     questions: ExternalBlindQuestionSet,
     reference_questions: list[str],
     *,
     max_similarity: float = 0.84,
 ) -> None:
-    if not 0 < max_similarity <= 1:
-        raise ValueError("max_similarity must be in (0, 1]")
-    normalized_references = [
-        (_normalize_question(question), question) for question in reference_questions
-    ]
-    violations: list[str] = []
-    for case in questions.cases:
-        normalized = _normalize_question(case.question)
-        for reference, reference_raw in normalized_references:
-            similarity = SequenceMatcher(None, normalized, reference).ratio()
-            if similarity >= max_similarity:
-                violations.append(
-                    f"{case.id} similarity={similarity:.3f} reference={reference_raw[:80]!r}"
-                )
-                break
+    maximum_observed, violations = assess_external_near_duplicates(
+        questions.cases,
+        reference_questions,
+        max_similarity=max_similarity,
+    )
     if violations:
         raise ValueError(
             "external blind questions are too similar to frozen references: "
-            + "; ".join(violations[:10])
+            + ", ".join(violations[:10])
+            + f"; maximum_similarity={maximum_observed:.3f}"
         )
 
 

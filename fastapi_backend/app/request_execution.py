@@ -5,7 +5,7 @@ import contextvars
 from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
-from threading import Lock
+from threading import Event, Lock
 
 from finance_agent_core.deadline import RequestDeadline, bind_request_deadline
 
@@ -34,6 +34,8 @@ class RequestExecutionStats:
 class _ProcessAdmission:
     def __init__(self) -> None:
         self._lock = Lock()
+        self._idle = Event()
+        self._idle.set()
         self._active = 0
         self._peak_active = 0
         self._accepted = 0
@@ -44,6 +46,8 @@ class _ProcessAdmission:
             if self._active >= limit:
                 self._rejected += 1
                 return False
+            if self._active == 0:
+                self._idle.clear()
             self._active += 1
             self._peak_active = max(self._peak_active, self._active)
             self._accepted += 1
@@ -54,6 +58,8 @@ class _ProcessAdmission:
             if self._active <= 0:
                 raise RuntimeError("request admission counter underflow")
             self._active -= 1
+            if self._active == 0:
+                self._idle.set()
 
     def stats(self) -> RequestExecutionStats:
         with self._lock:
@@ -63,6 +69,21 @@ class _ProcessAdmission:
                 accepted=self._accepted,
                 rejected=self._rejected,
             )
+
+    def wait_until_idle(self, timeout_seconds: float) -> bool:
+        """Wait for already accepted workers without accepting audit authority.
+
+        Uvicorn finishes ASGI traffic before lifespan shutdown, so no new public
+        request should be admitted while this wait runs. Rechecking the counter
+        after the Event closes the small defensive race with direct test callers.
+        """
+
+        if timeout_seconds < 0:
+            raise ValueError("timeout_seconds cannot be negative")
+        if not self._idle.wait(timeout_seconds):
+            return False
+        with self._lock:
+            return self._active == 0
 
 
 _PROCESS_EXECUTOR = ThreadPoolExecutor(
@@ -76,6 +97,12 @@ def request_execution_stats() -> RequestExecutionStats:
     """Expose aggregate counters for deterministic tests and process telemetry."""
 
     return _PROCESS_ADMISSION.stats()
+
+
+def wait_for_request_workers(*, timeout_seconds: float) -> bool:
+    """Bound shutdown until timed-out synchronous workers finish cleanup."""
+
+    return _PROCESS_ADMISSION.wait_until_idle(timeout_seconds)
 
 
 def _run_with_deadline[ResultT](

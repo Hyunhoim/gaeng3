@@ -34,6 +34,9 @@ services:
       FINANCE_SOURCE_COMMIT: ${FINANCE_SOURCE_COMMIT:?required}
       FINANCE_RUNTIME_IMAGE_REFERENCE: ${FINANCE_IMAGE_REFERENCE:?required}
       FINANCE_RUNTIME_PLATFORM: ${FINANCE_RUNTIME_PLATFORM:-linux/amd64}
+      # Stage 4 audit ordering is process-local. Keep exactly one worker until
+      # a cross-process audit aggregator becomes part of the release contract.
+      WEB_CONCURRENCY: "1"
       FINANCE_DENSE_SCHEMA_LINKER_ENABLED: "false"
       FINANCE_PRODUCT_DENSE_ENABLED: "false"
       FINANCE_BACKEND_ANSWER_PROVIDER: ${FINANCE_BACKEND_ANSWER_PROVIDER:-deterministic}
@@ -43,11 +46,22 @@ services:
       HCX_MODEL: ${HCX_MODEL:-}
       HCX_TIMEOUT_SECONDS: ${HCX_TIMEOUT_SECONDS:-45}
       CLOVASTUDIO_API_KEY_FILE: ${CLOVASTUDIO_API_KEY_FILE:-}
+      FINANCE_AUDIT_MODE: jsonl
+      FINANCE_AUDIT_FILE: /audit/events.jsonl
+      FINANCE_AUDIT_QUEUE_CAPACITY: ${FINANCE_AUDIT_QUEUE_CAPACITY:-2048}
+      FINANCE_AUDIT_SHUTDOWN_TIMEOUT_SECONDS: ${FINANCE_AUDIT_SHUTDOWN_TIMEOUT_SECONDS:-5}
+      FINANCE_AUDIT_FSYNC_EACH_EVENT: ${FINANCE_AUDIT_FSYNC_EACH_EVENT:-true}
     volumes:
       - type: bind
         source: ${FINANCE_DEPLOYMENT_BINDING_HOST_FILE:?required}
         target: /run/finance-release/deployment-binding.json
         read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${FINANCE_AUDIT_HOST_DIR:?owner-only audit directory is required}
+        target: /audit
+        read_only: false
         bind:
           create_host_path: false
     secrets:

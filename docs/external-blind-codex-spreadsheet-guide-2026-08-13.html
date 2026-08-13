@@ -1,0 +1,706 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'">
+  <meta name="referrer" content="no-referrer">
+  <meta name="description" content="박재모 금융 도메인 담당자가 Codex를 이용해 Schema Dense 외부 blind 100문항 Spreadsheet와 비공개 정답키를 안전하게 작성하는 방법론 및 프롬프트 모음">
+  <title>External Blind 100문항 — Codex Spreadsheet 작성 가이드</title>
+  <style>
+    :root {
+      --bg: #f4f7fb;
+      --surface: #ffffff;
+      --surface-soft: #eef3f8;
+      --text: #172238;
+      --muted: #5d6b7f;
+      --line: #d5dfea;
+      --navy: #123b64;
+      --blue: #116ca8;
+      --green: #0e7352;
+      --green-bg: #e9f7f0;
+      --amber: #8b5b05;
+      --amber-bg: #fff5d9;
+      --red: #a12f3c;
+      --red-bg: #fff0f1;
+      --purple: #6542a4;
+      --purple-bg: #f2edfc;
+      --shadow: 0 10px 28px rgba(18, 49, 82, .08);
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #111827;
+        --surface: #182233;
+        --surface-soft: #202c3d;
+        --text: #edf3fa;
+        --muted: #b9c6d5;
+        --line: #34445a;
+        --navy: #99cef2;
+        --blue: #73c5f5;
+        --green: #7ddbb7;
+        --green-bg: #143a31;
+        --amber: #ffd27d;
+        --amber-bg: #3a2e17;
+        --red: #ff9da5;
+        --red-bg: #3a2027;
+        --purple: #c5acf4;
+        --purple-bg: #2e2546;
+        --shadow: none;
+      }
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      color: var(--text);
+      background: var(--bg);
+      font-family: Pretendard, "Noto Sans KR", "Apple SD Gothic Neo", system-ui, sans-serif;
+      line-height: 1.68;
+      word-break: keep-all;
+    }
+    a { color: var(--blue); text-underline-offset: 3px; }
+    h1, h2, h3 { line-height: 1.3; letter-spacing: -.025em; }
+    h1 { margin: 0; font-size: clamp(2rem, 4.4vw, 3.2rem); }
+    h2 { margin: 0 0 18px; color: var(--navy); font-size: clamp(1.4rem, 3vw, 2rem); }
+    h3 { margin: 0 0 10px; color: var(--navy); font-size: 1.15rem; }
+    p { margin: 8px 0 14px; }
+    ul, ol { margin: 8px 0; padding-left: 1.35rem; }
+    li + li { margin-top: .4rem; }
+    code {
+      padding: .08rem .34rem;
+      border: 1px solid var(--line);
+      border-radius: 5px;
+      background: var(--surface-soft);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: .9em;
+      word-break: break-all;
+    }
+    pre {
+      margin: 0;
+      padding: 17px;
+      overflow: auto;
+      border: 1px solid var(--line);
+      border-radius: 11px;
+      background: var(--surface-soft);
+      white-space: pre-wrap;
+      word-break: break-word;
+      font: .83rem/1.6 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+    .page { max-width: 1180px; margin: 0 auto; padding: 28px 24px 80px; }
+    .hero {
+      padding: clamp(28px, 5vw, 54px);
+      border-radius: 22px;
+      color: #fff;
+      background: linear-gradient(135deg, #102e52 0%, #14557e 57%, #1b778e 100%);
+      box-shadow: var(--shadow);
+    }
+    .eyebrow { margin: 0 0 9px; font-size: .8rem; font-weight: 800; letter-spacing: .1em; opacity: .84; }
+    .hero .lead { max-width: 950px; margin-top: 18px; font-size: 1.05rem; opacity: .96; }
+    .meta { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 22px; }
+    .meta span { padding: 5px 10px; border: 1px solid rgba(255,255,255,.25); border-radius: 999px; background: rgba(255,255,255,.08); font-size: .78rem; }
+    nav {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+      margin-top: 18px;
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: var(--surface);
+      box-shadow: 0 4px 18px rgba(20,42,70,.05);
+    }
+    nav a { padding: 6px 9px; border-radius: 7px; color: var(--text); font-size: .82rem; font-weight: 700; text-decoration: none; }
+    nav a:hover, nav a:focus-visible { background: var(--surface-soft); }
+    main section { scroll-margin-top: 84px; margin-top: 52px; }
+    .callout { margin: 16px 0; padding: 16px 18px; border-left: 5px solid var(--blue); border-radius: 9px; background: var(--surface-soft); }
+    .callout.success { border-color: var(--green); background: var(--green-bg); }
+    .callout.warning { border-color: var(--amber); background: var(--amber-bg); }
+    .callout.danger { border-color: var(--red); background: var(--red-bg); }
+    .callout p:last-child { margin-bottom: 0; }
+    .grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 14px; }
+    .card { grid-column: span 6; padding: 19px; border: 1px solid var(--line); border-radius: 13px; background: var(--surface); box-shadow: 0 4px 16px rgba(20,42,70,.04); }
+    .card.third { grid-column: span 4; }
+    .card.full { grid-column: 1 / -1; }
+    .card p:last-child, .card ul:last-child { margin-bottom: 0; }
+    .table-wrap { margin: 15px 0 22px; overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; }
+    table { width: 100%; border-collapse: collapse; background: var(--surface); font-size: .88rem; }
+    th, td { padding: 11px 12px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+    th { color: var(--navy); background: var(--surface-soft); font-size: .79rem; white-space: nowrap; }
+    tr:last-child td { border-bottom: 0; }
+    .flow { display: flex; align-items: stretch; gap: 7px; margin: 18px 0; overflow-x: auto; padding-bottom: 7px; }
+    .flow-step { min-width: 135px; flex: 1; padding: 13px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); text-align: center; font-size: .78rem; }
+    .flow-step strong { display: block; margin-bottom: 4px; color: var(--navy); }
+    .arrow { align-self: center; color: var(--muted); font-weight: 900; }
+    .prompt { margin-top: 18px; padding: 20px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); box-shadow: var(--shadow); }
+    .prompt-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+    .prompt-head h3 { margin: 0; }
+    .copy {
+      flex: 0 0 auto;
+      padding: 7px 11px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      color: var(--text);
+      background: var(--surface-soft);
+      cursor: pointer;
+      font-weight: 700;
+    }
+    .copy:hover, .copy:focus-visible { border-color: var(--blue); }
+    .tag { display: inline-block; padding: 3px 8px; border-radius: 999px; font-size: .72rem; font-weight: 800; }
+    .required { color: var(--red); background: var(--red-bg); }
+    .private { color: var(--purple); background: var(--purple-bg); }
+    .safe { color: var(--green); background: var(--green-bg); }
+    .checklist { columns: 2; column-gap: 30px; }
+    .checklist li { break-inside: avoid; }
+    footer { margin-top: 60px; padding-top: 22px; border-top: 1px solid var(--line); color: var(--muted); font-size: .84rem; }
+    @media (max-width: 800px) {
+      .page { padding: 14px 14px 54px; }
+      .card, .card.third { grid-column: 1 / -1; }
+      .checklist { columns: 1; }
+      .prompt-head { align-items: flex-start; flex-direction: column; }
+    }
+    @media print {
+      body { background: #fff; color: #111; }
+      .page { max-width: none; padding: 0; }
+      nav, .copy { display: none; }
+      .hero { color: #fff; print-color-adjust: exact; }
+      main section { page-break-inside: avoid; }
+      .prompt { box-shadow: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header class="hero">
+      <p class="eyebrow">MIRAE ASSET AI FESTIVAL · EXTERNAL BLIND AUTHORING</p>
+      <h1>Codex로 외부 Blind 100문항<br>Spreadsheet 만들기</h1>
+      <p class="lead">박재모 금융 도메인 담당자가 질문·비공개 정답키를 안전하게 작성하고 봉인하기 위한 실행 순서와 복사용 프롬프트 모음입니다. 이 문서에는 실제 평가 질문을 넣지 않았습니다.</p>
+      <div class="meta">
+        <span>작성일 2026-08-13</span>
+        <span>대상: Schema Dense · Router · OOD</span>
+        <span>100개 독립 싱글턴 질문</span>
+        <span>BGE-M3 · KURE-v1 결과 열람 금지</span>
+      </div>
+    </header>
+
+    <nav aria-label="문서 목차">
+      <a href="#one-minute">1분 요약</a>
+      <a href="#isolation">작업 격리</a>
+      <a href="#files">파일 구조</a>
+      <a href="#quota">문항 할당</a>
+      <a href="#workflow">작업 순서</a>
+      <a href="#prompts">복사용 프롬프트</a>
+      <a href="#review">사람 검토</a>
+      <a href="#seal">봉인·전달</a>
+    </nav>
+
+    <main>
+      <section id="one-minute">
+        <h2>1. 1분 요약</h2>
+        <div class="callout danger">
+          <strong>최상위 금지사항</strong>
+          <p>Codex는 문항 작성과 결정론적 검수에만 사용합니다. Agent, BGE-M3, KURE-v1, Embedding, Retrieval 또는 평가 스크립트를 실행하거나 결과를 열람하면 안 됩니다. 결과를 본 뒤 질문을 수정하면 최초 blind가 무효가 됩니다.</p>
+        </div>
+        <div class="grid">
+          <article class="card third">
+            <h3>Codex의 역할</h3>
+            <p>Spreadsheet 생성, 할당량 검사, 중복 검사, 제공 Schema·frozen 데이터 기반 정답 구조화와 read-only SQL 계산을 돕습니다.</p>
+          </article>
+          <article class="card third">
+            <h3>박재모 님의 역할</h3>
+            <p>실제 고객 질문처럼 자연스러운지, 금융 의미가 맞는지, 해석이 하나뿐인지 최종 판정합니다. Codex 초안을 그대로 확정하지 않습니다.</p>
+          </article>
+          <article class="card third">
+            <h3>개발팀의 역할</h3>
+            <p>정답을 보기 전에 질문-only JSON으로 두 모델을 동시에 실행하고 prediction SHA-256을 외부에 기록합니다.</p>
+          </article>
+        </div>
+        <div class="callout warning">
+          <strong>엄밀한 명칭</strong>
+          <p>Codex가 질문 초안을 돕는 경우 “순수 사람 작성 blind”보다는 “독립 금융 담당자 감독의 외부 작성 blind”라고 기록하는 것이 정확합니다. 최종 문항은 반드시 박재모 님이 직접 검토·승인합니다.</p>
+        </div>
+      </section>
+
+      <section id="isolation">
+        <h2>2. 시작 전 작업환경 격리</h2>
+        <ol>
+          <li>기존 Agent 개발 대화가 아닌 <strong>새 Codex Task</strong>를 만듭니다.</li>
+          <li>기존 Task를 fork하지 않고 이전 대화 내용을 붙여 넣지 않습니다.</li>
+          <li>프로젝트 저장소 밖에 깨끗한 작성 폴더를 만듭니다.</li>
+          <li>아래 허용 자료만 복사합니다. 경로는 프롬프트에 절대경로로 적습니다.</li>
+          <li>Codex가 금지 파일을 요구하면 추측하지 말고 작업을 중단하도록 지시합니다.</li>
+        </ol>
+        <div class="grid">
+          <article class="card">
+            <h3><span class="tag safe">허용</span> 작성 폴더에 둘 자료</h3>
+            <ul>
+              <li>제공 Schema의 컬럼 정의</li>
+              <li>제공 시점으로 고정된 상품 snapshot</li>
+              <li>표준 field ID 목록과 의미·단위</li>
+              <li>QueryPlan JSON Schema와 허용 operator</li>
+              <li>상품군별 정확한 식별자 사용 규칙</li>
+              <li>이 HTML 가이드</li>
+            </ul>
+          </article>
+          <article class="card">
+            <h3><span class="tag required">금지</span> 열람·실행하면 안 되는 자료</h3>
+            <ul>
+              <li>기존 공개·비공개 평가 질문과 fixture</li>
+              <li>Agent 테스트, benchmark, prediction, score, trace</li>
+              <li>BGE-M3·KURE-v1 또는 다른 Embedding 결과</li>
+              <li>이전 질문에 대한 모델별 성공·실패 목록</li>
+              <li>README·Git history 중 평가 사례가 들어 있는 부분</li>
+              <li>웹 검색으로 수집한 질문 예문</li>
+            </ul>
+          </article>
+        </div>
+        <div class="callout">
+          <strong>Codex 자체 사용은 가능</strong>
+          <p>Codex가 문서와 Spreadsheet를 작성하는 것은 허용합니다. 금지되는 것은 평가 대상인 BGE-M3·KURE-v1이나 현재 Agent를 사전에 실행해 “잘 맞는 질문”으로 조정하는 행위입니다.</p>
+        </div>
+      </section>
+
+      <section id="files">
+        <h2>3. 폴더와 파일 구조</h2>
+        <pre>external-blind-authoring/
+├── allowed-input/                       # 허용 Schema·frozen 데이터만
+├── questions/
+│   ├── bond-questions.xlsx              # external-blind-v1-001~external-blind-v1-025
+│   ├── domestic-etp-questions.xlsx      # external-blind-v1-026~external-blind-v1-050
+│   ├── overseas-etp-questions.xlsx      # external-blind-v1-051~external-blind-v1-075
+│   ├── fund-questions.xlsx              # external-blind-v1-076~external-blind-v1-100
+│   └── external-blind-questions-private.xlsx
+├── private-answer-key/                  # 평가 실행 환경에 절대 전달하지 않음
+│   └── external-blind-answer-key-private.xlsx
+├── export/
+│   ├── external-blind-questions-only.json
+│   └── external-blind-answer-key-private.json
+└── checks/
+    └── authoring-validation-report.txt</pre>
+        <div class="callout danger">
+          <strong>숨김 탭은 분리가 아닙니다.</strong>
+          <p>질문과 정답키를 같은 Spreadsheet의 다른 탭에 두지 않습니다. 파일과 폴더를 물리적으로 분리하고, 모델 실행 환경에는 <code>external-blind-questions-only.json</code>만 전달합니다.</p>
+        </div>
+
+        <h3>질문 작성 Spreadsheet 열</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>열</th><th>작성 내용</th><th>최종 question-only에 포함?</th></tr></thead>
+            <tbody>
+              <tr><td><code>id</code></td><td><code>external-blind-v1-001</code>부터 <code>external-blind-v1-100</code></td><td>포함</td></tr>
+              <tr><td><code>question</code></td><td>실제 사용자처럼 작성한 한 개의 독립 질문</td><td>포함</td></tr>
+              <tr><td><code>family_slot</code></td><td><code>bond</code>, <code>domestic_etp</code>, <code>overseas_etp</code>, <code>fund</code></td><td>제외</td></tr>
+              <tr><td><code>intent_slot</code></td><td>search/detail/compare/aggregate/explain/clarify/unsupported</td><td>제외</td></tr>
+              <tr><td><code>difficulty</code></td><td>easy/medium/hard</td><td>제외</td></tr>
+              <tr><td><code>expression_type</code></td><td>direct/paraphrase/colloquial/compound/noisy/control</td><td>제외</td></tr>
+              <tr><td><code>author_status</code></td><td>draft/reviewed/final</td><td>제외</td></tr>
+              <tr><td><code>human_note</code></td><td>질문 의도와 검토 메모</td><td>제외</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>비공개 정답키 Spreadsheet 열</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>열</th><th>작성 규칙</th></tr></thead>
+            <tbody>
+              <tr><td><code>id</code></td><td>질문 파일과 같은 ID</td></tr>
+              <tr><td><code>expected_product_family</code></td><td>네 상품군 중 하나. Control도 할당량 관리를 위해 slot은 기록</td></tr>
+              <tr><td><code>expected_interaction_intent</code></td><td>일곱 Intent 중 하나</td></tr>
+              <tr><td><code>expected_disposition</code></td><td><code>execute</code>, <code>clarify</code>, <code>unsupported</code></td></tr>
+              <tr><td><code>gold_schema_field_ids</code></td><td>질문이 의미하는 canonical field ID의 JSON 배열</td></tr>
+              <tr><td><code>expected_query_plan_intent</code></td><td>execute는 search/compare/aggregate, Control은 빈칸</td></tr>
+              <tr><td><code>expected_query_plan</code></td><td>계약을 통과하는 QueryPlan JSON. Control은 빈칸</td></tr>
+              <tr><td><code>expected_candidate_count</code></td><td>read-only Oracle로 계산한 전체 후보 수. 추측 금지</td></tr>
+              <tr><td><code>expected_product_ids</code></td><td>정렬·limit 적용 후 정답 상품 ID의 JSON 배열</td></tr>
+              <tr><td><code>required_answer_checks</code></td><td>답변에 필요한 근거·필드·기준일의 JSON 배열</td></tr>
+              <tr><td><code>rationale</code></td><td>왜 이 정답인지 사람이 읽을 수 있는 설명</td></tr>
+              <tr><td><code>review_status</code></td><td>draft/data_checked/oracle_checked/final</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="quota">
+        <h2>4. 100문항 고정 할당량</h2>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>상품군</th><th>ID</th><th>Search</th><th>Detail</th><th>Compare</th><th>Aggregate</th><th>Explain</th><th>Clarify</th><th>Unsupported</th><th>합계</th></tr></thead>
+            <tbody>
+              <tr><td>국내채권</td><td>external-blind-v1-001~external-blind-v1-025</td><td>6</td><td>3</td><td>4</td><td>3</td><td>3</td><td>3</td><td>3</td><td>25</td></tr>
+              <tr><td>국내 ETF</td><td>external-blind-v1-026~external-blind-v1-050</td><td>6</td><td>3</td><td>4</td><td>3</td><td>3</td><td>3</td><td>3</td><td>25</td></tr>
+              <tr><td>해외 ETF</td><td>external-blind-v1-051~external-blind-v1-075</td><td>6</td><td>3</td><td>4</td><td>3</td><td>3</td><td>3</td><td>3</td><td>25</td></tr>
+              <tr><td>공모펀드</td><td>external-blind-v1-076~external-blind-v1-100</td><td>6</td><td>3</td><td>4</td><td>3</td><td>3</td><td>3</td><td>3</td><td>25</td></tr>
+              <tr><th>합계</th><th>100</th><th>24</th><th>12</th><th>16</th><th>12</th><th>12</th><th>12</th><th>12</th><th>100</th></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>각 상품군 내부 ID 순서는 <code>Search 6 → Detail 3 → Compare 4 → Aggregate 3 → Explain 3 → Clarify 3 → Unsupported 3</code>으로 고정합니다.</p>
+        <div class="grid">
+          <article class="card">
+            <h3>실행 문항 76개</h3>
+            <ul>
+              <li>제공 데이터만으로 답을 재현할 수 있어야 함</li>
+              <li>상품군과 조건의 해석이 하나여야 함</li>
+              <li>최소 1개의 평가 가능한 gold field가 있어야 함</li>
+              <li>Detail·Explain은 정확한 식별자 1개 필요</li>
+              <li>Compare는 정확한 식별자 2개 필요</li>
+            </ul>
+          </article>
+          <article class="card">
+            <h3>Control 문항 24개</h3>
+            <ul>
+              <li>Clarify 12개: 필요한 조건이나 식별자가 부족함</li>
+              <li>Unsupported 12개: 전망·추천·실시간·범위 밖·공격 질문</li>
+              <li>QueryPlan·후보 수·상품 ID는 반드시 비움</li>
+              <li>정답 공개 후 operational Dense 호출 0회를 검사</li>
+            </ul>
+          </article>
+        </div>
+      </section>
+
+      <section id="workflow">
+        <h2>5. 권장 작업 순서</h2>
+        <div class="flow" aria-label="외부 blind 작성 흐름">
+          <div class="flow-step"><strong>1. 격리</strong>새 Task·깨끗한 폴더</div><div class="arrow">→</div>
+          <div class="flow-step"><strong>2. 상품군별 작성</strong>25개씩 네 Task</div><div class="arrow">→</div>
+          <div class="flow-step"><strong>3. 병합</strong>100개·중복 검사</div><div class="arrow">→</div>
+          <div class="flow-step"><strong>4. 사람 검토</strong>금융 의미 확정</div><div class="arrow">→</div>
+          <div class="flow-step"><strong>5. 문구 동결</strong>이후 수정 금지</div><div class="arrow">→</div>
+          <div class="flow-step"><strong>6. 정답키</strong>새 Task·Oracle</div><div class="arrow">→</div>
+          <div class="flow-step"><strong>7. 읽기 전용 감사</strong>수정 없이 오류 보고</div><div class="arrow">→</div>
+          <div class="flow-step"><strong>8. JSON 봉인</strong>SHA-256 기록</div>
+        </div>
+        <ol>
+          <li><strong>질문 생성은 상품군별 네 Task로 나눕니다.</strong> 한 Task에서 100개를 한꺼번에 만들면 문체 반복과 누락이 늘어납니다.</li>
+          <li><strong>병합 Task는 새 질문을 만들지 않습니다.</strong> ID·할당량·중복·빈 셀만 검사합니다.</li>
+          <li><strong>박재모 님이 질문 문구를 직접 검토합니다.</strong> 어색한 문장과 의미가 여러 개인 문항은 모델 실행 전에만 고칩니다.</li>
+          <li><strong>질문을 확정한 다음 새 정답키 Task를 시작합니다.</strong> 정답키 Task가 질문 문구를 바꾸면 안 됩니다.</li>
+          <li><strong>마지막 검수 Task는 읽기 전용입니다.</strong> 문제의 셀 주소와 사유만 보고하고 자동 수정하지 않습니다.</li>
+          <li><strong>오류 수정은 사람이 승인한 뒤 별도 Task에서 수행합니다.</strong> 수정 후 전체 검수를 처음부터 다시 합니다.</li>
+        </ol>
+      </section>
+
+      <section id="prompts">
+        <h2>6. Codex에 복사할 프롬프트</h2>
+        <div class="callout warning">
+          <strong>사용 방법</strong>
+          <p>대괄호 부분을 실제 절대경로와 상품군 정보로 바꿉니다. 각 단계는 새 Codex Task에서 실행하고, 다음 단계로 넘어가기 전에 결과 파일을 사람이 확인합니다.</p>
+        </div>
+
+        <article class="prompt">
+          <div class="prompt-head"><h3>프롬프트 0 — 모든 Task 공통 안전 지시문</h3><button class="copy" type="button" data-copy="prompt-0">복사</button></div>
+          <pre id="prompt-0">이 작업은 BGE-M3와 KURE-v1을 비교하는 외부 blind 평가 자료 작성이다.
+블라인드 무결성이 최우선이다.
+
+허용 입력:
+- [Schema/field registry 절대경로]
+- [frozen 상품 데이터 절대경로]
+- [이 단계에서 지정한 입력 파일 절대경로]
+
+위 목록 이외의 파일, 상위 디렉터리, Git 이력, README, 테스트, fixture,
+기존 평가 문항, 모델 prediction, score, benchmark, trace 및 로그를 열람하지 마라.
+웹 검색과 외부 데이터 조회를 하지 마라.
+Agent, BGE-M3, KURE-v1, embedding, retrieval 또는 다른 모델/API를 실행하지 마라.
+평가 대상 모델이 질문을 맞히는지 사전 시험하지 마라.
+이 Codex Task 자체의 추론과 결정론적 파일·수식·read-only SQL 검증만 사용하라.
+
+허용되지 않은 자료가 필요하면 추측하거나 범위를 넓히지 말고 즉시 중단하여
+필요한 자료 이름과 이유만 보고하라. 출력 파일은 지정한 경로에만 생성하라.</pre>
+        </article>
+
+        <article class="prompt">
+          <div class="prompt-head"><h3>프롬프트 1 — 상품군별 질문 25개 작성</h3><button class="copy" type="button" data-copy="prompt-1">복사</button></div>
+          <pre id="prompt-1">[프롬프트 0의 공통 안전 지시문을 먼저 붙여 넣기]
+
+질문 작성 전용 Task다. 정답키, QueryPlan, SQL, Oracle 결과 또는 모델 점수는 만들지 마라.
+
+대상 상품군: [국내채권 / 국내 ETF / 해외 ETF / 공모펀드]
+family_slot: [bond / domestic_etp / overseas_etp / fund]
+ID 범위: [external-blind-v1-001~external-blind-v1-025 /
+external-blind-v1-026~external-blind-v1-050 /
+external-blind-v1-051~external-blind-v1-075 /
+external-blind-v1-076~external-blind-v1-100]
+출력: [상품군별 질문 Spreadsheet 절대경로]
+
+정확히 25개를 다음 순서로 작성하라.
+- Search 6개
+- Detail 3개
+- Compare 4개
+- Aggregate 3개
+- Explain 3개
+- Clarify 3개
+- Unsupported 3개
+
+열은 id, question, family_slot, intent_slot, difficulty, expression_type,
+author_status, human_note 순서로 만든다.
+
+작성 규칙:
+1. 모든 질문은 단일 질문·단일 답변의 독립 싱글턴이다.
+2. 기존 평가 질문이나 이 가이드의 표현을 복사·변형하지 마라.
+3. 제공 Schema와 frozen 데이터에 실제 존재하는 필드와 상품만 사용하라.
+4. Detail·Explain에는 실제 정확한 상품 식별자 1개를 질문에 넣어라.
+5. Compare에는 실제 서로 다른 상품 식별자 2개를 질문에 넣어라.
+6. 실행 문항은 정답 해석이 하나여야 한다. 복수 해석이면 Clarify로 작성하라.
+7. 일상어·동의어·간접 표현·구어체·복합 조건을 골고루 사용하라.
+8. 자연스러운 띄어쓰기나 축약 표현은 일부 허용하지만 의미 불명 문장은 금지한다.
+9. Unsupported에는 전망·추천, 실시간/미보유 데이터, 범위 밖 또는 공격성 질문을 분산한다.
+10. 생성 뒤 ID, 할당량, 빈 셀, 질문 정규화 중복을 검사하라.
+
+Codex가 만든 질문은 초안이다. author_status는 모두 draft로 기록하고,
+실행한 검사와 발견한 주의사항을 별도 validation 탭에 남겨라.</pre>
+        </article>
+
+        <article class="prompt">
+          <div class="prompt-head"><h3>프롬프트 2 — 네 파일 병합·구조 검수</h3><button class="copy" type="button" data-copy="prompt-2">복사</button></div>
+          <pre id="prompt-2">[프롬프트 0의 공통 안전 지시문을 먼저 붙여 넣기]
+
+병합과 구조 검수 전용 Task다. 새 질문을 만들거나 기존 질문 문구를 수정하지 마라.
+
+입력:
+- [bond-questions.xlsx 절대경로]
+- [domestic-etp-questions.xlsx 절대경로]
+- [overseas-etp-questions.xlsx 절대경로]
+- [fund-questions.xlsx 절대경로]
+
+출력:
+- [external-blind-questions-private.xlsx 절대경로]
+- [병합 검수 보고서 절대경로]
+
+다음을 수행하라.
+1. ID external-blind-v1-001~external-blind-v1-100 순서로 값만 복사해 한 파일로 병합한다.
+2. 문항 수 100개와 ID 연속성·유일성을 검사한다.
+3. 상품군별 25개인지 검사한다.
+4. 전체 Intent가 Search 24, Detail 12, Compare 16, Aggregate 12,
+   Explain 12, Clarify 12, Unsupported 12인지 검사한다.
+5. 공백·대소문자·문장부호를 정규화한 완전 중복과 높은 유사도 문항을 표시한다.
+6. 필수 셀 누락과 enum 오타를 표시한다.
+7. 질문을 자동 수정하지 말고 문제의 ID·셀·이유만 검수 보고서에 적는다.
+
+모든 검사가 통과하지 않으면 완료라고 표현하지 마라.</pre>
+        </article>
+
+        <article class="prompt">
+          <div class="prompt-head"><h3>프롬프트 3 — 질문-only JSON 생성</h3><button class="copy" type="button" data-copy="prompt-3">복사</button></div>
+          <pre id="prompt-3">[프롬프트 0의 공통 안전 지시문을 먼저 붙여 넣기]
+
+박재모가 최종 승인한 질문 Spreadsheet에서 question-only JSON을 생성하는 Task다.
+질문 문구, 공백, 문장부호, ID를 단 한 글자도 바꾸지 마라.
+
+입력: [최종 승인된 external-blind-questions-private.xlsx 절대경로]
+출력: [external-blind-questions-only.json 절대경로]
+
+출력 JSON은 정확히 다음 최상위 구조를 사용한다.
+- schema_version: "2.0"
+- suite_id: "external-blind-v1-100"
+- status: "question_only_without_gold_labels"
+- cases: 100개
+
+각 case에는 id와 question 두 필드만 넣어라.
+family, intent, disposition, difficulty, author note, field ID, 정답 단서를 넣지 마라.
+JSON은 UTF-8, LF 줄바꿈, 마지막 newline 1개로 저장한다.
+
+저장 후 다음을 읽기 전용으로 확인하라.
+- 100개
+- ID external-blind-v1-001~external-blind-v1-100 순서
+- 중복 없음
+- 각 case의 키가 id와 question뿐임
+
+파일을 다시 저장하지 말고 SHA-256을 계산해 화면과 별도 검수 보고서에 기록하라.</pre>
+        </article>
+
+        <article class="prompt">
+          <div class="prompt-head"><h3>프롬프트 4 — 비공개 정답키 작성</h3><button class="copy" type="button" data-copy="prompt-4">복사</button></div>
+          <pre id="prompt-4">[프롬프트 0의 공통 안전 지시문을 먼저 붙여 넣기]
+
+새로운 정답키 전용 Task다. 질문 파일은 읽기 전용이며 질문 문구와 ID를 절대로 수정하지 마라.
+Agent, BGE-M3, KURE-v1, embedding 또는 평가 실행 코드를 호출하지 마라.
+
+입력:
+- [봉인 직전의 external-blind-questions-only.json 절대경로]
+- [Schema/field registry 절대경로]
+- [QueryPlan JSON Schema 절대경로]
+- [frozen 상품 데이터 절대경로]
+
+출력: [external-blind-answer-key-private.xlsx 절대경로]
+
+열:
+id, expected_product_family, expected_interaction_intent, expected_disposition,
+gold_schema_field_ids, expected_query_plan_intent, expected_query_plan,
+expected_candidate_count, expected_product_ids, required_answer_checks,
+rationale, review_status
+
+규칙:
+1. field ID와 상품 ID는 Schema와 frozen 데이터에서 실제 존재 여부를 확인한다.
+2. 데이터에 없는 값은 추측하지 말고 오류로 보고한다.
+3. Execute 문항은 유효한 QueryPlan과 read-only Oracle 결과가 필요하다.
+4. 후보 수와 결과 상품 ID는 결정론적·parameterized read-only SQL/Python으로 계산한다.
+5. SQL 문자열 결합으로 사용자 문구를 실행하지 마라.
+6. Detail·Explain은 정확한 식별자가 1개인지, Compare는 2개인지 확인한다.
+7. Clarify·Unsupported에는 expected_query_plan_intent, expected_query_plan,
+   expected_candidate_count를 빈칸으로 두고 expected_product_ids는 빈 배열로 둔다.
+8. gold_schema_field_ids는 조건·정렬·비교·집계·요청 projection의 정식 field ID를 모두 기록한다.
+9. 모든 문항에 최소 10자 이상의 rationale을 작성한다.
+10. review_status는 draft로 두며 최종 판정은 박재모가 한다.
+
+정답키 파일, SQL 중간 결과와 데이터 원문을 질문 폴더 또는 모델 실행 환경에 복사하지 마라.</pre>
+        </article>
+
+        <article class="prompt">
+          <div class="prompt-head"><h3>프롬프트 5 — 두 파일 읽기 전용 최종 감사</h3><button class="copy" type="button" data-copy="prompt-5">복사</button></div>
+          <pre id="prompt-5">[프롬프트 0의 공통 안전 지시문을 먼저 붙여 넣기]
+
+최종 읽기 전용 검수 Task다. 입력 파일을 수정하거나 새 정답을 제안하지 마라.
+
+입력:
+- [external-blind-questions-only.json 절대경로]
+- [external-blind-answer-key-private.xlsx 절대경로]
+- [Schema/field registry 절대경로]
+- [frozen 상품 데이터 절대경로]
+
+출력: [authoring-validation-report.txt 절대경로]
+
+검사 항목:
+1. 질문 100개, ID 연속성·순서·중복
+2. 상품군 25개씩과 Intent 24/12/16/12/12/12/12 할당량
+3. 질문-only JSON에 id/question 외 정보가 없는지
+4. 질문·정답 ID의 정확한 1:1 대응
+5. Execute 문항의 QueryPlan·candidate_count 존재
+6. Control 문항의 QueryPlan·candidate_count·product_ids 부재
+7. 실제 canonical field ID와 상품 ID 존재 여부
+8. QueryPlan intent·상품군·질문 ID 정합성
+9. Oracle 후보 수가 저장값과 같은지 read-only 재계산
+10. 질문 안에 정답 label이나 작성자 메모가 노출되지 않았는지
+
+오류가 있으면 파일명, sheet, 셀/ID, 현재 값, 사유만 보고하라.
+자동 수정하지 말고 PASS/FAIL과 검사별 개수를 명시하라.
+어떠한 평가 대상 모델도 실행하지 마라.</pre>
+        </article>
+
+        <article class="prompt">
+          <div class="prompt-head"><h3>프롬프트 6 — 비공개 정답 JSON 내보내기·hash</h3><button class="copy" type="button" data-copy="prompt-6">복사</button></div>
+          <pre id="prompt-6">[프롬프트 0의 공통 안전 지시문을 먼저 붙여 넣기]
+
+박재모가 모든 review_status를 final로 승인한 뒤 수행하는 비공개 export Task다.
+질문과 정답의 의미를 수정하지 마라.
+
+입력:
+- [external-blind-answer-key-private.xlsx 절대경로]
+- [네 frozen DB 절대경로]
+출력:
+- [external-blind-answer-key-private.json 절대경로]
+- [hash 기록 파일 절대경로]
+
+정답 JSON은 schema_version "2.0", suite_id "external-blind-v1-100",
+status "private_labels_and_gold_before_reveal", reviewer_role "financial_domain",
+database_sha256_by_family와 cases 100개를 포함해야 한다.
+
+JSON은 UTF-8, LF 줄바꿈, 마지막 newline 1개로 저장한다.
+질문-only JSON과 정답키 JSON의 정확한 byte SHA-256을 계산해 기록한다.
+정답키 JSON과 그 hash는 private-answer-key 폴더 밖으로 복사하지 마라.
+평가 대상 모델·Agent·embedding은 실행하지 마라.</pre>
+        </article>
+      </section>
+
+      <section id="review">
+        <h2>7. 박재모 님의 사람 검토 기준</h2>
+        <div class="grid">
+          <article class="card">
+            <h3>질문 자체</h3>
+            <ul>
+              <li>실제 고객이 말할 법한 문장인가?</li>
+              <li>한 질문에 하나의 요청만 있는가?</li>
+              <li>실행 문항의 의미가 하나로 확정되는가?</li>
+              <li>비슷한 문장을 단어만 바꿔 반복하지 않았는가?</li>
+              <li>제공 snapshot 기준과 실시간 정보를 혼합하지 않았는가?</li>
+            </ul>
+          </article>
+          <article class="card">
+            <h3>정답키</h3>
+            <ul>
+              <li>정식 field ID를 추측하지 않고 Schema에서 확인했는가?</li>
+              <li>상품 식별자가 실제 데이터에 존재하는가?</li>
+              <li>숫자·단위·오름/내림차순이 질문 의미와 같은가?</li>
+              <li>Oracle 결과를 사람이 추산하지 않았는가?</li>
+              <li>Clarify/Unsupported에 실행 결과가 비어 있는가?</li>
+            </ul>
+          </article>
+        </div>
+        <div class="callout warning">
+          <strong>Codex 초안을 그대로 확정하지 마세요.</strong>
+          <p>Codex는 문법과 구조를 잘 맞춰도 금융 의미나 실제 고객 표현을 부자연스럽게 만들 수 있습니다. 박재모 님이 질문 한 개씩 읽고 의미·자연스러움·정답 유일성을 확인한 뒤에만 <code>final</code>로 바꿉니다.</p>
+        </div>
+        <h3>최종 체크리스트</h3>
+        <ul class="checklist">
+          <li>질문이 정확히 100개다.</li>
+          <li>ID가 external-blind-v1-001~external-blind-v1-100 순서다.</li>
+          <li>상품군별 25개다.</li>
+          <li>Intent 할당량이 정확하다.</li>
+          <li>모든 질문이 싱글턴이다.</li>
+          <li>중복·유사 중복을 검토했다.</li>
+          <li>실행 문항마다 gold field가 있다.</li>
+          <li>Detail·Explain 식별자 1개를 확인했다.</li>
+          <li>Compare 식별자 2개를 확인했다.</li>
+          <li>Control 실행 결과가 비어 있다.</li>
+          <li>Oracle 값을 재계산했다.</li>
+          <li>모든 review_status가 final이다.</li>
+          <li>Agent와 target model을 실행하지 않았다.</li>
+          <li>모델 결과를 열람하지 않았다.</li>
+          <li>웹 질문 예문을 수집하지 않았다.</li>
+          <li>금지 파일을 작성 Task에 주지 않았다.</li>
+        </ul>
+      </section>
+
+      <section id="seal">
+        <h2>8. 봉인과 개발팀 전달</h2>
+        <ol>
+          <li>사람 검토와 최종 읽기 전용 감사가 모두 통과한 뒤 두 JSON을 생성합니다.</li>
+          <li><code>questions-only.json</code>과 <code>answer-key-private.json</code>의 정확한 byte SHA-256을 계산합니다.</li>
+          <li>Spreadsheet는 작성 원본으로 보관하되, 정식 commitment는 최종 JSON byte hash를 사용합니다.</li>
+          <li>질문-only JSON과 그 hash만 독립 평가 실행 담당자에게 전달합니다.</li>
+          <li>비공개 정답키와 answer hash는 박재모 님 또는 독립 보관자가 유지합니다.</li>
+          <li>두 모델 prediction 파일이 생성되면 그 SHA-256을 외부 append-only 위치에 먼저 기록합니다.</li>
+          <li>그 기록이 완료된 뒤에만 비공개 정답키를 채점 담당자에게 공개합니다.</li>
+        </ol>
+        <div class="callout danger">
+          <strong>XLSX hash를 정식 commitment로 쓰지 않는 이유</strong>
+          <p>XLSX는 ZIP 기반 파일이라 열고 저장하는 것만으로 내부 메타데이터가 달라질 수 있습니다. 최종 평가에서는 형식을 고정한 JSON의 정확한 byte SHA-256을 사용하고, 봉인 후에는 다시 저장하지 않습니다.</p>
+        </div>
+        <div class="callout success">
+          <strong>개발팀에 최초로 전달할 것</strong>
+          <p><code>external-blind-questions-only.json</code>, questions SHA-256, 구현 commit 식별자뿐입니다. Spreadsheet 원본과 정답키는 prediction receipt가 외부에 기록되기 전에는 전달하지 않습니다.</p>
+        </div>
+        <div class="callout warning">
+          <strong>봉인 뒤 오류를 발견했다면</strong>
+          <p>조용히 기존 파일을 수정하지 않습니다. 해당 최초 blind를 중단하고, 새로운 suite/version으로 다시 작성·검수·봉인합니다. 첫 결과를 본 뒤 고친 세트를 “최초 blind”라고 부르면 안 됩니다.</p>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <p><strong>문서 범위:</strong> 외부 blind 질문·정답 작성 방법론과 Codex 프롬프트만 다룹니다. 실제 BGE-M3·KURE-v1 실행, prediction receipt, 채점 및 모델 선정은 별도의 frozen evaluation protocol을 따릅니다.</p>
+    </footer>
+  </div>
+
+  <script>
+    document.querySelectorAll('[data-copy]').forEach((button) => {
+      button.addEventListener('click', async () => {
+        const target = document.getElementById(button.dataset.copy);
+        if (!target) return;
+        try {
+          await navigator.clipboard.writeText(target.textContent);
+          const original = button.textContent;
+          button.textContent = '복사됨';
+          setTimeout(() => { button.textContent = original; }, 1400);
+        } catch (_) {
+          window.getSelection().selectAllChildren(target);
+          button.textContent = '선택됨 · Ctrl/Cmd+C';
+        }
+      });
+    });
+  </script>
+</body>
+</html>

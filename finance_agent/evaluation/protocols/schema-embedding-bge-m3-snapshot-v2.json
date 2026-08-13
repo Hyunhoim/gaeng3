@@ -1,0 +1,97 @@
+{
+  "schema_version": "2.0",
+  "manifest_kind": "schema_embedding_snapshot_artifact",
+  "candidate": {
+    "alias": "bge-m3",
+    "model_id": "BAAI/bge-m3",
+    "revision": "5617a9f61b028005a4858fdac845db406aefb181",
+    "linkage_key": "7c40c4b4149fc3e3fc94a93a08c14dbaa20f1f75605ce81614abb3d747d5103f"
+  },
+  "files": [
+    {
+      "relative_path": "1_Pooling/config.json",
+      "size_bytes": 191,
+      "sha256": "e54c164a07274f2eb45bb724f54a79d1efcc90c41573887cd9a29aeee0597352",
+      "category": "config"
+    },
+    {
+      "relative_path": "config.json",
+      "size_bytes": 687,
+      "sha256": "26159e7ad065073448460117eb24b7a4572f6f4e78eadff65dc0a11c052449fa",
+      "category": "config"
+    },
+    {
+      "relative_path": "config_sentence_transformers.json",
+      "size_bytes": 123,
+      "sha256": "1eef72430e7194a1e59680e635aed81ffa083f05668dbc5bb1c56c04c0999c38",
+      "category": "config"
+    },
+    {
+      "relative_path": "modules.json",
+      "size_bytes": 349,
+      "sha256": "84e40c8e006c9b1d6c122e02cba9b02458120b5fb0c87b746c41e0207cf642cf",
+      "category": "config"
+    },
+    {
+      "relative_path": "pytorch_model.bin",
+      "size_bytes": 2271145830,
+      "sha256": "b5e0ce3470abf5ef3831aa1bd5553b486803e83251590ab7ff35a117cf6aad38",
+      "category": "weights"
+    },
+    {
+      "relative_path": "sentence_bert_config.json",
+      "size_bytes": 54,
+      "sha256": "eb9b44b13c0f52a3b3685c3b1cbdea1ba8b04bea123b98f61610048940776eb1",
+      "category": "config"
+    },
+    {
+      "relative_path": "sentencepiece.bpe.model",
+      "size_bytes": 5069051,
+      "sha256": "cfc8146abe2a0488e9e2a0c56de7952f7c11ab059eca145a0a727afce0db2865",
+      "category": "tokenizer"
+    },
+    {
+      "relative_path": "special_tokens_map.json",
+      "size_bytes": 964,
+      "sha256": "8c785abebea9ae3257b61681b4e6fd8365ceafde980c21970d001e834cf10835",
+      "category": "tokenizer"
+    },
+    {
+      "relative_path": "tokenizer.json",
+      "size_bytes": 17098108,
+      "sha256": "21106b6d7dab2952c1d496fb21d5dc9db75c28ed361a05f5020bbba27810dd08",
+      "category": "tokenizer"
+    },
+    {
+      "relative_path": "tokenizer_config.json",
+      "size_bytes": 444,
+      "sha256": "a62b2b6784f990259fddef5f16388693a8043be4f69179e6a5257eeb3f9abac4",
+      "category": "tokenizer"
+    }
+  ],
+  "file_count": 10,
+  "total_size_bytes": 2293315801,
+  "category_digests": {
+    "weights": {
+      "file_count": 1,
+      "total_size_bytes": 2271145830,
+      "file_manifest_sha256": "7d71401664b65d35280165eee20125e301fed197d7626ccae2deda75fb58b414"
+    },
+    "tokenizer": {
+      "file_count": 4,
+      "total_size_bytes": 22168567,
+      "file_manifest_sha256": "625052eb7b4fbc8d4a37d7c43c8c51b50644eaffa4a4ec67b76ca21c7bf33166"
+    },
+    "config": {
+      "file_count": 5,
+      "total_size_bytes": 1404,
+      "file_manifest_sha256": "0156b9bbdc2bd226c7bfe44f38890e52add520323e5b34b6ee5c6394ce81b4c8"
+    },
+    "other": {
+      "file_count": 0,
+      "total_size_bytes": 0,
+      "file_manifest_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    }
+  },
+  "snapshot_file_manifest_sha256": "e24a174855f943293e26672300371e57aa1ac569073f028bffc3b791f82e35f4"
+}

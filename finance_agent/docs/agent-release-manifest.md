@@ -18,6 +18,13 @@ digest도 다시 바뀌는 순환 참조가 생긴다. 그래서 배포 단위�
 
 두 파일과 신뢰된 `DeploymentBinding` SHA-256을 함께 검증해야 하나의 배포 단위가 된다.
 
+### Schema 1.1 전환
+
+Stage 4에서 감사 runtime control이 `AgentReleaseManifest`의 필수 항목이 됐으므로 manifest
+schema만 `1.0`에서 `1.1`로 올렸다. 기존 manifest `1.0`은 새 runtime에서 재사용하지 않고
+clean source에서 다시 생성해야 한다. Image push 뒤 manifest file hash를 연결하는
+`DeploymentBinding` schema는 `1.0`을 유지하되, 새 manifest hash로 새 Binding을 발급한다.
+
 ```text
 control-plane의 Binding SHA-256
   → DeploymentBinding

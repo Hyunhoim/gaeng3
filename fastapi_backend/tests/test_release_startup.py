@@ -41,6 +41,8 @@ def _release_settings(tmp_path: Path, **overrides: object) -> tuple[Settings, Pa
         "FINANCE_DB_DOMESTIC_ETP": tmp_path / "domestic.sqlite3",
         "FINANCE_DB_BOND": tmp_path / "bond.sqlite3",
         "FINANCE_DB_FUND": tmp_path / "fund.sqlite3",
+        "FINANCE_AUDIT_MODE": "jsonl",
+        "FINANCE_AUDIT_FILE": tmp_path / "audit.jsonl",
     }
     values.update(overrides)
     answer_provider = values["FINANCE_BACKEND_ANSWER_PROVIDER"]
@@ -184,7 +186,6 @@ def test_release_profile_mismatch_stops_before_credential_or_agent_build(
         ("hcx_timeout_seconds", 46.0),
         ("official_answer_timeout_seconds", 54.0),
         ("official_answer_max_inflight", 3),
-        ("web_concurrency", 2),
     ],
 )
 def test_release_runtime_control_mismatch_stops_startup(
@@ -196,6 +197,15 @@ def test_release_runtime_control_mismatch_stops_startup(
 
     with pytest.raises(AgentReleaseError):
         resolve_runtime_release(settings.model_copy(update={setting: value}))
+
+
+def test_release_resolver_rejects_multiple_workers_before_manifest_resolution(
+    tmp_path: Path,
+) -> None:
+    settings, _ = _release_settings(tmp_path)
+
+    with pytest.raises(RuntimeError, match="one web worker"):
+        resolve_runtime_release(settings.model_copy(update={"web_concurrency": 2}))
 
 
 def test_hcx_release_assembles_exact_provider_without_network_call(
@@ -270,6 +280,16 @@ def test_partial_release_configuration_is_rejected() -> None:
         Settings(
             FINANCE_RELEASE_MANIFEST_FILE="/app/release/agent-release-manifest.json",
         )
+
+
+@pytest.mark.parametrize("app_env", ["evaluation", "production"])
+def test_deployment_settings_reject_multiple_web_workers(app_env: str) -> None:
+    with pytest.raises(ValidationError, match="WEB_CONCURRENCY=1"):
+        Settings(APP_ENV=app_env, WEB_CONCURRENCY=2)
+
+
+def test_development_settings_still_allow_multiple_web_workers() -> None:
+    assert Settings(APP_ENV="development", WEB_CONCURRENCY=2).web_concurrency == 2
 
 
 @pytest.mark.parametrize(

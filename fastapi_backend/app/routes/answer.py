@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+from contextlib import nullcontext
 from functools import partial
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, Response
+from fastapi import APIRouter, Depends, Query, Request, Response
 from finance_agent_core.agent import (
     execute_answer_request,
     invalid_official_request_response,
@@ -12,6 +13,7 @@ from finance_agent_core.agent import (
 )
 from finance_agent_core.contracts.backend import BackendAgentRequest, BackendAgentResponse
 from finance_agent_core.contracts.official import OfficialAnswerResponse
+from finance_agent_core.observability import AuditOutcome, bind_request_audit
 
 from app.answer_controls import (
     backend_overloaded_response,
@@ -19,7 +21,13 @@ from app.answer_controls import (
     official_overloaded_response,
 )
 from app.config import Settings
-from app.dependencies import AgentService, get_agent, get_settings
+from app.dependencies import (
+    AgentService,
+    get_agent,
+    get_settings,
+    request_audit_recorder,
+)
+from app.http_audit import mark_request_audit_terminal
 from app.request_execution import (
     RequestExecutionTimeoutError,
     RequestOverloadedError,
@@ -41,24 +49,57 @@ _ERROR_RESPONSES = {
 async def answer(
     request: BackendAgentRequest,
     response: Response,
+    http_request: Request,
     service: Annotated[AgentService, Depends(get_agent)],
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> BackendAgentResponse:
     """Expose the framework-neutral adapter without changing its DTO semantics."""
 
-    try:
-        result = await execute_bounded_request(
-            partial(execute_answer_request, service, request),
-            timeout_seconds=settings.official_answer_timeout_seconds,
-            max_inflight=settings.official_answer_max_inflight,
-        )
-    except RequestOverloadedError:
-        response.status_code = 503
-        return backend_overloaded_response(request.request_id)
-    except RequestExecutionTimeoutError:
-        response.status_code = 504
-        return backend_timeout_response(request.request_id)
+    audit = request_audit_recorder(
+        service,
+        request=http_request,
+        request_id=request.request_id,
+        question=request.question,
+    )
+    audit_context = bind_request_audit(audit) if audit is not None else nullcontext()
+    with audit_context:
+        try:
+            result = await execute_bounded_request(
+                partial(execute_answer_request, service, request),
+                timeout_seconds=settings.official_answer_timeout_seconds,
+                max_inflight=settings.official_answer_max_inflight,
+            )
+        except RequestOverloadedError:
+            mark_request_audit_terminal(
+                http_request,
+                outcome=AuditOutcome.BLOCKED,
+                reason_code="admission_rejected",
+            )
+            response.status_code = 503
+            return backend_overloaded_response(request.request_id)
+        except RequestExecutionTimeoutError:
+            mark_request_audit_terminal(
+                http_request,
+                outcome=AuditOutcome.TIMED_OUT,
+                reason_code="deadline_exceeded",
+            )
+            response.status_code = 504
+            return backend_timeout_response(request.request_id)
     response.status_code = result.http_status_code
+    adapter_timed_out = result.http_status_code == 504
+    mark_request_audit_terminal(
+        http_request,
+        outcome=(
+            AuditOutcome.TIMED_OUT
+            if adapter_timed_out
+            else (AuditOutcome.SUCCEEDED if result.http_status_code == 200 else AuditOutcome.FAILED)
+        ),
+        reason_code=(
+            "deadline_exceeded"
+            if adapter_timed_out
+            else ("response_completed" if result.http_status_code == 200 else "adapter_failure")
+        ),
+    )
     return result.response
 
 
@@ -67,6 +108,7 @@ async def answer(
     response_model=OfficialAnswerResponse,
 )
 async def official_answer(
+    http_request: Request,
     service: Annotated[AgentService, Depends(get_agent)],
     settings: Annotated[Settings, Depends(get_settings)],
     question_id: Annotated[str | None, Query()] = None,
@@ -82,34 +124,68 @@ async def official_answer(
         or not question.strip()
         or len(question) > 2000
     ):
+        mark_request_audit_terminal(
+            http_request,
+            outcome=AuditOutcome.BLOCKED,
+            reason_code="invalid_input",
+        )
         return invalid_official_request_response(
             question_id=question_id,
             question=question,
         )
     request = BackendAgentRequest(request_id=question_id, question=question)
-    try:
-        result = await execute_bounded_request(
-            partial(execute_answer_request, service, request),
-            timeout_seconds=settings.official_answer_timeout_seconds,
-            max_inflight=settings.official_answer_max_inflight,
-        )
-    except RequestOverloadedError:
-        return official_overloaded_response(
-            question_id=question_id,
-            question=question,
-        )
-    except RequestExecutionTimeoutError:
-        return official_timeout_response(
-            question_id=question_id,
-            question=question,
-        )
+    audit = request_audit_recorder(
+        service,
+        request=http_request,
+        request_id=question_id,
+        question=question,
+    )
+    audit_context = bind_request_audit(audit) if audit is not None else nullcontext()
+    with audit_context:
+        try:
+            result = await execute_bounded_request(
+                partial(execute_answer_request, service, request),
+                timeout_seconds=settings.official_answer_timeout_seconds,
+                max_inflight=settings.official_answer_max_inflight,
+            )
+        except RequestOverloadedError:
+            mark_request_audit_terminal(
+                http_request,
+                outcome=AuditOutcome.BLOCKED,
+                reason_code="admission_rejected",
+            )
+            return official_overloaded_response(
+                question_id=question_id,
+                question=question,
+            )
+        except RequestExecutionTimeoutError:
+            mark_request_audit_terminal(
+                http_request,
+                outcome=AuditOutcome.TIMED_OUT,
+                reason_code="deadline_exceeded",
+            )
+            return official_timeout_response(
+                question_id=question_id,
+                question=question,
+            )
     if result.http_status_code == 504:
+        mark_request_audit_terminal(
+            http_request,
+            outcome=AuditOutcome.TIMED_OUT,
+            reason_code="deadline_exceeded",
+        )
         return official_timeout_response(
             question_id=question_id,
             question=question,
         )
-    return official_response_from_backend(
+    response = official_response_from_backend(
         question_id=question_id,
         question=question,
         response=result.response,
     )
+    mark_request_audit_terminal(
+        http_request,
+        outcome=(AuditOutcome.SUCCEEDED if result.http_status_code == 200 else AuditOutcome.FAILED),
+        reason_code=("response_completed" if result.http_status_code == 200 else "adapter_failure"),
+    )
+    return response

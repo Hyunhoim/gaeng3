@@ -1,0 +1,596 @@
+from __future__ import annotations
+
+import hashlib
+import json
+import threading
+from collections.abc import Sequence
+from time import perf_counter
+
+import pytest
+
+from finance_agent_core.agent.planning_policy import (
+    PlanningDecision,
+    PlanningPath,
+    PlanningSemanticIssue,
+    PlanningTrace,
+)
+from finance_agent_core.agent.routed_service import RoutedFinanceAgent
+from finance_agent_core.agent.router import IntentRouter
+from finance_agent_core.agent.semantic_gate import SemanticCoverageDecision
+from finance_agent_core.contracts.queryplan import Intent, ProductFamily
+from finance_agent_core.contracts.routing import (
+    InteractionIntent,
+    MinimalQueryDraft,
+    RouteDecision,
+    RouteDisposition,
+)
+from finance_agent_core.evaluation.schema_embedding_artifacts import (
+    SchemaEmbeddingArtifactGateEvidence,
+    load_schema_embedding_candidate_link,
+)
+from finance_agent_core.evaluation.schema_embedding_models import SentenceTransformerCpuProvider
+from finance_agent_core.observability import (
+    BoundedMetrics,
+    FaultTolerantAuditSink,
+    InMemoryAuditSink,
+)
+from finance_agent_core.release import ResolvedAgentRelease
+from finance_agent_core.retrieval.schema_dense import (
+    DenseSchemaIndex,
+    EmbeddingProviderMetadata,
+    SchemaFieldCandidate,
+    build_schema_field_entries,
+)
+from finance_agent_core.retrieval.schema_shadow import (
+    AsyncSchemaLinkShadowObserver,
+    HybridSchemaLinkShadow,
+    SchemaFieldCapability,
+    SchemaLinkStatus,
+    SchemaShadowMode,
+    SchemaShadowQueueSettings,
+    SchemaShadowSettings,
+)
+
+
+def _vector(key: str, dimension: int = 64) -> list[float]:
+    chunks = []
+    counter = 0
+    while len(chunks) < dimension:
+        digest = hashlib.sha256(f"{key}:{counter}".encode()).digest()
+        chunks.extend(1.0 if byte & 1 else -1.0 for byte in digest)
+        counter += 1
+    return chunks[:dimension]
+
+
+class _CountingEmbeddingProvider(SentenceTransformerCpuProvider):
+    def __init__(self, *, query_targets: dict[str, str] | None = None) -> None:
+        candidate = load_schema_embedding_candidate_link("bge-m3")
+        self._metadata = EmbeddingProviderMetadata(
+            provider_kind="frozen_model",
+            provider_id="shadow-contract-fake",
+            model_id=candidate.model_id,
+            model_revision=candidate.revision,
+            license_id="mit-test-only",
+            dimension=64,
+            pooling="mean",
+        )
+        self.query_targets = query_targets or {"운용 비용률": "total_expense_ratio_pct"}
+        self.query_calls = 0
+        self.document_calls = 0
+        self._artifact_gate_evidence = _artifact_evidence()
+
+    @property
+    def metadata(self) -> EmbeddingProviderMetadata:
+        return self._metadata
+
+    @property
+    def artifact_gate_evidence(self) -> SchemaEmbeddingArtifactGateEvidence:
+        return self._artifact_gate_evidence
+
+    def embed_documents(self, texts: Sequence[str]) -> list[list[float]]:
+        self.document_calls += 1
+        return [_vector(text.split(" | ", maxsplit=1)[0]) for text in texts]
+
+    def embed_query(self, text: str) -> list[float]:
+        self.query_calls += 1
+        return _vector(self.query_targets.get(text, text))
+
+
+class _FailingQueryProvider(_CountingEmbeddingProvider):
+    def embed_query(self, text: str) -> list[float]:
+        self.query_calls += 1
+        raise RuntimeError(f"embedding service failed for {text}")
+
+
+class _BlockingQueryProvider(_CountingEmbeddingProvider):
+    def __init__(self) -> None:
+        super().__init__()
+        self.entered = threading.Event()
+        self.release = threading.Event()
+
+    def embed_query(self, text: str) -> list[float]:
+        self.query_calls += 1
+        self.entered.set()
+        if not self.release.wait(timeout=5):
+            raise TimeoutError("test did not release blocking embedding provider")
+        return _vector(self.query_targets.get(text, text))
+
+
+def _index(provider: _CountingEmbeddingProvider) -> DenseSchemaIndex:
+    return DenseSchemaIndex.build(build_schema_field_entries(), provider)
+
+
+def test_current_public_release_rejects_schema_shadow_observer() -> None:
+    unresolved_fixture = object.__new__(ResolvedAgentRelease)
+
+    with pytest.raises(ValueError, match="Schema Dense shadow disabled"):
+        RoutedFinanceAgent(
+            {},
+            release_guard=unresolved_fixture,
+            require_agent_release=True,
+            schema_link_shadow_observer=object(),  # type: ignore[arg-type]
+        )
+
+
+def test_submit_racing_shutdown_cannot_leave_an_unprocessed_trace() -> None:
+    provider = _CountingEmbeddingProvider()
+    worker = HybridSchemaLinkShadow(
+        settings=SchemaShadowSettings(mode=SchemaShadowMode.SHADOW),
+        index=_index(provider),
+        artifact_precondition=_artifact_evidence,
+    )
+    observer = AsyncSchemaLinkShadowObserver(worker)
+    entered = threading.Event()
+    release = threading.Event()
+    original_should_enqueue = worker.should_enqueue
+
+    def delayed_should_enqueue(trace: PlanningTrace) -> bool:
+        entered.set()
+        assert release.wait(timeout=2)
+        return original_should_enqueue(trace)
+
+    worker.should_enqueue = delayed_should_enqueue  # type: ignore[method-assign]
+    trace = _trace()
+    accepted: list[bool] = []
+    submitter = threading.Thread(target=lambda: accepted.append(observer.submit(trace)))
+    submitter.start()
+    assert entered.wait(timeout=2)
+    assert observer.shutdown(timeout_seconds=1) is True
+    release.set()
+    submitter.join(timeout=2)
+
+    assert accepted == [False]
+    assert observer.drain(timeout_seconds=0) is True
+    assert observer.is_alive is False
+    assert provider.query_calls == 0
+
+
+def _artifact_evidence() -> SchemaEmbeddingArtifactGateEvidence:
+    return SchemaEmbeddingArtifactGateEvidence(
+        mode="shadow",
+        candidate=load_schema_embedding_candidate_link("bge-m3"),
+        snapshot_file_manifest_sha256="a" * 64,
+        manifest_file_sha256="b" * 64,
+    )
+
+
+def _trace(
+    *,
+    family: ProductFamily = ProductFamily.DOMESTIC_ETP,
+    intent: InteractionIntent = InteractionIntent.SEARCH,
+    span: str = "운용 비용률",
+) -> PlanningTrace:
+    draft = MinimalQueryDraft(
+        request_id="schema-shadow-001",
+        question=f"국내 ETF 중 {span} 기준으로 찾아줘",
+        intent=intent,
+        product_families=[family],
+        product_mentions=[],
+    )
+    route = RouteDecision(
+        draft=draft,
+        disposition=RouteDisposition.EXECUTE,
+        reason_code="capability_executable",
+        reason="server-owned route is executable",
+        query_plan_intent={
+            InteractionIntent.SEARCH: Intent.SEARCH,
+            InteractionIntent.DETAIL: Intent.SEARCH,
+            InteractionIntent.COMPARE: Intent.COMPARE,
+            InteractionIntent.AGGREGATE: Intent.AGGREGATE,
+            InteractionIntent.EXPLAIN: Intent.SEARCH,
+        }[intent],
+        capability_matrix_version="1.0",
+    )
+    planning = PlanningDecision(
+        path=PlanningPath.SCHEMA_LINK_SHADOW,
+        semantic_issue=PlanningSemanticIssue.SCHEMA_LINK_GAP,
+        unresolved_spans=(span,),
+        product_families=(family,),
+        route_reason_code=route.reason_code,
+        reason_code="schema_link_gap_observed",
+    )
+    return PlanningTrace(route_decision=route, planning_decision=planning)
+
+
+def _shadow(
+    provider: _CountingEmbeddingProvider,
+    **settings: float | int,
+) -> HybridSchemaLinkShadow:
+    return HybridSchemaLinkShadow(
+        settings=SchemaShadowSettings(mode=SchemaShadowMode.SHADOW, **settings),
+        index=_index(provider),
+        artifact_precondition=_artifact_evidence,
+    )
+
+
+def test_shadow_exact_cosine_returns_only_canonical_capable_fields_with_frozen_ids() -> None:
+    provider = _CountingEmbeddingProvider()
+    observer = _shadow(provider)
+
+    decision = observer.observe(_trace())[0]
+
+    assert decision.status is SchemaLinkStatus.FOUND
+    assert decision.candidates[0].field_id == "total_expense_ratio_pct"
+    assert decision.candidates[0].product_family is ProductFamily.DOMESTIC_ETP
+    assert decision.candidates[0].dense_score == pytest.approx(1.0)
+    assert SchemaFieldCapability.QUERYABLE in decision.candidates[0].capabilities
+    assert [candidate.fused_rank for candidate in decision.candidates] == list(
+        range(1, len(decision.candidates) + 1)
+    )
+    assert decision.field_registry_schema_version
+    assert decision.field_registry_sha256
+    assert decision.index_manifest_id
+    canonical_provider = json.dumps(
+        provider.metadata.model_dump(mode="json"),
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode()
+    assert decision.provider_manifest_id == hashlib.sha256(canonical_provider).hexdigest()
+    assert decision.model_snapshot_manifest_id == "a" * 64
+    assert decision.unresolved_span_sha256 == hashlib.sha256("운용 비용률".encode()).hexdigest()
+    assert "운용 비용률" not in decision.model_dump_json()
+    assert provider.query_calls == 1
+
+
+def test_lexical_first_disagreement_is_a_non_authoritative_conflict() -> None:
+    provider = _CountingEmbeddingProvider(query_targets={"보수율": "aum"})
+    observer = _shadow(provider)
+
+    decision = observer.observe(_trace(span="보수율"))[0]
+
+    assert decision.status is SchemaLinkStatus.CONFLICT
+    assert decision.reason_code == "shadow_lexical_dense_conflict"
+    assert decision.candidates[0].field_id == "total_expense_ratio_pct"
+    assert decision.candidates[0].lexical_rank == 1
+    assert provider.query_calls == 1
+
+
+def test_low_margin_abstains_instead_of_asserting_a_field() -> None:
+    provider = _CountingEmbeddingProvider()
+    observer = _shadow(provider, minimum_margin=2.0)
+
+    decision = observer.observe(_trace())[0]
+
+    assert decision.status is SchemaLinkStatus.ABSTAIN
+    assert decision.reason_code == "shadow_low_margin"
+    assert decision.candidates
+
+
+def test_aggregate_intent_filters_every_candidate_by_registry_capability() -> None:
+    provider = _CountingEmbeddingProvider(query_targets={"운용 비용률": "product_name"})
+    observer = _shadow(provider, dense_min_score=-1.0, minimum_margin=0.0)
+
+    decision = observer.observe(_trace(intent=InteractionIntent.AGGREGATE))[0]
+
+    assert decision.status in {
+        SchemaLinkStatus.FOUND,
+        SchemaLinkStatus.ABSTAIN,
+        SchemaLinkStatus.CONFLICT,
+    }
+    assert decision.candidates
+    assert all(
+        SchemaFieldCapability.AGGREGATABLE in candidate.capabilities
+        for candidate in decision.candidates
+    )
+    assert all(candidate.field_id != "product_name" for candidate in decision.candidates)
+
+
+def test_missing_or_mismatched_artifact_fails_before_embedding() -> None:
+    provider = _CountingEmbeddingProvider()
+    index = _index(provider)
+
+    def fail_gate() -> SchemaEmbeddingArtifactGateEvidence:
+        raise RuntimeError("snapshot hash mismatch")
+
+    observer = HybridSchemaLinkShadow(
+        settings=SchemaShadowSettings(mode=SchemaShadowMode.SHADOW),
+        index=index,
+        artifact_precondition=fail_gate,
+    )
+
+    decision = observer.observe(_trace())[0]
+
+    assert decision.status is SchemaLinkStatus.ABSTAIN
+    assert decision.reason_code == "shadow_artifact_unverified"
+    assert provider.query_calls == 0
+
+
+def test_embedding_failure_isolated_as_abstain() -> None:
+    provider = _FailingQueryProvider()
+    observer = _shadow(provider)
+
+    decision = observer.observe(_trace())[0]
+
+    assert decision.status is SchemaLinkStatus.ABSTAIN
+    assert decision.reason_code == "shadow_embedding_failure"
+    assert decision.candidates == ()
+    assert provider.query_calls == 1
+
+
+class _OutOfFamilyIndex:
+    def __init__(self, trusted: DenseSchemaIndex) -> None:
+        self.manifest = trusted.manifest
+        self.provider = trusted.provider
+
+    def search(
+        self,
+        _span: str,
+        _family: ProductFamily,
+        *,
+        top_k: int,
+    ) -> list[SchemaFieldCandidate]:
+        del top_k
+        return [
+            SchemaFieldCandidate(
+                product_family=ProductFamily.OVERSEAS_ETP,
+                field_id="total_expense_ratio_pct",
+                score=1.0,
+                rank=1,
+            )
+        ]
+
+
+def test_untrusted_index_cannot_return_a_candidate_from_another_family() -> None:
+    provider = _CountingEmbeddingProvider()
+    trusted = _index(provider)
+    observer = HybridSchemaLinkShadow(
+        settings=SchemaShadowSettings(mode=SchemaShadowMode.SHADOW),
+        index=_OutOfFamilyIndex(trusted),  # type: ignore[arg-type]
+        artifact_precondition=_artifact_evidence,
+    )
+
+    decision = observer.observe(_trace())[0]
+
+    assert decision.status is SchemaLinkStatus.ABSTAIN
+    assert decision.reason_code == "shadow_no_registry_candidate"
+    assert decision.candidates == ()
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        "파스타 만드는 법을 알려줘",
+        "제일 좋은 ETF를 추천해줘",
+        "국내 ETF 상품 3개를 보여줘",
+    ],
+)
+def test_router_control_ood_and_deterministic_fast_paths_call_embedding_zero_times(
+    question: str,
+) -> None:
+    provider = _CountingEmbeddingProvider()
+    observer = _shadow(provider)
+    request_hash = hashlib.sha256(question.encode()).hexdigest()[:8]
+    trace = IntentRouter().route_with_planning(question, f"blocked-{request_hash}")
+
+    decisions = observer.observe(trace)
+
+    assert all(decision.status is SchemaLinkStatus.DISABLED for decision in decisions)
+    assert provider.query_calls == 0
+
+
+def test_off_mode_and_multiple_family_scope_call_embedding_zero_times() -> None:
+    provider = _CountingEmbeddingProvider()
+    index = _index(provider)
+    off = HybridSchemaLinkShadow(
+        settings=SchemaShadowSettings(mode=SchemaShadowMode.OFF),
+        index=index,
+        artifact_precondition=_artifact_evidence,
+    )
+    assert off.observe(_trace())[0].status is SchemaLinkStatus.DISABLED
+    assert provider.query_calls == 0
+
+    trace = _trace()
+    invalid_planning = trace.planning_decision.model_copy(
+        update={
+            "product_families": (
+                ProductFamily.DOMESTIC_ETP,
+                ProductFamily.OVERSEAS_ETP,
+            )
+        }
+    )
+    # An invalid injected trace is rejected by the observer's safe boundary;
+    # it must never reach the provider even when Pydantic model_copy bypasses validation.
+    invalid_trace = trace.model_copy(update={"planning_decision": invalid_planning})
+    shadow = _shadow(provider)
+    decisions = shadow.observe(invalid_trace)
+    assert all(decision.status is SchemaLinkStatus.DISABLED for decision in decisions)
+    assert provider.query_calls == 0
+
+
+def test_async_request_seam_does_not_start_a_thread_for_control_or_fast_paths() -> None:
+    provider = _CountingEmbeddingProvider()
+    observer = AsyncSchemaLinkShadowObserver(_shadow(provider))
+    try:
+        for question in (
+            "파스타 만드는 법을 알려줘",
+            "제일 좋은 ETF를 추천해줘",
+            "국내 ETF 상품 3개를 보여줘",
+        ):
+            trace = IntentRouter().route_with_planning(question, f"async-control-{len(question)}")
+            assert not observer.submit(trace)
+        assert not observer.is_alive
+        assert provider.query_calls == 0
+    finally:
+        assert observer.shutdown(timeout_seconds=1)
+
+
+class _ExplodingSink:
+    def emit(self, _event: object) -> None:
+        raise RuntimeError("audit backend unavailable")
+
+
+def test_redacted_audit_and_sink_failure_do_not_change_shadow_decision() -> None:
+    provider = _CountingEmbeddingProvider()
+    memory = InMemoryAuditSink()
+    metrics = BoundedMetrics()
+    observed = HybridSchemaLinkShadow(
+        settings=SchemaShadowSettings(mode=SchemaShadowMode.SHADOW),
+        index=_index(provider),
+        artifact_precondition=_artifact_evidence,
+        audit_sink=FaultTolerantAuditSink(memory, metrics),
+    ).observe(_trace())[0]
+    event = memory.snapshot()[0]
+    assert event.stage.value == "schema_link_shadow"
+    assert (
+        event.question_sha256
+        == hashlib.sha256(_trace().route_decision.draft.question.encode()).hexdigest()
+    )
+    assert _trace().route_decision.draft.question not in event.model_dump_json()
+
+    failed = HybridSchemaLinkShadow(
+        settings=SchemaShadowSettings(mode=SchemaShadowMode.SHADOW),
+        index=_index(_CountingEmbeddingProvider()),
+        artifact_precondition=_artifact_evidence,
+        audit_sink=FaultTolerantAuditSink(_ExplodingSink(), BoundedMetrics()),
+    ).observe(_trace())[0]
+    assert failed.status is observed.status is SchemaLinkStatus.FOUND
+
+
+class _MutatingExplodingObserver:
+    def submit(self, trace: PlanningTrace) -> bool:
+        trace.route_decision.draft.product_families.clear()
+        raise RuntimeError("shadow observer must not affect response")
+
+
+def test_agent_rejects_an_arbitrary_synchronous_shadow_observer() -> None:
+    with pytest.raises(TypeError, match="bounded async observer"):
+        RoutedFinanceAgent(
+            {},
+            router=_FixedTraceRouter(_trace()),  # type: ignore[arg-type]
+            schema_link_shadow_observer=_MutatingExplodingObserver(),  # type: ignore[arg-type]
+        )
+
+
+def test_async_observer_rejects_an_untrusted_worker() -> None:
+    with pytest.raises(TypeError, match="trusted HybridSchemaLinkShadow"):
+        AsyncSchemaLinkShadowObserver(object())  # type: ignore[arg-type]
+
+
+class _FixedTraceRouter:
+    def __init__(self, trace: PlanningTrace) -> None:
+        self.trace = trace
+
+    def route_with_planning(self, _question: str, _request_id: str) -> PlanningTrace:
+        return PlanningTrace.model_validate_json(self.trace.model_dump_json())
+
+
+class _FixedCoverageGate:
+    def evaluate(self, *_args: object, **_kwargs: object) -> SemanticCoverageDecision:
+        return SemanticCoverageDecision(schema_link_gap_spans=("운용 비용률",))
+
+
+def test_agent_does_not_wait_for_blocking_embedding_and_worker_shuts_down(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    provider = _BlockingQueryProvider()
+    worker = _shadow(provider)
+    observer = AsyncSchemaLinkShadowObserver(
+        worker,
+        settings=SchemaShadowQueueSettings(queue_capacity=2),
+    )
+    sentinel = object()
+    agent = RoutedFinanceAgent(
+        {},
+        router=_FixedTraceRouter(_trace()),  # type: ignore[arg-type]
+        schema_link_shadow_observer=observer,
+    )
+    monkeypatch.setattr(agent, "_answer_from_decision", lambda *_args: sentinel)
+
+    try:
+        started = perf_counter()
+        result = agent.answer("ignored by fixed test router", "ignored-request-id")
+        request_elapsed = perf_counter() - started
+
+        assert result is sentinel
+        assert request_elapsed < 0.1
+        assert provider.entered.wait(timeout=1)
+        assert observer.is_alive
+    finally:
+        provider.release.set()
+        assert observer.drain(timeout_seconds=2)
+        assert observer.shutdown(timeout_seconds=2)
+    assert not observer.is_alive
+
+
+def test_bounded_shadow_queue_drops_without_blocking_and_records_metric() -> None:
+    provider = _BlockingQueryProvider()
+    memory = InMemoryAuditSink(max_events=20)
+    metrics = BoundedMetrics()
+    worker = HybridSchemaLinkShadow(
+        settings=SchemaShadowSettings(mode=SchemaShadowMode.SHADOW),
+        index=_index(provider),
+        artifact_precondition=_artifact_evidence,
+        audit_sink=FaultTolerantAuditSink(memory, metrics),
+    )
+    observer = AsyncSchemaLinkShadowObserver(
+        worker,
+        settings=SchemaShadowQueueSettings(queue_capacity=1),
+    )
+
+    try:
+        assert observer.submit(_trace())
+        assert provider.entered.wait(timeout=1)
+        assert observer.submit(_trace(span="운용 비용률"))
+        started = perf_counter()
+        assert not observer.submit(_trace(span="운용 비용률"))
+        assert perf_counter() - started < 0.05
+        snapshot = metrics.snapshot()
+        assert snapshot.counters["queue_drops_total"] == 1
+        assert not any(event.reason_code == "shadow_queue_full" for event in memory.snapshot())
+    finally:
+        provider.release.set()
+        assert observer.drain(timeout_seconds=2)
+        assert observer.shutdown(timeout_seconds=2)
+    assert provider.query_calls == 2
+    assert not observer.is_alive
+
+
+def test_real_agent_queryplan_sql_and_response_are_byte_identical_in_shadow(
+    domestic_sample_database: tuple[object, object, object],
+) -> None:
+    database_path = domestic_sample_database[0]
+    question = "운용 비용률이 낮은 국내 ETF 3개를 보여줘."
+    baseline_router = IntentRouter(semantic_coverage_gate=_FixedCoverageGate())
+    observed_router = IntentRouter(semantic_coverage_gate=_FixedCoverageGate())
+    baseline = RoutedFinanceAgent(
+        {"domestic_etp": database_path},
+        router=baseline_router,
+    ).answer(question, "shadow-full-parity")
+
+    provider = _CountingEmbeddingProvider()
+    observer = AsyncSchemaLinkShadowObserver(_shadow(provider))
+    try:
+        observed = RoutedFinanceAgent(
+            {"domestic_etp": database_path},
+            router=observed_router,
+            schema_link_shadow_observer=observer,
+        ).answer(question, "shadow-full-parity")
+        assert observer.drain(timeout_seconds=2)
+    finally:
+        assert observer.shutdown(timeout_seconds=2)
+
+    assert observed.model_dump_json() == baseline.model_dump_json()
+    assert observed.decision == baseline.decision
+    assert observed.query_plan == baseline.query_plan
+    assert provider.query_calls == 1

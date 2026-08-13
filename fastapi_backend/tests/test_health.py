@@ -64,6 +64,7 @@ def test_health_reports_configured_and_missing_families_without_paths() -> None:
         "missing_product_families": ["domestic_etp", "fund"],
         "unavailable_product_families": ["bond", "overseas_etp"],
         "fund_execution_policy": "locked",
+        "audit_status": "disabled",
     }
     assert "private" not in response.text
     assert "sqlite3" not in response.text
@@ -96,6 +97,7 @@ def test_health_is_ok_when_every_database_manifest_is_ready(tmp_path: Path) -> N
     assert response.json()["missing_product_families"] == []
     assert response.json()["unavailable_product_families"] == []
     assert response.json()["fund_execution_policy"] == "locked"
+    assert response.json()["audit_status"] == "disabled"
 
 
 def test_evaluation_startup_rejects_injected_agent_before_readiness(

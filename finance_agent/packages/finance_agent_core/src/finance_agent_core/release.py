@@ -185,6 +185,11 @@ class RuntimeControlRelease(ReleaseModel):
     official_answer_timeout_seconds: float = Field(gt=0, lt=60)
     official_answer_max_inflight: StrictInt = Field(ge=1, le=8)
     worker_count: StrictInt = Field(ge=1, le=8)
+    audit_schema_version: Literal["1.1"] = "1.1"
+    audit_sink_kind: Literal["append_only_jsonl"] = "append_only_jsonl"
+    audit_queue_capacity: StrictInt = Field(ge=1, le=100_000)
+    audit_shutdown_timeout_seconds: float = Field(gt=0, le=60)
+    audit_fsync_each_event: StrictBool
 
 
 class AgentReleaseComponents(ReleaseModel):
@@ -205,7 +210,7 @@ class AgentReleaseComponents(ReleaseModel):
 class AgentReleaseManifest(ReleaseModel):
     """Image-bound payload. Container digest deliberately lives outside this model."""
 
-    schema_version: Literal["1.0"] = "1.0"
+    schema_version: Literal["1.1"] = "1.1"
     release_id: str = Field(pattern=_RELEASE_ID_PATTERN)
     environment: Literal["evaluation", "production"]
     generated_at_utc: datetime
@@ -308,6 +313,11 @@ class RuntimeReleaseInputs:
     official_answer_timeout_seconds: float = 55.0
     official_answer_max_inflight: int = 2
     worker_count: int = 1
+    audit_schema_version: Literal["1.1"] = "1.1"
+    audit_sink_kind: Literal["append_only_jsonl"] = "append_only_jsonl"
+    audit_queue_capacity: int = 2_048
+    audit_shutdown_timeout_seconds: float = 5.0
+    audit_fsync_each_event: bool = True
 
 
 def _canonical_json(value: object) -> str:
@@ -546,6 +556,11 @@ def build_release_components(inputs: RuntimeReleaseInputs) -> AgentReleaseCompon
             official_answer_timeout_seconds=inputs.official_answer_timeout_seconds,
             official_answer_max_inflight=inputs.official_answer_max_inflight,
             worker_count=inputs.worker_count,
+            audit_schema_version=inputs.audit_schema_version,
+            audit_sink_kind=inputs.audit_sink_kind,
+            audit_queue_capacity=inputs.audit_queue_capacity,
+            audit_shutdown_timeout_seconds=inputs.audit_shutdown_timeout_seconds,
+            audit_fsync_each_event=inputs.audit_fsync_each_event,
         ),
     )
 

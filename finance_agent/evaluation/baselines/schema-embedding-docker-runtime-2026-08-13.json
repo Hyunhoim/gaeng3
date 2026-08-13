@@ -1,0 +1,190 @@
+{
+  "schema_version": "1.0",
+  "baseline_id": "schema-embedding-docker-runtime-2026-08-13",
+  "recorded_on": "2026-08-13",
+  "dataset": "schema-embedding-bounded-component-workload-v1",
+  "evaluation_layer": "schema_retrieval",
+  "status": "public_development_not_blind",
+  "provider": {
+    "name": "sentence-transformers-cpu",
+    "official_submission_provider": false
+  },
+  "model": {
+    "candidates": [
+      {
+        "alias": "bge-m3",
+        "repository": "BAAI/bge-m3",
+        "revision": "5617a9f61b028005a4858fdac845db406aefb181",
+        "snapshot_manifest_file_sha256": "1da0e030976010aaa0f25402522f3846eeb08f8528aaa03a2825da6431f4ffba",
+        "snapshot_file_manifest_sha256": "e24a174855f943293e26672300371e57aa1ac569073f028bffc3b791f82e35f4"
+      },
+      {
+        "alias": "kure-v1",
+        "repository": "nlpai-lab/KURE-v1",
+        "revision": "d14c8a9423946e268a0c9952fecf3a7aabd73bd9",
+        "snapshot_manifest_file_sha256": "caa502227d3ed92bb1b5290fc7bced2202c99b70f6846e448c4608551498004c",
+        "snapshot_file_manifest_sha256": "b0b6229e5d2593371b7ac31519da186ccac3fcdfa8fb4e98fa6a430cc92bd597"
+      }
+    ],
+    "reason": "BGE-M3와 KURE-v1을 같은 고정 Docker 조건에서 비교하되 production 활성화에는 사용하지 않음"
+  },
+  "suite": {
+    "id": "schema-embedding-docker-concurrency-v1",
+    "version": "1.0",
+    "path": "packages/finance_agent_core/src/finance_agent_core/evaluation/schema_embedding_runtime_benchmark.py",
+    "sha256": "4535e07794f802fcf0b0b812adae45f54b865063809768d266ac8a6599cac5e8",
+    "workload_sha256": "da82efacc281710300f64594aa41a8466b3989ed12ac24855f9844360572848a",
+    "requests_per_concurrency_level": 24,
+    "concurrency_levels": [
+      1,
+      2,
+      4
+    ]
+  },
+  "data": {
+    "field_registry_sha256": "5887c4dba17fd33d0c20b550adf564796de508e3dcafc2a2e7bb3796603a73b5",
+    "model_registry_sha256": "25bce2f973c9685d94d6895c183f04006bf42a13e406a0f2a9624ee65ed7b653",
+    "not_applicable_reason": "상품 행 검색이 아닌 고정 Schema 임베딩 부품의 Docker CPU 지연·메모리 측정이므로 상품 DB와 원천 파일 hash는 사용하지 않음"
+  },
+  "source": {
+    "base_commit": "836828e346aa77e10f76225c3c038aeddb441be1",
+    "state": "uncommitted_candidate_worktree",
+    "runtime_image_reference": "finance-agent-schema-embedding-eval@sha256:3443cc87a1e2443cabe2bc32a8e6757f20075e87ae387fe65c14c74407a78c1d",
+    "platform": "linux/amd64"
+  },
+  "environment": {
+    "device": "cpu",
+    "cpu_threads": 8,
+    "container_cpu_limit": 8,
+    "container_memory_limit_bytes": 6442450944,
+    "network": "none",
+    "root_filesystem": "read_only",
+    "repository_mount": "read_only",
+    "model_cache_mount": "read_only",
+    "tmpfs": "/tmp",
+    "max_inflight_embedding_calls": 1,
+    "torch": "2.13.0+cpu",
+    "transformers": "5.15.0",
+    "sentence_transformers": "5.7.0",
+    "huggingface_hub": "1.27.0"
+  },
+  "gate": {
+    "gated_concurrency_levels": [
+      1,
+      2
+    ],
+    "diagnostic_concurrency_levels": [
+      4
+    ],
+    "maximum_p95_ms": 250.0,
+    "maximum_peak_memory_bytes": 4294967296,
+    "requires_zero_errors": true,
+    "scope": "embedding_component_runtime_prerequisite_only"
+  },
+  "metrics": {
+    "total": 2,
+    "passed": 2,
+    "prerequisite_gate_pass_rate": 1.0,
+    "prerequisite_gate_pass_rate_scope": "2개 embedding model의 지연·메모리·오류 runtime gate 통과율이며 문항·상품 검색 정확도가 아님",
+    "gated_model_count": 2,
+    "gated_model_passed": 2,
+    "diagnostic_concurrency_4_passed": 0,
+    "diagnostic_concurrency_4_total": 2
+  },
+  "observations": [
+    {
+      "alias": "bge-m3",
+      "model_load_ms": 2222.30823,
+      "process_peak_rss_bytes": 2077913088,
+      "cgroup_memory_peak_bytes": 791191552,
+      "prerequisite_gate_passed": true,
+      "concurrency": [
+        {
+          "level": 1,
+          "p50_ms": 60.594187,
+          "p95_ms": 92.360093,
+          "p99_ms": 119.752403,
+          "throughput_requests_per_second": 14.598262,
+          "error_count": 0
+        },
+        {
+          "level": 2,
+          "p50_ms": 82.345039,
+          "p95_ms": 117.104148,
+          "p99_ms": 122.526721,
+          "throughput_requests_per_second": 17.902319,
+          "error_count": 0
+        },
+        {
+          "level": 4,
+          "p50_ms": 189.88638,
+          "p95_ms": 345.589153,
+          "p99_ms": 354.10983,
+          "throughput_requests_per_second": 12.360998,
+          "error_count": 0,
+          "within_250ms": false
+        }
+      ]
+    },
+    {
+      "alias": "kure-v1",
+      "model_load_ms": 1895.671752,
+      "process_peak_rss_bytes": 2070417408,
+      "cgroup_memory_peak_bytes": 998518784,
+      "prerequisite_gate_passed": true,
+      "concurrency": [
+        {
+          "level": 1,
+          "p50_ms": 79.291322,
+          "p95_ms": 97.834428,
+          "p99_ms": 129.930584,
+          "throughput_requests_per_second": 12.295378,
+          "error_count": 0
+        },
+        {
+          "level": 2,
+          "p50_ms": 103.762132,
+          "p95_ms": 177.36054,
+          "p99_ms": 181.322672,
+          "throughput_requests_per_second": 12.755326,
+          "error_count": 0
+        },
+        {
+          "level": 4,
+          "p50_ms": 198.460647,
+          "p95_ms": 323.511298,
+          "p99_ms": 356.620333,
+          "throughput_requests_per_second": 12.621936,
+          "error_count": 0,
+          "within_250ms": false
+        }
+      ]
+    }
+  ],
+  "reports": [
+    {
+      "artifact_name": "bge-m3-runtime-v5.json",
+      "sha256": "8c2a3e1140b85b03bb53fb76a722049c0b256ea0c7f5b3e0306d34c42e9ff982"
+    },
+    {
+      "artifact_name": "kure-v1-runtime-v5.json",
+      "sha256": "c1a0f76b6cf4dcb746d5c0eb11d808be5af601bd5db2a8170cbd1671852b3504"
+    }
+  ],
+  "reproduce": {
+    "entrypoint": "finance-benchmark-schema-embedding-runtime",
+    "required_isolation": "network-none, read-only root, read-only repository and model cache, bounded CPU and memory",
+    "required_models": [
+      "bge-m3",
+      "kure-v1"
+    ]
+  },
+  "limitations": [
+    "임베딩 embed_query 부품만 측정했으며 FastAPI, Router, QueryPlan Compiler, SQL, Oracle, Verifier와 답변 생성은 포함하지 않음",
+    "동시성 단계별 표본은 24건으로 운영 SLO를 확정하기에 작음",
+    "동시성 4의 p95는 두 모델 모두 250ms를 넘음",
+    "소스는 아직 clean commit과 외부 attestation으로 고정되지 않은 candidate worktree임",
+    "NCP production 또는 evaluation 환경을 검증하지 않음"
+  ],
+  "activation_decision": "blocked"
+}

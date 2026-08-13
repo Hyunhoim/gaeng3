@@ -37,8 +37,90 @@ if [ "$1" = "inspect" ]; then
     exit 0
 fi
 if [ "$1" = "exec" ]; then
+    binding=$(sed -n '3p' "$ROLLBACK_DRILL_STATE_FILE")
+    audit_root=$(sed -n '4p' "$ROLLBACK_DRILL_STATE_FILE")
+    binding_sha256=$(sed -n '5p' "$ROLLBACK_DRILL_STATE_FILE")
+    release_id=$(sed -n 's/.*"release_id":"\([^"]*\)".*/\1/p' "$binding")
+    manifest_sha256=$(sed -n 's/.*"release_manifest_sha256":"\([0-9a-f]*\)".*/\1/p' "$binding")
+    if [ -z "$audit_root" ] || [ -z "$binding_sha256" ] || \
+        [ -z "$release_id" ] || [ -z "$manifest_sha256" ]; then
+        exit 11
+    fi
+    release_id_sha256=$(printf '%s' "$release_id" | sha256sum | awk '{print $1}')
+    image_reference=$(sed -n '1p' "$ROLLBACK_DRILL_STATE_FILE")
+    activation_generation=$(sed -n 's/.*"activation_generation":\([0-9]*\).*/\1/p' "$binding")
+    release_context_sha256=$(python -c \
+        'import hashlib,json,sys; print(hashlib.sha256(json.dumps({"release_id":sys.argv[1],"manifest_file_sha256":sys.argv[2],"binding_file_sha256":sys.argv[3],"image_reference":sys.argv[4],"activation_generation":int(sys.argv[5])},ensure_ascii=False,sort_keys=True,separators=(",",":"),allow_nan=False).encode()).hexdigest())' \
+        "$release_id" "$manifest_sha256" "$binding_sha256" "$image_reference" "$activation_generation")
+    audit_file=$audit_root/events.jsonl
+    umask 077
+    : >> "$audit_file"
+    chmod 600 "$audit_file"
+
+    append_event() {
+        sequence=$1
+        stage=$2
+        outcome=$3
+        reason_code=$4
+        request_id_sha256=$5
+        question_sha256=$6
+        route_disposition=null
+        interaction_intent=null
+        product_families='[]'
+        dataset_release_id_sha256=null
+        approved_dataset_manifest_sha256=null
+        database_manifest_sha256=null
+        database_snapshot_sha256=null
+        source_snapshot_sha256=null
+        plan_sha256=null
+        product_family_count=0
+        candidate_count=0
+        result_count=0
+        evidence_count=0
+        product_id_sha256s='[]'
+        evidence_id_sha256s='[]'
+        if [ "$stage" = answer ]; then
+            route_disposition='"execute"'
+            interaction_intent='"search"'
+            product_families='["bond"]'
+            dataset_release_id_sha256='"4444444444444444444444444444444444444444444444444444444444444444"'
+            approved_dataset_manifest_sha256='"5555555555555555555555555555555555555555555555555555555555555555"'
+            database_manifest_sha256='"6666666666666666666666666666666666666666666666666666666666666666"'
+            database_snapshot_sha256='"7777777777777777777777777777777777777777777777777777777777777777"'
+            source_snapshot_sha256='"8888888888888888888888888888888888888888888888888888888888888888"'
+            plan_sha256='"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"'
+            product_family_count=1
+            candidate_count=254
+            result_count=1
+            evidence_count=1
+            product_id_sha256s='["bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"]'
+            evidence_id_sha256s='["cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"]'
+        fi
+        printf '%s\n' \
+            "{\"schema_version\":\"1.1\",\"observed_at_utc\":\"2026-08-13T00:00:00Z\",\"stage\":\"$stage\",\"outcome\":\"$outcome\",\"reason_code\":\"$reason_code\",\"duration_ms\":0,\"request_id_sha256\":\"$request_id_sha256\",\"question_sha256\":\"$question_sha256\",\"invocation_id_sha256\":\"$release_id_sha256\",\"event_sequence\":$sequence,\"route_disposition\":$route_disposition,\"interaction_intent\":$interaction_intent,\"product_families\":$product_families,\"agent_release_id_sha256\":\"$release_id_sha256\",\"agent_release_manifest_sha256\":\"$manifest_sha256\",\"deployment_binding_sha256\":\"$binding_sha256\",\"release_context_sha256\":\"$release_context_sha256\",\"dataset_release_id_sha256\":$dataset_release_id_sha256,\"approved_dataset_manifest_sha256\":$approved_dataset_manifest_sha256,\"database_manifest_sha256\":$database_manifest_sha256,\"database_snapshot_sha256\":$database_snapshot_sha256,\"source_snapshot_sha256\":$source_snapshot_sha256,\"plan_sha256\":$plan_sha256,\"plan_bundle_sha256\":null,\"dataset_bundle_sha256\":null,\"model_revision_sha256\":null,\"model_snapshot_manifest_sha256\":null,\"index_manifest_sha256\":null,\"product_family_count\":$product_family_count,\"candidate_count\":$candidate_count,\"result_count\":$result_count,\"evidence_count\":$evidence_count,\"shadow_candidate_count\":0,\"product_id_sha256s\":$product_id_sha256s,\"evidence_id_sha256s\":$evidence_id_sha256s}" \
+            >> "$audit_file"
+    }
+
+    empty_sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+    probe_request_sha256=12d536ead6ce31b8d5dfdb0d535fca1042c4a4fd45344a0dd0cbc1db89545729
+    probe_question_sha256=26a624bfe2e3f97b2e7a908a8f70ef72becbde1843e2970149f23e143cee8491
+    append_event 1 request started received "$empty_sha256" "$empty_sha256" ''
+    append_event 2 safety succeeded guard_allowed "$probe_request_sha256" "$probe_question_sha256" ''
+    append_event 3 lexical succeeded lexical_completed "$probe_request_sha256" "$probe_question_sha256" ''
+    append_event 4 planning succeeded policy_completed "$probe_request_sha256" "$probe_question_sha256" ''
+    append_event 5 route succeeded routed_execute "$probe_request_sha256" "$probe_question_sha256" ''
+    append_event 6 compiler succeeded plan_compiled "$probe_request_sha256" "$probe_question_sha256" ''
+    append_event 7 authority succeeded authority_granted "$probe_request_sha256" "$probe_question_sha256" ''
+    append_event 8 sql succeeded parameterized_statement_completed "$probe_request_sha256" "$probe_question_sha256" ''
+    append_event 9 oracle succeeded oracle_completed "$probe_request_sha256" "$probe_question_sha256" ''
+    append_event 10 verifier succeeded verification_passed "$probe_request_sha256" "$probe_question_sha256" ''
+    append_event 11 renderer succeeded rendering_completed "$probe_request_sha256" "$probe_question_sha256" ''
+    append_event 12 answer succeeded execution_completed "$probe_request_sha256" "$probe_question_sha256" ''
+    append_event 13 request succeeded response_completed "$probe_request_sha256" "$probe_question_sha256" ''
+
     printf '%s\n' 'unrelated container diagnostic'
-    printf '%s\n' 'FINANCE_ROLLBACK_PROBE_RESULT={"status":"success","intent":"search"}'
+    printf '%s\n' \
+        'FINANCE_ROLLBACK_PROBE_RESULT={"audit_status":"ok","status":"success","intent":"search"}'
     exit 0
 fi
 
@@ -59,7 +141,10 @@ if [ "$1" = "compose" ]; then
                 image=$(sed -n 's/^FINANCE_IMAGE_REFERENCE=//p' "$env_file")
                 volume=$(sed -n 's/^FINANCE_DATA_VOLUME_NAME=//p' "$env_file")
                 binding=$(sed -n 's/^FINANCE_DEPLOYMENT_BINDING_HOST_FILE=//p' "$env_file")
-                printf '%s\n%s\n%s\n' "$image" "$volume" "$binding" \
+                audit_root=$(sed -n 's/^FINANCE_AUDIT_HOST_DIR=//p' "$env_file")
+                binding_sha256=$(sed -n 's/^FINANCE_DEPLOYMENT_BINDING_SHA256=//p' "$env_file")
+                printf '%s\n%s\n%s\n%s\n%s\n' \
+                    "$image" "$volume" "$binding" "$audit_root" "$binding_sha256" \
                     > "$ROLLBACK_DRILL_STATE_FILE"
                 exit 0
                 ;;
