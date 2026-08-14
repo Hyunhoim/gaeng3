@@ -130,6 +130,7 @@ def test_official_get_answer_returns_exact_five_string_contract(
     )
 
     assert response.status_code == 200
+    assert response.headers["content-type"] == "application/json; charset=utf-8"
     body = OfficialAnswerResponse.model_validate(response.json())
     assert body.question_id == "Q-001"
     assert body.question == question
@@ -231,6 +232,7 @@ def test_official_get_answer_handles_invalid_and_extra_parameters_without_agent_
     )
 
     assert invalid.status_code == 200
+    assert invalid.headers["content-type"] == "application/json; charset=utf-8"
     body = OfficialAnswerResponse.model_validate(invalid.json())
     assert body.question_id == "invalid-question-id"
     assert fake_agent.calls == []
@@ -244,6 +246,7 @@ def test_official_get_answer_handles_invalid_and_extra_parameters_without_agent_
         },
     )
     assert valid.status_code == 200
+    assert valid.headers["content-type"] == "application/json; charset=utf-8"
     OfficialAnswerResponse.model_validate(valid.json())
     assert len(fake_agent.calls) == 1
 

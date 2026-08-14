@@ -6,6 +6,7 @@ from time import perf_counter
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, Request, Response
+from fastapi.responses import JSONResponse
 from finance_agent_core.agent import (
     execute_answer_request,
     invalid_official_request_response,
@@ -44,6 +45,12 @@ router = APIRouter(tags=["answer"])
 _ERROR_RESPONSES = {
     status_code: {"model": BackendAgentResponse} for status_code in (422, 500, 502, 503, 504)
 }
+
+
+class OfficialJsonResponse(JSONResponse):
+    """Return the exact UTF-8 JSON media type required by the evaluator."""
+
+    media_type = "application/json; charset=utf-8"
 
 
 @router.post(
@@ -113,6 +120,7 @@ async def answer(
 @router.get(
     "/answer",
     response_model=OfficialAnswerResponse,
+    response_class=OfficialJsonResponse,
 )
 async def official_answer(
     http_request: Request,

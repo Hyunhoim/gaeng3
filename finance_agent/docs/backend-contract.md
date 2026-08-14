@@ -199,7 +199,7 @@ Frontend에 제공하는 상세 `POST /answer`와 별개로, 공식 평가 route
 | --- | --- |
 | `question_id` | 요청의 평가 질문 ID |
 | `question` | 요청 원문 |
-| `retrieved_context` | citation·근거·기준일을 JSON 문자열로 직렬화한 값 |
+| `retrieved_context` | 검증된 상품 field·비교·집계·문서와 citation·기준일을 JSON 문자열로 직렬화한 값 |
 | `think_trace` | intent·필터·검증·fallback의 구조화 실행 기록 JSON 문자열 |
 | `answer` | 검증된 최종 답변 또는 안전한 한계 안내 |
 
@@ -207,14 +207,19 @@ Frontend에 제공하는 상세 `POST /answer`와 별개로, 공식 평가 route
 검사할 수 있는 실행 사실만 담는다. 결정론적 답변에서 실행하지 않은
 Answer Verifier를 실행했다고 표시하지 않는다.
 
+공식 GET은 `Content-Type: application/json; charset=utf-8`을 명시한다.
+`retrieved_context`는 원천 raw value나 전체 내부 DTO를 복사하지 않고 Verifier를
+통과한 normalized value와 evidence reference만 담는다. 상품·field·문서 수와 문서
+본문 길이는 고정 상한으로 제한하고, 잘린 범위를 `truncation`으로 표시한다.
+
 성공·결과 없음·역질문·미지원·내부 오류와 입력 오류를 모두 같은 스키마와
 HTTP 200으로 반환한다. 이는 주최 측 계약을 위한 예외이며, 내부 `POST /answer`의
 HTTP 422·502·503·504 오류 의미를 바꾸지 않는다. 정의되지 않은 query parameter는
 무시하며, 내부 예외·credential·파일 경로는 다섯 문자열에 노출하지 않는다.
 
-Agent Core 계약 2건과 Backend의 모든 응답 상태·예외·추가 parameter 테스트로
+Agent Core 계약과 Backend의 모든 응답 상태·예외·추가 parameter 테스트로
 자동 검증한다. Docker HTTP smoke도 실제 공식 GET 응답의 필드·문자열·
-직렬화를 검사하도록 확장했다.
+직렬화·UTF-8 Content-Type과 공모펀드 잠금 상태를 검사하도록 확장했다.
 
 평가 route에는 기본 55초의 바깥쪽 시간 예산을 둔다. 예산이 끝나면
 `control_code=request_timeout`, 빈 citation과 안전 문구를 담은 같은 다섯 문자열을
