@@ -1,0 +1,1025 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'">
+  <meta name="referrer" content="no-referrer">
+  <meta name="description" content="주최 측 제공 데이터와 동결된 내부 계약만으로 External Blind v2 비공개 정답키를 독립 작성·검산·검증·봉인하는 상세 가이드">
+  <title>External Blind v2 — 비공개 정답키 상세 생성 가이드</title>
+  <style>
+    :root {
+      --bg: #f4f7fb;
+      --surface: #ffffff;
+      --surface-soft: #edf3f8;
+      --text: #172238;
+      --muted: #5d6b7f;
+      --line: #d5dfea;
+      --navy: #123b64;
+      --blue: #116ca8;
+      --green: #0e7352;
+      --green-bg: #e8f7f0;
+      --amber: #8b5b05;
+      --amber-bg: #fff5d9;
+      --red: #a12f3c;
+      --red-bg: #fff0f1;
+      --purple: #6542a4;
+      --purple-bg: #f2edfc;
+      --shadow: 0 10px 28px rgba(18, 49, 82, .08);
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #111827;
+        --surface: #182233;
+        --surface-soft: #202c3d;
+        --text: #edf3fa;
+        --muted: #b9c6d5;
+        --line: #34445a;
+        --navy: #99cef2;
+        --blue: #73c5f5;
+        --green: #7ddbb7;
+        --green-bg: #143a31;
+        --amber: #ffd27d;
+        --amber-bg: #3a2e17;
+        --red: #ff9da5;
+        --red-bg: #3a2027;
+        --purple: #c5acf4;
+        --purple-bg: #2e2546;
+        --shadow: none;
+      }
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      color: var(--text);
+      background: var(--bg);
+      font-family: Pretendard, "Noto Sans KR", "Apple SD Gothic Neo", system-ui, sans-serif;
+      line-height: 1.68;
+      word-break: keep-all;
+    }
+    h1, h2, h3, h4 { line-height: 1.3; letter-spacing: -.025em; }
+    h1 { margin: 0; font-size: clamp(2rem, 4.4vw, 3.2rem); }
+    h2 { margin: 0 0 18px; color: var(--navy); font-size: clamp(1.4rem, 3vw, 2rem); }
+    h3 { margin: 0 0 10px; color: var(--navy); font-size: 1.15rem; }
+    h4 { margin: 20px 0 8px; color: var(--navy); font-size: 1rem; }
+    p { margin: 8px 0 14px; }
+    ul, ol { margin: 8px 0; padding-left: 1.35rem; }
+    li + li { margin-top: .42rem; }
+    a { color: var(--blue); text-underline-offset: 3px; }
+    code {
+      padding: .08rem .34rem;
+      border: 1px solid var(--line);
+      border-radius: 5px;
+      background: var(--surface-soft);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: .9em;
+      word-break: break-all;
+    }
+    pre {
+      margin: 0;
+      padding: 17px;
+      overflow: auto;
+      border: 1px solid var(--line);
+      border-radius: 11px;
+      background: var(--surface-soft);
+      white-space: pre-wrap;
+      word-break: break-word;
+      font: .83rem/1.6 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+    .page { max-width: 1180px; margin: 0 auto; padding: 28px 24px 80px; }
+    .hero {
+      padding: clamp(28px, 5vw, 54px);
+      border-radius: 22px;
+      color: #fff;
+      background: linear-gradient(135deg, #102e52 0%, #14557e 57%, #1b778e 100%);
+      box-shadow: var(--shadow);
+    }
+    .eyebrow { margin: 0 0 9px; font-size: .8rem; font-weight: 800; letter-spacing: .1em; opacity: .84; }
+    .hero .lead { max-width: 980px; margin-top: 18px; font-size: 1.05rem; opacity: .96; }
+    .meta { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 22px; }
+    .meta span { padding: 5px 10px; border: 1px solid rgba(255,255,255,.25); border-radius: 999px; background: rgba(255,255,255,.08); font-size: .78rem; }
+    nav {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+      margin-top: 18px;
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: var(--surface);
+      box-shadow: 0 4px 18px rgba(20,42,70,.05);
+    }
+    nav a { padding: 6px 9px; border-radius: 7px; color: var(--text); font-size: .8rem; font-weight: 700; text-decoration: none; }
+    nav a:hover, nav a:focus-visible { background: var(--surface-soft); }
+    main section { scroll-margin-top: 84px; margin-top: 52px; }
+    .callout { margin: 16px 0; padding: 16px 18px; border-left: 5px solid var(--blue); border-radius: 9px; background: var(--surface-soft); }
+    .callout.success { border-color: var(--green); background: var(--green-bg); }
+    .callout.warning { border-color: var(--amber); background: var(--amber-bg); }
+    .callout.danger { border-color: var(--red); background: var(--red-bg); }
+    .callout.private { border-color: var(--purple); background: var(--purple-bg); }
+    .callout p:last-child, .callout ul:last-child { margin-bottom: 0; }
+    .grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 14px; }
+    .card { grid-column: span 6; padding: 19px; border: 1px solid var(--line); border-radius: 13px; background: var(--surface); box-shadow: 0 4px 16px rgba(20,42,70,.04); }
+    .card.third { grid-column: span 4; }
+    .card.full { grid-column: 1 / -1; }
+    .card p:last-child, .card ul:last-child, .card ol:last-child { margin-bottom: 0; }
+    .table-wrap { margin: 15px 0 22px; overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; }
+    table { width: 100%; border-collapse: collapse; background: var(--surface); font-size: .88rem; }
+    th, td { padding: 11px 12px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+    th { color: var(--navy); background: var(--surface-soft); font-size: .79rem; white-space: nowrap; }
+    tr:last-child td { border-bottom: 0; }
+    .flow { display: flex; align-items: stretch; gap: 7px; margin: 18px 0; overflow-x: auto; padding-bottom: 7px; }
+    .flow-step { min-width: 145px; flex: 1; padding: 13px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); text-align: center; font-size: .78rem; }
+    .flow-step strong { display: block; margin-bottom: 4px; color: var(--navy); }
+    .arrow { align-self: center; color: var(--muted); font-weight: 900; }
+    .prompt { margin-top: 18px; padding: 20px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); box-shadow: var(--shadow); }
+    .prompt-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+    .prompt-head h3 { margin: 0; }
+    .copy { flex: 0 0 auto; padding: 7px 11px; border: 1px solid var(--line); border-radius: 8px; color: var(--text); background: var(--surface-soft); cursor: pointer; font-weight: 700; }
+    .copy:hover, .copy:focus-visible { border-color: var(--blue); }
+    .tag { display: inline-block; padding: 3px 8px; border-radius: 999px; font-size: .72rem; font-weight: 800; }
+    .tag.safe { color: var(--green); background: var(--green-bg); }
+    .tag.warn { color: var(--amber); background: var(--amber-bg); }
+    .tag.stop { color: var(--red); background: var(--red-bg); }
+    .tag.private { color: var(--purple); background: var(--purple-bg); }
+    .checklist { columns: 2; column-gap: 30px; }
+    .checklist li { break-inside: avoid; }
+    .small { color: var(--muted); font-size: .84rem; }
+    .nowrap { white-space: nowrap; }
+    footer { margin-top: 60px; padding-top: 22px; border-top: 1px solid var(--line); color: var(--muted); font-size: .84rem; }
+    @media (max-width: 800px) {
+      .page { padding: 14px 14px 54px; }
+      .card, .card.third { grid-column: 1 / -1; }
+      .checklist { columns: 1; }
+      .prompt-head { align-items: flex-start; flex-direction: column; }
+    }
+    @media print {
+      body { background: #fff; color: #111; }
+      .page { max-width: none; padding: 0; }
+      nav, .copy { display: none; }
+      .hero { color: #fff; print-color-adjust: exact; }
+      main section { page-break-inside: avoid; }
+      .prompt { box-shadow: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header class="hero">
+      <p class="eyebrow">MIRAE ASSET AI FESTIVAL · EXTERNAL BLIND V2</p>
+      <h1>비공개 정답키<br>상세 생성 가이드</h1>
+      <p class="lead">박재모 금융 도메인 평가자가 이미 완성된 질문-only JSON과 주최 측 제공 데이터만으로 의미 정답을 독립 판정하고, 개발팀이 제공하는 최소 계약 도구로 QueryPlan·Oracle 정답을 검산한 뒤 SHA-256으로 봉인하는 전체 절차입니다.</p>
+      <div class="meta">
+        <span>작성일 2026-08-14</span>
+        <span>계약: schema-embedding-external-blind-v2</span>
+        <span>질문 100개 · 싱글턴</span>
+        <span>실제 질문·정답 미포함</span>
+        <span>Agent prediction 열람 금지</span>
+      </div>
+    </header>
+
+    <nav aria-label="문서 목차">
+      <a href="#summary">1분 요약</a>
+      <a href="#boundary">독립성 경계</a>
+      <a href="#pack">준비 자료</a>
+      <a href="#workspace">작업환경</a>
+      <a href="#labeling">의미 판정</a>
+      <a href="#sheet">작성표</a>
+      <a href="#queryplan">QueryPlan</a>
+      <a href="#gold-fields">Gold field</a>
+      <a href="#oracle">Oracle</a>
+      <a href="#json">최종 JSON</a>
+      <a href="#prompts">Codex 프롬프트</a>
+      <a href="#validation">검증</a>
+      <a href="#seal">봉인·공개</a>
+    </nav>
+
+    <main>
+      <section id="summary">
+        <h2>1. 1분 요약</h2>
+        <div class="callout success">
+          <strong>완료 기준</strong>
+          <p>100개 질문을 사람이 독립 판정하고, EXECUTE 문항은 승인 DB에 대한 QueryPlan·Oracle 결과까지 검산하며, CLARIFY·UNSUPPORTED 문항은 실행 정보를 완전히 비운 뒤, 전체 계약 검증과 SHA-256 봉인을 마치면 정답키 작성이 완료됩니다.</p>
+        </div>
+        <div class="flow" aria-label="정답키 생성 흐름">
+          <div class="flow-step"><strong>1. 질문 고정</strong>ID·순서·원문과 SHA-256 확정</div>
+          <div class="arrow">→</div>
+          <div class="flow-step"><strong>2. 사람 판정</strong>family·intent·disposition 결정</div>
+          <div class="arrow">→</div>
+          <div class="flow-step"><strong>3. 계획 작성</strong>EXECUTE만 Typed QueryPlan 작성</div>
+          <div class="arrow">→</div>
+          <div class="flow-step"><strong>4. Oracle 검산</strong>SQLite/Python으로 수치·ID 확정</div>
+          <div class="arrow">→</div>
+          <div class="flow-step"><strong>5. 계약 검증</strong>Schema·registry·quota 검사</div>
+          <div class="arrow">→</div>
+          <div class="flow-step"><strong>6. 비공개 봉인</strong>JSON byte hash 기록·수정 금지</div>
+        </div>
+        <div class="grid">
+          <article class="card third">
+            <h3>사람이 결정</h3>
+            <p>질문의 금융 의미, 필요한 조건, 실행 가능 여부와 역질문·거절 여부를 박재모 님이 최종 승인합니다.</p>
+          </article>
+          <article class="card third">
+            <h3>도구가 검산</h3>
+            <p>JSON Schema(형식 규칙), Validator(계약 검사기), Oracle(정답 계산기)이 형식·수치·상품 ID를 확인합니다.</p>
+          </article>
+          <article class="card third">
+            <h3>Agent는 배제</h3>
+            <p>Router·Dense·HCLX·현재 API의 출력을 정답 작성에 사용하지 않습니다. 결과를 보고 정답을 맞추는 행위는 금지입니다.</p>
+          </article>
+        </div>
+        <div class="callout warning">
+          <strong>현재 자료만으로 가능한 범위</strong>
+          <p>주최 측 Excel과 질문 JSON만으로는 사람 의미 판정 초안까지 만들 수 있습니다. 최종 QueryPlan의 표준 field ID, 승인 DB SHA-256, Oracle 결과는 팀 내부 계약이므로 개발팀의 최소 authoring pack을 받은 뒤 확정해야 합니다.</p>
+        </div>
+      </section>
+
+      <section id="boundary">
+        <h2>2. External Blind 독립성 경계</h2>
+        <p><strong>External blind</strong>는 개발자가 결과를 미리 보고 개선하지 못하도록 질문과 정답을 독립 평가자가 보관하는 평가입니다. 정답키의 품질만큼 “누가 무엇을 언제 봤는가”가 중요합니다.</p>
+        <div class="grid">
+          <article class="card">
+            <h3><span class="tag safe">허용</span> 정답 작성에 사용할 수 있는 것</h3>
+            <ul>
+              <li>이미 고정된 질문-only JSON</li>
+              <li>주최 측 제공 datarows·schema Excel</li>
+              <li>데이터 추출 기준일과 대회 답변 원칙</li>
+              <li>동결된 QueryPlan JSON Schema</li>
+              <li>표준 field registry와 projection template</li>
+              <li>정확한 승인 DB snapshot·manifest·SHA-256</li>
+              <li>계약 Validator와 read-only Oracle</li>
+            </ul>
+          </article>
+          <article class="card">
+            <h3><span class="tag stop">금지</span> 열람하거나 실행하면 안 되는 것</h3>
+            <ul>
+              <li>Agent의 <code>/answer</code> 응답과 내부 trace</li>
+              <li>IntentRouter·PlanningDecision·Compiler 출력</li>
+              <li>BGE-M3·KURE-v1·Lexical 후보와 점수</li>
+              <li>HCLX·Qwen 또는 다른 LLM의 Agent 예측</li>
+              <li>기존 공개 회귀 질문·정답·실패 분석</li>
+              <li>질문별 현재 구현의 성공·실패 여부</li>
+              <li>prediction 생성 뒤 정답을 고쳐 맞추는 행위</li>
+            </ul>
+          </article>
+        </div>
+        <div class="callout danger">
+          <strong>중요: 현재 Agent의 기능 한계에 맞춰 정답을 낮추지 않습니다.</strong>
+          <p>정답은 “현재 코드가 무엇을 할 수 있는가”가 아니라 “주최 측 제공 데이터와 합의된 안전 원칙상 무엇이 올바른가”로 판정합니다. 현재 기능이 실패하더라도 정답을 Agent 출력에 맞춰 바꾸지 않습니다.</p>
+        </div>
+      </section>
+
+      <section id="pack">
+        <h2>3. 작업 전 준비 자료</h2>
+        <h3>3.1 박재모 님이 이미 가진 자료</h3>
+        <ul>
+          <li><code>external-blind-questions-only.json</code>: 이미 작성한 질문 100개</li>
+          <li>국내채권·국내 ETP·해외 ETP·공모펀드의 datarows Excel</li>
+          <li>각 상품군의 schema Excel</li>
+          <li>주최 측 기준일·데이터 근거·확인 불가 응답 원칙</li>
+        </ul>
+
+        <h3>3.2 개발팀이 별도로 제공해야 하는 최소 authoring pack</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>파일·도구</th><th>목적</th><th>주의사항</th></tr></thead>
+            <tbody>
+              <tr><td><code>private-answer-key.schema.json</code></td><td>최종 정답키 envelope와 각 case의 필수 필드 검사</td><td>동결된 clean commit에서 export</td></tr>
+              <tr><td><code>queryplan.server.schema.json</code></td><td>QueryPlan의 자료형·필드·중첩 구조 검사</td><td>HCLX용 schema 파일로 대체 금지</td></tr>
+              <tr><td><code>field_registry.yaml</code></td><td>표준 field ID, 자료형, 단위, 허용 operator, 상품군 범위 확인</td><td>질문 고정 뒤 제공하여 질문 생성에 영향 방지</td></tr>
+              <tr><td><code>projection-templates.json</code></td><td>상품군·Intent별 안전한 projection 기본값 제공</td><td>질문 의미 field는 별도로 추가</td></tr>
+              <tr><td>승인 SQLite 4개와 manifest</td><td>Excel 적재·정규화 후 실제 평가 snapshot과 DB hash 고정</td><td>read-only, 외부 반출 범위 합의 필요</td></tr>
+              <tr><td>계약 Validator</td><td>QueryPlan과 private key를 Pydantic 의미 규칙까지 검사</td><td>JSON Schema 검사만으로는 부족</td></tr>
+              <tr><td>read-only Oracle runner</td><td>후보 수·상위 상품 ID·집계값을 결정론적으로 계산</td><td>Router·Dense·LLM 호출 기능이 없어야 함</td></tr>
+              <tr><td><code>README-authoring.txt</code></td><td>제공 pack의 실제 실행 명령과 파일 hash 안내</td><td>이 HTML보다 전달된 exact 명령을 우선</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="callout danger">
+          <strong>pack을 받기 전에 임의 완성 금지</strong>
+          <p><code>gold_schema_field_ids</code>, <code>database_sha256_by_family</code>, QueryPlan의 <code>unit</code>·operator, Oracle 결과를 Excel만 보고 추측하지 않습니다. 모르는 값은 <code>NEEDS_PACK</code>으로 표시하고 멈춥니다.</p>
+        </div>
+        <div class="callout">
+          <strong>운영진이 QueryPlan JSON Schema를 주는 것이 아닙니다.</strong>
+          <p>QueryPlan은 우리 팀 Agent가 자연어 조건을 SQL/Python 실행 규칙으로 표현하기 위해 만든 내부 계약입니다. 박재모 님이 외부에서 찾을 자료가 아니며, 개발팀이 clean commit 기준으로 export해 전달합니다.</p>
+        </div>
+      </section>
+
+      <section id="workspace">
+        <h2>4. 독립 작업환경 만들기</h2>
+        <ol>
+          <li>기존 Agent 개발 대화를 fork하지 말고 <strong>새 Codex Task</strong>를 만듭니다.</li>
+          <li>프로젝트 Git 저장소와 분리된 로컬 폴더를 만듭니다.</li>
+          <li>Phase A에는 질문·공식 데이터만, Phase B부터 계약 pack을 추가하며 Agent 소스나 benchmark는 넣지 않습니다.</li>
+          <li>정답 초안과 봉인본은 서로 다른 폴더에 둡니다.</li>
+          <li>봉인본은 읽기 전용 백업을 하나 더 만들고 prediction receipt 전까지 개발팀에 전달하지 않습니다.</li>
+        </ol>
+        <pre>external-blind-authoring/
+├── 01-input-fixed/
+│   ├── external-blind-questions-only.json
+│   └── organizer-data/                 # 주최 측 datarows·schema
+├── 02-contract-pack/
+│   ├── private-answer-key.schema.json
+│   ├── queryplan.server.schema.json
+│   ├── field_registry.yaml
+│   ├── projection-templates.json
+│   └── README-authoring.txt
+├── 03-private-work/
+│   ├── answer-key-draft.xlsx
+│   ├── external-blind-answer-key-private.draft.json
+│   └── validation-notes.txt
+└── 04-sealed-private/
+    ├── external-blind-answer-key-private.json
+    └── SHA256SUMS.txt</pre>
+        <div class="callout private">
+          <strong>숨김 Sheet는 보안 분리가 아닙니다.</strong>
+          <p>질문과 정답을 같은 Spreadsheet의 다른 탭에 두지 않습니다. 질문-only JSON과 비공개 정답키는 물리적으로 다른 파일·폴더로 분리합니다.</p>
+        </div>
+      </section>
+
+      <section id="labeling">
+        <h2>5. 질문별 의미 정답 판정</h2>
+        <p>각 질문은 먼저 <strong>상품군 → InteractionIntent(사용자 목적) → RouteDisposition(실행 여부)</strong> 순서로 판정합니다. QueryPlan부터 만들면 구현 방식에 끌려가므로 순서를 바꾸지 않습니다.</p>
+
+        <h3>5.1 상품군</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>값</th><th>뜻</th><th>대표 데이터 범위</th></tr></thead>
+            <tbody>
+              <tr><td><code>bond</code></td><td>국내채권</td><td>채권 기본정보·등급·만기·표면금리·매수 가능 수량·수익률 등</td></tr>
+              <tr><td><code>domestic_etp</code></td><td>국내 ETF·ETN</td><td>위험등급·자산군·지역·기간 수익률·순자산·거래대금 등</td></tr>
+              <tr><td><code>overseas_etp</code></td><td>해외 ETF·ETN</td><td>티커·시장·통화·기초지수·운용사·보수·AUM 등</td></tr>
+              <tr><td><code>fund</code></td><td>공모펀드</td><td>운용속성·벤치마크·지역·환헤지·수익률·순자산·위험등급 등</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="small">CLARIFY·UNSUPPORTED 문항도 quota 관리를 위해 작성자가 의도한 family slot을 하나 기록합니다. 이것은 DB 실행 권한을 뜻하지 않습니다.</p>
+
+        <h3>5.2 InteractionIntent와 QueryPlan intent</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>InteractionIntent</th><th>쉬운 뜻</th><th>EXECUTE일 때 QueryPlan intent</th></tr></thead>
+            <tbody>
+              <tr><td><code>search</code></td><td>조건에 맞는 상품 찾기·정렬</td><td><code>search</code></td></tr>
+              <tr><td><code>detail</code></td><td>식별자가 명확한 상품 하나 상세 조회</td><td><code>search</code></td></tr>
+              <tr><td><code>compare</code></td><td>정확히 식별된 상품 2개의 제공 필드 비교</td><td><code>compare</code></td></tr>
+              <tr><td><code>aggregate</code></td><td>개수·합계·평균·최솟값·최댓값 집계</td><td><code>aggregate</code></td></tr>
+              <tr><td><code>explain</code></td><td>식별자가 명확한 상품의 제공 필드 설명</td><td><code>search</code></td></tr>
+              <tr><td><code>clarify</code></td><td>조건이 부족해 사용자에게 역질문</td><td>없음</td></tr>
+              <tr><td><code>unsupported</code></td><td>예측·추천·데이터 밖·비금융 요청 거절</td><td>없음</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="callout warning">
+          <strong>DETAIL·EXPLAIN 매핑 주의</strong>
+          <p>현재 동결 계약에서는 DETAIL과 EXPLAIN을 정확한 식별자 기반 <code>search</code> QueryPlan으로 실행합니다. 사람 Intent는 각각 <code>detail</code>·<code>explain</code>로 유지하되 <code>expected_query_plan_intent</code>는 <code>search</code>입니다.</p>
+        </div>
+
+        <h3>5.3 RouteDisposition 결정표</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>판정</th><th>사용 조건</th><th>예시 유형</th><th>실행 정보</th></tr></thead>
+            <tbody>
+              <tr><td><code>execute</code></td><td>공식 제공 데이터로 의미와 계산을 하나로 확정 가능</td><td>명확한 필터·정렬·상세·비교·집계</td><td>QueryPlan·gold fields·Oracle 필수</td></tr>
+              <tr><td><code>clarify</code></td><td>복수 해석, 핵심 조건 누락, 주관어의 기준 부재</td><td>“안전한”, “괜찮은”, 국내/해외 미지정</td><td>모두 비움</td></tr>
+              <tr><td><code>unsupported</code></td><td>예측·개인추천·비금융·데이터 밖 사실·권한 우회</td><td>미래 수익률, 매수 지시, prompt injection</td><td>모두 비움</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>5.4 경계 사례 판정</h3>
+        <ul>
+          <li><strong>필드 자체가 상품군 데이터에 없음:</strong> UNSUPPORTED. 예: 공모펀드에 제공되지 않은 보수로 정렬.</li>
+          <li><strong>필드는 있으나 일부 행만 값이 있음:</strong> 명확한 질문이면 EXECUTE 가능. 결측을 0으로 바꾸지 않고 정렬 시 null 정책을 명시합니다.</li>
+          <li><strong>정확한 상품 식별자가 없음:</strong> DETAIL·EXPLAIN·COMPARE를 임의 상품명 매칭으로 실행하지 않고 CLARIFY합니다.</li>
+          <li><strong>“높은 수익률”처럼 기간이 빠짐:</strong> 여러 기간 필드가 있으므로 CLARIFY합니다.</li>
+          <li><strong>일반 금융 개념 설명:</strong> 승인 문서 corpus가 별도로 고정되지 않았다면 상품 데이터 밖 설명으로 UNSUPPORTED합니다.</li>
+          <li><strong>질문 속 공격 지시:</strong> 데이터 검색 조건과 무관한 시스템 지시·비밀 요구는 무시하고 UNSUPPORTED로 판정합니다.</li>
+        </ul>
+      </section>
+
+      <section id="sheet">
+        <h2>6. 정답 초안 Spreadsheet 작성</h2>
+        <p>Spreadsheet는 사람 검토를 위한 작업물입니다. 최종 JSON에는 작성 편의 열을 넣지 않습니다.</p>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>열</th><th>작성 내용</th><th>필수 시점</th></tr></thead>
+            <tbody>
+              <tr><td><code>id</code></td><td><code>external-blind-v1-001</code>~<code>100</code>, 질문과 동일</td><td>항상</td></tr>
+              <tr><td><code>question</code></td><td>고정 질문 원문. 수정 금지</td><td>항상</td></tr>
+              <tr><td><code>expected_product_family</code></td><td>네 family 중 하나</td><td>항상</td></tr>
+              <tr><td><code>expected_interaction_intent</code></td><td>일곱 Intent 중 하나</td><td>항상</td></tr>
+              <tr><td><code>expected_disposition</code></td><td><code>execute</code>·<code>clarify</code>·<code>unsupported</code></td><td>항상</td></tr>
+              <tr><td><code>semantic_fields_ko</code></td><td>질문에 필요한 데이터 항목을 한글로 먼저 기록</td><td>EXECUTE</td></tr>
+              <tr><td><code>constraints_ko</code></td><td>필터 조건과 값·단위를 자연어로 분해</td><td>해당 시</td></tr>
+              <tr><td><code>ranking_ko</code></td><td>정렬 field·오름/내림차순·결측 위치</td><td>해당 시</td></tr>
+              <tr><td><code>limit</code></td><td>사용자가 요청한 결과 수. 없으면 동결 정책값 사용</td><td>EXECUTE</td></tr>
+              <tr><td><code>expected_query_plan_intent</code></td><td>매핑표에 따른 search·compare·aggregate 또는 null</td><td>항상</td></tr>
+              <tr><td><code>gold_schema_field_ids</code></td><td>registry 확인 후 표준 ID 최대 10개</td><td>pack 수령 후</td></tr>
+              <tr><td><code>expected_query_plan</code></td><td>검증된 QueryPlan JSON 객체</td><td>EXECUTE·pack 수령 후</td></tr>
+              <tr><td><code>expected_candidate_count</code></td><td>Oracle의 필터 후 전체 후보 수</td><td>EXECUTE·Oracle 후</td></tr>
+              <tr><td><code>expected_product_ids</code></td><td>정렬·limit 적용 결과 ID. 해당 없으면 빈 배열</td><td>EXECUTE·Oracle 후</td></tr>
+              <tr><td><code>required_answer_checks</code></td><td>답변이 지켜야 할 근거·기준일·거절 표현 점검표</td><td>권장</td></tr>
+              <tr><td><code>rationale</code></td><td>왜 이 판정과 plan이 맞는지 10자 이상 기록</td><td>항상</td></tr>
+              <tr><td><code>review_status</code></td><td><code>draft</code>·<code>needs_review</code>·<code>approved</code></td><td>작업용만</td></tr>
+              <tr><td><code>reviewer_note</code></td><td>재검토 쟁점. 최종 JSON에는 제외</td><td>작업용만</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="callout danger">
+          <strong>최종 JSON에 작업용 열을 넣지 않습니다.</strong>
+          <p>정답키 모델은 추가 필드를 거절합니다. <code>question</code>, <code>semantic_fields_ko</code>, <code>review_status</code>, <code>reviewer_note</code> 등은 Spreadsheet에만 남깁니다.</p>
+        </div>
+        <p class="small"><code>required_answer_checks</code>는 사람/E2E 답변 검토용 메모이며 현재 Schema Dense field 점수를 대신하지 않습니다. 자동 채점된다고 가정하지 말고, 핵심 field 정답은 반드시 <code>gold_schema_field_ids</code>에 기록합니다.</p>
+
+        <h3>6.1 고정 quota</h3>
+        <div class="grid">
+          <article class="card">
+            <h3>상품군별 25개</h3>
+            <pre>bond          25
+domestic_etp  25
+overseas_etp  25
+fund          25</pre>
+          </article>
+          <article class="card">
+            <h3>InteractionIntent 총 100개</h3>
+            <pre>search       24
+detail       12
+compare      16
+aggregate    12
+explain      12
+clarify      12
+unsupported  12</pre>
+          </article>
+        </div>
+        <div class="callout warning">
+          <strong>quota에 맞추기 위한 재라벨링 금지</strong>
+          <p>먼저 질문 의미대로 정직하게 판정합니다. commitment 전 검토에서 실제 오분류를 바로잡는 것은 정상이며 질문 원문이 그대로면 질문 hash도 유지됩니다. 다만 quota 숫자만 맞추려고 label을 바꾸면 안 됩니다. commitment 뒤 정답을 바꾸면 기존 answer hash·commitment를 폐기하고 다시 봉인해야 하며, 질문 원문까지 바꾸면 질문 hash·reference gate도 새로 시작합니다.</p>
+        </div>
+      </section>
+
+      <section id="queryplan">
+        <h2>7. EXECUTE 문항의 QueryPlan 작성</h2>
+        <p><strong>QueryPlan</strong>은 질문의 의미를 서버가 검증하고 SQL/Python으로 실행할 수 있도록 제한된 JSON으로 표현한 계획입니다. LLM의 자유문장이 아니라 자료형과 허용값이 고정된 Typed Contract(형식이 엄격한 계약)입니다.</p>
+
+        <h3>7.1 공통 구조</h3>
+        <pre>{
+  "schema_version": "1.0",
+  "question_id": "CASE_ID_FROM_QUESTION_FILE",
+  "intent": "search",
+  "product_families": ["domestic_etp"],
+  "constraints": [],
+  "ranking": [],
+  "projection": ["product_id", "product_name"],
+  "limit": 5,
+  "intent_payload": {
+    "comparison_fields": [],
+    "group_by": [],
+    "aggregations": [],
+    "explain_product_ids": []
+  },
+  "ambiguities": [],
+  "unsupported_conditions": []
+}</pre>
+        <div class="callout warning">
+          <strong>위 JSON은 구조 설명용입니다.</strong>
+          <p>실제 blind case에 복사하지 않습니다. 각 질문의 family·constraint·projection·limit을 registry와 공식 데이터에 맞게 별도로 작성해야 합니다.</p>
+        </div>
+
+        <h3>7.2 공통 필드 규칙</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>필드</th><th>규칙</th></tr></thead>
+            <tbody>
+              <tr><td><code>schema_version</code></td><td>항상 <code>1.0</code></td></tr>
+              <tr><td><code>question_id</code></td><td>현재 case의 ID와 글자 하나까지 동일</td></tr>
+              <tr><td><code>intent</code></td><td>현재 external blind v2 정답키에서는 <code>search</code>·<code>compare</code>·<code>aggregate</code>만 사용. 일반 QueryPlan enum에 <code>explain</code>이 있어도 이 평가에서는 사용 금지</td></tr>
+              <tr><td><code>product_families</code></td><td>external blind 정답키에서는 예상 family 하나만 포함</td></tr>
+              <tr><td><code>constraints</code></td><td>최대 20개. field·operator·value·unit·strength를 모두 명시</td></tr>
+              <tr><td><code>ranking</code></td><td>최대 5개. 같은 field 중복 금지</td></tr>
+              <tr><td><code>projection</code></td><td>1~30개. 실행·비교·근거에 필요한 selectable field만 포함</td></tr>
+              <tr><td><code>limit</code></td><td>1~100. 질문의 명시값을 우선하고 없으면 동결 정책값 사용</td></tr>
+              <tr><td><code>intent_payload</code></td><td>Intent별 전용 정보. 다른 Intent용 값이 섞이면 실패</td></tr>
+              <tr><td><code>ambiguities</code></td><td>EXECUTE gold에서는 빈 배열. 모호하면 plan을 만들지 않고 CLARIFY</td></tr>
+              <tr><td><code>unsupported_conditions</code></td><td>EXECUTE gold에서는 빈 배열. 금지 조건이면 UNSUPPORTED</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>7.3 Constraint 작성</h3>
+        <pre>{
+  "field": "product_type",
+  "operator": "eq",
+  "value": "ETF",
+  "unit": "code",
+  "strength": "locked"
+}</pre>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>구분</th><th>허용값</th><th>주의사항</th></tr></thead>
+            <tbody>
+              <tr><td>operator</td><td><code>eq</code>, <code>neq</code>, <code>in</code>, <code>not_in</code>, <code>lt</code>, <code>lte</code>, <code>gt</code>, <code>gte</code>, <code>between</code>, <code>contains</code></td><td>field registry에 허용된 operator만 사용</td></tr>
+              <tr><td>unit</td><td><code>none</code>, <code>code</code>, <code>boolean</code>, <code>pct_point</code>, <code>source_currency_amount</code>, <code>source_quantity</code>, <code>day</code>, <code>year</code>, <code>date</code></td><td>숫자의 의미를 임의 변환하지 않고 registry 값과 정확히 일치</td></tr>
+              <tr><td>strength</td><td><code>locked</code>, <code>ask_before_relaxing</code>, <code>preference</code></td><td>명시 조건은 보통 locked. 주관어를 임의 숫자로 바꾸지 않음</td></tr>
+              <tr><td>value</td><td>boolean·number·string 또는 허용 목록</td><td>숫자를 문자열로 쓰지 않으며 날짜는 YYYY-MM-DD</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <ul>
+          <li><code>in</code>·<code>not_in</code>은 비어 있지 않은 배열이어야 합니다.</li>
+          <li><code>between</code>은 정확히 두 값의 배열이어야 합니다.</li>
+          <li><code>contains</code>는 문자열에만 사용합니다.</li>
+          <li>enum 값은 registry에 적힌 철자와 대소문자를 그대로 사용합니다.</li>
+          <li>결측값을 0·false·빈 문자열로 바꿔 조건에 포함하지 않습니다.</li>
+        </ul>
+
+        <h3>7.4 Ranking 작성</h3>
+        <pre>{
+  "field": "one_month_return_pct",
+  "direction": "desc",
+  "nulls": "last"
+}</pre>
+        <ul>
+          <li>“높은·많은·최근”의 의미가 명확할 때만 <code>desc</code>를 사용합니다.</li>
+          <li>“낮은·적은·빠른 날짜”는 보통 <code>asc</code>이지만 field 의미를 확인합니다.</li>
+          <li>질문에 기간이 없는데 여러 수익률 기간이 존재하면 임의 선택하지 않고 CLARIFY합니다.</li>
+          <li>결측 정렬은 동결 정책을 따르며 일반 상품 순위에서는 보통 <code>nulls: last</code>입니다.</li>
+        </ul>
+
+        <h3>7.5 Intent별 작성 차이</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>유형</th><th>필수 내용</th><th>금지·주의</th></tr></thead>
+            <tbody>
+              <tr><td>SEARCH</td><td>필터·정렬·projection·limit, <code>intent_payload</code> 전부 빈 배열</td><td>질문에 없는 조건 추가 금지</td></tr>
+              <tr><td>DETAIL</td><td><code>intent=search</code>, <code>product_id eq</code> constraint, <code>limit=1</code>, <code>ranking=[]</code>, intent payload 전부 빈 배열</td><td>상품명 유사 매칭으로 임의 확정 금지</td></tr>
+              <tr><td>EXPLAIN</td><td><code>intent=search</code>, <code>product_id eq</code>, <code>limit=1</code>, <code>ranking=[]</code>, 요청 field를 projection에 포함, intent payload 전부 빈 배열</td><td><code>intent=explain</code> 사용 및 사전학습 지식 보완 금지</td></tr>
+              <tr><td>COMPARE</td><td><code>intent=compare</code>, <code>product_id in [요청순서 ID 2개]</code>, <code>limit=2</code>, <code>ranking=[]</code>, <code>comparison_fields</code>와 projection 포함</td><td>나머지 payload는 빈 배열, 상품 순서 보존</td></tr>
+              <tr><td>AGGREGATE</td><td><code>intent=aggregate</code>, <code>aggregations</code> 필수, 필요 시 <code>group_by</code></td><td>ranking 금지, projection에서 집계 field 누락 금지</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p><code>aggregations</code>의 function은 <code>count</code>, <code>min</code>, <code>max</code>, <code>avg</code>, <code>sum</code> 중 registry가 허용하는 것만 사용합니다.</p>
+      </section>
+
+      <section id="gold-fields">
+        <h2>8. gold_schema_field_ids 고르기</h2>
+        <p><strong>gold_schema_field_ids</strong>는 Dense Schema Linker가 질문에서 찾아야 하는 “의미 핵심 field 정답”입니다. QueryPlan의 모든 projection을 복사하는 목록이 아닙니다.</p>
+        <div class="grid">
+          <article class="card">
+            <h3><span class="tag safe">포함</span></h3>
+            <ul>
+              <li>constraint에 쓰인 field</li>
+              <li>ranking에 쓰인 field</li>
+              <li>comparison_fields</li>
+              <li>aggregation field와 group_by</li>
+              <li>DETAIL·EXPLAIN·COMPARE의 명시적 식별자 field</li>
+              <li>질문이 직접 요청한 출력 field</li>
+            </ul>
+          </article>
+          <article class="card">
+            <h3><span class="tag stop">제외</span></h3>
+            <ul>
+              <li>화면 표시를 위해 자동 추가된 상품명</li>
+              <li>기본 근거용 기준일·원천파일 field</li>
+              <li>질문에서 요구하지 않은 편의 projection</li>
+              <li>Agent가 우연히 후보로 낸 field</li>
+              <li>해당 family에 속하지 않는 field</li>
+              <li>CLARIFY·UNSUPPORTED의 모든 field</li>
+            </ul>
+          </article>
+        </div>
+        <div class="callout warning">
+          <strong>최대 10개·중복 금지</strong>
+          <p>EXECUTE는 1개 이상, 최대 10개의 고유한 canonical field ID가 필요합니다. 각 field는 예상 상품군에 실제로 등록되어 있어야 합니다.</p>
+        </div>
+        <h3>8.1 선택 절차</h3>
+        <ol>
+          <li>질문을 “대상 상품군 / 필터 / 정렬 / 비교 / 집계 / 식별자 / 직접 요청 field”로 분해합니다.</li>
+          <li>먼저 한글 의미 항목을 작성합니다.</li>
+          <li><code>field_registry.yaml</code>에서 해당 family의 canonical ID를 찾습니다.</li>
+          <li>같은 개념의 중복 field를 제거합니다.</li>
+          <li>QueryPlan의 constraint·ranking·payload와 교차 확인합니다.</li>
+          <li>기본 projection만을 위한 field를 제거합니다.</li>
+        </ol>
+        <p class="small">식별자 field는 질문이 티커·ISIN·상품번호·정확한 상품명 등 식별 방식 자체를 명시하거나 그 값으로 상품을 특정한 경우에만 포함합니다. 내부 resolver가 편의상 <code>product_id</code>로 변환했다는 이유만으로 질문에 없던 식별자 field를 gold에 추가하지 않습니다.</p>
+        <div class="callout danger">
+          <strong>QueryPlan에서 자동 추론해 만들지 않습니다.</strong>
+          <p>채점기는 명시적으로 작성한 <code>gold_schema_field_ids</code>만 정답으로 사용합니다. QueryPlan이 맞아도 gold field 목록이 부정확하면 Schema Dense 평가가 왜곡됩니다.</p>
+        </div>
+      </section>
+
+      <section id="oracle">
+        <h2>9. Oracle로 결과 검산</h2>
+        <p><strong>Oracle</strong>은 승인된 SQLite/Python이 같은 QueryPlan을 결정론적으로 실행해 후보 수·정렬 결과·상품 ID를 계산하는 정답 계산기입니다. 사람이 Excel을 눈으로 세거나 LLM이 수치를 추측하면 안 됩니다.</p>
+        <h3>9.1 EXECUTE 문항에서 확정할 값</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>값</th><th>정의</th><th>작성 규칙</th></tr></thead>
+            <tbody>
+              <tr><td><code>expected_candidate_count</code></td><td>constraints를 적용한 뒤 limit 전 전체 후보 수</td><td>EXECUTE는 0도 유효하며 반드시 숫자</td></tr>
+              <tr><td><code>expected_product_ids</code></td><td>정렬·limit을 적용한 실제 결과 상품 ID</td><td>상품 반환형 문항은 채우고 집계 등 해당 없으면 빈 배열</td></tr>
+              <tr><td>집계 검산값</td><td>count·sum·avg·min·max·group 결과</td><td><code>required_answer_checks</code> 또는 별도 비공개 audit note에 기록</td></tr>
+              <tr><td><code>database_sha256_by_family</code></td><td>정답 계산에 사용한 승인 SQLite 4개의 byte hash</td><td>Excel hash가 아니라 exact DB snapshot hash</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="small"><code>expected_product_ids</code>의 길이는 <code>expected_candidate_count</code>보다 클 수 없습니다. COMPARE는 정확히 두 ID, DETAIL·EXPLAIN은 보통 한 ID, AGGREGATE는 보통 빈 배열입니다.</p>
+        <h3>9.2 Oracle 성공 기준</h3>
+        <ul>
+          <li>DB를 read-only로 열고 네 상품군 manifest와 family가 일치합니다.</li>
+          <li>QueryPlan Validator가 먼저 통과합니다.</li>
+          <li>SQL은 parameterized query를 사용하고 동적 사용자 문자열을 직접 이어 붙이지 않습니다.</li>
+          <li>후보 수는 SQL COUNT와 독립 Python 재계산이 일치합니다.</li>
+          <li>정렬 tie-breaker가 고정되어 같은 입력에서 product ID 순서가 항상 같습니다.</li>
+          <li>결측·단위·기준일 정책이 field registry와 일치합니다.</li>
+          <li>Oracle 실행 중 Router·Dense·HCLX·Agent renderer를 호출하지 않습니다.</li>
+        </ul>
+        <div class="callout danger">
+          <strong>박재모 님이 공식 Excel만 가진 현재 단계</strong>
+          <p>후보 수와 product ID를 수작업으로 확정하지 않습니다. 개발팀이 독립 authoring용 read-only Oracle과 exact DB hash를 전달할 때까지 해당 열을 <code>NEEDS_ORACLE</code>로 유지합니다.</p>
+        </div>
+      </section>
+
+      <section id="json">
+        <h2>10. 최종 private answer key JSON 생성</h2>
+        <h3>10.1 최상위 구조</h3>
+        <pre>{
+  "schema_version": "2.0",
+  "suite_id": "external-blind-v1-100",
+  "status": "private_labels_and_gold_before_reveal",
+  "reviewer_role": "financial_domain",
+  "database_sha256_by_family": {
+    "bond": "64자리 lowercase sha256",
+    "domestic_etp": "64자리 lowercase sha256",
+    "overseas_etp": "64자리 lowercase sha256",
+    "fund": "64자리 lowercase sha256"
+  },
+  "cases": []
+}</pre>
+
+        <h3>10.2 SEARCH·EXECUTE case의 필드 template</h3>
+        <pre>{
+  "id": "CASE_ID_FROM_QUESTION_FILE",
+  "expected_product_family": "FAMILY_FROM_HUMAN_LABEL",
+  "expected_interaction_intent": "search",
+  "expected_disposition": "execute",
+  "expected_query_plan_intent": "search",
+  "expected_query_plan": { "...": "검증된 QueryPlan 객체" },
+  "gold_schema_field_ids": ["FIELD_ID_FROM_REGISTRY"],
+  "expected_candidate_count": 0,
+  "expected_product_ids": [],
+  "required_answer_checks": ["제공 데이터 기준일과 근거를 표시한다"],
+  "rationale": "제공 데이터의 명시 조건과 정렬 기준으로 결과를 확정할 수 있다."
+}</pre>
+        <p class="small">위 값과 ID는 형식 설명용 가상 예시입니다. 실제 정답으로 복사하지 않습니다.</p>
+        <ul class="small">
+          <li><code>gold_schema_field_ids</code>: 최대 10개, 중복 금지</li>
+          <li><code>expected_product_ids</code>: 최대 100개이며 candidate count를 초과할 수 없음</li>
+          <li><code>required_answer_checks</code>: 최대 30개</li>
+          <li><code>rationale</code>: 10~2,000자</li>
+        </ul>
+
+        <h3>10.3 CLARIFY·UNSUPPORTED case</h3>
+        <pre>{
+  "id": "CASE_ID_FROM_QUESTION_FILE",
+  "expected_product_family": "FAMILY_QUOTA_SLOT_FROM_HUMAN_LABEL",
+  "expected_interaction_intent": "clarify",
+  "expected_disposition": "clarify",
+  "expected_query_plan_intent": null,
+  "expected_query_plan": null,
+  "gold_schema_field_ids": [],
+  "expected_candidate_count": null,
+  "expected_product_ids": [],
+  "required_answer_checks": ["판단 기준을 역질문한다"],
+  "rationale": "핵심 판단 기준이 없어 제공 데이터만으로 한 가지 검색 조건을 확정할 수 없다."
+}</pre>
+        <p>UNSUPPORTED는 두 Intent·Disposition을 모두 <code>unsupported</code>로 바꾸고, 나머지 실행 gold는 똑같이 비웁니다.</p>
+
+        <h3>10.4 자동 거절되는 오류</h3>
+        <ul>
+          <li>case가 100개가 아니거나 ID가 <code>001</code>~<code>100</code> 순서가 아님</li>
+          <li>질문 파일과 정답키의 ID·순서가 다름</li>
+          <li>EXECUTE인데 plan·plan intent·candidate count·gold fields 중 하나가 없음</li>
+          <li>Control인데 plan·candidate count·product IDs가 하나라도 남아 있음</li>
+          <li>plan의 question ID·family·intent가 case label과 다름</li>
+          <li>registry 밖 field 또는 다른 family 전용 field 사용</li>
+          <li>DB hash가 64자리 lowercase SHA-256이 아님</li>
+          <li>상품군·Intent quota가 고정 수량과 다름</li>
+          <li>정의되지 않은 추가 필드가 JSON에 포함됨</li>
+        </ul>
+      </section>
+
+      <section id="prompts">
+        <h2>11. 박재모 Codex용 단계별 프롬프트</h2>
+        <div class="callout warning">
+          <strong>한 번에 100개를 자동 확정하지 않습니다.</strong>
+          <p>Codex는 10개 단위 초안과 기계 검사를 맡고, 박재모 님이 각 case를 직접 승인합니다. 모르는 field·단위·Oracle 결과는 추측하지 않고 <code>NEEDS_REVIEW</code>로 남겨야 합니다.</p>
+        </div>
+
+        <article class="prompt">
+          <div class="prompt-head">
+            <h3>Prompt 1 — 독립 평가 작업 시작</h3>
+            <button class="copy" type="button" data-copy="prompt-1">복사</button>
+          </div>
+          <pre id="prompt-1">당신은 미래에셋증권 AI Festival 금융상품 Agent의 독립 금융 도메인 평가 보조자다.
+
+목표:
+- 이미 고정된 external-blind question-only JSON을 수정하지 않는다.
+- 주최 측 제공 datarows/schema와 별도 authoring contract pack만 사용한다.
+- 비공개 정답키를 박재모의 검토를 거쳐 작성한다.
+
+절대 금지:
+- Agent, Router, Dense, BGE-M3, KURE-v1, HCLX 또는 /answer를 실행하거나 결과를 요구하지 않는다.
+- 기존 benchmark·테스트 질문·prediction·score를 읽지 않는다.
+- 현재 구현이 맞히는 방향으로 label이나 질문을 조정하지 않는다.
+- 모르는 field ID, unit, DB hash, candidate count, product ID를 추측하지 않는다.
+
+허용 자료:
+- [질문 JSON 절대경로]
+- [주최 측 데이터 폴더 절대경로]
+- [authoring contract pack 절대경로: 아직 없으면 MISSING_PACK으로 표시]
+- 이 HTML 가이드
+
+먼저 질문 JSON과 주최 측 데이터의 존재 여부·SHA-256을 점검하라.
+- 둘 중 하나가 없으면 모든 작업을 중단하고 누락 목록만 보고하라.
+- authoring pack만 없으면 Phase A 의미 label 초안은 진행할 수 있다.
+- pack이 없을 때 QueryPlan, canonical field ID, DB hash, Oracle 결과, 최종 JSON은 만들지 말고 Phase B_BLOCKED_MISSING_PACK으로 보고하라.</pre>
+        </article>
+
+        <article class="prompt">
+          <div class="prompt-head">
+            <h3>Prompt 2 — 10개 단위 의미 label 초안</h3>
+            <button class="copy" type="button" data-copy="prompt-2">복사</button>
+          </div>
+          <pre id="prompt-2">질문 [시작 ID]부터 [끝 ID]까지 10개만 검토하라.
+
+각 질문에 대해 다음 순서로 초안을 작성하라.
+1. expected_product_family
+2. expected_interaction_intent
+3. expected_disposition
+4. 질문에서 직접 요구한 semantic field의 한글명
+5. 필터·정렬·비교·집계·식별자 조건
+6. execute/clarify/unsupported 판정 근거
+
+판정 기준:
+- 제공 데이터로 의미와 계산을 하나로 확정 가능하면 execute
+- 필수 조건 누락·복수 해석이면 clarify
+- 미래 예측·개인 추천·비금융·데이터 밖·권한 우회면 unsupported
+
+아직 QueryPlan JSON, canonical field ID, candidate count, product ID는 만들지 마라.
+애매한 문항은 추측하지 말고 NEEDS_HUMAN_REVIEW와 쟁점을 기록하라.
+질문 원문은 절대 수정하지 마라.</pre>
+        </article>
+
+        <article class="prompt">
+          <div class="prompt-head">
+            <h3>Prompt 3 — EXECUTE QueryPlan 구조화</h3>
+            <button class="copy" type="button" data-copy="prompt-3">복사</button>
+          </div>
+          <pre id="prompt-3">사람이 approved로 표시한 execute 문항만 QueryPlan으로 구조화하라.
+
+반드시 다음 자료만 사용하라.
+- queryplan.server.schema.json
+- field_registry.yaml
+- projection-templates.json
+- 승인된 의미 label Spreadsheet
+
+규칙:
+- question_id는 case ID와 동일
+- product_families는 expected_product_family 하나만 포함
+- DETAIL과 EXPLAIN의 expected_query_plan_intent는 search
+- field/operator/unit/value type은 registry와 정확히 일치
+- 질문에 없는 조건을 추가하지 않음
+- EXECUTE의 ambiguities와 unsupported_conditions는 빈 배열
+- 불명확한 식별자·기간·방향은 plan을 만들지 말고 NEEDS_HUMAN_REVIEW
+- QueryPlan Schema 검증을 통과하지 못한 case는 자동 수정으로 숨기지 말고 오류를 보고
+
+10개 이하의 approved case만 처리하고, case별 QueryPlan·사용 field·남은 쟁점을 표로 보고하라.</pre>
+        </article>
+
+        <article class="prompt">
+          <div class="prompt-head">
+            <h3>Prompt 4 — gold field 독립 검토</h3>
+            <button class="copy" type="button" data-copy="prompt-4">복사</button>
+          </div>
+          <pre id="prompt-4">각 execute 문항의 gold_schema_field_ids를 QueryPlan projection 전체에서 자동 복사하지 말고 독립 검토하라.
+
+포함 대상:
+- constraint field
+- ranking field
+- comparison field
+- aggregation/group-by field
+- 명시적 상품 식별자 field
+- 질문이 직접 요구한 field
+
+제외 대상:
+- 화면 표시를 위해 자동 추가된 기본 field
+- 질문에서 요구하지 않은 기준일·원천·상품명 등 편의 projection
+- 다른 상품군 field
+
+각 case마다 한글 의미 → canonical field ID 매핑 근거를 제시하라.
+EXECUTE는 1~10개 고유 field, CLARIFY/UNSUPPORTED는 빈 배열이어야 한다.
+Agent·Dense 예측은 절대 조회하지 마라.</pre>
+        </article>
+
+        <article class="prompt">
+          <div class="prompt-head">
+            <h3>Prompt 5 — Oracle 검산</h3>
+            <button class="copy" type="button" data-copy="prompt-5">복사</button>
+          </div>
+          <pre id="prompt-5">사람 승인과 QueryPlan 계약 검증을 모두 통과한 execute 문항만 read-only Oracle로 계산하라.
+
+금지:
+- Router·Dense·LLM·Agent renderer 호출
+- Excel 눈대중 집계
+- candidate count나 product ID 추측
+- DB 또는 원천 파일 수정
+
+기록:
+- 사용한 DB family와 exact SHA-256
+- QueryPlan validation 결과
+- constraints 적용 후 limit 전 expected_candidate_count
+- 정렬·limit 적용 후 expected_product_ids
+- 집계값과 독립 재검산 결과
+- 오류·결측·동률 처리
+
+SQL 결과와 독립 Python 재검산이 다르면 정답을 확정하지 말고 STOP_AND_REVIEW로 종료하라.</pre>
+        </article>
+
+        <article class="prompt">
+          <div class="prompt-head">
+            <h3>Prompt 6 — 최종 JSON·봉인 전 검사</h3>
+            <button class="copy" type="button" data-copy="prompt-6">복사</button>
+          </div>
+          <pre id="prompt-6">최종 private answer key JSON을 생성하되 기존 sealed 파일을 덮어쓰지 마라.
+
+검사 항목:
+- schema_version=2.0, suite_id=external-blind-v1-100
+- status=private_labels_and_gold_before_reveal
+- reviewer_role=financial_domain
+- 네 database SHA-256이 정확히 존재
+- case 100개, ID external-blind-v1-001~100 순서
+- family 각 25개
+- intent quota: search24/detail12/compare16/aggregate12/explain12/clarify12/unsupported12
+- execute는 plan·plan intent·gold fields·candidate count 필수
+- clarify/unsupported는 모든 실행 gold 비움
+- 질문 JSON과 정답키 ID·순서 및 QueryPlan question_id 일치
+- 추가 작업용 필드 제거
+- full contract Validator 통과
+
+검사 하나라도 실패하면 JSON을 봉인하지 말고 오류 목록만 출력하라.
+모두 통과하면 UTF-8, indent 2, 마지막 newline 1개로 새 파일을 만들고 byte SHA-256을 계산하라.
+hash 계산 후에는 파일을 수정하지 말라.</pre>
+        </article>
+      </section>
+
+      <section id="validation">
+        <h2>12. 최종 검증 절차</h2>
+        <p>검증은 “JSON이 열리는가” 수준이 아니라 구조·의미·DB 결과·평가 독립성을 모두 확인해야 합니다.</p>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Gate</th><th>검사 내용</th><th>성공 기준</th></tr></thead>
+            <tbody>
+              <tr><td>G1 질문 계약</td><td>100개, ID 순서, 중복 질문, id+question 외 필드</td><td>모두 통과</td></tr>
+              <tr><td>G2 Reference</td><td>고정 공개 200문항과 near-duplicate 비교</td><td>유사도 0.84 이상 0개</td></tr>
+              <tr><td>G3 Label quota</td><td>family·Intent 수량</td><td>고정 quota와 정확히 일치</td></tr>
+              <tr><td>G4 QueryPlan</td><td>Schema + registry + intent/family/question ID</td><td>모든 EXECUTE 통과</td></tr>
+              <tr><td>G5 Control</td><td>CLARIFY·UNSUPPORTED 실행 gold 잔존 여부</td><td>0개</td></tr>
+              <tr><td>G6 Gold field</td><td>1~10개, 중복·family 밖 field·과잉 projection</td><td>오류 0개</td></tr>
+              <tr><td>G7 Oracle</td><td>SQL/Python 후보 수·상품 ID·집계 교차검산</td><td>불일치 0개</td></tr>
+              <tr><td>G8 Bundle</td><td>질문·정답 ID와 plan question ID 결합 검사</td><td>100개 일치</td></tr>
+              <tr><td>G9 사람 검토</td><td>박재모 1차 + 별도 금융 reviewer 2차</td><td>모든 case approved</td></tr>
+              <tr><td>G10 Byte seal</td><td>최종 JSON exact SHA-256과 보관본</td><td>hash 기록 후 변경 없음</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>12.1 Hash 확인 명령</h3>
+        <p>Windows PowerShell:</p>
+        <pre>Get-FileHash -Algorithm SHA256 -LiteralPath ".\04-sealed-private\external-blind-answer-key-private.json"
+Get-FileHash -Algorithm SHA256 -LiteralPath ".\01-input-fixed\external-blind-questions-only.json"</pre>
+        <p>Linux:</p>
+        <pre>sha256sum -- ./04-sealed-private/external-blind-answer-key-private.json
+sha256sum -- ./01-input-fixed/external-blind-questions-only.json</pre>
+        <div class="callout warning">
+          <strong>XLSX hash를 최종 정답키 commitment로 쓰지 않습니다.</strong>
+          <p>XLSX는 ZIP 기반이라 열고 저장하는 것만으로 내부 metadata가 바뀔 수 있습니다. 최종 계약은 검증된 JSON의 정확한 byte SHA-256을 사용합니다.</p>
+        </div>
+        <div class="callout danger">
+          <strong><code>score</code>는 사전 Validator가 아닙니다.</strong>
+          <p>정답키 검증 목적으로 score 명령을 미리 실행하지 않습니다. score는 prediction hash가 외부 receipt에 기록되고 정답키가 정식 공개된 뒤에만 실행합니다. 사전 검증은 authoring pack의 전용 Validator를 사용합니다.</p>
+        </div>
+
+        <h3>12.2 최종 사람 검토 질문</h3>
+        <ul class="checklist">
+          <li>질문 원문을 한 글자도 바꾸지 않았는가?</li>
+          <li>현재 Agent의 예측을 한 번도 보지 않았는가?</li>
+          <li>가족군과 Intent를 질문 의미로 결정했는가?</li>
+          <li>주관어·기간 누락을 임의 조건으로 바꾸지 않았는가?</li>
+          <li>데이터에 없는 field 요청을 EXECUTE하지 않았는가?</li>
+          <li>DETAIL·EXPLAIN·COMPARE 식별자가 정확한가?</li>
+          <li>gold field가 질문 의미만 포함하는가?</li>
+          <li>Oracle 값이 추측이 아닌가?</li>
+          <li>Control 문항에 실행 정보가 남지 않았는가?</li>
+          <li>근거·기준일·확인 불가 기준을 점검했는가?</li>
+          <li>두 번째 reviewer가 독립 검토했는가?</li>
+          <li>봉인 후 파일을 다시 저장하지 않았는가?</li>
+        </ul>
+      </section>
+
+      <section id="seal">
+        <h2>13. SHA 봉인·최초 실행·정답 공개 순서</h2>
+        <div class="callout danger">
+          <strong>정답키 파일을 prediction보다 먼저 개발팀이나 Agent 실행 서버에 보내면 안 됩니다.</strong>
+          <p>개발팀에는 질문-only 파일과 정답키 hash만 전달하고, 정답 원본은 독립 보관자가 prediction receipt 기록까지 보관합니다.</p>
+        </div>
+        <ol>
+          <li>질문 JSON을 고정하고 label-free near-duplicate gate를 통과합니다.</li>
+          <li>clean implementation commit과 exact OCI image digest를 고정합니다.</li>
+          <li>박재모 님이 private key를 완성하고 질문·정답 JSON의 byte SHA-256을 계산합니다.</li>
+          <li>질문 hash·정답 hash·implementation commit·protocol hash·reference report hash를 commitment에 기록합니다.</li>
+          <li>독립 평가자가 exact image와 model artifact를 확인하고 execution authorization을 발급합니다.</li>
+          <li>공식 runner에는 commitment·authorization·protocol·reference report·동결 model artifact 등 비정답 binding 자료를 함께 제공합니다. label-bearing 파일 중에는 질문-only만 주고 private answer bytes는 제공하지 않습니다.</li>
+          <li>prediction SHA-256을 독립된 append-only 위치에 기록하고 receipt를 만듭니다.</li>
+          <li>receipt 기록이 끝난 뒤에만 private answer key를 공개합니다.</li>
+          <li>정답·commitment·receipt를 함께 검증한 뒤 최초 score를 생성합니다.</li>
+        </ol>
+        <div class="flow" aria-label="봉인 이후 시간 순서">
+          <div class="flow-step"><strong>Commitment</strong>질문·정답 hash 선봉인</div>
+          <div class="arrow">≤</div>
+          <div class="flow-step"><strong>Authorization</strong>독립 실행 승인</div>
+          <div class="arrow">≤</div>
+          <div class="flow-step"><strong>Prediction</strong>정답 없이 최초 실행</div>
+          <div class="arrow">≤</div>
+          <div class="flow-step"><strong>Receipt</strong>prediction hash 외부 기록</div>
+          <div class="arrow">≤</div>
+          <div class="flow-step"><strong>Score</strong>정답 공개 후 채점</div>
+        </div>
+        <div class="callout warning">
+          <strong>봉인 뒤 오류를 찾았다면</strong>
+          <p>파일을 조용히 수정하거나 같은 hash라고 주장하지 않습니다. 해당 최초 blind 실행을 중단하고 새 suite/version·새 JSON·새 hash·새 commitment로 다시 시작합니다. 결과를 본 뒤 고친 세트는 “최초 blind”가 아닙니다.</p>
+        </div>
+      </section>
+
+      <section id="handoff">
+        <h2>14. 최종 전달물과 보관물</h2>
+        <div class="grid">
+          <article class="card">
+            <h3>prediction 전 개발팀 전달 가능</h3>
+            <ul>
+              <li>질문-only JSON</li>
+              <li>질문 JSON SHA-256</li>
+              <li>private key SHA-256만</li>
+              <li>near-duplicate report와 hash</li>
+              <li>commitment metadata</li>
+            </ul>
+          </article>
+          <article class="card">
+            <h3>receipt 전 비공개 보관</h3>
+            <ul>
+              <li>private answer key JSON 원본</li>
+              <li>정답 Spreadsheet와 reviewer note</li>
+              <li>Oracle 상세 결과와 SQL audit</li>
+              <li>질문별 rationale</li>
+              <li>정답 생성 Codex 대화·작업 기록</li>
+            </ul>
+          </article>
+        </div>
+        <div class="callout success">
+          <strong>최종 성공 상태</strong>
+          <p>질문과 정답의 exact hash, clean commit, image digest, protocol, authorization, prediction receipt가 하나의 시간 순서로 연결되고, 정답키는 receipt 뒤에만 공개되어야 외부 blind 최초 결과로 인정할 수 있습니다.</p>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <p><strong>문서 범위:</strong> External Blind v2 비공개 정답키의 독립 작성·QueryPlan 구조화·Oracle 검산·계약 검증·SHA 봉인 절차를 다룹니다. 실제 질문, 정답, 모델 결과, DB 경로와 secret은 포함하지 않습니다.</p>
+      <p><strong>정본 우선순위:</strong> 전달된 clean commit의 protocol·private answer contract·QueryPlan contract·field registry·authoring pack README가 이 문서보다 우선합니다.</p>
+    </footer>
+  </div>
+
+  <script>
+    document.querySelectorAll('[data-copy]').forEach((button) => {
+      button.addEventListener('click', async () => {
+        const target = document.getElementById(button.dataset.copy);
+        if (!target) return;
+        try {
+          await navigator.clipboard.writeText(target.textContent);
+          const original = button.textContent;
+          button.textContent = '복사됨';
+          setTimeout(() => { button.textContent = original; }, 1400);
+        } catch (_) {
+          window.getSelection().selectAllChildren(target);
+          button.textContent = '선택됨 · Ctrl/Cmd+C';
+        }
+      });
+    });
+  </script>
+</body>
+</html>
