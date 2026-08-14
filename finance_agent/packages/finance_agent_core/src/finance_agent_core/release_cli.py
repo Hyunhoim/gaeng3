@@ -131,6 +131,9 @@ def _runtime_inputs(arguments: argparse.Namespace) -> RuntimeReleaseInputs:
         official_answer_timeout_seconds=arguments.official_answer_timeout_seconds,
         official_answer_max_inflight=arguments.official_answer_max_inflight,
         worker_count=arguments.worker_count,
+        audit_queue_capacity=arguments.audit_queue_capacity,
+        audit_shutdown_timeout_seconds=arguments.audit_shutdown_timeout_seconds,
+        audit_fsync_each_event=arguments.audit_fsync_each_event,
     )
 
 
@@ -233,6 +236,13 @@ def _parser() -> argparse.ArgumentParser:
     manifest.add_argument("--official-answer-timeout-seconds", type=float, default=55.0)
     manifest.add_argument("--official-answer-max-inflight", type=int, default=2)
     manifest.add_argument("--worker-count", type=int, default=1)
+    manifest.add_argument("--audit-queue-capacity", type=int, default=2_048)
+    manifest.add_argument("--audit-shutdown-timeout-seconds", type=float, default=5.0)
+    manifest.add_argument(
+        "--audit-fsync-each-event",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+    )
     manifest.add_argument(
         "--fund-execution-policy",
         choices=("locked", "public_fund_v1_approved"),

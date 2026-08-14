@@ -62,6 +62,10 @@ allowed = {
     "FINANCE_RELEASE_MANIFEST_HOST_FILE",
     "FINANCE_RELEASE_MANIFEST_SIGSTORE_BUNDLE_HOST_FILE",
     "FINANCE_DEPLOYMENT_BINDING_SIGSTORE_BUNDLE_HOST_FILE",
+    "FINANCE_AUDIT_HOST_DIR",
+    "FINANCE_AUDIT_QUEUE_CAPACITY",
+    "FINANCE_AUDIT_SHUTDOWN_TIMEOUT_SECONDS",
+    "FINANCE_AUDIT_FSYNC_EACH_EVENT",
     "BACKEND_BIND_ADDRESS",
     "BACKEND_PORT",
     "LOG_LEVEL",
@@ -93,12 +97,55 @@ required = {
     "FINANCE_RELEASE_MANIFEST_HOST_FILE",
     "FINANCE_RELEASE_MANIFEST_SIGSTORE_BUNDLE_HOST_FILE",
     "FINANCE_DEPLOYMENT_BINDING_SIGSTORE_BUNDLE_HOST_FILE",
+    "FINANCE_AUDIT_HOST_DIR",
+    "WEB_CONCURRENCY",
 }
 missing = sorted(name for name in required if not environment.get(name))
 if missing:
     raise SystemExit("missing release settings: " + ", ".join(missing))
 if environment["APP_ENV"] not in {"evaluation", "production"}:
     raise SystemExit("APP_ENV must be evaluation or production for a release deployment")
+if environment["WEB_CONCURRENCY"] != "1":
+    raise SystemExit(
+        "evaluation/production requires WEB_CONCURRENCY=1 until audit aggregation exists"
+    )
+
+RELEASE_BACKEND_UID = 10001
+audit_root = Path(environment["FINANCE_AUDIT_HOST_DIR"])
+try:
+    audit_root_stat = audit_root.stat(follow_symlinks=False)
+except OSError:
+    raise SystemExit("FINANCE_AUDIT_HOST_DIR is unavailable") from None
+if (
+    not audit_root.is_absolute()
+    or not stat.S_ISDIR(audit_root_stat.st_mode)
+    or audit_root.is_symlink()
+    or audit_root_stat.st_uid != RELEASE_BACKEND_UID
+    or audit_root_stat.st_mode & (stat.S_IRWXG | stat.S_IRWXO)
+):
+    raise SystemExit(
+        "FINANCE_AUDIT_HOST_DIR must be a UID 10001 owner-only local directory"
+    )
+
+def bounded_integer(name, default, minimum, maximum):
+    raw = environment.get(name, str(default))
+    if re.fullmatch(r"[0-9]+", raw) is None:
+        raise SystemExit(name + " must be an integer")
+    value = int(raw)
+    if not minimum <= value <= maximum:
+        raise SystemExit(name + " is outside its allowed range")
+
+bounded_integer("FINANCE_AUDIT_QUEUE_CAPACITY", 2048, 1, 100000)
+try:
+    audit_shutdown_timeout = float(
+        environment.get("FINANCE_AUDIT_SHUTDOWN_TIMEOUT_SECONDS", "5")
+    )
+except ValueError:
+    raise SystemExit("FINANCE_AUDIT_SHUTDOWN_TIMEOUT_SECONDS must be numeric") from None
+if not 0 < audit_shutdown_timeout <= 60:
+    raise SystemExit("FINANCE_AUDIT_SHUTDOWN_TIMEOUT_SECONDS is outside its allowed range")
+if environment.get("FINANCE_AUDIT_FSYNC_EACH_EVENT", "true").lower() != "true":
+    raise SystemExit("release audit fsync must remain enabled")
 
 answer_provider = environment.get("FINANCE_BACKEND_ANSWER_PROVIDER", "deterministic")
 hcx_query_plan = environment.get("FINANCE_BACKEND_HCX_QUERY_PLAN_ENABLED", "false").lower()
@@ -298,6 +345,10 @@ unset APP_ENV \
     FINANCE_RELEASE_MANIFEST_HOST_FILE \
     FINANCE_RELEASE_MANIFEST_SIGSTORE_BUNDLE_HOST_FILE \
     FINANCE_DEPLOYMENT_BINDING_SIGSTORE_BUNDLE_HOST_FILE \
+    FINANCE_AUDIT_HOST_DIR \
+    FINANCE_AUDIT_QUEUE_CAPACITY \
+    FINANCE_AUDIT_SHUTDOWN_TIMEOUT_SECONDS \
+    FINANCE_AUDIT_FSYNC_EACH_EVENT \
     FINANCE_BACKEND_FUND_EXECUTION_POLICY \
     FINANCE_BACKEND_ANSWER_PROVIDER \
     FINANCE_BACKEND_HCX_QUERY_PLAN_ENABLED \

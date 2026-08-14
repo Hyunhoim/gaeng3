@@ -7,9 +7,16 @@ import pytest
 from fastapi.testclient import TestClient
 from finance_agent_core.contracts.queryplan import ProductFamily
 from finance_agent_core.domain import DatabaseManifest
+from finance_agent_core.retrieval.schema_shadow import (
+    AsyncSchemaLinkShadowObserver,
+    HybridSchemaLinkShadow,
+    SchemaShadowMode,
+    SchemaShadowSettings,
+)
 
 from app.config import Settings
 from app.main import create_app
+from app.shadow_runtime import ShadowRuntimeState
 from tests.conftest import FakeAgentService
 
 
@@ -64,6 +71,8 @@ def test_health_reports_configured_and_missing_families_without_paths() -> None:
         "missing_product_families": ["domestic_etp", "fund"],
         "unavailable_product_families": ["bond", "overseas_etp"],
         "fund_execution_policy": "locked",
+        "audit_status": "disabled",
+        "shadow_status": "disabled",
     }
     assert "private" not in response.text
     assert "sqlite3" not in response.text
@@ -96,6 +105,8 @@ def test_health_is_ok_when_every_database_manifest_is_ready(tmp_path: Path) -> N
     assert response.json()["missing_product_families"] == []
     assert response.json()["unavailable_product_families"] == []
     assert response.json()["fund_execution_policy"] == "locked"
+    assert response.json()["audit_status"] == "disabled"
+    assert response.json()["shadow_status"] == "disabled"
 
 
 def test_evaluation_startup_rejects_injected_agent_before_readiness(
@@ -114,3 +125,35 @@ def test_evaluation_startup_rejects_injected_agent_before_readiness(
     )
     with pytest.raises(RuntimeError, match="forbids externally injected"):
         create_app(settings=settings, agent=FakeAgentService())
+
+
+def test_health_fails_closed_when_shadow_runtime_is_degraded(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    paths = {family: tmp_path / f"{family.value}.sqlite3" for family in ProductFamily}
+    for family, path in paths.items():
+        _create_manifest_database(path, family)
+    settings = Settings(
+        overseas_etp_db=paths[ProductFamily.OVERSEAS_ETP],
+        domestic_etp_db=paths[ProductFamily.DOMESTIC_ETP],
+        bond_db=paths[ProductFamily.BOND],
+        fund_db=paths[ProductFamily.FUND],
+    )
+    application = create_app(settings=settings, agent=FakeAgentService())
+    observer = AsyncSchemaLinkShadowObserver(
+        HybridSchemaLinkShadow(settings=SchemaShadowSettings(mode=SchemaShadowMode.SHADOW))
+    )
+    runtime = ShadowRuntimeState(observer)
+    failed = observer.snapshot().model_copy(update={"operational_failure_count": 1})
+    monkeypatch.setattr(observer, "snapshot", lambda: failed)
+    application.state.shadow_runtime = runtime
+
+    with TestClient(application) as client:
+        response = client.get("/health")
+
+    assert response.status_code == 503
+    assert response.json()["status"] == "degraded"
+    assert response.json()["audit_status"] == "disabled"
+    assert response.json()["shadow_status"] == "degraded"
+    assert AsyncSchemaLinkShadowObserver.shutdown(observer, timeout_seconds=1)

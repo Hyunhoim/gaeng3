@@ -13,6 +13,9 @@ from finance_agent_core.contracts.backend import (
     BackendStatus,
 )
 from finance_agent_core.contracts.routing import InteractionIntent
+from finance_agent_core.observability import AuditOutcome
+
+from app.http_audit import mark_request_audit_terminal
 
 _INVALID_REQUEST_ID = "invalid-request"
 _INVALID_REQUEST_MESSAGE = "요청 형식이 올바르지 않습니다. 입력값을 확인해 주세요."
@@ -62,10 +65,15 @@ def _invalid_request_response(request_id: str) -> BackendAgentResponse:
 
 
 async def request_validation_error_response(
-    _request: Request,
+    request: Request,
     error: RequestValidationError,
 ) -> JSONResponse:
     """Return the public Backend DTO without exposing validation internals."""
 
+    mark_request_audit_terminal(
+        request,
+        outcome=AuditOutcome.BLOCKED,
+        reason_code="invalid_input",
+    )
     response = _invalid_request_response(_safe_request_id(error.body))
     return JSONResponse(status_code=422, content=response.model_dump(mode="json"))

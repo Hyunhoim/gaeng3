@@ -29,6 +29,8 @@
 | HyperCLOVA X 연결 전에 무엇이 남았는지 | [연결 전 준비 기준](pre-hcx-readiness.md) |
 | Dense 도입 판단과 현재 SQL·BM25 수치가 궁금한지 | [Dense Schema Linker 오프라인 컴포넌트 평가](evaluation-dense-schema-linker-shadow.md) |
 | 실제 Schema Dense 임베딩 7개 CPU 비교가 궁금한지 | [상세 Markdown](evaluation-schema-embedding-cpu.md) · [팀 공유용 HTML](evaluation-schema-embedding-cpu.html) |
+| Stage 4 관측 계약·외부 blind와 현재 OFF인 Stage 5 Shadow 실험 상태가 궁금한지 | [Schema Dense Stage 4 구현·Stage 5 실험 상태 보고서](schema-dense-stage4-stage5-readiness-2026-08-13.md) |
+| Stage 4 결정론적 Fast Path 감사·blind 리허설·image·API 실측 결과가 궁금한지 | [Stage 4 최종 검증 보고서](stage4-audit-blind-image-api-report-2026-08-13.md) |
 | 다음 독립 blind·OOD 평가 절차가 궁금한지 | [Schema Dense 외부 평가 인계서](../evaluation/schema_embedding_external/README.md) |
 
 ## 목적별 위치

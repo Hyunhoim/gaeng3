@@ -73,11 +73,22 @@ DB, 원천 XLSX, 전체 report, 모델 가중치는 계속 `artifacts/` 또는 �
 | [Stage 3 release 계약](baselines/stage3-release-contract-2026-08-12.json) | Manifest·Binding·anti-replay·trust·rollback harness·SQLite 실행 권한 145건 |
 | [Stage 3 localhost OCI·rollback](baselines/stage3-local-oci-rollback-2026-08-12.json) | 합성 Registry exact digest와 격리 N-1→N→N-1 실기동; 외부 trust는 stub임을 함께 동결 |
 | [Schema Dense CPU 임베딩 비교](baselines/schema-embedding-cpu-public-v1.json) | 네 상품군 공개 200문항에서 7개 모델을 비교하고 BGE-M3·Lexical 우선 결합을 blind 후보로 선정 |
+| [Schema Dense Docker CPU runtime](baselines/schema-embedding-docker-runtime-2026-08-13.json) | exact snapshot의 BGE·KURE embed_query 동시성 1·2·4, p50·p95·p99와 memory를 고정 조건에서 관측 |
+| [Stage 4 결정론적 API 기준선](baselines/deterministic-api-stage4-final-2026-08-13.json) | 전체 감사 ON·HCLX/Dense OFF에서 실제 HTTP 374건, post-load health, p50·p95·memory·overload 제어를 관측 |
 | [Schema Dense paired 통계·실패 분석](analysis/schema-embedding-cpu-public-v1-statistics.json) | 7개 Lexical 우선 결과의 질문별 bootstrap, 상품군 점수 분포, BGE strict 실패 6건 |
 
 Schema Dense의 독립 외부 평가 설정은 질문을 받기 전에
-[동결 protocol](protocols/schema-embedding-external-blind-v1.protocol.json)로 고정했다.
-현재는 외부 질문·비공개 정답·commitment를 받지 않아 독립 점수가 없다
+[v2 동결 protocol](protocols/schema-embedding-external-blind-v2.protocol.json)로 고정했다.
+Phase 1은 `id + question`만 허용하고, 정답키·exact image 실행 승인·외부 append-only
+prediction receipt를 분리한다. 현재는 이 외부 bundle과 독립 실행 승인을 받지 않아
+최초 실행과 독립 점수가 없다. 상세 절차와 활성화 판단은
+[Stage 4 구현·Stage 5 OFF 실험 상태 보고서](../docs/schema-dense-stage4-stage5-readiness-2026-08-13.md)를 따른다.
+
+Docker runtime baseline은 동시성 1·2에서 두 모델이 p95 250ms·peak 4GiB·오류 0의
+임베딩 컴포넌트 전제를 통과한 관측이다. cgroup memory 수치가 없으면 gate는 실패한다.
+동시성 4 p95는 BGE-M3 345.59ms, KURE-v1 323.51ms로 기준을 넘었다. 각 단계 24회이며 `embed_query()`만 포함하고
+uncommitted candidate worktree에서 측정했으므로 FastAPI 전체 p95나 활성화 승인으로
+해석하지 않는다.
 
 자연어 비교 E2E baseline은 실행 16문항의 실제 `ComparisonCell.value`와 field
 evidence provenance를 서로 별도의 fingerprint로 동결한다. parser 안전 계약은

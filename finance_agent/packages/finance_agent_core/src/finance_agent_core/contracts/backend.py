@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import date
 from enum import StrEnum
+from time import perf_counter
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -15,6 +16,7 @@ from finance_agent_core.domain import (
     DatabaseManifest,
     ProductEvidence,
 )
+from finance_agent_core.observability import AuditOutcome, AuditStage, current_request_audit
 from finance_agent_core.retrieval import DocumentEvidence
 
 
@@ -346,6 +348,7 @@ def _comparison_citations(
 
 
 def routed_result_to_backend(result: RoutedAgentResult) -> BackendAgentResponse:
+    audit = current_request_audit()
     status = {
         "executed": (
             BackendStatus.NOT_FOUND if result.candidate_count == 0 else BackendStatus.SUCCESS
@@ -363,11 +366,25 @@ def routed_result_to_backend(result: RoutedAgentResult) -> BackendAgentResponse:
     else:
         answer_mode = BackendAnswerMode(result.answer_composition.mode)
         provider_model = result.answer_composition.model
+    citations_started = perf_counter()
     citations = [
         *_product_citations(result.products),
         *_comparison_citations(result.comparisons),
         *_aggregate_citations(result.aggregates),
     ]
+    evidence_ref_count = len(
+        {evidence_ref for citation in citations for evidence_ref in citation.evidence_refs}
+    )
+    if audit is not None and result.status == "executed":
+        audit.emit(
+            stage=AuditStage.SERIALIZATION,
+            outcome=AuditOutcome.SUCCEEDED,
+            reason_code="citations_built",
+            duration_ms=(perf_counter() - citations_started) * 1000,
+            candidate_count=result.candidate_count or 0,
+            evidence_count=evidence_ref_count,
+        )
+    dto_started = perf_counter()
     as_of_dates = sorted(
         {
             *(field.as_of for product in result.products for field in product.fields),
@@ -414,7 +431,7 @@ def routed_result_to_backend(result: RoutedAgentResult) -> BackendAgentResponse:
         )
         for item in result.family_searches
     ]
-    return BackendAgentResponse(
+    response = BackendAgentResponse(
         request_id=result.request_id,
         status=status,
         intent=result.decision.draft.intent,
@@ -438,6 +455,17 @@ def routed_result_to_backend(result: RoutedAgentResult) -> BackendAgentResponse:
         family_searches=family_searches,
         source_manifests=[item.source_manifest for item in family_searches],
     )
+    if audit is not None and result.status == "executed":
+        audit.emit(
+            stage=AuditStage.SERIALIZATION,
+            outcome=AuditOutcome.SUCCEEDED,
+            reason_code="backend_dto_built",
+            duration_ms=(perf_counter() - dto_started) * 1000,
+            candidate_count=result.candidate_count or 0,
+            result_count=len(response.products),
+            evidence_count=evidence_ref_count,
+        )
+    return response
 
 
 def backend_contract_schemas() -> dict[str, dict[str, Any]]:

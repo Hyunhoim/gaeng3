@@ -1,0 +1,46 @@
+services:
+  data-init:
+    container_name: ${FINANCE_PERF_DATA_INIT_CONTAINER_NAME:?isolated data-init name required}
+    cpus: ${FINANCE_PERF_DATA_INIT_CPU_LIMIT:-1.0}
+    mem_limit: ${FINANCE_PERF_DATA_INIT_MEMORY_LIMIT:-512m}
+    pids_limit: ${FINANCE_PERF_DATA_INIT_PIDS_LIMIT:-128}
+    restart: "no"
+
+  backend:
+    container_name: ${FINANCE_PERF_CONTAINER_NAME:?isolated backend name required}
+    environment:
+      APP_ENV: development
+      WEB_CONCURRENCY: "1"
+      OFFICIAL_ANSWER_MAX_INFLIGHT: "4"
+      FINANCE_BACKEND_ANSWER_PROVIDER: deterministic
+      FINANCE_BACKEND_HCX_QUERY_PLAN_ENABLED: "false"
+      FINANCE_AGENT_LLM_MODE: disabled
+      LLM_PROVIDER: disabled
+      FINANCE_DENSE_SCHEMA_LINKER_ENABLED: "false"
+      FINANCE_PRODUCT_DENSE_ENABLED: "false"
+      FINANCE_AUDIT_MODE: jsonl
+      FINANCE_AUDIT_FILE: /audit/events.jsonl
+      FINANCE_AUDIT_QUEUE_CAPACITY: ${FINANCE_AUDIT_QUEUE_CAPACITY:-8192}
+      FINANCE_AUDIT_SHUTDOWN_TIMEOUT_SECONDS: "30"
+      FINANCE_AUDIT_FSYNC_EACH_EVENT: "true"
+    ports: !override
+      - target: 8000
+        published: ${FINANCE_PERF_PORT:?isolated host port required}
+        host_ip: 127.0.0.1
+        protocol: tcp
+    volumes:
+      - type: bind
+        source: ${FINANCE_PERF_AUDIT_HOST_DIR:?owner-only audit directory required}
+        target: /audit
+        read_only: false
+        bind:
+          create_host_path: false
+    cpus: ${FINANCE_PERF_CPU_LIMIT:-2.0}
+    mem_limit: ${FINANCE_PERF_MEMORY_LIMIT:-1g}
+    pids_limit: ${FINANCE_PERF_PIDS_LIMIT:-256}
+    ulimits:
+      nofile:
+        soft: 4096
+        hard: 4096
+    restart: "no"
+    stop_grace_period: 35s

@@ -1,0 +1,34 @@
+# syntax=docker/dockerfile:1.7
+
+# Diagnostic-only overlay for a clean, digest-pinned Stage 4 runtime image.
+# It replaces only repository-owned Python source; dependencies remain those of
+# the pinned base. This image is never an evaluation/production release image.
+ARG BACKEND_BASE_IMAGE
+FROM ${BACKEND_BASE_IMAGE}
+
+ARG BACKEND_BASE_IMAGE
+ARG FINANCE_SOURCE_COMMIT
+
+USER root
+
+COPY finance_agent/packages/finance_agent_core/src/finance_agent_core \
+    /tmp/performance-core/finance_agent_core
+COPY fastapi_backend/app /tmp/performance-backend/app
+
+RUN find /usr/local/lib/python3.12/site-packages/finance_agent_core \
+        -mindepth 1 -maxdepth 1 -exec rm -rf -- {} + \
+    && cp -a /tmp/performance-core/finance_agent_core/. \
+        /usr/local/lib/python3.12/site-packages/finance_agent_core/ \
+    && find /app/app -mindepth 1 -maxdepth 1 -exec rm -rf -- {} + \
+    && cp -a /tmp/performance-backend/app/. /app/app/ \
+    && find /usr/local/lib/python3.12/site-packages/finance_agent_core /app/app \
+        -type d -exec chmod 0755 {} + \
+    && find /usr/local/lib/python3.12/site-packages/finance_agent_core /app/app \
+        -type f -exec chmod 0644 {} + \
+    && rm -rf /tmp/performance-core /tmp/performance-backend
+
+LABEL org.opencontainers.image.revision="${FINANCE_SOURCE_COMMIT}" \
+      org.opencontainers.image.base.name="${BACKEND_BASE_IMAGE}" \
+      ai.gaeng3.finance.image.kind="diagnostic-performance-candidate"
+
+USER app

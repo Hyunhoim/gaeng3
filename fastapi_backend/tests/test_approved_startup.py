@@ -218,6 +218,24 @@ def test_evaluation_rejects_provider_injection_outside_release_profile(
         create_app(settings=settings)
 
 
+def test_evaluation_rejects_unapproved_schema_shadow_observer(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    settings = _evaluation_settings(tmp_path)
+    release = _allow_release(monkeypatch)
+    misassembled = build_agent(settings, release_guard=release)
+    misassembled.schema_link_shadow_observer = object()  # type: ignore[assignment]
+    monkeypatch.setattr("app.main.require_approved_database_paths", lambda _paths: None)
+    monkeypatch.setattr(
+        "app.main.build_agent",
+        lambda _settings, *, release_guard: misassembled,
+    )
+
+    with pytest.raises(RuntimeError, match="approved RoutedFinanceAgent"):
+        create_app(settings=settings)
+
+
 def test_evaluation_rejects_hclx_planning_authority_outside_release_profile(
     tmp_path: Path,
     monkeypatch,

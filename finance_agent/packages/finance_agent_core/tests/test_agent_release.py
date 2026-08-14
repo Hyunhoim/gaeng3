@@ -13,6 +13,7 @@ from finance_agent_core.execution import PlanAuthorityCode, PlanAuthorityError, 
 from finance_agent_core.release import (
     AgentReleaseCode,
     AgentReleaseError,
+    AgentReleaseManifest,
     DeploymentBinding,
     RollbackRelease,
     RuntimeReleaseInputs,
@@ -95,6 +96,8 @@ def test_release_manifest_pins_code_contract_prompt_data_model_and_disabled_inde
     manifest, binding, resolved, _, _ = _write_release(tmp_path)
 
     assert resolved.release_id == manifest.release_id == binding.release_id
+    assert manifest.schema_version == "1.1"
+    assert binding.schema_version == "1.0"
     assert len(manifest.components.code.core_package_sha256) == 64
     assert len(manifest.components.code.backend_package_sha256) == 64
     assert manifest.components.queryplan.schema_version == "1.0"
@@ -116,6 +119,18 @@ def test_release_manifest_pins_code_contract_prompt_data_model_and_disabled_inde
     )
     assert "image_reference" not in manifest.model_dump(mode="json")
     assert binding.image_reference == _IMAGE_REFERENCE
+
+
+def test_stage4_manifest_rejects_pre_audit_schema_while_binding_remains_v1(
+    tmp_path: Path,
+) -> None:
+    manifest, binding, _, _, _ = _write_release(tmp_path)
+    legacy_manifest = manifest.model_dump(mode="python")
+    legacy_manifest["schema_version"] = "1.0"
+
+    with pytest.raises(ValidationError):
+        AgentReleaseManifest.model_validate(legacy_manifest)
+    assert binding.schema_version == "1.0"
 
 
 def test_manifest_bytes_are_canonical_for_the_same_release(tmp_path: Path) -> None:

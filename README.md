@@ -29,12 +29,12 @@ ETF·ETN, 공모펀드를 조회·비교·계산한 뒤 근거와 기준일을 �
 | --- | --- |
 | 데이터 | 공식 XLSX에서 네 상품군 SQLite를 자동 생성·검증하는 경로 구현 |
 | Ontology | 공식 파일명 Turtle 5개를 field registry에서 자동 생성·문법·정합성 검사 |
-| AI Agent | 검색·비교·집계·근거 생성·결과 검증 구현 |
-| Backend | FastAPI `GET /health`, 내부용 `POST /answer`, 평가용 `GET /answer` 구현 |
+| AI Agent | 검색·비교·집계·근거 생성·결과 검증과 현재 OFF인 Schema Dense Shadow 격리 구현 |
+| Backend | FastAPI `GET /health`, 내부용 `POST /answer`, 평가용 `GET /answer`, Audit·Shadow readiness 구현 |
 | Release | 코드·Prompt·Model·index·공식 데이터와 Docker digest를 묶는 Stage 3 fail-closed 계약과 host anti-replay 구현, localhost Registry·합성 N-1→N→N-1 실기동 검증 완료, NCP 공식 발급 대기 |
 | Frontend | 동료의 `nextjs-frontend/` 코드 합류 후 연결 예정 |
 | LLM | 로컬 Qwen은 내부 개발 전용. HyperCLOVA X 공식 HTTP transport와 FastAPI의 optional QueryPlan·grounded answer 무호출 배선 완료, production grounded planning provider와 실제 credential 호출은 대기 |
-| 자동 검증 | 동결 QA 기준 AI Core pytest 507개·Backend 34개를 보존하며, 현재 작업 트리 전체 회귀 1,061개·162개 통과 |
+| 자동 검증 | 동결 QA 기준 AI Core pytest 507개·Backend 34개를 보존하며, 현재 작업 트리 전체 회귀 1,225개·258개 통과(Backend의 기존 fork warning 2건) |
 
 세부 기능과 평가 결과는 [AI Agent 작업공간](finance_agent/README.md)에서 관리
 배포 버전 고정과 평가·운영 실행은

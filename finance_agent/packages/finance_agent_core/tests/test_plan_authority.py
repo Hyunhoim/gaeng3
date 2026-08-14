@@ -418,8 +418,8 @@ def test_real_database_mutation_during_execution_discards_the_result(
     original_connect = PinnedSQLiteArtifact.connect_read_only
 
     @contextmanager
-    def mutate_after_query(guard):
-        with original_connect(guard) as connection:
+    def mutate_after_query(guard, **kwargs):
+        with original_connect(guard, **kwargs) as connection:
             try:
                 yield connection
             finally:
@@ -455,11 +455,11 @@ def test_replace_and_restore_before_sqlite_open_fails_closed(
     original_connect = PinnedSQLiteArtifact.connect_read_only
 
     @contextmanager
-    def replace_while_opening(guard):
+    def replace_while_opening(guard, **kwargs):
         path.replace(approved_hold)
         replacement.replace(path)
         try:
-            with original_connect(guard) as connection:
+            with original_connect(guard, **kwargs) as connection:
                 yield connection
         finally:
             path.unlink(missing_ok=True)
@@ -492,8 +492,8 @@ def test_replace_and_restore_after_connection_never_returns_a_result(
     original_connect = PinnedSQLiteArtifact.connect_read_only
 
     @contextmanager
-    def replace_after_connection(guard):
-        with original_connect(guard) as connection:
+    def replace_after_connection(guard, **kwargs):
+        with original_connect(guard, **kwargs) as connection:
             path.replace(approved_hold)
             replacement.replace(path)
             try:

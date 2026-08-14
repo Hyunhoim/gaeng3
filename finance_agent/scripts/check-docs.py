@@ -66,6 +66,8 @@ REQUIRED_INDEX_TARGETS = {
     "evaluation-coverage-guided.md",
     "evaluation-domain-qa.md",
     "evaluation-schema-embedding-cpu.md",
+    "schema-dense-stage4-stage5-readiness-2026-08-13.md",
+    "stage4-audit-blind-image-api-report-2026-08-13.md",
     "submission-model-boundary.md",
     "hyperclova-provider.md",
     "evaluation-pre-hcx-diagnostic.md",
@@ -128,6 +130,8 @@ REQUIRED_BASELINES = {
     "stage3-release-contract-2026-08-12.json",
     "stage3-local-oci-rollback-2026-08-12.json",
     "schema-embedding-cpu-public-v1.json",
+    "schema-embedding-docker-runtime-2026-08-13.json",
+    "deterministic-api-stage4-final-2026-08-13.json",
 }
 REQUIRED_BASELINE_KEYS = {
     "schema_version",
@@ -144,6 +148,39 @@ REQUIRED_BASELINE_KEYS = {
     "reports",
     "reproduce",
     "limitations",
+}
+# Frozen evidence files are immutable.  These exact successor hashes pin components
+# intentionally superseded by the Stage 4 audit/single-worker release contract; keeping
+# the migration here avoids rewriting the Stage 3 evidence whose own SHA-256 is cited.
+HISTORICAL_BASELINE_COMPONENT_ALLOWLIST = {
+    "stage3-local-oci-rollback-2026-08-12.json": {
+        "compose-release.sh": (
+            "714990529f1be9a0d51f8dbdc3c3c260baeedf158301303245128d62113f2158"
+        ),
+        "fastapi_backend/docker-compose.release.yml": (
+            "6c243ae91240a7ccc752ce9393e466688d5279dec54be0619344a87f898377e8"
+        ),
+        "fastapi_backend/scripts/rollback_drill.py": (
+            "c6ed97df526f737ead8b2b3c47914c78b67db4d22d73cbf58da0ad04c79d6d8f"
+        ),
+    },
+    "stage3-release-contract-2026-08-12.json": {
+        "fastapi_backend/tests/test_release_deployment_contract.py": (
+            "7723d8e380c22acec939e3b9fa1dcbb8342d78b6c23f69e069664306ae87ca12"
+        ),
+        "fastapi_backend/tests/test_release_rollback_drill.py": (
+            "3813e01de811fb27389550678fa1b205d0079229de660795e382ac2e81a17fe5"
+        ),
+        "fastapi_backend/tests/test_release_startup.py": (
+            "4ba967aeda827b7bd1dbbca8d1b83fc9851efddebabfdc36edd87f56a6ca39dc"
+        ),
+        "finance_agent/packages/finance_agent_core/tests/test_agent_release.py": (
+            "3c0da4b7129fdb923e039cf0f53dfc2aa07cf51bdbead98537c51c705b5a8486"
+        ),
+        "finance_agent/packages/finance_agent_core/tests/test_plan_authority.py": (
+            "f33e0d47813d73e91a7e6778490d34ca2efd92e6cbbf97b58c0614c332ccd54f"
+        ),
+    },
 }
 FORBIDDEN_BASELINE_KEYS = {
     "answer",
@@ -364,6 +401,19 @@ def _check_baseline(path: Path) -> list[str]:
     suite = payload["suite"]
     suite_path = PROJECT_ROOT / suite.get("path", "")
     _require_sha256(errors, name, "suite.sha256", suite.get("sha256"))
+    historical_fields = {
+        "historical_component_hashes",
+        "historical_component_paths",
+        "historical_component_reason",
+    } & set(suite)
+    if historical_fields:
+        errors.append(
+            f"{name}: frozen baseline embeds historical bypass fields "
+            f"{sorted(historical_fields)}"
+        )
+    historical_component_hashes = HISTORICAL_BASELINE_COMPONENT_ALLOWLIST.get(name, {})
+    historical_component_paths = set(historical_component_hashes)
+    observed_historical_component_paths: set[str] = set()
     tracked_contract_sha256 = suite.get("tracked_contract_sha256", suite.get("sha256"))
     if "tracked_contract_sha256" in suite:
         _require_sha256(
@@ -418,10 +468,35 @@ def _check_baseline(path: Path) -> list[str]:
                         errors.append(
                             f"{name}: suite component does not exist: {component_name}"
                         )
-                    elif expected_hash != _sha256(component_path):
-                        errors.append(
-                            f"{name}: suite component SHA-256 differs: {component_name}"
-                        )
+                    else:
+                        actual_hash = _sha256(component_path)
+                        if expected_hash != actual_hash:
+                            observed_historical_component_paths.add(component_name)
+                            successor_hash = historical_component_hashes.get(
+                                component_name
+                            )
+                            if (
+                                successor_hash is not None
+                                and actual_hash != successor_hash
+                            ):
+                                errors.append(
+                                    f"{name}: approved successor SHA-256 differs: "
+                                    f"{component_name}"
+                                )
+
+    if historical_component_paths != observed_historical_component_paths:
+        unexpected = sorted(
+            observed_historical_component_paths - historical_component_paths
+        )
+        stale = sorted(historical_component_paths - observed_historical_component_paths)
+        if unexpected:
+            errors.append(
+                f"{name}: unapproved suite component SHA-256 differences: {unexpected}"
+            )
+        if stale:
+            errors.append(
+                f"{name}: historical_component_paths no longer differ: {stale}"
+            )
 
     data = payload["data"]
     if payload["evaluation_layer"] == "intent_route":
@@ -485,6 +560,66 @@ def _check_baseline(path: Path) -> list[str]:
     total = metrics.get("total")
     passed = metrics.get("passed")
     strict_accuracy = metrics.get("strict_accuracy")
+    if name == "schema-embedding-docker-runtime-2026-08-13.json":
+        pass_rate = metrics.get("prerequisite_gate_pass_rate")
+        pass_rate_scope = metrics.get("prerequisite_gate_pass_rate_scope")
+        if (
+            not isinstance(total, int)
+            or isinstance(total, bool)
+            or total <= 0
+            or not isinstance(passed, int)
+            or isinstance(passed, bool)
+            or not 0 <= passed <= total
+        ):
+            errors.append(f"{name}: runtime prerequisite counts are invalid")
+            return errors
+        if pass_rate not in {passed / total, round(passed / total, 6)}:
+            errors.append(
+                f"{name}: prerequisite_gate_pass_rate differs from observed counts"
+            )
+        if (
+            not isinstance(pass_rate_scope, str)
+            or "정확도가 아님" not in pass_rate_scope
+        ):
+            errors.append(
+                f"{name}: prerequisite gate scope must reject accuracy claims"
+            )
+        if strict_accuracy is not None:
+            errors.append(
+                f"{name}: runtime prerequisite must not claim strict_accuracy"
+            )
+        return errors
+    if name == "deterministic-api-stage4-final-2026-08-13.json":
+        pass_rate = metrics.get("contract_semantic_pass_rate")
+        pass_rate_scope = metrics.get("contract_semantic_pass_rate_scope")
+        if (
+            not isinstance(total, int)
+            or isinstance(total, bool)
+            or total <= 0
+            or not isinstance(passed, int)
+            or isinstance(passed, bool)
+            or not 0 <= passed <= total
+        ):
+            errors.append(f"{name}: deterministic API contract counts are invalid")
+            return errors
+        if total != passed:
+            errors.append(f"{name}: deterministic API contract baseline is not perfect")
+        if pass_rate not in {passed / total, round(passed / total, 6)}:
+            errors.append(
+                f"{name}: contract_semantic_pass_rate differs from observed counts"
+            )
+        if (
+            not isinstance(pass_rate_scope, str)
+            or "독립 상품 정확도가 아님" not in pass_rate_scope
+        ):
+            errors.append(
+                f"{name}: contract_semantic_pass_rate_scope must reject accuracy claims"
+            )
+        if strict_accuracy is not None:
+            errors.append(
+                f"{name}: deterministic API baseline must not claim strict_accuracy"
+            )
+        return errors
     if payload["status"] in {
         "holdout_first_run_observed",
         "diagnostic_initial_observed",

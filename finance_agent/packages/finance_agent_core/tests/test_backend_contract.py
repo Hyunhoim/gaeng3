@@ -17,6 +17,13 @@ from finance_agent_core.contracts.backend import (
     routed_result_to_backend,
 )
 from finance_agent_core.domain import DatabaseManifest, NormalizedOverseasEtpRecord
+from finance_agent_core.observability import (
+    AuditStage,
+    BoundedAsyncAuditSink,
+    InMemoryAuditSink,
+    RequestAuditRecorder,
+    bind_request_audit,
+)
 
 
 def _example(name: str) -> dict[str, object]:
@@ -166,6 +173,38 @@ def test_routed_product_result_adapts_to_backend_contract(
     assert response.answer_mode.value == "deterministic"
     assert not response.fallback_used
     BackendAgentResponse.model_validate_json(response.model_dump_json())
+
+
+def test_executed_backend_projection_audits_citation_and_dto_cost_without_payload(
+    sample_database: tuple[Path, list[NormalizedOverseasEtpRecord], DatabaseManifest],
+) -> None:
+    path, _, _ = sample_database
+    routed = RoutedFinanceAgent({"overseas_etp": path}).answer(
+        "미국 채권형 해외 ETF를 AUM 높은 순으로 3개 보여줘",
+        "backend-serialization-audit-001",
+    )
+    downstream = InMemoryAuditSink()
+    sink = BoundedAsyncAuditSink(downstream)
+    recorder = RequestAuditRecorder(
+        request_id="backend-serialization-audit-001",
+        question="미국 채권형 해외 ETF를 AUM 높은 순으로 3개 보여줘",
+        sink=sink,
+    )
+
+    with bind_request_audit(recorder):
+        response = routed_result_to_backend(routed)
+    assert sink.close(timeout_seconds=1) is True
+
+    events = downstream.snapshot()
+    assert [(event.stage, event.reason_code) for event in events] == [
+        (AuditStage.SERIALIZATION, "citations_built"),
+        (AuditStage.SERIALIZATION, "backend_dto_built"),
+    ]
+    assert events[0].evidence_count == len(
+        {reference for citation in response.citations for reference in citation.evidence_refs}
+    )
+    assert events[1].result_count == len(response.products)
+    assert all(event.duration_ms >= 0 for event in events)
 
 
 def test_routed_clarification_adapts_without_execution_evidence() -> None:

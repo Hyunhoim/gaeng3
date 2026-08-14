@@ -9,6 +9,7 @@ from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 FundExecutionPolicy = Literal["locked", "public_fund_v1_approved"]
+AuditMode = Literal["disabled", "jsonl"]
 
 
 class Settings(BaseSettings):
@@ -82,6 +83,30 @@ class Settings(BaseSettings):
         ge=1,
         le=8,
         validation_alias="WEB_CONCURRENCY",
+    )
+    audit_mode: AuditMode = Field(
+        default="disabled",
+        validation_alias="FINANCE_AUDIT_MODE",
+    )
+    audit_file: Path | None = Field(
+        default=None,
+        validation_alias="FINANCE_AUDIT_FILE",
+    )
+    audit_queue_capacity: int = Field(
+        default=2_048,
+        ge=1,
+        le=100_000,
+        validation_alias="FINANCE_AUDIT_QUEUE_CAPACITY",
+    )
+    audit_shutdown_timeout_seconds: float = Field(
+        default=5.0,
+        gt=0,
+        le=60,
+        validation_alias="FINANCE_AUDIT_SHUTDOWN_TIMEOUT_SECONDS",
+    )
+    audit_fsync_each_event: bool = Field(
+        default=True,
+        validation_alias="FINANCE_AUDIT_FSYNC_EACH_EVENT",
     )
     fund_execution_policy: FundExecutionPolicy = Field(
         default="locked",
@@ -186,10 +211,33 @@ class Settings(BaseSettings):
             value is not None for value in release_values
         ):
             raise ValueError("Agent release configuration must be supplied as one complete set")
+        if self.app_env in {"evaluation", "production"} and self.web_concurrency != 1:
+            raise ValueError(
+                "evaluation/production requires WEB_CONCURRENCY=1 "
+                "until cross-process audit aggregation exists"
+            )
         if self.app_env in {"evaluation", "production"} and (
             self.dense_schema_linker_enabled or self.product_dense_enabled
         ):
             raise ValueError("production Dense retrieval remains disabled in release schema v1")
+        if self.audit_mode == "disabled" and self.audit_file is not None:
+            raise ValueError("disabled audit mode cannot configure FINANCE_AUDIT_FILE")
+        if self.audit_mode == "jsonl" and (
+            self.audit_file is None or not self.audit_file.is_absolute()
+        ):
+            raise ValueError("JSONL audit mode requires an absolute FINANCE_AUDIT_FILE")
+        if (
+            self.app_env in {"evaluation", "production"}
+            and all(value is not None for value in release_values)
+            and self.audit_mode != "jsonl"
+        ):
+            raise ValueError("evaluation/production requires the JSONL audit boundary")
+        if (
+            self.app_env in {"evaluation", "production"}
+            and all(value is not None for value in release_values)
+            and not self.audit_fsync_each_event
+        ):
+            raise ValueError("evaluation/production requires durable audit fsync")
         return self
 
     @property

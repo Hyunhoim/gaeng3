@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import re
 from collections.abc import Iterable
+from time import perf_counter
 
 from finance_agent_core.agent.planning_policy import (
     AdaptiveShadowPlanningPolicy,
     PlanningDecision,
+    PlanningDecisionStatus,
     PlanningPolicy,
     PlanningTrace,
 )
@@ -25,6 +27,12 @@ from finance_agent_core.contracts.routing import (
     MinimalQueryDraft,
     RouteDecision,
     RouteDisposition,
+)
+from finance_agent_core.observability import (
+    AuditOutcome,
+    AuditStage,
+    MetricCounter,
+    current_request_audit,
 )
 
 _COMPARE = re.compile(
@@ -332,6 +340,7 @@ class IntentRouter:
         route_decision: RouteDecision,
         coverage: SemanticCoverageDecision,
     ) -> PlanningTrace:
+        started = perf_counter()
         # Pydantic frozen models are shallow: nested product-family and mention
         # lists can still be changed in place. Snapshot the authoritative route
         # before an injected shadow policy sees an isolated copy.
@@ -384,7 +393,7 @@ class IntentRouter:
             planning_decision = PlanningDecision.model_validate(candidate.model_dump(mode="python"))
             if planning_decision != authoritative:
                 raise ValueError("planning policy differs from adaptive-shadow-v1 authority")
-            return PlanningTrace(
+            trace = PlanningTrace(
                 route_decision=trusted_route,
                 planning_decision=planning_decision,
             )
@@ -407,25 +416,98 @@ class IntentRouter:
                     "내부 계획 정책을 안전하게 검증하지 못해 요청을 실행하지 않았습니다.",
                 )
             planning_decision = PlanningDecision.fail_closed(trusted_route)
-        return PlanningTrace(
-            route_decision=trusted_route,
-            planning_decision=planning_decision,
-        )
+            trace = PlanningTrace(
+                route_decision=trusted_route,
+                planning_decision=planning_decision,
+            )
+        audit = current_request_audit()
+        if audit is not None:
+            audit.emit(
+                stage=AuditStage.PLANNING,
+                outcome=(
+                    AuditOutcome.BLOCKED
+                    if planning_decision.decision_status is PlanningDecisionStatus.POLICY_ERROR
+                    else AuditOutcome.SUCCEEDED
+                ),
+                reason_code=(
+                    "policy_blocked"
+                    if planning_decision.decision_status is PlanningDecisionStatus.POLICY_ERROR
+                    else "policy_completed"
+                ),
+                duration_ms=(perf_counter() - started) * 1000,
+                route_disposition=trusted_route.disposition,
+                interaction_intent=(
+                    InteractionIntent.UNSUPPORTED
+                    if trusted_route.disposition is RouteDisposition.UNSUPPORTED
+                    else trusted_route.draft.intent
+                ),
+                product_families=trusted_route.draft.product_families,
+            )
+        return trace
 
     def _evaluate_with_planning(
         self,
         question: str,
         request_id: str,
     ) -> PlanningTrace:
-        safety = self.safety_envelope.evaluate(question)
+        safety_started = perf_counter()
+        try:
+            safety = self.safety_envelope.evaluate(question)
+        except Exception:
+            audit = current_request_audit()
+            if audit is not None:
+                audit.emit(
+                    stage=AuditStage.SAFETY,
+                    outcome=AuditOutcome.FAILED,
+                    reason_code="guard_failed",
+                    duration_ms=(perf_counter() - safety_started) * 1000,
+                )
+            raise
+        audit = current_request_audit()
+        if audit is not None:
+            if safety.blocked:
+                try:
+                    audit.sink.metrics.increment(MetricCounter.SAFETY_BLOCKS)
+                except Exception:
+                    # Metrics are operational telemetry, never routing authority.
+                    pass
+            audit.emit(
+                stage=AuditStage.SAFETY,
+                outcome={
+                    SafetyDisposition.ALLOW: AuditOutcome.SUCCEEDED,
+                    SafetyDisposition.CLARIFY: AuditOutcome.CLARIFIED,
+                    SafetyDisposition.UNSUPPORTED: AuditOutcome.UNSUPPORTED,
+                }[safety.disposition],
+                reason_code=(
+                    "guard_allowed" if safety.gate is None else f"guard_{safety.gate.value}"
+                ),
+                duration_ms=(perf_counter() - safety_started) * 1000,
+            )
         stripped = safety.normalized_question
         if not stripped:
             raise ValueError("question cannot be blank")
         if not request_id.strip():
             raise ValueError("request_id cannot be blank")
 
+        lexical_started = perf_counter()
+        if audit is not None:
+            try:
+                audit.sink.metrics.increment(MetricCounter.LEXICAL_CALLS)
+            except Exception:
+                # A broken metrics backend must not change the route decision.
+                pass
         families = _product_families(stripped)
         intent = _intent(stripped, families)
+        mentions = _product_mentions(stripped)
+        requested_limit = _requested_limit(stripped)
+        if audit is not None:
+            audit.emit(
+                stage=AuditStage.LEXICAL,
+                outcome=AuditOutcome.SUCCEEDED,
+                reason_code="lexical_completed",
+                duration_ms=(perf_counter() - lexical_started) * 1000,
+                product_families=families,
+            )
         cross_family_control = len(families) > 1 and intent is not InteractionIntent.SEARCH
         coverage = self.semantic_coverage_gate.evaluate(
             stripped,
@@ -442,14 +524,13 @@ class IntentRouter:
             # Control responses do not execute a family sequence. Keep their DTO order
             # stable across router vocabulary changes and preserve the frozen contract.
             families = sorted(families, key=_CONTROL_FAMILY_PRIORITY.__getitem__)
-        mentions = _product_mentions(stripped)
         draft = MinimalQueryDraft(
             request_id=request_id,
             question=stripped,
             intent=intent,
             product_families=families,
             product_mentions=mentions,
-            requested_limit=_requested_limit(stripped),
+            requested_limit=requested_limit,
         )
 
         if safety.blocked:

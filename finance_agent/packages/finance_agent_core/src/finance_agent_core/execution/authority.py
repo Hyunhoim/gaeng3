@@ -49,7 +49,11 @@ from finance_agent_core.storage.approval import (
     load_approved_dataset_manifest,
     require_approved_database,
 )
-from finance_agent_core.storage.pinned_sqlite import PinnedSQLiteArtifact, PinnedSQLiteError
+from finance_agent_core.storage.pinned_sqlite import (
+    ConnectionAuditReason,
+    PinnedSQLiteArtifact,
+    PinnedSQLiteError,
+)
 from finance_agent_core.storage.sqlite import load_manifest
 
 _SHA256_PATTERN = r"^[0-9a-f]{64}$"
@@ -1029,7 +1033,9 @@ class PlanAuthorityGate:
             approval = load_approved_dataset_manifest()
             try:
                 approved_manifest = require_approved_database(family.value, path)
-                with guard.connect_read_only() as connection:
+                with guard.connect_read_only(
+                    audit_reason_prefix="authority_connection"
+                ) as connection:
                     manifest = load_manifest(connection)
                     integrity = connection.execute("PRAGMA quick_check").fetchone()
             except Exception as error:  # noqa: BLE001 - normalize approval failures
@@ -1055,7 +1061,9 @@ class PlanAuthorityGate:
             approved_manifest_sha256 = approval.canonical_sha256
         else:
             try:
-                with guard.connect_read_only() as connection:
+                with guard.connect_read_only(
+                    audit_reason_prefix="authority_connection"
+                ) as connection:
                     manifest = load_manifest(connection)
             except Exception as error:  # noqa: BLE001 - normalize fixture failures
                 raise PlanAuthorityError(
@@ -1262,6 +1270,7 @@ def open_validated_database(
     database_path: str | Path,
     *,
     oracle_kind: Literal["search", "aggregate"] | None = None,
+    connection_audit_reason: ConnectionAuditReason | None = None,
 ) -> Iterator[tuple[QueryPlan, sqlite3.Connection, DatabaseManifest]]:
     """Yield the exact SQLite inode bound to a server-issued plan.
 
@@ -1278,7 +1287,7 @@ def open_validated_database(
             "ValidatedPlan database guard is invalid",
         )
     try:
-        with guard.connect_read_only() as connection:
+        with guard.connect_read_only(audit_reason_prefix=connection_audit_reason) as connection:
             manifest = load_manifest(connection)
             require_manifest_binding(validated, manifest)
             yield plan, connection, manifest

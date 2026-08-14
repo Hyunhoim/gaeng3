@@ -3,16 +3,39 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-import shutil
+import shlex
 import stat
 import subprocess
 from pathlib import Path
 
 import pytest
 
+_RELEASE_BACKEND_UID = 10001
+
 
 def _repository_root() -> Path:
     return Path(__file__).resolve().parents[2]
+
+
+def _write_test_release_launcher(target: Path, *, repository_dir: Path) -> None:
+    """Write a test-only launcher without adding a production UID override."""
+
+    canonical_launcher = (_repository_root() / "compose-release.sh").read_text(encoding="utf-8")
+    uid_marker = "RELEASE_BACKEND_UID = 10001"
+    repository_marker = 'REPOSITORY_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"'
+    assert canonical_launcher.count(uid_marker) == 1
+    assert canonical_launcher.count(repository_marker) == 1
+    target.write_text(
+        canonical_launcher.replace(
+            uid_marker,
+            f"RELEASE_BACKEND_UID = {os.geteuid()}",
+        ).replace(
+            repository_marker,
+            f"REPOSITORY_DIR={shlex.quote(str(repository_dir))}",
+        ),
+        encoding="utf-8",
+    )
+    target.chmod(0o755)
 
 
 def test_release_image_embeds_manifest_without_self_referential_digest() -> None:
@@ -38,6 +61,9 @@ def test_release_compose_requires_digest_binding_and_disabled_dense() -> None:
     assert 'FINANCE_PRODUCT_DENSE_ENABLED: "false"' in compose
     assert "read_only: true" in compose
     assert "FINANCE_DATA_VOLUME_NAME:?" in compose
+    assert "FINANCE_AUDIT_HOST_DIR:?" in compose
+    assert "FINANCE_AUDIT_FILE: /audit/events.jsonl" in compose
+    assert 'WEB_CONCURRENCY: "1"' in compose
     assert compose.count("build: !reset null") == 2
     assert "FINANCE_RUNTIME_PLATFORM" in compose
     assert "CLOVASTUDIO_API_KEY_FILE:" in compose
@@ -64,6 +90,12 @@ def test_release_launcher_forbids_build_and_forces_no_build() -> None:
     assert "release_trust.py" in launcher
     assert "release_activation.py" in launcher
     assert "RELEASE_ENV_SNAPSHOT" in launcher
+    assert '"FINANCE_AUDIT_HOST_DIR"' in launcher
+    assert "RELEASE_BACKEND_UID = 10001" in launcher
+    assert "audit_root_stat.st_uid != RELEASE_BACKEND_UID" in launcher
+    assert "audit_root_stat.st_uid not in {10001, os.geteuid()}" not in launcher
+    assert 'environment["WEB_CONCURRENCY"] != "1"' in launcher
+    assert "FINANCE_AUDIT_QUEUE_CAPACITY" in launcher
     assert "forbids command" in launcher
     assert "--force-recreate" in launcher
     assert "--no-recreate" in launcher
@@ -92,10 +124,16 @@ def test_release_build_context_is_allowlisted_and_base_has_no_mutable_default() 
     assert "!finance_agent/packages/finance_agent_core/**" in base_ignore
     assert "!fastapi_backend/app/**" in base_ignore
     assert "!fastapi_backend/.env" not in base_ignore
+    assert "**/__pycache__/" in base_ignore
+    assert "**/*.py[cod]" in base_ignore
+    assert "**/.pytest_cache/" in base_ignore
+    assert "**/.ruff_cache/" in base_ignore
     assert "ARG BACKEND_BASE_IMAGE=gaeng3-backend:local" not in dockerfile
 
 
-def _release_launcher_fixture(tmp_path: Path) -> tuple[Path, dict[str, str], Path]:
+def _release_launcher_fixture(
+    tmp_path: Path,
+) -> tuple[Path, dict[str, str], Path, Path]:
     image = "registry.example/finance-agent@sha256:" + "b" * 64
     source_commit = "a" * 40
     release_id = "finance-agent-test-v1"
@@ -131,6 +169,8 @@ def _release_launcher_fixture(tmp_path: Path) -> tuple[Path, dict[str, str], Pat
     manifest_bundle.write_text("{}\n", encoding="utf-8")
     binding_bundle.write_text("{}\n", encoding="utf-8")
     environment_path = tmp_path / ".env.release"
+    audit_root = tmp_path / "audit"
+    audit_root.mkdir(mode=0o700)
     environment_path.write_text(
         "\n".join(
             [
@@ -144,6 +184,8 @@ def _release_launcher_fixture(tmp_path: Path) -> tuple[Path, dict[str, str], Pat
                 f"FINANCE_RELEASE_MANIFEST_SIGSTORE_BUNDLE_HOST_FILE={manifest_bundle}",
                 f"FINANCE_DEPLOYMENT_BINDING_SIGSTORE_BUNDLE_HOST_FILE={binding_bundle}",
                 f"FINANCE_DATA_VOLUME_NAME=finance-data-{release_id}-{manifest_sha256[:12]}",
+                f"FINANCE_AUDIT_HOST_DIR={audit_root}",
+                "WEB_CONCURRENCY=1",
             ]
         )
         + "\n",
@@ -161,16 +203,24 @@ def _release_launcher_fixture(tmp_path: Path) -> tuple[Path, dict[str, str], Pat
             "CAPTURE_FILE": str(capture),
         }
     )
-    return environment_path, environment, capture
+    test_launcher = tmp_path / "compose-release-test.sh"
+    _write_test_release_launcher(
+        test_launcher,
+        repository_dir=_repository_root(),
+    )
+    return environment_path, environment, capture, test_launcher
 
 
 def test_release_launcher_inserts_no_build_after_global_options(tmp_path: Path) -> None:
-    _, environment, capture = _release_launcher_fixture(tmp_path)
+    _, environment, capture, _test_launcher = _release_launcher_fixture(tmp_path)
     snapshot_modes = tmp_path / "snapshot-modes.json"
     environment["SNAPSHOT_MODE_CAPTURE"] = str(snapshot_modes)
     harness = tmp_path / "launcher-harness"
     (harness / "fastapi_backend" / "scripts").mkdir(parents=True)
-    shutil.copy2(_repository_root() / "compose-release.sh", harness / "compose-release.sh")
+    _write_test_release_launcher(
+        harness / "compose-release.sh",
+        repository_dir=harness,
+    )
     activation = (
         _repository_root() / "fastapi_backend" / "scripts" / "release_activation.py"
     ).read_text(encoding="utf-8")
@@ -243,10 +293,10 @@ Path(os.environ["SNAPSHOT_MODE_CAPTURE"]).write_text(
 
 
 def test_release_launcher_rejects_unknown_global_option_before_trust(tmp_path: Path) -> None:
-    _, environment, capture = _release_launcher_fixture(tmp_path)
+    _, environment, capture, test_launcher = _release_launcher_fixture(tmp_path)
 
     completed = subprocess.run(
-        [str(_repository_root() / "compose-release.sh"), "--dry-run", "up", "--detach"],
+        [str(test_launcher), "--dry-run", "up", "--detach"],
         cwd=_repository_root(),
         env=environment,
         check=False,
@@ -260,10 +310,10 @@ def test_release_launcher_rejects_unknown_global_option_before_trust(tmp_path: P
 
 
 def test_release_launcher_rejects_global_option_build_bypass(tmp_path: Path) -> None:
-    _, environment, capture = _release_launcher_fixture(tmp_path)
+    _, environment, capture, test_launcher = _release_launcher_fixture(tmp_path)
 
     completed = subprocess.run(
-        [str(_repository_root() / "compose-release.sh"), "--ansi", "never", "up", "--build"],
+        [str(test_launcher), "--ansi", "never", "up", "--build"],
         cwd=_repository_root(),
         env=environment,
         check=False,
@@ -277,11 +327,11 @@ def test_release_launcher_rejects_global_option_build_bypass(tmp_path: Path) -> 
 
 
 def test_release_launcher_rejects_compose_run_override(tmp_path: Path) -> None:
-    _, environment, capture = _release_launcher_fixture(tmp_path)
+    _, environment, capture, test_launcher = _release_launcher_fixture(tmp_path)
 
     completed = subprocess.run(
         [
-            str(_repository_root() / "compose-release.sh"),
+            str(test_launcher),
             "run",
             "-e",
             "APP_ENV=development",
@@ -300,9 +350,77 @@ def test_release_launcher_rejects_compose_run_override(tmp_path: Path) -> None:
 
 
 def test_release_launcher_rejects_inline_hcx_credential(tmp_path: Path) -> None:
-    environment_path, environment, capture = _release_launcher_fixture(tmp_path)
+    environment_path, environment, capture, test_launcher = _release_launcher_fixture(tmp_path)
     with environment_path.open("a", encoding="utf-8") as stream:
         stream.write("CLOVASTUDIO_API_KEY=nv-inline-secret-must-not-be-used\n")
+
+    completed = subprocess.run(
+        [str(test_launcher), "config", "--quiet"],
+        cwd=_repository_root(),
+        env=environment,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 1
+    assert "forbid inline CLOVASTUDIO_API_KEY" in completed.stderr
+    assert "nv-inline-secret" not in completed.stderr
+    assert not capture.exists()
+
+
+def test_release_launcher_rejects_missing_web_concurrency(tmp_path: Path) -> None:
+    environment_path, environment, capture, test_launcher = _release_launcher_fixture(tmp_path)
+    content = environment_path.read_text(encoding="utf-8")
+    assert "WEB_CONCURRENCY=1\n" in content
+    environment_path.write_text(
+        content.replace("WEB_CONCURRENCY=1\n", ""),
+        encoding="utf-8",
+    )
+
+    completed = subprocess.run(
+        [str(test_launcher), "config", "--quiet"],
+        cwd=_repository_root(),
+        env=environment,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 1
+    assert "missing release settings: WEB_CONCURRENCY" in completed.stderr
+    assert not capture.exists()
+
+
+def test_release_launcher_rejects_multiple_web_workers(tmp_path: Path) -> None:
+    environment_path, environment, capture, test_launcher = _release_launcher_fixture(tmp_path)
+    content = environment_path.read_text(encoding="utf-8")
+    assert "WEB_CONCURRENCY=1\n" in content
+    environment_path.write_text(
+        content.replace("WEB_CONCURRENCY=1\n", "WEB_CONCURRENCY=2\n"),
+        encoding="utf-8",
+    )
+
+    completed = subprocess.run(
+        [str(test_launcher), "config", "--quiet"],
+        cwd=_repository_root(),
+        env=environment,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 1
+    assert "requires WEB_CONCURRENCY=1" in completed.stderr
+    assert not capture.exists()
+
+
+def test_canonical_release_launcher_rejects_current_euid_audit_owner(
+    tmp_path: Path,
+) -> None:
+    if os.geteuid() == _RELEASE_BACKEND_UID:
+        pytest.skip("current process already runs as the fixed release UID")
+    _, environment, capture, _test_launcher = _release_launcher_fixture(tmp_path)
 
     completed = subprocess.run(
         [str(_repository_root() / "compose-release.sh"), "config", "--quiet"],
@@ -314,8 +432,47 @@ def test_release_launcher_rejects_inline_hcx_credential(tmp_path: Path) -> None:
     )
 
     assert completed.returncode == 1
-    assert "forbid inline CLOVASTUDIO_API_KEY" in completed.stderr
-    assert "nv-inline-secret" not in completed.stderr
+    assert "UID 10001 owner-only local directory" in completed.stderr
+    assert str(tmp_path / "audit") not in completed.stderr
+    assert not capture.exists()
+
+
+def test_release_launcher_rejects_permissive_audit_directory(tmp_path: Path) -> None:
+    _environment_path, environment, capture, test_launcher = _release_launcher_fixture(tmp_path)
+    audit_root = tmp_path / "audit"
+    audit_root.chmod(0o770)
+
+    completed = subprocess.run(
+        [str(test_launcher), "config", "--quiet"],
+        cwd=_repository_root(),
+        env=environment,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 1
+    assert "UID 10001 owner-only local directory" in completed.stderr
+    assert str(audit_root) not in completed.stderr
+    assert not capture.exists()
+
+
+def test_release_launcher_rejects_disabled_audit_fsync(tmp_path: Path) -> None:
+    environment_path, environment, capture, test_launcher = _release_launcher_fixture(tmp_path)
+    with environment_path.open("a", encoding="utf-8") as stream:
+        stream.write("FINANCE_AUDIT_FSYNC_EACH_EVENT=false\n")
+
+    completed = subprocess.run(
+        [str(test_launcher), "config", "--quiet"],
+        cwd=_repository_root(),
+        env=environment,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 1
+    assert "audit fsync must remain enabled" in completed.stderr
     assert not capture.exists()
 
 
@@ -342,10 +499,10 @@ def test_release_launcher_rejects_stale_activation_or_volume_deletion(
     tmp_path: Path,
     arguments: list[str],
 ) -> None:
-    _, environment, capture = _release_launcher_fixture(tmp_path)
+    _, environment, capture, test_launcher = _release_launcher_fixture(tmp_path)
 
     completed = subprocess.run(
-        [str(_repository_root() / "compose-release.sh"), *arguments],
+        [str(test_launcher), *arguments],
         cwd=_repository_root(),
         env=environment,
         check=False,
@@ -358,10 +515,10 @@ def test_release_launcher_rejects_stale_activation_or_volume_deletion(
 
 
 def test_release_launcher_allows_down_without_destructive_options(tmp_path: Path) -> None:
-    _, environment, capture = _release_launcher_fixture(tmp_path)
+    _, environment, capture, test_launcher = _release_launcher_fixture(tmp_path)
 
     completed = subprocess.run(
-        [str(_repository_root() / "compose-release.sh"), "down"],
+        [str(test_launcher), "down"],
         cwd=_repository_root(),
         env=environment,
         check=False,
@@ -376,13 +533,14 @@ def test_release_launcher_allows_down_without_destructive_options(tmp_path: Path
 def test_release_launcher_removes_inherited_release_and_compose_overrides(
     tmp_path: Path,
 ) -> None:
-    _, environment, _ = _release_launcher_fixture(tmp_path)
+    _, environment, _, test_launcher = _release_launcher_fixture(tmp_path)
     captured_environment = tmp_path / "docker-environment.txt"
     environment.update(
         {
             "BACKEND_BIND_ADDRESS": "0.0.0.0",
             "BACKEND_PORT": "1",
             "FINANCE_IMAGE_REFERENCE": "attacker-controlled",
+            "FINANCE_AUDIT_HOST_DIR": "/attacker-controlled",
             "HCX_MODEL": "attacker-controlled",
             "COMPOSE_PROFILES": "attacker-controlled",
             "CAPTURE_ENV_FILE": str(captured_environment),
@@ -390,7 +548,7 @@ def test_release_launcher_removes_inherited_release_and_compose_overrides(
     )
 
     completed = subprocess.run(
-        [str(_repository_root() / "compose-release.sh"), "down"],
+        [str(test_launcher), "down"],
         cwd=_repository_root(),
         env=environment,
         check=False,
@@ -403,5 +561,6 @@ def test_release_launcher_removes_inherited_release_and_compose_overrides(
     assert "BACKEND_BIND_ADDRESS=" not in captured
     assert "BACKEND_PORT=" not in captured
     assert "FINANCE_IMAGE_REFERENCE=" not in captured
+    assert "FINANCE_AUDIT_HOST_DIR=" not in captured
     assert "HCX_MODEL=" not in captured
     assert "COMPOSE_PROFILES=" not in captured

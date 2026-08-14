@@ -21,6 +21,11 @@ from finance_agent_core.answering import (
     LocalGroundedAnswerProvider,
 )
 from finance_agent_core.execution import PlanAuthorityGate
+from finance_agent_core.observability import (
+    AppendOnlyJsonlAuditSink,
+    BoundedAsyncAuditSink,
+    RequestAuditRecorder,
+)
 from finance_agent_core.release import (
     ResolvedAgentRelease,
     RuntimeReleaseInputs,
@@ -29,6 +34,7 @@ from finance_agent_core.release import (
 from finance_agent_core.storage import ProductIdentitySnapshotCache, RecordSnapshotCache
 
 from app.config import Settings
+from app.http_audit import request_agent_audit
 
 _MAX_HCX_API_KEY_FILE_BYTES = 4096
 
@@ -79,6 +85,7 @@ def require_approval_guard(
     service: AgentService,
     settings: Settings,
     release_guard: ResolvedAgentRelease | None = None,
+    audit_sink: BoundedAsyncAuditSink | None = None,
 ) -> AgentService:
     """Accept only the internally assembled authority-aware production service."""
 
@@ -112,6 +119,18 @@ def require_approval_guard(
         or service.capability_execution_overrides
         != frozenset(settings.capability_execution_overrides)
         or service.hclx_planning_enabled != settings.hcx_query_plan_enabled
+        # Stage 5 is intentionally not part of the approved evaluation or
+        # production assembly yet.  An arbitrary observer receives a detached
+        # trace containing the raw question, so accepting an injected observer
+        # here would bypass both the release profile and the audit boundary.
+        or service.schema_link_shadow_observer is not None
+        or (
+            settings.has_release_configuration
+            and (
+                type(audit_sink) is not BoundedAsyncAuditSink
+                or service.audit_sink is not audit_sink
+            )
+        )
         or not _provider_assembly_matches(service, settings)
         or type(release_guard) is not ResolvedAgentRelease
         or service.release_guard is not release_guard
@@ -130,6 +149,10 @@ def resolve_runtime_release(settings: Settings) -> ResolvedAgentRelease | None:
 
     if settings.app_env not in {"evaluation", "production"}:
         return None
+    if settings.web_concurrency != 1:
+        raise RuntimeError(
+            "evaluation/production requires one web worker until audit aggregation exists"
+        )
     if not settings.has_release_configuration:
         raise RuntimeError("evaluation/production requires a complete Agent release configuration")
     assert settings.release_manifest_file is not None
@@ -154,6 +177,9 @@ def resolve_runtime_release(settings: Settings) -> ResolvedAgentRelease | None:
         official_answer_timeout_seconds=settings.official_answer_timeout_seconds,
         official_answer_max_inflight=settings.official_answer_max_inflight,
         worker_count=settings.web_concurrency,
+        audit_queue_capacity=settings.audit_queue_capacity,
+        audit_shutdown_timeout_seconds=settings.audit_shutdown_timeout_seconds,
+        audit_fsync_each_event=settings.audit_fsync_each_event,
     )
     return resolve_agent_release(
         manifest_path=settings.release_manifest_file,
@@ -227,6 +253,7 @@ def build_agent(
     *,
     hcx_transport: HyperClovaXTransport | None = None,
     release_guard: ResolvedAgentRelease | None = None,
+    audit_sink: BoundedAsyncAuditSink | None = None,
 ) -> RoutedFinanceAgent:
     """Create the core Agent without making an eager database connection."""
 
@@ -266,6 +293,26 @@ def build_agent(
         require_approved_databases=settings.app_env in {"evaluation", "production"},
         release_guard=release_guard,
         require_agent_release=settings.app_env in {"evaluation", "production"},
+        audit_sink=audit_sink,
+    )
+
+
+def build_audit_sink(settings: Settings) -> BoundedAsyncAuditSink | None:
+    """Build the only approved non-blocking durable audit boundary."""
+
+    if settings.audit_mode == "disabled":
+        return None
+    if settings.audit_mode != "jsonl" or settings.audit_file is None:
+        raise RuntimeError("unsupported audit runtime configuration")
+    downstream = AppendOnlyJsonlAuditSink(
+        settings.audit_file,
+        fsync_each_event=settings.audit_fsync_each_event,
+    )
+    return BoundedAsyncAuditSink(
+        downstream,
+        queue_capacity=settings.audit_queue_capacity,
+        start_worker=False,
+        stall_timeout_seconds=settings.audit_shutdown_timeout_seconds,
     )
 
 
@@ -275,3 +322,22 @@ def get_settings(request: Request) -> Settings:
 
 def get_agent(request: Request) -> AgentService:
     return cast(AgentService, request.app.state.agent)
+
+
+def request_audit_recorder(
+    service: AgentService,
+    *,
+    request: Request,
+    request_id: str,
+    question: str,
+) -> RequestAuditRecorder | None:
+    if type(service) is not RoutedFinanceAgent or service.audit_sink is None:
+        return None
+    recorder = request_agent_audit(
+        request,
+        request_id=request_id,
+        question=question,
+    )
+    if recorder is None or recorder.sink is not service.audit_sink:
+        return None
+    return recorder

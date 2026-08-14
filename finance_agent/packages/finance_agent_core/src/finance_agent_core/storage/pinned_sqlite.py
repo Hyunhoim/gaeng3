@@ -8,11 +8,24 @@ import threading
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
+from time import perf_counter
+from typing import Literal
 
 from finance_agent_core.deadline import current_request_deadline
+from finance_agent_core.observability import (
+    AuditOutcome,
+    AuditStage,
+    current_request_audit,
+)
 
 _HASH_CHUNK_BYTES = 1024 * 1024
 _SQLITE_OPEN_LOCK = threading.Lock()
+
+ConnectionAuditReason = Literal[
+    "authority_connection",
+    "oracle_connection",
+    "verifier_projection_connection",
+]
 
 
 class PinnedSQLiteError(RuntimeError):
@@ -128,7 +141,63 @@ class PinnedSQLiteArtifact:
             raise PinnedSQLiteError("database path no longer names the approved artifact")
 
     @contextmanager
-    def connect_read_only(self) -> Iterator[sqlite3.Connection]:
+    def connect_read_only(
+        self,
+        *,
+        audit_reason_prefix: ConnectionAuditReason | None = None,
+    ) -> Iterator[sqlite3.Connection]:
+        """Open a pinned connection and optionally time only its setup boundary.
+
+        The observed duration ends before the caller receives the connection,
+        so statement execution and close time cannot be mistaken for connect
+        latency. Audit remains best-effort and cannot change the connection
+        result.
+        """
+
+        started = perf_counter()
+        opened = False
+        try:
+            with self._connect_read_only_unobserved() as connection:
+                opened = True
+                self._emit_connection_timing(
+                    audit_reason_prefix,
+                    outcome=AuditOutcome.SUCCEEDED,
+                    suffix="opened",
+                    duration_ms=(perf_counter() - started) * 1000,
+                )
+                yield connection
+        except BaseException:
+            if not opened:
+                self._emit_connection_timing(
+                    audit_reason_prefix,
+                    outcome=AuditOutcome.FAILED,
+                    suffix="failed",
+                    duration_ms=(perf_counter() - started) * 1000,
+                )
+            raise
+
+    @staticmethod
+    def _emit_connection_timing(
+        prefix: ConnectionAuditReason | None,
+        *,
+        outcome: AuditOutcome,
+        suffix: Literal["opened", "failed"],
+        duration_ms: float,
+    ) -> None:
+        if prefix is None:
+            return
+        audit = current_request_audit()
+        if audit is None:
+            return
+        audit.emit(
+            stage=AuditStage.SQL,
+            outcome=outcome,
+            reason_code=f"{prefix}_{suffix}",
+            duration_ms=duration_ms,
+        )
+
+    @contextmanager
+    def _connect_read_only_unobserved(self) -> Iterator[sqlite3.Connection]:
         """Open SQLite and prove its private descriptor is this guard's inode."""
 
         self.assert_unchanged()

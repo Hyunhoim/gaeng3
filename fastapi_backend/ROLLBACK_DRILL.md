@@ -7,15 +7,23 @@
 ```text
 generation N-1 기동·health 확인
   → 대표 /answer 확인
+  → release·dataset·QueryPlan에 연결된 감사 체인 확인
   → generation N 기동·health·대표 /answer 확인
+  → N의 감사 체인 확인
   → N-1 image·DB volume 보존 확인
   → 동일 Binding으로 N-1 재기동·health·대표 /answer 확인
+  → 복귀한 N-1의 감사 체인 확인
   → N image·DB volume 보존 확인
 ```
 
 각 기동에서는 실행 container의 image reference, `/data` volume,
 `DeploymentBinding` mount가 해당 release와 정확히 일치하는지도 검사한다. 대표
 `POST /answer`는 국내채권 SEARCH 한 건이 `status=success`, `intent=search`인지 확인한다.
+각 probe 뒤에는 owner-only append-only JSONL에서 같은 invocation의
+Request→Safety→Lexical→Planning→Route→Compiler→Authority→SQL→Oracle→Verifier→
+Renderer→Answer→Request 순서, 연속 sequence, release·manifest·Binding hash,
+승인 dataset·QueryPlan hash를 다시 확인한다. N-1과 N은 하나의 감사 디렉터리를 보존해야
+하며 파일 교체·부분 JSON·중복 key·2 MiB 초과 신규 구간은 모두 차단한다.
 이는 질문 전체의 품질 평가가 아니라 rollback 뒤 실제 Agent 경로가 동작하는지 확인하는
 최소 smoke probe(대표 동작 점검)다.
 
@@ -37,6 +45,9 @@ snapshot이 없다는 뜻이지 image·DB volume 삭제를 뜻하지 않는다.
 - `/usr/local/bin/cosign`에 설치된 고정 `v3.1.3` 검증기
 - 로컬 Docker에 존재하는 두 개의 digest-pinned release image
 - 이미 적재·승인된 서로 다른 release-specific DB volume 두 개
+- UID `10001` 소유의 owner-only 감사 디렉터리 하나와 `WEB_CONCURRENCY=1`, event별 fsync
+- 감사 JSONL을 읽을 수 있는 root 권한. UID `10001` 계정에 Docker socket과 모든 release
+  artifact 읽기 권한을 별도로 부여한 환경이라면 그 계정으로도 실행할 수 있다.
 - 다른 사용자나 기존 project가 사용하지 않는 localhost 포트
 
 현재 release를 N, 직전 release를 N-1이라고 할 때 N의 `rollback` 필드는 N-1의 release,
@@ -50,7 +61,7 @@ image·volume 이름, 격리 project·port와 provider profile만 검증한다. 
 image·volume·API 동작은 `--execute`에서만 검증한다.
 
 ```bash
-python fastapi_backend/scripts/rollback_drill.py \
+sudo -- python3 fastapi_backend/scripts/rollback_drill.py \
   --previous-env /absolute/release-n-1/.env.release \
   --current-env /absolute/release-n/.env.release \
   --project-name finance-agent-rollback-drill-team01 \
@@ -62,10 +73,13 @@ python fastapi_backend/scripts/rollback_drill.py \
 
 ## 2. 격리된 실제 Docker drill
 
-Dry-run이 통과하고 명시한 포트가 비어 있을 때만 `--execute`를 추가한다.
+Dry-run이 통과하고 명시한 포트가 비어 있을 때만 `--execute`를 추가한다. `--execute`는
+감사 디렉터리·JSONL의 UID `10001`/owner-only 경계를 우회하지 않도록 root 또는 실제
+effective UID `10001`만 허용한다. 일반 사용자 UID로 실행하면 release 파일이나 Docker를
+읽기 전에 fail-closed로 중단한다.
 
 ```bash
-python fastapi_backend/scripts/rollback_drill.py \
+sudo -- python3 fastapi_backend/scripts/rollback_drill.py \
   --previous-env /absolute/release-n-1/.env.release \
   --current-env /absolute/release-n/.env.release \
   --project-name finance-agent-rollback-drill-team01 \
@@ -74,10 +88,11 @@ python fastapi_backend/scripts/rollback_drill.py \
 ```
 
 성공 기준은 종료 코드 `0`, JSON의 `status=verified`,
-`artifacts_preserved=true`, `containers_stopped_after_verification=true`다. Docker image나
+`artifacts_preserved=true`, `containers_stopped_after_verification=true`,
+`audit_chain_verified=true`와 세 개의 `audit_observations`다. Docker image나
 volume이 없거나, cosign image/blob 검증이 실패하거나, 기존 drill project의
-container/network가 발견되거나, 어느 generation 하나라도 healthy·대표 `/answer` 계약을
-통과하지 못하면 fail-closed로 종료한다.
+container/network가 발견되거나, 어느 generation 하나라도 healthy·대표 `/answer`·감사
+연결 계약을 통과하지 못하면 fail-closed로 종료한다.
 
 `--leave-running`은 immutable snapshot(실행 중 교체되지 않게 복사한 배포 파일)과 자동
 정리 계약에 맞지 않아 명시적으로 거부한다. drill에서 검증한 N-1을 계속 실행하는 방식으로
@@ -95,11 +110,12 @@ N-1→N→N-1 복귀 가능성을 별도 project에서 확인하기 위해 같�
 - project override용 Compose 환경변수와 release identity shell 변수를 제거한다.
 - `127.0.0.1:<명시한 포트>`로만 bind한다.
 - 전역 prune, image 삭제, volume 삭제, 다른 project 조작을 수행하지 않는다.
-- HCLX inline API key를 거부하고 secret 값은 결과나 오류에 출력하지 않는다.
-- evaluation/production HCLX profile은 `CLOVASTUDIO_API_KEY_HOST_FILE`만 허용한다. host
-  secret은 절대경로의 단일 regular file, UID `10001` 소유, hardlink 1개, group·other
-  권한 0이어야 하며 container에서는 `/run/secrets/clovastudio_api_key`로만 읽는다.
+- 현재 13-stage 감사 chain은 deterministic Fast Path에만 고정되어 있다.
+  따라서 HCLX QueryPlan·grounded answer profile은 정상 release여도 이 drill에서
+  명시적으로 거부하며, 실제 HCLX event 경로를 고정한 후 별도로 확장한다.
 - deterministic profile은 HCLX model·provider·credential 설정이 있으면 거부한다.
+- runner는 감사 JSONL의 원문 record, 질문, request ID를 stdout/stderr에 출력하지 않는다.
+  실패 메시지는 고정된 검증 경계만 알리며, 성공 결과에는 one-way hash와 event 수만 남긴다.
 - 실제 traffic 전환과 NCP rollback은 별도의 배포 승인·load balancer 절차가 필요하다.
 - production active-state 파일과 lock, launcher는 root-controlled 경로에 설치해야 하며
   새 host·재해복구 시 상태 복원은 외부 불변 archive 절차를 따른다.

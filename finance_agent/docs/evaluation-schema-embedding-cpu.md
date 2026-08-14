@@ -932,9 +932,15 @@ top-1 cosine 점수나 top-1과 top-2의 점수 차이가 어느 정도일 때 �
 다음 단계는 공개 질문을 더 반복하는 것이 아니라, 겹치지 않는 질문으로 최초 1회
 평가하는 것이다
 
-평가 방법은 질문을 받기 전에
-[Schema Dense 외부 blind protocol](../evaluation/protocols/schema-embedding-external-blind-v1.protocol.json)로
-동결했다
+2026-08-12 공개 실험 당시 다음 평가 방법을 질문을 받기 전에
+[Schema Dense 외부 blind v1 protocol](../evaluation/protocols/schema-embedding-external-blind-v1.protocol.json)로
+동결했다.
+
+> **현재 정본 안내(2026-08-13):** v1은 당시 설계 기록으로 보존한다. 실제 최초 외부
+> 실행은 exact model snapshot, clean image 실행 승인, 외부 prediction receipt를 추가한
+> [external blind v2 protocol](../evaluation/protocols/schema-embedding-external-blind-v2.protocol.json)만
+> 사용한다. 이 문서에서 생성된 HTML과 검증 artifact는 과거 공개 실험 snapshot이므로
+> 사후 수정하지 않는다.
 
 1. 금융 도메인 담당자가 기존 200문항과 표현이 겹치지 않는 external blind 100문항 작성
 2. 쉬운 동의어뿐 아니라 우회 표현, 복합 조건, 모호 질문, 지원 밖 질문 포함
@@ -1021,7 +1027,8 @@ node scripts/build-schema-embedding-html.mjs
 - [실험 suite](../packages/finance_agent_core/src/finance_agent_core/evaluation/suites/schema_embedding_cpu_public_v1.json)
 - [모델 registry](../packages/finance_agent_core/src/finance_agent_core/evaluation/schema_embedding_models_v1.json)
 - [field registry](../packages/finance_agent_core/src/finance_agent_core/config/field_registry.yaml)
-- [외부 blind·OOD 동결 protocol](../evaluation/protocols/schema-embedding-external-blind-v1.protocol.json)
+- [현재 외부 blind·OOD 정본 v2](../evaluation/protocols/schema-embedding-external-blind-v2.protocol.json)
+- [과거 설계 기록 v1](../evaluation/protocols/schema-embedding-external-blind-v1.protocol.json)
 - [외부 평가 인계서](../evaluation/schema_embedding_external/README.md)
 
 ### 구현 코드

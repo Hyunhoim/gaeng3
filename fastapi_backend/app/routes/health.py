@@ -16,8 +16,10 @@ from finance_agent_core.storage import (
 )
 from pydantic import BaseModel, ConfigDict
 
+from app.audit_runtime import AuditRuntimeState, AuditRuntimeStatus
 from app.config import FundExecutionPolicy, Settings
 from app.dependencies import get_settings
+from app.shadow_runtime import ShadowRuntimeState, ShadowRuntimeStatus
 
 router = APIRouter(tags=["health"])
 
@@ -34,6 +36,8 @@ class HealthResponse(BaseModel):
     missing_product_families: list[ProductFamily]
     unavailable_product_families: list[ProductFamily]
     fund_execution_policy: FundExecutionPolicy
+    audit_status: AuditRuntimeStatus
+    shadow_status: ShadowRuntimeStatus
 
 
 def _database_is_ready(
@@ -95,7 +99,19 @@ def health(
                 release_guard.assert_current()
             except Exception:  # noqa: BLE001 - readiness must not expose release details
                 release_ready = False
-    is_ready = len(ready_families) == len(ProductFamily) and release_ready
+    runtime = getattr(request.app.state, "audit_runtime", None)
+    audit_status: AuditRuntimeStatus = (
+        runtime.status() if type(runtime) is AuditRuntimeState else "degraded"
+    )
+    audit_ready = audit_status != "degraded"
+    shadow_runtime = getattr(request.app.state, "shadow_runtime", None)
+    shadow_status: ShadowRuntimeStatus = (
+        shadow_runtime.status() if type(shadow_runtime) is ShadowRuntimeState else "degraded"
+    )
+    shadow_ready = shadow_status != "degraded"
+    is_ready = (
+        len(ready_families) == len(ProductFamily) and release_ready and audit_ready and shadow_ready
+    )
     if not is_ready:
         response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
     return HealthResponse(
@@ -106,4 +122,6 @@ def health(
         missing_product_families=missing_families,
         unavailable_product_families=unavailable_families,
         fund_execution_policy=settings.fund_execution_policy,
+        audit_status=audit_status,
+        shadow_status=shadow_status,
     )
