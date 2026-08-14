@@ -185,7 +185,7 @@ class RuntimeControlRelease(ReleaseModel):
     official_answer_timeout_seconds: float = Field(gt=0, lt=60)
     official_answer_max_inflight: StrictInt = Field(ge=1, le=8)
     worker_count: StrictInt = Field(ge=1, le=8)
-    audit_schema_version: Literal["1.1"] = "1.1"
+    audit_schema_version: Literal["1.2"] = "1.2"
     audit_sink_kind: Literal["append_only_jsonl"] = "append_only_jsonl"
     audit_queue_capacity: StrictInt = Field(ge=1, le=100_000)
     audit_shutdown_timeout_seconds: float = Field(gt=0, le=60)
@@ -313,7 +313,7 @@ class RuntimeReleaseInputs:
     official_answer_timeout_seconds: float = 55.0
     official_answer_max_inflight: int = 2
     worker_count: int = 1
-    audit_schema_version: Literal["1.1"] = "1.1"
+    audit_schema_version: Literal["1.2"] = "1.2"
     audit_sink_kind: Literal["append_only_jsonl"] = "append_only_jsonl"
     audit_queue_capacity: int = 2_048
     audit_shutdown_timeout_seconds: float = 5.0

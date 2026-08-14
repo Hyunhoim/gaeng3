@@ -23,6 +23,7 @@ from scripts.deterministic_api_benchmark import (
     memory_delta,
     normalize_base_url,
     percentile,
+    require_isolated_base_url,
 )
 
 
@@ -324,10 +325,16 @@ def test_runner_separates_cold_warm_and_stress_and_hashes_responses() -> None:
     assert [phase["name"] for phase in report["phases"]] == [
         "warm_c1",
         "warm_c2",
-        "admission_c4",
+        "warm_c4",
         "admission_c8",
     ]
     assert [phase["actual_count"] for phase in report["phases"]] == [3, 4, 8, 8]
+    assert [phase["accepted_control_codes"] for phase in report["phases"]] == [
+        [],
+        [],
+        [],
+        ["request_overloaded", "request_timeout"],
+    ]
     for phase in report["phases"]:
         summary = phase["summary"]
         assert summary["latency_ms"] == {
@@ -350,6 +357,51 @@ def test_required_control_coverage_fails_when_stress_does_not_observe_it() -> No
 
     assert report["passed"] is False
     assert report["control_contract"]["missing_required_codes"] == ["request_overloaded"]
+
+
+class ControlDuringC4Client(StableHttpClient):
+    def __init__(self) -> None:
+        super().__init__()
+        self.answer_calls = 0
+
+    def request(
+        self,
+        url: str,
+        *,
+        timeout_seconds: float,
+        method: Literal["GET", "POST"] = "GET",
+        payload: Mapping[str, str] | None = None,
+    ) -> HttpExchange:
+        if url.endswith("/health"):
+            return super().request(
+                url,
+                timeout_seconds=timeout_seconds,
+                method=method,
+                payload=payload,
+            )
+        with self._lock:
+            self.answer_calls += 1
+            answer_call = self.answer_calls
+        if 8 <= answer_call <= 15:
+            return _exchange(
+                _official_body(control_code="request_overloaded"),
+                latency_ms=8.0,
+            )
+        return _exchange(_official_body(), latency_ms=8.0)
+
+
+def test_c4_rejects_admission_controls_while_c8_remains_admission_stress() -> None:
+    report = _benchmark(ControlDuringC4Client()).run()
+    phases = {phase["name"]: phase for phase in report["phases"]}
+
+    assert phases["warm_c4"]["passed"] is False
+    assert phases["warm_c4"]["summary"]["control_code_counts"] == {"request_overloaded": 8}
+    assert phases["warm_c4"]["summary"]["semantic_failed"] == 8
+    assert phases["admission_c8"]["accepted_control_codes"] == [
+        "request_overloaded",
+        "request_timeout",
+    ]
+    assert report["passed"] is False
 
 
 def test_required_runtime_metrics_fail_when_collectors_are_not_configured() -> None:
@@ -482,3 +534,12 @@ def test_normalize_base_url_forbids_credentials_query_and_fragment() -> None:
         normalize_base_url("http://user:secret@127.0.0.1:18001")
     with pytest.raises(ValueError, match="query and fragment"):
         normalize_base_url("http://127.0.0.1:18001?token=secret")
+
+
+@pytest.mark.parametrize("shared_port", [18001, 18002])
+def test_performance_target_rejects_shared_or_non_loopback_urls(shared_port: int) -> None:
+    assert require_isolated_base_url("http://127.0.0.1:18144/") == ("http://127.0.0.1:18144")
+    with pytest.raises(ValueError, match="non-shared"):
+        require_isolated_base_url(f"http://127.0.0.1:{shared_port}")
+    with pytest.raises(ValueError, match="loopback"):
+        require_isolated_base_url("https://example.com:18144")

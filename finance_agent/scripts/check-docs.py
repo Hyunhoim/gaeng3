@@ -177,6 +177,9 @@ HISTORICAL_BASELINE_COMPONENT_ALLOWLIST = {
         "finance_agent/packages/finance_agent_core/tests/test_agent_release.py": (
             "3c0da4b7129fdb923e039cf0f53dfc2aa07cf51bdbead98537c51c705b5a8486"
         ),
+        "finance_agent/packages/finance_agent_core/tests/test_plan_authority.py": (
+            "f33e0d47813d73e91a7e6778490d34ca2efd92e6cbbf97b58c0614c332ccd54f"
+        ),
     },
 }
 FORBIDDEN_BASELINE_KEYS = {

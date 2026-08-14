@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from contextlib import nullcontext
 from functools import partial
+from time import perf_counter
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, Request, Response
@@ -11,9 +12,13 @@ from finance_agent_core.agent import (
     official_response_from_backend,
     official_timeout_response,
 )
-from finance_agent_core.contracts.backend import BackendAgentRequest, BackendAgentResponse
+from finance_agent_core.contracts.backend import (
+    BackendAgentRequest,
+    BackendAgentResponse,
+    BackendStatus,
+)
 from finance_agent_core.contracts.official import OfficialAnswerResponse
-from finance_agent_core.observability import AuditOutcome, bind_request_audit
+from finance_agent_core.observability import AuditOutcome, AuditStage, bind_request_audit
 
 from app.answer_controls import (
     backend_overloaded_response,
@@ -27,7 +32,7 @@ from app.dependencies import (
     get_settings,
     request_audit_recorder,
 )
-from app.http_audit import mark_request_audit_terminal
+from app.http_audit import mark_request_audit_terminal, mark_response_serialization_start
 from app.request_execution import (
     RequestExecutionTimeoutError,
     RequestOverloadedError,
@@ -100,6 +105,8 @@ async def answer(
             else ("response_completed" if result.http_status_code == 200 else "adapter_failure")
         ),
     )
+    if result.response.status in {BackendStatus.SUCCESS, BackendStatus.NOT_FOUND}:
+        mark_response_serialization_start(http_request)
     return result.response
 
 
@@ -178,14 +185,36 @@ async def official_answer(
             question_id=question_id,
             question=question,
         )
+    official_dto_started = perf_counter()
     response = official_response_from_backend(
         question_id=question_id,
         question=question,
         response=result.response,
     )
+    if audit is not None and result.response.status in {
+        BackendStatus.SUCCESS,
+        BackendStatus.NOT_FOUND,
+    }:
+        audit.emit(
+            stage=AuditStage.SERIALIZATION,
+            outcome=AuditOutcome.SUCCEEDED,
+            reason_code="official_dto_built",
+            duration_ms=(perf_counter() - official_dto_started) * 1000,
+            candidate_count=result.response.candidate_count or 0,
+            result_count=len(result.response.products),
+            evidence_count=len(
+                {
+                    evidence_ref
+                    for citation in result.response.citations
+                    for evidence_ref in citation.evidence_refs
+                }
+            ),
+        )
     mark_request_audit_terminal(
         http_request,
         outcome=(AuditOutcome.SUCCEEDED if result.http_status_code == 200 else AuditOutcome.FAILED),
         reason_code=("response_completed" if result.http_status_code == 200 else "adapter_failure"),
     )
+    if result.response.status in {BackendStatus.SUCCESS, BackendStatus.NOT_FOUND}:
+        mark_response_serialization_start(http_request)
     return response

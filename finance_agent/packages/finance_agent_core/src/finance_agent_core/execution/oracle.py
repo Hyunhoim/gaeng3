@@ -218,14 +218,18 @@ class SQLiteOracle:
 
     def execute(self, validated_plan: ValidatedPlan) -> ExecutedSearch:
         started = perf_counter()
+        statements_started: float | None = None
+        statements_duration_ms: float | None = None
         audit = current_request_audit()
         try:
             with open_validated_database(
                 validated_plan,
                 self.database_path,
                 oracle_kind="search",
+                connection_audit_reason="oracle_connection",
             ) as (plan, connection, manifest):
                 select_sql, count_sql, parameters = compile_search_sql(plan)
+                statements_started = perf_counter()
                 count_row = connection.execute(count_sql, parameters).fetchone()
                 if count_row is None:
                     raise sqlite3.DatabaseError("candidate count query returned no row")
@@ -235,8 +239,17 @@ class SQLiteOracle:
                     select_sql,
                     [*parameters, plan.limit],
                 ).fetchall()
+                statements_duration_ms = (perf_counter() - statements_started) * 1000
         except Exception:
             if audit is not None:
+                if statements_started is not None and statements_duration_ms is None:
+                    audit.emit(
+                        stage=AuditStage.SQL,
+                        outcome=AuditOutcome.FAILED,
+                        reason_code="oracle_statements_failed",
+                        duration_ms=(perf_counter() - statements_started) * 1000,
+                        **_receipt_audit_fields(validated_plan),
+                    )
                 audit.emit(
                     stage=AuditStage.SQL,
                     outcome=AuditOutcome.FAILED,
@@ -246,6 +259,16 @@ class SQLiteOracle:
                 )
             raise
         if audit is not None:
+            assert statements_duration_ms is not None
+            audit.emit(
+                stage=AuditStage.SQL,
+                outcome=AuditOutcome.SUCCEEDED,
+                reason_code="oracle_statements_completed",
+                duration_ms=statements_duration_ms,
+                candidate_count=candidate_count,
+                result_count=len(rows),
+                **_receipt_audit_fields(validated_plan),
+            )
             audit.emit(
                 stage=AuditStage.SQL,
                 outcome=AuditOutcome.SUCCEEDED,
@@ -273,12 +296,15 @@ class SQLiteAggregateOracle:
 
     def execute(self, validated_plan: ValidatedPlan) -> ExecutedAggregation:
         started = perf_counter()
+        statements_started: float | None = None
+        statements_duration_ms: float | None = None
         audit = current_request_audit()
         try:
             with open_validated_database(
                 validated_plan,
                 self.database_path,
                 oracle_kind="aggregate",
+                connection_audit_reason="oracle_connection",
             ) as (plan, connection, manifest):
                 select_sql, parameters = compile_aggregate_sql(plan)
                 bounded_sql = f"{select_sql} LIMIT ?"
@@ -286,9 +312,19 @@ class SQLiteAggregateOracle:
                     *parameters,
                     validated_plan.receipt.max_candidate_rows + 1,
                 ]
+                statements_started = perf_counter()
                 rows = connection.execute(bounded_sql, bounded_parameters).fetchall()
+                statements_duration_ms = (perf_counter() - statements_started) * 1000
         except Exception:
             if audit is not None:
+                if statements_started is not None and statements_duration_ms is None:
+                    audit.emit(
+                        stage=AuditStage.SQL,
+                        outcome=AuditOutcome.FAILED,
+                        reason_code="oracle_statements_failed",
+                        duration_ms=(perf_counter() - statements_started) * 1000,
+                        **_receipt_audit_fields(validated_plan),
+                    )
                 audit.emit(
                     stage=AuditStage.SQL,
                     outcome=AuditOutcome.FAILED,
@@ -298,6 +334,16 @@ class SQLiteAggregateOracle:
                 )
             raise
         if audit is not None:
+            assert statements_duration_ms is not None
+            audit.emit(
+                stage=AuditStage.SQL,
+                outcome=AuditOutcome.SUCCEEDED,
+                reason_code="oracle_statements_completed",
+                duration_ms=statements_duration_ms,
+                candidate_count=len(rows),
+                result_count=0,
+                **_receipt_audit_fields(validated_plan),
+            )
             audit.emit(
                 stage=AuditStage.SQL,
                 outcome=AuditOutcome.SUCCEEDED,

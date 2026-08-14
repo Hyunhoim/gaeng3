@@ -1152,12 +1152,56 @@ class RoutedFinanceAgent:
                 )
             verifier_started = perf_counter()
             try:
-                universe = self._record_universe(database_path, validated_plan)
-                verified_aggregation = AggregateResultVerifier().verify(
-                    plan,
-                    executed_aggregation,
-                    universe,
-                )
+                universe_started = perf_counter()
+                try:
+                    universe = self._record_universe(database_path, validated_plan)
+                except Exception:
+                    if audit is not None:
+                        audit.emit(
+                            stage=AuditStage.VERIFIER,
+                            outcome=AuditOutcome.FAILED,
+                            reason_code="verifier_universe_failed",
+                            duration_ms=(perf_counter() - universe_started) * 1000,
+                            candidate_count=executed_aggregation.candidate_count,
+                            **self._validated_audit_fields(validated_plan),
+                        )
+                    raise
+                if audit is not None:
+                    audit.emit(
+                        stage=AuditStage.VERIFIER,
+                        outcome=AuditOutcome.SUCCEEDED,
+                        reason_code="verifier_universe_loaded",
+                        duration_ms=(perf_counter() - universe_started) * 1000,
+                        candidate_count=len(universe),
+                        **self._validated_audit_fields(validated_plan),
+                    )
+                pure_verifier_started = perf_counter()
+                try:
+                    verified_aggregation = AggregateResultVerifier().verify(
+                        plan,
+                        executed_aggregation,
+                        universe,
+                    )
+                except Exception:
+                    if audit is not None:
+                        audit.emit(
+                            stage=AuditStage.VERIFIER,
+                            outcome=AuditOutcome.FAILED,
+                            reason_code="pure_verification_failed",
+                            duration_ms=(perf_counter() - pure_verifier_started) * 1000,
+                            candidate_count=executed_aggregation.candidate_count,
+                            **self._validated_audit_fields(validated_plan),
+                        )
+                    raise
+                if audit is not None:
+                    audit.emit(
+                        stage=AuditStage.VERIFIER,
+                        outcome=AuditOutcome.SUCCEEDED,
+                        reason_code="pure_verification_passed",
+                        duration_ms=(perf_counter() - pure_verifier_started) * 1000,
+                        candidate_count=verified_aggregation.candidate_count,
+                        **self._validated_audit_fields(validated_plan),
+                    )
             except Exception:
                 if audit is not None:
                     audit.emit(
@@ -1253,12 +1297,55 @@ class RoutedFinanceAgent:
             )
         verifier_started = perf_counter()
         try:
-            universe = (
-                None
-                if plan.intent is Intent.COMPARE
-                else self._record_universe(database_path, validated_plan)
-            )
-            verified = ResultVerifier().verify(plan, executed, universe)
+            universe = None
+            if plan.intent is not Intent.COMPARE:
+                universe_started = perf_counter()
+                try:
+                    universe = self._record_universe(database_path, validated_plan)
+                except Exception:
+                    if audit is not None:
+                        audit.emit(
+                            stage=AuditStage.VERIFIER,
+                            outcome=AuditOutcome.FAILED,
+                            reason_code="verifier_universe_failed",
+                            duration_ms=(perf_counter() - universe_started) * 1000,
+                            candidate_count=executed.candidate_count,
+                            **self._validated_audit_fields(validated_plan),
+                        )
+                    raise
+                if audit is not None:
+                    audit.emit(
+                        stage=AuditStage.VERIFIER,
+                        outcome=AuditOutcome.SUCCEEDED,
+                        reason_code="verifier_universe_loaded",
+                        duration_ms=(perf_counter() - universe_started) * 1000,
+                        candidate_count=len(universe),
+                        **self._validated_audit_fields(validated_plan),
+                    )
+            pure_verifier_started = perf_counter()
+            try:
+                verified = ResultVerifier().verify(plan, executed, universe)
+            except Exception:
+                if audit is not None:
+                    audit.emit(
+                        stage=AuditStage.VERIFIER,
+                        outcome=AuditOutcome.FAILED,
+                        reason_code="pure_verification_failed",
+                        duration_ms=(perf_counter() - pure_verifier_started) * 1000,
+                        candidate_count=executed.candidate_count,
+                        **self._validated_audit_fields(validated_plan),
+                    )
+                raise
+            if audit is not None:
+                audit.emit(
+                    stage=AuditStage.VERIFIER,
+                    outcome=AuditOutcome.SUCCEEDED,
+                    reason_code="pure_verification_passed",
+                    duration_ms=(perf_counter() - pure_verifier_started) * 1000,
+                    candidate_count=verified.candidate_count,
+                    result_count=len(verified.records),
+                    **self._validated_audit_fields(validated_plan),
+                )
         except Exception:
             if audit is not None:
                 audit.emit(
@@ -1731,8 +1818,53 @@ class RoutedFinanceAgent:
             )
         verifier_started = perf_counter()
         try:
-            universe = self._record_universe(database_path, validated_plan)
-            verified = ResultVerifier().verify(plan, executed, universe)
+            universe_started = perf_counter()
+            try:
+                universe = self._record_universe(database_path, validated_plan)
+            except Exception:
+                if audit is not None:
+                    audit.emit(
+                        stage=AuditStage.VERIFIER,
+                        outcome=AuditOutcome.FAILED,
+                        reason_code="verifier_universe_failed",
+                        duration_ms=(perf_counter() - universe_started) * 1000,
+                        candidate_count=executed.candidate_count,
+                        **self._validated_audit_fields(validated_plan),
+                    )
+                raise
+            if audit is not None:
+                audit.emit(
+                    stage=AuditStage.VERIFIER,
+                    outcome=AuditOutcome.SUCCEEDED,
+                    reason_code="verifier_universe_loaded",
+                    duration_ms=(perf_counter() - universe_started) * 1000,
+                    candidate_count=len(universe),
+                    **self._validated_audit_fields(validated_plan),
+                )
+            pure_verifier_started = perf_counter()
+            try:
+                verified = ResultVerifier().verify(plan, executed, universe)
+            except Exception:
+                if audit is not None:
+                    audit.emit(
+                        stage=AuditStage.VERIFIER,
+                        outcome=AuditOutcome.FAILED,
+                        reason_code="pure_verification_failed",
+                        duration_ms=(perf_counter() - pure_verifier_started) * 1000,
+                        candidate_count=executed.candidate_count,
+                        **self._validated_audit_fields(validated_plan),
+                    )
+                raise
+            if audit is not None:
+                audit.emit(
+                    stage=AuditStage.VERIFIER,
+                    outcome=AuditOutcome.SUCCEEDED,
+                    reason_code="pure_verification_passed",
+                    duration_ms=(perf_counter() - pure_verifier_started) * 1000,
+                    candidate_count=verified.candidate_count,
+                    result_count=len(verified.records),
+                    **self._validated_audit_fields(validated_plan),
+                )
         except Exception:
             if audit is not None:
                 audit.emit(

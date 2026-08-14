@@ -245,12 +245,22 @@ def test_audit_event_correlation_fields_are_paired_and_legacy_v11_remains_readab
         AuditEvent.model_validate(payload)
 
     legacy_payload = _event().model_dump(mode="python")
+    legacy_payload["schema_version"] = "1.1"
     legacy_payload.pop("invocation_id_sha256")
     legacy_payload.pop("event_sequence")
     legacy = AuditEvent.model_validate(legacy_payload)
     assert legacy.schema_version == "1.1"
     assert legacy.invocation_id_sha256 is None
     assert legacy.event_sequence is None
+
+    serialization_payload = _event().model_dump(mode="python")
+    serialization_payload.update(
+        schema_version="1.1",
+        stage=AuditStage.SERIALIZATION,
+        reason_code="backend_dto_built",
+    )
+    with pytest.raises(ValidationError, match="schema version 1.2"):
+        AuditEvent.model_validate(serialization_payload)
 
     with pytest.raises(ValueError, match="invocation_id"):
         AuditEvent.redacted(

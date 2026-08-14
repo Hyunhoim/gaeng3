@@ -1057,7 +1057,7 @@ class DeterministicApiBenchmark:
         phase_specs = (
             PhaseSpec("warm_c1", 1, self.warm_requests, False),
             PhaseSpec("warm_c2", 2, self.warm_requests, False),
-            PhaseSpec("admission_c4", 4, self.stress_requests, True),
+            PhaseSpec("warm_c4", 4, self.stress_requests, False),
             PhaseSpec("admission_c8", 8, self.stress_requests, True),
         )
         phases = [self._run_phase(spec) for spec in phase_specs]
@@ -1210,6 +1210,22 @@ def normalize_base_url(value: str) -> str:
     return urlunsplit((parsed.scheme, parsed.netloc, path, "", ""))
 
 
+def require_isolated_base_url(value: str) -> str:
+    """Accept only an explicit non-shared loopback target for load generation."""
+
+    normalized = normalize_base_url(value)
+    parsed = urlsplit(normalized)
+    if parsed.hostname not in {"127.0.0.1", "localhost", "::1"}:
+        raise ValueError("performance target must use an explicit loopback host")
+    try:
+        port = parsed.port
+    except ValueError as error:
+        raise ValueError("performance target port is invalid") from error
+    if port is None or port in {18_001, 18_002}:
+        raise ValueError("performance target must use an explicit non-shared port")
+    return normalized
+
+
 def _rfc3339_epoch_ms(value: str) -> float | None:
     normalized = value[:-1] + "+00:00" if value.endswith("Z") else value
     normalized = re.sub(r"(\.\d{6})\d+(?=[+-]\d{2}:\d{2}$)", r"\1", normalized)
@@ -1245,7 +1261,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Measure an isolated deterministic FastAPI container over real HTTP."
     )
-    parser.add_argument("--base-url", default="http://127.0.0.1:18001")
+    parser.add_argument("--base-url", required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--request-timeout-seconds", type=float, default=60.0)
     parser.add_argument("--ready-timeout-seconds", type=float, default=120.0)
@@ -1301,6 +1317,10 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     arguments = parser.parse_args(argv)
+    if arguments.container_name is not None and not arguments.container_name.startswith(
+        "finance-perf-"
+    ):
+        parser.error("performance container name must use the finance-perf- namespace")
     families = tuple(arguments.expected_family or ["bond"])
     memory_collector: MemoryCollector = (
         CgroupV2MemoryCollector(arguments.cgroup_path)
@@ -1318,7 +1338,7 @@ def main(argv: list[str] | None = None) -> int:
         container_collector = NullContainerCollector()
     try:
         benchmark = DeterministicApiBenchmark(
-            base_url=arguments.base_url,
+            base_url=require_isolated_base_url(arguments.base_url),
             question_id=arguments.question_id,
             question=arguments.question,
             expectation=OfficialExpectation(

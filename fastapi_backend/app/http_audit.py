@@ -17,6 +17,8 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 _RECORDER_STATE_KEY = "finance_answer_transport_audit_recorder"
 _TERMINAL_STATE_KEY = "finance_answer_transport_audit_terminal"
+_SERIALIZATION_STARTED_STATE_KEY = "finance_answer_serialization_started"
+_CLOCK_STATE_KEY = "finance_answer_audit_clock"
 
 
 @dataclass(frozen=True, slots=True)
@@ -103,6 +105,18 @@ def mark_request_audit_terminal(
     )
 
 
+def mark_response_serialization_start(request: Request) -> None:
+    """Mark the DTO-return boundary without carrying response content."""
+
+    if request_transport_audit(request) is None:
+        return
+    state = _scope_state(request.scope)
+    clock = state.get(_CLOCK_STATE_KEY)
+    if not callable(clock):
+        clock = perf_counter
+    state[_SERIALIZATION_STARTED_STATE_KEY] = float(clock())
+
+
 class AnswerHttpAuditMiddleware:
     """Audit only the public answer transport without reading request payloads.
 
@@ -125,6 +139,7 @@ class AnswerHttpAuditMiddleware:
             return
         state = _scope_state(scope)
         state[_RECORDER_STATE_KEY] = recorder
+        state[_CLOCK_STATE_KEY] = self._clock
         started = self._clock()
         recorder.emit(
             stage=AuditStage.REQUEST,
@@ -156,6 +171,9 @@ class AnswerHttpAuditMiddleware:
 
         async def audited_send(message: Message) -> None:
             nonlocal response_status
+            serialization_finished = (
+                self._clock() if message["type"] == "http.response.start" else None
+            )
             try:
                 await send(message)
             except BaseException:
@@ -169,6 +187,25 @@ class AnswerHttpAuditMiddleware:
             if message["type"] == "http.response.start":
                 status = message.get("status")
                 response_status = status if isinstance(status, int) else None
+                serialization_started = state.pop(
+                    _SERIALIZATION_STARTED_STATE_KEY,
+                    None,
+                )
+                active_recorder = state.get(_RECORDER_STATE_KEY)
+                if (
+                    isinstance(serialization_started, float)
+                    and serialization_finished is not None
+                    and type(active_recorder) is RequestAuditRecorder
+                ):
+                    active_recorder.emit(
+                        stage=AuditStage.SERIALIZATION,
+                        outcome=AuditOutcome.SUCCEEDED,
+                        reason_code="http_response_serialized",
+                        duration_ms=max(
+                            0.0,
+                            (serialization_finished - serialization_started) * 1000,
+                        ),
+                    )
             if message["type"] == "http.response.body" and not message.get("more_body", False):
                 terminal = state.get(_TERMINAL_STATE_KEY)
                 if type(terminal) is not HttpAuditTerminal:
@@ -213,6 +250,7 @@ __all__ = [
     "AnswerHttpAuditMiddleware",
     "HttpAuditTerminal",
     "mark_request_audit_terminal",
+    "mark_response_serialization_start",
     "request_agent_audit",
     "request_transport_audit",
 ]

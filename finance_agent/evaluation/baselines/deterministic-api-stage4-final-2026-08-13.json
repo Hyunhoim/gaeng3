@@ -19,7 +19,9 @@
     "id": "deterministic-api-baseline-v1",
     "version": "1.0",
     "path": "../fastapi_backend/scripts/deterministic_api_benchmark.py",
-    "sha256": "b2a9422d42c936a53204561417f63f16577c62d089b019220884d8d747335567"
+    "sha256": "b2a9422d42c936a53204561417f63f16577c62d089b019220884d8d747335567",
+    "tracked_contract_sha256": "b71c3130f0e701087a85cfa58926c7d1ecc32677d195fab336463cc9bc3a0716",
+    "historical_contract_reason": "2026-08-14 successor는 c1·c2·c4 strict phase, 공유 포트 차단과 Audit 성능 분해 계약을 추가했으며 이 파일의 2026-08-13 관측값은 동결해 보존"
   },
   "data": {
     "database_sha256": "f4f0a4e33859084fc91bf167fccfc9a570a121b60f4922c4aac9cc5e34ca5f2b",

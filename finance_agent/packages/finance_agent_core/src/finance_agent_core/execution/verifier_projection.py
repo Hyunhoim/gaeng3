@@ -6,9 +6,11 @@ from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
+from time import perf_counter
 
 from finance_agent_core.config import QualityStatus, ValueType, load_field_registry
 from finance_agent_core.contracts import QueryPlan
+from finance_agent_core.contracts.routing import RouteDisposition
 from finance_agent_core.deadline import raise_if_request_stopped
 from finance_agent_core.execution.authority import (
     ValidatedPlan,
@@ -19,8 +21,28 @@ from finance_agent_core.execution.sql_schema import (
     SQL_FIELDS_BY_FAMILY,
     TABLE_BY_FAMILY,
 )
+from finance_agent_core.observability import AuditOutcome, AuditStage, current_request_audit
 
 _DEADLINE_CHECK_INTERVAL = 256
+
+
+def _validated_audit_fields(validated_plan: ValidatedPlan) -> dict[str, object]:
+    receipt = validated_plan.receipt
+    fields: dict[str, object] = {
+        "route_disposition": RouteDisposition.EXECUTE,
+        "interaction_intent": receipt.capability_interaction_intent,
+        "product_families": (receipt.dataset,),
+        "plan_sha256": receipt.plan_sha256,
+    }
+    if receipt.approved_manifest_sha256 is not None:
+        fields.update(
+            dataset_release_id=receipt.dataset_release_id,
+            approved_dataset_manifest_sha256=receipt.approved_manifest_sha256,
+            database_manifest_sha256=receipt.database_manifest_sha256,
+            database_snapshot_sha256=receipt.database_sha256,
+            source_snapshot_sha256=receipt.source_file_sha256,
+        )
+    return fields
 
 
 @dataclass(frozen=True, slots=True)
@@ -186,21 +208,73 @@ def load_projected_verifier_records(
     database_path: str | Path,
     validated_plan: ValidatedPlan,
 ) -> list[ProjectedVerifierRecord]:
-    with open_validated_database(validated_plan, database_path) as (
-        plan,
-        connection,
-        _manifest,
-    ):
-        family = plan.product_families[0].value
-        fields = verifier_projection_fields(plan)
-        try:
+    audit = current_request_audit()
+    fetch_started: float | None = None
+    fetch_duration_ms: float | None = None
+    try:
+        with open_validated_database(
+            validated_plan,
+            database_path,
+            connection_audit_reason="verifier_projection_connection",
+        ) as (
+            plan,
+            connection,
+            _manifest,
+        ):
+            family = plan.product_families[0].value
+            fields = verifier_projection_fields(plan)
             table = TABLE_BY_FAMILY[family]
-        except KeyError as error:
-            raise ValueError(f"no verifier table for {family}") from error
-        select_columns = verifier_select_columns(family, fields)
-        rows = connection.execute(
-            f"SELECT {', '.join(select_columns)} FROM {table} ORDER BY product_id LIMIT ?",
-            (validated_plan.receipt.max_verifier_rows + 1,),
-        ).fetchall()
+            select_columns = verifier_select_columns(family, fields)
+            fetch_started = perf_counter()
+            rows = connection.execute(
+                f"SELECT {', '.join(select_columns)} FROM {table} ORDER BY product_id LIMIT ?",
+                (validated_plan.receipt.max_verifier_rows + 1,),
+            ).fetchall()
+            fetch_duration_ms = (perf_counter() - fetch_started) * 1000
+    except KeyError as error:
+        raise ValueError(f"no verifier table for {family}") from error
+    except Exception:
+        if audit is not None and fetch_started is not None and fetch_duration_ms is None:
+            audit.emit(
+                stage=AuditStage.SQL,
+                outcome=AuditOutcome.FAILED,
+                reason_code="verifier_projection_failed",
+                duration_ms=(perf_counter() - fetch_started) * 1000,
+                **_validated_audit_fields(validated_plan),
+            )
+        raise
+    if audit is not None:
+        assert fetch_duration_ms is not None
+        audit.emit(
+            stage=AuditStage.SQL,
+            outcome=AuditOutcome.SUCCEEDED,
+            reason_code="verifier_projection_fetched",
+            duration_ms=fetch_duration_ms,
+            candidate_count=len(rows),
+            **_validated_audit_fields(validated_plan),
+        )
     require_verifier_budget(validated_plan, len(rows))
-    return project_verifier_rows(rows, family=family, fields=fields)
+    materialization_started = perf_counter()
+    try:
+        records = project_verifier_rows(rows, family=family, fields=fields)
+    except Exception:
+        if audit is not None:
+            audit.emit(
+                stage=AuditStage.VERIFIER,
+                outcome=AuditOutcome.FAILED,
+                reason_code="verifier_materialization_failed",
+                duration_ms=(perf_counter() - materialization_started) * 1000,
+                candidate_count=len(rows),
+                **_validated_audit_fields(validated_plan),
+            )
+        raise
+    if audit is not None:
+        audit.emit(
+            stage=AuditStage.VERIFIER,
+            outcome=AuditOutcome.SUCCEEDED,
+            reason_code="verifier_rows_materialized",
+            duration_ms=(perf_counter() - materialization_started) * 1000,
+            candidate_count=len(records),
+            **_validated_audit_fields(validated_plan),
+        )
+    return records

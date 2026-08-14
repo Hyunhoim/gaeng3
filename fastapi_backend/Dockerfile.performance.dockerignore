@@ -1,0 +1,8 @@
+**
+!finance_agent/
+!finance_agent/packages/
+!finance_agent/packages/finance_agent_core/
+!finance_agent/packages/finance_agent_core/src/
+!finance_agent/packages/finance_agent_core/src/finance_agent_core/**
+!fastapi_backend/
+!fastapi_backend/app/**

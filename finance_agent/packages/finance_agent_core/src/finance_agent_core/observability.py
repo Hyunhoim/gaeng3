@@ -58,6 +58,7 @@ class AuditStage(StrEnum):
     SQL = "sql"
     VERIFIER = "verifier"
     RENDERER = "renderer"
+    SERIALIZATION = "serialization"
     ANSWER = "answer"
 
 
@@ -105,7 +106,7 @@ class MetricCounter(StrEnum):
 class AuditEvent(ObservabilityModel):
     """Allowlisted, redacted Stage 4 event. It cannot carry arbitrary payloads."""
 
-    schema_version: Literal["1.1"] = "1.1"
+    schema_version: Literal["1.1", "1.2"] = "1.2"
     observed_at_utc: datetime
     stage: AuditStage
     outcome: AuditOutcome
@@ -185,6 +186,8 @@ class AuditEvent(ObservabilityModel):
 
     @model_validator(mode="after")
     def validate_linkage_consistency(self) -> AuditEvent:
+        if self.schema_version == "1.1" and self.stage is AuditStage.SERIALIZATION:
+            raise ValueError("serialization audit events require schema version 1.2")
         if (self.invocation_id_sha256 is None) != (self.event_sequence is None):
             raise ValueError("invocation hash and event sequence must be present together")
         if self.product_family_count != len(self.product_families):

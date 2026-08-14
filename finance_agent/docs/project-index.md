@@ -1,6 +1,6 @@
 # AI 기술문서 상세 인덱스
 
-마지막 갱신: 2026-08-13
+마지막 갱신: 2026-08-14
 
 이 문서는 금융상품 Agent의 전체 기술문서와 상태를 추적하는 상세 장부다. 간단한
 길잡이가 필요하면 먼저 [AI 기술문서 안내](README.md)를 확인한다. 연구 요청·외부
@@ -77,6 +77,7 @@ HCX 모델·endpoint·인증과 크레딧 적용 범위는 남아 있어 기존�
 - [공모펀드 blind 설계](evaluation-public-fund-blind-v1.1.md)
 - [COMPARE 공개 회귀](evaluation-product-comparison.md)
 - [SEARCH·AGGREGATE 성능](evaluation-search-aggregate-performance.md)
+- [결정론적 API 성능 원인 분해·Audit 검증 결과](../../fastapi_backend/docs/deterministic-performance-audit-report-2026-08-14.md)
 - [internal red-team](evaluation-internal-red-team.md)
 - [공식 형식 30문항 공개 모의평가](evaluation-official-mock.md)
 - [Qwen 변형 질문·전체 Agent 스트레스 평가](evaluation-qwen-metamorphic.md)
@@ -129,6 +130,7 @@ HCX 모델·endpoint·인증과 크레딧 적용 범위는 남아 있어 기존�
 | [네 상품군 공통 COMPARE 엔진 설계](comparison-engine-design.md) | 상품군별 비교 필드·식별·통화·기준일·결측·공통 evidence 설계 | v1.0 구현 |
 | [네 상품군 자연어 COMPARE 공개 회귀](evaluation-product-comparison.md) | 세 상품군 신규 30문항과 기존 공모펀드 24문항의 비교 배선·안전 경계 | v1.0 정본 |
 | [SEARCH·AGGREGATE 성능 기준선](evaluation-search-aggregate-performance.md) | 네 상품군 8문항의 결과 지문·새 프로세스 지연·RSS와 projected verifier 전후 비교 | v1.0 정본 |
+| [결정론적 API 성능 원인 분해·Audit 검증 결과](../../fastapi_backend/docs/deterministic-performance-audit-report-2026-08-14.md) | c1·c2·c4 strict HTTP, Router~직렬화 구간, short soak, Audit CLI와 local evaluation release linkage | Verifier projection 병목 확정·장시간 soak/NCP 대기 |
 | [교차 상품군 병렬 SEARCH와 grounded answer v2](cross-family-search.md) | 상품군별 QueryPlan·병렬 Oracle·evidence 격리 생성·교차 문구 검증·전체 fallback 계약 | v2.0 정본 |
 | [HyperCLOVA X provider 계약](hyperclova-provider.md) | 공식 HTTP transport, optional QueryPlan·grounded answer 배선, planning 권한·오류·관측 계약 | 무호출 검증 완료·실제 credential 호출 대기·HCLX grounded plan 미배선 |
 | [internal-red-team-v1 전체 E2E 평가](evaluation-internal-red-team.md) | 네 상품군 40문항의 공격 유형·전체 `/answer` 경로·최초 실패·수정 후 회귀 | v1.0 정본 |
@@ -140,8 +142,8 @@ HCX 모델·endpoint·인증과 크레딧 적용 범위는 남아 있어 기존�
 | [BM25/SQLite FTS 문서 RAG](document-rag.md) | 승인 문서 적재·BM25 검색·필터·근거·기준일·not-found 계약 | 최소 기능 완료 |
 | [Dense Schema Linker 오프라인 컴포넌트 평가](evaluation-dense-schema-linker-shadow.md) | 현재 승인 SQL·합성 BM25 기준선, fake embedding·index manifest·production OFF와 채택 gate | 컴포넌트 구현·채택 보류 |
 | [Schema Dense CPU 임베딩 모델 비교](evaluation-schema-embedding-cpu.md) · [팀 공유용 HTML](evaluation-schema-embedding-cpu.html) | 7개×두 결합 방식, 상품군·6개 실패·paired bootstrap 분석, BGE·KURE blind 후보 | 공개 후보 압축 완료·HTML 공유본 생성·독립 blind/OOD 대기·production OFF |
-| [Schema Dense Stage 4 구현·Stage 5 OFF 실험 상태](schema-dense-stage4-stage5-readiness-2026-08-13.md) | 모델 artifact 고정, 관측 계약, external blind v2, 배포 권한이 없는 실험용 Shadow, Docker CPU gate | Stage 4 계약·Stage 5 실험 코드 OFF·production 주입 차단·독립 blind/full E2E 대기 |
-| [Stage 4 감사·blind 리허설·image·API 기준선](stage4-audit-blind-image-api-report-2026-08-13.md) | 결정론적 Fast Path의 HTTP→Core→최종 ASGI body send 경계 감사, 합성 blind 절차, local 후보 image ID, API p50·p95·memory | dirty candidate 검증 완료·HCLX/Dense/release linkage·clean/NCP/external blind 대기 |
+| [Schema Dense Stage 4 구현·Stage 5 OFF 실험 상태](schema-dense-stage4-stage5-readiness-2026-08-13.md) | 모델 artifact 고정, external blind v2, audit correlation·전용 metrics·readiness·단일 deadline Shadow | Stage 5 운영 계약 구현·코드는 OFF·production 주입 차단·독립 blind/full E2E 대기 |
+| [Stage 4 감사·blind 리허설·image·API 기준선](stage4-audit-blind-image-api-report-2026-08-13.md) | 결정론적 Fast Path의 HTTP→Core→최종 ASGI body send 경계 감사, 합성 blind 절차, clean local image, API p50·p95·memory | clean local freeze 완료·NCP Registry/signing·HCLX/release linkage·external blind 대기 |
 | [Schema Dense Docker CPU runtime baseline](../evaluation/baselines/schema-embedding-docker-runtime-2026-08-13.json) | exact loader와 고정 image에서 BGE·KURE embed_query 동시성·p95·메모리 측정 | c1/c2 컴포넌트 전제 통과·c4 250ms 초과·활성화 근거 아님 |
 | [Schema Dense 외부 평가 인계서](../evaluation/schema_embedding_external/README.md) | label 없는 외부 100문항, BGE·KURE 동시 고정, OOD calibration/test와 외부 receipt | v2 protocol 완료·외부 bundle/독립 실행 승인 대기 |
 | [Backend 전달용 Agent DTO](backend-contract.md) | 프레임워크 독립 request·response·citation·fallback·HTTP 오류 adapter와 JSON 예시 | v1.0·adapter 12/12 |
@@ -233,7 +235,7 @@ HCX 모델·endpoint·인증과 크레딧 적용 범위는 남아 있어 기존�
   safety·evidence 각각 32/40을 보존하고 v1.2 Router·linker 회귀에서
   모든 계약 40/40·잘못된 실행 0건, dependency pending 13건은 유지
 - 코드 회귀 기준: pre-HCX 동결 507개·Backend 34개를 역사 기록으로 보존하고, 현재 작업
-  트리는 승인 DB 포함 Agent Core 1,219개·Backend 246개 통과(Backend의 기존 fork
+  트리는 승인 DB 포함 Agent Core 1,225개·Backend 258개 통과(Backend의 기존 fork
   warning 2건). Ruff lint·format, pip dependency check,
   wheel과 필수 package data 검사
 - 로컬 Qwen 평가 기준: 동결 50문항에서 최초 미사용 holdout 9/10,

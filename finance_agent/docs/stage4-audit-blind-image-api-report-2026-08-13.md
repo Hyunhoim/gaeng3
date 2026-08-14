@@ -6,6 +6,12 @@
   경로)에서 HTTP→Core→최종 ASGI body send 경계 감사와 Docker 기준선을 검증 완료
 - 배포 판단: **활성화 보류** — dirty candidate이며 외부 blind·NCP release가 아님
 
+> 후속 기록: Stage 4·5 동결 단위는 `ea380ed9774a7bedeb2ede9e867d214cfbf9b318`로
+> `origin/hyunhoim`에 push했고, 같은 clean commit의 local BuildKit OCI index digest
+> `sha256:a147b58fd7a6c58fbec3d2a222163f027cef5cb6309eec5f3bde0e8f0313aa3d`로 smoke를
+> 재검증했다. 이는 NCP Registry RepoDigest나 서명된 release가 아니다. 그 뒤의 Shadow
+> correlation·metrics·readiness·shutdown 변경은 별도 미커밋 후속 단위다.
+
 ## 1. 이번에 완료한 범위
 
 Stage 4 관측·감사는 요청이 어떤 안전·계획·실행·검증 경계를 거쳤는지 원문 없이
@@ -207,6 +213,8 @@ evaluation release/dataset linkage를 포함한 전체-mode 감사, 배포, Dens
 8. NCP Load Balancer의 `/health` 503 트래픽 제외와 GET query logging/redaction 실환경 검증
 9. 감사 증거가 필요하면 hash chain·서명 checkpoint·외부 WORM 중 승인 trust anchor 적용
 
-Stage 5 Shadow는 현재 OFF인 비배포 실험 기능이다. 제한된 Shadow 실험을 별도로 승인하기
-전에는 비동기 Shadow event를 HTTP/Core invocation에 연결하고, Dense 호출·차단·evidence
-불완전 counter 및 Shadow queue drop을 readiness에 연결해야 한다.
+Stage 5 Shadow는 현재 OFF인 비배포 실험 기능이다. 후속 변경에서 비동기 Shadow event의
+HTTP/Core invocation 연결, 전용 bounded metrics, queue·operational·correlation·audit emit
+장애 readiness, 단일 deadline 종료 계약을 구현했다. 그래도 실제 모델 Shadow Docker
+동시성·p95·메모리와 external blind를 통과하기 전에는 evaluation/production 활성화를
+승인하지 않는다.

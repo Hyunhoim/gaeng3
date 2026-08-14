@@ -361,6 +361,23 @@ def test_executed_search_audits_every_deterministic_authority_boundary(
         AuditStage.ANSWER,
     } <= stages
     assert {AuditStage.DENSE, AuditStage.HCLX}.isdisjoint(stages)
+    nested_reasons = {event.reason_code for event in events}
+    assert {
+        "authority_connection_opened",
+        "oracle_connection_opened",
+        "oracle_statements_completed",
+        "verifier_projection_connection_opened",
+        "verifier_projection_fetched",
+        "verifier_rows_materialized",
+        "verifier_universe_loaded",
+        "pure_verification_passed",
+    } <= nested_reasons
+    assert next(
+        event for event in events if event.reason_code == "verifier_projection_fetched"
+    ).candidate_count == len(sample_database[1])
+    assert next(
+        event for event in events if event.reason_code == "verifier_rows_materialized"
+    ).candidate_count == len(sample_database[1])
     assert all(event.request_id_sha256 == sha256_text("audit-search-001") for event in events)
     assert all(event.question_sha256 == sha256_text(question) for event in events)
     terminal = next(event for event in events if event.stage is AuditStage.ANSWER)

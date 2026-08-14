@@ -4,7 +4,7 @@ import hashlib
 import json
 import threading
 from collections.abc import Sequence
-from time import perf_counter
+from time import monotonic, perf_counter, sleep
 
 import pytest
 
@@ -30,9 +30,14 @@ from finance_agent_core.evaluation.schema_embedding_artifacts import (
 )
 from finance_agent_core.evaluation.schema_embedding_models import SentenceTransformerCpuProvider
 from finance_agent_core.observability import (
+    AuditOutcome,
+    AuditStage,
+    BoundedAsyncAuditSink,
     BoundedMetrics,
     FaultTolerantAuditSink,
     InMemoryAuditSink,
+    RequestAuditRecorder,
+    bind_request_audit,
 )
 from finance_agent_core.release import ResolvedAgentRelease
 from finance_agent_core.retrieval.schema_dense import (
@@ -467,6 +472,248 @@ def test_redacted_audit_and_sink_failure_do_not_change_shadow_decision() -> None
     assert failed.status is observed.status is SchemaLinkStatus.FOUND
 
 
+def test_async_shadow_audit_reuses_request_invocation_and_sequence_without_raw_text() -> None:
+    provider = _CountingEmbeddingProvider()
+    memory = InMemoryAuditSink(max_events=10)
+    audit_metrics = BoundedMetrics()
+    audit_sink = BoundedAsyncAuditSink(memory, metrics=audit_metrics, queue_capacity=10)
+    worker = HybridSchemaLinkShadow(
+        settings=SchemaShadowSettings(mode=SchemaShadowMode.SHADOW),
+        index=_index(provider),
+        artifact_precondition=_artifact_evidence,
+        audit_sink=audit_sink,
+    )
+    observer = AsyncSchemaLinkShadowObserver(worker)
+    trace = _trace()
+    recorder = RequestAuditRecorder(
+        request_id=trace.route_decision.draft.request_id,
+        question=trace.route_decision.draft.question,
+        sink=audit_sink,
+    )
+
+    try:
+        assert recorder.emit(
+            stage=AuditStage.REQUEST,
+            outcome=AuditOutcome.STARTED,
+            reason_code="request_received",
+            duration_ms=0,
+        )
+        with bind_request_audit(recorder):
+            assert observer.submit(trace)
+        assert observer.drain(timeout_seconds=2)
+        shadow_snapshot = observer.snapshot()
+    finally:
+        assert observer.shutdown(timeout_seconds=2)
+        assert audit_sink.close(timeout_seconds=2)
+
+    events = memory.snapshot()
+    assert [event.event_sequence for event in events] == [1, 2]
+    assert {event.invocation_id_sha256 for event in events} == {recorder.invocation_id_sha256}
+    shadow_event = events[1]
+    assert shadow_event.stage is AuditStage.SCHEMA_LINK_SHADOW
+    serialized = shadow_event.model_dump_json()
+    assert trace.route_decision.draft.question not in serialized
+    assert "운용 비용률" not in serialized
+    assert shadow_snapshot.audit_emit_attempt_count == 1
+    assert shadow_snapshot.audit_emit_success_count == 1
+    assert shadow_snapshot.audit_emit_failure_count == 0
+    assert shadow_snapshot.correlation_failure_count == 0
+
+
+def test_expected_audit_sink_rejects_missing_or_wrong_recorder_before_provider() -> None:
+    provider = _CountingEmbeddingProvider()
+    expected_memory = InMemoryAuditSink()
+    expected_metrics = BoundedMetrics()
+    expected_sink = BoundedAsyncAuditSink(expected_memory, metrics=expected_metrics)
+    wrong_sink = BoundedAsyncAuditSink(InMemoryAuditSink())
+    worker = HybridSchemaLinkShadow(
+        settings=SchemaShadowSettings(mode=SchemaShadowMode.SHADOW),
+        index=_index(provider),
+        artifact_precondition=_artifact_evidence,
+        audit_sink=expected_sink,
+    )
+    observer = AsyncSchemaLinkShadowObserver(worker)
+    trace = _trace()
+    wrong_recorder = RequestAuditRecorder(
+        request_id="wrong-recorder",
+        question=trace.route_decision.draft.question,
+        sink=wrong_sink,
+    )
+    wrong_request_same_sink = RequestAuditRecorder(
+        request_id="other-request",
+        question=trace.route_decision.draft.question,
+        sink=expected_sink,
+    )
+    wrong_question_same_sink = RequestAuditRecorder(
+        request_id=trace.route_decision.draft.request_id,
+        question="다른 요청의 원문",
+        sink=expected_sink,
+    )
+    audit_before = expected_metrics.snapshot()
+
+    try:
+        assert not observer.submit(trace)
+        with bind_request_audit(wrong_recorder):
+            assert not observer.submit(trace)
+        with bind_request_audit(wrong_request_same_sink):
+            assert not observer.submit(trace)
+        with bind_request_audit(wrong_question_same_sink):
+            assert not observer.submit(trace)
+        shadow_snapshot = observer.snapshot()
+        audit_after = expected_metrics.snapshot()
+    finally:
+        assert observer.shutdown(timeout_seconds=1)
+        assert expected_sink.close(timeout_seconds=1)
+        assert wrong_sink.close(timeout_seconds=1)
+
+    assert provider.query_calls == 0
+    assert not shadow_snapshot.started
+    assert shadow_snapshot.correlation_failure_count == 4
+    assert shadow_snapshot.accepted_count == 0
+    assert audit_before.counters == audit_after.counters == {}
+    assert audit_before.queue_depth == audit_after.queue_depth == 0
+    assert audit_before.inflight == audit_after.inflight == 0
+    assert expected_memory.snapshot() == ()
+
+
+def test_shadow_snapshot_counts_a_correlated_audit_enqueue_failure() -> None:
+    provider = _CountingEmbeddingProvider()
+    audit_sink = BoundedAsyncAuditSink(InMemoryAuditSink(), start_worker=False)
+    worker = HybridSchemaLinkShadow(
+        settings=SchemaShadowSettings(mode=SchemaShadowMode.SHADOW),
+        index=_index(provider),
+        artifact_precondition=_artifact_evidence,
+        audit_sink=audit_sink,
+    )
+    observer = AsyncSchemaLinkShadowObserver(worker)
+    trace = _trace()
+    recorder = RequestAuditRecorder(
+        request_id=trace.route_decision.draft.request_id,
+        question=trace.route_decision.draft.question,
+        sink=audit_sink,
+    )
+    try:
+        with bind_request_audit(recorder):
+            assert observer.submit(trace)
+        assert observer.drain(timeout_seconds=2)
+        snapshot = observer.snapshot()
+    finally:
+        assert observer.shutdown(timeout_seconds=2)
+        assert not audit_sink.close(timeout_seconds=2)
+
+    assert provider.query_calls == 1
+    assert snapshot.audit_emit_attempt_count == 1
+    assert snapshot.audit_emit_success_count == 0
+    assert snapshot.audit_emit_failure_count == 1
+
+
+def test_shadow_runtime_metrics_separate_operational_from_normal_abstention() -> None:
+    operational_provider = _CountingEmbeddingProvider()
+
+    def fail_gate() -> SchemaEmbeddingArtifactGateEvidence:
+        raise RuntimeError("artifact unavailable")
+
+    operational = AsyncSchemaLinkShadowObserver(
+        HybridSchemaLinkShadow(
+            settings=SchemaShadowSettings(mode=SchemaShadowMode.SHADOW),
+            index=_index(operational_provider),
+            artifact_precondition=fail_gate,
+        )
+    )
+    normal_provider = _CountingEmbeddingProvider()
+    normal = AsyncSchemaLinkShadowObserver(_shadow(normal_provider, minimum_margin=2.0))
+    try:
+        assert operational.submit(_trace())
+        assert normal.submit(_trace())
+        assert operational.drain(timeout_seconds=2)
+        assert normal.drain(timeout_seconds=2)
+        operational_snapshot = operational.snapshot()
+        normal_snapshot = normal.snapshot()
+    finally:
+        assert operational.shutdown(timeout_seconds=2)
+        assert normal.shutdown(timeout_seconds=2)
+
+    assert operational_provider.query_calls == 0
+    assert operational_snapshot.completed_count == 1
+    assert operational_snapshot.operational_failure_count == 1
+    assert normal_provider.query_calls == 1
+    assert normal_snapshot.completed_count == 1
+    assert normal_snapshot.operational_failure_count == 0
+
+
+class _ManualMonotonicClock:
+    def __init__(self) -> None:
+        self.value = 0.0
+
+    def __call__(self) -> float:
+        return self.value
+
+    def advance(self, seconds: float) -> None:
+        self.value += seconds
+
+
+def test_shadow_snapshot_reports_stall_and_shutdown_uses_one_deadline() -> None:
+    provider = _BlockingQueryProvider()
+    clock = _ManualMonotonicClock()
+    worker = _shadow(provider)
+    observer = AsyncSchemaLinkShadowObserver(
+        worker,
+        settings=SchemaShadowQueueSettings(
+            queue_capacity=1,
+            stall_timeout_seconds=0.1,
+        ),
+        monotonic_clock=clock,
+    )
+    assert observer.enabled
+    assert observer.submit(_trace())
+    assert provider.entered.wait(timeout=1)
+    clock.advance(0.2)
+    stalled = observer.snapshot()
+    assert stalled.stalled
+    assert stalled.pending_count == 1
+    assert stalled.inflight == 1
+    assert stalled.oldest_pending_age_seconds == pytest.approx(0.2)
+    assert stalled.no_progress_age_seconds == pytest.approx(0.2)
+
+    started = monotonic()
+    assert not observer.shutdown(timeout_seconds=0.1)
+    elapsed = monotonic() - started
+    assert elapsed < 0.17
+    failed_shutdown = observer.snapshot()
+    assert failed_shutdown.shutdown_started
+    assert failed_shutdown.shutdown_completed
+    assert failed_shutdown.shutdown_succeeded is False
+    assert not failed_shutdown.accepting
+
+    provider.release.set()
+    deadline = monotonic() + 2
+    while observer.is_alive and monotonic() < deadline:
+        sleep(0.01)
+    assert not observer.is_alive
+
+
+def test_shadow_snapshot_exposes_an_unexpected_dead_worker() -> None:
+    provider = _CountingEmbeddingProvider()
+    observer = AsyncSchemaLinkShadowObserver(_shadow(provider))
+    observer._run = lambda: None  # type: ignore[method-assign]  # noqa: SLF001
+
+    assert observer.submit(_trace())
+    deadline = monotonic() + 1
+    while observer.is_alive and monotonic() < deadline:
+        sleep(0.01)
+    snapshot = observer.snapshot()
+    assert snapshot.started
+    assert not snapshot.worker_alive
+    assert snapshot.accepting
+    assert snapshot.pending_count == 1
+    assert snapshot.accepted_count == 1
+    assert snapshot.completed_count == 0
+    assert provider.query_calls == 0
+    started = monotonic()
+    assert not observer.shutdown(timeout_seconds=1, drain=True)
+    assert monotonic() - started < 0.2
+
+
 class _MutatingExplodingObserver:
     def submit(self, trace: PlanningTrace) -> bool:
         trace.route_decision.draft.product_families.clear()
@@ -535,13 +782,10 @@ def test_agent_does_not_wait_for_blocking_embedding_and_worker_shuts_down(
 
 def test_bounded_shadow_queue_drops_without_blocking_and_records_metric() -> None:
     provider = _BlockingQueryProvider()
-    memory = InMemoryAuditSink(max_events=20)
-    metrics = BoundedMetrics()
     worker = HybridSchemaLinkShadow(
         settings=SchemaShadowSettings(mode=SchemaShadowMode.SHADOW),
         index=_index(provider),
         artifact_precondition=_artifact_evidence,
-        audit_sink=FaultTolerantAuditSink(memory, metrics),
     )
     observer = AsyncSchemaLinkShadowObserver(
         worker,
@@ -555,9 +799,10 @@ def test_bounded_shadow_queue_drops_without_blocking_and_records_metric() -> Non
         started = perf_counter()
         assert not observer.submit(_trace(span="운용 비용률"))
         assert perf_counter() - started < 0.05
-        snapshot = metrics.snapshot()
-        assert snapshot.counters["queue_drops_total"] == 1
-        assert not any(event.reason_code == "shadow_queue_full" for event in memory.snapshot())
+        snapshot = observer.snapshot()
+        assert snapshot.queue_drop_count == 1
+        assert snapshot.accepted_count == 2
+        assert snapshot.pending_count == 2
     finally:
         provider.release.set()
         assert observer.drain(timeout_seconds=2)

@@ -1,7 +1,8 @@
 # Schema Dense Stage 4 구현·Stage 5 실험 상태 보고서
 
 - 기준일: 2026-08-13
-- 기준 commit: `836828e346aa77e10f76225c3c038aeddb441be1`
+- 기준 base commit: `ea380ed9774a7bedeb2ede9e867d214cfbf9b318`
+- 검증 대상: 위 clean commit 뒤의 미커밋 Shadow 운영 계약 변경
 - 현재 모드: production OFF, 평가·운영 release에서도 Shadow 주입 차단
 - 결론: 모델 파일 고정, 관측 계약, 외부 blind harness, Shadow 격리와 Docker
   컴포넌트 측정까지 구현했지만 **사용자-visible 활성화는 승인하지 않음**
@@ -122,7 +123,16 @@ Shadow는 실제 질문을 관찰해 Dense 후보를 계산하지만 그 결과�
 - Shadow가 받은 `PlanningTrace`는 실행에 쓰는 trace와 별도로 복제하고 결과를 폐기
 - trusted bounded async observer만 Agent에 주입 가능하며 Provider·queue·audit 오류가
   QueryPlan·SQL·응답을 바꾸지 않음
-- shutdown과 submit 경쟁에서도 종료 뒤 처리되지 않은 trace가 남지 않도록 수명주기 잠금
+- `submit()` 시 요청의 `RequestAuditRecorder`를 함께 보존해 비동기 event도 같은
+  invocation hash와 연속 sequence를 사용. 기대 audit sink가 누락·불일치하면 Embedding 전 차단
+- durable Audit 지표와 분리된 bounded Shadow snapshot으로 accepted/completed, queue/inflight
+  peak, drop, operational/correlation/audit emit 실패, worker·stall·shutdown 상태를 집계
+- `FOUND/CONFLICT`, 낮은 score·margin, capable field 없음은 정상 관찰 결과로 두고,
+  artifact·embedding·internal·inflight 실패만 operational failure로 분류
+- queue drop, operational/correlation/audit emit 실패, worker death·stall은 readiness를
+  재시작 전까지 `degraded`로 고정. observer 없음/OFF는 `disabled`, lazy 미시작은 `ok`
+- 종료는 요청 worker → Shadow → audit 순서이며 하나의 deadline을 공유. shutdown과 submit
+  경쟁에서도 종료 뒤 처리되지 않은 trace가 남지 않도록 수명주기 잠금
 - 실제 SQLite 경로에서 Shadow 유무의 응답을 byte 단위로 비교
 
 현재 AgentReleaseManifest는 Schema Dense를 `disabled_offline_only`로 고정한다. Core와
@@ -155,8 +165,8 @@ HTTP p95·timeout·메모리를 의미하지 않는다.
 
 | 검증 | 결과 |
 | --- | ---: |
-| Agent Core 전체, 승인 네 SQLite read-only 포함 | 1,219 passed |
-| FastAPI Backend 전체 | 246 passed, 기존 fork warning 2건 |
+| Agent Core 전체, 승인 네 SQLite read-only 포함 | 1,225 passed |
+| FastAPI Backend 전체 | 258 passed, 기존 fork warning 2건 |
 | Agent Core Ruff lint | 통과 |
 | Agent Core Ruff format | 통과 |
 | 문서·baseline·내부 링크 검사 | 66 Markdown, 47 baselines 통과 |
@@ -177,7 +187,7 @@ Stage 4 코드 배선과 로컬 결정론적 후보 기준선은 완료했다. �
 **활성화 차단 유지**다. 다음 조건을 순서대로 모두 충족한 뒤에만 별도 승인을
 검토한다.
 
-1. 현재 변경을 clean commit과 exact OCI image digest로 다시 고정
+1. 현재 Shadow 운영 계약 변경을 승인된 clean commit과 exact OCI image digest로 다시 고정
 2. 독립 작성자가 label 없는 질문·비공개 정답키·commitment 제공
 3. 독립 평가자가 exact image를 실행하고 prediction hash를 외부 append-only 저장소에 기록
 4. BGE·KURE 최초 1회 동시 blind 결과와 OOD false accept 0 확인

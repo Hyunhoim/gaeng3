@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import queue
 import re
 import threading
+from collections import deque
 from collections.abc import Callable, Sequence
+from dataclasses import dataclass
 from enum import StrEnum
 from time import monotonic, perf_counter
 from typing import Literal, Protocol
@@ -17,6 +20,7 @@ from finance_agent_core.agent.planning_policy import (
     PlanningSemanticIssue,
     PlanningTrace,
 )
+from finance_agent_core.agent.safety import normalize_user_question
 from finance_agent_core.config import FieldRegistry, load_field_registry
 from finance_agent_core.config.capability import CapabilityMatrix, load_capability_matrix
 from finance_agent_core.contracts.queryplan import ProductFamily
@@ -25,8 +29,10 @@ from finance_agent_core.observability import (
     AuditEvent,
     AuditOutcome,
     AuditStage,
+    BoundedAsyncAuditSink,
     FaultTolerantAuditSink,
-    MetricCounter,
+    RequestAuditRecorder,
+    current_request_audit,
 )
 from finance_agent_core.retrieval.schema_dense import (
     DenseSchemaIndex,
@@ -142,6 +148,38 @@ class SchemaShadowSettings(SchemaShadowModel):
 class SchemaShadowQueueSettings(SchemaShadowModel):
     worker_count: Literal[1] = 1
     queue_capacity: int = Field(default=8, ge=1, le=128)
+    stall_timeout_seconds: float = Field(default=5.0, gt=0, le=60)
+
+
+class SchemaShadowRuntimeSnapshot(SchemaShadowModel):
+    """Payload-free process-local state for the optional Shadow worker."""
+
+    schema_version: Literal["1.0"] = "1.0"
+    enabled: bool
+    mode: SchemaShadowMode
+    started: bool
+    accepting: bool
+    worker_alive: bool
+    shutdown_started: bool
+    shutdown_completed: bool
+    shutdown_succeeded: bool | None
+    queue_depth: int = Field(ge=0)
+    inflight: int = Field(ge=0, le=1)
+    peak_queue_depth: int = Field(ge=0)
+    peak_inflight: int = Field(ge=0, le=1)
+    pending_count: int = Field(ge=0)
+    oldest_pending_age_seconds: float | None = Field(default=None, ge=0)
+    no_progress_age_seconds: float | None = Field(default=None, ge=0)
+    stall_timeout_seconds: float = Field(gt=0, le=60)
+    stalled: bool
+    accepted_count: int = Field(ge=0)
+    completed_count: int = Field(ge=0)
+    queue_drop_count: int = Field(ge=0)
+    operational_failure_count: int = Field(ge=0)
+    correlation_failure_count: int = Field(ge=0)
+    audit_emit_attempt_count: int = Field(ge=0)
+    audit_emit_success_count: int = Field(ge=0)
+    audit_emit_failure_count: int = Field(ge=0)
 
 
 class SchemaLinkShadowObserver(Protocol):
@@ -304,7 +342,7 @@ class HybridSchemaLinkShadow:
         artifact_precondition: ArtifactPrecondition | None = None,
         registry: FieldRegistry | None = None,
         capability_matrix: CapabilityMatrix | None = None,
-        audit_sink: FaultTolerantAuditSink | None = None,
+        audit_sink: FaultTolerantAuditSink | BoundedAsyncAuditSink | None = None,
     ) -> None:
         self.settings = settings or SchemaShadowSettings()
         self.index = index
@@ -313,6 +351,30 @@ class HybridSchemaLinkShadow:
         self.capability_matrix = capability_matrix or load_capability_matrix()
         self.audit_sink = audit_sink
         self._inflight = threading.BoundedSemaphore(self.settings.max_inflight)
+
+    @property
+    def expected_audit_sink(self) -> BoundedAsyncAuditSink | None:
+        """Return the server-owned sink that requires request correlation."""
+
+        if type(self.audit_sink) is BoundedAsyncAuditSink:
+            return self.audit_sink
+        return None
+
+    @staticmethod
+    def audit_recorder_matches_trace(
+        recorder: RequestAuditRecorder | None,
+        trace: PlanningTrace,
+        expected_sink: BoundedAsyncAuditSink,
+    ) -> bool:
+        """Bind a queued task to its exact request, not merely a shared sink."""
+
+        draft = trace.route_decision.draft
+        return bool(
+            recorder is not None
+            and recorder.sink is expected_sink
+            and recorder.request_id == draft.request_id
+            and normalize_user_question(recorder.question) == draft.question
+        )
 
     def should_enqueue(self, trace: PlanningTrace) -> bool:
         """Cheap request-thread guard; it never verifies files or calls a model."""
@@ -329,17 +391,48 @@ class HybridSchemaLinkShadow:
             and route.draft.intent not in {InteractionIntent.CLARIFY, InteractionIntent.UNSUPPORTED}
         )
 
-    def observe(self, trace: PlanningTrace) -> tuple[SchemaLinkDecision, ...]:
+    def observe(
+        self,
+        trace: PlanningTrace,
+        *,
+        audit_recorder: RequestAuditRecorder | None = None,
+    ) -> tuple[SchemaLinkDecision, ...]:
+        decisions, _ = self.observe_with_audit(trace, audit_recorder=audit_recorder)
+        return decisions
+
+    def observe_with_audit(
+        self,
+        trace: PlanningTrace,
+        *,
+        audit_recorder: RequestAuditRecorder | None = None,
+    ) -> tuple[tuple[SchemaLinkDecision, ...], bool | None]:
         started = perf_counter()
         spans = trace.planning_decision.unresolved_spans or ("disabled",)
+        expected_sink = self.expected_audit_sink
+        if expected_sink is not None and not self.audit_recorder_matches_trace(
+            audit_recorder,
+            trace,
+            expected_sink,
+        ):
+            return (
+                tuple(
+                    self._abstain(span, trace, "shadow_audit_correlation_failure") for span in spans
+                ),
+                None,
+            )
         try:
             decisions = self._observe_safely(trace)
         except Exception:  # noqa: BLE001 - a shadow observer can never alter the Agent result
             decisions = tuple(
                 self._abstain(span, trace, "shadow_internal_failure") for span in spans
             )
-        self._emit_audit(trace, decisions, (perf_counter() - started) * 1000)
-        return decisions
+        emitted = self._emit_audit(
+            trace,
+            decisions,
+            (perf_counter() - started) * 1000,
+            audit_recorder=audit_recorder,
+        )
+        return decisions, emitted
 
     def _observe_safely(self, trace: PlanningTrace) -> tuple[SchemaLinkDecision, ...]:
         planning = trace.planning_decision
@@ -389,11 +482,6 @@ class HybridSchemaLinkShadow:
                 for span in planning.unresolved_spans
             )
         try:
-            if self.audit_sink is not None:
-                try:
-                    self.audit_sink.metrics.increment(MetricCounter.SHADOW_OBSERVATIONS)
-                except Exception:
-                    pass
             return tuple(
                 self._link_span(
                     span,
@@ -576,9 +664,11 @@ class HybridSchemaLinkShadow:
         trace: PlanningTrace,
         decisions: tuple[SchemaLinkDecision, ...],
         duration_ms: float,
-    ) -> None:
+        *,
+        audit_recorder: RequestAuditRecorder | None,
+    ) -> bool | None:
         if self.audit_sink is None:
-            return
+            return None
         priority = {
             SchemaLinkStatus.CONFLICT: 3,
             SchemaLinkStatus.ABSTAIN: 2,
@@ -593,7 +683,26 @@ class HybridSchemaLinkShadow:
             SchemaLinkStatus.DISABLED: AuditOutcome.BLOCKED,
         }[selected.status]
         model_revision = self.index.manifest.provider.model_revision if self.index else None
-        self.audit_sink.emit_lazy(
+        fields = {
+            "model_revision": model_revision,
+            "model_snapshot_manifest_sha256": selected.model_snapshot_manifest_id,
+            "index_manifest_sha256": selected.index_manifest_id,
+            "route_disposition": trace.route_decision.disposition,
+            "interaction_intent": trace.route_decision.draft.intent,
+            "product_families": trace.planning_decision.product_families,
+            "shadow_candidate_count": sum(len(item.candidates) for item in decisions),
+        }
+        if audit_recorder is not None:
+            return audit_recorder.emit(
+                stage=AuditStage.SCHEMA_LINK_SHADOW,
+                outcome=outcome,
+                reason_code=selected.reason_code,
+                duration_ms=duration_ms,
+                **fields,
+            )
+        if type(self.audit_sink) is BoundedAsyncAuditSink:
+            return False
+        return self.audit_sink.emit_lazy(
             lambda: AuditEvent.redacted(
                 stage=AuditStage.SCHEMA_LINK_SHADOW,
                 outcome=outcome,
@@ -601,15 +710,27 @@ class HybridSchemaLinkShadow:
                 duration_ms=duration_ms,
                 request_id=trace.route_decision.draft.request_id,
                 question=trace.route_decision.draft.question,
-                model_revision=model_revision,
-                model_snapshot_manifest_sha256=selected.model_snapshot_manifest_id,
-                index_manifest_sha256=selected.index_manifest_id,
-                route_disposition=trace.route_decision.disposition,
-                interaction_intent=trace.route_decision.draft.intent,
-                product_families=trace.planning_decision.product_families,
-                shadow_candidate_count=sum(len(item.candidates) for item in decisions),
+                **fields,
             )
         )
+
+
+@dataclass(frozen=True, slots=True)
+class _QueuedShadowTask:
+    trace: PlanningTrace
+    audit_recorder: RequestAuditRecorder | None
+    enqueued_at: float
+
+
+_OPERATIONAL_REASON_CODES = frozenset(
+    {
+        "shadow_artifact_missing",
+        "shadow_artifact_unverified",
+        "shadow_embedding_failure",
+        "shadow_inflight_busy",
+        "shadow_internal_failure",
+    }
+)
 
 
 class AsyncSchemaLinkShadowObserver:
@@ -625,18 +746,50 @@ class AsyncSchemaLinkShadowObserver:
         worker: HybridSchemaLinkShadow,
         *,
         settings: SchemaShadowQueueSettings | None = None,
+        monotonic_clock: Callable[[], float] = monotonic,
     ) -> None:
         if type(worker) is not HybridSchemaLinkShadow:
             raise TypeError("shadow worker must be the trusted HybridSchemaLinkShadow")
         self._worker = worker
         self.settings = settings or SchemaShadowQueueSettings()
-        self._queue: queue.Queue[PlanningTrace] = queue.Queue(maxsize=self.settings.queue_capacity)
+        self._clock = monotonic_clock
+        initial = float(self._clock())
+        if not math.isfinite(initial) or initial < 0:
+            raise ValueError("shadow monotonic clock must be finite and non-negative")
+        self._last_clock = initial
+        self._queue: queue.Queue[_QueuedShadowTask] = queue.Queue(
+            maxsize=self.settings.queue_capacity
+        )
         self._stop = threading.Event()
         self._condition = threading.Condition()
+        self._shutdown_lock = threading.Lock()
         self._accepting = True
         self._thread: threading.Thread | None = None
         self._unfinished = 0
         self._inflight_count = 0
+        self._pending_enqueued_at: deque[float] = deque()
+        self._last_progress_at = initial
+        self._peak_queue_depth = 0
+        self._peak_inflight = 0
+        self._accepted_count = 0
+        self._completed_count = 0
+        self._queue_drop_count = 0
+        self._operational_failure_count = 0
+        self._correlation_failure_count = 0
+        self._audit_emit_attempt_count = 0
+        self._audit_emit_success_count = 0
+        self._audit_emit_failure_count = 0
+        self._shutdown_started = False
+        self._shutdown_completed = False
+        self._shutdown_succeeded: bool | None = None
+
+    @property
+    def enabled(self) -> bool:
+        return self._worker.settings.mode is SchemaShadowMode.SHADOW
+
+    @property
+    def expected_audit_sink(self) -> BoundedAsyncAuditSink | None:
+        return self._worker.expected_audit_sink
 
     @property
     def is_alive(self) -> bool:
@@ -657,82 +810,164 @@ class AsyncSchemaLinkShadowObserver:
     def submit(self, trace: PlanningTrace) -> bool:
         if not self._worker.should_enqueue(trace):
             return False
-        dropped = False
+        recorder = current_request_audit()
+        expected_sink = self._worker.expected_audit_sink
         with self._condition:
             if not self._accepting:
                 return False
+            if expected_sink is not None and not self._worker.audit_recorder_matches_trace(
+                recorder,
+                trace,
+                expected_sink,
+            ):
+                self._correlation_failure_count += 1
+                return False
+            if self._thread is not None and not self._thread.is_alive():
+                self._operational_failure_count += 1
+                return False
             self._ensure_started_locked()
+            accepted_at = self._read_clock_locked()
+            task = _QueuedShadowTask(
+                trace=trace,
+                audit_recorder=recorder,
+                enqueued_at=accepted_at,
+            )
             try:
-                self._queue.put_nowait(trace)
+                self._queue.put_nowait(task)
             except queue.Full:
-                dropped = True
+                self._queue_drop_count += 1
+                self._condition.notify_all()
+                return False
             else:
                 self._unfinished += 1
-            self._set_gauges_locked()
+                self._accepted_count += 1
+                if not self._pending_enqueued_at:
+                    self._last_progress_at = accepted_at
+                self._pending_enqueued_at.append(accepted_at)
+            self._update_peaks_locked()
             self._condition.notify_all()
-        if dropped:
-            self._record_drop(trace)
-            return False
         return True
 
     def _run(self) -> None:
         while not self._stop.is_set() or not self._queue.empty():
             try:
-                trace = self._queue.get(timeout=0.05)
+                task = self._queue.get(timeout=0.05)
             except queue.Empty:
                 continue
             with self._condition:
                 self._inflight_count = 1
-                self._set_gauges_locked()
+                self._update_peaks_locked()
+            operational = False
+            audit_attempted = False
+            emitted: bool | None = None
             try:
-                self._worker.observe(trace)
+                decisions, emitted = self._worker.observe_with_audit(
+                    task.trace,
+                    audit_recorder=task.audit_recorder,
+                )
+                operational = any(
+                    decision.reason_code in _OPERATIONAL_REASON_CODES for decision in decisions
+                )
+                audit_attempted = self._worker.audit_sink is not None
             except Exception:
                 # HybridSchemaLinkShadow already isolates failures, and this
                 # second boundary protects the process from injected workers.
-                pass
+                operational = True
+                audit_attempted = self._worker.audit_sink is not None
+                emitted = False if audit_attempted else None
             finally:
                 self._queue.task_done()
                 with self._condition:
                     self._inflight_count = 0
                     self._unfinished -= 1
-                    self._set_gauges_locked()
+                    self._completed_count += 1
+                    if operational:
+                        self._operational_failure_count += 1
+                    if audit_attempted:
+                        self._audit_emit_attempt_count += 1
+                        if emitted:
+                            self._audit_emit_success_count += 1
+                        else:
+                            self._audit_emit_failure_count += 1
+                    if self._pending_enqueued_at:
+                        self._pending_enqueued_at.popleft()
+                    self._last_progress_at = self._read_clock_locked()
                     self._condition.notify_all()
 
-    def _set_gauges_locked(self) -> None:
-        if self._worker.audit_sink is None:
-            return
+    def _update_peaks_locked(self) -> None:
+        self._peak_queue_depth = max(self._peak_queue_depth, self._queue.qsize())
+        self._peak_inflight = max(self._peak_inflight, self._inflight_count)
+
+    def _read_clock_locked(self) -> float:
         try:
-            self._worker.audit_sink.metrics.set_gauges(
+            observed = float(self._clock())
+        except Exception:  # noqa: BLE001 - telemetry cannot alter the Agent result
+            self._operational_failure_count += 1
+            return self._last_clock
+        if not math.isfinite(observed):
+            self._operational_failure_count += 1
+            return self._last_clock
+        self._last_clock = max(self._last_clock, observed)
+        return self._last_clock
+
+    def snapshot(self) -> SchemaShadowRuntimeSnapshot:
+        with self._condition:
+            now = self._read_clock_locked()
+            pending = self._unfinished
+            oldest_age = (
+                max(0.0, now - self._pending_enqueued_at[0]) if self._pending_enqueued_at else None
+            )
+            no_progress_age = max(0.0, now - self._last_progress_at) if pending else None
+            stalled = bool(
+                pending
+                and no_progress_age is not None
+                and no_progress_age >= self.settings.stall_timeout_seconds
+            )
+            thread = self._thread
+            return SchemaShadowRuntimeSnapshot(
+                enabled=self.enabled,
+                mode=self._worker.settings.mode,
+                started=thread is not None,
+                accepting=self._accepting,
+                worker_alive=bool(thread is not None and thread.is_alive()),
+                shutdown_started=self._shutdown_started,
+                shutdown_completed=self._shutdown_completed,
+                shutdown_succeeded=self._shutdown_succeeded,
                 queue_depth=self._queue.qsize(),
                 inflight=self._inflight_count,
+                peak_queue_depth=self._peak_queue_depth,
+                peak_inflight=self._peak_inflight,
+                pending_count=pending,
+                oldest_pending_age_seconds=oldest_age,
+                no_progress_age_seconds=no_progress_age,
+                stall_timeout_seconds=self.settings.stall_timeout_seconds,
+                stalled=stalled,
+                accepted_count=self._accepted_count,
+                completed_count=self._completed_count,
+                queue_drop_count=self._queue_drop_count,
+                operational_failure_count=self._operational_failure_count,
+                correlation_failure_count=self._correlation_failure_count,
+                audit_emit_attempt_count=self._audit_emit_attempt_count,
+                audit_emit_success_count=self._audit_emit_success_count,
+                audit_emit_failure_count=self._audit_emit_failure_count,
             )
-        except Exception:
-            pass
-
-    def _record_drop(self, trace: PlanningTrace) -> None:
-        del trace
-        sink = self._worker.audit_sink
-        if sink is None:
-            return
-        try:
-            sink.metrics.increment(MetricCounter.QUEUE_DROPS)
-        except Exception:
-            pass
-        # Queue saturation is handled on the user request thread.  Calling an
-        # arbitrary durable sink here could turn a telemetry outage into user
-        # latency.  The bounded in-memory counter is the only synchronous work;
-        # detailed events remain a worker-thread responsibility.
 
     def drain(self, *, timeout_seconds: float = 5.0) -> bool:
         if timeout_seconds < 0:
             raise ValueError("drain timeout cannot be negative")
         deadline = monotonic() + timeout_seconds
+        return self._drain_until(deadline)
+
+    def _drain_until(self, deadline: float) -> bool:
         with self._condition:
             while self._unfinished:
+                thread = self._thread
+                if thread is not None and not thread.is_alive():
+                    return False
                 remaining = deadline - monotonic()
                 if remaining <= 0:
                     return False
-                self._condition.wait(timeout=remaining)
+                self._condition.wait(timeout=min(remaining, 0.05))
         return True
 
     def shutdown(
@@ -743,17 +978,30 @@ class AsyncSchemaLinkShadowObserver:
     ) -> bool:
         if timeout_seconds < 0:
             raise ValueError("shutdown timeout cannot be negative")
-        with self._condition:
-            self._accepting = False
-        drained = True
-        if drain:
-            drained = self.drain(timeout_seconds=timeout_seconds)
-        self._stop.set()
-        thread = self._thread
-        if thread is None:
-            return drained
-        thread.join(timeout=timeout_seconds)
-        return drained and not thread.is_alive()
+        deadline = monotonic() + timeout_seconds
+        if not self._shutdown_lock.acquire(timeout=max(0.0, deadline - monotonic())):
+            return False
+        try:
+            with self._condition:
+                if self._shutdown_completed:
+                    return self._shutdown_succeeded is True
+                self._shutdown_started = True
+                self._accepting = False
+                thread = self._thread
+            drained = not drain or self._drain_until(deadline)
+            self._stop.set()
+            remaining = deadline - monotonic()
+            if thread is not None and remaining > 0:
+                thread.join(timeout=remaining)
+            stopped = thread is None or not thread.is_alive()
+            succeeded = drained and stopped
+            with self._condition:
+                self._shutdown_completed = True
+                self._shutdown_succeeded = succeeded
+                self._condition.notify_all()
+            return succeeded
+        finally:
+            self._shutdown_lock.release()
 
     def __enter__(self) -> AsyncSchemaLinkShadowObserver:
         return self
@@ -775,5 +1023,6 @@ __all__ = [
     "SchemaLinkStatus",
     "SchemaShadowMode",
     "SchemaShadowQueueSettings",
+    "SchemaShadowRuntimeSnapshot",
     "SchemaShadowSettings",
 ]

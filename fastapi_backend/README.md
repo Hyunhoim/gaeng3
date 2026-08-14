@@ -79,6 +79,14 @@ Backend는 다음 Agent 공개 계약만 사용
 - 하나라도 누락·불일치: HTTP 503, `status=degraded`
 - 파일 경로와 내부 오류 정보는 공개 응답에 노출하지 않음
 - `fund_execution_policy`는 공모펀드가 기본 잠금인지, 명시적 버전 승인으로 열렸는지 표시
+- `audit_status`와 `shadow_status`는 각각 `disabled|ok|degraded`만 표시
+- 활성 Shadow의 queue drop, artifact·embedding 오류, audit correlation 실패, worker
+  death·stall은 답변을 바꾸지 않지만 `shadow_status=degraded`와 HTTP 503으로 운영자에게 알림
+
+종료 시에는 새 요청을 멈춘 뒤 `요청 worker → Shadow worker → audit sink` 순서로 정리한다.
+세 단계는 하나의 timeout 예산을 공유해 Shadow의 마지막 audit event가 저장되기 전에 sink가
+닫히거나 단계별 timeout이 중복 소비되지 않게 한다. 현재 evaluation/production에서는
+Schema Dense와 Shadow가 OFF이고 observer 주입도 시작 단계에서 차단된다.
 
 ```bash
 curl --fail http://127.0.0.1:18001/health
@@ -310,6 +318,12 @@ curl --fail http://127.0.0.1:18002/health
 
 실험이 끝나면 환경변수와 override를 빼고 Backend를 재생성한 다음,
 `fund_execution_policy=locked`를 확인한다
+
+결정론적 API의 Router·SQLite·Oracle·Verifier·직렬화 구간 분해, 격리 Docker
+benchmark·soak 실행법과 2026-08-14 검증 결과는 다음 문서를 따른다.
+
+- [성능 원인 분해 실행 가이드](docs/deterministic-performance-decomposition.md)
+- [성능 원인 분해·Audit 검증 결과](docs/deterministic-performance-audit-report-2026-08-14.md)
 
 ## 8. 주요 환경변수
 

@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from typing import cast
 
 import pytest
+from fastapi import Request
 from finance_agent_core.observability import (
     AuditEvent,
     AuditOutcome,
@@ -16,7 +17,11 @@ from finance_agent_core.observability import (
 )
 from starlette.types import Message, Receive, Scope, Send
 
-from app.http_audit import AnswerHttpAuditMiddleware
+from app.http_audit import (
+    AnswerHttpAuditMiddleware,
+    mark_response_serialization_start,
+    request_agent_audit,
+)
 
 
 def _scope(sink: BoundedAsyncAuditSink) -> Scope:
@@ -101,6 +106,45 @@ def test_transport_audit_marks_response_aborted_on_cancellation() -> None:
 
     assert sink.close(timeout_seconds=1) is True
     _terminal_events(downstream)
+
+
+def test_transport_audit_times_only_marked_http_response_serialization() -> None:
+    downstream = InMemoryAuditSink()
+    sink = BoundedAsyncAuditSink(downstream)
+
+    async def application(scope: Scope, _receive: Receive, send: Send) -> None:
+        request = Request(scope)
+        recorder = request_agent_audit(
+            request,
+            request_id="serialization-audit-001",
+            question="직렬화 계측 질문",
+        )
+        assert recorder is not None
+        mark_response_serialization_start(request)
+        await send({"type": "http.response.start", "status": 200, "headers": []})
+        await send({"type": "http.response.body", "body": b"safe"})
+
+    async def successful_send(_message: Message) -> None:
+        return None
+
+    asyncio.run(
+        AnswerHttpAuditMiddleware(application)(
+            _scope(sink),
+            _receive,
+            successful_send,
+        )
+    )
+    assert sink.close(timeout_seconds=1) is True
+
+    events = downstream.snapshot()
+    assert [(event.stage, event.outcome, event.reason_code) for event in events] == [
+        (AuditStage.REQUEST, AuditOutcome.STARTED, "received"),
+        (AuditStage.SERIALIZATION, AuditOutcome.SUCCEEDED, "http_response_serialized"),
+        (AuditStage.REQUEST, AuditOutcome.SUCCEEDED, "response_completed"),
+    ]
+    assert events[1].duration_ms >= 0
+    assert events[1].request_id_sha256 == sha256_text("serialization-audit-001")
+    assert events[1].question_sha256 == sha256_text("직렬화 계측 질문")
 
 
 def test_transport_audit_ignores_non_answer_routes() -> None:
