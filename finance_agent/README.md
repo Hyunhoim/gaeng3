@@ -53,7 +53,7 @@ LLM은 수치 계산, 필터, 정렬, 상품 순위와 출처를 직접 만들�
 | 국내 ETF·ETN | 검색·상세·비교·집계·근거 검증 |
 | 해외 ETF·ETN | 검색·상세·비교·집계·교차 상품군 검색·근거 검증 |
 | 공모펀드 | 검색·비교·집계·grounded answer 내부 검증, 공식 실행은 정책상 비활성 |
-| 문서 검색 | 제공된 문서를 대상으로 하는 BM25·SQLite FTS 최소 기능 |
+| 문서 검색 | BM25·SQLite FTS 최소 기능과 외부 문서 승인·권한·해시·변조 차단 반입 계약. 실제 corpus는 승인 대기 |
 | Backend 연동 | 요청·응답 DTO, 오류 adapter와 JSON Schema 제공 |
 
 세부 필드와 제한은 [Capability matrix](docs/capability-matrix.md), 최신 구현·평가 상태는

@@ -1,6 +1,6 @@
 # BM25/SQLite FTS 문서 RAG 최소 계약
 
-마지막 갱신: 2026-07-30
+마지막 갱신: 2026-08-19
 
 ## 1. 범위
 
@@ -18,6 +18,10 @@ retrieval 계층이다. 생성형 모델이나 외부 수집기를 포함하지 
 - chunk text·문서 hash·출처 URI·기준일·metadata를 포함한 evidence
 - 동일 ID 재적재의 idempotency와 다른 내용 덮어쓰기 차단
 - 같은 relevance 구간에서 주최 측 제공 데이터 우선
+- 금융 내용·데이터 사용 권한 독립 review가 필요한 외부 문서 intake 계약
+- 출처·수집일·기준일·라이선스·본문 SHA-256 canonical manifest 봉인
+- 변조·경로 탈출·symbolic link·중복 JSON key·덮어쓰기 fail-closed
+- 검증된 UTF-8 `.txt`·`.md`만 새 읽기 전용 SQLite BM25 색인으로 build
 
 현재 제외:
 
@@ -26,6 +30,7 @@ retrieval 계층이다. 생성형 모델이나 외부 수집기를 포함하지 
 - embedding, cross-encoder, NER, 번역 모델
 - 문서 evidence를 자유 생성 답변으로 바꾸는 production provider
 - 문서 간 사실 충돌을 자동 판정하는 금융 의미 모델
+- 실제 외부 corpus, PDF·OCR·번역, Agent Release 활성화
 
 ## 2. 적재 계약
 
@@ -74,6 +79,11 @@ relevance 구간에서는 `provided`를 `external_approved`보다 우선한다.
 - 공식 제공 데이터와 충돌할 때 우선순위를 지킬 수 있는지
 - 개인정보·유료 콘텐츠·재배포 제한이 없는지
 
-금융 도메인 담당자가 후보 corpus와 활용 목적을 검토하고, AI 담당자가 적재
-manifest·hash·검색 품질 테스트를 추가한 뒤 활성화한다. 승인된 실제 corpus가
-없으므로 현재 테스트는 synthetic 문서만 사용한다.
+금융 도메인 담당자가 후보 corpus와 활용 목적을 검토하고, 데이터 사용 권한
+담당자가 저장·검색·공모전·배포 범위를 별도로 승인한다. AI 담당자는 그 기록과
+snapshot bytes를 manifest·hash·receipt로 묶고 검색 품질 테스트 후에만 활성화한다.
+
+상세 절차와 CLI는 [P0-5 외부 문서 반입 계약](p0-5-external-corpus-intake-2026-08-19.md)을
+따른다. 승인된 실제 corpus가 없으므로 현재 Release는
+`document_bm25=disabled_no_approved_corpus`를 유지하고, 테스트는 synthetic 문서만
+사용한다.

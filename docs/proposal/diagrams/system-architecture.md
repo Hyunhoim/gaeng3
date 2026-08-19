@@ -1,8 +1,8 @@
 # 금융상품 Agent 시스템 구성도
 
-상태: 초안 v0.3 · 설명회 계약 반영
+상태: 초안 v0.4 · P0-5 외부 문서 반입 계약 반영
 
-기준일: 2026-08-07
+기준일: 2026-08-19
 
 실선은 Agent Core와 FastAPI에서 검증된 경로, 점선은 외부 통합이 남은 경로다.
 
@@ -38,7 +38,8 @@ flowchart LR
 
     REGISTRY["Field Registry<br/>현재 의미 정본"] --> TTL["Ontology Turtle 5개<br/>생성·문법·정합성 검사 완료"]
 
-    CORPUS["승인된 외부 문서 corpus<br/>수집·검수 대기"] -.-> RAG["BM25 / SQLite FTS"]
+    CORPUS["실제 외부 문서 corpus<br/>출처·권한 승인 대기"] -.-> INTAKE["독립 review·HTTPS 출처<br/>권한·byte/normalized hash 봉인"]
+    INTAKE --> RAG["BM25 / SQLite FTS<br/>검증된 새 색인 build"]
     RAG -.-> EVIDENCE
 ```
 
@@ -57,6 +58,7 @@ flowchart LR
 - 도메인별 Ontology Turtle 5개와 field registry exact-match 검사
 - Ubuntu SSH Docker build·데이터 준비·Backend HTTP smoke
 - HyperCLOVA X fake transport·오류 계약
+- P0-5 외부 문서 독립 승인·사용 권한·해시·변조 차단·BM25 색인 build 계약
 
 ## 외부 통합 대기
 

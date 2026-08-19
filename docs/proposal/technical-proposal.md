@@ -73,8 +73,11 @@ field-level evidence와 기준일을 갖추며, 검증에 실패하면 근거 �
 ### 3.5 문서 설명
 
 BM25/SQLite FTS 기반 문서 검색의 적재·필터·출처·기준일 계약을 구현했다.
-현재는 synthetic contract 수준이며, 실제 투자설명서·약관·용어집은 출처와
-활용 범위를 확인한 뒤 연결한다.
+외부 문서는 금융·데이터 권한 독립 review, HTTPS 출처, 사용 권한 4종,
+byte·정규화 본문 SHA-256, canonical manifest, 변조·경로·덮어쓰기 차단을 통과해야
+별도 BM25 색인으로 build된다. 이 반입 계약은 합성 문서 24/24를 통과했지만,
+실제 투자설명서·약관·용어집은 출처·사용 권한·검색 품질을 확인한 뒤에만
+Release에 연결한다.
 
 ## 4. 시스템 구성도
 
@@ -98,7 +101,7 @@ BM25/SQLite FTS 기반 문서 검색의 적재·필터·출처·기준일 계약
 | SEARCH | 네 상품군 조건 검색·상세 조회, 복수 상품군 독립 검색과 family별 grounded answer | 공통 조건만 상품군별 실행·근거를 family별로 격리·직접 비교 금지 |
 | COMPARE | 같은 상품군의 정확한 두 상품 | 통화·기준일·결측 불일치 차단 |
 | AGGREGATE | 네 상품군 COUNT·MIN·MAX·AVG·제한 SUM | 독립 Python 재검산 |
-| EXPLAIN | 정형 evidence 설명, 문서 RAG 최소 계약 | 실제 corpus 승인 대기 |
+| EXPLAIN | 정형 evidence 설명, 문서 RAG·승인 반입 최소 계약 | 실제 corpus 출처·권한·검색 평가 대기 |
 | CLARIFY | 상품군·식별자·기준 누락 | Oracle·LLM 불필요 호출 차단 |
 | UNSUPPORTED | 전망·수익 보장·단정 추천 | 근거 없는 생성 금지 |
 

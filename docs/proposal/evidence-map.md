@@ -29,15 +29,16 @@
 | 기술완성도·성능 | 전체 테스트, 검색·집계 성능 기준선, family별 grounded answer, FastAPI·공식 GET·Ontology·Docker·provider·오류·재시도 계약 | 실제 HCX·NCP 공개 서버·장시간 부하 테스트 |
 | 창의성·확장성 | LLM 계획과 서버 계획의 exact-match gate, 독립 verifier, field evidence | 기존 방식 대비 비교표와 실제 확장 사례 |
 | 답변 정확성·완결성 | 상품명·수치·순위·근거·기준일 Answer Verifier와 red-team | external blind와 실제 사람 평가 |
-| 현업 활용성·리스크 관리 | 결측·stale·통화·추천 금지·fallback·오류 비노출·동일 요청 중복 비용 방지 | 실제 사용자 시나리오·화면 데모·NCP 운영 로그 |
+| 현업 활용성·리스크 관리 | 결측·stale·통화·추천 금지·fallback·오류 비노출·중복 비용 방지·외부 문서 출처·권한·해시 게이트 | 실제 사용자 시나리오·화면 데모·승인 corpus·NCP 운영 로그 |
 
 ## 정량 근거
 
 | 주장 | 값 | 정본 | 해석 제한 |
 | --- | ---: | --- | --- |
 | 원천 감사 | 4종 145,393행, 65/65 | [데이터 감사](../../finance_agent/docs/data-audit.md) | 제공 스냅샷 기준 |
-| 전체 코드 회귀 | Agent Core 1,272 passed·2 조건부 skip, Backend 320 passed·2 기존 warning | [P0-8 인수인계](../../finance_agent/docs/p0-8-retry-contract-handover-2026-08-19.md) | 단위·계약 회귀이며 독립 성능 평가가 아님 |
+| 전체 코드 회귀 | Agent Core 1,291 passed·2 조건부 skip, Backend 320 passed·2 기존 warning | [P0-5 인수인계](../../finance_agent/docs/p0-5-external-corpus-intake-2026-08-19.md)·[P0-8 인수인계](../../finance_agent/docs/p0-8-retry-contract-handover-2026-08-19.md) | 단위·계약 회귀이며 독립 성능 평가가 아님 |
 | 평가기 retry·중복 실행 제어 | 정상 동일 요청 200·200/Agent 1회, dataset 장애 503·503/Agent 2회, 강제 timeout 504 | [P0-8 baseline](../../finance_agent/evaluation/baselines/retry-contract-p0-8-v1.json)·[인수인계](../../finance_agent/docs/p0-8-retry-contract-handover-2026-08-19.md) | 로컬 Docker fault injection, 실제 evaluator·HCLX·NCP 아님 |
+| 외부 문서 반입 게이트 | 승인·권한·출처·해시·변조 차단·BM25 build 합성 계약 24/24 | [P0-5 baseline](../../finance_agent/evaluation/baselines/external-corpus-intake-contract-v1.json)·[인수인계](../../finance_agent/docs/p0-5-external-corpus-intake-2026-08-19.md) | 실제 외부 문서 0건, 승인·검색 정확도·Release 활성화 아님 |
 | 교차 상품군 SEARCH | 국내·해외 ETP 4/4 | [교차 SEARCH](../../finance_agent/docs/cross-family-search.md) | 공개 회귀, not blind |
 | 교차 상품군 grounded answer | expected·로컬 Qwen 각각 4/4; 생성 대상 2문항 모두 grounded; 실제 모델 호출 3회; fallback 0 | [교차 SEARCH](../../finance_agent/docs/cross-family-search.md)·[baseline](../../finance_agent/evaluation/baselines/cross-family-answer-v1.json) | 공개 4문항, not blind; 로컬 Qwen은 개발 전용 |
 | 내부 red-team | 수정 후 40/40 | [red-team 평가](../../finance_agent/docs/evaluation-internal-red-team.md) | self-authored, not blind |

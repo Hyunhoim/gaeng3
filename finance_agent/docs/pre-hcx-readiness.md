@@ -1,6 +1,6 @@
 # HyperCLOVA X 연결 전 준비 기준
 
-마지막 갱신: 2026-08-09
+마지막 갱신: 2026-08-19
 
 이 문서는 HyperCLOVA X API를 연결하기 전에 Agent Core에서 끝내야 할 구현,
 평가, 계약과 외부 확인 게이트를 추적하는 정본이다. 완료 표시는 코드·테스트·
@@ -43,6 +43,7 @@
 | 3A | 네 상품군 AGGREGATE | Decimal 계산·통화 gate·결측·기준일·독립 verifier·Backend evidence | 완료 |
 | 3B | 네 상품군 COMPARE | exact identity·field capability·통화·기준일·stale·독립 verifier·Backend evidence | 완료 |
 | 4 | BM25/SQLite FTS 문서 RAG | 적재·필터·top-k·근거·기준일·not-found 테스트 | 최소 기능 완료·실제 corpus 승인 대기 |
+| 4A | P0-5 외부 corpus 반입 게이트 | 금융·권한 독립 review·HTTPS 출처·사용 권한 4종·byte/정규화 hash·변조 차단 | 합성 계약 24/24·실제 corpus 승인·검색 평가·Release 연결 대기 |
 | 5 | 사람 rubric·Backend DTO | JSON 예시·schema·contract test 포함 | 계약 완료·사람 평가 대기 |
 | 6 | baseline 동결·전체 QA | 회귀·wheel·문서·hash 검증과 외부 게이트 명시 | 내부 완료 |
 | 7 | HyperCLOVA X provider 경계 | 세 operation·주입형 transport·오류·관측·전체 경로 E2E | 내부 8/8 완료·실제 HTTP 대기 |
@@ -258,7 +259,7 @@ registry 기반 자동 커버리지 최초 관측:
 - 금융 도메인 담당자가 독립 작성한 네 상품군 blind 질문과 비공개 정답키
 - 봉인 이후 단 한 번 수행하는 최초 blind 실행
 - 금융 도메인 담당자와 팀원이 수행한 사람 평가 점수
-- 주최 측이 허용한 외부 비정형 문서 corpus와 사용 범위 확인
+- 주최 측이 허용한 외부 비정형 문서의 실제 출처·사용 권한 확인. 반입·봉인 코드는 [P0-5 계약](p0-5-external-corpus-intake-2026-08-19.md)으로 준비 완료
 - HyperCLOVA X 정확한 모델명·Structured Outputs 범위·endpoint·인증·제출 범위의
   공식 서면 확인과 크레딧 수령·적용 서비스 확인
 - 위 공식 답변 확인 후의 실제 HTTP transport 연결과 공식 재현

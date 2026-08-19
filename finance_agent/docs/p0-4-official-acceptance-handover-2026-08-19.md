@@ -275,7 +275,8 @@ private 자산과 독립 실행 승인이 준비되지 않으면 P0-9 점수를 
 
 - P0-8: 완료 — 일시 장애 503·timeout 504와 동일 요청 중복 실행·Audit 통제
   ([인수인계](p0-8-retry-contract-handover-2026-08-19.md))
-- P0-5: 승인된 외부 금융 문서 corpus와 출처·라이선스·SHA-256 고정
+- P0-5: 반입 계약 구현 완료 — 실제 외부 corpus 출처·사용 권한 승인·검색 평가 대기
+  ([인수인계](p0-5-external-corpus-intake-2026-08-19.md))
 - P0-6: 회사–상품–테마–편입 관계 검색과 공식 상품 ID 재검증
 - P0-7: 관계형 QueryPlan과 문장별 Claim Verifier
 - P0-10: clean commit·Release Manifest·NCP image digest·rollback·제출 고정

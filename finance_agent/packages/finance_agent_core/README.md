@@ -13,7 +13,8 @@ evidence, 동결 50문항 계약, 개발 전용 로컬 parser와 grounded answer
 24문항의 parser부터 grounded answer 후검증까지 잇는 통합 E2E도 구현했다.
 네 상품군·일곱 intent의 fail-closed Router와 서버 QueryPlan compiler를
 구현했다. 상품 검색·비교는 Oracle→Result Verifier→field evidence→Answer
-Verifier 경로를 사용한다. BM25/SQLite FTS 문서 검색, 프레임워크 독립
+Verifier 경로를 사용한다. BM25/SQLite FTS 문서 검색과 외부 문서의
+독립 승인·사용 권한·해시·변조 차단 반입 계약, 프레임워크 독립
 Backend DTO·`/answer` service adapter와 사람 평가 rubric은 별도 계약으로
 제공한다. 네 상품군 40문항의 공개 `internal-red-team-v1`은 Router부터
 로컬 Qwen·Oracle·Verifier·Backend DTO까지 한 경로로 회귀 검증한다.
@@ -78,6 +79,7 @@ Answer Verifier, 결정론적 evidence compiler와 safe fallback으로 구성한
 - [계약 설명](../../docs/contracts.md): 설계 근거, 첫 vertical slice 예시, 확장 규칙
 - [공모펀드 계약](../../docs/public-fund-contract.md): product grain, capability, 품질 규칙, 실행 승인 조건
 - [문서 RAG 계약](../../docs/document-rag.md): 승인 문서 BM25/SQLite FTS 검색
+- [P0-5 외부 문서 반입 계약](../../docs/p0-5-external-corpus-intake-2026-08-19.md): 독립 review·HTTPS 출처·권한 4종·byte/정규화 hash·canonical manifest·BM25 build
 - [공통 AGGREGATE 계약](../../docs/aggregate-engine.md): 함수·그룹·통화·결측·근거
 - [공통 COMPARE 계약](../../docs/comparison-engine-design.md): exact identity·필드·통화·기준일·stale
 - [교차 상품군 SEARCH·답변 계약](../../docs/cross-family-search.md): 상품군별 계획·병렬 실행·evidence 격리 생성·전체 fallback

@@ -70,6 +70,7 @@ REQUIRED_INDEX_TARGETS = {
     "stage4-audit-blind-image-api-report-2026-08-13.md",
     "p0-4-official-acceptance-handover-2026-08-19.md",
     "p0-8-retry-contract-handover-2026-08-19.md",
+    "p0-5-external-corpus-intake-2026-08-19.md",
     "submission-model-boundary.md",
     "hyperclova-provider.md",
     "evaluation-pre-hcx-diagnostic.md",
@@ -89,6 +90,7 @@ REQUIRED_INDEX_TARGETS = {
 REQUIRED_BASELINES = {
     "official-acceptance-p0-4-v1.json",
     "retry-contract-p0-8-v1.json",
+    "external-corpus-intake-contract-v1.json",
     "briefing-examples-v1-bond-improved.json",
     "briefing-examples-v1-initial.json",
     "briefing-examples-v1-safety-improved.json",

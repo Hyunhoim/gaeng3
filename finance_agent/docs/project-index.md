@@ -17,6 +17,7 @@
 4. [재현 가능한 평가 baseline](../evaluation/README.md) — 성능 수치와 실험 해석
 5. [P0-4 공식 Acceptance 인수인계](p0-4-official-acceptance-handover-2026-08-19.md) — 공식 GET 계약, Docker 검증, 다음 작업
 6. [P0-8 재시도 계약 인수인계](p0-8-retry-contract-handover-2026-08-19.md) — 200·503·504, 270초, 동일 요청 중복 실행 방지
+7. [P0-5 외부 문서 반입 계약](p0-5-external-corpus-intake-2026-08-19.md) — 독립 승인, 출처·권한·해시 봉인, 변조 차단, BM25 색인 전 게이트
 
 배포·복구 담당자는 [NCP immutable release CI](immutable-ncp-release-ci.md)와
 [Rollback drill runbook](../../fastapi_backend/ROLLBACK_DRILL.md)을 추가로 확인한다. 현재
@@ -33,7 +34,7 @@ HCX 모델·endpoint·인증과 크레딧 적용 범위는 남아 있어 기존�
 | --- | --- | --- |
 | 새 AI 개발자 | [현재 프로젝트 기준](project-baseline.md) | [개발 환경](development.md) → [계약](contracts.md) → [Agent Core README](../packages/finance_agent_core/README.md) |
 | Backend 담당 | [Backend DTO](backend-contract.md) | [P0-4 공식 Acceptance](p0-4-official-acceptance-handover-2026-08-19.md) → [P0-8 재시도 계약](p0-8-retry-contract-handover-2026-08-19.md) → [HyperCLOVA X provider](hyperclova-provider.md) |
-| 금융 도메인 담당 | [capability matrix](capability-matrix.md) | [데이터 감사](data-audit.md) → [사람 평가 rubric](human-evaluation.md) → [금융 도메인 QA 평가](evaluation-domain-qa.md) |
+| 금융 도메인 담당 | [capability matrix](capability-matrix.md) | [데이터 감사](data-audit.md) → [P0-5 외부 문서 반입](p0-5-external-corpus-intake-2026-08-19.md) → [사람 평가 rubric](human-evaluation.md) → [금융 도메인 QA 평가](evaluation-domain-qa.md) |
 | 기술 제안서 작성자 | [기술 제안서 허브](../../docs/proposal/README.md) | [현재 프로젝트 기준](project-baseline.md) → [평가 baseline](../evaluation/README.md) |
 | 제출 전 검수자 | [제출 체크리스트](../../docs/proposal/submission-checklist.md) | [모델 경계](submission-model-boundary.md) → [연결 전 준비 기준](pre-hcx-readiness.md) |
 | 배포·복구 담당 | [NCP immutable release CI](immutable-ncp-release-ci.md) | [AgentReleaseManifest](agent-release-manifest.md) → [Rollback drill runbook](../../fastapi_backend/ROLLBACK_DRILL.md) |
@@ -88,6 +89,7 @@ HCX 모델·endpoint·인증과 크레딧 적용 범위는 남아 있어 기존�
 - [사람 평가 rubric](human-evaluation.md)
 - [P0-4 공식 Acceptance 인수인계](p0-4-official-acceptance-handover-2026-08-19.md)
 - [P0-8 평가기 재시도 계약 인수인계](p0-8-retry-contract-handover-2026-08-19.md)
+- [P0-5 외부 금융 문서 반입 계약](p0-5-external-corpus-intake-2026-08-19.md)
 - [전체 평가 baseline](../evaluation/README.md)
 - [Stage 2 승인 DB 재검증 baseline](../evaluation/baselines/stage2-approved-db-revalidation-2026-08-12.json)
 
@@ -116,6 +118,7 @@ HCX 모델·endpoint·인증과 크레딧 적용 범위는 남아 있어 기존�
 | [Ontology 제출 계약](ontology.md) | 공식 Turtle 5개·registry 기반 생성·문법·정합성 검사 | v1.0 구현 |
 | [P0-4 공식 Acceptance 인수인계](p0-4-official-acceptance-handover-2026-08-19.md) | 설명회 예시·공식 GET·다섯 문자열·UTF-8·안전 무실행의 Docker 검증과 재현 절차 | P0-4 완료 |
 | [P0-8 평가기 재시도 계약 인수인계](p0-8-retry-contract-handover-2026-08-19.md) | 답변·제어 200, 일시 장애 503, timeout 504, 270초 outer deadline과 동일 요청 single-flight·replay | P0-8 완료 |
+| [P0-5 외부 문서 반입 계약](p0-5-external-corpus-intake-2026-08-19.md) | 금융·권한 독립 review, HTTPS 출처, 사용 권한 4종, byte·정규화 hash, canonical manifest, 변조·경로 차단 | 반입 코드 완료·실제 corpus 승인 대기 |
 | [해외 ETP 핵심 평가 기준선](evaluation.md) | 동결 50문항, oracle·채점 규칙, 최초 holdout과 사후 회귀 결과 | v1.0 정본 |
 | [국내 ETP 핵심 평가 기준선](evaluation-domestic-etp.md) | 국내 ETP 동결 50문항, 품질 계약, local-inference split 결과 | v1.0 정본 |
 | [국내채권 핵심 평가 기준선](evaluation-domestic-bond.md) | 국내채권 동결 50문항, stale·날짜 계약, 로컬 Qwen·답변 결과 | v1.0 정본 |
@@ -233,7 +236,7 @@ HCX 모델·endpoint·인증과 크레딧 적용 범위는 남아 있어 기존�
 - 연결 전 Router 진단: 도입 전 search 강제 replay 4/28, 현재 28/28
 - 네 상품군 공통 집계: COUNT·MIN·MAX·AVG·허용 SUM, 최대 두 그룹,
   금액 통화 gate, 결측·기준일 공개, SQL 후보와 독립 Python 재검산
-- 문서 검색 기준: BM25/SQLite FTS synthetic 적재·필터·근거·not-found 통과
+- 문서 검색 기준: BM25/SQLite FTS synthetic 적재·필터·근거·not-found와 P0-5 승인·권한·해시·변조 차단 계약 24/24 통과. 실제 corpus는 대기
 - 팀 계약 기준: Backend DTO JSON 예시·schema·오류 adapter, 사람 rubric validator 통과
 - 내부 red-team 기준: 네 상품군 40문항 expected·수정 후 로컬 Qwen 40/40,
   safety·evidence 40/40, 최초 36/40과 수정 이력 별도 보존
@@ -254,7 +257,7 @@ HCX 모델·endpoint·인증과 크레딧 적용 범위는 남아 있어 기존�
 - 국내채권 답변 기준: 46개 LLM 생성·1개 결정론적 빈 결과·3개 안전 차단,
   전체 50/50, 폴백 0
 - 다음 외부 게이트: 금융 도메인 담당자의 external blind 100문항·비공개 정답키,
-  승인 corpus, 실제 사람 평가
+  실제 corpus 출처·사용 권한·검색 평가, 실제 사람 평가
 - Ubuntu SSH Docker 통합: 실제 이미지 build, 네 DB health, 채권·국내 ETP·
   해외 ETP 실행, 공모펀드 잠금, 역질문·미지원·HTTP 422 Backend 7건과
   공식 GET 정상·예외 7건의 확장 스모크 14/14 완료

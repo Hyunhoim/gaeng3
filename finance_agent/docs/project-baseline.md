@@ -159,7 +159,10 @@
   모델을 호출하지 않았다. 다른 상품군 언급이나 교차 연산 문구, 한 family의
   실패가 있으면 전체를 결정론적 답변으로 교체한다.
 - caller-fed BM25/SQLite FTS 문서 검색은 chunk·필터·top-k·출처·기준일·
-  provided 우선순위·not-found를 검증했다. 실제 corpus는 승인 전이다.
+  provided 우선순위·not-found를 검증했다. 외부 문서는 금융·데이터 권한
+  독립 review, HTTPS 출처, 사용 권한 4종, byte·정규화 본문 hash,
+  canonical manifest, 변조·경로·덮어쓰기 차단을 통과해야만 별도 BM25 색인으로
+  build할 수 있다. 실제 corpus 승인·검색 평가·Release 활성화는 남아 있다.
 - 사람 평가 rubric v1과 프레임워크 독립 Backend DTO·JSON 예시를 구현했다.
   실제 사람 평가는 외부 게이트다.
 - 금융 도메인 담당자가 작성한 40문항을 hash·schema·분포로 검증하고 현재
@@ -432,6 +435,8 @@ QueryPlan에는 최소한 intent, 상품군, 필수 조건, 완화 전 확인이
   matrix를 구현하고 도입 전·후 결과를 분리 보존한다.
 - [x] 서버 MinimalQueryDraft→QueryPlan compiler와 공통 답변 경로를 구현한다.
 - [x] BM25/SQLite FTS 문서 검색 최소 기능과 synthetic contract test를 구현한다.
+- [x] 외부 문서의 독립 승인·사용 권한·해시·경로를 봉인하는 P0-5 반입 게이트를 구현한다.
+- [ ] 실제 외부 corpus를 승인하고 BM25 검색 품질·충돌·최신성을 평가한 뒤 Release에 연결한다.
 - [x] 사람 평가 rubric·집계 validator와 Backend DTO·JSON 예시를 확정한다.
 - [ ] 금융 도메인 담당자가 새 blind 100문항과 비공개 정답키를 독립 작성한다.
 - [x] 금융 도메인 개발 QA 40문항의 Router·linker 안전 경계를 개선하고

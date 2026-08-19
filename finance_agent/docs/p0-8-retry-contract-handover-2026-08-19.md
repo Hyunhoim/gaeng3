@@ -250,7 +250,7 @@ HCLX 단계가 없는지 확인한다
 
 1. 금융 도메인 담당자가 보관한 P0-9 blind 질문·비공개 gold·봉인 hash 확보
 2. 확보 즉시 clean image로 P0-9 최초 1회 실행
-3. blind 자산이 아직 없으면 P0-5 승인 외부 문서 manifest와 라이선스 표부터 준비
+3. blind 자산이 아직 없으면 구현된 [P0-5 반입 계약](p0-5-external-corpus-intake-2026-08-19.md)에 맞춰 실제 외부 문서 출처·사용 권한을 검토
 4. P0-6 관계 테이블·문서 BM25 검색 구현
 5. P0-7 relation/document QueryPlan과 Claim Verifier 구현
 6. 마지막으로 P0-10 NCP release·공인 IP smoke·rollback drill 수행
