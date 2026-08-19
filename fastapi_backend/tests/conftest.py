@@ -7,7 +7,12 @@ from types import SimpleNamespace
 import pytest
 from fastapi.testclient import TestClient
 from finance_agent_core.agent import IntentRouter, RoutedFinanceAgent
-from finance_agent_core.release import ResolvedAgentRelease
+from finance_agent_core.release import (
+    PublicDocumentRetrievalRelease,
+    PublicKnowledgeRetrievalRelease,
+    PublicRelationRetrievalRelease,
+    ResolvedAgentRelease,
+)
 
 from app.config import Settings
 from app.main import create_app
@@ -32,8 +37,15 @@ class FakeAgentService:
 def stub_resolved_release() -> ResolvedAgentRelease:
     """Exact nominal release object for assembly-only tests that never execute it."""
 
+    knowledge_retrieval = PublicKnowledgeRetrievalRelease(
+        relation=PublicRelationRetrievalRelease(status="disabled_not_activated"),
+        document=PublicDocumentRetrievalRelease(),
+    )
     return ResolvedAgentRelease(
-        manifest=SimpleNamespace(release_id="finance-agent-test-v1"),  # type: ignore[arg-type]
+        manifest=SimpleNamespace(
+            release_id="finance-agent-test-v1",
+            components=SimpleNamespace(knowledge_retrieval=knowledge_retrieval),
+        ),  # type: ignore[arg-type]
         binding=SimpleNamespace(),  # type: ignore[arg-type]
         manifest_path=Path("/nonexistent/test-agent-release.json"),
         binding_path=Path("/nonexistent/test-deployment-binding.json"),

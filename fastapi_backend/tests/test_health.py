@@ -5,6 +5,9 @@ from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
+from finance_agent_core.agent import RoutedFinanceAgent
+from finance_agent_core.agent.knowledge_router import DeterministicKnowledgeRouter
+from finance_agent_core.agent.knowledge_service import KnowledgeAgent, KnowledgeServiceError
 from finance_agent_core.contracts.queryplan import ProductFamily
 from finance_agent_core.domain import DatabaseManifest
 from finance_agent_core.retrieval.schema_shadow import (
@@ -71,6 +74,7 @@ def test_health_reports_configured_and_missing_families_without_paths() -> None:
         "missing_product_families": ["domestic_etp", "fund"],
         "unavailable_product_families": ["bond", "overseas_etp"],
         "fund_execution_policy": "locked",
+        "relation_retrieval_status": "disabled",
         "audit_status": "disabled",
         "shadow_status": "disabled",
     }
@@ -105,8 +109,67 @@ def test_health_is_ok_when_every_database_manifest_is_ready(tmp_path: Path) -> N
     assert response.json()["missing_product_families"] == []
     assert response.json()["unavailable_product_families"] == []
     assert response.json()["fund_execution_policy"] == "locked"
+    assert response.json()["relation_retrieval_status"] == "disabled"
     assert response.json()["audit_status"] == "disabled"
     assert response.json()["shadow_status"] == "disabled"
+
+
+def test_health_fails_closed_when_configured_relation_agent_is_missing(tmp_path: Path) -> None:
+    paths = {family: tmp_path / f"{family.value}.sqlite3" for family in ProductFamily}
+    for family, path in paths.items():
+        _create_manifest_database(path, family)
+    settings = Settings(
+        overseas_etp_db=paths[ProductFamily.OVERSEAS_ETP],
+        domestic_etp_db=paths[ProductFamily.DOMESTIC_ETP],
+        bond_db=paths[ProductFamily.BOND],
+        fund_db=paths[ProductFamily.FUND],
+        FINANCE_RELATION_RETRIEVAL_ARTIFACT_FILE=tmp_path / "relation-artifact.json",
+        FINANCE_RELATION_RETRIEVAL_ARTIFACT_SHA256="a" * 64,
+        FINANCE_RELATION_INDEX_FILE=tmp_path / "relations.sqlite3",
+    )
+    application = create_app(settings=settings, agent=FakeAgentService())
+
+    with TestClient(application) as client:
+        response = client.get("/health")
+
+    assert response.status_code == 503
+    assert response.json()["relation_retrieval_status"] == "degraded"
+
+
+def test_health_fails_closed_when_relation_readiness_drifted(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    paths = {family: tmp_path / f"{family.value}.sqlite3" for family in ProductFamily}
+    for family, path in paths.items():
+        _create_manifest_database(path, family)
+    settings = Settings(
+        overseas_etp_db=paths[ProductFamily.OVERSEAS_ETP],
+        domestic_etp_db=paths[ProductFamily.DOMESTIC_ETP],
+        bond_db=paths[ProductFamily.BOND],
+        fund_db=paths[ProductFamily.FUND],
+        FINANCE_RELATION_RETRIEVAL_ARTIFACT_FILE=tmp_path / "relation-artifact.json",
+        FINANCE_RELATION_RETRIEVAL_ARTIFACT_SHA256="a" * 64,
+        FINANCE_RELATION_INDEX_FILE=tmp_path / "relations.sqlite3",
+    )
+    knowledge_agent = object.__new__(KnowledgeAgent)
+    agent = RoutedFinanceAgent(
+        paths,
+        knowledge_router=DeterministicKnowledgeRouter(),
+        knowledge_agent=knowledge_agent,
+    )
+
+    def reject_drift(_self: KnowledgeAgent) -> None:
+        raise KnowledgeServiceError("test drift")
+
+    monkeypatch.setattr(KnowledgeAgent, "assert_ready_current", reject_drift)
+    application = create_app(settings=settings, agent=agent)
+
+    with TestClient(application) as client:
+        response = client.get("/health")
+
+    assert response.status_code == 503
+    assert response.json()["relation_retrieval_status"] == "degraded"
 
 
 def test_evaluation_startup_rejects_injected_agent_before_readiness(

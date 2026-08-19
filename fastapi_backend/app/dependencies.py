@@ -9,6 +9,8 @@ from fastapi import Request
 from finance_agent_core.agent import IntentRouter, RoutedAgentResult, RoutedFinanceAgent
 from finance_agent_core.agent.compiler import ServerQueryPlanCompiler
 from finance_agent_core.agent.grounded_planning import GroundedPlanGate
+from finance_agent_core.agent.knowledge_router import DeterministicKnowledgeRouter
+from finance_agent_core.agent.knowledge_service import KnowledgeAgent
 from finance_agent_core.agent.providers import (
     HyperClovaXHTTPTransport,
     HyperClovaXQueryPlanProvider,
@@ -20,6 +22,7 @@ from finance_agent_core.answering import (
     HyperClovaXGroundedAnswerProvider,
     LocalGroundedAnswerProvider,
 )
+from finance_agent_core.contracts.queryplan import ProductFamily
 from finance_agent_core.execution import PlanAuthorityGate
 from finance_agent_core.observability import (
     AppendOnlyJsonlAuditSink,
@@ -27,8 +30,13 @@ from finance_agent_core.observability import (
     RequestAuditRecorder,
 )
 from finance_agent_core.release import (
+    PublicDocumentRetrievalRelease,
+    PublicKnowledgeRetrievalRelease,
+    PublicRelationRetrievalRelease,
+    RelationRetrievalArtifactRelease,
     ResolvedAgentRelease,
     RuntimeReleaseInputs,
+    load_relation_retrieval_artifact_release,
     resolve_agent_release,
 )
 from finance_agent_core.storage import ProductIdentitySnapshotCache, RecordSnapshotCache
@@ -38,6 +46,7 @@ from app.http_audit import request_agent_audit
 from app.request_execution import IdempotentRequestCoordinator
 
 _MAX_HCX_API_KEY_FILE_BYTES = 4096
+_RELATION_ARTIFACT_SHA256_FILE_BYTES = 65
 
 
 class AgentService(Protocol):
@@ -91,6 +100,41 @@ def _provider_assembly_matches(service: RoutedFinanceAgent, settings: Settings) 
     return len(transports) < 2 or transports[0] is transports[1]
 
 
+def _knowledge_assembly_matches(
+    service: RoutedFinanceAgent,
+    settings: Settings,
+    release_guard: ResolvedAgentRelease | None,
+) -> bool:
+    if type(service.knowledge_router) is not DeterministicKnowledgeRouter:
+        return False
+    if type(release_guard) is not ResolvedAgentRelease:
+        return False
+    knowledge_release = release_guard.manifest.components.knowledge_retrieval
+    if knowledge_release.relation.status != "activated":
+        return service.knowledge_agent is None and not settings.relation_retrieval_configured
+    agent = service.knowledge_agent
+    if type(agent) is not KnowledgeAgent or not settings.relation_retrieval_configured:
+        return False
+    assert settings.relation_index_file is not None
+    relation_families = {
+        ProductFamily.BOND,
+        ProductFamily.DOMESTIC_ETP,
+        ProductFamily.OVERSEAS_ETP,
+    }
+    return (
+        agent.release == knowledge_release
+        and agent.relation_index_path == settings.relation_index_file
+        and agent.relation_database_paths
+        == {
+            family: settings.database_paths[family]
+            for family in relation_families
+            if family in settings.database_paths
+        }
+        and agent.document_index_path is None
+        and agent.claim_provider is None
+    )
+
+
 def require_approval_guard(
     service: AgentService,
     settings: Settings,
@@ -142,6 +186,7 @@ def require_approval_guard(
             )
         )
         or not _provider_assembly_matches(service, settings)
+        or not _knowledge_assembly_matches(service, settings, release_guard)
         or type(release_guard) is not ResolvedAgentRelease
         or service.release_guard is not release_guard
         or not service.require_agent_release
@@ -170,6 +215,9 @@ def resolve_runtime_release(settings: Settings) -> ResolvedAgentRelease | None:
     assert settings.deployment_binding_sha256 is not None
     assert settings.source_commit is not None
     assert settings.runtime_image_reference is not None
+    relation_binding = _load_relation_retrieval_artifact(settings)
+    relation_artifact = relation_binding[0] if relation_binding is not None else None
+    relation_artifact_sha256 = relation_binding[1] if relation_binding is not None else None
     inputs = RuntimeReleaseInputs(
         environment=settings.app_env,
         source_commit=settings.source_commit,
@@ -182,6 +230,8 @@ def resolve_runtime_release(settings: Settings) -> ResolvedAgentRelease | None:
         fund_execution_policy=settings.fund_execution_policy,
         schema_dense_enabled=settings.dense_schema_linker_enabled,
         product_dense_enabled=settings.product_dense_enabled,
+        relation_retrieval_artifact=relation_artifact,
+        relation_retrieval_artifact_file_sha256=relation_artifact_sha256,
         platform=settings.runtime_platform,
         hcx_timeout_seconds=settings.hcx_timeout_seconds,
         official_answer_timeout_seconds=settings.official_answer_timeout_seconds,
@@ -197,6 +247,140 @@ def resolve_runtime_release(settings: Settings) -> ResolvedAgentRelease | None:
         expected_binding_sha256=settings.deployment_binding_sha256,
         runtime_inputs=inputs,
     )
+
+
+def _load_relation_retrieval_artifact(
+    settings: Settings,
+) -> tuple[RelationRetrievalArtifactRelease, str] | None:
+    if not settings.relation_retrieval_configured:
+        return None
+    assert settings.relation_retrieval_artifact_file is not None
+    expected_file_sha256 = _relation_artifact_trust_sha256(settings)
+    artifact = load_relation_retrieval_artifact_release(
+        artifact_path=settings.relation_retrieval_artifact_file,
+        expected_file_sha256=expected_file_sha256,
+    )
+    return artifact, expected_file_sha256
+
+
+def _relation_artifact_trust_sha256(settings: Settings) -> str:
+    if settings.relation_retrieval_artifact_sha256 is not None:
+        return settings.relation_retrieval_artifact_sha256
+    path = settings.relation_retrieval_artifact_sha256_file
+    if path is None or settings.app_env in {"evaluation", "production"}:
+        raise RuntimeError("relation retrieval artifact trust anchor is unavailable")
+    descriptor: int | None = None
+    try:
+        descriptor = os.open(
+            path,
+            os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0),
+        )
+        before = os.fstat(descriptor)
+        if (
+            not stat.S_ISREG(before.st_mode)
+            or before.st_nlink != 1
+            or before.st_uid not in {0, os.geteuid()}
+            or before.st_mode & (stat.S_IWGRP | stat.S_IWOTH)
+            or before.st_size != _RELATION_ARTIFACT_SHA256_FILE_BYTES
+        ):
+            raise RuntimeError("relation retrieval artifact trust file is insecure")
+        chunks: list[bytes] = []
+        remaining = _RELATION_ARTIFACT_SHA256_FILE_BYTES
+        while remaining:
+            chunk = os.read(descriptor, remaining)
+            if not chunk:
+                raise RuntimeError("relation retrieval artifact trust file changed while loading")
+            chunks.append(chunk)
+            remaining -= len(chunk)
+        if os.read(descriptor, 1):
+            raise RuntimeError("relation retrieval artifact trust file changed while loading")
+        payload = b"".join(chunks)
+        after = os.fstat(descriptor)
+        current = path.stat(follow_symlinks=False)
+        fingerprint = lambda item: (
+            item.st_dev,
+            item.st_ino,
+            item.st_mode,
+            item.st_uid,
+            item.st_nlink,
+            item.st_size,
+            item.st_mtime_ns,
+            item.st_ctime_ns,
+        )
+        if fingerprint(before) != fingerprint(after) or fingerprint(after) != fingerprint(current):
+            raise RuntimeError("relation retrieval artifact trust file changed while loading")
+        value = payload.decode("ascii")
+    except RuntimeError:
+        raise
+    except (OSError, UnicodeError):
+        raise RuntimeError("relation retrieval artifact trust file is unreadable") from None
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
+    if (
+        len(value) != _RELATION_ARTIFACT_SHA256_FILE_BYTES
+        or not value.endswith("\n")
+        or any(character not in "0123456789abcdef" for character in value[:-1])
+    ):
+        raise RuntimeError("relation retrieval artifact trust file is invalid")
+    return value[:-1]
+
+
+def _knowledge_release(
+    settings: Settings,
+    release_guard: ResolvedAgentRelease | None,
+) -> PublicKnowledgeRetrievalRelease:
+    if release_guard is not None:
+        return release_guard.manifest.components.knowledge_retrieval
+    relation_binding = _load_relation_retrieval_artifact(settings)
+    artifact = relation_binding[0] if relation_binding is not None else None
+    artifact_file_sha256 = relation_binding[1] if relation_binding is not None else None
+    return PublicKnowledgeRetrievalRelease(
+        relation=(
+            PublicRelationRetrievalRelease(status="disabled_not_activated")
+            if artifact is None
+            else PublicRelationRetrievalRelease(
+                status="activated",
+                artifact=artifact,
+                artifact_file_sha256=artifact_file_sha256,
+            )
+        ),
+        document=PublicDocumentRetrievalRelease(),
+    )
+
+
+def _build_knowledge_agent(
+    settings: Settings,
+    release_guard: ResolvedAgentRelease | None,
+) -> KnowledgeAgent | None:
+    release = _knowledge_release(settings, release_guard)
+    if release.relation.status != "activated":
+        return None
+    if not settings.relation_retrieval_configured:
+        raise RuntimeError("activated relation release requires configured runtime artifacts")
+    assert settings.relation_index_file is not None
+    required_families = {
+        family
+        for family in (
+            ProductFamily.BOND,
+            ProductFamily.DOMESTIC_ETP,
+            ProductFamily.OVERSEAS_ETP,
+        )
+    }
+    relation_database_paths = {
+        family: path
+        for family, path in settings.database_paths.items()
+        if family in required_families
+    }
+    if set(relation_database_paths) != required_families:
+        raise RuntimeError("relation retrieval requires all three approved product databases")
+    agent = KnowledgeAgent(
+        release=release,
+        relation_index_path=settings.relation_index_file,
+        relation_database_paths=relation_database_paths,
+    )
+    agent.verify_ready()
+    return agent
 
 
 def _load_hcx_api_key(settings: Settings) -> str:
@@ -294,6 +478,7 @@ def build_agent(
             query_plan_provider = HyperClovaXQueryPlanProvider(hcx_settings, transport)
         if settings.answer_provider == "hyperclova":
             answer_provider = HyperClovaXGroundedAnswerProvider(hcx_settings, transport)
+    knowledge_agent = _build_knowledge_agent(settings, release_guard)
     return RoutedFinanceAgent(
         settings.database_paths,
         query_plan_provider=query_plan_provider,
@@ -304,6 +489,8 @@ def build_agent(
         release_guard=release_guard,
         require_agent_release=settings.app_env in {"evaluation", "production"},
         audit_sink=audit_sink,
+        knowledge_router=DeterministicKnowledgeRouter(),
+        knowledge_agent=knowledge_agent,
     )
 
 
