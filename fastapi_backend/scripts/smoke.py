@@ -12,6 +12,10 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
+from finance_agent_core.evaluation.official_acceptance import (
+    build_official_acceptance_transport_cases,
+)
+
 EXPECTED_FAMILIES = ["bond", "domestic_etp", "overseas_etp", "fund"]
 
 
@@ -131,84 +135,23 @@ CASES = (
     ),
 )
 
-_MALICIOUS_FRAGMENT = "<script>alert(1)</script>"
-_LONG_QUESTION = "가" * 2001
-_FUND_LOCKED_QUESTION = (
-    "당사에서 판매 중인 해외 주식형 공모펀드 중 3개월 수익률이 높은 상품 5개 보여줘."
-)
-OFFICIAL_CASES = (
+OFFICIAL_CASES = tuple(
     OfficialSmokeCase(
-        case_id="official-valid",
-        query=(
-            ("question_id", "docker-smoke-official-001"),
-            ("question", "현재 판매 가능한 원화채권 중 AA- 이상 종목 알려줘"),
-            ("unexpected", "ignored"),
+        case_id=case.id,
+        query=case.query,
+        expected_question_id=case.expected_question_id,
+        expected_question=case.expected_question,
+        expected_control_code=case.expected_control_code,
+        expected_trace_status=(
+            case.expected_trace_statuses[0] if len(case.expected_trace_statuses) == 1 else None
         ),
-        expected_question_id="docker-smoke-official-001",
-        expected_question="현재 판매 가능한 원화채권 중 AA- 이상 종목 알려줘",
-        expected_evidence=True,
-    ),
-    OfficialSmokeCase(
-        case_id="official-unicode-and-markup",
-        query=(
-            ("question_id", "평가-😀-001"),
-            (
-                "question",
-                f"내일 가장 오를 ETF를 예측해줘 & {_MALICIOUS_FRAGMENT}",
-            ),
-        ),
-        expected_question_id="평가-😀-001",
-        expected_question=f"내일 가장 오를 ETF를 예측해줘 & {_MALICIOUS_FRAGMENT}",
-        forbidden_output_fragments=(_MALICIOUS_FRAGMENT,),
-    ),
-    OfficialSmokeCase(
-        case_id="official-fund-locked",
-        query=(
-            ("question_id", "docker-smoke-official-fund-locked-001"),
-            ("question", _FUND_LOCKED_QUESTION),
-        ),
-        expected_question_id="docker-smoke-official-fund-locked-001",
-        expected_question=_FUND_LOCKED_QUESTION,
-        expected_trace_status="unsupported",
-        expected_intent="unsupported",
-        expected_families=("fund",),
-        expected_empty_context=True,
-    ),
-    OfficialSmokeCase(
-        case_id="official-blank-values",
-        query=(("question_id", " "), ("question", " ")),
-        expected_question_id="invalid-question-id",
-        expected_question=" ",
-        expected_control_code="invalid_request",
-    ),
-    OfficialSmokeCase(
-        case_id="official-missing-id",
-        query=(("question", "해외 ETF를 알려줘"),),
-        expected_question_id="invalid-question-id",
-        expected_question="해외 ETF를 알려줘",
-        expected_control_code="invalid_request",
-    ),
-    OfficialSmokeCase(
-        case_id="official-missing-question",
-        query=(("question_id", "Q-MISSING"),),
-        expected_question_id="Q-MISSING",
-        expected_question="",
-        expected_control_code="invalid_request",
-    ),
-    OfficialSmokeCase(
-        case_id="official-id-too-long",
-        query=(("question_id", "Q" * 129), ("question", "국내채권을 알려줘")),
-        expected_question_id="invalid-question-id",
-        expected_question="국내채권을 알려줘",
-        expected_control_code="invalid_request",
-    ),
-    OfficialSmokeCase(
-        case_id="official-question-too-long",
-        query=(("question_id", "Q-LONG"), ("question", _LONG_QUESTION)),
-        expected_question_id="Q-LONG",
-        expected_question=_LONG_QUESTION[:2000],
-        expected_control_code="invalid_request",
-    ),
+        expected_intent=(case.expected_intents[0] if len(case.expected_intents) == 1 else None),
+        expected_families=tuple(family.value for family in case.expected_families),
+        expected_evidence=case.require_evidence,
+        expected_empty_context=case.require_no_execution,
+        forbidden_output_fragments=case.forbidden_output_fragments,
+    )
+    for case in build_official_acceptance_transport_cases()
 )
 
 
