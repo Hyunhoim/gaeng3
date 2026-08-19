@@ -19,6 +19,7 @@ from finance_agent_core.release import (
     _strict_json_object,
     build_agent_release_manifest,
     deployment_binding_file_bytes,
+    load_relation_retrieval_artifact_release,
     manifest_file_bytes,
 )
 
@@ -112,6 +113,21 @@ def _write_immutable(path: Path, data: bytes) -> str:
 
 def _runtime_inputs(arguments: argparse.Namespace) -> RuntimeReleaseInputs:
     model = arguments.hcx_model
+    artifact_path = arguments.relation_retrieval_artifact
+    artifact_file_sha256 = arguments.relation_retrieval_artifact_sha256
+    if (artifact_path is None) != (artifact_file_sha256 is None):
+        raise SystemExit(
+            "relation retrieval activation requires both artifact path and trusted SHA-256"
+        )
+    relation_retrieval_artifact = None
+    if artifact_path is not None:
+        try:
+            relation_retrieval_artifact = load_relation_retrieval_artifact_release(
+                artifact_path=artifact_path,
+                expected_file_sha256=artifact_file_sha256,
+            )
+        except AgentReleaseError as error:
+            raise SystemExit(f"relation retrieval artifact is invalid: {error}") from error
     return RuntimeReleaseInputs(
         environment=arguments.environment,
         source_commit=arguments.source_commit,
@@ -126,6 +142,8 @@ def _runtime_inputs(arguments: argparse.Namespace) -> RuntimeReleaseInputs:
         hcx_queryplan_enabled=arguments.hcx_queryplan_enabled,
         hcx_model=model,
         fund_execution_policy=arguments.fund_execution_policy,
+        relation_retrieval_artifact=relation_retrieval_artifact,
+        relation_retrieval_artifact_file_sha256=artifact_file_sha256,
         platform=arguments.platform,
         hcx_timeout_seconds=arguments.hcx_timeout_seconds,
         official_answer_timeout_seconds=arguments.official_answer_timeout_seconds,
@@ -247,6 +265,15 @@ def _parser() -> argparse.ArgumentParser:
         "--fund-execution-policy",
         choices=("locked", "public_fund_v1_approved"),
         default="locked",
+    )
+    manifest.add_argument(
+        "--relation-retrieval-artifact",
+        type=Path,
+        help="absolute path to one canonical read-only relation artifact release",
+    )
+    manifest.add_argument(
+        "--relation-retrieval-artifact-sha256",
+        help="trusted SHA-256 of --relation-retrieval-artifact",
     )
     manifest.add_argument("--output", type=Path, required=True)
     manifest.set_defaults(handler=_create_manifest)

@@ -10,9 +10,77 @@ import pytest
 from finance_agent_core import release_cli
 from finance_agent_core.release import (
     DeploymentBinding,
+    RelationRetrievalArtifactRelease,
     RollbackRelease,
     deployment_binding_file_bytes,
+    relation_retrieval_artifact_file_bytes,
 )
+
+
+def _parse_manifest_arguments(tmp_path: Path, *extra: str) -> argparse.Namespace:
+    backend_root = tmp_path / "backend"
+    backend_root.mkdir(exist_ok=True)
+    return release_cli._parser().parse_args(
+        [
+            "manifest",
+            "--release-id",
+            "finance-agent-test-v1",
+            "--environment",
+            "evaluation",
+            "--source-commit",
+            "a" * 40,
+            "--git-root",
+            str(tmp_path),
+            "--backend-root",
+            str(backend_root),
+            "--output",
+            str(tmp_path / "manifest.json"),
+            *extra,
+        ]
+    )
+
+
+def test_manifest_cli_defaults_relation_retrieval_to_disabled(tmp_path: Path) -> None:
+    runtime = release_cli._runtime_inputs(_parse_manifest_arguments(tmp_path))
+
+    assert runtime.relation_retrieval_artifact is None
+    assert runtime.relation_retrieval_artifact_file_sha256 is None
+
+
+def test_manifest_cli_requires_both_relation_artifact_and_hash(tmp_path: Path) -> None:
+    arguments = _parse_manifest_arguments(
+        tmp_path,
+        "--relation-retrieval-artifact",
+        str(tmp_path / "relation.json"),
+    )
+
+    with pytest.raises(SystemExit, match="requires both"):
+        release_cli._runtime_inputs(arguments)
+
+
+def test_manifest_cli_loads_only_trusted_canonical_relation_artifact(tmp_path: Path) -> None:
+    artifact = RelationRetrievalArtifactRelease(
+        index_sha256="1" * 64,
+        approval_manifest_sha256="2" * 64,
+        relation_set_sha256="3" * 64,
+    )
+    artifact_data = relation_retrieval_artifact_file_bytes(artifact)
+    artifact_path = tmp_path / "relation.json"
+    artifact_path.write_bytes(artifact_data)
+    artifact_path.chmod(0o444)
+    artifact_sha256 = hashlib.sha256(artifact_data).hexdigest()
+    arguments = _parse_manifest_arguments(
+        tmp_path,
+        "--relation-retrieval-artifact",
+        str(artifact_path),
+        "--relation-retrieval-artifact-sha256",
+        artifact_sha256,
+    )
+
+    runtime = release_cli._runtime_inputs(arguments)
+
+    assert runtime.relation_retrieval_artifact == artifact
+    assert runtime.relation_retrieval_artifact_file_sha256 == artifact_sha256
 
 
 def test_release_output_is_exclusive_read_only_and_durable(tmp_path: Path) -> None:
