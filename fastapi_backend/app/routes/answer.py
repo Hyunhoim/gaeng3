@@ -292,11 +292,7 @@ async def official_answer(
         )
     mark_request_audit_terminal(
         http_request,
-        outcome=(
-            AuditOutcome.FAILED
-            if retryable_error
-            else AuditOutcome.SUCCEEDED
-        ),
+        outcome=(AuditOutcome.FAILED if retryable_error else AuditOutcome.SUCCEEDED),
         reason_code=("retryable_adapter_failure" if retryable_error else "response_completed"),
     )
     if retryable_error:

@@ -290,9 +290,7 @@ class ApprovedCorpusManifest(CorpusModel):
         _validate_reviews(self.reviews, self.documents)
         if self.document_count != len(self.documents):
             raise ValueError("corpus document_count differs")
-        if self.total_content_size_bytes != sum(
-            item.content_size_bytes for item in self.documents
-        ):
+        if self.total_content_size_bytes != sum(item.content_size_bytes for item in self.documents):
             raise ValueError("corpus total_content_size_bytes differs")
         if self.file_manifest_sha256 != _document_file_manifest_sha256(self.documents):
             raise ValueError("corpus file manifest SHA-256 differs")
@@ -317,9 +315,7 @@ class CorpusVerificationReceipt(CorpusModel):
 class CorpusIndexBuildReceipt(CorpusModel):
     schema_version: Literal["1.0"] = "1.0"
     receipt_kind: Literal["external_corpus_bm25_index"] = "external_corpus_bm25_index"
-    status: Literal["verified_index_not_release_activated"] = (
-        "verified_index_not_release_activated"
-    )
+    status: Literal["verified_index_not_release_activated"] = "verified_index_not_release_activated"
     corpus_id: str = Field(pattern=_ID_PATTERN)
     manifest_sha256: str = Field(pattern=_SHA256_PATTERN)
     file_manifest_sha256: str = Field(pattern=_SHA256_PATTERN)
@@ -581,9 +577,7 @@ def verify_approved_corpus(
         text = _decode_snapshot(data, f"corpus document {item.document_id}")
         normalized = normalize_document_text(text)
         if sha256_document_text(normalized) != item.normalized_text_sha256:
-            raise CorpusApprovalError(
-                f"corpus document {item.document_id} normalized text differs"
-            )
+            raise CorpusApprovalError(f"corpus document {item.document_id} normalized text differs")
         verified.append(VerifiedCorpusDocument(approval=item, text=text))
     return VerifiedApprovedCorpus(
         manifest=manifest,

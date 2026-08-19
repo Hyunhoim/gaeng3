@@ -27,8 +27,7 @@ _PROVIDED_RELATION_FAMILIES = (
 
 def _database_paths(database_dir: Path) -> dict[ProductFamily, Path]:
     return {
-        family: database_dir / f"{family.value}.sqlite3"
-        for family in _PROVIDED_RELATION_FAMILIES
+        family: database_dir / f"{family.value}.sqlite3" for family in _PROVIDED_RELATION_FAMILIES
     }
 
 

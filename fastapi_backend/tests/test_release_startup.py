@@ -62,9 +62,7 @@ def _release_settings(tmp_path: Path, **overrides: object) -> tuple[Settings, Pa
         ),  # type: ignore[arg-type]
         platform=values.get("FINANCE_RUNTIME_PLATFORM", "linux/amd64"),  # type: ignore[arg-type]
         hcx_timeout_seconds=float(values.get("HCX_TIMEOUT_SECONDS", 45.0)),
-        official_answer_timeout_seconds=float(
-            values.get("OFFICIAL_ANSWER_TIMEOUT_SECONDS", 270.0)
-        ),
+        official_answer_timeout_seconds=float(values.get("OFFICIAL_ANSWER_TIMEOUT_SECONDS", 270.0)),
         official_answer_max_inflight=int(values.get("OFFICIAL_ANSWER_MAX_INFLIGHT", 2)),
         worker_count=int(values.get("WEB_CONCURRENCY", 1)),
     )
