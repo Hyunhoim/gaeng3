@@ -140,6 +140,41 @@ class RetrievalRelease(ReleaseModel):
     document_bm25: Literal["disabled_no_approved_corpus"] = "disabled_no_approved_corpus"
 
 
+class RelationRetrievalArtifactRelease(ReleaseModel):
+    artifact_kind: Literal["provided_product_relations"] = "provided_product_relations"
+    index_sha256: str = Field(pattern=_SHA256_PATTERN)
+    approval_manifest_sha256: str = Field(pattern=_SHA256_PATTERN)
+    relation_set_sha256: str = Field(pattern=_SHA256_PATTERN)
+
+
+class DocumentRetrievalArtifactRelease(ReleaseModel):
+    artifact_kind: Literal["approved_document_bm25"] = "approved_document_bm25"
+    index_sha256: str = Field(pattern=_SHA256_PATTERN)
+    corpus_manifest_sha256: str = Field(pattern=_SHA256_PATTERN)
+    file_manifest_sha256: str = Field(pattern=_SHA256_PATTERN)
+
+
+class KnowledgeRetrievalRelease(ReleaseModel):
+    """P0-7 candidate binding; P0-10 must embed it in the public Agent release."""
+
+    schema_version: Literal["1.0"] = "1.0"
+    status: Literal["internal_verified_not_agent_release_activated"] = (
+        "internal_verified_not_agent_release_activated"
+    )
+    relation: RelationRetrievalArtifactRelease | None = None
+    document: DocumentRetrievalArtifactRelease | None = None
+
+    @model_validator(mode="after")
+    def require_at_least_one_artifact(self) -> KnowledgeRetrievalRelease:
+        if self.relation is None and self.document is None:
+            raise ValueError("knowledge retrieval release requires at least one artifact")
+        return self
+
+    @property
+    def contract_sha256(self) -> str:
+        return canonical_sha256(self.model_dump(mode="json"))
+
+
 class ExecutionRelease(ReleaseModel):
     plan_authority_version: Literal["plan-authority-v1"] = "plan-authority-v1"
     planning_policy_version: Literal["adaptive-shadow-v1"] = "adaptive-shadow-v1"
@@ -892,6 +927,9 @@ __all__ = [
     "AgentReleaseError",
     "AgentReleaseManifest",
     "DeploymentBinding",
+    "DocumentRetrievalArtifactRelease",
+    "KnowledgeRetrievalRelease",
+    "RelationRetrievalArtifactRelease",
     "ResolvedAgentRelease",
     "RollbackRelease",
     "RuntimeControlRelease",

@@ -13,6 +13,7 @@ from finance_agent_core.retrieval.models import (
     DocumentSearchRequest,
     DocumentSearchResponse,
 )
+from finance_agent_core.storage import connect_read_only
 
 _QUERY_TOKEN = re.compile(r"[0-9A-Za-z가-힣]+")
 _KOREAN_SUFFIXES = (
@@ -317,7 +318,7 @@ class SQLiteDocumentIndex:
             LIMIT ?
         """
         parameters.append(request.top_k)
-        with sqlite3.connect(self.database_path) as connection:
+        with connect_read_only(self.database_path) as connection:
             connection.row_factory = sqlite3.Row
             rows = connection.execute(sql, parameters).fetchall()
         evidence = [
