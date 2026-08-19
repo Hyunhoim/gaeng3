@@ -204,3 +204,50 @@ def test_prepare_rejects_nonapproved_sources_before_building(
         )
 
     assert calls == []
+
+
+def test_approved_prepare_publishes_relation_state_after_four_databases(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    raw = _raw_directory(tmp_path)
+    output = tmp_path / "normalized"
+    calls: list[str] = []
+    relation_calls: list[tuple[Path, object]] = []
+    monkeypatch.setattr(prepare, "BUILDERS", _fake_builders(calls))
+    monkeypatch.setattr(prepare, "require_approved_source_files", lambda *args, **kwargs: None)
+    monkeypatch.setattr(prepare, "require_approved_database", lambda *args, **kwargs: None)
+
+    def fake_prepare_relations(
+        output_dir: str | Path,
+        *,
+        previous_state,
+        force: bool,
+        verifier,
+    ) -> dict[str, object]:
+        assert all(
+            (Path(output_dir) / f"{dataset}.sqlite3").exists() for dataset in prepare.DATASETS
+        )
+        assert previous_state is None
+        assert force is False
+        relation_calls.append((Path(output_dir), verifier))
+        return {"action": "built", "index_sha256": "a" * 64}
+
+    monkeypatch.setattr(
+        prepare,
+        "prepare_relation_retrieval_artifacts",
+        fake_prepare_relations,
+    )
+
+    state = prepare.prepare_databases(
+        raw,
+        output,
+        approval=load_approved_dataset_manifest(),
+    )
+
+    assert calls == list(prepare.DATASETS)
+    assert len(relation_calls) == 1
+    assert state["relation_retrieval"] == {
+        "action": "built",
+        "index_sha256": "a" * 64,
+    }

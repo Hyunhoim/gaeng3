@@ -128,6 +128,7 @@ def test_audit_event_contains_only_redacted_hashes_counts_and_codes() -> None:
         "model_revision_sha256",
         "model_snapshot_manifest_sha256",
         "index_manifest_sha256",
+        "relation_set_sha256",
         "product_family_count",
         "candidate_count",
         "result_count",

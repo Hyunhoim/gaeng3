@@ -41,6 +41,19 @@ class KnowledgeRouteDecision(BaseModel):
         return self
 
 
+class KnowledgeRoutedExecutionError(RuntimeError):
+    """Preserve a trusted knowledge route when execution fails downstream."""
+
+    def __init__(self, decision: KnowledgeRouteDecision, cause: Exception) -> None:
+        if type(decision) is not KnowledgeRouteDecision:
+            raise TypeError("decision must be a KnowledgeRouteDecision")
+        if decision.disposition is not KnowledgeRouteDisposition.EXECUTE:
+            raise ValueError("only an executable knowledge route can fail downstream")
+        self.decision = decision
+        self.cause = cause
+        super().__init__("trusted knowledge route execution failed")
+
+
 _FAMILY_PATTERNS: dict[ProductFamily, re.Pattern[str]] = {
     ProductFamily.BOND: re.compile(
         r"국내\s*채권(?!\s*형\s*(?:ETF|ETN|ETP))|"
@@ -157,6 +170,12 @@ _PROHIBITED_ACTION = re.compile(
     r"drop\s+table|<script|```",
     re.IGNORECASE,
 )
+_ADDITIONAL_PRODUCT_CONDITION = re.compile(
+    r"AUM|총\s*보수|보수율|수익률|이율|금리|만기|신용\s*등급|거래\s*통화|"
+    r"가격|시가\s*총액|듀레이션|잔존\s*일수|오름차순|내림차순|상위|하위|"
+    r"높은\s*순|낮은\s*순|큰\s*순|작은\s*순",
+    re.IGNORECASE,
+)
 _COORDINATED_ENTITY = re.compile(r"(?:또는|혹은|및|와|과)\s+|[,/;]", re.IGNORECASE)
 _INVALID_ENTITY = re.compile(
     r"(?:ETF|ETN|ETP|펀드|상품|어떤|어느|해당|모든|전체|추천|전망)",
@@ -255,6 +274,12 @@ class DeterministicKnowledgeRouter:
                 KnowledgeRouteDisposition.UNSUPPORTED,
                 "relation_source_not_approved",
                 "테마·편입종목·외부 문서 관계는 현재 승인된 P0-6 관계 색인에 없음",
+            )
+        if _ADDITIONAL_PRODUCT_CONDITION.search(question):
+            return _decision(
+                KnowledgeRouteDisposition.CLARIFY,
+                "additional_relation_conditions",
+                "관계 검색과 다른 수치·정렬 조건을 한 요청에서 함께 실행할 수 없음",
             )
         if len(signals) != 1:
             return _decision(
@@ -357,4 +382,5 @@ __all__ = [
     "DeterministicKnowledgeRouter",
     "KnowledgeRouteDecision",
     "KnowledgeRouteDisposition",
+    "KnowledgeRoutedExecutionError",
 ]

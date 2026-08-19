@@ -15,6 +15,7 @@ from finance_agent_core.retrieval.relations import (
     VerifiedProductDatabase,
     build_provided_relation_index,
 )
+from finance_agent_core.storage import write_domestic_etp_database
 from finance_agent_core.storage.approval import sha256_file
 from finance_agent_core.storage.identity_cache import load_product_identities
 
@@ -56,6 +57,46 @@ def relation_index(
 ) -> tuple[Path, Path, SyntheticDatabaseVerifier]:
     product_database, _, _ = domestic_sample_database
     index_path = tmp_path / "relations.sqlite3"
+    verifier = SyntheticDatabaseVerifier()
+    build_provided_relation_index(
+        {ProductFamily.DOMESTIC_ETP: product_database},
+        index_path,
+        verifier=verifier,
+    )
+    return index_path, product_database, verifier
+
+
+@pytest.fixture
+def overlapping_relation_index(
+    tmp_path: Path,
+    domestic_sample_database,
+) -> tuple[Path, Path, SyntheticDatabaseVerifier]:
+    _, records, manifest = domestic_sample_database
+    managers = (
+        "Test Capital",
+        "TEST CAPITAL",
+        "Test Capital Holdings",
+        "Other Capital",
+        "S&P 500",
+        "한국운용",
+        "테스트 운용 그룹",
+    )
+    updated_records = []
+    for record, manager in zip(records, managers, strict=True):
+        updated_records.append(
+            record.model_copy(
+                update={
+                    "manager": manager,
+                    "source_values": {
+                        **record.source_values,
+                        "cu_fund_mgmt_co": manager,
+                    },
+                }
+            )
+        )
+    product_database = tmp_path / "overlapping-domestic-etp.sqlite3"
+    write_domestic_etp_database(product_database, updated_records, manifest)
+    index_path = tmp_path / "overlapping-relations.sqlite3"
     verifier = SyntheticDatabaseVerifier()
     build_provided_relation_index(
         {ProductFamily.DOMESTIC_ETP: product_database},
@@ -163,6 +204,76 @@ def test_returns_not_found_without_fabricating_relations(
 
     assert response.status == "not_found"
     assert response.evidence == ()
+
+
+def test_full_entity_match_does_not_fill_top_k_with_overlapping_names(
+    overlapping_relation_index: tuple[Path, Path, SyntheticDatabaseVerifier],
+) -> None:
+    index_path, product_database, verifier = overlapping_relation_index
+
+    response = SQLiteRelationIndex(index_path).search(
+        RelationSearchRequest(
+            query="  test   capital  ",
+            top_k=50,
+            relation_types=(RelationType.MANAGED_BY,),
+        ),
+        {ProductFamily.DOMESTIC_ETP: product_database},
+        verifier=verifier,
+    )
+
+    assert response.status == "found"
+    assert len(response.evidence) == 2
+    assert {item.entity_label for item in response.evidence} == {
+        "Test Capital",
+        "TEST CAPITAL",
+    }
+
+
+def test_partial_entity_token_is_not_found_even_when_fts_has_candidates(
+    overlapping_relation_index: tuple[Path, Path, SyntheticDatabaseVerifier],
+) -> None:
+    index_path, product_database, verifier = overlapping_relation_index
+
+    response = SQLiteRelationIndex(index_path).search(
+        RelationSearchRequest(
+            query="Test",
+            top_k=50,
+            relation_types=(RelationType.MANAGED_BY,),
+        ),
+        {ProductFamily.DOMESTIC_ETP: product_database},
+        verifier=verifier,
+    )
+
+    assert response.status == "not_found"
+    assert response.evidence == ()
+
+
+@pytest.mark.parametrize(
+    ("query", "expected_label"),
+    [
+        ("Ｓ　＆　Ｐ　５００", "S&P 500"),
+        ("한 국 운용", "한국운용"),
+    ],
+)
+def test_full_entity_match_preserves_safe_korean_and_english_normalization(
+    overlapping_relation_index: tuple[Path, Path, SyntheticDatabaseVerifier],
+    query: str,
+    expected_label: str,
+) -> None:
+    index_path, product_database, verifier = overlapping_relation_index
+
+    response = SQLiteRelationIndex(index_path).search(
+        RelationSearchRequest(
+            query=query,
+            top_k=50,
+            relation_types=(RelationType.MANAGED_BY,),
+        ),
+        {ProductFamily.DOMESTIC_ETP: product_database},
+        verifier=verifier,
+    )
+
+    assert response.status == "found"
+    assert [item.entity_label for item in response.evidence] == [expected_label]
 
 
 def test_rejects_runtime_product_database_drift(

@@ -10,6 +10,8 @@ import pytest
 from pydantic import ValidationError
 
 from finance_agent_core.agent import RoutedFinanceAgent
+from finance_agent_core.agent.knowledge_router import DeterministicKnowledgeRouter
+from finance_agent_core.agent.knowledge_service import KnowledgeAgent
 from finance_agent_core.execution import PlanAuthorityCode, PlanAuthorityError, SQLiteOracle
 from finance_agent_core.release import (
     AgentReleaseCode,
@@ -208,6 +210,109 @@ def test_internal_knowledge_release_cannot_masquerade_as_public_activation() -> 
         )
 
     assert raised.value.code is AgentReleaseCode.RUNTIME_MISMATCH
+
+
+def test_public_agent_requires_exact_signed_knowledge_runtime(tmp_path: Path) -> None:
+    artifact = _relation_artifact()
+    artifact_file_sha256 = hashlib.sha256(
+        relation_retrieval_artifact_file_bytes(artifact)
+    ).hexdigest()
+    runtime = replace(
+        _inputs(),
+        relation_retrieval_artifact=artifact,
+        relation_retrieval_artifact_file_sha256=artifact_file_sha256,
+    )
+    _, _, resolved, _, _ = _write_release(tmp_path, runtime)
+    signed_release = resolved.manifest.components.knowledge_retrieval
+    relation_path = tmp_path / "relations.sqlite3"
+    product_path = tmp_path / "domestic-etp.sqlite3"
+
+    matching_agent = KnowledgeAgent(
+        release=signed_release,
+        relation_index_path=relation_path,
+        relation_database_paths={"domestic_etp": product_path},
+    )
+    service = RoutedFinanceAgent(
+        {},
+        release_guard=resolved,
+        require_agent_release=True,
+        knowledge_router=DeterministicKnowledgeRouter(),
+        knowledge_agent=matching_agent,
+    )
+    assert service.knowledge_agent is matching_agent
+
+    matching_agent.release = signed_release.model_copy(
+        update={
+            "relation": signed_release.relation.model_copy(
+                update={"artifact_file_sha256": "e" * 64}
+            )
+        }
+    )
+    with pytest.raises(AgentReleaseError) as drifted:
+        service._assert_signed_knowledge_current()
+    assert drifted.value.code is AgentReleaseCode.RUNTIME_MISMATCH
+    matching_agent.release = signed_release
+
+    with pytest.raises(ValueError, match="requires its public router and Agent"):
+        RoutedFinanceAgent(
+            {},
+            release_guard=resolved,
+            require_agent_release=True,
+        )
+
+    internal_agent = KnowledgeAgent(
+        release=KnowledgeRetrievalRelease(relation=artifact),
+        relation_index_path=relation_path,
+        relation_database_paths={"domestic_etp": product_path},
+    )
+    with pytest.raises(ValueError, match="signed public knowledge release"):
+        RoutedFinanceAgent(
+            {},
+            release_guard=resolved,
+            require_agent_release=True,
+            knowledge_router=DeterministicKnowledgeRouter(),
+            knowledge_agent=internal_agent,
+        )
+
+    mismatched_agent = KnowledgeAgent(
+        release=signed_release.model_copy(
+            update={
+                "relation": signed_release.relation.model_copy(
+                    update={
+                        "artifact_file_sha256": "f" * 64,
+                    }
+                )
+            }
+        ),
+        relation_index_path=relation_path,
+        relation_database_paths={"domestic_etp": product_path},
+    )
+    with pytest.raises(ValueError, match="signed public knowledge release"):
+        RoutedFinanceAgent(
+            {},
+            release_guard=resolved,
+            require_agent_release=True,
+            knowledge_router=DeterministicKnowledgeRouter(),
+            knowledge_agent=mismatched_agent,
+        )
+
+
+def test_disabled_signed_relation_release_rejects_attached_agent(tmp_path: Path) -> None:
+    _, _, resolved, _, _ = _write_release(tmp_path)
+    internal_agent = KnowledgeAgent(
+        release=KnowledgeRetrievalRelease(relation=_relation_artifact()),
+        relation_index_path=tmp_path / "relations.sqlite3",
+        relation_database_paths={"domestic_etp": tmp_path / "domestic-etp.sqlite3"},
+    )
+
+    with pytest.raises(ValueError, match="disabled signed relation release"):
+        RoutedFinanceAgent(
+            {},
+            release_guard=resolved,
+            require_agent_release=True,
+            knowledge_router=DeterministicKnowledgeRouter(),
+            knowledge_agent=internal_agent,
+        )
 
 
 def test_constructed_invalid_relation_artifact_is_revalidated_before_activation() -> None:

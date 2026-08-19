@@ -208,6 +208,10 @@ class PublicKnowledgeRetrievalRelease(ReleaseModel):
     relation: PublicRelationRetrievalRelease
     document: PublicDocumentRetrievalRelease
 
+    @property
+    def contract_sha256(self) -> str:
+        return canonical_sha256(self.model_dump(mode="json"))
+
 
 class ExecutionRelease(ReleaseModel):
     plan_authority_version: Literal["plan-authority-v1"] = "plan-authority-v1"

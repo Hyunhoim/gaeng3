@@ -146,6 +146,7 @@ class AuditEvent(ObservabilityModel):
         pattern=_SHA256_PATTERN,
     )
     index_manifest_sha256: str | None = Field(default=None, pattern=_SHA256_PATTERN)
+    relation_set_sha256: str | None = Field(default=None, pattern=_SHA256_PATTERN)
     product_family_count: int = Field(default=0, ge=0, le=4)
     candidate_count: int = Field(default=0, ge=0, le=1_000_000)
     result_count: int = Field(default=0, ge=0, le=100_000)
@@ -276,6 +277,7 @@ class AuditEvent(ObservabilityModel):
         model_revision: str | None = None,
         model_snapshot_manifest_sha256: str | None = None,
         index_manifest_sha256: str | None = None,
+        relation_set_sha256: str | None = None,
         product_family_count: int | None = None,
         candidate_count: int = 0,
         result_count: int = 0,
@@ -324,6 +326,7 @@ class AuditEvent(ObservabilityModel):
             ),
             model_snapshot_manifest_sha256=model_snapshot_manifest_sha256,
             index_manifest_sha256=index_manifest_sha256,
+            relation_set_sha256=relation_set_sha256,
             product_family_count=(
                 len(families) if product_family_count is None else product_family_count
             ),

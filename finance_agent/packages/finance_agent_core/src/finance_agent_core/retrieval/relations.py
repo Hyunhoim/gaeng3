@@ -233,9 +233,7 @@ class RelationSearchResponse(RelationModel):
 
 class RelationIndexBuildReceipt(RelationModel):
     schema_version: Literal["1.0"] = "1.0"
-    status: Literal["verified_index_not_agent_activated"] = (
-        "verified_index_not_agent_activated"
-    )
+    status: Literal["verified_index_not_agent_activated"] = "verified_index_not_agent_activated"
     database_sha256: str = Field(pattern=_SHA256_PATTERN)
     database_size_bytes: int = Field(gt=0)
     approval_manifest_sha256: str = Field(pattern=_SHA256_PATTERN)
@@ -278,9 +276,7 @@ class ApprovedProductDatabaseVerifier:
     def __init__(self, approval: ApprovedDatasetManifest | None = None) -> None:
         self._uses_packaged_approval = approval is None
         self.approval = approval or load_approved_dataset_manifest()
-        self._identity_cache = ProductIdentitySnapshotCache(
-            max_entries=len(_SUPPORTED_FAMILIES)
-        )
+        self._identity_cache = ProductIdentitySnapshotCache(max_entries=len(_SUPPORTED_FAMILIES))
 
     @property
     def approval_manifest_sha256(self) -> str:
@@ -365,15 +361,59 @@ def _normalize_label(value: str) -> str:
     return " ".join(unicodedata.normalize("NFKC", value).split()).casefold()
 
 
+def _compact_label(value: str) -> str:
+    """Return the comparison key that ignores punctuation and whitespace only."""
+
+    return "".join(character for character in _normalize_label(value) if character.isalnum())
+
+
 def _stable_id(prefix: str, payload: object) -> str:
     return f"{prefix}-{hashlib.sha256(_canonical_json_bytes(payload)).hexdigest()[:32]}"
 
 
 def _fts_query(query: str) -> str:
-    tokens = list(dict.fromkeys(token.casefold() for token in _QUERY_TOKEN.findall(query)))
+    """Build a high-recall candidate query, never an evidence acceptance rule.
+
+    Natural tokens must all occur.  The compact alternative preserves deterministic
+    matches across harmless punctuation or spacing differences such as ``S&P 500``
+    and ``S P 500``.  Every candidate is independently checked by
+    :func:`_canonical_entity_match` before it can become evidence.
+    """
+
+    normalized_query = _normalize_label(query)
+    tokens = list(dict.fromkeys(_QUERY_TOKEN.findall(normalized_query)))
     if not tokens:
         raise ValueError("relation query contains no searchable tokens")
-    return " OR ".join(f'"{token}"' for token in tokens)
+    conjunction = " AND ".join(f'"{token}"' for token in tokens)
+    compact = _compact_label(normalized_query)
+    if compact in tokens:
+        return conjunction
+    return f'({conjunction}) OR "{compact}"'
+
+
+def _canonical_entity_match(
+    query: str,
+    *,
+    entity_label: str,
+    stored_normalized_entity_label: str,
+) -> bool:
+    """Authorize only a canonical full-entity match.
+
+    The primary policy is exact NFKC/casefold/whitespace-normalized equality.  The
+    only fallback ignores punctuation and whitespace; it never accepts a token
+    subset, prefix, or substring.  Recomputing the stored normalization here makes
+    this an independent post-query check rather than trusting the FTS candidate.
+    """
+
+    normalized_query = _normalize_label(query)
+    normalized_entity = _normalize_label(entity_label)
+    if normalized_entity != stored_normalized_entity_label:
+        raise RelationIndexError("relation candidate normalization differs")
+    if normalized_query == normalized_entity:
+        return True
+    compact_query = _compact_label(normalized_query)
+    compact_entity = _compact_label(normalized_entity)
+    return bool(compact_query) and compact_query == compact_entity
 
 
 def _lexemes(value: str) -> str:
@@ -885,9 +925,7 @@ def _identity_maps(
             or snapshot.manifest.searchable_rows != binding.searchable_rows
             or binding.source_id != registry.require_dataset(family.value).source_id
         ):
-            raise RelationIndexError(
-                f"{family.value} database differs from relation index binding"
-            )
+            raise RelationIndexError(f"{family.value} database differs from relation index binding")
         identity_maps[family] = {item.product_id: item for item in snapshot.identities}
     return identity_maps
 
@@ -911,6 +949,21 @@ class SQLiteRelationIndex:
 
     def manifest(self) -> RelationIndexManifest:
         return self._verified()[2]
+
+    def verify_runtime(
+        self,
+        database_paths: Mapping[ProductFamily | str, str | Path],
+        *,
+        verifier: ProductDatabaseVerifier | None = None,
+    ) -> tuple[RelationIndexManifest, str]:
+        """Verify the immutable index and every official DB binding without searching."""
+
+        active_verifier = verifier or _default_product_database_verifier()
+        resolved, before, manifest, relation_index_sha256 = self._verified()
+        _identity_maps(manifest, database_paths, active_verifier)
+        if _relation_index_version(resolved) != before:
+            raise RelationIndexError("relation index changed during runtime verification")
+        return manifest, relation_index_sha256
 
     def search(
         self,
@@ -950,15 +1003,19 @@ class SQLiteRelationIndex:
                     r.normalized_entity_label ASC,
                     r.product_family ASC,
                     r.product_id ASC
-                LIMIT ?
             """
-            parameters.append(request.top_k)
             rows = connection.execute(sql, parameters).fetchall()
         if _relation_index_version(resolved) != before:
             raise RelationIndexError("relation index changed during search")
 
         evidence: list[RelationEvidence] = []
         for row in rows:
+            if not _canonical_entity_match(
+                request.query,
+                entity_label=str(row["entity_label"]),
+                stored_normalized_entity_label=str(row["normalized_entity_label"]),
+            ):
+                continue
             family = ProductFamily(str(row["product_family"]))
             identity = identities.get(family, {}).get(str(row["product_id"]))
             if identity is None or identity.is_quarantined:
@@ -988,6 +1045,8 @@ class SQLiteRelationIndex:
                     relevance_score=round(max(0.0, -float(row["rank"])), 9),
                 )
             )
+            if len(evidence) == request.top_k:
+                break
         return RelationSearchResponse(
             status="found" if evidence else "not_found",
             query=request.query,

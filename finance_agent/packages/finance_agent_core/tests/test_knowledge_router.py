@@ -177,6 +177,10 @@ def test_ordinary_product_field_search_is_not_hijacked(
             "미국에 투자하는 해외 ETF 3개와 5개 중 알려줘",
             "ambiguous_result_limit",
         ),
+        (
+            "한국전력공사가 발행한 국내채권 중 이율 5% 이상 3개를 알려줘",
+            "additional_relation_conditions",
+        ),
     ],
 )
 def test_ambiguous_relation_questions_never_emit_a_plan(

@@ -3,7 +3,16 @@ from __future__ import annotations
 import json
 from datetime import date
 
-from finance_agent_core.agent.knowledge_backend_adapter import knowledge_result_to_backend
+import pytest
+
+from finance_agent_core.agent.knowledge_backend_adapter import (
+    knowledge_result_to_backend,
+    knowledge_route_control_to_backend,
+)
+from finance_agent_core.agent.knowledge_router import (
+    KnowledgeRouteDecision,
+    KnowledgeRouteDisposition,
+)
 from finance_agent_core.agent.knowledge_service import KnowledgeAgentResult
 from finance_agent_core.agent.official_adapter import official_response_from_backend
 from finance_agent_core.answering.claims import (
@@ -135,3 +144,50 @@ def test_not_found_knowledge_result_exposes_no_evidence() -> None:
     assert response.products == []
     assert response.citations == []
     assert response.as_of_dates == []
+
+
+@pytest.mark.parametrize(
+    ("disposition", "status"),
+    [
+        (KnowledgeRouteDisposition.CLARIFY, BackendStatus.CLARIFICATION),
+        (KnowledgeRouteDisposition.UNSUPPORTED, BackendStatus.UNSUPPORTED),
+    ],
+)
+def test_knowledge_control_route_uses_safe_backend_contract(
+    disposition: KnowledgeRouteDisposition,
+    status: BackendStatus,
+) -> None:
+    decision = KnowledgeRouteDecision(
+        disposition=disposition,
+        reason_code=(
+            "ambiguous_product_family"
+            if disposition is KnowledgeRouteDisposition.CLARIFY
+            else "relation_family_unavailable"
+        ),
+        reason="테스트용 공개 사유",
+    )
+
+    response = knowledge_route_control_to_backend(decision, request_id="relation-control")
+
+    assert response.status is status
+    assert response.answer_mode is BackendAnswerMode.CONTROL
+    assert response.query_plan is None
+    assert response.products == []
+    assert response.citations == []
+    if disposition is KnowledgeRouteDisposition.CLARIFY:
+        assert response.clarification is not None
+        assert response.clarification.required_fields == ["product_family"]
+    else:
+        assert response.clarification is None
+
+
+def test_knowledge_control_adapter_rejects_non_control_route() -> None:
+    with pytest.raises(ValueError, match="only knowledge control"):
+        knowledge_route_control_to_backend(
+            KnowledgeRouteDecision(
+                disposition=KnowledgeRouteDisposition.NOT_APPLICABLE,
+                reason_code="not_relation_question",
+                reason="기존 상품 경로",
+            ),
+            request_id="ordinary",
+        )

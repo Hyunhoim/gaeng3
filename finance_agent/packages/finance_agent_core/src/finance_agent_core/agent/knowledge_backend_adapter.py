@@ -2,12 +2,17 @@ from __future__ import annotations
 
 from time import perf_counter
 
+from finance_agent_core.agent.knowledge_router import (
+    KnowledgeRouteDecision,
+    KnowledgeRouteDisposition,
+)
 from finance_agent_core.agent.knowledge_service import KnowledgeAgentResult
 from finance_agent_core.answering.claims import KnowledgeAnswerComposition
 from finance_agent_core.config import QualityStatus
 from finance_agent_core.contracts.backend import (
     BackendAgentResponse,
     BackendAnswerMode,
+    BackendClarification,
     BackendStatus,
     SourceCitation,
 )
@@ -26,6 +31,16 @@ _RELATION_WARNING = (
     "관계는 주최 측 제공 데이터의 표기를 그대로 조회한 결과이며 투자 추천이나 "
     "인과관계를 뜻하지 않습니다."
 )
+
+_CLARIFICATION_FIELDS: dict[str, list[str]] = {
+    "ambiguous_product_family": ["product_family"],
+    "multiple_relation_predicates": ["relation_type"],
+    "missing_relation_entity": ["relation_entity"],
+    "invalid_relation_entity": ["relation_entity"],
+    "multiple_relation_entities": ["relation_entity"],
+    "ambiguous_result_limit": ["limit"],
+    "additional_relation_conditions": ["single_relation_condition"],
+}
 
 
 def _answer_mode(composition: KnowledgeAnswerComposition) -> BackendAnswerMode:
@@ -165,4 +180,73 @@ def knowledge_result_to_backend(result: KnowledgeAgentResult) -> BackendAgentRes
     return response
 
 
-__all__ = ["knowledge_result_to_backend"]
+def knowledge_route_control_to_backend(
+    decision: KnowledgeRouteDecision,
+    *,
+    request_id: str,
+) -> BackendAgentResponse:
+    """Project a non-executable relation route onto the strict Backend DTO."""
+
+    if type(decision) is not KnowledgeRouteDecision:
+        raise TypeError("decision must be a KnowledgeRouteDecision")
+    if not request_id.strip():
+        raise ValueError("request_id cannot be blank")
+    if decision.disposition not in {
+        KnowledgeRouteDisposition.CLARIFY,
+        KnowledgeRouteDisposition.UNSUPPORTED,
+    }:
+        raise ValueError("only knowledge control routes can be projected")
+    clarify = decision.disposition is KnowledgeRouteDisposition.CLARIFY
+    answer = f"질문을 실행하지 않았습니다. {decision.reason} " + (
+        "상품군과 관계 조건을 하나씩 정확히 알려주세요."
+        if clarify
+        else "제공 데이터에 있는 관계 조회 범위로 질문을 바꿔주세요."
+    )
+    response = BackendAgentResponse(
+        request_id=request_id,
+        status=(BackendStatus.CLARIFICATION if clarify else BackendStatus.UNSUPPORTED),
+        intent=(InteractionIntent.CLARIFY if clarify else InteractionIntent.UNSUPPORTED),
+        product_families=[],
+        answer=answer,
+        query_plan=None,
+        candidate_count=None,
+        products=[],
+        comparisons=[],
+        aggregates=[],
+        documents=[],
+        citations=[],
+        as_of_dates=[],
+        warnings=[],
+        answer_mode=BackendAnswerMode.CONTROL,
+        fallback_used=False,
+        provider_model=None,
+        clarification=(
+            BackendClarification(
+                code=decision.reason_code,
+                message=decision.reason,
+                required_fields=_CLARIFICATION_FIELDS.get(
+                    decision.reason_code,
+                    ["relation_condition"],
+                ),
+                options=[],
+            )
+            if clarify
+            else None
+        ),
+        error=None,
+        source_manifest=None,
+        family_searches=[],
+        source_manifests=[],
+    )
+    audit = current_request_audit()
+    if audit is not None:
+        audit.emit(
+            stage=AuditStage.SERIALIZATION,
+            outcome=(AuditOutcome.CLARIFIED if clarify else AuditOutcome.UNSUPPORTED),
+            reason_code="knowledge_control_dto_built",
+            duration_ms=0,
+        )
+    return response
+
+
+__all__ = ["knowledge_result_to_backend", "knowledge_route_control_to_backend"]

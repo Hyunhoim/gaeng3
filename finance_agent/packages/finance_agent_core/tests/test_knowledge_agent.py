@@ -9,7 +9,9 @@ from typing import Literal
 import pytest
 from pydantic import ValidationError
 
+from finance_agent_core.agent import RoutedFinanceAgent, execute_answer_request
 from finance_agent_core.agent.knowledge_cli import main as knowledge_cli_main
+from finance_agent_core.agent.knowledge_router import DeterministicKnowledgeRouter
 from finance_agent_core.agent.knowledge_service import (
     KnowledgeAgent,
     KnowledgeServiceError,
@@ -19,6 +21,16 @@ from finance_agent_core.answering.claims import (
     KnowledgeAnswerDraft,
     expected_knowledge_answer_draft,
 )
+from finance_agent_core.audit_validation import (
+    AuditValidationPolicy,
+    AuditValidationStatus,
+    validate_audit_jsonl,
+)
+from finance_agent_core.contracts.backend import (
+    BackendAgentRequest,
+    BackendErrorCode,
+    BackendStatus,
+)
 from finance_agent_core.contracts.knowledge import (
     DocumentKnowledgeOperation,
     KnowledgePlanAuthorityError,
@@ -27,9 +39,22 @@ from finance_agent_core.contracts.knowledge import (
     RelationKnowledgeOperation,
 )
 from finance_agent_core.contracts.queryplan import ProductFamily
+from finance_agent_core.contracts.routing import InteractionIntent
+from finance_agent_core.deadline import RequestDeadline, bind_request_deadline
+from finance_agent_core.observability import (
+    AuditOutcome,
+    AuditStage,
+    BoundedAsyncAuditSink,
+    InMemoryAuditSink,
+    RequestAuditRecorder,
+    bind_request_audit,
+)
 from finance_agent_core.release import (
     DocumentRetrievalArtifactRelease,
     KnowledgeRetrievalRelease,
+    PublicDocumentRetrievalRelease,
+    PublicKnowledgeRetrievalRelease,
+    PublicRelationRetrievalRelease,
     RelationRetrievalArtifactRelease,
 )
 from finance_agent_core.retrieval import (
@@ -230,6 +255,359 @@ def test_relation_plan_allows_only_one_predicate_per_request() -> None:
             ),
             product_families=(ProductFamily.DOMESTIC_ETP,),
         )
+
+
+def test_public_relation_release_verifies_readiness_and_preserves_provenance(
+    relation_agent_factory,
+) -> None:
+    create, relation_index, internal_release, product_database = relation_agent_factory
+    internal_agent = create()
+    assert internal_release.relation is not None
+    public_release = PublicKnowledgeRetrievalRelease(
+        relation=PublicRelationRetrievalRelease(
+            status="activated",
+            artifact=internal_release.relation,
+            artifact_file_sha256="a" * 64,
+        ),
+        document=PublicDocumentRetrievalRelease(),
+    )
+    agent = KnowledgeAgent(
+        release=public_release,
+        relation_index_path=relation_index,
+        relation_database_paths={ProductFamily.DOMESTIC_ETP: product_database},
+        relation_verifier=internal_agent.relation_verifier,
+    )
+    with pytest.raises(ValueError, match="claim generation disabled"):
+        KnowledgeAgent(
+            release=public_release,
+            relation_index_path=relation_index,
+            relation_database_paths={ProductFamily.DOMESTIC_ETP: product_database},
+            relation_verifier=internal_agent.relation_verifier,
+            claim_provider=FakeClaimProvider(),
+        )
+
+    agent.verify_ready()
+    result = agent.execute(_relation_plan())
+
+    assert result.release_contract_sha256 == public_release.contract_sha256
+
+    assert public_release.relation.artifact is not None
+    mismatched_release = public_release.model_copy(
+        update={
+            "relation": public_release.relation.model_copy(
+                update={
+                    "artifact": public_release.relation.artifact.model_copy(
+                        update={"relation_set_sha256": "e" * 64}
+                    )
+                }
+            )
+        }
+    )
+    with pytest.raises(KnowledgeServiceError, match="runtime differs"):
+        KnowledgeAgent(
+            release=mismatched_release,
+            relation_index_path=relation_index,
+            relation_database_paths={ProductFamily.DOMESTIC_ETP: product_database},
+            relation_verifier=internal_agent.relation_verifier,
+        ).verify_ready()
+
+
+def test_relation_readiness_detects_post_start_file_drift(relation_agent_factory) -> None:
+    create, relation_index, _, _ = relation_agent_factory
+    agent = create()
+    agent.verify_ready()
+    agent.assert_ready_current()
+
+    os.chmod(relation_index, 0o644)
+
+    with pytest.raises(KnowledgeServiceError, match="changed after readiness"):
+        agent.assert_ready_current()
+
+
+def test_public_router_executes_relation_and_preserves_product_fallthrough(
+    relation_agent_factory,
+) -> None:
+    create, _, _, product_database = relation_agent_factory
+    service = RoutedFinanceAgent(
+        {ProductFamily.DOMESTIC_ETP: product_database},
+        knowledge_router=DeterministicKnowledgeRouter(),
+        knowledge_agent=create(),
+    )
+
+    relation = execute_answer_request(
+        service,
+        BackendAgentRequest(
+            request_id="public-relation-001",
+            question="테스트운용이 운용하는 국내 ETF 3개를 알려줘",
+        ),
+    )
+    aggregate = execute_answer_request(
+        service,
+        BackendAgentRequest(
+            request_id="public-product-001",
+            question="국내 ETP의 상품유형별 분포를 집계해줘",
+        ),
+    )
+
+    assert relation.http_status_code == 200
+    assert relation.response.status is BackendStatus.SUCCESS
+    assert relation.response.request_id == "public-relation-001"
+    assert len(relation.response.products) == 3
+    assert relation.response.query_plan is not None
+    assert relation.response.query_plan.operation.kind == "relation_search"
+    assert aggregate.http_status_code == 200
+    assert aggregate.response.status is BackendStatus.SUCCESS
+    assert aggregate.response.aggregates
+    assert aggregate.response.query_plan is not None
+    assert aggregate.response.query_plan.intent.value == "aggregate"
+
+
+def test_relation_timeout_preserves_trusted_backend_route_context(
+    relation_agent_factory,
+) -> None:
+    create, _, _, product_database = relation_agent_factory
+    service = RoutedFinanceAgent(
+        {ProductFamily.DOMESTIC_ETP: product_database},
+        knowledge_router=DeterministicKnowledgeRouter(),
+        knowledge_agent=create(),
+    )
+    request = BackendAgentRequest(
+        request_id="public-relation-timeout-001",
+        question="테스트운용이 운용하는 국내 ETF 3개를 알려줘",
+    )
+
+    with bind_request_deadline(RequestDeadline(expires_at=0.0)):
+        result = execute_answer_request(service, request)
+
+    assert result.http_status_code == 504
+    assert result.response.status is BackendStatus.ERROR
+    assert result.response.intent is InteractionIntent.SEARCH
+    assert result.response.product_families == [ProductFamily.DOMESTIC_ETP]
+    assert result.response.error is not None
+    assert result.response.error.code is BackendErrorCode.PROVIDER_UNAVAILABLE
+
+
+def test_public_relation_emits_ordered_release_linked_audit(
+    relation_agent_factory,
+    tmp_path: Path,
+) -> None:
+    create, _, release, product_database = relation_agent_factory
+    assert release.relation is not None
+    memory = InMemoryAuditSink(max_events=100)
+    audit = BoundedAsyncAuditSink(memory, queue_capacity=100)
+    service = RoutedFinanceAgent(
+        {ProductFamily.DOMESTIC_ETP: product_database},
+        knowledge_router=DeterministicKnowledgeRouter(),
+        knowledge_agent=create(FakeClaimProvider()),
+        audit_sink=audit,
+    )
+    request_id = "public-relation-audit-001"
+    question = "테스트운용이 운용하는 국내 ETF 3개를 알려줘"
+    recorder = RequestAuditRecorder(request_id="", question="", sink=audit)
+    recorder.emit(
+        stage=AuditStage.REQUEST,
+        outcome=AuditOutcome.STARTED,
+        reason_code="received",
+        duration_ms=0,
+    )
+    enriched = recorder.with_request(request_id=request_id, question=question)
+
+    with bind_request_audit(enriched):
+        response = execute_answer_request(
+            service,
+            BackendAgentRequest(request_id=request_id, question=question),
+        )
+        enriched.emit(
+            stage=AuditStage.REQUEST,
+            outcome=AuditOutcome.SUCCEEDED,
+            reason_code="response_completed",
+            duration_ms=0,
+        )
+    assert audit.close(timeout_seconds=2)
+    events = memory.snapshot()
+    expected_reasons = [
+        "guard_allowed",
+        "knowledge_routed_execute",
+        "knowledge_plan_compiled",
+        "knowledge_authority_granted",
+        "relation_lookup_completed",
+        "relation_evidence_verified",
+        "knowledge_claims_verified",
+        "knowledge_rendering_completed",
+        "knowledge_execution_completed",
+    ]
+
+    assert response.http_status_code == 200
+    assert [
+        event.reason_code for event in events if event.reason_code in expected_reasons
+    ] == expected_reasons
+    release_linked_reasons = {
+        *expected_reasons[1:],
+        "knowledge_generation_completed",
+    }
+    assert all(
+        event.relation_set_sha256 == release.relation.relation_set_sha256
+        for event in events
+        if event.reason_code in release_linked_reasons
+    )
+    audit_path = tmp_path / "public-relation-audit.jsonl"
+    audit_path.write_text(
+        "".join(event.model_dump_json() + "\n" for event in events),
+        encoding="utf-8",
+    )
+    report = validate_audit_jsonl(
+        audit_path,
+        policy=AuditValidationPolicy(require_relation_linkage=True),
+    )
+    assert report.status is AuditValidationStatus.PASSED
+    assert report.issue_count == 0
+
+
+def test_public_relation_timeout_emits_valid_causal_audit(
+    relation_agent_factory,
+    tmp_path: Path,
+) -> None:
+    create, _, _, product_database = relation_agent_factory
+    memory = InMemoryAuditSink(max_events=100)
+    audit = BoundedAsyncAuditSink(memory, queue_capacity=100)
+    service = RoutedFinanceAgent(
+        {ProductFamily.DOMESTIC_ETP: product_database},
+        knowledge_router=DeterministicKnowledgeRouter(),
+        knowledge_agent=create(),
+        audit_sink=audit,
+    )
+    request_id = "public-relation-timeout-audit-001"
+    question = "테스트운용이 운용하는 국내 ETF 3개를 알려줘"
+    recorder = RequestAuditRecorder(request_id="", question="", sink=audit)
+    recorder.emit(
+        stage=AuditStage.REQUEST,
+        outcome=AuditOutcome.STARTED,
+        reason_code="received",
+        duration_ms=0,
+    )
+    enriched = recorder.with_request(request_id=request_id, question=question)
+
+    with (
+        bind_request_audit(enriched),
+        bind_request_deadline(RequestDeadline(expires_at=0.0)),
+    ):
+        response = execute_answer_request(
+            service,
+            BackendAgentRequest(request_id=request_id, question=question),
+        )
+        enriched.emit(
+            stage=AuditStage.REQUEST,
+            outcome=AuditOutcome.TIMED_OUT,
+            reason_code="deadline_exceeded",
+            duration_ms=0,
+        )
+    assert audit.close(timeout_seconds=2)
+    events = memory.snapshot()
+
+    assert response.http_status_code == 504
+    assert [
+        event.reason_code
+        for event in events
+        if event.reason_code
+        in {
+            "knowledge_authority_timed_out",
+            "knowledge_deadline_exceeded",
+            "deadline_exceeded",
+        }
+    ] == [
+        "knowledge_authority_timed_out",
+        "knowledge_deadline_exceeded",
+        "deadline_exceeded",
+    ]
+    audit_path = tmp_path / "public-relation-timeout-audit.jsonl"
+    audit_path.write_text(
+        "".join(event.model_dump_json() + "\n" for event in events),
+        encoding="utf-8",
+    )
+    report = validate_audit_jsonl(
+        audit_path,
+        policy=AuditValidationPolicy(require_relation_linkage=True),
+    )
+    assert report.status is AuditValidationStatus.PASSED
+    assert report.issue_count == 0
+
+
+@pytest.mark.parametrize(
+    ("question", "status"),
+    [
+        ("테스트운용이 운용하는 ETF를 보여줘", BackendStatus.CLARIFICATION),
+        ("테스트운용이 운용하는 해외 ETF를 보여줘", BackendStatus.UNSUPPORTED),
+    ],
+)
+def test_public_router_projects_relation_control_without_execution(
+    relation_agent_factory,
+    question: str,
+    status: BackendStatus,
+) -> None:
+    create, _, _, product_database = relation_agent_factory
+    response = execute_answer_request(
+        RoutedFinanceAgent(
+            {ProductFamily.DOMESTIC_ETP: product_database},
+            knowledge_router=DeterministicKnowledgeRouter(),
+            knowledge_agent=create(),
+        ),
+        BackendAgentRequest(request_id="public-control-001", question=question),
+    )
+
+    assert response.http_status_code == 200
+    assert response.response.status is status
+    assert response.response.query_plan is None
+    assert response.response.products == []
+    assert response.response.citations == []
+
+
+def test_public_router_without_activated_relation_release_fails_closed(
+    domestic_sample_database,
+) -> None:
+    product_database, _, _ = domestic_sample_database
+    response = execute_answer_request(
+        RoutedFinanceAgent(
+            {ProductFamily.DOMESTIC_ETP: product_database},
+            knowledge_router=DeterministicKnowledgeRouter(),
+        ),
+        BackendAgentRequest(
+            request_id="public-relation-disabled-001",
+            question="테스트운용이 운용하는 국내 ETF 3개를 알려줘",
+        ),
+    )
+
+    assert response.http_status_code == 200
+    assert response.response.status is BackendStatus.UNSUPPORTED
+    assert response.response.query_plan is None
+    assert response.response.products == []
+    assert response.response.error is None
+
+
+def test_public_relation_integrity_failure_maps_to_retryable_503(
+    relation_agent_factory,
+) -> None:
+    create, relation_index, _, product_database = relation_agent_factory
+    service = RoutedFinanceAgent(
+        {ProductFamily.DOMESTIC_ETP: product_database},
+        knowledge_router=DeterministicKnowledgeRouter(),
+        knowledge_agent=create(),
+    )
+    os.chmod(relation_index, 0o644)
+
+    response = execute_answer_request(
+        service,
+        BackendAgentRequest(
+            request_id="public-relation-drift-001",
+            question="테스트운용이 운용하는 국내 ETF 3개를 알려줘",
+        ),
+    )
+
+    assert response.http_status_code == 503
+    assert response.response.status is BackendStatus.ERROR
+    assert response.response.error is not None
+    assert response.response.error.code is BackendErrorCode.DATASET_UNAVAILABLE
+    assert response.response.error.retryable
+    assert str(relation_index) not in response.model_dump_json()
 
 
 def test_knowledge_plan_forbids_untyped_extra_operations() -> None:
