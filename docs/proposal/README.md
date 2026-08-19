@@ -37,7 +37,7 @@ AI 구현 세부사항은 `finance_agent/docs/`에 유지하고, 이곳에서는
 
 | 문서 | 역할 | 상태 |
 | --- | --- | --- |
-| [기술 제안서 원문](technical-proposal.md) | 공식 7개 항목을 따르는 팀 공통 원고 | 초안 v0.1 |
+| [기술 제안서 원문](technical-proposal.md) | 공식 7개 항목을 따르는 팀 공통 원고 | 초안 v0.4 · P0-7 반영 |
 | [예선 1등 실행 전략](competition-strategy.md) | 공식 배점에 맞춘 우선순위·Qwen 실험·기술 채택 기준 | 실행 중 |
 | [제안서 근거 맵](evidence-map.md) | 제안서 주장과 코드·평가 결과의 연결 | 활성 |
 | [연구 근거](research-basis.md) | 탑티어 연구에서 차용한 원칙과 실제 구현·한계의 구분 | 활성 |

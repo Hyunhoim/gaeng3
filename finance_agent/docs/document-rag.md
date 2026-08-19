@@ -1,6 +1,6 @@
 # BM25/SQLite FTS 문서 RAG 최소 계약
 
-마지막 갱신: 2026-08-19
+마지막 갱신: 2026-08-20
 
 ## 1. 범위
 
@@ -22,13 +22,15 @@ retrieval 계층이다. 생성형 모델이나 외부 수집기를 포함하지 
 - 출처·수집일·기준일·라이선스·본문 SHA-256 canonical manifest 봉인
 - 변조·경로 탈출·symbolic link·중복 JSON key·덮어쓰기 fail-closed
 - 검증된 UTF-8 `.txt`·`.md`만 새 읽기 전용 SQLite BM25 색인으로 build
+- P0-7 내부 `KnowledgeQueryPlan`과 문서 ID·제목·원문 발췌·evidence ID의
+  exact Claim Verifier, 모델 오류·허위 발췌의 결정론적 fallback
 
 현재 제외:
 
 - 웹 crawler, 자동 다운로드, 대량 외부 수집
 - OCR·PDF parser
 - embedding, cross-encoder, NER, 번역 모델
-- 문서 evidence를 자유 생성 답변으로 바꾸는 production provider
+- 문서 evidence를 자유 생성 답변으로 바꾸는 production provider와 공개 API 연결
 - 문서 간 사실 충돌을 자동 판정하는 금융 의미 모델
 - 실제 외부 corpus, PDF·OCR·번역, Agent Release 활성화
 
@@ -87,3 +89,6 @@ snapshot bytes를 manifest·hash·receipt로 묶고 검색 품질 테스트 후�
 따른다. 승인된 실제 corpus가 없으므로 현재 Release는
 `document_bm25=disabled_no_approved_corpus`를 유지하고, 테스트는 synthetic 문서만
 사용한다.
+
+문서 계획·주장 검증의 내부 완료 범위와 공개 활성화 대기는
+[P0-7 인수인계](p0-7-knowledge-claim-verifier-handover-2026-08-20.md)를 따른다.

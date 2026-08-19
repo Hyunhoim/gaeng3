@@ -1,7 +1,7 @@
 # 금융상품 Agent 현재 프로젝트 기준
 
 상태: 현재 정본
-기준일: 2026-08-19
+기준일: 2026-08-20
 대상 저장소: `https://github.com/Hyunhoim/gaeng3`
 
 ## 1. 한 문장 목표
@@ -166,9 +166,13 @@
 - 승인 상품 DB의 제공 필드만 사용해 국내채권·국내/해외 ETP의 발행사·운용사·
   기초지수·자산유형·투자지역 관계 58,005개를 SQLite FTS5 색인으로 만들었다.
   검색된 상품 ID는 공식 상품 DB에서 다시 확인하고 원천 행·열·기준일·DB hash를
-  보존한다. 관계 전용 계약 14/14와 실제 검색 smoke 4/4를 통과했지만, P0-7 전까지
-  Agent 답변 경로에는 연결하지 않는다. 공모펀드·테마·편입종목·외부 문서 관계와
-  금융 alias는 출처·도메인 검수 대기다.
+  보존한다. 관계 전용 계약 14/14와 실제 검색 smoke 4/4를 통과했다.
+  공모펀드·테마·편입종목·외부 문서 관계와 금융 alias는 출처·도메인 검수 대기다.
+- 관계·문서 전용 `KnowledgeQueryPlan`, 서버 계획 exact-match 권한 gate, 구조화
+  Claim Verifier와 결정론적 fallback을 P0-7 내부 경로로 연결했다. 모델이 상품·관계·
+  문서 발췌·evidence를 바꾸거나 실패하면 초안을 버리고 서버 근거 답변을 사용한다.
+  전용 계약 22/22, 승인 관계 CLI smoke 4/4를 통과했다. 기존 자연어 Router와 공개
+  `GET /answer`, 운영 `AgentReleaseManifest`에는 아직 연결하지 않는다.
 - 사람 평가 rubric v1과 프레임워크 독립 Backend DTO·JSON 예시를 구현했다.
   실제 사람 평가는 외부 게이트다.
 - 금융 도메인 담당자가 작성한 40문항을 hash·schema·분포로 검증하고 현재
@@ -192,8 +196,8 @@
   사후 회귀했다. 최신 실행 의미 보조 strict는 242/391이며, 각 검색 단계의 기존
   통과 문항 퇴행은 0건이다. 이는 개발에 사용한 같은 질문의 회귀이지 blind가 아니다.
 - pre-HCX 동결 시점의 Agent Core pytest 507개·Backend 34개 기록은 역사 baseline으로
-  보존한다. P0-6 코드 기준 전체 회귀는 Agent Core 1,305 passed·2 skipped,
-  Backend 최근 기준 320 passed이며 Ruff lint·format을 통과했다.
+  보존한다. P0-7 코드 기준 전체 회귀는 Agent Core 1,327 passed·2 skipped,
+  Backend 최근 P0-8 기준은 320 passed이며 Ruff lint·변경 파일 format을 통과했다.
 - Docker `data-init`은 읽기 전용 공식 XLSX에서 네 SQLite를 자동 생성·검증하고,
   같은 원천과 registry에서는 재사용한다. 모든 DB 준비가 성공한 뒤에만 Backend를
   시작하며 Backend에는 생성 volume을 읽기 전용으로 연결한다.
@@ -388,6 +392,8 @@ QueryPlan에는 최소한 intent, 상품군, 필수 조건, 완화 전 확인이
 - [x] 공모펀드 정규화 DB에 oracle·verifier·field evidence를 연결한다.
 - [x] 승인 상품 DB에서 제공 관계 58,005개를 색인하고 상품 identity·출처·해시를
   fail-closed로 재검증하는 P0-6 기반을 구현한다.
+- [x] relation/document Typed Plan·exact 권한 gate·Claim Verifier·전체 fallback을
+  P0-7 내부 실행 경로로 연결한다.
 
 ### P2 — Agent 수직 통합
 
@@ -415,6 +421,8 @@ QueryPlan에는 최소한 intent, 상품군, 필수 조건, 완화 전 확인이
   공식 GET 예외 입력을 실제 HTTP 14개 요청으로 재현한다.
 - [x] 공식 endpoint·Bearer 인증·Structured Outputs 계약에 맞는 HyperCLOVA X HTTP
   transport와 FastAPI 무호출 조립을 구현한다.
+- [ ] P0-7 내부 relation/document 경로를 공개 Router·Backend adapter와
+  `AgentReleaseManifest`에 연결하고 clean Docker HTTP로 재검증한다.
 - [ ] 실제 API Key로 인증·HCX-007 권한·응답 호환성을 확인하고 NCP 실행 환경에서
   최소 호출을 재현한다.
 

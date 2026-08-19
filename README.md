@@ -29,16 +29,18 @@ ETF·ETN, 공모펀드를 조회·비교·계산한 뒤 근거와 기준일을 �
 | --- | --- |
 | 데이터 | 공식 XLSX에서 네 상품군 SQLite를 자동 생성·검증하는 경로 구현 |
 | Ontology | 공식 파일명 Turtle 5개를 field registry에서 자동 생성·문법·정합성 검사 |
-| AI Agent | 검색·비교·집계·근거 생성·결과 검증과 현재 OFF인 Schema Dense Shadow 격리 구현 |
+| AI Agent | 검색·비교·집계·근거 생성·결과 검증 구현. P0-7 관계·문서 검색과 주장 검증은 내부 경로까지 완료했으며 공개 Router 연결은 P0-10 대기 |
 | Backend | FastAPI `GET /health`, 내부용 `POST /answer`, 평가용 `GET /answer`, Audit·Shadow readiness 구현 |
 | Release | 코드·Prompt·Model·index·공식 데이터와 Docker digest를 묶는 Stage 3 fail-closed 계약과 host anti-replay 구현, localhost Registry·합성 N-1→N→N-1 실기동 검증 완료, NCP 공식 발급 대기 |
 | Frontend | 동료의 `nextjs-frontend/` 코드 합류 후 연결 예정 |
 | LLM | 로컬 Qwen은 내부 개발 전용. HyperCLOVA X answer-only 실제 DETAIL·SEARCH 호출과 검증된 fallback 확인, QueryPlan은 OFF이며 production grounded planning과 clean NCP release는 대기 |
-| 자동 검증 | 동결 QA 기준 AI Core pytest 507개·Backend 34개를 보존하며, 현재 핵심 패키지 회귀 Core 1,272개·Backend 311개 통과, 비공개 키·승인 DB 경로 opt-in 2개 skip(기존 fork warning 2건) |
+| 자동 검증 | 동결 QA 기준 AI Core pytest 507개·Backend 34개를 보존하며, 현재 핵심 패키지 회귀 Core 1,327개·Backend 320개 통과, 비공개 키·승인 DB 경로 opt-in 2개 skip |
 
 세부 기능과 평가 결과는 [AI Agent 작업공간](finance_agent/README.md)에서 관리
 배포 버전 고정과 평가·운영 실행은
 [AgentReleaseManifest 배포 계약](finance_agent/docs/agent-release-manifest.md)을 기준으로 한다.
+관계·문서 검색의 현재 내부 검증 범위와 공개 활성화 전 남은 일은
+[P0-7 인수인계 보고서](finance_agent/docs/p0-7-knowledge-claim-verifier-handover-2026-08-20.md)에서 확인한다.
 
 ## 3. 전체 구조
 

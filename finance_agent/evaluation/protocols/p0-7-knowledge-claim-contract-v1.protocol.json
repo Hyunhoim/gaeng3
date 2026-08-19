@@ -1,0 +1,124 @@
+{
+  "schema_version": "1.0",
+  "protocol_id": "p0-7-knowledge-claim-contract-v1",
+  "status": "internal_contract_verified_public_agent_not_activated",
+  "requirement": {
+    "source": "docs/p0-p1-remaining-roadmap-2026-08-14.html",
+    "roadmap_item": "P0-7 관계형 QueryPlan·Claim Verifier",
+    "completion_boundary": "허용된 relation/document 계획만 실행하고 모든 모델 주장을 검색 evidence와 정확히 대조하며 실패 시 결정론적 답변으로 전환"
+  },
+  "knowledge_plan": {
+    "schema_version": "1.0",
+    "allowed_operations": [
+      "relation_search",
+      "document_search"
+    ],
+    "relation_predicates_per_request": 1,
+    "maximum_top_k": 20,
+    "fund_relation_enabled": false,
+    "arbitrary_aggregation_enabled": false,
+    "arbitrary_numeric_claim_enabled": false,
+    "canonical_order_required": true,
+    "extra_fields_forbidden": true
+  },
+  "authority_gate": {
+    "owner": "server_knowledge_plan_v1",
+    "model_proposal_policy": "exact_detached_copy_only",
+    "mismatch_action": "reject_before_retrieval",
+    "receipt_fields": [
+      "plan_sha256",
+      "operation_kind",
+      "proposal_provider_name",
+      "proposal_model_name"
+    ]
+  },
+  "release_binding": {
+    "status": "internal_verified_not_agent_release_activated",
+    "relation_required_fields": [
+      "index_sha256",
+      "approval_manifest_sha256",
+      "relation_set_sha256"
+    ],
+    "document_required_fields": [
+      "index_sha256",
+      "corpus_manifest_sha256",
+      "file_manifest_sha256"
+    ],
+    "public_agent_release_embedding": "deferred_to_p0_10"
+  },
+  "claim_contract": {
+    "relation_fields": [
+      "result_ref",
+      "evidence_id",
+      "relation_type",
+      "product_family",
+      "product_id",
+      "product_name",
+      "ticker",
+      "entity_id",
+      "entity_label"
+    ],
+    "document_fields": [
+      "result_ref",
+      "evidence_id",
+      "document_id",
+      "title",
+      "excerpt"
+    ],
+    "verification": "exact count, kind, order, value, and evidence-reference match",
+    "valid_draft_action": "compile the answer from server evidence",
+    "invalid_or_failed_draft_action": "discard model claims and return the full deterministic evidence answer",
+    "not_found_action": "do not call a claim provider"
+  },
+  "artifact_checks": [
+    "index path contains no symbolic link and resolves to one regular file",
+    "index has one hard link, no write bit, bounded size, and no SQLite sidecar",
+    "index SHA-256 and file identity remain unchanged before and after execution",
+    "relation manifest approval and relation-set hashes match the internal release",
+    "relation product identity is re-verified in approved product databases",
+    "document index passes quick_check and contains the required tables",
+    "returned evidence stays inside the authorized family, predicate, source, document, and metadata filters"
+  ],
+  "approved_data_smoke_cases": [
+    {
+      "id": "managed_by_miraeasset",
+      "operation": "relation_search",
+      "predicate": "managed_by",
+      "query": "미래에셋",
+      "family": "domestic_etp",
+      "expected_count": 3
+    },
+    {
+      "id": "invests_in_usa",
+      "operation": "relation_search",
+      "predicate": "invests_in_region",
+      "query": "미국",
+      "family": "domestic_etp",
+      "expected_count": 3
+    },
+    {
+      "id": "tracks_kospi200",
+      "operation": "relation_search",
+      "predicate": "tracks_index",
+      "query": "KOSPI200",
+      "family": "domestic_etp",
+      "expected_count": 3
+    },
+    {
+      "id": "issued_by_kepco",
+      "operation": "relation_search",
+      "predicate": "issued_by",
+      "query": "한국전력공사",
+      "family": "bond",
+      "expected_count": 3
+    }
+  ],
+  "non_claims": [
+    "사용자 자연어 Router나 공개 GET /answer에 P0-7 경로가 활성화되었다는 결과가 아님",
+    "P0-10 AgentReleaseManifest에 relation/document artifact가 포함되었다는 결과가 아님",
+    "실제 승인 외부 문서 corpus 또는 문서 검색 정확도를 검증한 결과가 아님",
+    "HyperCLOVA X나 로컬 Qwen 생성 품질을 평가한 결과가 아님",
+    "관계 alias, 동의어, 번역, 금융 의미 정확도를 해결한 결과가 아님",
+    "22/22 계약 통과나 4/4 smoke가 독립 blind 또는 공모전 예상 점수를 뜻하지 않음"
+  ]
+}

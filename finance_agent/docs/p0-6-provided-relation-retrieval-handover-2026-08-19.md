@@ -6,6 +6,9 @@
 
 상세 baseline: `evaluation/baselines/p0-6-provided-relation-retrieval-v1.json`
 
+후속 상태: 2026-08-20에 Typed Plan·Claim Verifier 내부 연결을 완료함. 공개
+Router·Release 대기는 [P0-7 인수인계](p0-7-knowledge-claim-verifier-handover-2026-08-20.md)에서 계속 관리
+
 ## 0. 한눈에 보기
 
 - 국내채권·국내 ETF·ETN·해외 ETF·ETN의 공식 제공 데이터에서 확인 가능한 관계를 별도 SQLite 색인으로 만드는 기능 구현

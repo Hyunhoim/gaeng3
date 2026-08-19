@@ -1,8 +1,8 @@
 # 금융상품 Agent 주요 기능 흐름도
 
-상태: 초안 v0.1
+상태: 초안 v0.2 · P0-7 내부 경로 반영
 
-기준일: 2026-07-31
+기준일: 2026-08-20
 
 ```mermaid
 flowchart TD
@@ -22,6 +22,12 @@ flowchart TD
     C --> P
     A --> P
     E --> P
+
+    P -.->|"관계·문서 공개 연결 대기"| KP["P0-7 내부 KnowledgeQueryPlan"]
+    KP --> KR["승인 관계·문서 색인"]
+    KR --> KCV["Claim Verifier<br/>개수·순서·값·evidence exact 검사"]
+    KCV -->|"통과"| OK
+    KCV -->|"불일치·오류"| FB
 
     P --> T["상품군별 결정론적 도구"]
     T --> B["국내채권"]
@@ -55,5 +61,7 @@ flowchart TD
 - COMPARE는 같은 상품군의 정확한 두 상품과 승인 필드만 실행
 - AGGREGATE는 허용 함수·그룹·통화 정책을 서버가 결정
 - EXPLAIN은 검증된 정형 evidence를 사용하며 실제 문서 corpus는 승인 대기
+- 관계·문서 내부 경로는 모델의 구조화 주장만 evidence와 정확히 대조하고,
+  공개 Router·`GET /answer`·Agent Release 연결 전까지 사용자 경로에는 비활성
 - CLARIFY·UNSUPPORTED는 Oracle과 답변 모델을 불필요하게 호출하지 않음
 - 답변 검증 실패는 근거 없는 재생성이 아니라 결정론적 fallback으로 종료

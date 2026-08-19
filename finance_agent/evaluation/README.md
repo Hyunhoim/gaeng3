@@ -32,6 +32,7 @@ DB, 원천 XLSX, 전체 report, 모델 가중치는 계속 `artifacts/` 또는 �
 | [P0-8 timeout·5xx 재시도 계약](baselines/retry-contract-p0-8-v1.json) | 답변·제어 200, 일시 장애 503, timeout 504, 270초와 동일 요청 single-flight·replay의 단위·Docker 검증 |
 | [P0-5 외부 corpus 반입 계약](baselines/external-corpus-intake-contract-v1.json) | 독립 review·사용 권한·출처·해시·경로·변조 차단과 검증된 BM25 색인 build의 합성 계약 24/24 |
 | [P0-6 제공 관계 검색](baselines/p0-6-provided-relation-retrieval-v1.json) | 승인 DB 3개의 제공 필드 관계 58,005개, 공식 상품 ID 재조회, 14개 fail-closed 계약과 실제 4종 smoke |
+| [P0-7 관계·문서 계획과 주장 검증](baselines/p0-7-knowledge-claim-contract-v1.json) | Typed Plan·서버 exact 권한·evidence Claim Verifier·전체 fallback 22/22와 승인 관계 전체 경로 smoke 4/4; 공개 Agent는 비활성 |
 | [설명회 공개 예시 채권 개선](baselines/briefing-examples-v1-bond-improved.json) | 원화·판매 가능·AA- 이상 검색과 근거 검증을 연결한 회귀 |
 | [설명회 공개 예시 최초 관측](baselines/briefing-examples-v1-initial.json) | 답변 가능 5개·답변 불가 3개의 Router→Oracle→Verifier 현재 도달 범위 |
 | [설명회 공개 예시 안전 개선](baselines/briefing-examples-v1-safety-improved.json) | 잘못된 신용등급 차단과 요청 어미 오분류 수정 후 회귀 |

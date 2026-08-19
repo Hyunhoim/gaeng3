@@ -1,7 +1,7 @@
 # Field Registry와 QueryPlan 계약
 
-상태: P1 네 상품군 field 계약 정본
-기준일: 2026-07-29
+상태: P1 네 상품군 field 계약 및 P0-7 관계·문서 주장 계약 정본
+기준일: 2026-08-20
 
 이 문서는 자연어 질문과 결정론적 검색기 사이의 계약을 설명한다. 해외 ETP,
 국내 ETP, 국내채권은 실행 가능하다. 공모펀드는 grain·field capability와
@@ -43,6 +43,10 @@
 | [`product_comparison_cli.py`](../packages/finance_agent_core/src/finance_agent_core/evaluation/product_comparison_cli.py) | DB·manifest hash 검증 후 30문항 공통 비교 실행 |
 | [`search_aggregate_benchmark.py`](../packages/finance_agent_core/src/finance_agent_core/evaluation/search_aggregate_benchmark.py) | 새 프로세스 8문항의 결과 지문·지연·RSS 회귀 |
 | [`routed_service.py`](../packages/finance_agent_core/src/finance_agent_core/agent/routed_service.py) | SEARCH의 서버 기준계획·선택적 HCX 계획 완전 일치 guard와 공통 실행 |
+| [`contracts/knowledge.py`](../packages/finance_agent_core/src/finance_agent_core/contracts/knowledge.py) | 관계·문서 검색의 별도 `KnowledgeQueryPlan`과 엄격한 입력·결과 계약 |
+| [`agent/knowledge_service.py`](../packages/finance_agent_core/src/finance_agent_core/agent/knowledge_service.py) | 서버 기준계획·선택적 모델 제안 완전 일치, release 검증, 검색·주장·답변 조립 |
+| [`answering/claims.py`](../packages/finance_agent_core/src/finance_agent_core/answering/claims.py) | 허용된 관계·문서 주장 생성과 exact claim verifier·결정론적 fallback |
+| [`agent/knowledge_cli.py`](../packages/finance_agent_core/src/finance_agent_core/agent/knowledge_cli.py) | Backend 통합 전 strict JSON schema·실행 계약을 확인하는 CLI |
 
 ## 2. 두 스키마를 분리하는 이유
 
@@ -397,6 +401,30 @@ Verifier를 모두 통과해야 `llm_grounded`다. 다른 상품군 언급·직�
 우열 문구, provider 오류 또는 한 family의 검증 실패가 있으면 부분 모델 문장을
 남기지 않고 전체를 `deterministic_fallback`으로 교체한다. 전체 빈 결과와
 control route는 Answer provider를 호출하지 않는다.
+
+### 7.6 관계·문서 검색과 주장 검증 계약
+
+P0-7 지식 검색은 기존 상품 `QueryPlan`과 섞지 않고 별도
+`KnowledgeQueryPlan`을 사용한다. 현재 허용 범위는 다음 두 가지다.
+
+- `relation`: 승인된 `manager`, `region`, `index`, `issuer` 관계 중 정확히 한 조건 검색
+- `document`: 승인된 문서 BM25 index에서 질문과 관련된 passage 검색
+
+서버가 만든 기준계획과 모델 제안 계획이 완전히 같을 때만 검색한다. 모델 제안이
+없으면 서버 계획만으로 실행하며, 다르면 모델 값을 보정해 실행하지 않고 즉시
+차단한다. 관계 검색은 상품군·관계 종류·상한을, 문서 검색은 문서 집합·상한을
+엄격히 제한한다.
+
+검색 결과를 설명 문장으로 바꾸기 전에는 허용된 구조의 claim을 먼저 만든다.
+검증기는 claim의 개수·종류·순서·값·evidence 참조가 검색 결과와 정확히 같은지
+확인한다. 하나라도 다르거나 생성기가 실패하면 모델 문장을 남기지 않고 같은
+근거에서 만든 결정론적 답변으로 교체한다. 검색 결과가 없으면 모델을 호출하지 않는다.
+
+관계·문서 index는 내부 `KnowledgeRetrievalRelease`가 SHA-256·크기·승인 상태와
+공식 상품 DB identity를 고정한다. 이 내부 계약은 P0-7 검증용이며 공개
+`AgentReleaseManifest`와 일반 Router에는 아직 연결하지 않았다. 따라서 P0-10
+clean-image 통합 전까지 평가·운영 기능으로 활성화하지 않는다. 상세 증거와 실행법은
+[P0-7 인수인계 보고서](p0-7-knowledge-claim-verifier-handover-2026-08-20.md)를 따른다.
 
 ## 8. 검증
 

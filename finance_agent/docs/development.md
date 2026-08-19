@@ -1,12 +1,12 @@
 # 개발 환경과 현재 구현 상태
 
 상태: 현재 정본
-기준일: 2026-08-07
+기준일: 2026-08-20
 
 ## 저장소 상태
 
-- 로컬 branch: `haeyeongcho`
-- upstream: `origin/haeyeongcho`
+- 로컬 branch: `haeyeongcho-p0-7-relation-agent`
+- 기반 순서: `haeyeongcho` → P0-5 → P0-6 → P0-7
 - AI Agent와 FastAPI Backend 통합 코드가 같은 branch에 있음
 - 로컬 branch는 이번 검증 커밋을 포함해 upstream보다 앞서며, 이 문서는 특정
   commit ID 대신 source-freeze manifest로 검증 대상을 고정
@@ -84,6 +84,16 @@ SOURCE_DATE_EPOCH=1785283200 \
   흔적이 남은 현재 소스를 `submission`에서 의도적으로 차단
 - 최신 source-freeze 값과 wheel 검증 결과는
   [연결 전 준비 기준](pre-hcx-readiness.md)과 source-freeze manifest에 기록
+
+2026-08-20 P0-7 추가 검증:
+
+- 관계·문서 Typed Plan·exact 권한 gate·Claim Verifier·fallback 전용 22/22
+- 관계·문서·릴리스 관련 회귀 82/82
+- Agent Core 전체 1,327 passed·2 조건부 skip
+- 승인 관계 전체 경로 공개 smoke 4/4
+- Ruff lint와 P0-7 변경 파일 format 검사 통과
+- 코드 기준 commit `ae1f7e539e2b09a1eef0739a3325050995770149`
+- 공개 Router·`GET /answer`·P0-10 Agent Release는 아직 비활성
 
 ## P1 계약 구현
 
@@ -278,8 +288,9 @@ header·credential은 크레딧 수령 전이라 아직 연결하지 않았다. 
 이 수치는 자유 생성 LLM 점수가 아니라 제한된 hybrid system의 계약 준수율이다.
 네 상품군·일곱 intent Router, capability matrix, BM25/SQLite FTS 문서 검색,
 사람 rubric validator와 Backend DTO까지 구현했다. 다음 평가는 금융 도메인
-담당자의 external blind 100문항 parser→답변 E2E와 실제 사람 평가이며, 이후
-공식 API 계약에 맞는 HyperCLOVA X HTTP transport와 FastAPI route를 연결한다.
+담당자의 external blind 100문항 parser→답변 E2E와 실제 사람 평가다. P0-7은
+관계·문서 계획과 evidence 주장 검증을 내부 CLI까지 연결했으며, 이후 P0-10에서
+공개 Router·FastAPI adapter·Agent Release를 같은 clean image로 고정한다.
 
 같은 상품군의 정확한 두 상품 COMPARE도 네 상품군 공통 경로로 일반화했다.
 해외·국내 ETP·국내채권 exact resolver, registry 비교 capability,

@@ -77,14 +77,14 @@
         <h3><span class="label">P0-6 · 제공 관계 기반 완료</span>관계·문서 검색</h3>
         <p>승인 상품 DB의 발행사·운용사·기초지수·자산유형·투자지역을 SQLite 관계 색인으로 구성했다.</p>
         <div class="row"><strong>완료 결과</strong>국내채권·국내/해외 ETP 실제 관계 58,005개에 출처·기준일·DB hash를 연결하고, 후보 product ID를 공식 DB에서 다시 조회·검증했다. 관계 계약 14/14, 실제 smoke 4/4를 확인했다.</div>
-        <div class="row"><strong>남은 일</strong>공모펀드·테마·편입종목·외부 문서 관계 출처, 금융 alias 검수, P0-7 QueryPlan·Claim Verifier와 Agent Release 연결. <a href="../finance_agent/docs/p0-6-provided-relation-retrieval-handover-2026-08-19.md">관계 검색 인수인계</a></div>
+        <div class="row"><strong>남은 일</strong>공모펀드·테마·편입종목·외부 문서 관계 출처, 금융 alias 검수, P0-10 공개 Agent Release 연결. P0-7 내부 연결은 완료했다. <a href="../finance_agent/docs/p0-6-provided-relation-retrieval-handover-2026-08-19.md">관계 검색 인수인계</a></div>
       </article>
 
       <article class="card">
-        <h3><span class="label">P0-7</span>관계형 QueryPlan·Claim Verifier</h3>
+        <h3><span class="label done">P0-7 · 내부 완료</span>관계형 QueryPlan·Claim Verifier</h3>
         <p>QueryPlan은 질문을 허용된 검색 조건으로 바꾼 설계도이며, Claim Verifier는 답변 문장마다 근거가 있는지 확인한다.</p>
-        <div class="row"><strong>해야 할 일</strong>허용된 relation/document 연산만 Typed QueryPlan에 추가하고 HCLX가 임의 relation·수치를 만들지 못하게 한다.</div>
-        <div class="row"><strong>완료 기준</strong>모든 주장에 DB 또는 승인 문서 evidence가 연결되지 않으면 답변에서 제외하거나 안전 fallback.</div>
+        <div class="row"><strong>완료 결과</strong>관계·문서 Typed Plan, 서버 계획 exact-match gate, evidence의 개수·순서·값·참조 Claim Verifier와 전체 결정론적 fallback을 구현했다. 전용 계약 22/22, 승인 관계 smoke 4/4를 확인했다.</div>
+        <div class="row"><strong>남은 경계</strong>기존 자연어 Router·공개 GET /answer·P0-10 AgentReleaseManifest에는 아직 연결하지 않았다. 실제 외부 문서와 HCLX도 호출하지 않았다. <a href="../finance_agent/docs/p0-7-knowledge-claim-verifier-handover-2026-08-20.md">P0-7 인수인계</a></div>
       </article>
 
       <article class="card">
@@ -127,7 +127,7 @@
 
   <section>
     <h2>권장 실행 순서</h2>
-    <p class="flow">P0-4·P0-8 완료 → P0-5 반입·P0-6 제공 관계 기반 완료 → P0-9 private 자산 확보 시 최초 Blind → P0-7 Agent 연결 → P0-10 NCP 제출 Release</p>
+    <p class="flow">P0-4·P0-8 완료 → P0-5 반입·P0-6 관계 기반·P0-7 내부 검증 완료 → P0-9 private 자산 확보 시 최초 Blind → P0-10 공개 Router·Release·NCP 제출</p>
     <p class="note">P0-3 공모펀드는 주최 측 공지가 올 때까지 이 흐름과 별개로 잠근다. Schema Dense·HCLX Planning은 Blind 결과가 개선을 증명한 경우에만 P1 Shadow로 연결한다.</p>
   </section>
 

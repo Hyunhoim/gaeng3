@@ -1,6 +1,6 @@
 # AI 기술문서 상세 인덱스
 
-마지막 갱신: 2026-08-19
+마지막 갱신: 2026-08-20
 
 이 문서는 금융상품 Agent의 전체 기술문서와 상태를 추적하는 상세 장부다. 간단한
 길잡이가 필요하면 먼저 [AI 기술문서 안내](README.md)를 확인한다. 연구 요청·외부
@@ -19,6 +19,7 @@
 6. [P0-8 재시도 계약 인수인계](p0-8-retry-contract-handover-2026-08-19.md) — 200·503·504, 270초, 동일 요청 중복 실행 방지
 7. [P0-5 외부 문서 반입 계약](p0-5-external-corpus-intake-2026-08-19.md) — 독립 승인, 출처·권한·해시 봉인, 변조 차단, BM25 색인 전 게이트
 8. [P0-6 제공 관계 검색 인수인계](p0-6-provided-relation-retrieval-handover-2026-08-19.md) — 공식 DB 관계 58,005개, 출처·기준일, 상품 ID 재검증, Agent 비활성 경계
+9. [P0-7 관계·문서 계획과 주장 검증 인수인계](p0-7-knowledge-claim-verifier-handover-2026-08-20.md) — Typed Plan, exact 권한 gate, Claim Verifier, 결정론적 fallback, 공개 API 비활성 경계
 
 배포·복구 담당자는 [NCP immutable release CI](immutable-ncp-release-ci.md)와
 [Rollback drill runbook](../../fastapi_backend/ROLLBACK_DRILL.md)을 추가로 확인한다. 현재
@@ -34,7 +35,7 @@ HCX 모델·endpoint·인증과 크레딧 적용 범위는 남아 있어 기존�
 | 독자·목적 | 먼저 읽기 | 이어서 읽기 |
 | --- | --- | --- |
 | 새 AI 개발자 | [현재 프로젝트 기준](project-baseline.md) | [개발 환경](development.md) → [계약](contracts.md) → [Agent Core README](../packages/finance_agent_core/README.md) |
-| Backend 담당 | [Backend DTO](backend-contract.md) | [P0-4 공식 Acceptance](p0-4-official-acceptance-handover-2026-08-19.md) → [P0-8 재시도 계약](p0-8-retry-contract-handover-2026-08-19.md) → [P0-6 관계 검색](p0-6-provided-relation-retrieval-handover-2026-08-19.md) → [HyperCLOVA X provider](hyperclova-provider.md) |
+| Backend 담당 | [Backend DTO](backend-contract.md) | [P0-4 공식 Acceptance](p0-4-official-acceptance-handover-2026-08-19.md) → [P0-8 재시도 계약](p0-8-retry-contract-handover-2026-08-19.md) → [P0-6 관계 검색](p0-6-provided-relation-retrieval-handover-2026-08-19.md) → [P0-7 주장 검증](p0-7-knowledge-claim-verifier-handover-2026-08-20.md) → [HyperCLOVA X provider](hyperclova-provider.md) |
 | 금융 도메인 담당 | [capability matrix](capability-matrix.md) | [데이터 감사](data-audit.md) → [P0-5 외부 문서 반입](p0-5-external-corpus-intake-2026-08-19.md) → [P0-6 관계 값·alias 검수](p0-6-provided-relation-retrieval-handover-2026-08-19.md) → [사람 평가 rubric](human-evaluation.md) → [금융 도메인 QA 평가](evaluation-domain-qa.md) |
 | 기술 제안서 작성자 | [기술 제안서 허브](../../docs/proposal/README.md) | [현재 프로젝트 기준](project-baseline.md) → [평가 baseline](../evaluation/README.md) |
 | 제출 전 검수자 | [제출 체크리스트](../../docs/proposal/submission-checklist.md) | [모델 경계](submission-model-boundary.md) → [연결 전 준비 기준](pre-hcx-readiness.md) |
@@ -70,6 +71,7 @@ HCX 모델·endpoint·인증과 크레딧 적용 범위는 남아 있어 기존�
 - [교차 상품군 SEARCH](cross-family-search.md)
 - [BM25/SQLite FTS 문서 RAG](document-rag.md)
 - [P0-6 제공 데이터 관계 검색](p0-6-provided-relation-retrieval-handover-2026-08-19.md)
+- [P0-7 관계·문서 계획과 주장 검증](p0-7-knowledge-claim-verifier-handover-2026-08-20.md)
 - [Dense Schema Linker 오프라인 컴포넌트 평가](evaluation-dense-schema-linker-shadow.md)
 - [Schema Dense CPU 임베딩 모델 비교](evaluation-schema-embedding-cpu.md) · [팀 공유용 HTML](evaluation-schema-embedding-cpu.html)
 - [Schema Dense Stage 4 구현·Stage 5 OFF 실험 상태](schema-dense-stage4-stage5-readiness-2026-08-13.md)
@@ -93,6 +95,7 @@ HCX 모델·endpoint·인증과 크레딧 적용 범위는 남아 있어 기존�
 - [P0-8 평가기 재시도 계약 인수인계](p0-8-retry-contract-handover-2026-08-19.md)
 - [P0-5 외부 금융 문서 반입 계약](p0-5-external-corpus-intake-2026-08-19.md)
 - [P0-6 제공 데이터 관계 검색 인수인계](p0-6-provided-relation-retrieval-handover-2026-08-19.md)
+- [P0-7 관계·문서 계획과 주장 검증 인수인계](p0-7-knowledge-claim-verifier-handover-2026-08-20.md)
 - [전체 평가 baseline](../evaluation/README.md)
 - [Stage 2 승인 DB 재검증 baseline](../evaluation/baselines/stage2-approved-db-revalidation-2026-08-12.json)
 
@@ -123,6 +126,7 @@ HCX 모델·endpoint·인증과 크레딧 적용 범위는 남아 있어 기존�
 | [P0-8 평가기 재시도 계약 인수인계](p0-8-retry-contract-handover-2026-08-19.md) | 답변·제어 200, 일시 장애 503, timeout 504, 270초 outer deadline과 동일 요청 single-flight·replay | P0-8 완료 |
 | [P0-5 외부 문서 반입 계약](p0-5-external-corpus-intake-2026-08-19.md) | 금융·권한 독립 review, HTTPS 출처, 사용 권한 4종, byte·정규화 hash, canonical manifest, 변조·경로 차단 | 반입 코드 완료·실제 corpus 승인 대기 |
 | [P0-6 제공 관계 검색 인수인계](p0-6-provided-relation-retrieval-handover-2026-08-19.md) | 승인 DB의 발행사·운용사·기초지수·자산·지역 관계 색인, 출처·기준일, 공식 상품 ID 재조회 | 실제 58,005관계 검증·Agent 연결 대기 |
+| [P0-7 관계·문서 계획과 주장 검증 인수인계](p0-7-knowledge-claim-verifier-handover-2026-08-20.md) | 관계·문서 Typed Plan, exact 권한 gate, evidence 주장 대조, 모델 실패·환각 fallback | 내부 계약 22/22·실제 관계 smoke 4/4·공개 Router/Release 연결 대기 |
 | [해외 ETP 핵심 평가 기준선](evaluation.md) | 동결 50문항, oracle·채점 규칙, 최초 holdout과 사후 회귀 결과 | v1.0 정본 |
 | [국내 ETP 핵심 평가 기준선](evaluation-domestic-etp.md) | 국내 ETP 동결 50문항, 품질 계약, local-inference split 결과 | v1.0 정본 |
 | [국내채권 핵심 평가 기준선](evaluation-domestic-bond.md) | 국내채권 동결 50문항, stale·날짜 계약, 로컬 Qwen·답변 결과 | v1.0 정본 |
@@ -241,16 +245,18 @@ HCX 모델·endpoint·인증과 크레딧 적용 범위는 남아 있어 기존�
 - 네 상품군 공통 집계: COUNT·MIN·MAX·AVG·허용 SUM, 최대 두 그룹,
   금액 통화 gate, 결측·기준일 공개, SQL 후보와 독립 Python 재검산
 - 문서 검색 기준: BM25/SQLite FTS synthetic 적재·필터·근거·not-found와 P0-5 승인·권한·해시·변조 차단 계약 24/24 통과. 실제 corpus는 대기
+- 관계·문서 Agent 내부 계약: 서버 확정 계획과 모델 제안 exact-match, relation/document
+  evidence의 개수·순서·값·참조 검증, 오류·허위 주장 전체 fallback을 22/22로 확인.
+  승인 관계 전체 경로 smoke 4/4이며 공개 Router·`GET /answer`·P0-10 Release는 대기
 - 팀 계약 기준: Backend DTO JSON 예시·schema·오류 adapter, 사람 rubric validator 통과
 - 내부 red-team 기준: 네 상품군 40문항 expected·수정 후 로컬 Qwen 40/40,
   safety·evidence 40/40, 최초 36/40과 수정 이력 별도 보존
 - 금융 도메인 QA: v1 개발 40문항 최초 strict 1/40,
   safety·evidence 각각 32/40을 보존하고 v1.2 Router·linker 회귀에서
   모든 계약 40/40·잘못된 실행 0건, dependency pending 13건은 유지
-- 코드 회귀 기준: pre-HCX 동결 507개·Backend 34개를 역사 기록으로 보존하고, 현재 작업
-  트리는 승인 DB 포함 Agent Core 1,225개·Backend 258개 통과(Backend의 기존 fork
-  warning 2건). Ruff lint·format, pip dependency check,
-  wheel과 필수 package data 검사
+- 코드 회귀 기준: pre-HCX 동결 507개·Backend 34개를 역사 기록으로 보존하고,
+  P0-7 코드 기준 Agent Core 1,327개 통과·2개 조건부 skip. Backend의 최근 P0-8
+  기준은 320개 통과·기존 fork warning 2건이며 이번 P0-7에서는 Backend를 변경하지 않음
 - 로컬 Qwen 평가 기준: 동결 50문항에서 최초 미사용 holdout 9/10,
   오류 수정 후 전체 회귀 50/50을 연속 2회 재현
 - 국내 ETP 로컬 Qwen 기준: development 40/40, local-inference holdout 첫 실행 10/10
@@ -279,12 +285,10 @@ HCX 모델·endpoint·인증과 크레딧 적용 범위는 남아 있어 기존�
   로컬 개발 파일을 제거한 release 후보에서 재검사
 - Docker 데이터 준비: 읽기 전용 공식 XLSX에서 네 SQLite를 자동 생성·검증하고
   두 번째 실행에서 네 DB 모두 재사용, 성공 후에만 Backend 시작
-- 다음 기술 통합: 공식 `GET /answer` 계약·기본 270초 외곽 시간 예산·일시 장애
-  503/504·동일 요청 중복 실행 방지, Docker 공식 GET smoke와 도메인별 Ontology
-  `.ttl` 5개는 구현·테스트 완료.
-  이후 크레딧·정확한 model ID·endpoint·
-  인증 계약을 확보하면 HyperCLOVA X HTTP transport를 연결. 주최 측 실행 환경의
-  포트·인증·네트워크 정책은 별도 재현 필요
+- 다음 기술 통합: P0-7 내부 관계·문서 계획과 Claim Verifier까지 완료. P0-9 private
+  blind 자산을 확보하면 수정 전에 최초 실행하고, P0-10에서 공개 Router·Backend
+  adapter·AgentReleaseManifest·clean Docker image를 함께 고정. 이후 크레딧·정확한
+  model ID·endpoint·인증 계약을 확보하면 같은 안전 gate 안에 HyperCLOVA X를 연결
 
 ## 6. 저장소 밖의 근거 자료
 

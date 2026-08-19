@@ -1,7 +1,8 @@
 # AgentReleaseManifest 배포 계약
 
 상태: Stage 3 애플리케이션·Docker·keyless release CI 계약 및 localhost 합성 rollback
-실기동 완료 · 실제 NCP 발급·서명 검증·운영 rollback 대기
+실기동 완료 · P0-7 관계·문서 검색 내부 release 계약 검증 완료 · 실제 NCP 발급·서명
+검증·운영 rollback 및 P0-10 공개 manifest 연결 대기
 
 ## 1. 목적
 
@@ -54,6 +55,13 @@ control-plane의 Binding SHA-256
 따라서 release schema v1은 이를 빈 값으로 생략하지 않고 각각
 `disabled_offline_only`, `disabled_not_implemented`로 고정한다. 승인 전 flag를 켜면
 evaluation/production 시작이 실패한다.
+
+P0-7에서 관계 index와 문서 index를 고정하는 내부용 `KnowledgeRetrievalRelease`를
+별도로 추가했다. 이 계약은 파일 SHA-256·크기·승인 manifest·관계 집합·공식 상품 DB
+identity를 검색 직전까지 다시 확인한다. 다만 아직 공개 `AgentReleaseManifest`의 일부가
+아니며 일반 Router에서도 호출하지 않는다. P0-10에서 두 계약을 하나의 clean-image
+release로 연결하고 전체 시작·요청 경계에서 재검증하기 전에는 관계·문서 검색을
+평가·운영 활성 상태로 표현하지 않는다.
 
 HyperCLOVA X는 현재 API에서 immutable model revision을 제공하지 않으므로
 `HCX-007` model ID, operation, Prompt·schema·generation parameter 코드까지 고정하되
@@ -248,8 +256,12 @@ launcher 단계에서 거부된다.
 - global option을 앞세운 `--build`, profile 오인식, 부분 service 실행과
   `--force-recreate=false` 우회 차단
 - rollback data volume·image를 지우는 `down --volumes`, `-v` 결합형, `--rmi` 차단
-- Agent Core 전체 회귀 `1,061 passed`(실제 DB opt-in 1건 제외), FastAPI Backend 전체 회귀
-  `162 passed`
+- Agent Core 전체 회귀 `1,327 passed, 2 skipped`(비공개 blind key·승인 DB 경로 opt-in),
+  FastAPI Backend 최근 P0-8 전체 회귀 `320 passed`
+- P0-7 관계·문서 계획·검색·주장 검증 표적 회귀 `22/22`, 관련 회귀 `82/82`와 승인
+  데이터 관계 검색 스모크 `4/4` 통과
+- P0-7의 내부 `KnowledgeRetrievalRelease`와 공개 `AgentReleaseManifest` 연결은 아직
+  완료하지 않았으며 P0-10 clean-image 통합 항목으로 유지
 - 네 상품군 승인 DB opt-in 회귀는 별도 실행해 SEARCH·AGGREGATE·COMPARE `62/62` 통과
 - `finance_agent_core` 패키지·Backend Ruff lint/format 통과
 
