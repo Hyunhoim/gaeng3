@@ -1,11 +1,13 @@
 # HyperCLOVA X provider 계약
 
-마지막 갱신: 2026-08-12
+마지막 갱신: 2026-08-14
 
 이 문서는 HyperCLOVA X provider, 공식 HTTP transport와 FastAPI 연결 경계를
 설명한다. 2026-08-11 NAVER Cloud 공식 문서 기준 endpoint·Bearer 인증·Structured
-Outputs 요청과 응답 형식을 반영했다. 실제 credential을 사용한 외부 API 호출은 아직
-수행하지 않았으며, 현재 완료 범위는 **HTTP 배선과 무네트워크 계약 검증**이다.
+Outputs 요청과 응답 형식을 반영했다. 2026-08-14에는 QueryPlan을 끈 answer-only
+경로에서 실제 credential로 HCX-007 호출 3회를 수행했다. 고정 2,048 token 요청의
+timeout 1회와 출력 예산 보완 뒤 DETAIL·SEARCH 성공 2회를 확인했으며, 이 결과는
+연구실 검증이지 clean NCP release 또는 HCLX planning 품질 증거가 아니다.
 
 평가용 `GET /answer`와 다섯 문자열 응답 계약은 별도 Backend adapter가 담당한다.
 HCLX는 그 안에서 검증된 결과를 제한된 문장으로 표현하며, 공식 데이터 검색·수치·
@@ -37,7 +39,7 @@ QueryPlan / 공모펀드 비교 초안 / 근거 답변 provider
                  │                 │
                  ▼                 ▼
        테스트용 fake transport   공식 Direct v3 HTTP transport
-              완료                 구현·무호출 검증 완료
+              완료                 answer-only 실호출 확인
 ```
 
 provider는 API URL, 인증 header, 응답 wire 구조를 직접 알지 못한다.
@@ -261,23 +263,22 @@ transport·응답 오류, dataset 장애, 알 수 없는 예외와 answer fallba
 QueryPlan provider는 별도 flag로 분리했다. 사용자 인증과 실제 네트워크 호출 검증은
 여전히 이 계약의 바깥이다.
 
-## 10. HTTP 배선 이후 남은 작업
+## 10. 실제 answer-only 확인 이후 남은 작업
 
-1. 테스트 API key를 안전하게 보관하고 팀 승인 후 최소 한 건 호출
-2. 실제 인증·HCX-007 사용 권한·응답 schema와 latency 확인
-3. QueryPlan을 끈 answer-only 경로부터 공개 회귀와 독립 평가
+1. 현재 출력 예산 변경을 clean commit·Manifest·OCI digest로 다시 고정
+2. 실제 route를 포함한 Docker/NCP HTTP E2E 검증
+3. SEARCH·DETAIL 외의 허용 intent와 네 상품군 answer-only 독립 평가
 4. token·latency·오류·fallback·예상 비용 측정
 5. 의미상 같은 QueryPlan 표현 차이와 strict equality 실패 유형 분석
 6. 필요할 때만 전체 request deadline 안의 제한적 retry 설계
-7. QueryPlan flag 활성화 여부를 독립 blind 결과로 결정
+7. QueryPlan flag 활성화 여부를 external blind 결과로 결정
 8. 로컬 Qwen 결과와 분리된 HyperCLOVA X 평가 baseline 기록
-9. 실제 route를 포함한 Docker/NCP HTTP E2E 검증
+9. 공모펀드는 주최 측 데이터 정정 공지 전까지 release에서 잠금 유지
 10. 제출 후보에서 로컬 LLM provider·설정·스크립트·의존성을 제거하고
     clean checkout에서 재검증
 
-최초 실제 호출이 성공하기 전에는 “HyperCLOVA X API 연결 검증 완료”라고 표현하지
-않는다. 현재 정확한 상태는 “공식 HTTP transport와 FastAPI 배선·무호출 계약 검증
-완료”다.
+현재 정확한 상태는 “공식 HTTP transport·FastAPI answer-only 배선과 실제 DETAIL·
+SEARCH 응답 호환성 확인, QueryPlan·grounded planning과 clean NCP release 미완료”다.
 
 공식 근거:
 

@@ -47,6 +47,11 @@ class OfficialSmokeCase:
     expected_question_id: str
     expected_question: str
     expected_control_code: str | None = None
+    expected_trace_status: str | None = None
+    expected_intent: str | None = None
+    expected_families: tuple[str, ...] = ()
+    expected_evidence: bool = False
+    expected_empty_context: bool = False
     forbidden_output_fragments: tuple[str, ...] = ()
 
     def query_string(self) -> str:
@@ -128,6 +133,9 @@ CASES = (
 
 _MALICIOUS_FRAGMENT = "<script>alert(1)</script>"
 _LONG_QUESTION = "가" * 2001
+_FUND_LOCKED_QUESTION = (
+    "당사에서 판매 중인 해외 주식형 공모펀드 중 3개월 수익률이 높은 상품 5개 보여줘."
+)
 OFFICIAL_CASES = (
     OfficialSmokeCase(
         case_id="official-valid",
@@ -138,6 +146,7 @@ OFFICIAL_CASES = (
         ),
         expected_question_id="docker-smoke-official-001",
         expected_question="현재 판매 가능한 원화채권 중 AA- 이상 종목 알려줘",
+        expected_evidence=True,
     ),
     OfficialSmokeCase(
         case_id="official-unicode-and-markup",
@@ -151,6 +160,19 @@ OFFICIAL_CASES = (
         expected_question_id="평가-😀-001",
         expected_question=f"내일 가장 오를 ETF를 예측해줘 & {_MALICIOUS_FRAGMENT}",
         forbidden_output_fragments=(_MALICIOUS_FRAGMENT,),
+    ),
+    OfficialSmokeCase(
+        case_id="official-fund-locked",
+        query=(
+            ("question_id", "docker-smoke-official-fund-locked-001"),
+            ("question", _FUND_LOCKED_QUESTION),
+        ),
+        expected_question_id="docker-smoke-official-fund-locked-001",
+        expected_question=_FUND_LOCKED_QUESTION,
+        expected_trace_status="unsupported",
+        expected_intent="unsupported",
+        expected_families=("fund",),
+        expected_empty_context=True,
     ),
     OfficialSmokeCase(
         case_id="official-blank-values",
@@ -217,7 +239,7 @@ def _request_json(
     *,
     timeout: float,
     payload: dict[str, str] | None = None,
-) -> tuple[int, dict[str, Any], int, float]:
+) -> tuple[int, dict[str, Any], int, float, str]:
     data = None
     headers: dict[str, str] = {}
     method = "GET"
@@ -231,9 +253,11 @@ def _request_json(
         with urlopen(request, timeout=timeout) as response:
             status = response.status
             raw = response.read()
+            content_type = response.headers.get("Content-Type", "")
     except HTTPError as error:
         status = error.code
         raw = error.read()
+        content_type = error.headers.get("Content-Type", "")
     duration_ms = (time.perf_counter() - started) * 1000
     try:
         body = json.loads(raw)
@@ -241,7 +265,7 @@ def _request_json(
         raise RuntimeError(f"{url} returned invalid JSON: {error}") from error
     if not isinstance(body, dict):
         raise TypeError(f"{url} returned a non-object JSON response")
-    return status, body, len(raw), duration_ms
+    return status, body, len(raw), duration_ms, content_type
 
 
 def _expect(errors: list[str], condition: bool, message: str) -> None:
@@ -384,9 +408,15 @@ def validate_official_answer(
     http_status: int,
     body: dict[str, Any],
     *,
+    content_type: str = "application/json; charset=utf-8",
     question_id: str,
     question: str,
     expected_control_code: str | None = None,
+    expected_trace_status: str | None = None,
+    expected_intent: str | None = None,
+    expected_families: tuple[str, ...] = (),
+    expected_evidence: bool = False,
+    expected_empty_context: bool = False,
     forbidden_output_fragments: tuple[str, ...] = (),
 ) -> list[str]:
     errors: list[str] = []
@@ -398,6 +428,11 @@ def validate_official_answer(
         "answer",
     }
     _expect(errors, http_status == 200, f"official answer expected HTTP 200, got {http_status}")
+    _expect(
+        errors,
+        content_type.casefold().replace(" ", "") == "application/json;charset=utf-8",
+        f"official Content-Type differs: {content_type!r}",
+    )
     _expect(errors, set(body) == expected_keys, "official answer fields differ")
     _expect(errors, body.get("question_id") == question_id, "official question_id differs")
     _expect(errors, body.get("question") == question, "official question differs")
@@ -427,6 +462,38 @@ def validate_official_answer(
             trace.get("control_code") == expected_control_code,
             "official control code differs",
         )
+    trace = decoded_fields.get("think_trace", {})
+    if expected_trace_status is not None:
+        _expect(
+            errors,
+            trace.get("status") == expected_trace_status,
+            "official trace status differs",
+        )
+    if expected_intent is not None:
+        _expect(errors, trace.get("intent") == expected_intent, "official intent differs")
+    if expected_families:
+        _expect(
+            errors,
+            trace.get("product_families") == list(expected_families),
+            "official product families differ",
+        )
+    context = decoded_fields.get("retrieved_context", {})
+    if expected_evidence:
+        evidence = context.get("evidence")
+        _expect(errors, isinstance(evidence, dict), "official evidence is missing")
+        if isinstance(evidence, dict):
+            _expect(
+                errors,
+                any(
+                    evidence.get(key)
+                    for key in ("products", "comparisons", "aggregates", "documents")
+                ),
+                "official evidence is empty",
+            )
+        _expect(errors, bool(context.get("citations")), "official citations are empty")
+    if expected_empty_context:
+        _expect(errors, context.get("citations") == [], "official control context has citations")
+        _expect(errors, "evidence" not in context, "official control context has evidence")
     for fragment in forbidden_output_fragments:
         for key in ("retrieved_context", "think_trace", "answer"):
             value = body.get(key)
@@ -499,7 +566,7 @@ def main(argv: list[str] | None = None) -> int:
     cases = smoke_cases(arguments.expected_fund_execution_policy)
     started_at = datetime.now(UTC)
     try:
-        health_status, health_body, health_bytes, health_duration = _request_json(
+        health_status, health_body, health_bytes, health_duration, _ = _request_json(
             f"{base_url}/health",
             timeout=arguments.timeout,
         )
@@ -510,7 +577,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         results = []
         for case in cases:
-            http_status, body, response_bytes, duration_ms = _request_json(
+            http_status, body, response_bytes, duration_ms, _ = _request_json(
                 f"{base_url}/answer",
                 timeout=arguments.timeout,
                 payload=case.payload(),
@@ -533,16 +600,28 @@ def main(argv: list[str] | None = None) -> int:
             )
         official_results = []
         for case in OFFICIAL_CASES:
-            official_status, official_body, official_bytes, official_duration = _request_json(
+            (
+                official_status,
+                official_body,
+                official_bytes,
+                official_duration,
+                official_content_type,
+            ) = _request_json(
                 f"{base_url}/answer?{case.query_string()}",
                 timeout=arguments.timeout,
             )
             official_errors = validate_official_answer(
                 official_status,
                 official_body,
+                content_type=official_content_type,
                 question_id=case.expected_question_id,
                 question=case.expected_question,
                 expected_control_code=case.expected_control_code,
+                expected_trace_status=case.expected_trace_status,
+                expected_intent=case.expected_intent,
+                expected_families=case.expected_families,
+                expected_evidence=case.expected_evidence,
+                expected_empty_context=case.expected_empty_context,
                 forbidden_output_fragments=case.forbidden_output_fragments,
             )
             official_results.append(
@@ -550,6 +629,7 @@ def main(argv: list[str] | None = None) -> int:
                     "case_id": case.case_id,
                     "passed": not official_errors,
                     "http_status": official_status,
+                    "content_type": official_content_type,
                     "response_bytes": official_bytes,
                     "duration_ms": round(official_duration, 3),
                     "errors": official_errors,

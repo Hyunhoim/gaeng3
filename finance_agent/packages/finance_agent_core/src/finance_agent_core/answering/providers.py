@@ -8,6 +8,7 @@ from typing import Any, Literal
 from finance_agent_core.agent.providers.hyperclova import (
     HyperClovaXCallRecord,
     HyperClovaXClient,
+    HyperClovaXConfigurationError,
     HyperClovaXResponseError,
     HyperClovaXSettings,
     HyperClovaXTransport,
@@ -26,6 +27,32 @@ from finance_agent_core.answering.models import (
 )
 from finance_agent_core.config import QualityStatus, load_field_registry
 from finance_agent_core.contracts.hcx_schema import validate_hcx_payload
+from finance_agent_core.domain import ProductEvidence
+
+
+def _selected_evidence_fields(
+    context: GroundedAnswerContext,
+    product: ProductEvidence,
+) -> list[str]:
+    """Return only fields the verified query contract needs the model to cite."""
+
+    usable = [
+        field.canonical_field
+        for field in product.fields
+        if field.normalized_value is not None
+        and field.quality in {QualityStatus.VALID, QualityStatus.PARTIAL}
+    ]
+    usable_set = set(usable)
+    selected = list(
+        dict.fromkeys(field for field in required_evidence_fields(context) if field in usable_set)
+    )
+    if not selected and usable:
+        selected = [usable[0]]
+    if not selected or len(selected) > 20:
+        raise HyperClovaXConfigurationError(
+            "grounded answer evidence cannot fit the verified output contract"
+        )
+    return selected
 
 
 def _safe_explanation(context: GroundedAnswerContext) -> str:
@@ -41,9 +68,9 @@ def _safe_explanation(context: GroundedAnswerContext) -> str:
 
 def _generation_payload(context: GroundedAnswerContext) -> dict[str, Any]:
     registry = load_field_registry()
-    required = required_evidence_fields(context)
     products: list[dict[str, Any]] = []
     for rank, product in enumerate(context.products, start=1):
+        selected = _selected_evidence_fields(context, product)
         fields = [
             {
                 "canonical_field": field.canonical_field,
@@ -55,17 +82,12 @@ def _generation_payload(context: GroundedAnswerContext) -> dict[str, Any]:
                 "quality": field.quality.value,
             }
             for field in product.fields
-            if field.normalized_value is not None
-            and field.quality in {QualityStatus.VALID, QualityStatus.PARTIAL}
+            if field.canonical_field in selected
         ]
         products.append(
             {
                 "result_ref": f"result_{rank}",
-                "required_evidence_fields": [
-                    name
-                    for name in required
-                    if any(field["canonical_field"] == name for field in fields)
-                ],
+                "required_evidence_fields": selected,
                 "available_evidence": fields,
             }
         )
@@ -118,6 +140,49 @@ _SAFE_LEADS = [
 ]
 
 
+def _grounded_answer_max_output_tokens(context: GroundedAnswerContext) -> int:
+    """Size HCX output from the widest verifier-acceptable compact JSON.
+
+    HCX-007 does not expose a local tokenizer, so UTF-8 bytes are used as a
+    conservative upper bound and receive 20 percent headroom.  Refuse the call
+    instead of silently clamping when the bounded Structured Outputs response
+    would exceed the release limit; the answer composer then returns the exact
+    deterministic result.
+    """
+
+    products: list[dict[str, Any]] = []
+    for index, product in enumerate(context.products, start=1):
+        evidence_fields = _selected_evidence_fields(context, product)
+        products.append(
+            {
+                "result_ref": f"result_{index}",
+                "evidence_fields": evidence_fields,
+                "explanation": _safe_explanation(context),
+            }
+        )
+
+    widest_payload = {
+        "schema_version": "1.0",
+        "lead": max(_SAFE_LEADS, key=lambda value: len(value.encode("utf-8"))),
+        "products": products,
+        "acknowledged_warning_codes": [warning.code for warning in context.warnings],
+    }
+    output_bytes = len(
+        json.dumps(
+            widest_payload,
+            ensure_ascii=False,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    )
+    with_headroom = (output_bytes * 6 + 4) // 5
+    budget = ((max(384, with_headroom) + 31) // 32) * 32
+    if budget > 16_384:
+        raise HyperClovaXConfigurationError(
+            "grounded answer output exceeds the approved generation budget"
+        )
+    return budget
+
+
 def _answer_schema(context: GroundedAnswerContext) -> dict[str, Any]:
     schema = GroundedAnswerDraft.model_json_schema()
     schema["properties"]["lead"]["enum"] = _SAFE_LEADS
@@ -126,20 +191,16 @@ def _answer_schema(context: GroundedAnswerContext) -> dict[str, Any]:
     prefix_items: list[dict[str, Any]] = []
     for index, product in enumerate(context.products, start=1):
         item = deepcopy(base_product)
-        usable_fields = [
-            field.canonical_field
-            for field in product.fields
-            if field.normalized_value is not None
-            and field.quality in {QualityStatus.VALID, QualityStatus.PARTIAL}
-        ]
+        selected_fields = _selected_evidence_fields(context, product)
         item["properties"]["result_ref"] = {
             "type": "string",
             "const": f"result_{index}",
         }
         item["properties"]["evidence_fields"]["items"] = {
             "type": "string",
-            "enum": usable_fields,
+            "enum": selected_fields,
         }
+        item["properties"]["evidence_fields"]["maxItems"] = len(selected_fields)
         item["properties"]["explanation"] = {
             "type": "string",
             "const": _safe_explanation(context),
@@ -183,24 +244,9 @@ class ExpectedGroundedAnswerProvider:
         self,
         context: GroundedAnswerContext,
     ) -> GroundedAnswerDraft:
-        required = required_evidence_fields(context)
         products: list[ProductAnswerDraft] = []
         for index, product in enumerate(context.products, start=1):
-            usable = {
-                field.canonical_field
-                for field in product.fields
-                if field.normalized_value is not None
-                and field.quality in {QualityStatus.VALID, QualityStatus.PARTIAL}
-            }
-            selected = [field for field in required if field in usable]
-            if not selected:
-                selected = [
-                    next(
-                        field.canonical_field
-                        for field in product.fields
-                        if field.canonical_field in usable
-                    )
-                ]
+            selected = _selected_evidence_fields(context, product)
             products.append(
                 ProductAnswerDraft(
                     result_ref=f"result_{index}",
@@ -284,15 +330,11 @@ def _hcx_grounded_answer_schema(
     context: GroundedAnswerContext,
 ) -> dict[str, Any]:
     result_refs = [f"result_{index}" for index in range(1, len(context.products) + 1)]
-    usable_fields = sorted(
-        {
-            field.canonical_field
-            for product in context.products
-            for field in product.fields
-            if field.normalized_value is not None
-            and field.quality in {QualityStatus.VALID, QualityStatus.PARTIAL}
-        }
-    )
+    selected_by_product = [
+        _selected_evidence_fields(context, product) for product in context.products
+    ]
+    selected_fields = sorted({field for fields in selected_by_product for field in fields})
+    maximum_fields = max(len(fields) for fields in selected_by_product)
     warning_codes = [warning.code for warning in context.warnings]
     warning_items: dict[str, Any] = {"type": "string"}
     if warning_codes:
@@ -308,10 +350,10 @@ def _hcx_grounded_answer_schema(
                 "type": "array",
                 "items": {
                     "type": "string",
-                    "enum": usable_fields,
+                    "enum": selected_fields,
                 },
                 "minItems": 1,
-                "maxItems": 20,
+                "maxItems": maximum_fields,
             },
             "explanation": {
                 "type": "string",
@@ -384,7 +426,7 @@ class HyperClovaXGroundedAnswerProvider:
             user_prompt="검증된 입력만 사용해 grounded answer JSON을 작성해줘.",
             schema_name="grounded_finance_answer",
             response_schema=response_schema,
-            max_output_tokens=2048,
+            max_output_tokens=_grounded_answer_max_output_tokens(context),
         )
         payload = parse_hcx_json_object(content, "grounded answer")
         try:

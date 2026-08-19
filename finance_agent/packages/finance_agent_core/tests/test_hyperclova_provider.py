@@ -29,6 +29,7 @@ from finance_agent_core.answering import (
     HyperClovaXGroundedAnswerProvider,
     build_grounded_answer_context,
 )
+from finance_agent_core.answering.providers import _grounded_answer_max_output_tokens
 from finance_agent_core.contracts.hcx_schema import validate_hcx_schema
 from finance_agent_core.deadline import RequestDeadline, bind_request_deadline
 from finance_agent_core.domain import DatabaseManifest, NormalizedDomesticEtpRecord
@@ -241,6 +242,8 @@ def test_hcx_grounded_answer_provider_uses_evidence_only_hcx_schema(
     assert draft == expected
     request = transport.requests[0]
     assert request.operation == "grounded_answer"
+    assert request.max_output_tokens == _grounded_answer_max_output_tokens(context)
+    assert request.max_output_tokens < 2048
     validate_hcx_schema(request.response_schema)
     assert context.products[0].product_id not in request.system_prompt
     assert context.products[0].product_name not in request.system_prompt
@@ -270,6 +273,48 @@ def test_hcx_grounded_answer_provider_uses_evidence_only_hcx_schema(
     )
     with pytest.raises(HyperClovaXResponseError, match="invalid grounded answer"):
         unsafe_explanation_provider.generate_grounded_answer(context)
+
+
+def test_hcx_grounded_answer_budget_tracks_evidence_width_and_fails_closed(
+    domestic_sample_database: tuple[
+        Path,
+        list[NormalizedDomesticEtpRecord],
+        DatabaseManifest,
+    ],
+) -> None:
+    path, _, _ = domestic_sample_database
+    plan = domestic_vertical_slice_plan("hcx-answer-budget-001")
+    validated_plan = authorize_internal_evaluation_plan(plan, path)
+    executed = SQLiteOracle(path).execute(validated_plan)
+    universe = load_projected_verifier_records(path, validated_plan)
+    verified = ResultVerifier().verify(plan, executed, universe)
+    products = build_product_evidence(plan, verified)
+    context = build_grounded_answer_context(
+        question="미국 주식형 국내 ETF를 수익률 순으로 보여줘",
+        plan=plan,
+        verified=verified,
+        products=products,
+    )
+
+    single_context = context.model_copy(update={"products": [context.products[0]]})
+    original_budget = _grounded_answer_max_output_tokens(single_context)
+    original_field = context.products[0].fields[0]
+    wider_fields = [original_field.model_copy(update={"canonical_field": "field_" + ("x" * 1000)})]
+    wider_product = context.products[0].model_copy(update={"fields": wider_fields})
+    wider_context = context.model_copy(update={"products": [wider_product]})
+    wider_budget = _grounded_answer_max_output_tokens(wider_context)
+
+    assert wider_budget > original_budget
+    assert wider_budget % 32 == 0
+    assert wider_budget >= 384
+
+    oversized_fields = [
+        original_field.model_copy(update={"canonical_field": "field_" + ("x" * 1000)})
+    ]
+    oversized_product = context.products[0].model_copy(update={"fields": oversized_fields})
+    oversized_context = context.model_copy(update={"products": [oversized_product] * 100})
+    with pytest.raises(HyperClovaXConfigurationError, match="generation budget"):
+        _grounded_answer_max_output_tokens(oversized_context)
 
 
 @pytest.mark.parametrize(

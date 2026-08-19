@@ -148,9 +148,12 @@ curl --get --fail-with-body \
 응답은 `question_id`, `question`, `retrieved_context`, `think_trace`, `answer`의
 다섯 필드만 갖고 모두 문자열이다. 정상 검색, 결과 없음, 역질문, 미지원,
 내부 오류도 같은 다섯 필드와 HTTP 200을 반환한다. 정의되지 않은 추가
-query parameter는 무시한다.
+query parameter는 무시하며 `Content-Type: application/json; charset=utf-8`을
+명시한다.
 
 `retrieved_context`와 `think_trace`는 JSON을 문자열로 직렬화한 값이다.
+`retrieved_context`에는 검증된 상품 field 값·비교·집계·문서 chunk·citation을
+고정 상한 안에서 담고 원천 raw value와 내부 경로는 넣지 않는다.
 `think_trace`는 모델의 숨은 사고과정이 아니라 질문 분류·필터·검증·fallback 결과처럼
 다시 확인할 수 있는 실행 기록만 담는다.
 
@@ -258,9 +261,10 @@ python fastapi_backend/scripts/smoke.py \
   --output /tmp/gaeng3-docker-http-smoke-v2.json
 ```
 
-스모크는 `/health`, 내부 `POST /answer` 7건과 공식 `GET /answer` 7건을 함께
+스모크는 `/health`, 내부 `POST /answer` 7건과 공식 `GET /answer` 8건을 함께
 검사. 공식 GET에는 정상 질문뿐 아니라 결측·공백·길이 초과·유니코드·마크업 형태
-입력을 포함하며, 어떤 경우에도 HTTP 200과 다섯 문자열 계약이 유지되는지 확인
+입력과 공모펀드 잠금 질문을 포함하며, HTTP 200·다섯 문자열·UTF-8 Content-Type
+계약이 유지되는지 확인
 
 기본값은 `fund_execution_policy=locked`를 요구. 팀이 공모펀드 실행 정책을 명시한
 개발 리허설에서는 다음 인자를 추가

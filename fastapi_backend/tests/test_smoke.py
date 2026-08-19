@@ -1,6 +1,7 @@
 import pytest
 
 from scripts.smoke import (
+    OFFICIAL_CASES,
     SmokeCase,
     smoke_cases,
     validate_answer,
@@ -87,6 +88,21 @@ def test_smoke_cases_switch_only_fund_expectation_for_approved_policy() -> None:
 
     with pytest.raises(ValueError, match="unsupported fund execution policy"):
         smoke_cases("unsafe")
+
+
+def test_official_smoke_keeps_public_fund_locked() -> None:
+    case = next(item for item in OFFICIAL_CASES if item.case_id == "official-fund-locked")
+
+    assert case.expected_trace_status == "unsupported"
+    assert case.expected_intent == "unsupported"
+    assert case.expected_families == ("fund",)
+    assert case.expected_empty_context is True
+
+
+def test_official_smoke_requires_verified_evidence_for_success() -> None:
+    case = next(item for item in OFFICIAL_CASES if item.case_id == "official-valid")
+
+    assert case.expected_evidence is True
 
 
 def test_validate_answer_checks_success_evidence() -> None:
@@ -229,6 +245,14 @@ def test_validate_official_answer_requires_five_json_string_fields() -> None:
         question_id="Q-001",
         question="평가 질문",
     )
+    content_type_errors = validate_official_answer(
+        200,
+        body,
+        content_type="application/json",
+        question_id="Q-001",
+        question="평가 질문",
+    )
+    assert any(error.startswith("official Content-Type differs") for error in content_type_errors)
 
 
 def test_validate_official_answer_checks_safe_control_code() -> None:
@@ -257,6 +281,56 @@ def test_validate_official_answer_checks_safe_control_code() -> None:
         question_id="invalid-question-id",
         question="",
         expected_control_code="invalid_request",
+    )
+
+
+def test_validate_official_answer_checks_locked_fund_trace() -> None:
+    body = {
+        "question_id": "Q-FUND",
+        "question": "공모펀드를 보여줘",
+        "retrieved_context": '{"citations":[],"reason":"지원하지 않음"}',
+        "think_trace": (
+            '{"status":"unsupported","intent":"unsupported","product_families":["fund"]}'
+        ),
+        "answer": "현재 공모펀드 실행은 지원하지 않습니다.",
+    }
+
+    assert (
+        validate_official_answer(
+            200,
+            body,
+            question_id="Q-FUND",
+            question="공모펀드를 보여줘",
+            expected_trace_status="unsupported",
+            expected_intent="unsupported",
+            expected_families=("fund",),
+            expected_empty_context=True,
+        )
+        == []
+    )
+
+
+def test_validate_official_answer_checks_verified_evidence() -> None:
+    body = {
+        "question_id": "Q-001",
+        "question": "매수 가능한 채권을 보여줘",
+        "retrieved_context": (
+            '{"evidence":{"products":[{"product_id":"BOND-001"}]},'
+            '"citations":[{"citation_id":"citation-001"}]}'
+        ),
+        "think_trace": '{"status":"success","intent":"search"}',
+        "answer": "검증된 상품을 안내합니다.",
+    }
+
+    assert (
+        validate_official_answer(
+            200,
+            body,
+            question_id="Q-001",
+            question="매수 가능한 채권을 보여줘",
+            expected_evidence=True,
+        )
+        == []
     )
 
 
