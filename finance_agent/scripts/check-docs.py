@@ -69,6 +69,7 @@ REQUIRED_INDEX_TARGETS = {
     "schema-dense-stage4-stage5-readiness-2026-08-13.md",
     "stage4-audit-blind-image-api-report-2026-08-13.md",
     "p0-4-official-acceptance-handover-2026-08-19.md",
+    "p0-8-retry-contract-handover-2026-08-19.md",
     "submission-model-boundary.md",
     "hyperclova-provider.md",
     "evaluation-pre-hcx-diagnostic.md",
@@ -87,6 +88,7 @@ REQUIRED_INDEX_TARGETS = {
 }
 REQUIRED_BASELINES = {
     "official-acceptance-p0-4-v1.json",
+    "retry-contract-p0-8-v1.json",
     "briefing-examples-v1-bond-improved.json",
     "briefing-examples-v1-initial.json",
     "briefing-examples-v1-safety-improved.json",
@@ -182,10 +184,10 @@ HISTORICAL_BASELINE_COMPONENT_ALLOWLIST = {
             "3813e01de811fb27389550678fa1b205d0079229de660795e382ac2e81a17fe5"
         ),
         "fastapi_backend/tests/test_release_startup.py": (
-            "4ba967aeda827b7bd1dbbca8d1b83fc9851efddebabfdc36edd87f56a6ca39dc"
+            "bc9232c9e1012ee0626536464d549b5c0e1c0b8eb498b2650e97ebb0e5f4d447"
         ),
         "finance_agent/packages/finance_agent_core/tests/test_agent_release.py": (
-            "3c0da4b7129fdb923e039cf0f53dfc2aa07cf51bdbead98537c51c705b5a8486"
+            "1b2a27adbb077366f6723aec9cc55694b5614f021e7a66933fb3b16705ace170"
         ),
         "finance_agent/packages/finance_agent_core/tests/test_plan_authority.py": (
             "f33e0d47813d73e91a7e6778490d34ca2efd92e6cbbf97b58c0614c332ccd54f"

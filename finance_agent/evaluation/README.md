@@ -29,6 +29,7 @@ DB, 원천 XLSX, 전체 report, 모델 가중치는 계속 `artifacts/` 또는 �
 | 파일 | 범위 |
 | --- | --- |
 | [P0-4 공식 Acceptance](baselines/official-acceptance-p0-4-v1.json) | 설명회 공개 예시 8개와 HTTP 경계 8개를 clean Docker 순차 GET으로 검증한 계약 기준선 16/16 |
+| [P0-8 timeout·5xx 재시도 계약](baselines/retry-contract-p0-8-v1.json) | 답변·제어 200, 일시 장애 503, timeout 504, 270초와 동일 요청 single-flight·replay의 단위·Docker 검증 |
 | [설명회 공개 예시 채권 개선](baselines/briefing-examples-v1-bond-improved.json) | 원화·판매 가능·AA- 이상 검색과 근거 검증을 연결한 회귀 |
 | [설명회 공개 예시 최초 관측](baselines/briefing-examples-v1-initial.json) | 답변 가능 5개·답변 불가 3개의 Router→Oracle→Verifier 현재 도달 범위 |
 | [설명회 공개 예시 안전 개선](baselines/briefing-examples-v1-safety-improved.json) | 잘못된 신용등급 차단과 요청 어미 오분류 수정 후 회귀 |
@@ -197,6 +198,13 @@ Docker의 인증 없는 순차 `GET /answer`로 재생한다. 다섯 문자열·
 상품 정답 정확도, 독립 blind 또는 공모전 예상 점수가 아니다. 구현·재현·남은
 공백은 [P0-4 인수인계 보고서](../docs/p0-4-official-acceptance-handover-2026-08-19.md)를
 따른다.
+
+`retry-contract-p0-8-v1`은 주최 측 300초·timeout/5xx 최대 2회 재시도 운영 정보에
+맞춰 공식 GET의 상태와 중복 실행을 검증한다. 정상 동일 요청 2회는 HTTP 200·200이지만
+Agent 실행 1회와 replay Audit 1건, 존재하지 않는 채권 DB 장애는 HTTP 503·503과
+Agent 실행 시도 2회·replay 0건, 강제 outer timeout은 HTTP 504를 기록했다. 실제
+주최 측 evaluator나 HyperCLOVA X를 호출한 결과는 아니며 자세한 구현·한계는
+[P0-8 인수인계 보고서](../docs/p0-8-retry-contract-handover-2026-08-19.md)를 따른다.
 
 `official-mock-v1-30`은 설명회의 예상 난이도 하·중·상 각 10개와 답변 불가
 5개 분포만 모사한 공개 모의평가다. 로컬 Qwen에서 검색·비교·집계·안전·근거·

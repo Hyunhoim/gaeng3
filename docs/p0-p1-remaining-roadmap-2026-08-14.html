@@ -46,6 +46,7 @@
     HCLX 변경을 별도 commit으로 동결했고, 공식 <code>GET /answer</code>의 5개 문자열·UTF-8·검증 근거 응답을 Docker에서 확인했다.
     공모펀드는 주최 측 데이터 공지 전까지 <code>locked</code>이며 DB·HCLX를 실행하지 않고 <code>UNSUPPORTED</code>로 종료한다.
     P0-4 공식 Acceptance는 원본 해시를 확인한 clean Docker에서 계약 16/16·안전 무실행 11/11로 완료했다.
+    P0-8은 답변·제어 200, 일시 장애 503, timeout 504와 동일 요청 중복 실행 방지를 Docker에서 완료했다.
   </section>
 
   <section>
@@ -87,10 +88,10 @@
       </article>
 
       <article class="card">
-        <h3><span class="label">P0-8</span>300초·5xx 재시도 계약</h3>
-        <p>주최 측은 문항당 300초를 기다리고 timeout 또는 5xx에서 최대 2회 재시도한다. 현재 외곽 제한은 55초다.</p>
-        <div class="row"><strong>해야 할 일</strong>미지원·역질문은 HTTP 200으로 유지하고, 일시적 인프라 장애만 503/504로 분리한다. 내부 deadline은 실측 후 300초보다 짧게 둔다.</div>
-        <div class="row"><strong>완료 기준</strong>장애에서만 평가기 재시도가 작동하고, 같은 요청의 중복 실행·Audit·비용이 통제되는 Docker 테스트 통과.</div>
+        <h3><span class="label done">P0-8 · 완료</span>300초·5xx 재시도 계약</h3>
+        <p>주최 측 300초 제한보다 짧은 270초 outer deadline과 일시 장애 503·timeout 504 계약을 적용했다.</p>
+        <div class="row"><strong>완료 결과</strong>동일 요청 single-flight·안전 결과 300초 replay를 추가하고 정상 재전송 200·200/Agent 1회, dataset 장애 503·503/Agent 2회, 강제 timeout 504를 Docker에서 확인했다.</div>
+        <div class="row"><strong>인수인계</strong><a href="../finance_agent/docs/p0-8-retry-contract-handover-2026-08-19.md">P0-8 재시도 계약 보고서</a> · code commit <code>2ca044b</code></div>
       </article>
 
       <article class="card">
@@ -126,7 +127,7 @@
 
   <section>
     <h2>권장 실행 순서</h2>
-    <p class="flow">P0-4 공식 예시 고정 완료 → P0-9 Blind 최초 실행 → P0-8 timeout·재시도 → P0-5~7 승인 문서·관계 근거 → P0-10 NCP 제출 Release</p>
+    <p class="flow">P0-4·P0-8 완료 → P0-9 Blind 최초 실행 → P0-5~7 승인 문서·관계 근거 → P0-10 NCP 제출 Release</p>
     <p class="note">P0-3 공모펀드는 주최 측 공지가 올 때까지 이 흐름과 별개로 잠근다. Schema Dense·HCLX Planning은 Blind 결과가 개선을 증명한 경우에만 P1 Shadow로 연결한다.</p>
   </section>
 

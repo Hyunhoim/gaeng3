@@ -51,7 +51,7 @@
 | 10 | 교차 상품군 grounded answer | family evidence 격리·교차 문구 검증·전체 fallback·무호출 | expected·로컬 Qwen 각각 4/4 |
 | 11 | 금융 도메인 QA 실험 | 담당자 작성 40문항 hash 검증·단계별 E2E·Q002 SEARCH gold | v1.2 사후 회귀 40/40·잘못된 실행 0건 |
 | 12 | 제출용 모델 경계 | 로컬 provider 제거 검사·투명한 개발·제출 분리 | 개발 자동 검사 통과·제출 자동 차단·공식 범위 서면 확인 대기 |
-| 13 | 공식 평가 API adapter | `GET /answer`·다섯 문자열·전 결과 HTTP 200·60초 내부 예산 | route·DTO·상태·오류·55초 외곽 예산 완료 |
+| 13 | 공식 평가 API adapter | `GET /answer`·다섯 문자열·답변/제어 200·일시 장애 503/504·300초 제한 | route·DTO·상태·오류·270초 외곽 예산·동일 요청 중복 실행 방지 완료 |
 | 14 | 도메인별 Ontology | Turtle 5개·field registry 정합성·문법 검사 | 5개 생성·RDFLib 문법·registry exact-match 완료 |
 | 15 | 공식 형식 공개 모의평가 | 난이도 10/10/10·답변 불가 5개·공식 5필드·latency | expected·로컬 Qwen 30/30·생성 16/17·안전 fallback 1건 |
 | 16 | Qwen 변형·전체 Agent 스트레스 평가 | 세 표현 축·의미 선별·gold 감사·실패 단계·fallback 전후 비교 | 승인 변형 결정론적·Qwen 각각 77/77·fallback 0/61 |

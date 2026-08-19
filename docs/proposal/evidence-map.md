@@ -2,7 +2,7 @@
 
 상태: 활성
 
-기준일: 2026-08-08
+기준일: 2026-08-19
 
 제안서에 사용하는 주장과 실제 코드·문서·baseline을 연결한다. `검증 완료`는
 해당 범위의 저장소 회귀를 통과했다는 뜻이며 공식 평가 성능을 뜻하지 않는다.
@@ -19,24 +19,25 @@
 | 주요 기능 흐름 | SEARCH·교차 상품군 독립 검색·family별 grounded answer·교차 검증·전체 fallback·COMPARE·AGGREGATE·제어 응답 | [교차 SEARCH](../../finance_agent/docs/cross-family-search.md) | 검증 완료 |
 | 사용자 시나리오 | 검색·비교·집계·역질문·거절 | [사용자 시나리오](user-scenarios.md) | 금융·화면 검수 대기 |
 | 기대효과·확장성 | 근거 추적·안전 fallback·상품군 adapter·평가 재사용 | [Backend 계약](../../finance_agent/docs/backend-contract.md) | 내부 계약 완료 |
-| 공식 제출 계약 | GET `/answer`, 다섯 문자열, 미응답 HTTP 200, Ontology 5개 | [설명회 반영 기록](briefing-2026-08-06.md)·[Ontology 계약](../../finance_agent/docs/ontology.md) | API·Ontology 내부 구현 완료 |
+| 공식 제출 계약 | GET `/answer`, 다섯 문자열, 답변·제어 200, 일시 장애 503, timeout 504, 동일 요청 중복 실행 방지, Ontology 5개 | [P0-8 인수인계](../../finance_agent/docs/p0-8-retry-contract-handover-2026-08-19.md)·[Ontology 계약](../../finance_agent/docs/ontology.md) | API·Ontology 내부 구현 완료 |
 
 ## 정성평가 축
 
 | 평가 축 | 현재 근거 | 남은 증거 |
 | --- | --- | --- |
 | 문제정의 | 데이터 grain·품질·금융 안전 문제를 실제 원천 수치로 정의 | 금융 도메인 담당자의 사용자 pain point 검수 |
-| 기술완성도·성능 | 전체 테스트, 검색·집계 성능 기준선, family별 grounded answer, FastAPI·공식 GET·Ontology·Docker·provider·오류 계약 | 실제 HCX·공개 서버·부하 테스트 |
+| 기술완성도·성능 | 전체 테스트, 검색·집계 성능 기준선, family별 grounded answer, FastAPI·공식 GET·Ontology·Docker·provider·오류·재시도 계약 | 실제 HCX·NCP 공개 서버·장시간 부하 테스트 |
 | 창의성·확장성 | LLM 계획과 서버 계획의 exact-match gate, 독립 verifier, field evidence | 기존 방식 대비 비교표와 실제 확장 사례 |
 | 답변 정확성·완결성 | 상품명·수치·순위·근거·기준일 Answer Verifier와 red-team | external blind와 실제 사람 평가 |
-| 현업 활용성·리스크 관리 | 결측·stale·통화·추천 금지·fallback·오류 비노출 | 실제 사용자 시나리오·화면 데모·운영 로그 |
+| 현업 활용성·리스크 관리 | 결측·stale·통화·추천 금지·fallback·오류 비노출·동일 요청 중복 비용 방지 | 실제 사용자 시나리오·화면 데모·NCP 운영 로그 |
 
 ## 정량 근거
 
 | 주장 | 값 | 정본 | 해석 제한 |
 | --- | ---: | --- | --- |
 | 원천 감사 | 4종 145,393행, 65/65 | [데이터 감사](../../finance_agent/docs/data-audit.md) | 제공 스냅샷 기준 |
-| 전체 코드 회귀 | Agent Core pytest 507개·Backend pytest 34개 | [readiness](../../finance_agent/docs/pre-hcx-readiness.md) | 단위·계약 회귀 범위 |
+| 전체 코드 회귀 | Agent Core 1,272 passed·2 조건부 skip, Backend 320 passed·2 기존 warning | [P0-8 인수인계](../../finance_agent/docs/p0-8-retry-contract-handover-2026-08-19.md) | 단위·계약 회귀이며 독립 성능 평가가 아님 |
+| 평가기 retry·중복 실행 제어 | 정상 동일 요청 200·200/Agent 1회, dataset 장애 503·503/Agent 2회, 강제 timeout 504 | [P0-8 baseline](../../finance_agent/evaluation/baselines/retry-contract-p0-8-v1.json)·[인수인계](../../finance_agent/docs/p0-8-retry-contract-handover-2026-08-19.md) | 로컬 Docker fault injection, 실제 evaluator·HCLX·NCP 아님 |
 | 교차 상품군 SEARCH | 국내·해외 ETP 4/4 | [교차 SEARCH](../../finance_agent/docs/cross-family-search.md) | 공개 회귀, not blind |
 | 교차 상품군 grounded answer | expected·로컬 Qwen 각각 4/4; 생성 대상 2문항 모두 grounded; 실제 모델 호출 3회; fallback 0 | [교차 SEARCH](../../finance_agent/docs/cross-family-search.md)·[baseline](../../finance_agent/evaluation/baselines/cross-family-answer-v1.json) | 공개 4문항, not blind; 로컬 Qwen은 개발 전용 |
 | 내부 red-team | 수정 후 40/40 | [red-team 평가](../../finance_agent/docs/evaluation-internal-red-team.md) | self-authored, not blind |

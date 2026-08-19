@@ -79,6 +79,11 @@ flowchart LR
 - HTTP 200
 - `Content-Type: application/json; charset=utf-8`
 - 정확히 다섯 필드만 존재하고 모든 값이 문자열
+
+P0-4 당시 공개 예시·입력 경계는 모두 HTTP 200 계약으로 검증했다. 이후 P0-8에서
+평가기 재시도를 위해 일시 장애는 503, timeout은 504로 분리했으며 다섯 문자열 body는
+유지한다. 현재 전송 계약은 [P0-8 인수인계](p0-8-retry-contract-handover-2026-08-19.md)를
+우선한다
 - 정상 입력의 `question_id`와 `question`을 그대로 반환
 - `retrieved_context`와 `think_trace` 문자열을 다시 JSON object로 해석 가능
 - `answer`가 빈 문자열이 아님
@@ -268,7 +273,8 @@ private 자산과 독립 실행 승인이 준비되지 않으면 P0-9 점수를 
 
 ### 이후 작업
 
-- P0-8: 일시적 5xx·timeout만 최대 2회 재시도하고 중복 실행·Audit를 통제
+- P0-8: 완료 — 일시 장애 503·timeout 504와 동일 요청 중복 실행·Audit 통제
+  ([인수인계](p0-8-retry-contract-handover-2026-08-19.md))
 - P0-5: 승인된 외부 금융 문서 corpus와 출처·라이선스·SHA-256 고정
 - P0-6: 회사–상품–테마–편입 관계 검색과 공식 상품 ID 재검증
 - P0-7: 관계형 QueryPlan과 문장별 Claim Verifier

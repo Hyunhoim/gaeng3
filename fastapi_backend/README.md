@@ -146,10 +146,11 @@ curl --get --fail-with-body \
 ```
 
 응답은 `question_id`, `question`, `retrieved_context`, `think_trace`, `answer`의
-다섯 필드만 갖고 모두 문자열이다. 정상 검색, 결과 없음, 역질문, 미지원,
-내부 오류도 같은 다섯 필드와 HTTP 200을 반환한다. 정의되지 않은 추가
-query parameter는 무시하며 `Content-Type: application/json; charset=utf-8`을
-명시한다.
+다섯 필드만 갖고 모두 문자열이다. 정상 검색, 결과 없음, 역질문, 미지원과 재시도해도
+회복되지 않는 오류는 같은 다섯 필드와 HTTP 200을 반환한다. 일시적인 provider·dataset·
+과부하 장애는 HTTP 503, 전체 시간 초과는 HTTP 504를 쓰되 본문은 같은 다섯 문자열을
+유지한다. 정의되지 않은 추가 query parameter는 무시하며
+`Content-Type: application/json; charset=utf-8`을 명시한다.
 
 `retrieved_context`와 `think_trace`는 JSON을 문자열로 직렬화한 값이다.
 `retrieved_context`에는 검증된 상품 field 값·비교·집계·문서 chunk·citation을
@@ -157,10 +158,14 @@ query parameter는 무시하며 `Content-Type: application/json; charset=utf-8`�
 `think_trace`는 모델의 숨은 사고과정이 아니라 질문 분류·필터·검증·fallback 결과처럼
 다시 확인할 수 있는 실행 기록만 담는다.
 
-전체 처리의 바깥쪽 제한은 기본 55초다. 시간이 다 되면 근거가 없는 안전한 시간 초과
-답변을 HTTP 200으로 먼저 반환한다. 실행 중인 작업을 강제로 종료하는 방식은 아니므로,
-실제 HyperCLOVA X 연결 때는 모델 호출 제한을 이 값보다 짧게 설정하고 동시 요청 수를
-별도로 제한해야 한다.
+전체 처리의 바깥쪽 제한은 주최 측 300초보다 여유를 둔 기본 270초다. 시간이 다 되면
+근거가 없는 공식 다섯 문자열 안전 응답을 HTTP 504로 반환한다. 실행 중인 작업을 강제로
+종료하는 방식은 아니므로 실제 HyperCLOVA X 호출 제한은 이 값보다 짧게 설정하고 동시
+요청 수를 별도로 제한해야 한다.
+
+평가기 재시도가 같은 `question_id`와 질문을 다시 보내면 실행 중인 작업을 공유하거나
+300초 안의 안전한 완료 결과를 재사용한다. 같은 ID에 다른 질문이 오면 실행하지 않는다.
+재시도 가능한 503·504 결과는 저장하지 않아 다음 순차 시도가 다시 실행될 수 있다.
 
 ## 5. 전체 시스템에서 실행
 
@@ -340,7 +345,7 @@ benchmark·soak 실행법과 2026-08-14 검증 결과는 다음 문서를 따른
 | `FINANCE_RAW_DATA_DIR` | `../../2. Data/1. Raw/1.금융상품` | 읽기 전용 공식 XLSX 경로 |
 | `APP_ENV` | `development` | 기본 Compose는 로컬 개발. `evaluation`·`production`은 전용 release manifest·Binding을 강제 |
 | `WEB_CONCURRENCY` | `1` | Uvicorn worker 수 |
-| `OFFICIAL_ANSWER_TIMEOUT_SECONDS` | `55` | 평가용 GET의 바깥쪽 응답 제한, 0초 초과 60초 미만만 허용 |
+| `OFFICIAL_ANSWER_TIMEOUT_SECONDS` | `270` | 평가용 GET의 바깥쪽 응답 제한, 0초 초과 300초 미만만 허용 |
 | `OFFICIAL_ANSWER_MAX_INFLIGHT` | `2` | 프로세스당 동시 Agent 작업 상한(허용 1~8). timeout 뒤에도 실제 worker 종료까지 자리를 유지하며 초과 요청은 실행 전에 거절 |
 | `FINANCE_BACKEND_ANSWER_PROVIDER` | `deterministic` | 답변 provider, 기본은 모델 미사용 |
 | `FINANCE_BACKEND_HCX_QUERY_PLAN_ENABLED` | `false` | HCLX QueryPlan 선택 기능. 독립 품질·지연 평가 전에는 비활성 유지 |

@@ -217,9 +217,11 @@
 - 공식 `GET /answer` 요청·응답 계약과 주최 측 실행 환경을 최종적으로 준수한다.
 - 공식 adapter는 `question_id`, `question`, `retrieved_context`, `think_trace`,
   `answer`의 다섯 문자열 필드를 반환한다.
-- 답을 찾지 못하거나 처리할 수 없는 질문도 같은 스키마와 HTTP 200으로 응답한다.
-- 위 공식 adapter의 DTO·FastAPI route·전 상태·예외·추가 parameter·기본 55초
-  외곽 시간 예산은 2026-08-07 자동 테스트를 통과했으며, 공개 서버 배포는 남아 있다.
+- 답을 찾지 못하거나 지원하지 않는 질문은 같은 스키마와 HTTP 200, 재시도 가능한
+  일시 장애는 HTTP 503, 시간 초과는 HTTP 504로 응답한다.
+- 위 공식 adapter의 DTO·FastAPI route·상태·예외·추가 parameter·기본 270초
+  외곽 시간 예산과 동일 요청 중복 실행 방지는 자동 테스트를 통과했으며, 공개 서버
+  배포는 남아 있다.
 - 도메인별 `common.ttl`, `bond_kr.ttl`, `etf_kr.ttl`, `etf_gl.ttl`,
   `fund_pub.ttl`을 제출 기준으로 준비한다.
 - 위 다섯 파일은 field registry에서 자동 생성하며 RDFLib Turtle 문법과 registry

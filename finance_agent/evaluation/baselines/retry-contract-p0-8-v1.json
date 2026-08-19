@@ -1,0 +1,120 @@
+{
+  "schema_version": "1.0",
+  "baseline_id": "retry-contract-p0-8-v1",
+  "recorded_on": "2026-08-19",
+  "dataset": "p0-8-retry-contract-docker-v1",
+  "evaluation_layer": "system_contract",
+  "status": "p0_8_contract_verified_local_docker_not_external_evaluator",
+  "provider": {
+    "name": "deterministic-fastapi",
+    "official_submission_provider": false,
+    "network_used": true,
+    "network_scope": "localhost Docker GET /answer",
+    "hclx_called": false,
+    "local_llm_called": false
+  },
+  "model": {
+    "name": "none",
+    "reason": "P0-8은 LLM 생성 품질이 아니라 HTTP 장애 신호와 중복 실행 제어를 검증"
+  },
+  "suite": {
+    "id": "retry-contract-p0-8-v1",
+    "version": "1.0",
+    "path": "evaluation/protocols/retry-contract-p0-8-v1.protocol.json",
+    "sha256": "c12a92d71d66f66d5fd9028305d06157c92a6fef1b8abc22e4b48c7a7426feee"
+  },
+  "data": {
+    "fixture_definition_sha256": "c12a92d71d66f66d5fd9028305d06157c92a6fef1b8abc22e4b48c7a7426feee",
+    "not_applicable_reason": "상품 정답이나 원천 행 평가가 아니라 HTTP retry·single-flight·Audit 계약 검증"
+  },
+  "source_contract": {
+    "path": "docs/p0-p1-remaining-roadmap-2026-08-14.html",
+    "evaluator_timeout_seconds": 300,
+    "evaluator_retry_conditions": [
+      "timeout",
+      "http_5xx"
+    ],
+    "evaluator_max_retries": 2
+  },
+  "implementation": {
+    "commit": "2ca044b0dfa318d32c5b04d4205e059024421f43",
+    "official_outer_timeout_seconds": 270,
+    "official_max_inflight": 2,
+    "idempotency_key": "question_id",
+    "idempotency_input_fingerprint": "sha256(question)",
+    "safe_result_replay_ttl_seconds": 300,
+    "safe_result_replay_max_entries": 2048,
+    "retryable_result_cached": false,
+    "server_side_provider_retry_added": false,
+    "request_execution_sha256": "6ed406aa223a827719fb87042b9b92966282d358f7a11c482003447b1cd057f2",
+    "official_route_sha256": "35734cf2e2ffe64e86b0cb036db18f601b0ca5836bc061cb9b6e2ecd757b26f0",
+    "release_contract_sha256": "40b5d816b421fb73bbce817f24948dc60c682eb9fc04b2a45401222248afb588"
+  },
+  "http_policy": {
+    "success_not_found_clarification_unsupported_invalid_request": 200,
+    "non_retryable_internal_error": 200,
+    "retryable_provider_dataset_release_or_admission_failure": 503,
+    "request_timeout": 504,
+    "all_statuses_keep_official_five_string_body": true,
+    "same_id_different_question": "http_200_invalid_request_without_agent_execution"
+  },
+  "regression": {
+    "targeted_retry_audit_release_tests_passed": 98,
+    "backend_tests_passed": 320,
+    "backend_warnings": 2,
+    "agent_core_tests_passed": 1272,
+    "agent_core_tests_skipped": 2,
+    "changed_python_ruff_passed": true,
+    "git_diff_check_passed": true
+  },
+  "docker": {
+    "image_reference": "gaeng3-backend@sha256:fab6ca1315ac276b5c6a98566ff016e4812d061afceba835e40187832995d2c1",
+    "image_tag_during_test": "gaeng3-backend:p08-working",
+    "data_volume": "gaeng3_finance-data",
+    "hclx_called": false,
+    "local_llm_called": false,
+    "normal_replay": {
+      "http_statuses": [200, 200],
+      "http_invocations": 2,
+      "agent_execution_count": 1,
+      "idempotent_result_replayed_events": 1,
+      "response_bodies_equal": true
+    },
+    "transient_dataset_failure": {
+      "fault": "configured bond database path does not exist",
+      "http_statuses": [503, 503],
+      "http_invocations": 2,
+      "agent_execution_count": 2,
+      "retryable_adapter_failure_events": 2,
+      "idempotent_result_replayed_events": 0
+    },
+    "forced_outer_timeout": {
+      "configured_timeout_seconds": 0.000001,
+      "http_status": 504,
+      "control_code": "request_timeout",
+      "official_five_string_body_valid": true
+    }
+  },
+  "metrics": {
+    "total": 3,
+    "passed": 3,
+    "strict_accuracy": 1.0,
+    "strict_accuracy_scope": "세 Docker 전송·장애 시나리오 계약 통과율이며 상품 정답 정확도·독립 blind·공모전 점수가 아님"
+  },
+  "reports": [
+    {
+      "role": "docker_audit_counter_summary",
+      "artifact_name": "p0-8-retry-contract-docker-audit-summary.json",
+      "sha256": "6eb7e583cb6d14db68f9bb2f1a2284f4771bb358cdc30495b8c6df6821ed4d01"
+    }
+  ],
+  "reproduce": "python -m pytest fastapi_backend/tests/test_request_execution.py fastapi_backend/tests/test_answer.py fastapi_backend/tests/test_audit_runtime.py -q",
+  "limitations": [
+    "실제 주최 측 평가기는 호출하지 않았으며 300초·최대 2회 재시도 조건은 팀 로드맵 문서에 적힌 운영 정보를 기준으로 구현함",
+    "Docker 장애 검증은 로컬 연구 서버에서 수행했으며 NCP 네트워크·Load Balancer·실제 evaluator 재시도 간격을 측정한 결과가 아님",
+    "HyperCLOVA X와 로컬 Qwen을 호출하지 않아 provider latency·429·실사용 token·비용 안정성을 평가하지 않음",
+    "동일 요청 조정자는 프로세스 로컬 구조이며 현재 evaluation·production의 WEB_CONCURRENCY=1 제한과 함께 사용함",
+    "270초 기본값은 평가기 제한보다 30초 여유를 둔 운영 상한이며 실제 HCLX 및 NCP 실측 뒤 더 짧게 조정할 수 있음",
+    "Backend 경고 2건은 기존 multiprocessing fork deprecation이며 P0-8 실패가 아님"
+  ]
+}

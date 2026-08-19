@@ -212,18 +212,32 @@ Answer Verifier를 실행했다고 표시하지 않는다.
 통과한 normalized value와 evidence reference만 담는다. 상품·field·문서 수와 문서
 본문 길이는 고정 상한으로 제한하고, 잘린 범위를 `truncation`으로 표시한다.
 
-성공·결과 없음·역질문·미지원·내부 오류와 입력 오류를 모두 같은 스키마와
-HTTP 200으로 반환한다. 이는 주최 측 계약을 위한 예외이며, 내부 `POST /answer`의
-HTTP 422·502·503·504 오류 의미를 바꾸지 않는다. 정의되지 않은 query parameter는
-무시하며, 내부 예외·credential·파일 경로는 다섯 문자열에 노출하지 않는다.
+성공·결과 없음·역질문·미지원·입력 오류와 재시도해도 회복되지 않는 내부 오류는
+같은 스키마와 HTTP 200으로 반환한다. 반면 평가기가 다시 시도하면 회복될 수 있는
+provider·dataset·release·admission 장애는 HTTP 503, 전체 요청 시간 초과는 HTTP
+504로 반환한다. 503·504도 응답 본문은 공식 다섯 문자열을 그대로 유지한다. 이는
+정상적인 답변 불가와 일시적인 서버 장애를 평가기가 구분하게 하기 위한 계약이다.
+내부 `POST /answer`의 HTTP 422·500·502·503·504 의미는 바꾸지 않는다. 정의되지
+않은 query parameter는 무시하며, 내부 예외·credential·파일 경로는 다섯 문자열에
+노출하지 않는다.
 
 Agent Core 계약과 Backend의 모든 응답 상태·예외·추가 parameter 테스트로
 자동 검증한다. Docker HTTP smoke도 실제 공식 GET 응답의 필드·문자열·
 직렬화·UTF-8 Content-Type과 공모펀드 잠금 상태를 검사하도록 확장했다.
 
-평가 route에는 기본 55초의 바깥쪽 시간 예산을 둔다. 예산이 끝나면
+평가 route에는 주최 측 300초 제한보다 30초 짧은 기본 270초의 바깥쪽 시간 예산을
+둔다. 예산이 끝나면
 `control_code=request_timeout`, 빈 citation과 안전 문구를 담은 같은 다섯 문자열을
-HTTP 200으로 반환한다. 이 제한은 실행 중인 Python thread를 강제 종료하지 않으므로,
-실제 provider timeout은 55초보다 짧게 둬야 한다. 프로세스 동시 Agent 작업은
+HTTP 504로 반환한다. 이 제한은 실행 중인 Python thread를 강제 종료하지 않으므로,
+실제 provider timeout은 바깥쪽 제한보다 짧게 둬야 한다. 프로세스 동시 Agent 작업은
 기본 2개(허용 1~8)로 제한하고, 상한을 넘긴 요청은 실행하지 않은 채
-`control_code=request_overloaded`와 빈 citation을 같은 HTTP 200 계약으로 반환한다.
+`control_code=request_overloaded`와 빈 citation을 같은 다섯 문자열과 HTTP 503으로
+반환한다.
+
+평가기의 timeout·5xx 최대 2회 재시도에 대응해 `question_id`를 요청 식별자로 쓴다.
+같은 ID와 같은 질문이 동시에 들어오면 먼저 시작한 Agent 작업 하나를 공유하고,
+성공하거나 재시도 불필요로 끝난 결과는 300초 동안 재사용한다. 같은 ID에 다른 질문이
+들어오면 실행하지 않고 HTTP 200 `invalid_request`로 종료한다. 재시도 가능한 503·504
+결과는 저장하지 않아 다음 순차 시도가 실제로 다시 실행될 수 있다. 서버가 HCLX를
+임의로 반복 호출하는 구조가 아니라 평가기의 재시도만 받아들이므로 호출 횟수·Audit·
+비용을 중복 증가시키지 않는다.

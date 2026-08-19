@@ -24,6 +24,7 @@ docs/
 | Agent 1~9단계 구현 방향 | [단계별 구현 로드맵](agent-implementation-roadmap-2026-08-12.html) | 전체 팀 |
 | 남은 P0·P1 순서와 현재 완료 상태 | [남은 구현 로드맵](p0-p1-remaining-roadmap-2026-08-14.html) | AI·Backend 담당 |
 | P0-4 공식 API 계약 결과 인계 | [공식 Acceptance 인수인계](../finance_agent/docs/p0-4-official-acceptance-handover-2026-08-19.md) | AI·Backend 담당 |
+| P0-8 timeout·5xx 재시도 결과 인계 | [재시도 계약 인수인계](../finance_agent/docs/p0-8-retry-contract-handover-2026-08-19.md) | AI·Backend 담당 |
 | 기술 제안서·제출 준비 | [기술 제안서 작성 허브](proposal/README.md) | 전체 팀 |
 | AI 구현·데이터·평가 확인 | [AI 기술문서 안내](../finance_agent/docs/README.md) | AI·Backend 담당 |
 | Agent release·Docker 배포 고정 | [AgentReleaseManifest 배포 계약](../finance_agent/docs/agent-release-manifest.md) | AI·Backend·배포 담당 |
@@ -61,3 +62,4 @@ docs/
 3. [Backend DTO](../finance_agent/docs/backend-contract.md)
 4. [Backend README](../fastapi_backend/README.md)
 5. [P0-4 공식 Acceptance 인수인계](../finance_agent/docs/p0-4-official-acceptance-handover-2026-08-19.md)
+6. [P0-8 평가기 재시도 계약 인수인계](../finance_agent/docs/p0-8-retry-contract-handover-2026-08-19.md)

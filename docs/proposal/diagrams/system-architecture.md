@@ -52,7 +52,8 @@ flowchart LR
 - 상품군별 evidence-only grounded answer·Answer Verifier·교차 검증·전체 deterministic fallback
 - 프레임워크 독립 Backend DTO와 service adapter
 - FastAPI `/health`·`/answer`, 안전한 422 DTO와 실제 SQLite 로컬 HTTP smoke test
-- 공식 `GET /answer` 다섯 문자열 adapter와 전 결과 HTTP 200 계약
+- 공식 `GET /answer` 다섯 문자열 adapter, 답변/제어 200·일시 장애 503/504 계약,
+  동일 요청 single-flight·안전 결과 replay
 - 도메인별 Ontology Turtle 5개와 field registry exact-match 검사
 - Ubuntu SSH Docker build·데이터 준비·Backend HTTP smoke
 - HyperCLOVA X fake transport·오류 계약
