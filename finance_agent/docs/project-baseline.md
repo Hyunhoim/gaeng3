@@ -1,7 +1,7 @@
 # 금융상품 Agent 현재 프로젝트 기준
 
 상태: 현재 정본
-기준일: 2026-08-12
+기준일: 2026-08-19
 대상 저장소: `https://github.com/Hyunhoim/gaeng3`
 
 ## 1. 한 문장 목표
@@ -163,6 +163,12 @@
   독립 review, HTTPS 출처, 사용 권한 4종, byte·정규화 본문 hash,
   canonical manifest, 변조·경로·덮어쓰기 차단을 통과해야만 별도 BM25 색인으로
   build할 수 있다. 실제 corpus 승인·검색 평가·Release 활성화는 남아 있다.
+- 승인 상품 DB의 제공 필드만 사용해 국내채권·국내/해외 ETP의 발행사·운용사·
+  기초지수·자산유형·투자지역 관계 58,005개를 SQLite FTS5 색인으로 만들었다.
+  검색된 상품 ID는 공식 상품 DB에서 다시 확인하고 원천 행·열·기준일·DB hash를
+  보존한다. 관계 전용 계약 14/14와 실제 검색 smoke 4/4를 통과했지만, P0-7 전까지
+  Agent 답변 경로에는 연결하지 않는다. 공모펀드·테마·편입종목·외부 문서 관계와
+  금융 alias는 출처·도메인 검수 대기다.
 - 사람 평가 rubric v1과 프레임워크 독립 Backend DTO·JSON 예시를 구현했다.
   실제 사람 평가는 외부 게이트다.
 - 금융 도메인 담당자가 작성한 40문항을 hash·schema·분포로 검증하고 현재
@@ -186,8 +192,8 @@
   사후 회귀했다. 최신 실행 의미 보조 strict는 242/391이며, 각 검색 단계의 기존
   통과 문항 퇴행은 0건이다. 이는 개발에 사용한 같은 질문의 회귀이지 blind가 아니다.
 - pre-HCX 동결 시점의 Agent Core pytest 507개·Backend 34개 기록은 역사 baseline으로
-  보존한다. 현재 작업 트리 전체 회귀는 Agent Core 1,061개·Backend 162개이며 Ruff
-  lint·format을 통과했다.
+  보존한다. P0-6 코드 기준 전체 회귀는 Agent Core 1,305 passed·2 skipped,
+  Backend 최근 기준 320 passed이며 Ruff lint·format을 통과했다.
 - Docker `data-init`은 읽기 전용 공식 XLSX에서 네 SQLite를 자동 생성·검증하고,
   같은 원천과 registry에서는 재사용한다. 모든 DB 준비가 성공한 뒤에만 Backend를
   시작하며 Backend에는 생성 volume을 읽기 전용으로 연결한다.
@@ -380,6 +386,8 @@ QueryPlan에는 최소한 intent, 상품군, 필수 조건, 완화 전 확인이
 - [x] 공모펀드 product-grain·field capability·품질 규칙을 동결한다.
 - [x] 동결된 공모펀드 계약으로 product·attribute·quarantine 정규화 적재를 구현한다.
 - [x] 공모펀드 정규화 DB에 oracle·verifier·field evidence를 연결한다.
+- [x] 승인 상품 DB에서 제공 관계 58,005개를 색인하고 상품 identity·출처·해시를
+  fail-closed로 재검증하는 P0-6 기반을 구현한다.
 
 ### P2 — Agent 수직 통합
 

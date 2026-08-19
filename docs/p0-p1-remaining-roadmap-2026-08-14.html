@@ -74,10 +74,10 @@
       </article>
 
       <article class="card">
-        <h3><span class="label">P0-6</span>관계·문서 검색</h3>
-        <p>Ontology는 회사–상품–테마–편입관계처럼 데이터 사이의 의미 연결을 정의하는 구조다.</p>
-        <div class="row"><strong>해야 할 일</strong>우선 SQLite 관계 테이블로 구현하고 관계마다 출처·기준일을 연결한다. GraphDB는 필요성이 입증될 때만 검토한다.</div>
-        <div class="row"><strong>완료 기준</strong>관계 검색 결과의 최종 product ID와 수치는 공식 상품 DB에서 다시 조회·검증.</div>
+        <h3><span class="label">P0-6 · 제공 관계 기반 완료</span>관계·문서 검색</h3>
+        <p>승인 상품 DB의 발행사·운용사·기초지수·자산유형·투자지역을 SQLite 관계 색인으로 구성했다.</p>
+        <div class="row"><strong>완료 결과</strong>국내채권·국내/해외 ETP 실제 관계 58,005개에 출처·기준일·DB hash를 연결하고, 후보 product ID를 공식 DB에서 다시 조회·검증했다. 관계 계약 14/14, 실제 smoke 4/4를 확인했다.</div>
+        <div class="row"><strong>남은 일</strong>공모펀드·테마·편입종목·외부 문서 관계 출처, 금융 alias 검수, P0-7 QueryPlan·Claim Verifier와 Agent Release 연결. <a href="../finance_agent/docs/p0-6-provided-relation-retrieval-handover-2026-08-19.md">관계 검색 인수인계</a></div>
       </article>
 
       <article class="card">
@@ -127,7 +127,7 @@
 
   <section>
     <h2>권장 실행 순서</h2>
-    <p class="flow">P0-4·P0-8 완료 → P0-9 Blind 최초 실행 → P0-5~7 승인 문서·관계 근거 → P0-10 NCP 제출 Release</p>
+    <p class="flow">P0-4·P0-8 완료 → P0-5 반입·P0-6 제공 관계 기반 완료 → P0-9 private 자산 확보 시 최초 Blind → P0-7 Agent 연결 → P0-10 NCP 제출 Release</p>
     <p class="note">P0-3 공모펀드는 주최 측 공지가 올 때까지 이 흐름과 별개로 잠근다. Schema Dense·HCLX Planning은 Blind 결과가 개선을 증명한 경우에만 P1 Shadow로 연결한다.</p>
   </section>
 

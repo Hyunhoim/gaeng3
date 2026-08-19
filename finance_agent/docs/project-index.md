@@ -18,6 +18,7 @@
 5. [P0-4 공식 Acceptance 인수인계](p0-4-official-acceptance-handover-2026-08-19.md) — 공식 GET 계약, Docker 검증, 다음 작업
 6. [P0-8 재시도 계약 인수인계](p0-8-retry-contract-handover-2026-08-19.md) — 200·503·504, 270초, 동일 요청 중복 실행 방지
 7. [P0-5 외부 문서 반입 계약](p0-5-external-corpus-intake-2026-08-19.md) — 독립 승인, 출처·권한·해시 봉인, 변조 차단, BM25 색인 전 게이트
+8. [P0-6 제공 관계 검색 인수인계](p0-6-provided-relation-retrieval-handover-2026-08-19.md) — 공식 DB 관계 58,005개, 출처·기준일, 상품 ID 재검증, Agent 비활성 경계
 
 배포·복구 담당자는 [NCP immutable release CI](immutable-ncp-release-ci.md)와
 [Rollback drill runbook](../../fastapi_backend/ROLLBACK_DRILL.md)을 추가로 확인한다. 현재
@@ -33,8 +34,8 @@ HCX 모델·endpoint·인증과 크레딧 적용 범위는 남아 있어 기존�
 | 독자·목적 | 먼저 읽기 | 이어서 읽기 |
 | --- | --- | --- |
 | 새 AI 개발자 | [현재 프로젝트 기준](project-baseline.md) | [개발 환경](development.md) → [계약](contracts.md) → [Agent Core README](../packages/finance_agent_core/README.md) |
-| Backend 담당 | [Backend DTO](backend-contract.md) | [P0-4 공식 Acceptance](p0-4-official-acceptance-handover-2026-08-19.md) → [P0-8 재시도 계약](p0-8-retry-contract-handover-2026-08-19.md) → [HyperCLOVA X provider](hyperclova-provider.md) |
-| 금융 도메인 담당 | [capability matrix](capability-matrix.md) | [데이터 감사](data-audit.md) → [P0-5 외부 문서 반입](p0-5-external-corpus-intake-2026-08-19.md) → [사람 평가 rubric](human-evaluation.md) → [금융 도메인 QA 평가](evaluation-domain-qa.md) |
+| Backend 담당 | [Backend DTO](backend-contract.md) | [P0-4 공식 Acceptance](p0-4-official-acceptance-handover-2026-08-19.md) → [P0-8 재시도 계약](p0-8-retry-contract-handover-2026-08-19.md) → [P0-6 관계 검색](p0-6-provided-relation-retrieval-handover-2026-08-19.md) → [HyperCLOVA X provider](hyperclova-provider.md) |
+| 금융 도메인 담당 | [capability matrix](capability-matrix.md) | [데이터 감사](data-audit.md) → [P0-5 외부 문서 반입](p0-5-external-corpus-intake-2026-08-19.md) → [P0-6 관계 값·alias 검수](p0-6-provided-relation-retrieval-handover-2026-08-19.md) → [사람 평가 rubric](human-evaluation.md) → [금융 도메인 QA 평가](evaluation-domain-qa.md) |
 | 기술 제안서 작성자 | [기술 제안서 허브](../../docs/proposal/README.md) | [현재 프로젝트 기준](project-baseline.md) → [평가 baseline](../evaluation/README.md) |
 | 제출 전 검수자 | [제출 체크리스트](../../docs/proposal/submission-checklist.md) | [모델 경계](submission-model-boundary.md) → [연결 전 준비 기준](pre-hcx-readiness.md) |
 | 배포·복구 담당 | [NCP immutable release CI](immutable-ncp-release-ci.md) | [AgentReleaseManifest](agent-release-manifest.md) → [Rollback drill runbook](../../fastapi_backend/ROLLBACK_DRILL.md) |
@@ -68,6 +69,7 @@ HCX 모델·endpoint·인증과 크레딧 적용 범위는 남아 있어 기존�
 - [네 상품군 공통 COMPARE](comparison-engine-design.md)
 - [교차 상품군 SEARCH](cross-family-search.md)
 - [BM25/SQLite FTS 문서 RAG](document-rag.md)
+- [P0-6 제공 데이터 관계 검색](p0-6-provided-relation-retrieval-handover-2026-08-19.md)
 - [Dense Schema Linker 오프라인 컴포넌트 평가](evaluation-dense-schema-linker-shadow.md)
 - [Schema Dense CPU 임베딩 모델 비교](evaluation-schema-embedding-cpu.md) · [팀 공유용 HTML](evaluation-schema-embedding-cpu.html)
 - [Schema Dense Stage 4 구현·Stage 5 OFF 실험 상태](schema-dense-stage4-stage5-readiness-2026-08-13.md)
@@ -90,6 +92,7 @@ HCX 모델·endpoint·인증과 크레딧 적용 범위는 남아 있어 기존�
 - [P0-4 공식 Acceptance 인수인계](p0-4-official-acceptance-handover-2026-08-19.md)
 - [P0-8 평가기 재시도 계약 인수인계](p0-8-retry-contract-handover-2026-08-19.md)
 - [P0-5 외부 금융 문서 반입 계약](p0-5-external-corpus-intake-2026-08-19.md)
+- [P0-6 제공 데이터 관계 검색 인수인계](p0-6-provided-relation-retrieval-handover-2026-08-19.md)
 - [전체 평가 baseline](../evaluation/README.md)
 - [Stage 2 승인 DB 재검증 baseline](../evaluation/baselines/stage2-approved-db-revalidation-2026-08-12.json)
 
@@ -119,6 +122,7 @@ HCX 모델·endpoint·인증과 크레딧 적용 범위는 남아 있어 기존�
 | [P0-4 공식 Acceptance 인수인계](p0-4-official-acceptance-handover-2026-08-19.md) | 설명회 예시·공식 GET·다섯 문자열·UTF-8·안전 무실행의 Docker 검증과 재현 절차 | P0-4 완료 |
 | [P0-8 평가기 재시도 계약 인수인계](p0-8-retry-contract-handover-2026-08-19.md) | 답변·제어 200, 일시 장애 503, timeout 504, 270초 outer deadline과 동일 요청 single-flight·replay | P0-8 완료 |
 | [P0-5 외부 문서 반입 계약](p0-5-external-corpus-intake-2026-08-19.md) | 금융·권한 독립 review, HTTPS 출처, 사용 권한 4종, byte·정규화 hash, canonical manifest, 변조·경로 차단 | 반입 코드 완료·실제 corpus 승인 대기 |
+| [P0-6 제공 관계 검색 인수인계](p0-6-provided-relation-retrieval-handover-2026-08-19.md) | 승인 DB의 발행사·운용사·기초지수·자산·지역 관계 색인, 출처·기준일, 공식 상품 ID 재조회 | 실제 58,005관계 검증·Agent 연결 대기 |
 | [해외 ETP 핵심 평가 기준선](evaluation.md) | 동결 50문항, oracle·채점 규칙, 최초 holdout과 사후 회귀 결과 | v1.0 정본 |
 | [국내 ETP 핵심 평가 기준선](evaluation-domestic-etp.md) | 국내 ETP 동결 50문항, 품질 계약, local-inference split 결과 | v1.0 정본 |
 | [국내채권 핵심 평가 기준선](evaluation-domestic-bond.md) | 국내채권 동결 50문항, stale·날짜 계약, 로컬 Qwen·답변 결과 | v1.0 정본 |

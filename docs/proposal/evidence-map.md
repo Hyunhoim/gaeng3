@@ -36,9 +36,10 @@
 | 주장 | 값 | 정본 | 해석 제한 |
 | --- | ---: | --- | --- |
 | 원천 감사 | 4종 145,393행, 65/65 | [데이터 감사](../../finance_agent/docs/data-audit.md) | 제공 스냅샷 기준 |
-| 전체 코드 회귀 | Agent Core 1,291 passed·2 조건부 skip, Backend 320 passed·2 기존 warning | [P0-5 인수인계](../../finance_agent/docs/p0-5-external-corpus-intake-2026-08-19.md)·[P0-8 인수인계](../../finance_agent/docs/p0-8-retry-contract-handover-2026-08-19.md) | 단위·계약 회귀이며 독립 성능 평가가 아님 |
+| 전체 코드 회귀 | Agent Core 1,305 passed·2 조건부 skip, Backend 최근 기준 320 passed·2 기존 warning | [P0-6 인수인계](../../finance_agent/docs/p0-6-provided-relation-retrieval-handover-2026-08-19.md)·[P0-8 인수인계](../../finance_agent/docs/p0-8-retry-contract-handover-2026-08-19.md) | 단위·계약 회귀이며 독립 성능 평가가 아님 |
 | 평가기 retry·중복 실행 제어 | 정상 동일 요청 200·200/Agent 1회, dataset 장애 503·503/Agent 2회, 강제 timeout 504 | [P0-8 baseline](../../finance_agent/evaluation/baselines/retry-contract-p0-8-v1.json)·[인수인계](../../finance_agent/docs/p0-8-retry-contract-handover-2026-08-19.md) | 로컬 Docker fault injection, 실제 evaluator·HCLX·NCP 아님 |
 | 외부 문서 반입 게이트 | 승인·권한·출처·해시·변조 차단·BM25 build 합성 계약 24/24 | [P0-5 baseline](../../finance_agent/evaluation/baselines/external-corpus-intake-contract-v1.json)·[인수인계](../../finance_agent/docs/p0-5-external-corpus-intake-2026-08-19.md) | 실제 외부 문서 0건, 승인·검색 정확도·Release 활성화 아님 |
+| 제공 데이터 관계 검색 기반 | 승인 국내채권·국내/해외 ETP 관계 58,005개, 계약 14/14, 실제 검색 smoke 4/4, warm p50 4.846ms·p95 5.960ms | [P0-6 baseline](../../finance_agent/evaluation/baselines/p0-6-provided-relation-retrieval-v1.json)·[인수인계](../../finance_agent/docs/p0-6-provided-relation-retrieval-handover-2026-08-19.md) | Agent 비활성, 공모펀드·외부 관계 없음, lexical 검색·단일 로컬 장비이며 관계 의미 정확도나 공식 성능이 아님 |
 | 교차 상품군 SEARCH | 국내·해외 ETP 4/4 | [교차 SEARCH](../../finance_agent/docs/cross-family-search.md) | 공개 회귀, not blind |
 | 교차 상품군 grounded answer | expected·로컬 Qwen 각각 4/4; 생성 대상 2문항 모두 grounded; 실제 모델 호출 3회; fallback 0 | [교차 SEARCH](../../finance_agent/docs/cross-family-search.md)·[baseline](../../finance_agent/evaluation/baselines/cross-family-answer-v1.json) | 공개 4문항, not blind; 로컬 Qwen은 개발 전용 |
 | 내부 red-team | 수정 후 40/40 | [red-team 평가](../../finance_agent/docs/evaluation-internal-red-team.md) | self-authored, not blind |
@@ -66,6 +67,7 @@
 - Ontology 용어의 금융 도메인 검수와 주최 측 최종 형식 승인 완료
 - 독립 blind 일반화 성능 100%
 - 실제 투자설명서·약관 기반 문서 RAG 완료
+- 제공 관계 검색의 Agent 답변 연결·금융 alias 검수·관계 의미 정확도 입증 완료
 - 상품군 간 직접 수치 비교 지원
 - 세 상품 이상 비교·환율 환산·개인화 투자 추천 지원
 - 사람 평가에서 현업 유용성 입증

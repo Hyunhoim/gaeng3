@@ -1,8 +1,8 @@
 # 금융상품 Agent 기술 제안서
 
-상태: 팀 검토 전 초안 v0.2 · 설명회 계약 반영
+상태: 팀 검토 전 초안 v0.3 · P0-6 제공 관계 검색 기반 반영
 
-기준일: 2026-08-08
+기준일: 2026-08-19
 
 이 문서는 최종 PDF 또는 발표자료를 만들기 위한 내용 정본이다. 구현되지 않은
 기능과 외부 확인이 필요한 항목은 완료된 기능처럼 표현하지 않는다.
@@ -60,6 +60,10 @@ field-level evidence와 기준일을 갖추며, 검증에 실패하면 근거 �
 - 비교는 같은 상품군의 정확한 두 상품과 승인 필드에 한정
 - 집계는 Decimal 기반 COUNT·MIN·MAX·AVG와 제한된 SUM을 지원
 - 통화·단위·기준일이 호환되지 않으면 차이 또는 합산을 차단
+- 제공 데이터의 발행사·운용사·기초지수·자산유형·투자지역은 별도 SQLite FTS5
+  관계 색인으로 구성하고, 후보 상품 ID를 공식 상품 DB에서 다시 확인
+- 현재 승인 DB에서 관계 58,005개와 검색 smoke 4/4를 검증했지만, 금융 alias·
+  관계 의미 검수와 P0-7 Claim Verifier가 끝날 때까지 Agent 답변에는 연결하지 않음
 
 ### 3.4 근거와 답변 검증
 
@@ -87,8 +91,9 @@ Release에 연결한다.
   FastAPI 내부 `POST /answer`, 공식 `GET /answer` 계약, Ontology Turtle 5개,
   Docker 데이터 준비·HTTP smoke
 - 교차 상품군 SEARCH의 family별 근거 격리·답변 검증·전체 fallback
+- 승인 상품 DB의 제공 관계 58,005개 색인·공식 상품 ID 재검증·출처 추적
 - 외부 통합 대기: Next.js, 공식 `GET /answer` 공개 통신 재현,
-  HyperCLOVA X transport, 공개 API 서버
+  HyperCLOVA X transport, 관계 QueryPlan·Claim Verifier, 공개 API 서버
 
 목표 구조를 현재 구현 완료 상태로 오해하지 않도록 실선과 점선으로 구분한다.
 
@@ -153,8 +158,9 @@ Release에 연결한다.
 현재 대표 근거:
 
 - 4종 원천 145,393행 감사, 핵심 expectation 65/65
-- Agent Core pytest 507개와 Backend pytest 34개 통과
+- Agent Core 1,305 passed·2 조건부 skip, Backend 최근 기준 320 passed
 - 공식 XLSX에서 SQLite 4개를 자동 생성·검증한 뒤 Backend를 시작하는 Docker 경로 완료
+- 승인 상품 DB 관계 58,005개·관계 계약 14/14·실제 검색 smoke 4/4와 공식 상품 ID 재검증 완료
 - 국내·해외 ETP 교차 SEARCH 공개 실제 데이터 회귀 4/4
 - 교차 상품군 grounded answer 공개 회귀 expected·로컬 Qwen 각각 4/4, 생성 대상 2문항 모두 grounded, 모델 호출 3회, fallback 0
 - 내부 red-team 40문항 수정 후 strict·safety·evidence 40/40

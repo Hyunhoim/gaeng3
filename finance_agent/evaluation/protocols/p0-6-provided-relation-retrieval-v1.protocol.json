@@ -1,0 +1,85 @@
+{
+  "schema_version": "1.0",
+  "protocol_id": "p0-6-provided-relation-retrieval-v1",
+  "status": "provided_relation_contract_no_agent_activation",
+  "requirement": {
+    "source": "docs/p0-p1-remaining-roadmap-2026-08-14.html",
+    "roadmap_item": "P0-6 관계·문서 검색",
+    "completion_boundary": "관계 후보 product ID를 공식 상품 DB에서 다시 조회하고 출처·기준일 evidence를 보존"
+  },
+  "approved_inputs": {
+    "product_families": [
+      "bond",
+      "domestic_etp",
+      "overseas_etp"
+    ],
+    "canonical_fields": [
+      "asset_type",
+      "base_index",
+      "investment_region",
+      "issuer",
+      "manager"
+    ],
+    "source_kind": "official_competition_product_database",
+    "database_build_environment": "pinned Backend Docker image",
+    "fund_enabled": false,
+    "external_document_relation_enabled": false
+  },
+  "relation_contract": {
+    "relation_types": [
+      "classified_as_asset",
+      "invests_in_region",
+      "issued_by",
+      "managed_by",
+      "tracks_index"
+    ],
+    "required_evidence": [
+      "product_family",
+      "product_id",
+      "canonical_field",
+      "source_id",
+      "source_row",
+      "source_columns",
+      "as_of",
+      "source_database_sha256",
+      "approval_manifest_sha256"
+    ],
+    "retrieval": "SQLite FTS5 lexical BM25",
+    "final_identity_source": "approved normalized product database"
+  },
+  "fail_closed_checks": [
+    "approved product database manifest and byte hash mismatch",
+    "runtime database family set differs from relation index bindings",
+    "relation row count, logical relation-set hash, typed fields, canonical IDs, or FTS rows differ",
+    "relation index has SQLite sidecars or fails quick_check",
+    "relation candidate product ID is missing or quarantined in the verified product identity snapshot",
+    "approval manifest hash differs between build and runtime",
+    "fund relation build or search is requested before its source contract",
+    "output relation index already exists"
+  ],
+  "public_smoke_cases": [
+    {
+      "query": "미래에셋",
+      "relation_type": "managed_by"
+    },
+    {
+      "query": "미국",
+      "relation_type": "invests_in_region"
+    },
+    {
+      "query": "KOSPI200",
+      "relation_type": "tracks_index"
+    },
+    {
+      "query": "한국전력공사",
+      "relation_type": "issued_by"
+    }
+  ],
+  "non_claims": [
+    "P0-6 관계 검색이 사용자 Agent 답변 경로에 활성화되었다는 결과가 아님",
+    "공모펀드·테마·편입종목·외부 문서 관계를 구현했다는 결과가 아님",
+    "회사명·지역명·지수명의 동의어·번역·의미 검색을 해결했다는 결과가 아님",
+    "관계가 투자 추천이나 경제적 인과관계를 의미한다는 결과가 아님",
+    "HyperCLOVA X 또는 로컬 Qwen의 이해·생성 성능 평가가 아님"
+  ]
+}

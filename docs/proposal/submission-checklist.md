@@ -35,6 +35,9 @@
 - [x] 외부 문서의 금융·데이터 권한 독립 review·HTTPS 출처·본문 hash·변조 차단 계약
 - [ ] 실제 외부 corpus 출처·사용 권한·snapshot·manifest SHA-256 승인
 - [ ] 승인 corpus BM25 검색 품질·충돌·최신성 평가 후 Release에 연결
+- [x] 승인 상품 DB 제공 관계 58,005개 색인·상품 ID 재검증·출처·해시 계약
+- [ ] 관계 값·한영 표기·동의어의 금융 도메인 검수
+- [ ] P0-7 관계 QueryPlan·Claim Verifier와 Agent Release 연결
 
 현재 상태: Conda·pip와 Agent Core wheel, 공식 XLSX 준비와 FastAPI를 잇는 통합
 Docker 실행은 재현 완료. `nextjs-frontend/`는 아직 저장소에 없으며 화면 합류 후

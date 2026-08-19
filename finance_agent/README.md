@@ -18,6 +18,7 @@
 - 결과와 최종 답변의 상품명·수치·순위·출처 검증
 - 공개 회귀·blind·red-team·사람 평가를 위한 도구와 기준선
 - field registry에서 제출용 Ontology Turtle 5개를 생성·검사하는 도구
+- 승인 상품 DB에서 발행사·운용사·기초지수·자산유형·투자지역 관계를 만들고 상품 ID를 재검증하는 도구
 - 개발 전용 로컬 Qwen과 HyperCLOVA X provider·공식 HTTP transport 계약
 
 ### 포함하지 않는 것
@@ -54,6 +55,7 @@ LLM은 수치 계산, 필터, 정렬, 상품 순위와 출처를 직접 만들�
 | 해외 ETF·ETN | 검색·상세·비교·집계·교차 상품군 검색·근거 검증 |
 | 공모펀드 | 검색·비교·집계·grounded answer 내부 검증, 공식 실행은 정책상 비활성 |
 | 문서 검색 | BM25·SQLite FTS 최소 기능과 외부 문서 승인·권한·해시·변조 차단 반입 계약. 실제 corpus는 승인 대기 |
+| 관계 검색 | 국내채권·국내/해외 ETP의 제공 필드 관계 58,005개 생성·검색·공식 ID 재검증. Agent 답변 연결은 대기 |
 | Backend 연동 | 요청·응답 DTO, 오류 adapter와 JSON Schema 제공 |
 
 세부 필드와 제한은 [Capability matrix](docs/capability-matrix.md), 최신 구현·평가 상태는

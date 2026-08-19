@@ -1,0 +1,226 @@
+{
+  "schema_version": "1.0",
+  "baseline_id": "p0-6-provided-relation-retrieval-v1",
+  "recorded_on": "2026-08-19",
+  "dataset": "approved-provided-product-databases-bond-domestic-etp-overseas-etp-v1",
+  "evaluation_layer": "system_contract",
+  "status": "verified_relation_index_not_agent_activated",
+  "implementation": {
+    "commit": "1944f70c987c133f82ced4ec7d5a88c0693be587",
+    "relations_sha256": "1f06e0314aae0bcc834dac7bce94a359ce35e599f903bd8bef8bcc22d6def464",
+    "cli_sha256": "e02ae915c889866ce61341785d621e22166a5df7625e2a1e615defc42d0abdb5",
+    "tests_sha256": "aaae724e04678a46425fe00fb202c318ffc3c43a823427e3ac3b7cfa631fb48f"
+  },
+  "protocol": {
+    "path": "evaluation/protocols/p0-6-provided-relation-retrieval-v1.protocol.json",
+    "sha256": "7d076b6a8391108a4128c22a369735e1b2d16903f5c69b49971264ff0b9a9e65"
+  },
+  "suite": {
+    "id": "p0-6-provided-relation-retrieval-v1",
+    "version": "1.0",
+    "path": "evaluation/protocols/p0-6-provided-relation-retrieval-v1.protocol.json",
+    "sha256": "7d076b6a8391108a4128c22a369735e1b2d16903f5c69b49971264ff0b9a9e65"
+  },
+  "provider": {
+    "name": "deterministic-python-sqlite-fts5",
+    "official_submission_provider": false,
+    "network_used": false,
+    "hclx_called": false,
+    "local_llm_called": false,
+    "embedding_model_called": false
+  },
+  "model": {
+    "name": "none",
+    "reason": "생성 품질이 아니라 승인 상품 DB에서 추출한 관계·상품 identity·변조 차단 계약을 검증"
+  },
+  "data": {
+    "fixture_kind": "approved_product_databases_and_pytest_contract_cases",
+    "fixture_definition_sha256": "aaae724e04678a46425fe00fb202c318ffc3c43a823427e3ac3b7cfa631fb48f",
+    "official_competition_data_used": true,
+    "external_document_used": false,
+    "not_applicable_reason": "관계 정답 정확도나 Agent 답변 품질이 아니라 승인 DB 결합·색인 무결성·상품 ID 재검증 계약 검사"
+  },
+  "approved_product_data": {
+    "approval_manifest_sha256": "deecdaff1125f7460ffb1ed5235e92d81bded435911eea7b22593d3bbe3737f6",
+    "docker_image": {
+      "reference": "gaeng3-backend:local",
+      "image_id": "sha256:7282df380275cb2ad9744b1ed194897fffe91d56e86186858691ef3bd6fa57ab",
+      "source_revision": "28eb502ca7c5a1c658ec81321acc5c23bf87aaf9",
+      "python_version": "3.12.13",
+      "sqlite_version": "3.40.1"
+    },
+    "database_bindings": {
+      "bond": {
+        "source_id": "PRBD01N001",
+        "source_file_sha256": "728f44a567a986d21cf843d711c6c4dfa1a24d05b39c7da0541b981b57ecccf8",
+        "database_sha256": "ee37ee75ef87a44ca992e6d93867406c64b827c0482fb0df808b5acb26e1ef8e",
+        "searchable_rows": 42394,
+        "source_snapshot_date": "2026-07-11"
+      },
+      "domestic_etp": {
+        "source_id": "PREF01N001",
+        "source_file_sha256": "0f5706d45f93284bcaac2fa8eaed04db920a7043abaa859e455f06e246d54723",
+        "database_sha256": "55646843e0932448fb1bb015aa28f7469a303ce24945023d1168e48623c0491e",
+        "searchable_rows": 1733,
+        "source_snapshot_date": "2026-07-11"
+      },
+      "overseas_etp": {
+        "source_id": "PREF02N001",
+        "source_file_sha256": "3cec19043f742771e0016d56fe806f19ad78f4295d1ae59192740a78feb2253b",
+        "database_sha256": "d405e132909676f559ffeb330825fd616f3c84b1e3ecfb7abd1ad2f344167de2",
+        "searchable_rows": 5636,
+        "source_snapshot_date": "2026-07-11"
+      }
+    }
+  },
+  "relation_index": {
+    "database_sha256": "3d120722a14537b7999168aecb1e1da98fc67d12e27c181731adc4f713f491d8",
+    "database_size_bytes": 32022528,
+    "relation_set_sha256": "4d1d39119b405d96dd5845add13f7bb86f8fd74b9b020e864f244ca66732d632",
+    "relation_count": 58005,
+    "external_relation_count": 0,
+    "status": "verified_not_agent_activated",
+    "counts_by_product_family": {
+      "bond": 41476,
+      "domestic_etp": 5257,
+      "overseas_etp": 11272
+    },
+    "counts_by_relation_type": {
+      "classified_as_asset": 7369,
+      "invests_in_region": 7369,
+      "issued_by": 41476,
+      "managed_by": 1733,
+      "tracks_index": 58
+    },
+    "distinct_entities_by_relation_type": {
+      "classified_as_asset": 14,
+      "invests_in_region": 70,
+      "issued_by": 8018,
+      "managed_by": 96,
+      "tracks_index": 19
+    }
+  },
+  "public_smoke_results": [
+    {
+      "query": "미래에셋",
+      "relation_type": "managed_by",
+      "status": "found",
+      "top_product_ids": [
+        "KR70000D0009",
+        "KR70001S0001",
+        "KR70008S0004"
+      ]
+    },
+    {
+      "query": "미국",
+      "relation_type": "invests_in_region",
+      "status": "found",
+      "top_product_ids": [
+        "KR70000J0003",
+        "KR70004G0002",
+        "KR70005A0007"
+      ]
+    },
+    {
+      "query": "KOSPI200",
+      "relation_type": "tracks_index",
+      "status": "found",
+      "top_product_ids": [
+        "KR7407160001",
+        "KR7407170000",
+        "KR7427110002"
+      ]
+    },
+    {
+      "query": "한국전력공사",
+      "relation_type": "issued_by",
+      "status": "found",
+      "top_product_ids": [
+        "KR350101G355",
+        "KR350101G488",
+        "KR350101G7B6"
+      ]
+    }
+  ],
+  "performance": {
+    "host": "research-server CPU, 24 logical CPUs, 125.5 GiB RAM",
+    "relation_builder_python": "3.12.13 conda-forge",
+    "relation_builder_sqlite": "3.53.4",
+    "build_elapsed_seconds": 3.71,
+    "build_max_rss_kb": 267520,
+    "cold_first_search_ms": 2400.117,
+    "warm_sequential_runs": 100,
+    "warm_overall_p50_ms": 4.846,
+    "warm_overall_p95_ms": 5.96,
+    "case_warm_latency_ms": {
+      "managed_by": {
+        "p50": 4.636,
+        "p95": 5.001,
+        "max": 5.156
+      },
+      "invests_in_region": {
+        "p50": 5.848,
+        "p95": 5.995,
+        "max": 6.203
+      },
+      "tracks_index": {
+        "p50": 3.508,
+        "p95": 3.7,
+        "max": 8.472
+      },
+      "issued_by": {
+        "p50": 4.987,
+        "p95": 5.445,
+        "max": 5.779
+      }
+    },
+    "interpretation": "cold에는 관계 색인·승인 DB 해시·상품 identity 최초 검증이 포함되고 warm은 같은 장기 실행 프로세스의 순차 검색"
+  },
+  "tests": {
+    "targeted": {
+      "tests": 14,
+      "passed": 14,
+      "failed": 0,
+      "junit_path": "artifacts/evaluation/p0-6-relation-retrieval-targeted.xml",
+      "junit_sha256": "84fe394eb6ad8bfc341250a28fe0b5c71749cd7099442bb50b2141c68e827cdf"
+    },
+    "agent_core_full": {
+      "tests": 1307,
+      "passed": 1305,
+      "failed": 0,
+      "skipped": 2,
+      "duration_seconds": 32.196,
+      "junit_sha256": "852228253e4177fec8da37f3bc76c84bb6ad76bef94b47df9c0feced0e20858e"
+    },
+    "ruff": "passed"
+  },
+  "metrics": {
+    "total": 14,
+    "passed": 14,
+    "strict_accuracy": 1.0,
+    "strict_accuracy_scope": "fail-closed 관계 색인·상품 identity 계약 통과율이며 관계 의미 정확도·독립 검색 성능·공모전 점수가 아님"
+  },
+  "reports": [
+    {
+      "role": "targeted_pytest_junit",
+      "artifact_name": "p0-6-relation-retrieval-targeted.xml",
+      "sha256": "84fe394eb6ad8bfc341250a28fe0b5c71749cd7099442bb50b2141c68e827cdf"
+    }
+  ],
+  "reproduce": {
+    "build_approved_databases": "docker compose run --rm data-init",
+    "build_relation_index": "finance-relations build --database-dir <approved-db-dir> --output-database <new-relations.sqlite3>",
+    "search_example": "finance-relations search --index <relations.sqlite3> --database-dir <approved-db-dir> --query 미래에셋 --relation-type managed_by --top-k 3"
+  },
+  "limitations": [
+    "관계 색인은 Git 또는 제출 release에 포함하지 않았고 Agent 답변 경로도 비활성 상태임",
+    "공모펀드는 주최 측 데이터 정정과 팀 승인 전까지 관계 build·search를 거부함",
+    "외부 문서·테마·편입종목 관계는 승인된 출처가 없어 0건임",
+    "FTS5 lexical 검색이므로 미래에셋과 미래에셋자산운용, 미국과 United States of America 같은 동의어·번역을 자동 연결하지 않음",
+    "공식 데이터의 관계 값이 금융 의미상 타당한지 별도 금융 도메인 검수가 필요하며 관계는 투자 추천을 뜻하지 않음",
+    "성능은 로컬 순차 단일 프로세스 참고값이며 NCP 동시성·cold start·장시간 안정성 결과가 아님",
+    "관계 SQLite는 conda SQLite 3.53.4로 만든 실험 artifact이며 제출 release 후보가 아님",
+    "정규화 상품 DB의 byte hash는 SQLite 버전에 따라 달라져 승인 DB는 고정 Docker SQLite 3.40.1에서 생성해야 함",
+    "HyperCLOVA X·로컬 Qwen·임베딩 모델을 호출하지 않아 의미 해석과 답변 생성 품질을 평가하지 않음"
+  ]
+}
