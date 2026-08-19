@@ -22,6 +22,16 @@ _DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
 _IMAGE_REFERENCE = re.compile(r"^[a-z0-9][a-z0-9._:/-]{2,255}@sha256:[0-9a-f]{64}$")
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _PLATFORMS = {"linux/amd64": ("linux", "amd64"), "linux/arm64": ("linux", "arm64")}
+_MAX_RELATION_ARTIFACT_BYTES = 4 * 1024
+_MAX_RELEASE_MANIFEST_BYTES = 2 * 1024 * 1024
+_RELATION_ARTIFACT_KEYS = frozenset(
+    {
+        "artifact_kind",
+        "index_sha256",
+        "approval_manifest_sha256",
+        "relation_set_sha256",
+    }
+)
 
 
 class ReleaseCIError(ValueError):
@@ -275,9 +285,170 @@ def materialize_previous_binding(arguments: argparse.Namespace) -> None:
         raise ReleaseCIError("previous DeploymentBinding must be read-only")
 
 
+def _canonical_relation_artifact(data: bytes) -> dict[str, str]:
+    if not data or len(data) > _MAX_RELATION_ARTIFACT_BYTES:
+        raise ReleaseCIError("relation retrieval artifact size is invalid")
+    payload = _strict_json(data, "relation retrieval artifact")
+    if not isinstance(payload, dict) or set(payload) != _RELATION_ARTIFACT_KEYS:
+        raise ReleaseCIError("relation retrieval artifact schema is invalid")
+    if payload.get("artifact_kind") != "provided_product_relations":
+        raise ReleaseCIError("relation retrieval artifact kind is invalid")
+    for field in (
+        "index_sha256",
+        "approval_manifest_sha256",
+        "relation_set_sha256",
+    ):
+        value = payload.get(field)
+        if not isinstance(value, str) or _SHA256.fullmatch(value) is None:
+            raise ReleaseCIError("relation retrieval artifact schema is invalid")
+    canonical = (
+        json.dumps(
+            payload,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        )
+        + "\n"
+    ).encode("utf-8")
+    if data != canonical:
+        raise ReleaseCIError("relation retrieval artifact is not canonical JSON")
+    return payload
+
+
+def _write_read_only_ci_artifact(path: Path, data: bytes) -> None:
+    if not path.is_absolute() or not path.parent.is_dir():
+        raise ReleaseCIError("relation retrieval artifact output path is invalid")
+    current = path.parent
+    while True:
+        if current.is_symlink():
+            raise ReleaseCIError("relation retrieval artifact output path is invalid")
+        if current.parent == current:
+            break
+        current = current.parent
+
+    descriptor: int | None = None
+    created = False
+    completed = False
+    try:
+        try:
+            descriptor = os.open(
+                path,
+                os.O_WRONLY
+                | os.O_CREAT
+                | os.O_EXCL
+                | getattr(os, "O_CLOEXEC", 0)
+                | getattr(os, "O_NOFOLLOW", 0),
+                0o400,
+            )
+            created = True
+            view = memoryview(data)
+            while view:
+                written = os.write(descriptor, view)
+                if written <= 0:
+                    raise ReleaseCIError("cannot write relation retrieval artifact")
+                view = view[written:]
+            os.fsync(descriptor)
+            os.fchmod(descriptor, 0o444)
+            opened = os.fstat(descriptor)
+        except OSError as error:
+            raise ReleaseCIError("cannot create relation retrieval artifact") from error
+        finally:
+            if descriptor is not None:
+                os.close(descriptor)
+
+        current_file = path.stat(follow_symlinks=False)
+        if (
+            not stat.S_ISREG(opened.st_mode)
+            or opened.st_nlink != 1
+            or opened.st_dev != current_file.st_dev
+            or opened.st_ino != current_file.st_ino
+            or current_file.st_mode & (stat.S_IWUSR | stat.S_IWGRP | stat.S_IWOTH)
+        ):
+            raise ReleaseCIError("materialized relation retrieval artifact is insecure")
+        parent_descriptor = os.open(
+            path.parent,
+            os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_CLOEXEC", 0),
+        )
+        try:
+            os.fsync(parent_descriptor)
+        finally:
+            os.close(parent_descriptor)
+        completed = True
+    except OSError as error:
+        raise ReleaseCIError("cannot secure relation retrieval artifact") from error
+    finally:
+        if created and not completed:
+            try:
+                path.unlink()
+            except OSError:
+                pass
+
+
+def materialize_relation_artifact(arguments: argparse.Namespace) -> None:
+    encoded = os.environ.get("RELATION_RETRIEVAL_ARTIFACT_B64", "")
+    expected_sha256 = os.environ.get("RELATION_RETRIEVAL_ARTIFACT_SHA256", "")
+    _require_match(_SHA256, expected_sha256, "relation retrieval artifact SHA-256")
+    try:
+        data = base64.b64decode(encoded, validate=True)
+    except (ValueError, binascii.Error) as error:
+        raise ReleaseCIError("relation retrieval artifact is not strict base64") from error
+    _canonical_relation_artifact(data)
+    if hashlib.sha256(data).hexdigest() != expected_sha256:
+        raise ReleaseCIError("relation retrieval artifact differs from its trusted SHA-256")
+    _write_read_only_ci_artifact(arguments.output, data)
+    _write_github_outputs(
+        arguments.github_output,
+        {
+            "artifact_path": str(arguments.output),
+            "artifact_sha256": expected_sha256,
+        },
+    )
+
+
+def verify_relation_manifest_binding(arguments: argparse.Namespace) -> None:
+    expected_sha256 = _require_match(
+        _SHA256,
+        arguments.relation_artifact_sha256,
+        "relation retrieval artifact SHA-256",
+    )
+    artifact_data = arguments.relation_artifact.read_bytes()
+    artifact = _canonical_relation_artifact(artifact_data)
+    if hashlib.sha256(artifact_data).hexdigest() != expected_sha256:
+        raise ReleaseCIError("relation retrieval artifact differs from its trusted SHA-256")
+
+    manifest_data = arguments.manifest.read_bytes()
+    if not manifest_data or len(manifest_data) > _MAX_RELEASE_MANIFEST_BYTES:
+        raise ReleaseCIError("AgentReleaseManifest size is invalid")
+    manifest = _strict_json(manifest_data, "AgentReleaseManifest")
+    try:
+        components = manifest["components"]
+        approved_manifest = components["approved_datasets"]["manifest"]
+        approved_contract_sha256 = approved_manifest["contract_sha256"]
+        relation = components["knowledge_retrieval"]["relation"]
+    except (KeyError, TypeError) as error:
+        raise ReleaseCIError("AgentReleaseManifest relation binding is invalid") from error
+    if (
+        not isinstance(approved_contract_sha256, str)
+        or _SHA256.fullmatch(approved_contract_sha256) is None
+        or not isinstance(relation, dict)
+    ):
+        raise ReleaseCIError("AgentReleaseManifest relation binding is invalid")
+    if artifact["approval_manifest_sha256"] != approved_contract_sha256:
+        raise ReleaseCIError(
+            "relation retrieval artifact belongs to a different approved dataset manifest"
+        )
+    if (
+        relation.get("status") != "activated"
+        or relation.get("artifact") != artifact
+        or relation.get("artifact_file_sha256") != expected_sha256
+    ):
+        raise ReleaseCIError("AgentReleaseManifest does not bind the trusted relation artifact")
+
+
 def write_metadata(arguments: argparse.Namespace) -> None:
     fields = {
-        "schema_version": "1.0",
+        "schema_version": "1.1",
         "workflow_identity": arguments.workflow_identity,
         "oidc_issuer": "https://token.actions.githubusercontent.com",
         "source_commit": _require_match(_SOURCE_COMMIT, arguments.source_commit, "source commit"),
@@ -295,6 +466,11 @@ def write_metadata(arguments: argparse.Namespace) -> None:
         ),
         "deployment_binding_sha256": _require_match(
             _SHA256, arguments.binding_sha256, "Binding SHA-256"
+        ),
+        "relation_retrieval_artifact_sha256": _require_match(
+            _SHA256,
+            arguments.relation_artifact_sha256,
+            "relation retrieval artifact SHA-256",
         ),
         "github_run_id": arguments.github_run_id,
         "github_run_attempt": arguments.github_run_attempt,
@@ -368,6 +544,17 @@ def _parser() -> argparse.ArgumentParser:
     previous.add_argument("--output", type=Path, required=True)
     previous.set_defaults(handler=materialize_previous_binding)
 
+    relation = commands.add_parser("materialize-relation-artifact")
+    relation.add_argument("--output", type=Path, required=True)
+    relation.add_argument("--github-output", type=Path, required=True)
+    relation.set_defaults(handler=materialize_relation_artifact)
+
+    relation_binding = commands.add_parser("verify-relation-manifest-binding")
+    relation_binding.add_argument("--manifest", type=Path, required=True)
+    relation_binding.add_argument("--relation-artifact", type=Path, required=True)
+    relation_binding.add_argument("--relation-artifact-sha256", required=True)
+    relation_binding.set_defaults(handler=verify_relation_manifest_binding)
+
     metadata = commands.add_parser("write-metadata")
     metadata.add_argument("--output", type=Path, required=True)
     metadata.add_argument("--workflow-identity", required=True)
@@ -379,6 +566,7 @@ def _parser() -> argparse.ArgumentParser:
     metadata.add_argument("--release-image-reference", required=True)
     metadata.add_argument("--manifest-sha256", required=True)
     metadata.add_argument("--binding-sha256", required=True)
+    metadata.add_argument("--relation-artifact-sha256", required=True)
     metadata.add_argument("--github-run-id", required=True)
     metadata.add_argument("--github-run-attempt", required=True)
     metadata.set_defaults(handler=write_metadata)

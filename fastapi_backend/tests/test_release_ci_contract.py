@@ -71,6 +71,58 @@ def _outputs(path: Path) -> dict[str, str]:
     return dict(line.split("=", 1) for line in path.read_text(encoding="utf-8").splitlines())
 
 
+def _relation_artifact_data(**updates: str) -> bytes:
+    payload = {
+        "artifact_kind": "provided_product_relations",
+        "index_sha256": "1" * 64,
+        "approval_manifest_sha256": "2" * 64,
+        "relation_set_sha256": "3" * 64,
+        **updates,
+    }
+    return (
+        json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n"
+    ).encode("utf-8")
+
+
+def _relation_artifact_environment(data: bytes) -> dict[str, str]:
+    environment = os.environ.copy()
+    environment.update(
+        {
+            "RELATION_RETRIEVAL_ARTIFACT_B64": base64.b64encode(data).decode("ascii"),
+            "RELATION_RETRIEVAL_ARTIFACT_SHA256": hashlib.sha256(data).hexdigest(),
+        }
+    )
+    return environment
+
+
+def _manifest_with_relation(
+    artifact_data: bytes,
+    *,
+    approved_contract_sha256: str | None = None,
+    artifact_file_sha256: str | None = None,
+) -> bytes:
+    artifact = json.loads(artifact_data)
+    payload = {
+        "components": {
+            "approved_datasets": {
+                "manifest": {
+                    "contract_sha256": approved_contract_sha256
+                    or artifact["approval_manifest_sha256"]
+                }
+            },
+            "knowledge_retrieval": {
+                "relation": {
+                    "status": "activated",
+                    "artifact": artifact,
+                    "artifact_file_sha256": artifact_file_sha256
+                    or hashlib.sha256(artifact_data).hexdigest(),
+                }
+            },
+        }
+    }
+    return (json.dumps(payload, sort_keys=True, separators=(",", ":")) + "\n").encode("utf-8")
+
+
 def test_release_ci_accepts_only_normalized_protected_main_inputs(tmp_path: Path) -> None:
     output = tmp_path / "github-output"
     output.touch()
@@ -309,6 +361,366 @@ def test_previous_binding_requires_external_sha256_anchor_and_read_only_output(
     )
     assert rejected.returncode != 0
     assert "trusted SHA-256" in rejected.stderr
+
+
+def test_relation_artifact_requires_external_anchor_and_canonical_read_only_output(
+    tmp_path: Path,
+) -> None:
+    data = _relation_artifact_data()
+    output = tmp_path / "relation-retrieval-artifact.json"
+    github_output = tmp_path / "github-output"
+    github_output.touch()
+    environment = _relation_artifact_environment(data)
+
+    completed = _run(
+        "materialize-relation-artifact",
+        "--output",
+        str(output),
+        "--github-output",
+        str(github_output),
+        environment=environment,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    assert completed.stdout == ""
+    assert completed.stderr == ""
+    assert output.read_bytes() == data
+    assert output.stat().st_mode & 0o222 == 0
+    assert output.stat().st_nlink == 1
+    assert _outputs(github_output) == {
+        "artifact_path": str(output),
+        "artifact_sha256": hashlib.sha256(data).hexdigest(),
+    }
+
+
+@pytest.mark.parametrize(
+    ("encoded", "trusted_sha256", "message"),
+    [
+        ("", "1" * 64, "size is invalid"),
+        ("not-base64%%%", "1" * 64, "not strict base64"),
+        (
+            base64.b64encode(_relation_artifact_data()).decode("ascii"),
+            "0" * 64,
+            "differs from its trusted SHA-256",
+        ),
+        (
+            base64.b64encode(
+                json.dumps(
+                    json.loads(_relation_artifact_data()),
+                    ensure_ascii=False,
+                    indent=2,
+                ).encode("utf-8")
+            ).decode("ascii"),
+            hashlib.sha256(
+                json.dumps(
+                    json.loads(_relation_artifact_data()),
+                    ensure_ascii=False,
+                    indent=2,
+                ).encode("utf-8")
+            ).hexdigest(),
+            "not canonical JSON",
+        ),
+        (
+            base64.b64encode(
+                b'{"artifact_kind":"provided_product_relations",'
+                b'"artifact_kind":"provided_product_relations",'
+                b'"approval_manifest_sha256":"' + b"2" * 64 + b'",'
+                b'"index_sha256":"' + b"1" * 64 + b'",'
+                b'"relation_set_sha256":"' + b"3" * 64 + b'"}\n'
+            ).decode("ascii"),
+            hashlib.sha256(
+                b'{"artifact_kind":"provided_product_relations",'
+                b'"artifact_kind":"provided_product_relations",'
+                b'"approval_manifest_sha256":"' + b"2" * 64 + b'",'
+                b'"index_sha256":"' + b"1" * 64 + b'",'
+                b'"relation_set_sha256":"' + b"3" * 64 + b'"}\n'
+            ).hexdigest(),
+            "duplicate JSON key",
+        ),
+        (
+            base64.b64encode(_relation_artifact_data(extra="4" * 64)).decode("ascii"),
+            hashlib.sha256(_relation_artifact_data(extra="4" * 64)).hexdigest(),
+            "schema is invalid",
+        ),
+        (
+            base64.b64encode(b"{" + b" " * (4 * 1024)).decode("ascii"),
+            hashlib.sha256(b"{" + b" " * (4 * 1024)).hexdigest(),
+            "size is invalid",
+        ),
+    ],
+)
+def test_relation_artifact_rejects_missing_malformed_tampered_or_noncanonical_material(
+    tmp_path: Path,
+    encoded: str,
+    trusted_sha256: str,
+    message: str,
+) -> None:
+    output = tmp_path / "relation-retrieval-artifact.json"
+    github_output = tmp_path / "github-output"
+    github_output.touch()
+    environment = os.environ.copy()
+    environment.update(
+        {
+            "RELATION_RETRIEVAL_ARTIFACT_B64": encoded,
+            "RELATION_RETRIEVAL_ARTIFACT_SHA256": trusted_sha256,
+        }
+    )
+
+    completed = _run(
+        "materialize-relation-artifact",
+        "--output",
+        str(output),
+        "--github-output",
+        str(github_output),
+        environment=environment,
+    )
+
+    assert completed.returncode != 0
+    assert message in completed.stderr
+    if encoded:
+        assert encoded not in completed.stdout
+        assert encoded not in completed.stderr
+    assert not output.exists()
+    assert github_output.read_text(encoding="utf-8") == ""
+
+
+def test_relation_artifact_rejects_missing_sha256_and_unsafe_output_paths(
+    tmp_path: Path,
+) -> None:
+    data = _relation_artifact_data()
+    github_output = tmp_path / "github-output"
+    github_output.touch()
+    missing_sha = _relation_artifact_environment(data)
+    missing_sha.pop("RELATION_RETRIEVAL_ARTIFACT_SHA256")
+    missing_output = tmp_path / "missing-sha.json"
+
+    rejected_missing = _run(
+        "materialize-relation-artifact",
+        "--output",
+        str(missing_output),
+        "--github-output",
+        str(github_output),
+        environment=missing_sha,
+    )
+
+    assert rejected_missing.returncode != 0
+    assert "SHA-256 is invalid" in rejected_missing.stderr
+    assert not missing_output.exists()
+
+    existing = tmp_path / "existing.json"
+    existing.write_bytes(b"do-not-replace\n")
+    rejected_existing = _run(
+        "materialize-relation-artifact",
+        "--output",
+        str(existing),
+        "--github-output",
+        str(github_output),
+        environment=_relation_artifact_environment(data),
+    )
+    assert rejected_existing.returncode != 0
+    assert existing.read_bytes() == b"do-not-replace\n"
+
+    target = tmp_path / "target.json"
+    target.write_bytes(b"do-not-follow\n")
+    symlink = tmp_path / "relation-link.json"
+    symlink.symlink_to(target)
+    rejected_symlink = _run(
+        "materialize-relation-artifact",
+        "--output",
+        str(symlink),
+        "--github-output",
+        str(github_output),
+        environment=_relation_artifact_environment(data),
+    )
+    assert rejected_symlink.returncode != 0
+    assert target.read_bytes() == b"do-not-follow\n"
+    assert symlink.is_symlink()
+
+
+def test_release_metadata_records_the_promoted_relation_artifact_sha256(tmp_path: Path) -> None:
+    output = tmp_path / "release-metadata.json"
+    relation_sha256 = "9" * 64
+    arguments = [
+        "write-metadata",
+        "--output",
+        str(output),
+        "--workflow-identity",
+        (
+            "https://github.com/Hyunhoim/gaeng3/.github/workflows/"
+            "immutable-ncp-release.yml@refs/heads/main"
+        ),
+        "--source-commit",
+        "a" * 40,
+        "--release-id",
+        "finance-agent-eval-001",
+        "--environment",
+        "evaluation",
+        "--platform",
+        "linux/amd64",
+        "--base-image-reference",
+        "team.kr.ncr.ntruss.com/finance-agent@sha256:" + "b" * 64,
+        "--release-image-reference",
+        "team.kr.ncr.ntruss.com/finance-agent@sha256:" + "c" * 64,
+        "--manifest-sha256",
+        "d" * 64,
+        "--binding-sha256",
+        "e" * 64,
+        "--relation-artifact-sha256",
+        relation_sha256,
+        "--github-run-id",
+        "12345",
+        "--github-run-attempt",
+        "1",
+    ]
+
+    completed = _run(*arguments)
+
+    assert completed.returncode == 0, completed.stderr
+    metadata = json.loads(output.read_bytes())
+    assert metadata["schema_version"] == "1.1"
+    assert metadata["relation_retrieval_artifact_sha256"] == relation_sha256
+
+    invalid_output = tmp_path / "invalid-release-metadata.json"
+    invalid = list(arguments)
+    invalid[invalid.index("--output") + 1] = str(invalid_output)
+    invalid[invalid.index("--relation-artifact-sha256") + 1] = "not-a-sha256"
+    rejected = _run(*invalid)
+    assert rejected.returncode != 0
+    assert "relation retrieval artifact SHA-256 is invalid" in rejected.stderr
+    assert not invalid_output.exists()
+
+
+def test_relation_artifact_must_belong_to_the_manifest_approved_dataset(tmp_path: Path) -> None:
+    artifact_data = _relation_artifact_data()
+    artifact = tmp_path / "relation-retrieval-artifact.json"
+    artifact.write_bytes(artifact_data)
+    artifact.chmod(0o444)
+    artifact_sha256 = hashlib.sha256(artifact_data).hexdigest()
+    manifest = tmp_path / "agent-release-manifest.json"
+    manifest.write_bytes(_manifest_with_relation(artifact_data))
+
+    accepted = _run(
+        "verify-relation-manifest-binding",
+        "--manifest",
+        str(manifest),
+        "--relation-artifact",
+        str(artifact),
+        "--relation-artifact-sha256",
+        artifact_sha256,
+    )
+
+    assert accepted.returncode == 0, accepted.stderr
+    assert accepted.stdout == ""
+    assert accepted.stderr == ""
+
+    stale_manifest = tmp_path / "stale-agent-release-manifest.json"
+    stale_manifest.write_bytes(
+        _manifest_with_relation(
+            artifact_data,
+            approved_contract_sha256="4" * 64,
+        )
+    )
+    rejected_stale = _run(
+        "verify-relation-manifest-binding",
+        "--manifest",
+        str(stale_manifest),
+        "--relation-artifact",
+        str(artifact),
+        "--relation-artifact-sha256",
+        artifact_sha256,
+    )
+
+    assert rejected_stale.returncode != 0
+    assert "different approved dataset manifest" in rejected_stale.stderr
+
+
+def test_relation_manifest_binding_rejects_a_tampered_public_artifact(tmp_path: Path) -> None:
+    artifact_data = _relation_artifact_data()
+    artifact = tmp_path / "relation-retrieval-artifact.json"
+    artifact.write_bytes(artifact_data)
+    artifact.chmod(0o444)
+    artifact_sha256 = hashlib.sha256(artifact_data).hexdigest()
+    manifest = tmp_path / "agent-release-manifest.json"
+    manifest.write_bytes(
+        _manifest_with_relation(
+            artifact_data,
+            artifact_file_sha256="5" * 64,
+        )
+    )
+
+    rejected = _run(
+        "verify-relation-manifest-binding",
+        "--manifest",
+        str(manifest),
+        "--relation-artifact",
+        str(artifact),
+        "--relation-artifact-sha256",
+        artifact_sha256,
+    )
+
+    assert rejected.returncode != 0
+    assert "does not bind the trusted relation artifact" in rejected.stderr
+
+
+def test_release_workflow_materializes_and_binds_the_approved_relation_artifact() -> None:
+    workflow_path = _repository_root() / ".github" / "workflows" / "immutable-ncp-release.yml"
+    workflow = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
+    event_config = workflow.get("on", workflow.get(True))
+    dispatch_inputs = event_config["workflow_dispatch"]["inputs"]
+    steps = workflow["jobs"]["release"]["steps"]
+    relation_step = next(step for step in steps if step.get("id") == "relation_artifact")
+    manifest_step = next(
+        step
+        for step in steps
+        if step.get("name") == "Create AgentReleaseManifest from the clean checkout"
+    )
+    metadata_step = next(
+        step for step in steps if step.get("name") == "Record non-secret release evidence"
+    )
+    registry_login_step = next(
+        step for step in steps if str(step.get("uses", "")).startswith("docker/login-action@")
+    )
+
+    assert "relation_artifact" not in dispatch_inputs
+    assert "relation_artifact_sha256" not in dispatch_inputs
+    assert steps.index(relation_step) < steps.index(registry_login_step)
+    assert steps.index(manifest_step) < steps.index(registry_login_step)
+    assert relation_step["env"] == {
+        "RELATION_RETRIEVAL_ARTIFACT_B64": (
+            "${{ secrets.APPROVED_RELATION_RETRIEVAL_ARTIFACT_B64 }}"
+        ),
+        "RELATION_RETRIEVAL_ARTIFACT_SHA256": (
+            "${{ vars.APPROVED_RELATION_RETRIEVAL_ARTIFACT_SHA256 }}"
+        ),
+    }
+    assert "release_ci.py materialize-relation-artifact" in relation_step["run"]
+    assert '"$RUNNER_TEMP/relation-retrieval-artifact.json"' in relation_step["run"]
+    assert "RELATION_RETRIEVAL_ARTIFACT_B64" not in relation_step["run"]
+    assert manifest_step["env"]["RELATION_RETRIEVAL_ARTIFACT_FILE"] == (
+        "${{ steps.relation_artifact.outputs.artifact_path }}"
+    )
+    assert manifest_step["env"]["RELATION_RETRIEVAL_ARTIFACT_SHA256"] == (
+        "${{ steps.relation_artifact.outputs.artifact_sha256 }}"
+    )
+    assert (
+        '--relation-retrieval-artifact "$RELATION_RETRIEVAL_ARTIFACT_FILE"' in manifest_step["run"]
+    )
+    assert (
+        '--relation-retrieval-artifact-sha256 "$RELATION_RETRIEVAL_ARTIFACT_SHA256"'
+        in manifest_step["run"]
+    )
+    assert "release_ci.py verify-relation-manifest-binding" in manifest_step["run"]
+    assert '--manifest "$RELEASE_OUTPUT_DIR/agent-release-manifest.json"' in manifest_step["run"]
+    assert '--relation-artifact "$RELATION_RETRIEVAL_ARTIFACT_FILE"' in manifest_step["run"]
+    assert (
+        '--relation-artifact-sha256 "$RELATION_RETRIEVAL_ARTIFACT_SHA256"' in manifest_step["run"]
+    )
+    assert metadata_step["env"]["RELATION_RETRIEVAL_ARTIFACT_SHA256"] == (
+        "${{ steps.relation_artifact.outputs.artifact_sha256 }}"
+    )
+    assert (
+        '--relation-artifact-sha256 "$RELATION_RETRIEVAL_ARTIFACT_SHA256"' in metadata_step["run"]
+    )
 
 
 def test_release_workflow_has_a_commit_pinned_keyless_trust_boundary() -> None:

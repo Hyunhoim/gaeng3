@@ -4,6 +4,7 @@ import hashlib
 import json
 import os
 import shlex
+import shutil
 import stat
 import subprocess
 from pathlib import Path
@@ -57,6 +58,10 @@ def test_release_compose_requires_digest_binding_and_disabled_dense() -> None:
     assert "FINANCE_IMAGE_REFERENCE:?" in compose
     assert "FINANCE_DEPLOYMENT_BINDING_SHA256:?" in compose
     assert "FINANCE_RUNTIME_IMAGE_REFERENCE" in compose
+    assert "FINANCE_RELATION_RETRIEVAL_ARTIFACT_SHA256:?" in compose
+    assert "FINANCE_RELATION_RETRIEVAL_ARTIFACT_SHA256_FILE: !reset null" in compose
+    assert "FINANCE_RELATION_RETRIEVAL_ARTIFACT_FILE" in compose
+    assert "FINANCE_RELATION_INDEX_FILE" in compose
     assert 'FINANCE_DENSE_SCHEMA_LINKER_ENABLED: "false"' in compose
     assert 'FINANCE_PRODUCT_DENSE_ENABLED: "false"' in compose
     assert "read_only: true" in compose
@@ -72,6 +77,49 @@ def test_release_compose_requires_digest_binding_and_disabled_dense() -> None:
     assert "require_approved_database_paths" in compose
     assert "volumes: !override" in compose
     assert "target: /raw" not in compose
+
+
+@pytest.mark.skipif(shutil.which("docker") is None, reason="Docker Compose CLI is unavailable")
+def test_release_compose_renders_only_explicit_relation_trust_source() -> None:
+    root = _repository_root()
+    environment = os.environ.copy()
+    explicit_sha256 = "d" * 64
+    environment.update(
+        {
+            "FINANCE_IMAGE_REFERENCE": ("registry.example/finance-agent@sha256:" + "b" * 64),
+            "FINANCE_DEPLOYMENT_BINDING_SHA256": "c" * 64,
+            "FINANCE_SOURCE_COMMIT": "a" * 40,
+            "FINANCE_RELATION_RETRIEVAL_ARTIFACT_SHA256": explicit_sha256,
+            "FINANCE_DEPLOYMENT_BINDING_HOST_FILE": "/tmp/deployment-binding.json",
+            "FINANCE_AUDIT_HOST_DIR": "/tmp/finance-audit",
+            "FINANCE_DATA_VOLUME_NAME": "finance-data-test",
+        }
+    )
+
+    completed = subprocess.run(
+        [
+            "docker",
+            "compose",
+            "-f",
+            "docker-compose.yml",
+            "-f",
+            "fastapi_backend/docker-compose.release.yml",
+            "config",
+            "--format",
+            "json",
+            "backend",
+        ],
+        cwd=root,
+        env=environment,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    backend_environment = json.loads(completed.stdout)["services"]["backend"]["environment"]
+    assert backend_environment["FINANCE_RELATION_RETRIEVAL_ARTIFACT_SHA256"] == explicit_sha256
+    assert "FINANCE_RELATION_RETRIEVAL_ARTIFACT_SHA256_FILE" not in backend_environment
 
 
 def test_release_launcher_forbids_build_and_forces_no_build() -> None:
@@ -184,6 +232,7 @@ def _release_launcher_fixture(
                 f"FINANCE_RELEASE_MANIFEST_SIGSTORE_BUNDLE_HOST_FILE={manifest_bundle}",
                 f"FINANCE_DEPLOYMENT_BINDING_SIGSTORE_BUNDLE_HOST_FILE={binding_bundle}",
                 f"FINANCE_DATA_VOLUME_NAME=finance-data-{release_id}-{manifest_sha256[:12]}",
+                "FINANCE_RELATION_RETRIEVAL_ARTIFACT_SHA256=" + "9" * 64,
                 f"FINANCE_AUDIT_HOST_DIR={audit_root}",
                 "WEB_CONCURRENCY=1",
             ]
@@ -389,6 +438,30 @@ def test_release_launcher_rejects_missing_web_concurrency(tmp_path: Path) -> Non
 
     assert completed.returncode == 1
     assert "missing release settings: WEB_CONCURRENCY" in completed.stderr
+    assert not capture.exists()
+
+
+def test_release_launcher_requires_valid_relation_artifact_sha256(tmp_path: Path) -> None:
+    environment_path, environment, capture, test_launcher = _release_launcher_fixture(tmp_path)
+    content = environment_path.read_text(encoding="utf-8")
+    expected = "FINANCE_RELATION_RETRIEVAL_ARTIFACT_SHA256=" + "9" * 64 + "\n"
+    assert expected in content
+    environment_path.write_text(
+        content.replace(expected, "FINANCE_RELATION_RETRIEVAL_ARTIFACT_SHA256=mutable\n"),
+        encoding="utf-8",
+    )
+
+    completed = subprocess.run(
+        [str(test_launcher), "config", "--quiet"],
+        cwd=_repository_root(),
+        env=environment,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 1
+    assert "FINANCE_RELATION_RETRIEVAL_ARTIFACT_SHA256 is invalid" in completed.stderr
     assert not capture.exists()
 
 
