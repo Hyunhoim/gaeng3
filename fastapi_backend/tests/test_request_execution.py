@@ -8,6 +8,9 @@ import pytest
 
 from app import request_execution as execution_module
 from app.request_execution import (
+    IdempotentRequestCoordinator,
+    RequestExecutionDisposition,
+    RequestIdentityConflictError,
     execute_bounded_request,
     request_execution_stats,
     wait_for_request_workers,
@@ -121,3 +124,150 @@ def test_shutdown_wait_tracks_timed_out_worker_until_cleanup() -> None:
     release.set()
     assert wait_for_request_workers(timeout_seconds=1) is True
     _wait_for_active(0)
+
+
+def test_idempotent_concurrent_callers_share_one_worker() -> None:
+    _wait_for_active(0)
+    coordinator = IdempotentRequestCoordinator()
+    started = Event()
+    release = Event()
+    call_count = 0
+
+    def operation() -> str:
+        nonlocal call_count
+        call_count += 1
+        started.set()
+        assert release.wait(1)
+        return "shared-result"
+
+    async def scenario() -> None:
+        first = asyncio.create_task(
+            coordinator.execute(
+                operation,
+                request_key="Q-SINGLE-FLIGHT",
+                request_input="동일한 질문",
+                timeout_seconds=1,
+                max_inflight=1,
+                cache_result=lambda _result: True,
+            )
+        )
+        while not started.is_set():
+            await asyncio.sleep(0.001)
+        second = asyncio.create_task(
+            coordinator.execute(
+                operation,
+                request_key="Q-SINGLE-FLIGHT",
+                request_input="동일한 질문",
+                timeout_seconds=1,
+                max_inflight=1,
+                cache_result=lambda _result: True,
+            )
+        )
+        await asyncio.sleep(0)
+        release.set()
+        first_result, second_result = await asyncio.gather(first, second)
+        assert first_result.value == second_result.value == "shared-result"
+        assert first_result.disposition is RequestExecutionDisposition.EXECUTED
+        assert second_result.disposition is RequestExecutionDisposition.JOINED
+
+    asyncio.run(scenario())
+    assert call_count == 1
+    _wait_for_active(0)
+
+
+def test_idempotent_safe_completion_is_replayed_without_execution() -> None:
+    coordinator = IdempotentRequestCoordinator()
+    call_count = 0
+
+    def operation() -> str:
+        nonlocal call_count
+        call_count += 1
+        return "safe-result"
+
+    async def scenario() -> None:
+        first = await coordinator.execute(
+            operation,
+            request_key="Q-REPLAY",
+            request_input="재전송 질문",
+            timeout_seconds=1,
+            max_inflight=1,
+            cache_result=lambda _result: True,
+        )
+        second = await coordinator.execute(
+            operation,
+            request_key="Q-REPLAY",
+            request_input="재전송 질문",
+            timeout_seconds=1,
+            max_inflight=1,
+            cache_result=lambda _result: True,
+        )
+        assert first.disposition is RequestExecutionDisposition.EXECUTED
+        assert second.disposition is RequestExecutionDisposition.REPLAYED
+
+    asyncio.run(scenario())
+    assert call_count == 1
+
+
+def test_idempotent_retryable_completion_is_not_replayed() -> None:
+    coordinator = IdempotentRequestCoordinator()
+    call_count = 0
+
+    def operation() -> str:
+        nonlocal call_count
+        call_count += 1
+        return "transient-failure"
+
+    async def scenario() -> None:
+        first = await coordinator.execute(
+            operation,
+            request_key="Q-RETRY",
+            request_input="재시도 질문",
+            timeout_seconds=1,
+            max_inflight=1,
+            cache_result=lambda _result: False,
+        )
+        second = await coordinator.execute(
+            operation,
+            request_key="Q-RETRY",
+            request_input="재시도 질문",
+            timeout_seconds=1,
+            max_inflight=1,
+            cache_result=lambda _result: False,
+        )
+        assert first.disposition is RequestExecutionDisposition.EXECUTED
+        assert second.disposition is RequestExecutionDisposition.EXECUTED
+
+    asyncio.run(scenario())
+    assert call_count == 2
+
+
+def test_idempotent_request_key_cannot_be_reused_for_different_input() -> None:
+    coordinator = IdempotentRequestCoordinator()
+    call_count = 0
+
+    def operation() -> str:
+        nonlocal call_count
+        call_count += 1
+        return "safe-result"
+
+    async def scenario() -> None:
+        await coordinator.execute(
+            operation,
+            request_key="Q-CONFLICT",
+            request_input="첫 번째 질문",
+            timeout_seconds=1,
+            max_inflight=1,
+            cache_result=lambda _result: True,
+        )
+        with pytest.raises(RequestIdentityConflictError):
+            await coordinator.execute(
+                operation,
+                request_key="Q-CONFLICT",
+                request_input="다른 질문",
+                timeout_seconds=1,
+                max_inflight=1,
+                cache_result=lambda _result: True,
+            )
+
+    asyncio.run(scenario())
+    assert call_count == 1

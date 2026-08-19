@@ -110,7 +110,7 @@ def test_release_manifest_pins_code_contract_prompt_data_model_and_disabled_inde
     }
     assert manifest.components.runtime_features.model.provider == "disabled"
     assert manifest.components.runtime_controls.hcx_timeout_seconds == 45.0
-    assert manifest.components.runtime_controls.official_answer_timeout_seconds == 55.0
+    assert manifest.components.runtime_controls.official_answer_timeout_seconds == 270.0
     assert manifest.components.runtime_controls.official_answer_max_inflight == 2
     assert manifest.components.runtime_controls.worker_count == 1
     assert manifest.components.runtime_features.retrieval.schema_dense == "disabled_offline_only"

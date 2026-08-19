@@ -35,6 +35,7 @@ from finance_agent_core.storage import ProductIdentitySnapshotCache, RecordSnaps
 
 from app.config import Settings
 from app.http_audit import request_agent_audit
+from app.request_execution import IdempotentRequestCoordinator
 
 _MAX_HCX_API_KEY_FILE_BYTES = 4096
 
@@ -45,6 +46,15 @@ class AgentService(Protocol):
     router: IntentRouter
 
     def answer(self, question: str, request_id: str) -> RoutedAgentResult: ...
+
+
+def get_request_coordinator(request: Request) -> IdempotentRequestCoordinator:
+    """Return the application-owned evaluator retry coordinator."""
+
+    coordinator = getattr(request.app.state, "request_coordinator", None)
+    if type(coordinator) is not IdempotentRequestCoordinator:
+        raise RuntimeError("request coordinator is unavailable")
+    return coordinator
 
 
 def _provider_assembly_matches(service: RoutedFinanceAgent, settings: Settings) -> bool:

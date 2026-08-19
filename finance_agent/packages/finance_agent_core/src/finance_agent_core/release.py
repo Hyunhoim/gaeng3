@@ -182,7 +182,7 @@ class RuntimeFeatureRelease(ReleaseModel):
 
 class RuntimeControlRelease(ReleaseModel):
     hcx_timeout_seconds: float = Field(gt=0, le=300)
-    official_answer_timeout_seconds: float = Field(gt=0, lt=60)
+    official_answer_timeout_seconds: float = Field(gt=0, lt=300)
     official_answer_max_inflight: StrictInt = Field(ge=1, le=8)
     worker_count: StrictInt = Field(ge=1, le=8)
     audit_schema_version: Literal["1.2"] = "1.2"
@@ -310,7 +310,7 @@ class RuntimeReleaseInputs:
     product_dense_enabled: bool = False
     platform: Literal["linux/amd64", "linux/arm64"] = "linux/amd64"
     hcx_timeout_seconds: float = 45.0
-    official_answer_timeout_seconds: float = 55.0
+    official_answer_timeout_seconds: float = 270.0
     official_answer_max_inflight: int = 2
     worker_count: int = 1
     audit_schema_version: Literal["1.2"] = "1.2"

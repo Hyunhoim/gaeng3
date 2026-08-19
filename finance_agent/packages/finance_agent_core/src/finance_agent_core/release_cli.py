@@ -233,7 +233,7 @@ def _parser() -> argparse.ArgumentParser:
     manifest.add_argument("--hcx-queryplan-enabled", action="store_true")
     manifest.add_argument("--hcx-model")
     manifest.add_argument("--hcx-timeout-seconds", type=float, default=45.0)
-    manifest.add_argument("--official-answer-timeout-seconds", type=float, default=55.0)
+    manifest.add_argument("--official-answer-timeout-seconds", type=float, default=270.0)
     manifest.add_argument("--official-answer-max-inflight", type=int, default=2)
     manifest.add_argument("--worker-count", type=int, default=1)
     manifest.add_argument("--audit-queue-capacity", type=int, default=2_048)

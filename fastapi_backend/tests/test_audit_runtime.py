@@ -179,6 +179,56 @@ def test_official_get_audit_never_persists_raw_query_values(tmp_path: Path) -> N
     assert "%3Cscript%3E" not in serialized
 
 
+def test_official_retry_replays_one_execution_and_audits_each_transport_attempt(
+    tmp_path: Path,
+) -> None:
+    settings, path = _audit_settings(tmp_path)
+    agent = FakeAgentService()
+    application = create_app(settings=settings, agent=agent)
+    request_id = "REPLAY-PRIVATE-ID"
+    question = "REPLAY-PRIVATE-QUESTION"
+
+    with TestClient(application) as client:
+        first = client.get(
+            "/answer",
+            params={"question_id": request_id, "question": question},
+        )
+        second = client.get(
+            "/answer",
+            params={"question_id": request_id, "question": question},
+        )
+
+    assert first.status_code == second.status_code == 200
+    assert agent.calls == [(question, request_id)]
+    events = tuple(
+        AuditEvent.model_validate_json(line)
+        for line in path.read_text(encoding="utf-8").splitlines()
+    )
+    by_invocation: dict[str, list[AuditEvent]] = {}
+    for event in events:
+        assert event.invocation_id_sha256 is not None
+        by_invocation.setdefault(event.invocation_id_sha256, []).append(event)
+    assert len(by_invocation) == 2
+    contracts = {
+        tuple((event.outcome, event.reason_code) for event in invocation)
+        for invocation in by_invocation.values()
+    }
+    assert contracts == {
+        (
+            (AuditOutcome.STARTED, "received"),
+            (AuditOutcome.SUCCEEDED, "response_completed"),
+        ),
+        (
+            (AuditOutcome.STARTED, "received"),
+            (AuditOutcome.SUCCEEDED, "idempotent_result_replayed"),
+            (AuditOutcome.SUCCEEDED, "response_completed"),
+        ),
+    }
+    serialized = path.read_text(encoding="utf-8")
+    assert request_id not in serialized
+    assert question not in serialized
+
+
 def test_trailing_slash_redirect_is_audited_without_query_values(tmp_path: Path) -> None:
     settings, path = _audit_settings(tmp_path)
     application = create_app(settings=settings)

@@ -67,9 +67,9 @@ class Settings(BaseSettings):
         validation_alias="CLOVASTUDIO_API_KEY_FILE",
     )
     official_answer_timeout_seconds: float = Field(
-        default=55.0,
+        default=270.0,
         gt=0,
-        lt=60,
+        lt=300,
         validation_alias="OFFICIAL_ANSWER_TIMEOUT_SECONDS",
     )
     official_answer_max_inflight: int = Field(
