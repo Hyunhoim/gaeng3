@@ -1,6 +1,6 @@
 # AI 기술문서 상세 인덱스
 
-마지막 갱신: 2026-08-14
+마지막 갱신: 2026-08-19
 
 이 문서는 금융상품 Agent의 전체 기술문서와 상태를 추적하는 상세 장부다. 간단한
 길잡이가 필요하면 먼저 [AI 기술문서 안내](README.md)를 확인한다. 연구 요청·외부
@@ -15,6 +15,7 @@
 2. [금융상품 Agent capability matrix](capability-matrix.md) — 지금 가능한 질문과 불가능한 질문
 3. [HyperCLOVA X 연결 전 준비 기준](pre-hcx-readiness.md) — 완료된 일과 남은 게이트
 4. [재현 가능한 평가 baseline](../evaluation/README.md) — 성능 수치와 실험 해석
+5. [P0-4 공식 Acceptance 인수인계](p0-4-official-acceptance-handover-2026-08-19.md) — 공식 GET 계약, Docker 검증, 다음 작업
 
 배포·복구 담당자는 [NCP immutable release CI](immutable-ncp-release-ci.md)와
 [Rollback drill runbook](../../fastapi_backend/ROLLBACK_DRILL.md)을 추가로 확인한다. 현재
@@ -30,7 +31,7 @@ HCX 모델·endpoint·인증과 크레딧 적용 범위는 남아 있어 기존�
 | 독자·목적 | 먼저 읽기 | 이어서 읽기 |
 | --- | --- | --- |
 | 새 AI 개발자 | [현재 프로젝트 기준](project-baseline.md) | [개발 환경](development.md) → [계약](contracts.md) → [Agent Core README](../packages/finance_agent_core/README.md) |
-| Backend 담당 | [Backend DTO](backend-contract.md) | [capability matrix](capability-matrix.md) → [HyperCLOVA X provider](hyperclova-provider.md) |
+| Backend 담당 | [Backend DTO](backend-contract.md) | [P0-4 공식 Acceptance 인수인계](p0-4-official-acceptance-handover-2026-08-19.md) → [capability matrix](capability-matrix.md) → [HyperCLOVA X provider](hyperclova-provider.md) |
 | 금융 도메인 담당 | [capability matrix](capability-matrix.md) | [데이터 감사](data-audit.md) → [사람 평가 rubric](human-evaluation.md) → [금융 도메인 QA 평가](evaluation-domain-qa.md) |
 | 기술 제안서 작성자 | [기술 제안서 허브](../../docs/proposal/README.md) | [현재 프로젝트 기준](project-baseline.md) → [평가 baseline](../evaluation/README.md) |
 | 제출 전 검수자 | [제출 체크리스트](../../docs/proposal/submission-checklist.md) | [모델 경계](submission-model-boundary.md) → [연결 전 준비 기준](pre-hcx-readiness.md) |
@@ -84,6 +85,7 @@ HCX 모델·endpoint·인증과 크레딧 적용 범위는 남아 있어 기존�
 - [네 상품군 자동 커버리지·Qwen 자연화 평가](evaluation-coverage-guided.md)
 - [금융 도메인 QA](evaluation-domain-qa.md)
 - [사람 평가 rubric](human-evaluation.md)
+- [P0-4 공식 Acceptance 인수인계](p0-4-official-acceptance-handover-2026-08-19.md)
 - [전체 평가 baseline](../evaluation/README.md)
 - [Stage 2 승인 DB 재검증 baseline](../evaluation/baselines/stage2-approved-db-revalidation-2026-08-12.json)
 
@@ -110,6 +112,7 @@ HCX 모델·endpoint·인증과 크레딧 적용 범위는 남아 있어 기존�
 | [NCP immutable release CI](immutable-ncp-release-ci.md) | 보호된 main에서 NCP push·exact digest·OCI platform/label·cosign OIDC 서명 검증 | 코드 계약 구현·외부 Registry 실행 대기 |
 | [Rollback drill runbook](../../fastapi_backend/ROLLBACK_DRILL.md) | N-1 → N → N-1 image·Binding·DB volume·health·대표 `/answer` 복귀 검증 | localhost 합성 실기동 완료·공식 NCP 두 release 대기 |
 | [Ontology 제출 계약](ontology.md) | 공식 Turtle 5개·registry 기반 생성·문법·정합성 검사 | v1.0 구현 |
+| [P0-4 공식 Acceptance 인수인계](p0-4-official-acceptance-handover-2026-08-19.md) | 설명회 예시·공식 GET·다섯 문자열·UTF-8·안전 무실행의 Docker 검증과 재현 절차 | P0-4 완료 |
 | [해외 ETP 핵심 평가 기준선](evaluation.md) | 동결 50문항, oracle·채점 규칙, 최초 holdout과 사후 회귀 결과 | v1.0 정본 |
 | [국내 ETP 핵심 평가 기준선](evaluation-domestic-etp.md) | 국내 ETP 동결 50문항, 품질 계약, local-inference split 결과 | v1.0 정본 |
 | [국내채권 핵심 평가 기준선](evaluation-domestic-bond.md) | 국내채권 동결 50문항, stale·날짜 계약, 로컬 Qwen·답변 결과 | v1.0 정본 |

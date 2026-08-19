@@ -38,13 +38,14 @@
 <main>
   <header>
     <h1>남은 P0·P1 구현 로드맵</h1>
-    <p class="meta">기준일 2026-08-14 · 팀 공유용 · 예선 정확성·안전성 우선</p>
+    <p class="meta">최초 작성 2026-08-14 · 상태 갱신 2026-08-19 · 팀 공유용 · 예선 정확성·안전성 우선</p>
   </header>
 
   <section class="summary">
     <span class="label done">완료</span>
     HCLX 변경을 별도 commit으로 동결했고, 공식 <code>GET /answer</code>의 5개 문자열·UTF-8·검증 근거 응답을 Docker에서 확인했다.
     공모펀드는 주최 측 데이터 공지 전까지 <code>locked</code>이며 DB·HCLX를 실행하지 않고 <code>UNSUPPORTED</code>로 종료한다.
+    P0-4 공식 Acceptance는 원본 해시를 확인한 clean Docker에서 계약 16/16·안전 무실행 11/11로 완료했다.
   </section>
 
   <section>
@@ -58,10 +59,10 @@
       </article>
 
       <article class="card">
-        <h3><span class="label">P0-4 · 다음</span>공식 예시 Acceptance Suite</h3>
+        <h3><span class="label done">P0-4 · 완료</span>공식 예시 Acceptance Suite</h3>
         <p>Acceptance Suite는 주최 측 예시 요청·응답을 그대로 자동 검사하는 공식 계약 회귀 세트다.</p>
-        <div class="row"><strong>해야 할 일</strong>공개된 예시를 원문 그대로 고정하고 GET, query parameter, 5개 string, UTF-8, 무인증·순차 호출을 검사한다.</div>
-        <div class="row"><strong>완료 기준</strong>답변 불가·추가 parameter·긴 입력·공모펀드 잠금을 포함해 clean Docker에서 전부 통과.</div>
+        <div class="row"><strong>완료 결과</strong>공개 예시 8개와 경계 사례 8개를 원본·commit·image digest에 연결하고 계약 16/16, 무실행 11/11을 확인했다.</div>
+        <div class="row"><strong>해석 한계</strong>답변 가능 5개 중 success 관측은 1개다. 16/16은 제출 형식·안전 계약이며 의미 정답률이 아니다. <a href="../finance_agent/docs/p0-4-official-acceptance-handover-2026-08-19.md">인수인계 보고서</a></div>
       </article>
 
       <article class="card">
@@ -125,7 +126,7 @@
 
   <section>
     <h2>권장 실행 순서</h2>
-    <p class="flow">P0-4 공식 예시 고정 → P0-9 Blind 최초 실행 → P0-8 timeout·재시도 → P0-5~7 승인 문서·관계 근거 → P0-10 NCP 제출 Release</p>
+    <p class="flow">P0-4 공식 예시 고정 완료 → P0-9 Blind 최초 실행 → P0-8 timeout·재시도 → P0-5~7 승인 문서·관계 근거 → P0-10 NCP 제출 Release</p>
     <p class="note">P0-3 공모펀드는 주최 측 공지가 올 때까지 이 흐름과 별개로 잠근다. Schema Dense·HCLX Planning은 Blind 결과가 개선을 증명한 경우에만 P1 Shadow로 연결한다.</p>
   </section>
 

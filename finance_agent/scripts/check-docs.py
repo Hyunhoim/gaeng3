@@ -68,6 +68,7 @@ REQUIRED_INDEX_TARGETS = {
     "evaluation-schema-embedding-cpu.md",
     "schema-dense-stage4-stage5-readiness-2026-08-13.md",
     "stage4-audit-blind-image-api-report-2026-08-13.md",
+    "p0-4-official-acceptance-handover-2026-08-19.md",
     "submission-model-boundary.md",
     "hyperclova-provider.md",
     "evaluation-pre-hcx-diagnostic.md",
@@ -85,6 +86,7 @@ REQUIRED_INDEX_TARGETS = {
     "../evaluation/README.md",
 }
 REQUIRED_BASELINES = {
+    "official-acceptance-p0-4-v1.json",
     "briefing-examples-v1-bond-improved.json",
     "briefing-examples-v1-initial.json",
     "briefing-examples-v1-safety-improved.json",
@@ -152,6 +154,14 @@ REQUIRED_BASELINE_KEYS = {
 # Frozen evidence files are immutable.  These exact successor hashes pin components
 # intentionally superseded by the Stage 4 audit/single-worker release contract; keeping
 # the migration here avoids rewriting the Stage 3 evidence whose own SHA-256 is cited.
+HISTORICAL_BASELINE_SUITE_SUCCESSOR_SHA256 = {
+    "docker-http-smoke-v2.json": (
+        "fb7b12b3f038f1c4f575b92e4f89a00ac9b69ddbc93ecee2ac8f6173dc00707b"
+    ),
+    "docker-http-smoke-qwen-v2.json": (
+        "fb7b12b3f038f1c4f575b92e4f89a00ac9b69ddbc93ecee2ac8f6173dc00707b"
+    ),
+}
 HISTORICAL_BASELINE_COMPONENT_ALLOWLIST = {
     "stage3-local-oci-rollback-2026-08-12.json": {
         "compose-release.sh": (
@@ -430,9 +440,14 @@ def _check_baseline(path: Path) -> list[str]:
             )
     if not suite_path.is_file():
         errors.append(f"{name}: suite path does not exist")
-    elif _sha256(suite_path) != tracked_contract_sha256:
-        errors.append(f"{name}: tracked suite SHA-256 differs")
     else:
+        actual_suite_sha256 = _sha256(suite_path)
+        approved_successor_sha256 = HISTORICAL_BASELINE_SUITE_SUCCESSOR_SHA256.get(name)
+        if (
+            actual_suite_sha256 != tracked_contract_sha256
+            and actual_suite_sha256 != approved_successor_sha256
+        ):
+            errors.append(f"{name}: tracked suite SHA-256 differs")
         try:
             suite_payload = json.loads(suite_path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):

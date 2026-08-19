@@ -28,6 +28,7 @@ DB, 원천 XLSX, 전체 report, 모델 가중치는 계속 `artifacts/` 또는 �
 
 | 파일 | 범위 |
 | --- | --- |
+| [P0-4 공식 Acceptance](baselines/official-acceptance-p0-4-v1.json) | 설명회 공개 예시 8개와 HTTP 경계 8개를 clean Docker 순차 GET으로 검증한 계약 기준선 16/16 |
 | [설명회 공개 예시 채권 개선](baselines/briefing-examples-v1-bond-improved.json) | 원화·판매 가능·AA- 이상 검색과 근거 검증을 연결한 회귀 |
 | [설명회 공개 예시 최초 관측](baselines/briefing-examples-v1-initial.json) | 답변 가능 5개·답변 불가 3개의 Router→Oracle→Verifier 현재 도달 범위 |
 | [설명회 공개 예시 안전 개선](baselines/briefing-examples-v1-safety-improved.json) | 잘못된 신용등급 차단과 요청 어미 오분류 수정 후 회귀 |
@@ -188,6 +189,14 @@ strict 1/40·safety 32/40은 유지되며 E2 사후 회귀의 비교점이다.
 답변 가능 실행 1/5를 기록한다.
 이 질문들은 실제 평가 문항이 아니며, 공개 후 수정 결과도 blind 성능으로 해석하지
 않는다.
+
+`official-acceptance-p0-4-v1`은 위 공개 예시 8개와 HTTP 경계 사례 8개를 실제
+Docker의 인증 없는 순차 `GET /answer`로 재생한다. 다섯 문자열·UTF-8·입력 보존·
+내부 JSON·안전한 무실행 11/11과 공식 원본 이미지 SHA-256을 확인해 계약 16/16을
+기록했다. 답변 가능한 공개 예시 5개 중 실제 success 관측은 1개이므로 이 16/16은
+상품 정답 정확도, 독립 blind 또는 공모전 예상 점수가 아니다. 구현·재현·남은
+공백은 [P0-4 인수인계 보고서](../docs/p0-4-official-acceptance-handover-2026-08-19.md)를
+따른다.
 
 `official-mock-v1-30`은 설명회의 예상 난이도 하·중·상 각 10개와 답변 불가
 5개 분포만 모사한 공개 모의평가다. 로컬 Qwen에서 검색·비교·집계·안전·근거·
