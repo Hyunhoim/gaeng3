@@ -2,7 +2,7 @@
 
 상태: 활성
 
-기준일: 2026-08-19
+기준일: 2026-08-20
 
 공식 과제 소개자료 7페이지의 예선 제출 항목과 변경 금지 조건을 기준으로 한다.
 
@@ -38,11 +38,17 @@
 - [x] 승인 상품 DB 제공 관계 58,005개 색인·상품 ID 재검증·출처·해시 계약
 - [ ] 관계 값·한영 표기·동의어의 금융 도메인 검수
 - [x] P0-7 관계·문서 Typed Plan·Claim Verifier·결정론적 fallback 내부 계약
-- [ ] P0-7 공개 Router·Backend adapter와 P0-10 Agent Release 연결
+- [x] P0-10 공개 Router·Backend adapter와 manifest에 해시로 고정된 Agent Release 계약 연결을 로컬에서 검증
+- [x] 관계 검색의 exact FTS 후보·canonical full match·공식 DB identity 재검증·field evidence·인과적 Audit 계약
+- [x] P0-10 집중 회귀 522/522, Agent Core 1,443 passed·2 skipped, Backend 358 passed·2 warnings
+- [x] 빈 Docker volume에서 Backend smoke 8/8·공식 형식 GET 호환 smoke 8/8, 관계 3 products/3 citations, 부분 표현 `not_found` 확인
+- [x] 관계 색인·DB 변조 시 health·API가 HTTP 503으로 fail-closed되는 로컬 계약 확인
+- [ ] 금융 alias·관계 의미의 독립 blind 평가로 정확도·오수락 확인
 
-현재 상태: Conda·pip와 Agent Core wheel, 공식 XLSX 준비와 FastAPI를 잇는 통합
-Docker 실행은 재현 완료. `nextjs-frontend/`는 아직 저장소에 없으며 화면 합류 후
-같은 루트 Compose 실행 경로에 추가해야 한다.
+현재 상태: Conda·pip와 Agent Core wheel, 공식 XLSX 준비와 FastAPI, P0-10
+공개 관계 검색을 잇는 통합 Docker 경로는 로컬에서 재현 완료. 이 표시는
+`local implementation verified`이며 NCP 실제 배포 완료를 뜻하지 않는다. `nextjs-frontend/`는
+아직 저장소에 없으며 화면 합류 후 같은 루트 Compose 실행 경로에 추가해야 한다.
 
 ## 2. 기술 제안서
 
@@ -73,6 +79,7 @@ Docker 실행은 재현 완료. `nextjs-frontend/`는 아직 저장소에 없으
 - [ ] 인증이 필요하면 주최 측 호출 방식과 호환
 - [ ] health check·구조화 로그·credential masking
 - [x] provider·dataset 장애의 안전한 공식 응답 계약
+- [x] 관계 artifact·DB 변조를 `/health`와 질문 API 모두에서 503으로 차단하는 계약
 - [ ] 평가 기간 가용성·재시작·모니터링 계획
 
 ### 공식 예시와 내부 DTO의 경계
@@ -126,4 +133,8 @@ Docker 실행은 재현 완료. `nextjs-frontend/`는 아직 저장소에 없으
 - [ ] external blind 최초 실행 결과와 사후 수정 결과 분리
 - [ ] 최소 2명 사람 평가 완료
 - [ ] API smoke·contract·load·장애 복구 테스트 완료
+- [ ] NCP에 서명된 release를 실제 배포하고 공인 IP `GET /answer`·`/health` smoke 완료
+- [ ] 서명된 두 release를 사용한 forward·rollback drill과 Audit receipt 보존
+- [ ] 관계 답변용 HyperCLOVA X claim provider 계약·답변 검증·장애 fallback 실험
+- [ ] 실제 승인 문서 corpus 반입·검색 정확도·release 결속 검증
 - [ ] 제출 후 변경 금지 절차를 팀 전원이 확인

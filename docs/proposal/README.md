@@ -1,8 +1,8 @@
 # 기술 제안서 작성 허브
 
-상태: 초안 v0.2 · 8월 6일 설명회 반영
+상태: 초안 v0.3 · P0-10 관계 검색 공개 릴리스 로컬 검증 반영
 
-기준일: 2026-08-08
+기준일: 2026-08-20
 
 제출 마감: 2026-09-06
 
@@ -37,14 +37,15 @@ AI 구현 세부사항은 `finance_agent/docs/`에 유지하고, 이곳에서는
 
 | 문서 | 역할 | 상태 |
 | --- | --- | --- |
-| [기술 제안서 원문](technical-proposal.md) | 공식 7개 항목을 따르는 팀 공통 원고 | 초안 v0.4 · P0-7 반영 |
+| [기술 제안서 원문](technical-proposal.md) | 공식 7개 항목을 따르는 팀 공통 원고 | 초안 v0.5 · P0-10 로컬 검증 반영 |
 | [예선 1등 실행 전략](competition-strategy.md) | 공식 배점에 맞춘 우선순위·Qwen 실험·기술 채택 기준 | 실행 중 |
 | [제안서 근거 맵](evidence-map.md) | 제안서 주장과 코드·평가 결과의 연결 | 활성 |
 | [연구 근거](research-basis.md) | 탑티어 연구에서 차용한 원칙과 실제 구현·한계의 구분 | 활성 |
 | [사용자 시나리오](user-scenarios.md) | 질문·Agent 처리·화면 결과·안전 처리를 정의 | 초안 |
 | [제출 체크리스트](submission-checklist.md) | 소스·제안서·API·동결 절차 점검 | 활성 |
-| [시스템 구성도](diagrams/system-architecture.md) | 현재 검증 범위와 목표 통합 범위 구분 | 초안 |
-| [답변 기능 흐름도](diagrams/answer-flow.md) | intent별 실행·검증·제어 흐름 | 초안 |
+| [시스템 구성도](diagrams/system-architecture.md) | 현재 검증 범위와 목표 통합 범위 구분 | P0-10 로컬 검증 반영 |
+| [답변 기능 흐름도](diagrams/answer-flow.md) | intent별 실행·검증·제어 흐름 | P0-10 로컬 검증 반영 |
+| [P0-10 공개 관계 검색 인수인계](../../finance_agent/docs/p0-10-public-relation-release-integration-handover-2026-08-20.md) | 구현·회귀·Docker·변조 검증과 미검증 게이트 정본 | `local implementation verified` |
 | [8월 6일 설명회 반영 기록](briefing-2026-08-06.md) | 평가 API·Ontology·HCX·크레딧의 확정·미확정 사항과 구현 순서 | 현장 자료 검토 완료 |
 
 ## 작성 원칙
@@ -55,6 +56,8 @@ AI 구현 세부사항은 `finance_agent/docs/`에 유지하고, 이곳에서는
 - 수치 주장은 [근거 맵](evidence-map.md)에 코드·baseline·문서를 연결
 - 목표 아키텍처와 현재 동작하는 아키텍처를 한 그림에서 혼동하지 않음
 - 상품군 간 비교, 실제 문서 RAG, FastAPI, HyperCLOVA X는 완료된 범위만 기술
+- P0-10은 `local implementation verified`로만 표기하고, NCP 실제 서명 배포·공인 IP·signed rollback을 완료로 표현하지 않음
+- 관계 검색의 HCLX claim provider, 금융 alias·의미 blind, 실제 승인 문서 corpus는 후속 검증으로 분리
 - `think_trace`는 숨은 사고과정이 아니라 도구·검증 결과의 감사 가능한 실행 기록으로 설계
 
 ## 역할

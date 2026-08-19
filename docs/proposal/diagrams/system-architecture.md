@@ -1,20 +1,23 @@
 # 금융상품 Agent 시스템 구성도
 
-상태: 초안 v0.6 · P0-7 관계·문서 주장 검증 반영
+상태: 초안 v0.7 · P0-10 공개 관계 검색 릴리스 로컬 검증 반영
 
 기준일: 2026-08-20
 
-실선은 Agent Core와 FastAPI에서 검증된 경로, 점선은 외부 통합이 남은 경로다.
+실선은 Agent Core·FastAPI·clean Docker에서 로컬 검증된 경로, 점선은 외부
+통합이 남은 경로다. 실선의 판정은 `local implementation verified`이며
+NCP 실제 배포를 의미하지는 않는다.
 
 ```mermaid
 flowchart LR
     U["사용자"] -.-> WEB["Next.js UI<br/>통합 대기"]
     WEB -.-> API["내부 FastAPI POST /answer<br/>로컬 통합 완료"]
     CLIENT["주최 측 평가 client"] -.-> OFFICIAL["공식 GET /answer adapter<br/>FastAPI 구현 · 계약 테스트 완료"]
-    OFFICIAL -.-> REQ
+    OFFICIAL --> REQ
     API --> REQ["BackendAgentRequest"]
 
-    REQ --> ROUTER["Fail-closed Intent Router"]
+    REQ --> SAFE["입력·정책 안전 검사"]
+    SAFE --> ROUTER["Fail-closed Intent Router"]
     ROUTER --> PLAN["서버 QueryPlan Compiler<br/>capability 검증"]
     PLAN -.->|"선택적 SEARCH 계획·근거 설명"| HCX["HyperCLOVA X<br/>실제 transport 대기"]
     HCX -.->|"서버 계획 exact-match gate"| PLAN
@@ -22,9 +25,6 @@ flowchart LR
     PLAN --> SPLIT["단일 또는 복수 상품군<br/>단일-family 계획 분리"]
     SPLIT --> TOOLS["상품군별 결정론적 도구<br/>복수 SEARCH 병렬 실행"]
     TOOLS --> DB["정규화 SQLite<br/>채권 · 국내/해외 ETP · 공모펀드"]
-    DB --> REL["제공 데이터 관계 색인<br/>발행사 · 운용사 · 지수 · 자산 · 지역"]
-    REL --> KAGENT["P0-7 내부 Knowledge Agent<br/>Typed Plan · Claim Verifier · Fallback"]
-    KAGENT -.->|"공개 Router · Release 연결 대기"| EVIDENCE
     DB --> RV["Result Verifier"]
     RV --> EVIDENCE["Field-level Evidence<br/>비교 · 집계 · 문서 citation"]
     EVIDENCE --> FAMILY_ANSWER["상품군별 evidence-only 답변<br/>또는 deterministic renderer"]
@@ -34,8 +34,24 @@ flowchart LR
     COMPOSE --> FALLBACK["하나라도 실패하면<br/>전체 Deterministic Fallback"]
     FALLBACK --> DTO
 
+    ROUTER --> KROUTER["결정론적 Relation Router"]
+    KROUTER --> KBIND["Manifest 해시 고정 Public Relation Release 결속"]
+    SIGNED["해시 고정 AgentReleaseManifest 1.2 계약"] --> KBIND
+    KHASH["read-only relation artifact·DB<br/>identity·SHA-256"] --> KBIND
+    KBIND --> REL["Exact FTS 후보<br/>발행사 · 운용사 · 지수 · 자산 · 지역"]
+    KBIND -->|"불일치·변조"| K503["health·질문 API 503<br/>fail-closed"]
+    REL --> KFULL["canonical 전체 표현 exact match"]
+    KFULL -->|"부분 표현"| KNF["not_found"]
+    KFULL -->|"전체 일치"| KID["공식 상품 DB identity 재검증"]
+    DB --> KID
+    KID --> KEVIDENCE["Relation Field-level Evidence<br/>값 · 출처 · 기준일 · citation"]
+    KEVIDENCE --> KANSWER["결정론적 관계 답변"]
+    KANSWER --> KAUDIT["인과 순서 Audit"]
+    KNF --> KAUDIT
+    KAUDIT --> DTO
+
     DTO --> API
-    DTO -.-> OFFICIAL
+    DTO --> OFFICIAL
     API -.-> WEB
     OFFICIAL -.-> CLIENT
 
@@ -64,14 +80,23 @@ flowchart LR
 - P0-5 외부 문서 독립 승인·사용 권한·해시·변조 차단·BM25 색인 build 계약
 - P0-6 승인 상품 DB 관계 58,005개·공식 상품 ID 재검증·출처·기준일·변조 차단 계약
 - P0-7 관계·문서 Typed Plan·서버 exact 권한·evidence Claim Verifier·전체 fallback 내부 계약
+- P0-10 결정론적 관계 Router·manifest에 해시로 고정된 public release 결속·exact FTS 후보·canonical
+  전체 일치·공식 DB identity 재검증·field evidence·결정론적 답변·인과적 Audit
+- P0-10 집중 회귀 522/522, Agent Core 1,443 passed·2 skipped,
+  Backend 358 passed·2 warnings
+- clean Docker Backend smoke 8/8·공식 형식 GET 호환 smoke 8/8, 관계 3 products/3 citations,
+  부분 표현 `not_found`, 변조 후 health·API 503
+- 수치·실행 범위·한계의 정본은 [P0-10 machine-readable baseline](../../../finance_agent/evaluation/baselines/p0-10-public-relation-release-integration-v1.json)
 
 ## 외부 통합 대기
 
 - Next.js 실제 화면
-- 공식 `GET /answer`의 공개 서버·평가 client 통신 재현
+- NCP의 실제 서명 배포·공인 IP·평가 client 통신 재현
+- 서명된 두 release 간 forward·rollback drill
 - HyperCLOVA X 실제 endpoint·인증
+- 관계 답변용 HyperCLOVA X claim provider
 - 승인된 실제 비정형 금융 문서
-- 제공 관계의 금융 alias 검수와 P0-7 공개 Router·Agent Release 연결
+- 제공 관계의 금융 alias·의미 독립 blind 검증
 - public 배포·평가 기간 API 운영
 
 최종 제안서에서는 통합 완료 후 점선을 실선으로 바꾸고 실제 배포 구성과

@@ -12,17 +12,22 @@ workflow가 성공하면 다음 순서가 하나의 감사 가능한 실행 기�
 
 1. NCP Container Registry 주소·repository·release ID·activation generation을 정규식으로
    검사한다. shell 명령에 workflow input을 직접 삽입하지 않는다.
-2. SHA-256으로 고정된 Python base에서 code-only image를 빌드하고 NCP Registry에 push한다.
-3. Registry가 반환한 정확한 digest를 `repository@sha256`로 고정한다.
-4. clean Git checkout에서 `AgentReleaseManifest`를 생성한다.
-5. code-only image digest와 Manifest를 이용해 release image를 빌드·push한다.
-6. 원격 OCI index가 실행 가능한 image를 정확히 `linux/amd64` 하나만 포함하는지 확인한다.
+2. 보호된 GitHub Environment의 관계 검색 artifact를 strict base64로 복원한 뒤,
+   외부 SHA-256·정확한 schema·canonical JSON·read-only 파일 권한을 검사한다.
+3. SHA-256으로 고정된 Python base에서 code-only image를 빌드하고 NCP Registry에 push한다.
+4. Registry가 반환한 정확한 digest를 `repository@sha256`로 고정한다.
+5. clean Git checkout에서 복원한 artifact와 외부 SHA-256을 함께 넣어
+   **관계 검색이 활성화된** `AgentReleaseManifest`를 생성한다. 생성 직후 artifact의
+   `approval_manifest_sha256`와 Manifest의 승인 데이터 contract SHA-256이 같은지 다시
+   비교해, 과거 데이터 세트의 artifact가 섞이면 Registry 변경 전에 중단한다.
+6. code-only image digest와 Manifest를 이용해 release image를 빌드·push한다.
+7. 원격 OCI index가 실행 가능한 image를 정확히 `linux/amd64` 하나만 포함하는지 확인한다.
    SBOM·provenance용 `unknown/unknown` attestation descriptor는 실행 image로 세지 않는다.
-7. exact digest를 pull한 뒤 source commit, release ID, Python base OCI label을 검증한다.
-8. 최초 배포 또는 신뢰된 직전 Binding을 이용해 `DeploymentBinding`을 생성한다.
-9. GitHub OIDC로 base image, release image, Manifest, Binding을 cosign keyless 서명하고,
+8. exact digest를 pull한 뒤 source commit, release ID, Python base OCI label을 검증한다.
+9. 최초 배포 또는 신뢰된 직전 Binding을 이용해 `DeploymentBinding`을 생성한다.
+10. GitHub OIDC로 base image, release image, Manifest, Binding을 cosign keyless 서명하고,
    동일 workflow identity와 issuer로 즉시 검증한다.
-10. credential을 제외한 Manifest·Binding·digest·OCI inspect·Sigstore bundle·검증 결과를
+11. credential을 제외한 Manifest·Binding·digest·OCI inspect·Sigstore bundle·검증 결과를
     GitHub Actions artifact로 90일간 보존한다.
 
 모든 외부 Action은 버전 tag가 아니라 정확한 commit SHA로 고정돼 있다. Docker build는
@@ -73,6 +78,18 @@ Sigstore public service를 허용하지 않거나 조직 소유 장기 키를 �
 - 각 Environment의 variable(비밀이 아닌 보호 설정)에 `NCP_REGISTRY_HOST`와
   `NCP_IMAGE_REPOSITORY`를 등록한다. Registry와 repository는 수동 실행 입력으로 받지
   않으므로 workflow 실행자가 다른 push 대상을 주입할 수 없다.
+- 승인된 원천 데이터로 별도의 통제된 data-preparation을 실행해
+  `relation-retrieval-artifact.json`, `relation-retrieval-artifact.sha256`,
+  `provided-relations.sqlite3`, 세 상품 DB를 하나의 세트로 생성한다.
+- 각 Environment의 secret `APPROVED_RELATION_RETRIEVAL_ARTIFACT_B64`에 canonical
+  `relation-retrieval-artifact.json`의 **줄바꿈 없는 strict base64**를 등록한다.
+- 각 Environment의 variable `APPROVED_RELATION_RETRIEVAL_ARTIFACT_SHA256`에 위 JSON
+  파일의 64자 소문자 SHA-256을 등록한다. 이 값은 동일 세트의
+  `relation-retrieval-artifact.sha256`과 정확히 같아야 한다.
+- workflow에 승격한 정확한 JSON·SHA와 NCP 배포 호스트의 release-specific
+  data volume 안 JSON·index·DB가 동일한 세트임을 보장한다. workflow는
+  원천 금융 데이터나 Docker volume을 생성하지 않으며, Backend startup이
+  Manifest·artifact·index·DB hash를 다시 교차 검증한다.
 - 각 Environment에 `NCP_REGISTRY_USERNAME`, `NCP_REGISTRY_PASSWORD` secret을 설정한다.
   전용 계정에는 대상 Registry의 push·pull에 필요한 최소 권한만 부여한다.
 - NCP Registry가 OCI attestation과 cosign signature artifact push/pull을 지원하는지 작은
@@ -126,6 +143,17 @@ push 대상은 입력이 아니라 선택한 GitHub Environment의 보호 variab
 | --- | --- | --- |
 | `NCP_REGISTRY_HOST` | `<team>.kr.ncr.ntruss.com` | NCP Registry hostname 형식 |
 | `NCP_IMAGE_REPOSITORY` | `finance-agent/backend` | 정규화된 소문자 repository path |
+| `APPROVED_RELATION_RETRIEVAL_ARTIFACT_SHA256` | `<64 lowercase hex>` | 복원한 canonical artifact와 exact hash 대조 |
+
+`APPROVED_RELATION_RETRIEVAL_ARTIFACT_B64`는 크기·base64·JSON·hash가 모두 일치해야
+`$RUNNER_TEMP/relation-retrieval-artifact.json`으로 0444 권한으로 복원된다.
+workflow shell은 이 값을 출력하지 않으며, 실패 메시지에도 artifact 내용을
+포함하지 않는다. 배포 호스트의 `.env.release` 속
+`FINANCE_RELATION_RETRIEVAL_ARTIFACT_SHA256`에도 반드시 같은 SHA-256을 입력한다.
+발급된 `release-metadata.json`의 `relation_retrieval_artifact_sha256`과 검증 대상
+Manifest 속 `knowledge_retrieval.relation.artifact_file_sha256`에서도 같은 값을
+독립적으로 대조할 수 있다. `release-metadata.json`은 관계 artifact SHA-256을 필수
+필드로 추가한 schema version `1.1`을 사용한다.
 
 성공 기준은 단순히 Docker build가 끝난 것이 아니다. 다음이 모두 성공해야 한다.
 
@@ -133,6 +161,10 @@ push 대상은 입력이 아니라 선택한 GitHub Environment의 보호 variab
 - 원격 OCI index의 실행 manifest가 `linux/amd64` 하나뿐임
 - release image label의 source commit·release ID·base image가 workflow 입력과 일치
 - Binding 생성기가 Manifest hash·image digest·rollback generation을 수용
+- Manifest의 `knowledge_retrieval.relation.status`가 `activated`이고, 보호된
+  relation artifact와 exact file SHA-256이 함께 고정됨
+- relation artifact의 승인 데이터 contract SHA-256과 새 Manifest가 계산한 승인 데이터
+  contract SHA-256이 정확히 같음
 - 네 cosign 서명과 exact workflow identity 검증 성공
 - non-secret release evidence artifact 업로드 성공
 
@@ -154,6 +186,40 @@ chain을 검증한 뒤 `--no-build --force-recreate --wait`로 기동한다. hea
 기록되지 않은 release를 활성 상태로 남기지 않는다. 운영 rollback 역시 오래된 Binding을
 그대로 재생하지 않고, 이전 image·manifest를 가리키는 다음 generation의 새 서명 Binding을
 사용한다.
+
+### 4.1 P0-10 관계 artifact 신뢰원 점검 — 2026-08-20
+
+관계 검색은 개발과 공개 release에서 서로 다른 신뢰원을 사용하며, 최종 Compose에는
+정확히 하나만 남아야 한다.
+
+| 프로필 | 관계 artifact SHA-256 신뢰원 | 최종 Compose 계약 |
+| --- | --- | --- |
+| 개발 | data-init이 같은 volume에 만든 read-only `relation-retrieval-artifact.sha256` | `FINANCE_RELATION_RETRIEVAL_ARTIFACT_SHA256_FILE`만 사용 |
+| evaluation·production | 보호된 GitHub Environment의 외부 SHA-256 | release overlay가 sidecar를 `!reset null`로 제거하고 `FINANCE_RELATION_RETRIEVAL_ARTIFACT_SHA256`만 사용 |
+
+CI는 secret의 artifact를 `base64.b64decode(..., validate=True)`로 복원한다. 크기 제한,
+UTF-8·duplicate key·정확한 schema, canonical JSON bytes와 외부 64자 소문자 SHA-256을
+검사한 뒤에만 `$RUNNER_TEMP/relation-retrieval-artifact.json`을 새 파일로 만든다.
+파일은 symlink·hardlink가 아니어야 하고 mode `0444`, 동일 inode를 다시 확인한 뒤 parent
+directory까지 fsync한다. 값과 artifact 원문은 workflow log에 출력하지 않는다.
+
+clean checkout에서 manifest 1.2를 만든 직후 다음 세 값을 다시 교차 검사한다.
+
+1. 복원 artifact의 `approval_manifest_sha256`
+2. 현재 source tree에서 생성한 `components.approved_datasets.manifest.contract_sha256`
+3. `components.knowledge_retrieval.relation`의 artifact 전체와 `artifact_file_sha256`
+
+따라서 과거 승인 데이터에서 만든 관계 artifact를 현재 dataset manifest에 섞거나,
+manifest 생성 뒤 artifact만 바꾸면 Registry의 다음 변경 전에 중단한다. 배포 host에서는
+같은 explicit SHA-256과 검증 대상 release manifest를 사용하고, Backend startup이 실제
+index·세 상품 DB·관계 집합을 다시 대조한다. startup 이후 path/inode/size/mtime/ctime drift는 `/health`를
+`degraded` HTTP 503으로 바꾸며 관계 요청도 503으로 거부한다.
+
+현재 로컬 증거는 Agent Core `1,443 passed, 2 skipped`, Backend
+`358 passed, 2 warnings`, P0-10 집중 회귀 `522/522`다. fresh Docker smoke는
+Backend 8/8와 공식 GET 8/8이고, relation index 1바이트 변조 뒤 health·관계 요청 503을
+확인했다. 이는 workflow의 계약과 로컬 runtime 동작 증거이지 보호된 GitHub Environment의
+실제 dispatch·NCP push·cosign 서명이나 서명된 두 release rollback 증거는 아니다.
 
 ## 5. 현재 수행하지 않은 일
 

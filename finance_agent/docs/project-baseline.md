@@ -14,8 +14,9 @@
 - 원천 145,393행의 1차 감사와 GPT Pro 전략 연구를 마쳤다.
 - GPT Pro 산출물은 유용한 연구 근거지만, 그대로 실행 가능한 구현 명세는 아니다.
 - 애플리케이션 저장소 로컬 경로는 `3. Workspace/gaeng3`로 정했다.
-- 로컬 `haeyeongcho` branch가 `origin/haeyeongcho`를 추적하며 공모펀드 구현·문서
-  commit `be2797a`까지 원격에 push했다.
+- 초기 공모펀드 수직 구현 시점에는 `haeyeongcho` branch의 commit `be2797a`까지
+  원격에 push했다. 현재 P0-10 통합 작업 branch는
+  `haeyeongcho-p0-10-release-integration`이다.
 - 동료가 가져올 `vintasoftware/nextjs-fastapi-template`은 루트의 `fastapi_backend`, `nextjs-frontend`, `docs` 구조와 UV를 사용한다. Agent·데이터 작업공간은 `finance_agent/`에 격리하고, 애플리케이션이 재사용할 Python 코드는 `finance_agent/packages/finance_agent_core`에서 개발한다.
 - `gaeng3-dev` Conda 환경과 pip requirements를 만들고, 표준 라이브러리 기반 데이터 감사기를 구현했다.
 - 4종 145,393행 감사, expectation 65/65, 8개 입력 hash 대조, 두 번의 결정적 재실행을 통과했다.
@@ -171,8 +172,34 @@
 - 관계·문서 전용 `KnowledgeQueryPlan`, 서버 계획 exact-match 권한 gate, 구조화
   Claim Verifier와 결정론적 fallback을 P0-7 내부 경로로 연결했다. 모델이 상품·관계·
   문서 발췌·evidence를 바꾸거나 실패하면 초안을 버리고 서버 근거 답변을 사용한다.
-  전용 계약 22/22, 승인 관계 CLI smoke 4/4를 통과했다. 기존 자연어 Router와 공개
-  `GET /answer`, 운영 `AgentReleaseManifest`에는 아직 연결하지 않는다.
+  전용 계약 22/22, 승인 관계 CLI smoke 4/4를 통과했다. P0-7 당시에는 기존 자연어
+  Router와 공개 `GET /answer`, 운영 `AgentReleaseManifest`에 연결하지 않았다.
+- 2026-08-20 P0-10에서 제공 데이터 관계 검색을 공개 자연어 Router, Backend DTO,
+  `AgentReleaseManifest` 1.2와 clean Docker 경로에 연결했다. FTS는 후보 생성에만 쓰고
+  정규화한 관계명 전체가 정확히 같은 행만 evidence로 승인하므로, 회사명 일부나
+  `주식회사` 같은 공통 토큰만 겹치는 상품은 결과에 포함하지 않는다.
+- 공개 관계 release는 임의 claim provider를 허용하지 않는다. 현재 관계 답변은 검증된
+  evidence로 만든 결정론적 문장만 사용하며, 실제 HyperCLOVA X 주장 생성은 별도로 승인된
+  provider 계약이 생기기 전까지 비활성이다. evaluation·production의 공개 Agent는 실행
+  시작과 요청 경계마다 실제 `KnowledgeAgent`의 release가 release manifest에 해시로
+  고정된 `knowledge_retrieval` 계약과 정확히 같은지 다시 확인한다. development는 release
+  manifest 대신 data-init artifact와 read-only SHA sidecar의 결합을 검사한다.
+- 관계 실행의 deadline, SQL, evidence·claim 검증, renderer, 최종 answer를 하나의
+  인과적 감사 trace로 연결했다. timeout은 성공이나 일반 실패로 바뀌지 않고
+  `timed_out`으로 종결하며, 불가능하거나 중복된 실패 trace는 validator가 거부한다.
+  실행 중 오류가 나더라도 Backend 오류 DTO는 검증된 관계 계획의 `search` intent와
+  상품군을 보존하되 내부 경로·hash·예외 상세는 노출하지 않는다.
+- 개발 Compose는 data-init이 만든 read-only SHA sidecar를 신뢰하고, evaluation·production
+  release Compose는 sidecar를 명시적으로 제거한 뒤 배포 control plane이 주입한 SHA-256만
+  신뢰한다. 두 값이 동시에 활성화되거나 둘 다 없으면 시작하지 않는다.
+- clean Docker `gaeng3-p010-review2`에서 data-init, health, 일반 상품 검색, 관계명 exact
+  검색 3건·근거 3건, 부분 관계명 0건, 관계+수익률 혼합 질문의 안전 차단을 확인했다.
+  Backend·공식 API smoke는 각각 8/8이고, 실행 뒤 관계 index를 1바이트 바꾸면 health와
+  관계 요청이 모두 HTTP 503으로 전환됐다. 검증용 project·volume은 종료 후 삭제했다.
+- 같은 source tree의 현재 회귀는 Agent Core `1,443 passed, 2 skipped`, Backend
+  `358 passed, 2 warnings`, P0-10 집중 회귀 `522/522`다. 이는 로컬 코드·Docker
+  통합 증거이며, 실제 서명된 NCP 두 release 발급·활성화·rollback이나 HyperCLOVA X
+  관계 답변 품질을 입증하지 않는다.
 - 사람 평가 rubric v1과 프레임워크 독립 Backend DTO·JSON 예시를 구현했다.
   실제 사람 평가는 외부 게이트다.
 - 금융 도메인 담당자가 작성한 40문항을 hash·schema·분포로 검증하고 현재
@@ -421,8 +448,9 @@ QueryPlan에는 최소한 intent, 상품군, 필수 조건, 완화 전 확인이
   공식 GET 예외 입력을 실제 HTTP 14개 요청으로 재현한다.
 - [x] 공식 endpoint·Bearer 인증·Structured Outputs 계약에 맞는 HyperCLOVA X HTTP
   transport와 FastAPI 무호출 조립을 구현한다.
-- [ ] P0-7 내부 relation/document 경로를 공개 Router·Backend adapter와
-  `AgentReleaseManifest`에 연결하고 clean Docker HTTP로 재검증한다.
+- [x] P0-7 내부 relation 경로를 공개 Router·Backend adapter와
+  `AgentReleaseManifest`에 연결하고 clean Docker HTTP로 재검증한다. 승인된 실제 문서
+  corpus가 없어 document 경로는 계속 비활성이다.
 - [ ] 실제 API Key로 인증·HCX-007 권한·응답 호환성을 확인하고 NCP 실행 환경에서
   최소 호출을 재현한다.
 

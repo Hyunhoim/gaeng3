@@ -66,6 +66,24 @@ Backend는 다음 Agent 공개 계약만 사용
 - `fastapi_backend/tests/`
 - Frontend의 응답 타입과 렌더링 분기
 
+### P0-10 공개 관계 검색 계약
+
+관계 질문은 상품 조건 검색과 다른 `KnowledgeQueryPlan` 경로를 사용한다. 예를 들어
+“한국주택금융공사가 발행한 국내채권 3개 보여줘”는 관계 Router가 issuer와 상품군을
+확정한 뒤 관계 index에서 후보를 찾고, 공식 상품 DB identity와 근거를 다시 확인한다.
+
+- FTS는 후보만 넓게 찾고 정규화한 회사·지수·운용사·자산유형·지역 이름 전체가 정확히 같은
+  행만 반환. 일부 단어만 같은 회사는 0건
+- evaluation·production에서는 release manifest에 해시로 고정된 `knowledge_retrieval`
+  계약과 실제 `KnowledgeAgent` release가 exact match여야 함. disabled↔active나 내부 후보 release
+  혼합은 시작과 요청 경계에서 거부
+- 공개 관계 release에는 claim provider를 주입하지 않음. 현재 답변은 검증된 relation
+  evidence의 결정론적 rendering이며 Qwen·HyperCLOVA X 관계 설명을 호출하지 않음
+- deadline, authority, SQL, verifier, renderer, answer event를 같은 plan·상품군·
+  `relation_set_sha256`로 연결. timeout과 실패 원인이 맞지 않는 감사 trace는 거부
+- 실행 실패도 검증된 관계 route를 보존해 ERROR DTO의 `intent=search`와 상품군을
+  유지. 내부 파일 경로·hash·예외 문자열은 응답에 비노출
+
 ## 4. HTTP API
 
 ### `GET /health`
@@ -78,6 +96,8 @@ Backend는 다음 Agent 공개 계약만 사용
 - 모두 준비됨: HTTP 200, `status=ok`
 - 하나라도 누락·불일치: HTTP 503, `status=degraded`
 - 파일 경로와 내부 오류 정보는 공개 응답에 노출하지 않음
+- `relation_retrieval_status`는 `disabled|ready|degraded`. startup에서 확인한 관계
+  index·세 상품 DB의 path/inode/size/mtime/ctime이 바뀌면 `degraded`와 HTTP 503
 - `fund_execution_policy`는 공모펀드가 기본 잠금인지, 명시적 버전 승인으로 열렸는지 표시
 - `audit_status`와 `shadow_status`는 각각 `disabled|ok|degraded`만 표시
 - 활성 Shadow의 queue drop, artifact·embedding 오류, audit correlation 실패, worker
@@ -112,6 +132,16 @@ curl --fail-with-body \
   --request POST \
   --header 'Content-Type: application/json' \
   --data '{"schema_version":"1.0","request_id":"manual-001","question":"매수 가능한 국내채권을 매수수익률 높은 순으로 3개 보여줘.","locale":"ko-KR"}' \
+  http://127.0.0.1:18001/answer
+```
+
+관계 검색 예시
+
+```bash
+curl --fail-with-body \
+  --request POST \
+  --header 'Content-Type: application/json' \
+  --data '{"schema_version":"1.0","request_id":"relation-001","question":"한국주택금융공사가 발행한 국내채권 3개 보여줘","locale":"ko-KR"}' \
   http://127.0.0.1:18001/answer
 ```
 
@@ -266,10 +296,11 @@ python fastapi_backend/scripts/smoke.py \
   --output /tmp/gaeng3-docker-http-smoke-v2.json
 ```
 
-스모크는 `/health`, 내부 `POST /answer` 7건과 공식 `GET /answer` 8건을 함께
-검사. 공식 GET에는 정상 질문뿐 아니라 결측·공백·길이 초과·유니코드·마크업 형태
-입력과 공모펀드 잠금 질문을 포함하며, HTTP 200·다섯 문자열·UTF-8 Content-Type
-계약이 유지되는지 확인
+스모크는 `/health`, 내부 `POST /answer` 8건과 공식 `GET /answer` 8건을 함께
+검사. 내부 경로에는 공개 relation exact 검색과 relation citation 검증이 포함된다.
+공식 GET에는 정상 질문뿐 아니라 결측·공백·길이 초과·유니코드·마크업 형태 입력과
+공모펀드 잠금 질문을 포함하며, HTTP 200·다섯 문자열·UTF-8 Content-Type 계약이
+유지되는지 확인
 
 기본값은 `fund_execution_policy=locked`를 요구. 팀이 공모펀드 실행 정책을 명시한
 개발 리허설에서는 다음 인자를 추가
@@ -286,6 +317,12 @@ python fastapi_backend/scripts/smoke.py \
 2026-08-07 실제 Docker에서 기본 결정론적·잠금 경로 14/14, Qwen·공모펀드 승인
 경로 14/14, Qwen 중단 후 결정론적 fallback 경로 14/14를 확인. 공개 개발
 스모크이므로 공식 점수·독립 blind·운영 지연 보장으로 해석하지 않음
+
+2026-08-20 fresh Docker `gaeng3-p010-review2`에서는 data-init exit 0, health ok,
+일반 상품 질문과 exact 관계 질문 3건·근거 3건, 부분 관계명 0건, 관계+수익률 혼합
+질문 안전 차단을 확인했다. Backend 8/8와 공식 GET 8/8 smoke 뒤 관계 index를
+1바이트 바꾸자 health와 관계 요청이 모두 HTTP 503이 됐다. 전용 project·volume은
+`down --volumes --remove-orphans`로 정리했다.
 
 ### 동결 30문항 실제 GET 평가
 
@@ -336,7 +373,10 @@ benchmark·soak 실행법과 2026-08-14 검증 결과는 다음 문서를 따른
 
 ## 8. 주요 환경변수
 
-환경변수 예시는 `.env.example`, 개인 설정은 Git에서 제외되는 `.env`에서 관리
+개발 설정 예시는 `.env.example`, release 설정 예시는 `.env.release.example`을 사용한다.
+개인 값은 각각 Git에서 제외되는 `.env`, `.env.release`에서 관리한다.
+
+### 8.1 사용자가 host 환경 파일에 설정하는 변수
 
 | 변수 | 기본값 | 의미 |
 | --- | --- | --- |
@@ -353,17 +393,41 @@ benchmark·soak 실행법과 2026-08-14 검증 결과는 다음 문서를 따른
 | `LLM_PROVIDER` | `disabled` | HCLX 사용 시에만 `hyperclova` |
 | `HCX_MODEL` | 미설정 | Structured Outputs 사용 경로는 현재 `HCX-007`만 허용 |
 | `HCX_TIMEOUT_SECONDS` | `45` | HCLX 단일 HTTP 요청 상한. 전체 요청 deadline이 더 짧으면 자동 축소 |
-| `CLOVASTUDIO_API_KEY_FILE` | 미설정 | evaluation/production에서만 허용되는 credential 파일의 컨테이너 내부 경로. inline `CLOVASTUDIO_API_KEY`는 거부 |
+| `CLOVASTUDIO_API_KEY_HOST_FILE` | 미설정 | HCLX release에서만 사용하는 host의 read-only credential 파일. inline `CLOVASTUDIO_API_KEY`는 거부 |
+| `CLOVASTUDIO_API_KEY_FILE` | 미설정 | HCLX release에서 `/run/secrets/clovastudio_api_key`로 설정하는 컨테이너 내부 mount 대상 경로 |
 | `FINANCE_BACKEND_FUND_EXECUTION_POLICY` | `locked` | 공모펀드 실행 정책, 팀이 승인한 버전에서만 `public_fund_v1_approved` |
-| `FINANCE_RELEASE_MANIFEST_FILE` | 미설정 | evaluation/production image 안의 read-only AgentReleaseManifest 경로 |
-| `FINANCE_DEPLOYMENT_BINDING_FILE` | 미설정 | image digest와 manifest를 잇는 read-only DeploymentBinding 경로 |
+| `FINANCE_IMAGE_REFERENCE` | release에서 필수 | registry의 불변 `repository@sha256` image 참조 |
+| `FINANCE_RELEASE_MANIFEST_HOST_FILE` | release에서 필수 | host의 read-only AgentReleaseManifest 절대경로 |
+| `FINANCE_RELEASE_MANIFEST_SIGSTORE_BUNDLE_HOST_FILE` | release에서 필수 | manifest Sigstore bundle의 host 절대경로 |
+| `FINANCE_DEPLOYMENT_BINDING_HOST_FILE` | release에서 필수 | host의 read-only DeploymentBinding 절대경로 |
+| `FINANCE_DEPLOYMENT_BINDING_SIGSTORE_BUNDLE_HOST_FILE` | release에서 필수 | Binding Sigstore bundle의 host 절대경로 |
 | `FINANCE_DEPLOYMENT_BINDING_SHA256` | 미설정 | 배포 control plane이 주입하는 Binding file 신뢰 hash |
 | `FINANCE_SOURCE_COMMIT` | 미설정 | clean release source commit |
-| `FINANCE_RUNTIME_IMAGE_REFERENCE` | 미설정 | `repository@sha256` 형식의 실행 image |
 | `FINANCE_RUNTIME_PLATFORM` | `linux/amd64` | Binding·Compose·runtime이 함께 확인하는 image platform |
+| `FINANCE_RELATION_RETRIEVAL_ARTIFACT_SHA256` | release에서 필수 | evaluation·production control plane의 explicit hash 신뢰원 |
+| `FINANCE_DATA_VOLUME_NAME` | release에서 필수 | 해당 release에 고정된 기존 승인 데이터 volume 이름 |
+| `FINANCE_AUDIT_HOST_DIR` | release에서 필수 | UID/GID 10001, mode 0700으로 미리 만든 append-only audit host 디렉터리 |
+
+### 8.2 Compose가 컨테이너에 연결하는 내부 변수
+
+아래 값은 Compose가 host 변수와 mount를 바탕으로 설정한다. 일반 사용자가 `.env`나
+`.env.release`에 직접 덮어쓰는 입력값이 아니다.
+
+| 내부 변수 | 연결되는 값 |
+| --- | --- |
+| `FINANCE_RELEASE_MANIFEST_FILE` | image 안의 `/app/release/agent-release-manifest.json` |
+| `FINANCE_DEPLOYMENT_BINDING_FILE` | host에서 read-only mount한 Binding 경로 |
+| `FINANCE_RUNTIME_IMAGE_REFERENCE` | host `FINANCE_IMAGE_REFERENCE`의 exact digest 참조 |
+| `FINANCE_RELATION_RETRIEVAL_ARTIFACT_FILE` | `/data/relation-retrieval-artifact.json` |
+| `FINANCE_RELATION_INDEX_FILE` | `/data/provided-relations.sqlite3` |
+| `FINANCE_RELATION_RETRIEVAL_ARTIFACT_SHA256_FILE` | 기본 개발 Compose의 read-only SHA sidecar |
 
 Compose에서는 네 DB를 전용 volume의 `/data/*.sqlite3`로 자동 연결하므로 DB 경로를
 개인 `.env`에서 직접 지정하지 않음
+
+기본 `docker-compose.yml`은 개발 sidecar만 사용한다. release overlay는
+`FINANCE_RELATION_RETRIEVAL_ARTIFACT_SHA256_FILE: !reset null`로 이를 제거하고 explicit
+SHA-256만 주입한다. 최종 렌더링에 두 신뢰원이 같이 남거나 둘 다 없으면 fail-closed다.
 
 `OFFICIAL_ANSWER_MAX_INFLIGHT`는 Uvicorn **프로세스마다** 적용되므로 전체 이론 상한은
 `WEB_CONCURRENCY × OFFICIAL_ANSWER_MAX_INFLIGHT`다. 현재는 예측 가능한 자원 사용을 위해

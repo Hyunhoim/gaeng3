@@ -1,8 +1,8 @@
 # AgentReleaseManifest 배포 계약
 
 상태: Stage 3 애플리케이션·Docker·keyless release CI 계약 및 localhost 합성 rollback
-실기동 완료 · P0-7 관계·문서 검색 내부 release 계약 검증 완료 · 실제 NCP 발급·서명
-검증·운영 rollback 및 P0-10 공개 manifest 연결 대기
+실기동 완료 · P0-10 관계 검색 공개 manifest·Backend·clean Docker 연결 완료 · 문서 검색,
+실제 NCP 발급·서명 검증·운영 rollback 대기
 
 ## 1. 목적
 
@@ -19,18 +19,22 @@ digest도 다시 바뀌는 순환 참조가 생긴다. 그래서 배포 단위�
 
 두 파일과 신뢰된 `DeploymentBinding` SHA-256을 함께 검증해야 하나의 배포 단위가 된다.
 
-### Schema 1.1 전환
+### Schema 1.2 전환
 
-Stage 4에서 감사 runtime control이 `AgentReleaseManifest`의 필수 항목이 됐으므로 manifest
-schema만 `1.0`에서 `1.1`로 올렸다. 기존 manifest `1.0`은 새 runtime에서 재사용하지 않고
-clean source에서 다시 생성해야 한다. Image push 뒤 manifest file hash를 연결하는
-`DeploymentBinding` schema는 `1.0`을 유지하되, 새 manifest hash로 새 Binding을 발급한다.
+Stage 4에서 감사 runtime control이 필수 항목이 되며 manifest schema `1.1`이 도입됐다.
+P0-10은 공개 `knowledge_retrieval` 상태와 AuditEvent 1.2의 `relation_set_sha256` 연결을
+필수화해 현재 `AgentReleaseManifest` schema를 `1.2`로 올렸다. 이 문장은 1.1의 역사적
+도입 사실을 지우지 않고 현재 소비 계약을 명시한다. 기존 manifest 1.0·1.1은 새 runtime에서
+재사용하지 않고 clean source에서 다시 생성한다. Image push 뒤 manifest file hash를
+연결하는 `DeploymentBinding` schema는 `1.0`을 유지하되, 새 manifest hash로 새 Binding을
+발급한다.
 
 ```text
 control-plane의 Binding SHA-256
   → DeploymentBinding
     → AgentReleaseManifest file SHA-256
       → 코드·QueryPlan·Registry·Capability·Ontology·Dataset·Prompt·Model·Index
+        + 공개 knowledge_retrieval 상태·artifact file SHA-256
     → Docker repository@sha256 + platform
 ```
 
@@ -47,6 +51,7 @@ control-plane의 Binding SHA-256
 | 실행기 | Compiler·Verifier·Planning policy·Core·Backend version |
 | Model | `disabled` 또는 `hyperclova/HCX-007`, QueryPlan·답변 operation 활성 상태 |
 | 검색 index | Schema Dense·Product Dense·Re-ranker·문서 BM25의 명시적 활성 상태 |
+| 관계 검색 | 활성·비활성 상태, relation artifact canonical 내용·file SHA-256·관계 집합·공식 DB identity |
 | 실행 제어 | HCLX timeout, 전체 답변 timeout, max inflight, worker 수 |
 | Docker | image digest, `linux/amd64` 또는 `linux/arm64`, activation generation |
 | Rollback | 최초 배포 여부 또는 검증된 직전 Binding의 release·manifest·image |
@@ -57,11 +62,18 @@ control-plane의 Binding SHA-256
 evaluation/production 시작이 실패한다.
 
 P0-7에서 관계 index와 문서 index를 고정하는 내부용 `KnowledgeRetrievalRelease`를
-별도로 추가했다. 이 계약은 파일 SHA-256·크기·승인 manifest·관계 집합·공식 상품 DB
-identity를 검색 직전까지 다시 확인한다. 다만 아직 공개 `AgentReleaseManifest`의 일부가
-아니며 일반 Router에서도 호출하지 않는다. P0-10에서 두 계약을 하나의 clean-image
-release로 연결하고 전체 시작·요청 경계에서 재검증하기 전에는 관계·문서 검색을
-평가·운영 활성 상태로 표현하지 않는다.
+별도로 추가했다. P0-10은 이 내부 후보와 타입이 다른
+`PublicKnowledgeRetrievalRelease`를 manifest 1.2의 필수 component로 추가했다. 공개
+relation은 `disabled_not_activated` 또는 artifact와 artifact file SHA-256을 모두 가진
+`activated` 중 하나여야 한다. 문서는 승인 corpus가 없어
+`disabled_no_approved_corpus`만 허용한다.
+
+release manifest에 해시로 고정된 relation 계약이 활성화된 경우 공개 `RoutedFinanceAgent`는
+`DeterministicKnowledgeRouter`, 같은 공개 release를 가진 `KnowledgeAgent`, 비어 있는
+claim provider를 모두 요구한다. 내부 P0-7 release, 다른 artifact, disabled↔active
+불일치는 시작과 매 요청 경계에서 거부한다. 공개 claim provider가 비활성인 이유는
+관계 설명용 모델·Prompt·schema가 아직 서명 계약에 없기 때문이다. 현재 답변은 검증된
+관계 evidence의 결정론적 rendering만 사용한다.
 
 HyperCLOVA X는 현재 API에서 immutable model revision을 제공하지 않으므로
 `HCX-007` model ID, operation, Prompt·schema·generation parameter 코드까지 고정하되
@@ -77,7 +89,9 @@ evaluation/production 시작 순서는 고정돼 있다.
 3. Binding의 manifest hash·image digest·platform·source commit을 교차 검사한다.
 4. 코드·Prompt·Model·index 상태와 공식 데이터 계약을 deep hash로 재검사한다.
 5. 네 SQLite의 승인 hash를 확인한다.
-6. 그 뒤에만 HCLX transport와 `RoutedFinanceAgent`를 조립한다. 시작 중 HCLX 호출은 없다.
+6. 관계 검색이 활성화됐다면 artifact JSON·index·세 상품 DB, 승인 dataset manifest와
+   `relation_set_sha256`을 교차 검사하고 public release와 Agent를 exact binding한다.
+7. 그 뒤에만 HCLX transport와 `RoutedFinanceAgent`를 조립한다. 시작 중 HCLX 호출은 없다.
 
 요청 시작과 종료에는 manifest·Binding이 그대로인지 다시 확인한다. 실행 중 발급되는
 `ValidatedPlan`에도 Agent release ID, manifest file hash, Binding file hash와 release
@@ -108,17 +122,22 @@ Core가 검증한 Git checkout에서 import되도록 source path를 명시한다
 ```bash
 export SOURCE_COMMIT=<clean-Git-HEAD-40-hex>
 export RELEASE_ID=<unique-release-id>
+export RELATION_RETRIEVAL_ARTIFACT_FILE=<approved-canonical-artifact-absolute-path>
+export RELATION_RETRIEVAL_ARTIFACT_SHA256=<64-lowercase-hex>
+export REPO_ROOT="$(git rev-parse --show-toplevel)"
 
-PYTHONPATH=finance_agent/packages/finance_agent_core/src \
+PYTHONPATH="$REPO_ROOT/finance_agent/packages/finance_agent_core/src" \
 python -m finance_agent_core.release_cli manifest \
   --release-id "$RELEASE_ID" \
   --environment evaluation \
   --source-commit "$SOURCE_COMMIT" \
-  --git-root /home/hyunholim/projects/finance-agent \
-  --backend-root /home/hyunholim/projects/finance-agent/fastapi_backend/app \
+  --git-root "$REPO_ROOT" \
+  --backend-root "$REPO_ROOT/fastapi_backend/app" \
   --platform linux/amd64 \
   --answer-provider deterministic \
-  --output /home/hyunholim/projects/finance-agent/fastapi_backend/release/agent-release-manifest.json
+  --relation-retrieval-artifact "$RELATION_RETRIEVAL_ARTIFACT_FILE" \
+  --relation-retrieval-artifact-sha256 "$RELATION_RETRIEVAL_ARTIFACT_SHA256" \
+  --output "$REPO_ROOT/fastapi_backend/release/agent-release-manifest.json"
 ```
 
 생성기는 다음을 강제한다.
@@ -126,7 +145,13 @@ python -m finance_agent_core.release_cli manifest \
 - Git top-level, HEAD와 `source_commit` 일치
 - tracked·untracked 변경이 없는 상태를 hash 전후 두 번 확인
 - Core와 Backend가 그 Git checkout의 정확한 경로인지 확인
+- relation artifact가 canonical JSON이고 외부 file SHA-256과 일치하는지 확인
 - 기존 파일 덮어쓰기 금지, symlink 경로 금지, 결과를 read-only로 생성
+
+생성 뒤 CI의 `verify-relation-manifest-binding` 단계가 relation artifact의
+`approval_manifest_sha256`과 방금 생성한 manifest의 현재 승인 dataset
+`contract_sha256`을 별도로 교차 검증한다. 이 검증까지 통과해야 registry 변경 단계로
+진행하며, manifest 생성기 하나가 현재 승인 dataset 일치까지 보장하는 것은 아니다.
 
 HCLX release라면 승인된 설정에 맞춰 `--answer-provider hyperclova`,
 `--hcx-model HCX-007`, 필요할 때만 `--hcx-queryplan-enabled`를 사용한다. 이 생성 명령은
@@ -256,12 +281,16 @@ launcher 단계에서 거부된다.
 - global option을 앞세운 `--build`, profile 오인식, 부분 service 실행과
   `--force-recreate=false` 우회 차단
 - rollback data volume·image를 지우는 `down --volumes`, `-v` 결합형, `--rmi` 차단
-- Agent Core 전체 회귀 `1,327 passed, 2 skipped`(비공개 blind key·승인 DB 경로 opt-in),
-  FastAPI Backend 최근 P0-8 전체 회귀 `320 passed`
+- Agent Core 전체 회귀 `1,443 passed, 2 skipped`, FastAPI Backend 전체 회귀
+  `358 passed, 2 warnings`, P0-10 집중 회귀 `522/522`
 - P0-7 관계·문서 계획·검색·주장 검증 표적 회귀 `22/22`, 관련 회귀 `82/82`와 승인
   데이터 관계 검색 스모크 `4/4` 통과
-- P0-7의 내부 `KnowledgeRetrievalRelease`와 공개 `AgentReleaseManifest` 연결은 아직
-  완료하지 않았으며 P0-10 clean-image 통합 항목으로 유지
+- P0-7의 내부 relation 후보를 공개 `AgentReleaseManifest` 1.2·Router·Backend에 연결하고,
+  관계명 전체 exact match, 공개 claim provider 차단, deadline causal audit와 Backend의
+  trusted intent·family 오류 보존을 검증
+- fresh Docker에서 data-init·health·상품 검색·관계 3건/근거 3건·부분 관계 0건·혼합
+  미지원 차단, Backend 8/8와 공식 GET 8/8 smoke를 통과. relation index 1바이트 변조 뒤
+  health와 관계 요청이 HTTP 503으로 전환됨
 - 네 상품군 승인 DB opt-in 회귀는 별도 실행해 SEARCH·AGGREGATE·COMPARE `62/62` 통과
 - `finance_agent_core` 패키지·Backend Ruff lint/format 통과
 

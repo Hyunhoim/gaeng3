@@ -27,6 +27,8 @@ docs/
 | P0-8 timeout·5xx 재시도 결과 인계 | [재시도 계약 인수인계](../finance_agent/docs/p0-8-retry-contract-handover-2026-08-19.md) | AI·Backend 담당 |
 | P0-5 외부 금융 문서 반입·승인 절차 | [외부 문서 반입 계약](../finance_agent/docs/p0-5-external-corpus-intake-2026-08-19.md) | 금융 도메인·AI 담당 |
 | P0-6 제공 데이터 관계 검색 결과 | [관계 검색 인수인계](../finance_agent/docs/p0-6-provided-relation-retrieval-handover-2026-08-19.md) | 금융 도메인·AI·Backend 담당 |
+| P0-7 관계·문서 계획과 주장 검증 결과 | [계획·주장 검증 인수인계](../finance_agent/docs/p0-7-knowledge-claim-verifier-handover-2026-08-20.md) | AI·Backend 담당 |
+| P0-10 공개 관계 검색·릴리스 통합 결과 | [공개 관계 검색·릴리스 통합 인수인계](../finance_agent/docs/p0-10-public-relation-release-integration-handover-2026-08-20.md) | AI·Backend·배포 담당 |
 | 기술 제안서·제출 준비 | [기술 제안서 작성 허브](proposal/README.md) | 전체 팀 |
 | AI 구현·데이터·평가 확인 | [AI 기술문서 안내](../finance_agent/docs/README.md) | AI·Backend 담당 |
 | Agent release·Docker 배포 고정 | [AgentReleaseManifest 배포 계약](../finance_agent/docs/agent-release-manifest.md) | AI·Backend·배포 담당 |
@@ -67,3 +69,5 @@ docs/
 6. [P0-8 평가기 재시도 계약 인수인계](../finance_agent/docs/p0-8-retry-contract-handover-2026-08-19.md)
 7. [P0-5 외부 금융 문서 반입 계약](../finance_agent/docs/p0-5-external-corpus-intake-2026-08-19.md)
 8. [P0-6 제공 데이터 관계 검색 인수인계](../finance_agent/docs/p0-6-provided-relation-retrieval-handover-2026-08-19.md)
+9. [P0-7 관계·문서 계획과 주장 검증 인수인계](../finance_agent/docs/p0-7-knowledge-claim-verifier-handover-2026-08-20.md)
+10. [P0-10 공개 관계 검색·릴리스 통합 인수인계](../finance_agent/docs/p0-10-public-relation-release-integration-handover-2026-08-20.md)

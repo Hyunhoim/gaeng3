@@ -45,7 +45,8 @@
 | 4 | BM25/SQLite FTS 문서 RAG | 적재·필터·top-k·근거·기준일·not-found 테스트 | 최소 기능 완료·실제 corpus 승인 대기 |
 | 4A | P0-5 외부 corpus 반입 게이트 | 금융·권한 독립 review·HTTPS 출처·사용 권한 4종·byte/정규화 hash·변조 차단 | 합성 계약 24/24·실제 corpus 승인·검색 평가·Release 연결 대기 |
 | 4B | P0-6 제공 데이터 관계 검색 | 승인 DB의 발행사·운용사·지수·자산·지역 색인·상품 ID 재검증·출처·해시 | 실제 58,005개·계약 14/14·smoke 4/4 |
-| 4C | P0-7 관계·문서 계획과 주장 검증 | Typed Plan·서버 exact 권한·evidence 주장 검증·전체 fallback·릴리스 해시 | 내부 계약 22/22·승인 관계 smoke 4/4, 공개 Router·Release 연결 대기 |
+| 4C | P0-7 관계·문서 계획과 주장 검증 | Typed Plan·서버 exact 권한·evidence 주장 검증·전체 fallback·릴리스 해시 | P0-7 당시 내부 계약 22/22·승인 관계 smoke 4/4; 관계 공개 연결은 4D에서 완료, 문서는 대기 |
+| 4D | P0-10 공개 관계 검색 연결 | 관계명 전체 exact match·manifest 해시 고정 release cross-binding·Backend·감사·Docker 변조 차단 | 관계 공개 연결 완료·문서/실제 NCP 대기 |
 | 5 | 사람 rubric·Backend DTO | JSON 예시·schema·contract test 포함 | 계약 완료·사람 평가 대기 |
 | 6 | baseline 동결·전체 QA | 회귀·wheel·문서·hash 검증과 외부 게이트 명시 | 내부 완료 |
 | 7 | HyperCLOVA X provider 경계 | 세 operation·주입형 transport·오류·관측·전체 경로 E2E | 내부 8/8 완료·실제 HTTP 대기 |
@@ -254,6 +255,37 @@ registry 기반 자동 커버리지 최초 관측:
 - v1.2 40/40은 개선에 사용한 MFT 세트의 회귀이며 독립 blind·
   LLM 생성 품질·공식 평가 점수가 아님
 
+### 2.1 P0-10 공개 관계 검색 addendum — 2026-08-20
+
+이 절은 위의 과거 최초 관측과 P0-7 수치를 덮어쓰지 않는 후속 기준선이다.
+
+- P0-7 내부 관계 계획·검색·claim 검증을 공개 Router, Backend DTO와
+  `AgentReleaseManifest` 1.2에 연결
+- FTS 후보 생성 뒤 관계명 전체 exact match를 요구해 일부 토큰만 같은 다른 회사 결과 차단
+- 공개 `PublicKnowledgeRetrievalRelease`의 claim provider를 비활성화해 임의 모델을
+  HCLX로 오인 기록하는 경로 차단. 현재 공개 관계 답변은 evidence 기반 결정론적 renderer
+- release manifest에 해시로 고정된 relation 활성 상태와 실제 Router·Agent·release를 시작
+  및 요청 경계에서 cross-binding하고 disabled↔active·내부 후보↔공개 release 불일치를 모두 차단
+- deadline과 authority·SQL·verifier·renderer·answer를 동일 plan·상품군·관계 집합 hash로
+  잇는 causal audit trace 검증. timeout은 `timed_out` terminal로 유지
+- 관계 실행 실패에서도 trusted route의 `search` intent와 상품군을 Backend ERROR DTO에
+  보존하고 내부 상세는 비노출
+- 개발은 read-only SHA sidecar, evaluation·production은 explicit SHA-256만 신뢰하며
+  release Compose가 base sidecar를 `!reset null`로 제거
+- `/health`가 startup 이후 관계 index·공식 DB의 path/inode/size/mtime/ctime drift를 검사하고,
+  변조 시 HTTP 503으로 전환
+
+현재 같은 source tree에서 Agent Core `1,443 passed, 2 skipped`, Backend
+`358 passed, 2 warnings`, P0-10 집중 회귀 `522/522`를 통과했다.
+fresh Docker에서는 data-init→health→일반 상품 질문→exact 관계 질문을 순서대로 실행했고,
+관계 결과 3건·근거 3건, 부분 관계명 0건, 혼합 미지원 질문 안전 차단, Backend 8/8와
+공식 GET 8/8 smoke를 확인했다. 관계 index 1바이트 변조 뒤 health와 관계 요청은 모두
+HTTP 503이었으며 전용 project·volume은 검증 후 정리했다.
+
+이 addendum은 로컬 회귀·clean Docker 통합 완료를 뜻한다. 실제 HyperCLOVA X 관계
+claim provider, 보호된 GitHub Environment의 서명 release 발급, NCP 기동과 두 release
+rollback은 외부 게이트로 남는다.
+
 ## 3. 외부 완료 게이트
 
 다음 항목은 저장소 코드만으로 완료할 수 없으며 최종 baseline과 분리해 관리한다.
@@ -264,9 +296,10 @@ registry 기반 자동 커버리지 최초 관측:
 - 주최 측이 허용한 외부 비정형 문서의 실제 출처·사용 권한 확인. 반입·봉인 코드는 [P0-5 계약](p0-5-external-corpus-intake-2026-08-19.md)으로 준비 완료
 - 제공 관계 값과 한영 표기·동의어의 금융 도메인 검수. 관계 검색 기반과 한계는
   [P0-6 인수인계](p0-6-provided-relation-retrieval-handover-2026-08-19.md)에 기록
-- P0-7 내부 관계·문서 경로를 공개 Router·Backend·P0-10 AgentReleaseManifest에
-  연결하고 clean Docker HTTP로 재검증. 내부 완료·외부 경계는
-  [P0-7 인수인계](p0-7-knowledge-claim-verifier-handover-2026-08-20.md)에 기록
+- 승인된 실제 문서 corpus를 공개 Router·Backend·AgentReleaseManifest에 연결하고
+  검색 품질·변조·충돌을 검증. 관계 경로의 P0-10 공개 연결은 위 addendum에서 완료
+- P0-10 관계 artifact를 보호된 GitHub Environment에서 실제 승격하고, 서명된 NCP
+  두 release의 기동·감사·rollback을 수행
 - HyperCLOVA X 정확한 모델명·Structured Outputs 범위·endpoint·인증·제출 범위의
   공식 서면 확인과 크레딧 수령·적용 서비스 확인
 - 위 공식 답변 확인 후의 실제 HTTP transport 연결과 공식 재현
