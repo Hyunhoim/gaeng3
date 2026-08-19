@@ -55,6 +55,7 @@ finance-evaluate-schema-embedding-external-v2 = "finance_agent_core.evaluation.s
 finance-benchmark-schema-embedding-runtime = "finance_agent_core.evaluation.schema_embedding_runtime_benchmark:main"
 finance-evaluate-approved-sql = "finance_agent_core.evaluation.approved_sql_baseline_cli:main"
 finance-benchmark-bm25-contract = "finance_agent_core.evaluation.bm25_contract_benchmark_cli:main"
+finance-corpus = "finance_agent_core.retrieval.corpus_cli:main"
 finance-build-agent-release = "finance_agent_core.release_cli:main"
 finance-validate-audit = "finance_agent_core.audit_validation_cli:main"
 
