@@ -4,6 +4,10 @@ import json
 from typing import Any
 
 from finance_agent_core.contracts.backend import BackendAgentResponse, BackendStatus
+from finance_agent_core.contracts.knowledge import (
+    KnowledgeQueryPlan,
+    RelationKnowledgeOperation,
+)
 from finance_agent_core.contracts.official import OfficialAnswerResponse
 
 _INVALID_REQUEST_MESSAGE = "요청 형식이 올바르지 않습니다. question_id와 question을 확인해 주세요."
@@ -164,7 +168,34 @@ def _retrieved_context(response: BackendAgentResponse) -> str:
 def _think_trace(response: BackendAgentResponse) -> str:
     plan = response.query_plan
     execution_steps = ["intent_router"]
-    if plan is not None:
+    if isinstance(plan, KnowledgeQueryPlan):
+        is_relation = isinstance(plan.operation, RelationKnowledgeOperation)
+        execution_steps.extend(
+            [
+                "knowledge_plan_validation",
+                "relation_retrieval" if is_relation else "document_retrieval",
+                "claim_verifier",
+                "response_contract_validation",
+            ]
+        )
+        if is_relation:
+            filters: list[dict[str, Any]] = [
+                {
+                    "relation_type": plan.operation.relation_types[0].value,
+                    "query": plan.operation.query,
+                    "top_k": plan.operation.top_k,
+                }
+            ]
+        else:
+            filters = [
+                {
+                    "source_kinds": [item.value for item in plan.operation.source_kinds],
+                    "document_ids": list(plan.operation.document_ids),
+                    "top_k": plan.operation.top_k,
+                }
+            ]
+        ranking: list[dict[str, Any]] = []
+    elif plan is not None:
         execution_steps.extend(
             [
                 "query_plan_validation",
@@ -176,8 +207,20 @@ def _think_trace(response: BackendAgentResponse) -> str:
         if response.answer_mode.value in {"llm_grounded", "deterministic_fallback"}:
             execution_steps.append("answer_verifier")
         execution_steps.append("response_contract_validation")
+        filters = [
+            {
+                "field": constraint.field,
+                "operator": constraint.operator.value,
+                "value": constraint.value,
+                "unit": constraint.unit.value,
+            }
+            for constraint in plan.constraints
+        ]
+        ranking = [item.model_dump(mode="json") for item in plan.ranking]
     else:
         execution_steps.append("safe_control_response")
+        filters = []
+        ranking = []
     return _json_text(
         {
             "trace_type": "structured_execution_summary_not_hidden_reasoning",
@@ -185,20 +228,8 @@ def _think_trace(response: BackendAgentResponse) -> str:
             "intent": response.intent.value,
             "product_families": [family.value for family in response.product_families],
             "execution_steps": execution_steps,
-            "filters": []
-            if plan is None
-            else [
-                {
-                    "field": constraint.field,
-                    "operator": constraint.operator.value,
-                    "value": constraint.value,
-                    "unit": constraint.unit.value,
-                }
-                for constraint in plan.constraints
-            ],
-            "ranking": []
-            if plan is None
-            else [ranking.model_dump(mode="json") for ranking in plan.ranking],
+            "filters": filters,
+            "ranking": ranking,
             "candidate_count": response.candidate_count,
             "returned_evidence": {
                 "products": len(response.products),

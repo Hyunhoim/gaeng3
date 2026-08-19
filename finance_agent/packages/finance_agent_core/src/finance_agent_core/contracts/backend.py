@@ -8,6 +8,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from finance_agent_core.agent.routed_service import RoutedAgentResult
+from finance_agent_core.contracts.knowledge import KnowledgeQueryPlan
 from finance_agent_core.contracts.queryplan import ProductFamily, QueryPlan
 from finance_agent_core.contracts.routing import InteractionIntent
 from finance_agent_core.domain import (
@@ -79,6 +80,7 @@ class SourceCitation(BackendContractModel):
         "comparison_field",
         "aggregate_field",
         "document_chunk",
+        "relation_field",
     ]
     label: str = Field(min_length=1, max_length=500)
     source_id: str = Field(min_length=1, max_length=300)
@@ -114,7 +116,7 @@ class BackendAgentResponse(BackendContractModel):
     intent: InteractionIntent
     product_families: list[ProductFamily] = Field(max_length=4)
     answer: str = Field(min_length=1)
-    query_plan: QueryPlan | None
+    query_plan: QueryPlan | KnowledgeQueryPlan | None
     candidate_count: int | None = Field(default=None, ge=0)
     products: list[ProductEvidence]
     comparisons: list[ComparisonEvidence] = Field(default_factory=list)
