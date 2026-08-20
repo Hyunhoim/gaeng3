@@ -23,6 +23,7 @@ docs/
 | 프로젝트 전체 파악 | [저장소 README](../README.md) | 전체 팀 |
 | Agent 1~9단계 구현 방향 | [단계별 구현 로드맵](agent-implementation-roadmap-2026-08-12.html) | 전체 팀 |
 | 남은 P0·P1 순서와 현재 완료 상태 | [남은 구현 로드맵](p0-p1-remaining-roadmap-2026-08-14.html) | AI·Backend 담당 |
+| P0-4~P0-10 전체 상태와 남은 조건 공유 | [현재 상태 인수인계 HTML](../finance_agent/docs/p0-4-p0-10-current-status-handover-2026-08-20.html) | 전체 팀 |
 | P0-4 공식 API 계약 결과 인계 | [공식 Acceptance 인수인계](../finance_agent/docs/p0-4-official-acceptance-handover-2026-08-19.md) | AI·Backend 담당 |
 | P0-8 timeout·5xx 재시도 결과 인계 | [재시도 계약 인수인계](../finance_agent/docs/p0-8-retry-contract-handover-2026-08-19.md) | AI·Backend 담당 |
 | P0-5 외부 금융 문서 반입·승인 절차 | [외부 문서 반입 계약](../finance_agent/docs/p0-5-external-corpus-intake-2026-08-19.md) | 금융 도메인·AI 담당 |

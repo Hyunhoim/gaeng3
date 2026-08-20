@@ -21,6 +21,7 @@
 8. [P0-6 제공 관계 검색 인수인계](p0-6-provided-relation-retrieval-handover-2026-08-19.md) — 공식 DB 관계 58,005개, 출처·기준일, 상품 ID 재검증, Agent 비활성 경계
 9. [P0-7 관계·문서 계획과 주장 검증 인수인계](p0-7-knowledge-claim-verifier-handover-2026-08-20.md) — Typed Plan, exact 권한 gate, Claim Verifier, 결정론적 fallback, 공개 API 비활성 경계
 10. [P0-10 공개 관계 검색·릴리스 통합 인수인계](p0-10-public-relation-release-integration-handover-2026-08-20.md) — 공개 Router·Backend, exact entity match, Release·Audit·Docker·변조 차단
+11. [P0-4~P0-10 현재 상태 인수인계 HTML](p0-4-p0-10-current-status-handover-2026-08-20.html) — 전체 완료 여부, 단계별 판정, P0-9·P0-10 남은 외부 조건과 담당
 
 배포·복구 담당자는 [NCP immutable release CI](immutable-ncp-release-ci.md)와
 [Rollback drill runbook](../../fastapi_backend/ROLLBACK_DRILL.md)을 추가로 확인한다. 현재

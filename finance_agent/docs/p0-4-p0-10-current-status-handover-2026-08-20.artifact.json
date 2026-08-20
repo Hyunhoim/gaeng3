@@ -1,0 +1,628 @@
+{
+  "surface": "report",
+  "manifest": {
+    "version": 1,
+    "surface": "report",
+    "title": "P0-4~P0-10 현재 상태 인수인계",
+    "description": "팀 구현 로드맵의 완료 범위와 남은 외부 조건을 구분한 2026년 8월 20일 기준 보고서",
+    "generatedAt": "2026-08-20T11:25:35+09:00",
+    "sources": [
+      {
+        "id": "summary_counts_sql",
+        "label": "P0 단계 상태 집계 SQL",
+        "path": "docs/p0-p1-remaining-roadmap-2026-08-14.html"
+      },
+      {
+        "id": "status_distribution_sql",
+        "label": "P0 단계 상태 분포 SQL",
+        "path": "docs/p0-p1-remaining-roadmap-2026-08-14.html"
+      },
+      {
+        "id": "stage_status_sql",
+        "label": "P0 단계별 상태 표 SQL",
+        "path": "docs/p0-p1-remaining-roadmap-2026-08-14.html"
+      },
+      {
+        "id": "next_actions_sql",
+        "label": "P0 남은 행동 정렬 SQL",
+        "path": "docs/p0-p1-remaining-roadmap-2026-08-14.html"
+      },
+      {
+        "id": "roadmap",
+        "label": "P0·P1 남은 구현 로드맵",
+        "path": "docs/p0-p1-remaining-roadmap-2026-08-14.html"
+      },
+      {
+        "id": "p04_handover",
+        "label": "P0-4 공식 Acceptance 인수인계",
+        "path": "finance_agent/docs/p0-4-official-acceptance-handover-2026-08-19.md"
+      },
+      {
+        "id": "p05_handover",
+        "label": "P0-5 외부 문서 반입 계약 인수인계",
+        "path": "finance_agent/docs/p0-5-external-corpus-intake-2026-08-19.md"
+      },
+      {
+        "id": "p06_handover",
+        "label": "P0-6 제공 관계 검색 인수인계",
+        "path": "finance_agent/docs/p0-6-provided-relation-retrieval-handover-2026-08-19.md"
+      },
+      {
+        "id": "p07_handover",
+        "label": "P0-7 계획·주장 검증 인수인계",
+        "path": "finance_agent/docs/p0-7-knowledge-claim-verifier-handover-2026-08-20.md"
+      },
+      {
+        "id": "p08_handover",
+        "label": "P0-8 재시도 계약 인수인계",
+        "path": "finance_agent/docs/p0-8-retry-contract-handover-2026-08-19.md"
+      },
+      {
+        "id": "p09_protocol",
+        "label": "Schema Dense 외부 blind v2 protocol",
+        "path": "finance_agent/evaluation/protocols/schema-embedding-external-blind-v2.protocol.json"
+      },
+      {
+        "id": "p010_handover",
+        "label": "P0-10 공개 관계 검색·릴리스 통합 인수인계",
+        "path": "finance_agent/docs/p0-10-public-relation-release-integration-handover-2026-08-20.md"
+      },
+      {
+        "id": "p010_baseline",
+        "label": "P0-10 공개 관계 검색·릴리스 통합 baseline",
+        "path": "finance_agent/evaluation/baselines/p0-10-public-relation-release-integration-v1.json"
+      }
+    ],
+    "cards": [
+      {
+        "id": "total-stages",
+        "description": "P0-4부터 P0-10까지 검토한 전체 단계",
+        "dataset": "summary_counts",
+        "sourceId": "summary_counts_sql",
+        "metrics": [
+          {
+            "label": "검토 대상 단계",
+            "field": "total_steps",
+            "format": "number"
+          }
+        ]
+      },
+      {
+        "id": "fully-complete",
+        "description": "추가 외부 입력 없이 완료로 유지하는 단계",
+        "dataset": "summary_counts",
+        "sourceId": "summary_counts_sql",
+        "metrics": [
+          {
+            "label": "완료",
+            "field": "fully_complete",
+            "format": "number"
+          }
+        ]
+      },
+      {
+        "id": "scoped-complete",
+        "description": "정해진 구현 범위는 끝났지만 실제 자료·외부 연결이 남은 단계",
+        "dataset": "summary_counts",
+        "sourceId": "summary_counts_sql",
+        "metrics": [
+          {
+            "label": "범위·내부 완료",
+            "field": "scoped_complete",
+            "format": "number"
+          }
+        ]
+      },
+      {
+        "id": "local-complete",
+        "description": "로컬 통합은 끝났지만 실제 배포 검증이 남은 단계",
+        "dataset": "summary_counts",
+        "sourceId": "summary_counts_sql",
+        "metrics": [
+          {
+            "label": "로컬 구현 완료",
+            "field": "local_complete",
+            "format": "number"
+          }
+        ]
+      },
+      {
+        "id": "incomplete",
+        "description": "필수 입력 또는 팀 결정이 없어 실행하지 못한 단계",
+        "dataset": "summary_counts",
+        "sourceId": "summary_counts_sql",
+        "metrics": [
+          {
+            "label": "미완료",
+            "field": "incomplete",
+            "format": "number"
+          }
+        ]
+      }
+    ],
+    "charts": [
+      {
+        "id": "status-distribution",
+        "title": "P0 단계의 현재 완료 수준",
+        "subtitle": "P0-4~P0-10 7개 단계, 2026년 8월 20일 기준",
+        "showDescription": true,
+        "type": "bar",
+        "dataset": "status_distribution",
+        "sourceId": "status_distribution_sql",
+        "encodings": {
+          "x": {
+            "field": "status",
+            "type": "nominal",
+            "label": "현재 상태"
+          },
+          "y": {
+            "field": "count",
+            "type": "quantitative",
+            "aggregate": "none",
+            "format": "number",
+            "label": "단계 수",
+            "unit": "개"
+          },
+          "tooltip": [
+            {
+              "field": "count",
+              "type": "quantitative",
+              "format": "number",
+              "label": "단계 수"
+            },
+            {
+              "field": "share",
+              "type": "quantitative",
+              "format": "percent",
+              "label": "전체 7개 중 비율"
+            },
+            {
+              "field": "examples",
+              "type": "text",
+              "label": "해당 단계"
+            }
+          ]
+        },
+        "valueFormat": "number",
+        "unit": "개 단계",
+        "layout": "full",
+        "maxRows": 4,
+        "compatibleTypes": [
+          "bar"
+        ]
+      }
+    ],
+    "tables": [
+      {
+        "id": "stage-status",
+        "title": "P0-4~P0-10 단계별 상태",
+        "subtitle": "완료라는 단어를 로컬·내부·실제 외부 완료로 나누어 판정",
+        "showDescription": true,
+        "dataset": "stage_status",
+        "sourceId": "stage_status_sql",
+        "defaultSort": {
+          "field": "step",
+          "direction": "asc"
+        },
+        "density": "spacious",
+        "layout": "full",
+        "columns": [
+          {
+            "field": "step",
+            "label": "P0 단계",
+            "format": "number"
+          },
+          {
+            "field": "status",
+            "label": "판정",
+            "type": "text"
+          },
+          {
+            "field": "completed",
+            "label": "완료한 것",
+            "type": "text"
+          },
+          {
+            "field": "remaining",
+            "label": "남은 것",
+            "type": "text"
+          }
+        ]
+      },
+      {
+        "id": "next-actions",
+        "title": "다음 행동과 완료 증거",
+        "subtitle": "팀 결정이 필요한 항목부터 실제 외부 배포 순서로 정렬",
+        "showDescription": true,
+        "dataset": "next_actions",
+        "sourceId": "next_actions_sql",
+        "defaultSort": {
+          "field": "priority",
+          "direction": "asc"
+        },
+        "density": "spacious",
+        "layout": "full",
+        "columns": [
+          {
+            "field": "priority",
+            "label": "순서",
+            "format": "number"
+          },
+          {
+            "field": "owner",
+            "label": "주 담당",
+            "type": "text"
+          },
+          {
+            "field": "action",
+            "label": "할 일",
+            "type": "text"
+          },
+          {
+            "field": "evidence",
+            "label": "완료 증거",
+            "type": "text"
+          }
+        ]
+      }
+    ],
+    "blocks": [
+      {
+        "id": "title",
+        "type": "markdown",
+        "body": "# P0-4~P0-10 현재 상태 인수인계"
+      },
+      {
+        "id": "executive-summary",
+        "type": "markdown",
+        "sourceId": "roadmap",
+        "body": "## Executive Summary\n\n- **결론: P0-4~P0-10 전체 완료 조건은 아직 충족하지 못했음**\n- **완료 범위:** P0-4와 P0-8은 완료, P0-5·P0-6·P0-7은 정해진 구현 범위 또는 내부 계약까지 완료\n- **남은 핵심:** P0-9 외부 blind 최초 평가가 미실행이고, P0-10은 로컬 공개 통합까지만 완료\n- **팀 결정:** P0-9를 실제 수행할지 공식적으로 생략할지 먼저 기록하고, 이후 실제 NCP 배포·공인 IP smoke·두 release rollback으로 P0-10을 마감해야 함"
+      },
+      {
+        "id": "headline-metrics",
+        "type": "metric-strip",
+        "cardIds": [
+          "total-stages",
+          "fully-complete",
+          "scoped-complete",
+          "local-complete",
+          "incomplete"
+        ]
+      },
+      {
+        "id": "status-intro",
+        "type": "markdown",
+        "sourceId": "roadmap",
+        "body": "## 7개 단계의 완료 수준은 서로 다름\n\nP0-10 인수인계 문서는 **P0-10의 로컬 통합 완료 증거**이지 P0-4~P0-10 전체 완료 증명서가 아님. 아래 차트는 현재 판정을 네 수준으로 묶어 보여주며, 이어지는 표에서 단계별 근거와 남은 일을 확인할 수 있음"
+      },
+      {
+        "id": "status-distribution-chart",
+        "type": "chart",
+        "chartId": "status-distribution",
+        "layout": "full"
+      },
+      {
+        "id": "stage-status-table",
+        "type": "table",
+        "tableId": "stage-status",
+        "layout": "full"
+      },
+      {
+        "id": "completed-scope",
+        "type": "markdown",
+        "body": "## 지금 완료라고 말할 수 있는 범위\n\n**P0-4와 P0-8은 명시된 계약 기준으로 완료**\n\n- P0-4: 공개 예시와 입력 경계의 공식 형식 Acceptance 계약 검증\n- P0-8: 200·503·504, 270초 outer deadline, 동일 요청 중복 실행 방지 검증\n\n**P0-5·P0-6·P0-7은 범위를 붙여서 완료라고 표현해야 함**\n\n- P0-5: 외부 문서 반입·권한·해시·변조 차단 기능은 완료, 실제 승인 문서는 없음\n- P0-6: 주최 측 제공 데이터에서 만들 수 있는 관계 검색은 완료, 모든 금융 관계를 지원하는 것은 아님\n- P0-7: 서버 계획과 근거 문장을 검증하는 내부 계약은 완료, 실제 외부 문서와 관계 HCLX는 미연결"
+      },
+      {
+        "id": "remaining-gates",
+        "type": "markdown",
+        "sourceId": "p010_handover",
+        "body": "## 전체 완료를 막는 핵심은 P0-9와 P0-10 외부 실행\n\n**P0-9는 아직 평가 결과가 없음**\n\n외부 담당자가 봉인한 질문·비공개 정답으로 최초 한 번 실행해야 하지만, 현재는 평가 protocol만 준비된 상태임. 팀에서 생략하기로 했다면 구두 합의가 아니라 `waived` 또는 `skipped_by_team_decision` 같은 결정 기록이 필요함\n\n**P0-10은 로컬 구현 검증까지만 완료**\n\n고정 회귀 522/522, clean Docker Backend smoke 8/8, 공식 형식 GET 호환 smoke 8/8과 관계 색인 변조 시 503 차단을 확인했음. 그러나 실제 NCP 배포·공인 IP·OIDC/Cosign 서명·서명된 두 release rollback은 실행하지 않았음"
+      },
+      {
+        "id": "team-message",
+        "type": "markdown",
+        "body": "## 임현호 님에게 전달할 요약\n\n> P0-4·P0-8은 완료했고, P0-5·P0-6·P0-7은 외부 자료를 제외한 구현 범위를 완료했습니다. P0-10은 공개 Router·Backend·Release 계약의 로컬 통합까지 완료했습니다. 다만 P0-9 외부 blind 최초 평가와 P0-10 실제 NCP 서명 배포·공인 IP smoke·두 release rollback은 남아 있습니다. P0-9는 수행할지 공식 생략할지 팀 결정이 필요합니다"
+      },
+      {
+        "id": "next-steps-intro",
+        "type": "markdown",
+        "body": "## 다음 작업은 팀 결정부터 시작\n\n먼저 P0-9의 처리 방식을 확정해야 이후 결과를 ‘전체 완료’로 표현할 수 있음. P0-10 외부 검증은 NCP 환경과 배포 권한이 준비된 뒤 순서대로 수행"
+      },
+      {
+        "id": "next-actions-table",
+        "type": "table",
+        "tableId": "next-actions",
+        "layout": "full"
+      },
+      {
+        "id": "further-questions",
+        "type": "markdown",
+        "body": "## 팀에서 답해야 할 질문\n\n1. P0-9 외부 blind를 실제 수행할지, 공식적으로 생략할지\n2. 실제 승인 외부 문서 corpus를 이번 제출 범위에 포함할지\n3. NCP 보호 환경·Registry·서명·rollback의 실행 담당자와 일정을 누구로 정할지\n4. 관계 답변에 HyperCLOVA X를 연결할 실익이 있는지, 결정론적 답변을 유지할지"
+      },
+      {
+        "id": "caveats",
+        "type": "markdown",
+        "body": "## 해석할 때 주의할 점\n\n- 16/16, 22/22, 522/522는 고정된 시스템 계약 회귀 결과이며 독립 금융 질문 정확도나 공모전 예상 점수가 아님\n- 로컬 Docker 성공은 NCP 공인 IP와 실제 평가 client 통신 성공을 뜻하지 않음\n- P0-6의 완료 범위는 제공 데이터에서 출처를 확인할 수 있는 관계에 한정\n- P0-10 공개 관계 답변은 현재 생성 모델을 호출하지 않는 결정론적 경로임"
+      }
+    ]
+  },
+  "snapshot": {
+    "version": 1,
+    "generatedAt": "2026-08-20T11:25:35+09:00",
+    "status": "ready",
+    "datasets": {
+      "summary_counts": [
+        {
+          "total_steps": 7,
+          "fully_complete": 2,
+          "scoped_complete": 3,
+          "local_complete": 1,
+          "incomplete": 1
+        }
+      ],
+      "status_distribution": [
+        {
+          "status": "완료",
+          "count": 2,
+          "share": 0.285714,
+          "examples": "P0-4, P0-8"
+        },
+        {
+          "status": "범위·내부 완료",
+          "count": 3,
+          "share": 0.428571,
+          "examples": "P0-5, P0-6, P0-7"
+        },
+        {
+          "status": "로컬 구현 완료",
+          "count": 1,
+          "share": 0.142857,
+          "examples": "P0-10"
+        },
+        {
+          "status": "미완료",
+          "count": 1,
+          "share": 0.142857,
+          "examples": "P0-9"
+        }
+      ],
+      "stage_status": [
+        {
+          "step": 4,
+          "status": "완료",
+          "completed": "공식 형식 Acceptance 계약 16/16·안전 무실행 11/11",
+          "remaining": "의미 일반화 성능은 P0-9 blind에서 별도 측정"
+        },
+        {
+          "step": 5,
+          "status": "반입 기반 완료",
+          "completed": "문서 승인·권한·해시·변조 차단·BM25 build 계약",
+          "remaining": "실제 승인 corpus·검색 gold·충돌 처리·release 연결"
+        },
+        {
+          "step": 6,
+          "status": "제공 관계 기반 완료",
+          "completed": "제공 데이터 관계 58,005개·상품 ID 재검증",
+          "remaining": "공모펀드·테마·편입종목·외부 문서 관계·금융 alias"
+        },
+        {
+          "step": 7,
+          "status": "내부 완료",
+          "completed": "Typed Plan·Claim Verifier 22/22·관계 smoke 4/4",
+          "remaining": "실제 외부 문서와 관계 HyperCLOVA X"
+        },
+        {
+          "step": 8,
+          "status": "완료",
+          "completed": "200·503·504·270초 deadline·single-flight·replay",
+          "remaining": "실제 평가 환경에서는 P0-10 배포 후 재확인"
+        },
+        {
+          "step": 9,
+          "status": "미완료",
+          "completed": "외부 blind protocol v1·v2 준비",
+          "remaining": "비공개 질문·gold·봉인 hash·수정 전 최초 실행"
+        },
+        {
+          "step": 10,
+          "status": "로컬 구현 검증",
+          "completed": "공개 관계 경로 522/522·Docker 8/8+8/8·변조 503",
+          "remaining": "NCP 서명 배포·공인 IP·두 release rollback·관계 HCLX"
+        }
+      ],
+      "next_actions": [
+        {
+          "priority": 1,
+          "owner": "전체 팀",
+          "action": "P0-9 수행 또는 공식 생략 결정",
+          "evidence": "회의 결정과 roadmap 상태 기록"
+        },
+        {
+          "priority": 2,
+          "owner": "금융 도메인 담당",
+          "action": "P0-9를 수행하면 비공개 질문·gold·hash 봉인",
+          "evidence": "개발자가 보지 않은 sealed bundle"
+        },
+        {
+          "priority": 3,
+          "owner": "AI 담당",
+          "action": "수정 전 blind 최초 1회 실행",
+          "evidence": "결과·Audit receipt·report SHA"
+        },
+        {
+          "priority": 4,
+          "owner": "Backend·배포 담당",
+          "action": "보호 환경에서 NCP immutable release 실행",
+          "evidence": "RepoDigest·서명 manifest·공인 IP smoke"
+        },
+        {
+          "priority": 5,
+          "owner": "Backend·배포 담당",
+          "action": "서명된 N-1·N release forward·rollback 수행",
+          "evidence": "N-1→N→N-1 health·answer·Audit 기록"
+        },
+        {
+          "priority": 6,
+          "owner": "AI·금융 도메인 담당",
+          "action": "관계 HCLX와 승인 문서 corpus의 제출 포함 여부 결정",
+          "evidence": "scope 결정과 새 release 계약 또는 비활성 기록"
+        }
+      ]
+    }
+  },
+  "sources": [
+    {
+      "id": "summary_counts_sql",
+      "label": "P0 단계 상태 집계 SQL",
+      "path": "docs/p0-p1-remaining-roadmap-2026-08-14.html",
+      "query": {
+        "engine": "SQLite",
+        "description": "검토된 P0-4~P0-10 단계 판정을 완료 수준별로 집계",
+        "executed_at": "2026-08-20T11:25:35+09:00",
+        "language": "sql",
+        "filters": [
+          "P0-4부터 P0-10까지 7개 단계",
+          "2026년 8월 20일 갱신 로드맵 기준"
+        ],
+        "metric_definitions": [
+          "완료는 P0-4와 P0-8",
+          "범위·내부 완료는 P0-5·P0-6·P0-7",
+          "로컬 구현 완료는 P0-10",
+          "미완료는 P0-9"
+        ],
+        "sql": "WITH stage_status(step, bucket) AS (VALUES (4, '완료'), (5, '범위·내부 완료'), (6, '범위·내부 완료'), (7, '범위·내부 완료'), (8, '완료'), (9, '미완료'), (10, '로컬 구현 완료')) SELECT COUNT(*) AS total_steps, SUM(CASE WHEN bucket = '완료' THEN 1 ELSE 0 END) AS fully_complete, SUM(CASE WHEN bucket = '범위·내부 완료' THEN 1 ELSE 0 END) AS scoped_complete, SUM(CASE WHEN bucket = '로컬 구현 완료' THEN 1 ELSE 0 END) AS local_complete, SUM(CASE WHEN bucket = '미완료' THEN 1 ELSE 0 END) AS incomplete FROM stage_status;"
+      }
+    },
+    {
+      "id": "status_distribution_sql",
+      "label": "P0 단계 상태 분포 SQL",
+      "path": "docs/p0-p1-remaining-roadmap-2026-08-14.html",
+      "query": {
+        "engine": "SQLite",
+        "description": "상태 분포 차트용 4개 완료 수준과 단계 수",
+        "executed_at": "2026-08-20T11:25:35+09:00",
+        "language": "sql",
+        "filters": [
+          "P0-4부터 P0-10까지 7개 단계"
+        ],
+        "metric_definitions": [
+          "share는 각 완료 수준의 단계 수를 전체 7개 단계로 나눈 값"
+        ],
+        "sql": "WITH status_distribution(sort_order, status, count, share, examples) AS (VALUES (1, '완료', 2, ROUND(2.0 / 7.0, 6), 'P0-4, P0-8'), (2, '범위·내부 완료', 3, ROUND(3.0 / 7.0, 6), 'P0-5, P0-6, P0-7'), (3, '로컬 구현 완료', 1, ROUND(1.0 / 7.0, 6), 'P0-10'), (4, '미완료', 1, ROUND(1.0 / 7.0, 6), 'P0-9')) SELECT status, count, share, examples FROM status_distribution ORDER BY sort_order;"
+      }
+    },
+    {
+      "id": "stage_status_sql",
+      "label": "P0 단계별 상태 표 SQL",
+      "path": "docs/p0-p1-remaining-roadmap-2026-08-14.html",
+      "query": {
+        "engine": "SQLite",
+        "description": "로드맵과 단계별 인수인계 문서를 대조한 7개 단계 상태",
+        "executed_at": "2026-08-20T11:25:35+09:00",
+        "language": "sql",
+        "filters": [
+          "P0-4부터 P0-10까지",
+          "로컬·내부·실제 외부 완료를 분리"
+        ],
+        "sql": "WITH stage_status(step, status, completed, remaining) AS (VALUES (4, '완료', '공식 형식 Acceptance 계약 16/16·안전 무실행 11/11', '의미 일반화 성능은 P0-9 blind에서 별도 측정'), (5, '반입 기반 완료', '문서 승인·권한·해시·변조 차단·BM25 build 계약', '실제 승인 corpus·검색 gold·충돌 처리·release 연결'), (6, '제공 관계 기반 완료', '제공 데이터 관계 58,005개·상품 ID 재검증', '공모펀드·테마·편입종목·외부 문서 관계·금융 alias'), (7, '내부 완료', 'Typed Plan·Claim Verifier 22/22·관계 smoke 4/4', '실제 외부 문서와 관계 HyperCLOVA X'), (8, '완료', '200·503·504·270초 deadline·single-flight·replay', '실제 평가 환경에서는 P0-10 배포 후 재확인'), (9, '미완료', '외부 blind protocol v1·v2 준비', '비공개 질문·gold·봉인 hash·수정 전 최초 실행'), (10, '로컬 구현 검증', '공개 관계 경로 522/522·Docker 8/8+8/8·변조 503', 'NCP 서명 배포·공인 IP·두 release rollback·관계 HCLX')) SELECT step, status, completed, remaining FROM stage_status ORDER BY step;"
+      }
+    },
+    {
+      "id": "next_actions_sql",
+      "label": "P0 남은 행동 정렬 SQL",
+      "path": "docs/p0-p1-remaining-roadmap-2026-08-14.html",
+      "query": {
+        "engine": "SQLite",
+        "description": "팀 결정부터 실제 NCP 검증까지 남은 행동을 실행 순서로 정리",
+        "executed_at": "2026-08-20T11:25:35+09:00",
+        "language": "sql",
+        "filters": [
+          "P0-9와 P0-10의 미완료 조건"
+        ],
+        "sql": "WITH next_actions(priority, owner, action, evidence) AS (VALUES (1, '전체 팀', 'P0-9 수행 또는 공식 생략 결정', '회의 결정과 roadmap 상태 기록'), (2, '금융 도메인 담당', 'P0-9를 수행하면 비공개 질문·gold·hash 봉인', '개발자가 보지 않은 sealed bundle'), (3, 'AI 담당', '수정 전 blind 최초 1회 실행', '결과·Audit receipt·report SHA'), (4, 'Backend·배포 담당', '보호 환경에서 NCP immutable release 실행', 'RepoDigest·서명 manifest·공인 IP smoke'), (5, 'Backend·배포 담당', '서명된 N-1·N release forward·rollback 수행', 'N-1→N→N-1 health·answer·Audit 기록'), (6, 'AI·금융 도메인 담당', '관계 HCLX와 승인 문서 corpus의 제출 포함 여부 결정', 'scope 결정과 새 release 계약 또는 비활성 기록')) SELECT priority, owner, action, evidence FROM next_actions ORDER BY priority;"
+      }
+    },
+    {
+      "id": "roadmap",
+      "label": "P0·P1 남은 구현 로드맵",
+      "path": "docs/p0-p1-remaining-roadmap-2026-08-14.html",
+      "query": {
+        "description": "2026년 8월 20일 갱신 상태와 P0-4~P0-10 완료 기준",
+        "executed_at": "2026-08-20T11:25:35+09:00",
+        "language": "document"
+      }
+    },
+    {
+      "id": "p04_handover",
+      "label": "P0-4 공식 Acceptance 인수인계",
+      "path": "finance_agent/docs/p0-4-official-acceptance-handover-2026-08-19.md",
+      "query": {
+        "description": "공식 형식 계약과 해석 한계",
+        "language": "markdown"
+      }
+    },
+    {
+      "id": "p05_handover",
+      "label": "P0-5 외부 문서 반입 계약 인수인계",
+      "path": "finance_agent/docs/p0-5-external-corpus-intake-2026-08-19.md",
+      "query": {
+        "description": "반입 기반 완료와 실제 corpus 대기 범위",
+        "language": "markdown"
+      }
+    },
+    {
+      "id": "p06_handover",
+      "label": "P0-6 제공 관계 검색 인수인계",
+      "path": "finance_agent/docs/p0-6-provided-relation-retrieval-handover-2026-08-19.md",
+      "query": {
+        "description": "제공 데이터 관계 검색의 완료 범위와 미지원 관계",
+        "language": "markdown"
+      }
+    },
+    {
+      "id": "p07_handover",
+      "label": "P0-7 계획·주장 검증 인수인계",
+      "path": "finance_agent/docs/p0-7-knowledge-claim-verifier-handover-2026-08-20.md",
+      "query": {
+        "description": "내부 Typed Plan과 Claim Verifier 완료 범위",
+        "language": "markdown"
+      }
+    },
+    {
+      "id": "p08_handover",
+      "label": "P0-8 재시도 계약 인수인계",
+      "path": "finance_agent/docs/p0-8-retry-contract-handover-2026-08-19.md",
+      "query": {
+        "description": "HTTP 상태·deadline·동일 요청 처리 계약",
+        "language": "markdown"
+      }
+    },
+    {
+      "id": "p09_protocol",
+      "label": "Schema Dense 외부 blind v2 protocol",
+      "path": "finance_agent/evaluation/protocols/schema-embedding-external-blind-v2.protocol.json",
+      "query": {
+        "description": "P0-9에서 사용할 외부 blind 절차만 준비된 상태",
+        "language": "json"
+      }
+    },
+    {
+      "id": "p010_handover",
+      "label": "P0-10 공개 관계 검색·릴리스 통합 인수인계",
+      "path": "finance_agent/docs/p0-10-public-relation-release-integration-handover-2026-08-20.md",
+      "query": {
+        "description": "로컬 공개 통합 결과와 실제 외부 미검증 범위",
+        "language": "markdown"
+      }
+    },
+    {
+      "id": "p010_baseline",
+      "label": "P0-10 공개 관계 검색·릴리스 통합 baseline",
+      "path": "finance_agent/evaluation/baselines/p0-10-public-relation-release-integration-v1.json",
+      "query": {
+        "description": "522개 고정 회귀·Docker 관측·제외 범위를 기록한 기계 판독 기준선",
+        "language": "json"
+      }
+    }
+  ]
+}

@@ -25,6 +25,7 @@
 | 발행사·운용사·지수·자산·지역 관계를 어떻게 안전하게 찾는지 | [P0-6 제공 관계 검색 인수인계](p0-6-provided-relation-retrieval-handover-2026-08-19.md) |
 | 관계·문서 검색을 모델이 임의 변경하지 못하게 어떻게 검증하는지 | [P0-7 계획·주장 검증 인수인계](p0-7-knowledge-claim-verifier-handover-2026-08-20.md) |
 | 관계 검색을 공개 Router·Backend·Release·Docker에 어떻게 연결했는지 | [P0-10 공개 관계 검색·릴리스 통합 인수인계](p0-10-public-relation-release-integration-handover-2026-08-20.md) |
+| P0-4~P0-10 전체가 어디까지 완료됐고 무엇이 남았는지 | [현재 상태 인수인계 HTML](p0-4-p0-10-current-status-handover-2026-08-20.html) |
 | 현재 승인 DB로 Stage 2 지문을 다시 계산한 결과 | [Stage 2 승인 DB 재검증 baseline](../evaluation/baselines/stage2-approved-db-revalidation-2026-08-12.json) |
 | Stage 3 release·anti-replay 자동 계약 결과 | [Stage 3 release 계약 baseline](../evaluation/baselines/stage3-release-contract-2026-08-12.json) |
 | localhost OCI push·합성 rollback 실기동 결과 | [Stage 3 OCI·rollback baseline](../evaluation/baselines/stage3-local-oci-rollback-2026-08-12.json) |
