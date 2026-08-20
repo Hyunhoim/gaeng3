@@ -7,6 +7,10 @@ from time import monotonic, sleep
 import pytest
 from fastapi.testclient import TestClient
 from finance_agent_core.agent import RoutedFinanceAgent
+from finance_agent_core.audit_validation import (
+    AuditValidationStatus,
+    validate_audit_jsonl,
+)
 from finance_agent_core.deadline import RequestDeadlineExceeded, current_request_deadline
 from finance_agent_core.observability import (
     AuditEvent,
@@ -410,6 +414,8 @@ def test_shutdown_waits_for_late_timeout_audit_before_sink_flush(
         }
     )
     worker_started = Event()
+    worker_saw_cancel = Event()
+    allow_late_audit = Event()
     worker_finished = Event()
     sink = build_audit_sink(settings)
     assert sink is not None
@@ -425,6 +431,8 @@ def test_shutdown_waits_for_late_timeout_audit_before_sink_flush(
         deadline = current_request_deadline()
         assert deadline is not None
         assert deadline.cancel_event.wait(1)
+        worker_saw_cancel.set()
+        assert allow_late_audit.wait(1)
         recorder = current_request_audit()
         assert recorder is not None
         recorder.emit(
@@ -445,6 +453,9 @@ def test_shutdown_waits_for_late_timeout_audit_before_sink_flush(
             json={"request_id": "late-timeout-id", "question": "late-timeout-question"},
         )
         assert response.status_code == 504
+        assert worker_saw_cancel.wait(1)
+        allow_late_audit.set()
+        assert worker_finished.wait(1)
 
     assert worker_started.is_set()
     assert worker_finished.is_set()
@@ -458,6 +469,14 @@ def test_shutdown_waits_for_late_timeout_audit_before_sink_flush(
         event.stage is AuditStage.COMPILER and event.outcome is AuditOutcome.TIMED_OUT
         for event in events
     )
+    assert (events[-1].stage, events[-1].outcome, events[-1].reason_code) == (
+        AuditStage.REQUEST,
+        AuditOutcome.TIMED_OUT,
+        "deadline_exceeded",
+    )
+    report = validate_audit_jsonl(path)
+    assert report.status is AuditValidationStatus.PASSED
+    assert report.issue_count == 0
     assert "late-timeout-id" not in path.read_text(encoding="utf-8")
     assert "late-timeout-question" not in path.read_text(encoding="utf-8")
 

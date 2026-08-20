@@ -427,9 +427,9 @@ class RoutedFinanceAgent:
                     raise ValueError(
                         "the signed public knowledge release keeps claim generation disabled"
                     )
-            elif knowledge_agent is not None:
+            elif knowledge_router is not None or knowledge_agent is not None:
                 raise ValueError(
-                    "a disabled signed relation release cannot attach a knowledge Agent"
+                    "a disabled signed relation release cannot attach a knowledge router or Agent"
                 )
         self.release_guard = release_guard
         self.require_agent_release = require_agent_release
@@ -479,15 +479,25 @@ class RoutedFinanceAgent:
                 and agent.claim_provider is None
             )
         else:
-            matches = (
-                self.knowledge_router is None
-                or type(self.knowledge_router) is DeterministicKnowledgeRouter
-            ) and agent is None
+            matches = self.knowledge_router is None and agent is None
         if not matches:
             raise AgentReleaseError(
                 AgentReleaseCode.RUNTIME_MISMATCH,
                 "knowledge runtime differs from the signed public release",
             )
+
+    def _assert_public_knowledge_boundary_current(self) -> None:
+        """Apply the same immutable boundary to every public relation outcome."""
+
+        if self.release_guard is not None:
+            self.release_guard.assert_request_current()
+        self._assert_signed_knowledge_current()
+        if self.require_approved_databases:
+            require_approved_database_paths(self.database_paths)
+        if self.require_agent_release and self.knowledge_agent is not None:
+            # Production assembly verifies the expensive hashes at startup. This
+            # request check is the cheap inode/path fingerprint used by readiness.
+            self.knowledge_agent.assert_ready_current()
 
     def answer(self, question: str, request_id: str) -> RoutedAgentResult:
         return self._execute_audited(
@@ -531,7 +541,7 @@ class RoutedFinanceAgent:
     ) -> RoutedAgentResult | KnowledgeAgentResult | KnowledgeRouteDecision:
         """Route one public request without bypassing the established atomic boundary."""
 
-        self._assert_signed_knowledge_current()
+        self._assert_public_knowledge_boundary_current()
         if self.knowledge_router is None:
             return self._answer_atomically(question, request_id)
         safety = self.router.safety_envelope.evaluate(question)
@@ -545,6 +555,11 @@ class RoutedFinanceAgent:
         if decision.disposition is KnowledgeRouteDisposition.NOT_APPLICABLE:
             return self._answer_atomically(question, request_id)
         try:
+            # A control decision performs no retrieval, so this is its post-route
+            # release check. Executable found/not-found paths additionally guard
+            # both sides of KnowledgeAgent execution below.
+            if decision.disposition is not KnowledgeRouteDisposition.EXECUTE:
+                self._assert_public_knowledge_boundary_current()
             return self._execute_knowledge_audited(decision, question, request_id)
         except KnowledgeRoutedExecutionError:
             raise

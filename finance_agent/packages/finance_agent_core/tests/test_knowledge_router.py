@@ -6,6 +6,7 @@ from pydantic import ValidationError
 from finance_agent_core.agent.knowledge_router import (
     DeterministicKnowledgeRouter,
     KnowledgeRouteDecision,
+    KnowledgeRoutedExecutionError,
     KnowledgeRouteDisposition,
 )
 from finance_agent_core.contracts.queryplan import ProductFamily
@@ -181,6 +182,34 @@ def test_ordinary_product_field_search_is_not_hijacked(
             "한국전력공사가 발행한 국내채권 중 이율 5% 이상 3개를 알려줘",
             "additional_relation_conditions",
         ),
+        (
+            "미국에 투자하는 해외 ETF 중 위험이 낮은 상품을 보여줘",
+            "additional_relation_conditions",
+        ),
+        (
+            "미국에 투자하는 해외 ETF 중 위험등급 2등급 이하 상품을 보여줘",
+            "additional_relation_conditions",
+        ),
+        (
+            "미국에 투자하는 해외 ETF 중 판매 가능한 상품을 보여줘",
+            "additional_relation_conditions",
+        ),
+        (
+            "한국전력공사가 발행한 매수 가능한 국내채권을 보여줘",
+            "additional_relation_conditions",
+        ),
+        (
+            "미국에 투자하는 해외 ETF 중 거래 정지 상품은 제외해줘",
+            "additional_relation_conditions",
+        ),
+        (
+            "미국에 투자하는 해외 ETF 중 테스트운용 상품은 제외해줘",
+            "additional_relation_conditions",
+        ),
+        (
+            "미국에 투자하는 해외 ETF를 거래대금 많은 순으로 보여줘",
+            "additional_relation_conditions",
+        ),
     ],
 )
 def test_ambiguous_relation_questions_never_emit_a_plan(
@@ -197,6 +226,43 @@ def test_ambiguous_relation_questions_never_emit_a_plan(
     assert decision.disposition is KnowledgeRouteDisposition.CLARIFY
     assert decision.reason_code == reason_code
     assert decision.plan is None
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        "상품 ID KR7000000002인 국내 ETF의 운용사 상세 정보를 조회해줘",
+        "국내 ETF KR7000000003과 KR7000000002의 운용사를 비교해줘",
+        "국내 ETF의 운용사별 상품 개수를 집계해줘",
+    ],
+)
+def test_non_search_product_intents_remain_owned_by_existing_router(
+    router: DeterministicKnowledgeRouter,
+    question: str,
+) -> None:
+    decision = router.route_after_safety_gate(
+        question,
+        "existing-intent-q",
+        safety_gate_passed=True,
+    )
+
+    assert decision.disposition is KnowledgeRouteDisposition.NOT_APPLICABLE
+    assert decision.reason_code == "existing_product_intent"
+    assert decision.plan is None
+
+
+def test_routed_boundary_error_rejects_not_applicable_decision(
+    router: DeterministicKnowledgeRouter,
+) -> None:
+    decision = router.route_after_safety_gate(
+        "총보수율이 0.1% 이하인 해외 ETF를 보여줘",
+        "not-applicable-error-q",
+        safety_gate_passed=True,
+    )
+
+    assert decision.disposition is KnowledgeRouteDisposition.NOT_APPLICABLE
+    with pytest.raises(ValueError, match="non-applicable knowledge route"):
+        KnowledgeRoutedExecutionError(decision, RuntimeError("must not be wrapped"))
 
 
 @pytest.mark.parametrize(

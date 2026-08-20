@@ -1,15 +1,42 @@
+import hashlib
 import json
+import sqlite3
+from dataclasses import dataclass
+from datetime import UTC, date, datetime
 from importlib.resources import files
+from pathlib import Path
 from threading import Event
 from time import sleep
 
 import pytest
 from fastapi.testclient import TestClient
-from finance_agent_core.agent import AnswerAdapterResult
+from finance_agent_core.agent import AnswerAdapterResult, RoutedFinanceAgent
+from finance_agent_core.agent.knowledge_router import DeterministicKnowledgeRouter
+from finance_agent_core.agent.knowledge_service import KnowledgeAgent
 from finance_agent_core.contracts.backend import BackendAgentResponse, BackendStatus
 from finance_agent_core.contracts.official import OfficialAnswerResponse
+from finance_agent_core.contracts.queryplan import ProductFamily
 from finance_agent_core.deadline import current_request_deadline
+from finance_agent_core.domain import DatabaseManifest
+from finance_agent_core.release import (
+    DeploymentBinding,
+    RelationRetrievalArtifactRelease,
+    RollbackRelease,
+    RuntimeReleaseInputs,
+    build_agent_release_manifest,
+    deployment_binding_file_bytes,
+    manifest_file_bytes,
+    relation_retrieval_artifact_file_bytes,
+    resolve_agent_release,
+)
+from finance_agent_core.retrieval import (
+    SQLiteRelationIndex,
+    VerifiedProductDatabase,
+    build_provided_relation_index,
+)
 from finance_agent_core.storage import DatasetApprovalError
+from finance_agent_core.storage.approval import sha256_file
+from finance_agent_core.storage.identity_cache import ProductIdentityRecord
 
 from app.config import Settings
 from app.main import create_app
@@ -220,6 +247,270 @@ def test_request_time_approval_failure_is_safe_for_post_and_official_get() -> No
     official_body = OfficialAnswerResponse.model_validate(official.json())
     assert "데이터에 접근할 수 없습니다" in official_body.answer
     assert secret not in official.text
+
+
+@dataclass(frozen=True)
+class _SyntheticRelationVerifier:
+    database_path: Path
+    manifest: DatabaseManifest
+    identities: tuple[ProductIdentityRecord, ...]
+    database_sha256: str
+    approval_manifest_sha256: str = "f" * 64
+
+    def verify(
+        self,
+        product_family: ProductFamily,
+        path: str | Path,
+    ) -> VerifiedProductDatabase:
+        resolved = Path(path).resolve(strict=True)
+        if product_family is not ProductFamily.DOMESTIC_ETP:
+            raise ValueError("unexpected synthetic relation family")
+        if resolved != self.database_path:
+            raise ValueError("unexpected synthetic relation database")
+        return VerifiedProductDatabase(
+            product_family=product_family,
+            path=resolved,
+            manifest=self.manifest,
+            database_sha256=self.database_sha256,
+            identities=self.identities,
+        )
+
+
+@dataclass(frozen=True)
+class _PublicRelationRuntime:
+    service: RoutedFinanceAgent
+    relation_index: Path
+    release_manifest: Path
+    artifact_file: Path
+
+
+def _write_read_only(path: Path, data: bytes) -> None:
+    path.write_bytes(data)
+    path.chmod(0o444)
+
+
+def _build_public_relation_runtime(tmp_path: Path) -> _PublicRelationRuntime:
+    """Build real signed files, SQLite relation index and public Agent assembly."""
+
+    product_database = tmp_path / "domestic-etp.sqlite3"
+    product_ids = tuple(f"KR7{row:09d}" for row in range(2, 5))
+    with sqlite3.connect(product_database) as connection:
+        connection.execute(
+            """
+            CREATE TABLE domestic_etp_products (
+                product_id TEXT PRIMARY KEY,
+                source_row INTEGER NOT NULL,
+                static_as_of TEXT NOT NULL,
+                manager TEXT,
+                base_index TEXT,
+                base_index_quality TEXT,
+                asset_type TEXT,
+                investment_region TEXT,
+                is_quarantined INTEGER NOT NULL
+            )
+            """
+        )
+        connection.executemany(
+            """
+            INSERT INTO domestic_etp_products (
+                product_id, source_row, static_as_of, manager,
+                base_index, base_index_quality, asset_type,
+                investment_region, is_quarantined
+            ) VALUES (?, ?, '2026-07-11', '테스트운용', NULL, 'UNKNOWN', NULL, NULL, 0)
+            """,
+            tuple((product_id, row) for row, product_id in enumerate(product_ids, start=2)),
+        )
+    product_database.chmod(0o444)
+    database_sha256 = sha256_file(product_database)
+    manifest = DatabaseManifest(
+        schema_version="1.1",
+        dataset="domestic_etp",
+        registry_schema_version="1.3",
+        source_file_name="synthetic-domestic-etp.xlsx",
+        source_file_sha256="a" * 64,
+        source_file_size_bytes=1,
+        source_snapshot_date=date(2026, 7, 11),
+        total_rows=3,
+        searchable_rows=3,
+        quarantined_rows=0,
+    )
+    identities = tuple(
+        ProductIdentityRecord(
+            product_family="domestic_etp",
+            product_id=product_id,
+            product_name=f"관계 검증 ETF {index}",
+            ticker=f"R{index}",
+            isin=product_id,
+            short_name=f"관계 ETF {index}",
+            public_offering=None,
+            is_quarantined=False,
+        )
+        for index, product_id in enumerate(product_ids, start=1)
+    )
+    verifier = _SyntheticRelationVerifier(
+        database_path=product_database.resolve(),
+        manifest=manifest,
+        identities=identities,
+        database_sha256=database_sha256,
+    )
+    relation_index = tmp_path / "relations.sqlite3"
+    receipt = build_provided_relation_index(
+        {ProductFamily.DOMESTIC_ETP: product_database},
+        relation_index,
+        verifier=verifier,
+    )
+    relation_manifest = SQLiteRelationIndex(relation_index).manifest()
+    artifact = RelationRetrievalArtifactRelease(
+        index_sha256=receipt.database_sha256,
+        approval_manifest_sha256=receipt.approval_manifest_sha256,
+        relation_set_sha256=relation_manifest.relation_set_sha256,
+    )
+    artifact_data = relation_retrieval_artifact_file_bytes(artifact)
+    artifact_file = tmp_path / "relation-retrieval-artifact.json"
+    _write_read_only(artifact_file, artifact_data)
+    runtime_inputs = RuntimeReleaseInputs(
+        environment="evaluation",
+        source_commit="a" * 40,
+        image_reference="registry.example/finance-agent@sha256:" + "b" * 64,
+        backend_version="0.1.0",
+        backend_root=Path(__file__).resolve().parents[1] / "app",
+        answer_provider="deterministic",
+        hcx_queryplan_enabled=False,
+        hcx_model=None,
+        fund_execution_policy="locked",
+        relation_retrieval_artifact=artifact,
+        relation_retrieval_artifact_file_sha256=hashlib.sha256(artifact_data).hexdigest(),
+    )
+    release_manifest = build_agent_release_manifest(
+        runtime_inputs,
+        release_id="finance-agent-relation-e2e-v1",
+        generated_at_utc=datetime(2026, 8, 20, tzinfo=UTC),
+    )
+    manifest_file = tmp_path / "agent-release-manifest.json"
+    manifest_data = manifest_file_bytes(release_manifest)
+    _write_read_only(manifest_file, manifest_data)
+    binding = DeploymentBinding(
+        release_id=release_manifest.release_id,
+        environment="evaluation",
+        source_commit=runtime_inputs.source_commit,
+        release_manifest_sha256=hashlib.sha256(manifest_data).hexdigest(),
+        image_reference=runtime_inputs.image_reference,
+        platform="linux/amd64",
+        activation_generation=1,
+        rollback=RollbackRelease(mode="initial_bootstrap"),
+    )
+    binding_file = tmp_path / "deployment-binding.json"
+    binding_data = deployment_binding_file_bytes(binding)
+    _write_read_only(binding_file, binding_data)
+    resolved_release = resolve_agent_release(
+        manifest_path=manifest_file,
+        binding_path=binding_file,
+        expected_binding_sha256=hashlib.sha256(binding_data).hexdigest(),
+        runtime_inputs=runtime_inputs,
+    )
+    knowledge_agent = KnowledgeAgent(
+        release=resolved_release.manifest.components.knowledge_retrieval,
+        relation_index_path=relation_index,
+        relation_database_paths={ProductFamily.DOMESTIC_ETP: product_database},
+        relation_verifier=verifier,
+    )
+    knowledge_agent.verify_ready()
+    service = RoutedFinanceAgent(
+        {},
+        release_guard=resolved_release,
+        require_agent_release=True,
+        knowledge_router=DeterministicKnowledgeRouter(),
+        knowledge_agent=knowledge_agent,
+    )
+    return _PublicRelationRuntime(
+        service=service,
+        relation_index=relation_index,
+        release_manifest=manifest_file,
+        artifact_file=artifact_file,
+    )
+
+
+@pytest.mark.parametrize(
+    ("case_id", "question", "tamper_target"),
+    [
+        (
+            "exact",
+            "테스트운용이 운용하는 국내 ETF 3개를 보여줘",
+            "relation_index",
+        ),
+        (
+            "not-found",
+            "존재하지않는운용사가 운용하는 국내 ETF 3개를 보여줘",
+            "release_manifest",
+        ),
+        (
+            "clarify",
+            "테스트운용이 운용하는 ETF를 보여줘",
+            "relation_index",
+        ),
+        (
+            "unsupported",
+            "테스트운용이 운용하는 공모펀드를 보여줘",
+            "release_manifest",
+        ),
+    ],
+)
+def test_official_relation_routes_fail_closed_on_real_file_drift(
+    case_id: str,
+    question: str,
+    tamper_target: str,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Route normally, mutate a real bound file, then require a safe official 503."""
+
+    secret = "DO_NOT_LEAK_REAL_RELATION_FILE_DRIFT"
+    runtime = _build_public_relation_runtime(tmp_path)
+    router = runtime.service.knowledge_router
+    assert router is not None
+    original_route = router.route_after_safety_gate
+    route_calls = 0
+
+    def route_then_tamper(*args, **kwargs):
+        nonlocal route_calls
+        decision = original_route(*args, **kwargs)
+        route_calls += 1
+        target = (
+            runtime.relation_index
+            if tamper_target == "relation_index"
+            else runtime.release_manifest
+        )
+        target.chmod(0o644)
+        with target.open("ab") as stream:
+            stream.write(("\n" + secret).encode())
+        return decision
+
+    monkeypatch.setattr(router, "route_after_safety_gate", route_then_tamper)
+    application = create_app(settings=Settings(), agent=runtime.service)
+
+    with TestClient(application) as client:
+        response = client.get(
+            "/answer",
+            params={"question_id": f"Q-RELATION-{case_id}", "question": question},
+        )
+
+    assert route_calls == 1
+    assert response.status_code == 503
+    assert response.headers["content-type"] == "application/json; charset=utf-8"
+    body = OfficialAnswerResponse.model_validate(response.json())
+    assert body.question_id == f"Q-RELATION-{case_id}"
+    assert body.question == question
+    assert set(response.json()) == {
+        "question_id",
+        "question",
+        "retrieved_context",
+        "think_trace",
+        "answer",
+    }
+    assert all(isinstance(value, str) for value in response.json().values())
+    assert json.loads(body.retrieved_context)["citations"] == []
+    assert json.loads(body.think_trace)["status"] == "error"
+    assert secret not in response.text
 
 
 def test_official_get_answer_handles_invalid_and_extra_parameters_without_agent_call(

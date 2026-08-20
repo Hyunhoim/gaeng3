@@ -59,6 +59,17 @@ class OfficialSmokeCase:
     expected_families: tuple[str, ...] = ()
     expected_evidence: bool = False
     expected_empty_context: bool = False
+    expected_execution_step: str | None = None
+    expected_citation_kind: str | None = None
+    expected_relation_type: str | None = None
+    expected_relation_query: str | None = None
+    expected_relation_top_k: int | None = None
+    expected_product_count: int | None = None
+    expected_relation_field: str | None = None
+    expected_relation_value: str | None = None
+    expected_candidate_count: int | None = None
+    require_safe_control_response: bool = False
+    forbidden_execution_steps: tuple[str, ...] = ()
     forbidden_output_fragments: tuple[str, ...] = ()
 
     def query_string(self) -> str:
@@ -169,6 +180,89 @@ OFFICIAL_CASES = tuple(
     )
     for case in build_official_acceptance_transport_cases()
 )
+
+RELATION_OFFICIAL_CASES = (
+    OfficialSmokeCase(
+        case_id="official-relation-exact",
+        query=(
+            ("question_id", "docker-smoke-official-relation-exact-001"),
+            ("question", "한국주택금융공사가 발행한 국내채권 3개 보여줘."),
+        ),
+        expected_question_id="docker-smoke-official-relation-exact-001",
+        expected_question="한국주택금융공사가 발행한 국내채권 3개 보여줘.",
+        expected_trace_status="success",
+        expected_intent="search",
+        expected_families=("bond",),
+        expected_evidence=True,
+        expected_execution_step="relation_retrieval",
+        expected_citation_kind="relation_field",
+        expected_relation_type="issued_by",
+        expected_relation_query="한국주택금융공사",
+        expected_relation_top_k=3,
+        expected_product_count=3,
+        expected_relation_field="issuer",
+        expected_relation_value="한국주택금융공사",
+        expected_candidate_count=3,
+    ),
+    OfficialSmokeCase(
+        case_id="official-relation-partial-not-found",
+        query=(
+            ("question_id", "docker-smoke-official-relation-not-found-001"),
+            ("question", "한국주택금융이 발행한 국내채권 3개 보여줘."),
+        ),
+        expected_question_id="docker-smoke-official-relation-not-found-001",
+        expected_question="한국주택금융이 발행한 국내채권 3개 보여줘.",
+        expected_trace_status="not_found",
+        expected_intent="search",
+        expected_families=("bond",),
+        expected_empty_context=True,
+        expected_execution_step="relation_retrieval",
+        expected_relation_type="issued_by",
+        expected_relation_query="한국주택금융",
+        expected_relation_top_k=3,
+        expected_product_count=0,
+        expected_candidate_count=0,
+    ),
+    OfficialSmokeCase(
+        case_id="official-relation-clarify",
+        query=(
+            ("question_id", "docker-smoke-official-relation-clarify-001"),
+            ("question", "미래에셋이 운용하는 ETF를 보여줘."),
+        ),
+        expected_question_id="docker-smoke-official-relation-clarify-001",
+        expected_question="미래에셋이 운용하는 ETF를 보여줘.",
+        expected_control_code="ambiguous_product_family",
+        expected_trace_status="clarification",
+        expected_intent="clarify",
+        expected_empty_context=True,
+        require_safe_control_response=True,
+        forbidden_execution_steps=("relation_retrieval", "sql", "deterministic_oracle"),
+    ),
+    OfficialSmokeCase(
+        case_id="official-relation-unsupported",
+        query=(
+            ("question_id", "docker-smoke-official-relation-unsupported-001"),
+            ("question", "미래에셋이 운용하는 공모펀드를 보여줘."),
+        ),
+        expected_question_id="docker-smoke-official-relation-unsupported-001",
+        expected_question="미래에셋이 운용하는 공모펀드를 보여줘.",
+        expected_trace_status="unsupported",
+        expected_intent="unsupported",
+        expected_empty_context=True,
+        require_safe_control_response=True,
+        forbidden_execution_steps=("relation_retrieval", "sql", "deterministic_oracle"),
+    ),
+)
+
+
+def official_smoke_cases(relation_retrieval_status: str) -> tuple[OfficialSmokeCase, ...]:
+    """Add public relation coverage only when the signed relation release is active."""
+
+    if relation_retrieval_status == "ready":
+        return OFFICIAL_CASES + RELATION_OFFICIAL_CASES
+    if relation_retrieval_status == "disabled":
+        return OFFICIAL_CASES
+    raise ValueError(f"unsupported relation retrieval status: {relation_retrieval_status}")
 
 
 def smoke_cases(
@@ -430,6 +524,17 @@ def validate_official_answer(
     expected_families: tuple[str, ...] = (),
     expected_evidence: bool = False,
     expected_empty_context: bool = False,
+    expected_execution_step: str | None = None,
+    expected_citation_kind: str | None = None,
+    expected_relation_type: str | None = None,
+    expected_relation_query: str | None = None,
+    expected_relation_top_k: int | None = None,
+    expected_product_count: int | None = None,
+    expected_relation_field: str | None = None,
+    expected_relation_value: str | None = None,
+    expected_candidate_count: int | None = None,
+    require_safe_control_response: bool = False,
+    forbidden_execution_steps: tuple[str, ...] = (),
     forbidden_output_fragments: tuple[str, ...] = (),
 ) -> list[str]:
     errors: list[str] = []
@@ -469,7 +574,8 @@ def validate_official_answer(
                 decoded_fields[key] = decoded
     if expected_control_code is not None:
         trace = decoded_fields.get("think_trace", {})
-        _expect(errors, trace.get("status") == "error", "official control status differs")
+        if expected_trace_status is None:
+            _expect(errors, trace.get("status") == "error", "official control status differs")
         _expect(
             errors,
             trace.get("control_code") == expected_control_code,
@@ -490,6 +596,52 @@ def validate_official_answer(
             trace.get("product_families") == list(expected_families),
             "official product families differ",
         )
+    if expected_execution_step is not None:
+        execution_steps = trace.get("execution_steps")
+        _expect(
+            errors,
+            isinstance(execution_steps, list) and expected_execution_step in execution_steps,
+            "official execution step differs",
+        )
+    execution_steps = trace.get("execution_steps")
+    if require_safe_control_response:
+        _expect(
+            errors,
+            isinstance(execution_steps, list) and "safe_control_response" in execution_steps,
+            "official safe control step is missing",
+        )
+    if forbidden_execution_steps:
+        _expect(
+            errors,
+            isinstance(execution_steps, list)
+            and not any(step in execution_steps for step in forbidden_execution_steps),
+            "official control response contains a forbidden execution step",
+        )
+    if any(
+        value is not None
+        for value in (
+            expected_relation_type,
+            expected_relation_query,
+            expected_relation_top_k,
+        )
+    ):
+        filters = trace.get("filters")
+        expected_filter = {
+            "relation_type": expected_relation_type,
+            "query": expected_relation_query,
+            "top_k": expected_relation_top_k,
+        }
+        _expect(
+            errors,
+            filters == [expected_filter],
+            "official relation filter differs",
+        )
+    if expected_candidate_count is not None:
+        _expect(
+            errors,
+            trace.get("candidate_count") == expected_candidate_count,
+            "official candidate count differs",
+        )
     context = decoded_fields.get("retrieved_context", {})
     if expected_evidence:
         evidence = context.get("evidence")
@@ -504,6 +656,54 @@ def validate_official_answer(
                 "official evidence is empty",
             )
         _expect(errors, bool(context.get("citations")), "official citations are empty")
+    if expected_citation_kind is not None:
+        citations = context.get("citations")
+        _expect(
+            errors,
+            isinstance(citations, list)
+            and bool(citations)
+            and all(
+                isinstance(citation, dict) and citation.get("kind") == expected_citation_kind
+                for citation in citations
+            ),
+            "official citation kind differs",
+        )
+    if expected_product_count is not None:
+        evidence = context.get("evidence")
+        products = evidence.get("products") if isinstance(evidence, dict) else None
+        if expected_product_count == 0 and expected_empty_context:
+            _expect(
+                errors,
+                products is None,
+                "official not-found context unexpectedly contains products",
+            )
+        else:
+            _expect(
+                errors,
+                isinstance(products, list) and len(products) == expected_product_count,
+                "official relation product count differs",
+            )
+    if expected_relation_field is not None or expected_relation_value is not None:
+        evidence = context.get("evidence")
+        products = evidence.get("products") if isinstance(evidence, dict) else None
+        relation_fields = []
+        if isinstance(products, list):
+            for product in products:
+                if not isinstance(product, dict):
+                    continue
+                fields = product.get("fields")
+                if isinstance(fields, list):
+                    relation_fields.extend(field for field in fields if isinstance(field, dict))
+        _expect(
+            errors,
+            bool(relation_fields)
+            and all(
+                field.get("field") == expected_relation_field
+                and field.get("value") == expected_relation_value
+                for field in relation_fields
+            ),
+            "official relation field evidence differs",
+        )
     if expected_empty_context:
         _expect(errors, context.get("citations") == [], "official control context has citations")
         _expect(errors, "evidence" not in context, "official control context has evidence")
@@ -621,7 +821,7 @@ def main(argv: list[str] | None = None) -> int:
                 )
             )
         official_results = []
-        for case in OFFICIAL_CASES:
+        for case in official_smoke_cases(arguments.expected_relation_retrieval_status):
             (
                 official_status,
                 official_body,
@@ -644,6 +844,17 @@ def main(argv: list[str] | None = None) -> int:
                 expected_families=case.expected_families,
                 expected_evidence=case.expected_evidence,
                 expected_empty_context=case.expected_empty_context,
+                expected_execution_step=case.expected_execution_step,
+                expected_citation_kind=case.expected_citation_kind,
+                expected_relation_type=case.expected_relation_type,
+                expected_relation_query=case.expected_relation_query,
+                expected_relation_top_k=case.expected_relation_top_k,
+                expected_product_count=case.expected_product_count,
+                expected_relation_field=case.expected_relation_field,
+                expected_relation_value=case.expected_relation_value,
+                expected_candidate_count=case.expected_candidate_count,
+                require_safe_control_response=case.require_safe_control_response,
+                forbidden_execution_steps=case.forbidden_execution_steps,
                 forbidden_output_fragments=case.forbidden_output_fragments,
             )
             official_results.append(
@@ -664,7 +875,7 @@ def main(argv: list[str] | None = None) -> int:
     passed_cases = sum(item["passed"] for item in results)
     report = {
         "schema_version": "1.1",
-        "suite_id": "docker-http-smoke-v2",
+        "suite_id": "docker-http-smoke-v3",
         "started_at": started_at.isoformat(),
         "base_url": base_url,
         "llm_provider_expected": arguments.provider_model is not None,

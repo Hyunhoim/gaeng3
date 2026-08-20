@@ -105,13 +105,17 @@ def _knowledge_assembly_matches(
     settings: Settings,
     release_guard: ResolvedAgentRelease | None,
 ) -> bool:
-    if type(service.knowledge_router) is not DeterministicKnowledgeRouter:
-        return False
     if type(release_guard) is not ResolvedAgentRelease:
         return False
     knowledge_release = release_guard.manifest.components.knowledge_retrieval
     if knowledge_release.relation.status != "activated":
-        return service.knowledge_agent is None and not settings.relation_retrieval_configured
+        return (
+            service.knowledge_router is None
+            and service.knowledge_agent is None
+            and not settings.relation_retrieval_configured
+        )
+    if type(service.knowledge_router) is not DeterministicKnowledgeRouter:
+        return False
     agent = service.knowledge_agent
     if type(agent) is not KnowledgeAgent or not settings.relation_retrieval_configured:
         return False
@@ -479,6 +483,7 @@ def build_agent(
         if settings.answer_provider == "hyperclova":
             answer_provider = HyperClovaXGroundedAnswerProvider(hcx_settings, transport)
     knowledge_agent = _build_knowledge_agent(settings, release_guard)
+    knowledge_router = DeterministicKnowledgeRouter() if knowledge_agent is not None else None
     return RoutedFinanceAgent(
         settings.database_paths,
         query_plan_provider=query_plan_provider,
@@ -489,7 +494,7 @@ def build_agent(
         release_guard=release_guard,
         require_agent_release=settings.app_env in {"evaluation", "production"},
         audit_sink=audit_sink,
-        knowledge_router=DeterministicKnowledgeRouter(),
+        knowledge_router=knowledge_router,
         knowledge_agent=knowledge_agent,
     )
 

@@ -6,11 +6,14 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from finance_agent_core.agent.router import classify_interaction_intent
+from finance_agent_core.agent.semantic_gate import SemanticCoverageGate
 from finance_agent_core.contracts.knowledge import (
     KnowledgeQueryPlan,
     RelationKnowledgeOperation,
 )
 from finance_agent_core.contracts.queryplan import ProductFamily
+from finance_agent_core.contracts.routing import InteractionIntent
 from finance_agent_core.retrieval.relations import RelationType
 
 
@@ -42,16 +45,16 @@ class KnowledgeRouteDecision(BaseModel):
 
 
 class KnowledgeRoutedExecutionError(RuntimeError):
-    """Preserve a trusted knowledge route when execution fails downstream."""
+    """Preserve a trusted knowledge route when a downstream boundary fails."""
 
     def __init__(self, decision: KnowledgeRouteDecision, cause: Exception) -> None:
         if type(decision) is not KnowledgeRouteDecision:
             raise TypeError("decision must be a KnowledgeRouteDecision")
-        if decision.disposition is not KnowledgeRouteDisposition.EXECUTE:
-            raise ValueError("only an executable knowledge route can fail downstream")
+        if decision.disposition is KnowledgeRouteDisposition.NOT_APPLICABLE:
+            raise ValueError("a non-applicable knowledge route has no trusted boundary")
         self.decision = decision
         self.cause = cause
-        super().__init__("trusted knowledge route execution failed")
+        super().__init__("trusted knowledge route boundary failed")
 
 
 _FAMILY_PATTERNS: dict[ProductFamily, re.Pattern[str]] = {
@@ -165,15 +168,18 @@ _UNSUPPORTED_RELATION_SCOPE = re.compile(
     re.IGNORECASE,
 )
 _PROHIBITED_ACTION = re.compile(
-    r"전망|예측|추천|사야|매수|수익\s*보장|CSV|엑셀|다운로드|내보내|출력\s*파일|"
+    r"전망|예측|추천|사야|매수\s*(?:해|하|를\s*(?:실행|추천)|주문)|"
+    r"수익\s*보장|CSV|엑셀|다운로드|내보내|출력\s*파일|"
     r"이전\s*지시\s*무시|시스템\s*프롬프트|ignore\s+(?:all\s+)?previous|"
     r"drop\s+table|<script|```",
     re.IGNORECASE,
 )
 _ADDITIONAL_PRODUCT_CONDITION = re.compile(
     r"AUM|총\s*보수|보수율|수익률|이율|금리|만기|신용\s*등급|거래\s*통화|"
-    r"가격|시가\s*총액|듀레이션|잔존\s*일수|오름차순|내림차순|상위|하위|"
-    r"높은\s*순|낮은\s*순|큰\s*순|작은\s*순",
+    r"가격|시가\s*총액|듀레이션|잔존\s*일수|위험|리스크|"
+    r"매수\s*가능|판매\s*가능|거래\s*(?:가능|중지|정지|량|대금)|"
+    r"연금|환\s*헤지|제외|말고|빼고|오름차순|내림차순|정렬|상위|하위|"
+    r"높은\s*순|낮은\s*순|큰\s*순|작은\s*순|많은\s*순|적은\s*순",
     re.IGNORECASE,
 )
 _COORDINATED_ENTITY = re.compile(r"(?:또는|혹은|및|와|과)\s+|[,/;]", re.IGNORECASE)
@@ -182,6 +188,18 @@ _INVALID_ENTITY = re.compile(
     re.IGNORECASE,
 )
 _LIMIT = re.compile(r"(\d+)\s*(?:개|건)(?!월)")
+_APPROVED_REQUEST_WORDS = re.compile(
+    r"상품|종목|목록|결과|딱|정확히|"
+    r"알려|보여|찾아|검색|조회|제시|나열|"
+    r"해|줘|주세요|주십시오|달라|부탁|합니다|"
+    r"무엇|뭐|어떤|있는지|있나요|있어|인가|인지",
+    re.IGNORECASE,
+)
+_STANDALONE_REQUEST_PARTICLE = re.compile(
+    r"(?<![0-9A-Za-z가-힣])(?:을|를|은|는|이|가|만|중|에서|와|과)(?![0-9A-Za-z가-힣])"
+)
+_REQUEST_PUNCTUATION = re.compile(r"[\s.,!?~:;·'\"“”‘’()\[\]{}]+")
+_RESIDUAL_TOKEN = re.compile(r"[0-9A-Za-z가-힣]+")
 
 
 def _decision(
@@ -222,6 +240,40 @@ def _entity_candidates(question: str, relation_type: RelationType) -> tuple[str,
             if entity and entity not in candidates:
                 candidates.append(entity)
     return tuple(candidates)
+
+
+def _unresolved_relation_spans(
+    question: str,
+    relation_type: RelationType,
+) -> tuple[str, ...]:
+    """Return all text outside the deliberately small relation-query grammar.
+
+    FTS exact matching protects the entity value, but it cannot prove that every
+    other condition in the user's sentence reached the plan.  Mask the authorized
+    relation clause, product family and result limit; only harmless request words
+    may remain.  Any other token is a residual condition and therefore cannot gain
+    SQL authority.
+    """
+
+    surface = list(question)
+
+    def mask(start: int, end: int) -> None:
+        surface[start:end] = " " * (end - start)
+
+    for pattern in _ENTITY_PATTERNS[relation_type]:
+        for match in pattern.finditer(question):
+            mask(*match.span())
+    for pattern in _FAMILY_PATTERNS.values():
+        for match in pattern.finditer(question):
+            mask(*match.span())
+    for match in _LIMIT.finditer(question):
+        mask(*match.span())
+
+    residual = "".join(surface)
+    residual = _APPROVED_REQUEST_WORDS.sub(" ", residual)
+    residual = _STANDALONE_REQUEST_PARTICLE.sub(" ", residual)
+    residual = _REQUEST_PUNCTUATION.sub(" ", residual)
+    return tuple(dict.fromkeys(_RESIDUAL_TOKEN.findall(residual)))
 
 
 class DeterministicKnowledgeRouter:
@@ -275,11 +327,34 @@ class DeterministicKnowledgeRouter:
                 "relation_source_not_approved",
                 "테마·편입종목·외부 문서 관계는 현재 승인된 P0-6 관계 색인에 없음",
             )
+        if classify_interaction_intent(question) is not InteractionIntent.SEARCH:
+            return _decision(
+                KnowledgeRouteDisposition.NOT_APPLICABLE,
+                "existing_product_intent",
+                "SEARCH가 아닌 기존 상품 의도는 기존 Router가 처리",
+            )
         if _ADDITIONAL_PRODUCT_CONDITION.search(question):
             return _decision(
                 KnowledgeRouteDisposition.CLARIFY,
                 "additional_relation_conditions",
                 "관계 검색과 다른 수치·정렬 조건을 한 요청에서 함께 실행할 수 없음",
+            )
+        coverage = SemanticCoverageGate().evaluate(
+            question,
+            interaction_intent="search",
+            check_exclusions=True,
+        )
+        if coverage.unsupported_spans:
+            return _decision(
+                KnowledgeRouteDisposition.UNSUPPORTED,
+                "relation_semantic_unsupported",
+                "관계 검색과 함께 실행할 수 없는 읽기 외 행동이나 미지원 필드가 있음",
+            )
+        if coverage.ambiguity_spans:
+            return _decision(
+                KnowledgeRouteDisposition.CLARIFY,
+                "relation_semantic_incomplete",
+                "관계 외 조건의 필드나 기준을 하나로 확정할 수 없음",
             )
         if len(signals) != 1:
             return _decision(
@@ -358,6 +433,15 @@ class DeterministicKnowledgeRouter:
                 KnowledgeRouteDisposition.UNSUPPORTED,
                 "relation_limit_out_of_range",
                 "관계 검색은 한 번에 1건에서 20건까지만 실행할 수 있음",
+            )
+
+        unresolved = _unresolved_relation_spans(question, relation_type)
+        if unresolved:
+            return _decision(
+                KnowledgeRouteDisposition.CLARIFY,
+                "unresolved_relation_conditions",
+                "관계 계획에 포함되지 않은 추가 조건이 있어 실행할 수 없음: "
+                + ", ".join(unresolved)[:300],
             )
 
         plan = KnowledgeQueryPlan(
