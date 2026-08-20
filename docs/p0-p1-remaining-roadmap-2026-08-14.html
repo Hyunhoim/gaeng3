@@ -38,13 +38,15 @@
 <main>
   <header>
     <h1>남은 P0·P1 구현 로드맵</h1>
-    <p class="meta">기준일 2026-08-14 · 팀 공유용 · 예선 정확성·안전성 우선</p>
+    <p class="meta">최초 작성 2026-08-14 · 상태 갱신 2026-08-20 · 팀 공유용 · 예선 정확성·안전성 우선</p>
   </header>
 
   <section class="summary">
     <span class="label done">완료</span>
     HCLX 변경을 별도 commit으로 동결했고, 공식 <code>GET /answer</code>의 5개 문자열·UTF-8·검증 근거 응답을 Docker에서 확인했다.
     공모펀드는 주최 측 데이터 공지 전까지 <code>locked</code>이며 DB·HCLX를 실행하지 않고 <code>UNSUPPORTED</code>로 종료한다.
+    P0-4 공식 Acceptance는 원본 해시를 확인한 clean Docker에서 계약 16/16·안전 무실행 11/11로 완료했다.
+    P0-8은 답변·제어 200, 일시 장애 503, timeout 504와 동일 요청 중복 실행 방지를 Docker에서 완료했다.
   </section>
 
   <section>
@@ -58,38 +60,38 @@
       </article>
 
       <article class="card">
-        <h3><span class="label">P0-4 · 다음</span>공식 예시 Acceptance Suite</h3>
+        <h3><span class="label done">P0-4 · 완료</span>공식 예시 Acceptance Suite</h3>
         <p>Acceptance Suite는 주최 측 예시 요청·응답을 그대로 자동 검사하는 공식 계약 회귀 세트다.</p>
-        <div class="row"><strong>해야 할 일</strong>공개된 예시를 원문 그대로 고정하고 GET, query parameter, 5개 string, UTF-8, 무인증·순차 호출을 검사한다.</div>
-        <div class="row"><strong>완료 기준</strong>답변 불가·추가 parameter·긴 입력·공모펀드 잠금을 포함해 clean Docker에서 전부 통과.</div>
+        <div class="row"><strong>완료 결과</strong>공개 예시 8개와 경계 사례 8개를 원본·commit·image digest에 연결하고 계약 16/16, 무실행 11/11을 확인했다.</div>
+        <div class="row"><strong>해석 한계</strong>답변 가능 5개 중 success 관측은 1개다. 16/16은 제출 형식·안전 계약이며 의미 정답률이 아니다. <a href="../finance_agent/docs/p0-4-official-acceptance-handover-2026-08-19.md">인수인계 보고서</a></div>
       </article>
 
       <article class="card">
-        <h3><span class="label">P0-5</span>External Approved Corpus</h3>
-        <p>승인된 외부 문서를 snapshot으로 보관해 금융 개념 설명의 근거로 쓰는 단계다.</p>
-        <div class="row"><strong>해야 할 일</strong>출처·수집일·라이선스·본문 SHA-256을 allowlist Manifest에 고정하고 FTS5/BM25에 적재한다.</div>
-        <div class="row"><strong>완료 기준</strong><code>provided</code> 또는 <code>external_approved</code> 문서만 검색되며, 충돌하면 주최 측 데이터가 우선.</div>
+        <h3><span class="label">P0-5 · 반입 기반 완료</span>External Approved Corpus</h3>
+        <p>승인된 외부 문서를 snapshot으로 보관해 금융 개념 설명의 근거로 쓰는 단계다. 실제 corpus는 아직 없다.</p>
+        <div class="row"><strong>완료 결과</strong>금융·데이터 권한 독립 review, HTTPS 출처, 사용 권한 4종, byte·정규화 본문 SHA-256, canonical Manifest, 변조·경로·덮어쓰기 차단과 검증된 BM25 색인 build를 합성 문서로 검증했다.</div>
+        <div class="row"><strong>남은 일</strong>실제 출처·라이선스 승인, 문서 질문·gold 검색 평가, 충돌 처리, Release manifest 연결. <a href="../finance_agent/docs/p0-5-external-corpus-intake-2026-08-19.md">반입 계약 인수인계</a></div>
       </article>
 
       <article class="card">
-        <h3><span class="label">P0-6</span>관계·문서 검색</h3>
-        <p>Ontology는 회사–상품–테마–편입관계처럼 데이터 사이의 의미 연결을 정의하는 구조다.</p>
-        <div class="row"><strong>해야 할 일</strong>우선 SQLite 관계 테이블로 구현하고 관계마다 출처·기준일을 연결한다. GraphDB는 필요성이 입증될 때만 검토한다.</div>
-        <div class="row"><strong>완료 기준</strong>관계 검색 결과의 최종 product ID와 수치는 공식 상품 DB에서 다시 조회·검증.</div>
+        <h3><span class="label">P0-6 · 제공 관계 기반 완료</span>관계·문서 검색</h3>
+        <p>승인 상품 DB의 발행사·운용사·기초지수·자산유형·투자지역을 SQLite 관계 색인으로 구성했다.</p>
+        <div class="row"><strong>완료 결과</strong>국내채권·국내/해외 ETP 실제 관계 58,005개에 출처·기준일·DB hash를 연결하고, 후보 product ID를 공식 DB에서 다시 조회·검증했다. 관계 계약 14/14, 실제 smoke 4/4를 확인했다.</div>
+        <div class="row"><strong>P0-6 당시 남은 일</strong>공모펀드·테마·편입종목·외부 문서 관계 출처, 금융 alias 검수, P0-10 공개 Agent Release 연결이었다. P0-7 내부 연결과 아래 P0-10 로컬 공개 연결은 후속 완료했으며 나머지는 대기다. <a href="../finance_agent/docs/p0-6-provided-relation-retrieval-handover-2026-08-19.md">관계 검색 인수인계</a></div>
       </article>
 
       <article class="card">
-        <h3><span class="label">P0-7</span>관계형 QueryPlan·Claim Verifier</h3>
+        <h3><span class="label done">P0-7 · 내부 완료</span>관계형 QueryPlan·Claim Verifier</h3>
         <p>QueryPlan은 질문을 허용된 검색 조건으로 바꾼 설계도이며, Claim Verifier는 답변 문장마다 근거가 있는지 확인한다.</p>
-        <div class="row"><strong>해야 할 일</strong>허용된 relation/document 연산만 Typed QueryPlan에 추가하고 HCLX가 임의 relation·수치를 만들지 못하게 한다.</div>
-        <div class="row"><strong>완료 기준</strong>모든 주장에 DB 또는 승인 문서 evidence가 연결되지 않으면 답변에서 제외하거나 안전 fallback.</div>
+        <div class="row"><strong>완료 결과</strong>관계·문서 Typed Plan, 서버 계획 exact-match gate, evidence의 개수·순서·값·참조 Claim Verifier와 전체 결정론적 fallback을 구현했다. 전용 계약 22/22, 승인 관계 smoke 4/4를 확인했다.</div>
+        <div class="row"><strong>P0-7 당시 남은 경계</strong>기존 자연어 Router·공개 GET /answer·P0-10 AgentReleaseManifest 연결이었다. 아래 P0-10에서 관계 경로의 로컬 연결을 후속 완료했으며 실제 외부 문서와 관계 HCLX는 계속 미호출이다. <a href="../finance_agent/docs/p0-7-knowledge-claim-verifier-handover-2026-08-20.md">P0-7 인수인계</a></div>
       </article>
 
       <article class="card">
-        <h3><span class="label">P0-8</span>300초·5xx 재시도 계약</h3>
-        <p>주최 측은 문항당 300초를 기다리고 timeout 또는 5xx에서 최대 2회 재시도한다. 현재 외곽 제한은 55초다.</p>
-        <div class="row"><strong>해야 할 일</strong>미지원·역질문은 HTTP 200으로 유지하고, 일시적 인프라 장애만 503/504로 분리한다. 내부 deadline은 실측 후 300초보다 짧게 둔다.</div>
-        <div class="row"><strong>완료 기준</strong>장애에서만 평가기 재시도가 작동하고, 같은 요청의 중복 실행·Audit·비용이 통제되는 Docker 테스트 통과.</div>
+        <h3><span class="label done">P0-8 · 완료</span>300초·5xx 재시도 계약</h3>
+        <p>주최 측 300초 제한보다 짧은 270초 outer deadline과 일시 장애 503·timeout 504 계약을 적용했다.</p>
+        <div class="row"><strong>완료 결과</strong>동일 요청 single-flight·안전 결과 300초 replay를 추가하고 정상 재전송 200·200/Agent 1회, dataset 장애 503·503/Agent 2회, 강제 timeout 504를 Docker에서 확인했다.</div>
+        <div class="row"><strong>인수인계</strong><a href="../finance_agent/docs/p0-8-retry-contract-handover-2026-08-19.md">P0-8 재시도 계약 보고서</a> · code commit <code>2ca044b</code></div>
       </article>
 
       <article class="card">
@@ -100,10 +102,11 @@
       </article>
 
       <article class="card">
-        <h3><span class="label">P0-10</span>NCP 불변 Release·제출</h3>
-        <p>같은 코드·Prompt·Model·index·DB·Docker image를 하나의 배포 단위로 고정한다.</p>
-        <div class="row"><strong>해야 할 일</strong>clean commit → AgentReleaseManifest → linux/amd64 image → Registry RepoDigest → NCP 80번 포트 순서로 배포한다.</div>
-        <div class="row"><strong>완료 기준</strong>공인 IP GET smoke, rollback drill, image label·digest·Manifest 일치, README endpoint 명시 후 제출 상태 동결.</div>
+        <h3><span class="label">P0-10 · 로컬 구현 검증</span>NCP 불변 Release·제출</h3>
+        <p>관계 질문의 공개 Router부터 manifest에 해시로 고정된 공개 Release 계약, 정확 일치 검색, 공식 DB 재검증, 필드 근거, 결정론적 답변, 인과적 Audit까지를 하나의 공개 경로로 연결했다.</p>
+        <div class="row"><strong>로컬 검증 결과</strong><code>local implementation verified</code>. P0-10 집중 회귀 522/522, Agent Core 1,443 passed·2 skipped, Backend 358 passed·2 warnings. 빈 Docker volume에서 Backend smoke 8/8·공식 형식 GET 호환 smoke 8/8, 관계 질문 3개 상품/3개 citation, 부분 표현 <code>not_found</code>, 변조 시 health·API 503을 확인했다. <a href="../finance_agent/evaluation/baselines/p0-10-public-relation-release-integration-v1.json">machine-readable baseline</a> · <a href="../finance_agent/docs/p0-10-public-relation-release-integration-handover-2026-08-20.md">P0-10 인수인계</a></div>
+        <div class="row"><strong>아직 완료가 아닌 범위</strong>NCP의 실제 서명 배포·공인 IP, 서명된 두 Release 간 rollback, 관계 답변용 HCLX claim provider, 금융 alias·의미 독립 blind, 실제 승인 문서 corpus.</div>
+        <div class="row"><strong>최종 완료 기준</strong>clean commit → 서명된 AgentReleaseManifest → linux/amd64 image·RepoDigest → NCP 배포 → 공인 IP smoke·signed rollback drill 순서를 실제 인프라에서 재현한 뒤 제출 상태로 동결.</div>
       </article>
     </div>
   </section>
@@ -125,7 +128,7 @@
 
   <section>
     <h2>권장 실행 순서</h2>
-    <p class="flow">P0-4 공식 예시 고정 → P0-9 Blind 최초 실행 → P0-8 timeout·재시도 → P0-5~7 승인 문서·관계 근거 → P0-10 NCP 제출 Release</p>
+    <p class="flow">P0-4·P0-8 완료 → P0-5 반입·P0-6 관계 기반·P0-7 내부 검증 완료 → P0-9 private 자산 확보 시 최초 Blind → P0-10 공개 Router·Release·NCP 제출</p>
     <p class="note">P0-3 공모펀드는 주최 측 공지가 올 때까지 이 흐름과 별개로 잠근다. Schema Dense·HCLX Planning은 Blind 결과가 개선을 증명한 경우에만 P1 Shadow로 연결한다.</p>
   </section>
 

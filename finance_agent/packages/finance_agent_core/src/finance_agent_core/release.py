@@ -36,6 +36,7 @@ class AgentReleaseCode(StrEnum):
     UNSAFE_FILE = "unsafe_file"
     INVALID_JSON = "invalid_json"
     BINDING_HASH_MISMATCH = "binding_hash_mismatch"
+    ARTIFACT_HASH_MISMATCH = "artifact_hash_mismatch"
     MANIFEST_HASH_MISMATCH = "manifest_hash_mismatch"
     RELEASE_MISMATCH = "release_mismatch"
     RUNTIME_MISMATCH = "runtime_mismatch"
@@ -140,6 +141,78 @@ class RetrievalRelease(ReleaseModel):
     document_bm25: Literal["disabled_no_approved_corpus"] = "disabled_no_approved_corpus"
 
 
+class RelationRetrievalArtifactRelease(ReleaseModel):
+    artifact_kind: Literal["provided_product_relations"] = "provided_product_relations"
+    index_sha256: str = Field(pattern=_SHA256_PATTERN)
+    approval_manifest_sha256: str = Field(pattern=_SHA256_PATTERN)
+    relation_set_sha256: str = Field(pattern=_SHA256_PATTERN)
+
+
+class DocumentRetrievalArtifactRelease(ReleaseModel):
+    artifact_kind: Literal["approved_document_bm25"] = "approved_document_bm25"
+    index_sha256: str = Field(pattern=_SHA256_PATTERN)
+    corpus_manifest_sha256: str = Field(pattern=_SHA256_PATTERN)
+    file_manifest_sha256: str = Field(pattern=_SHA256_PATTERN)
+
+
+class KnowledgeRetrievalRelease(ReleaseModel):
+    """P0-7 internal candidate binding; never serves as public activation state."""
+
+    schema_version: Literal["1.0"] = "1.0"
+    status: Literal["internal_verified_not_agent_release_activated"] = (
+        "internal_verified_not_agent_release_activated"
+    )
+    relation: RelationRetrievalArtifactRelease | None = None
+    document: DocumentRetrievalArtifactRelease | None = None
+
+    @model_validator(mode="after")
+    def require_at_least_one_artifact(self) -> KnowledgeRetrievalRelease:
+        if self.relation is None and self.document is None:
+            raise ValueError("knowledge retrieval release requires at least one artifact")
+        return self
+
+    @property
+    def contract_sha256(self) -> str:
+        return canonical_sha256(self.model_dump(mode="json"))
+
+
+class PublicRelationRetrievalRelease(ReleaseModel):
+    """Public activation state; deliberately incompatible with the P0-7 candidate."""
+
+    status: Literal["disabled_not_activated", "activated"]
+    artifact: RelationRetrievalArtifactRelease | None = None
+    artifact_file_sha256: str | None = Field(default=None, pattern=_SHA256_PATTERN)
+
+    @model_validator(mode="after")
+    def require_exact_activation_evidence(self) -> PublicRelationRetrievalRelease:
+        if self.status == "disabled_not_activated":
+            if self.artifact is not None or self.artifact_file_sha256 is not None:
+                raise ValueError("disabled relation retrieval cannot bind an artifact")
+            return self
+        if self.artifact is None or self.artifact_file_sha256 is None:
+            raise ValueError("activated relation retrieval requires a validated artifact")
+        return self
+
+
+class PublicDocumentRetrievalRelease(ReleaseModel):
+    """P0-10 does not activate documents until an approved corpus exists."""
+
+    status: Literal["disabled_no_approved_corpus"] = "disabled_no_approved_corpus"
+    artifact: None = None
+
+
+class PublicKnowledgeRetrievalRelease(ReleaseModel):
+    """Required knowledge-retrieval state in the public Agent release."""
+
+    schema_version: Literal["1.0"] = "1.0"
+    relation: PublicRelationRetrievalRelease
+    document: PublicDocumentRetrievalRelease
+
+    @property
+    def contract_sha256(self) -> str:
+        return canonical_sha256(self.model_dump(mode="json"))
+
+
 class ExecutionRelease(ReleaseModel):
     plan_authority_version: Literal["plan-authority-v1"] = "plan-authority-v1"
     planning_policy_version: Literal["adaptive-shadow-v1"] = "adaptive-shadow-v1"
@@ -182,7 +255,7 @@ class RuntimeFeatureRelease(ReleaseModel):
 
 class RuntimeControlRelease(ReleaseModel):
     hcx_timeout_seconds: float = Field(gt=0, le=300)
-    official_answer_timeout_seconds: float = Field(gt=0, lt=60)
+    official_answer_timeout_seconds: float = Field(gt=0, lt=300)
     official_answer_max_inflight: StrictInt = Field(ge=1, le=8)
     worker_count: StrictInt = Field(ge=1, le=8)
     audit_schema_version: Literal["1.2"] = "1.2"
@@ -203,6 +276,7 @@ class AgentReleaseComponents(ReleaseModel):
     approved_datasets: ApprovedDatasetRelease
     prompts: PromptRelease
     execution: ExecutionRelease
+    knowledge_retrieval: PublicKnowledgeRetrievalRelease
     runtime_features: RuntimeFeatureRelease
     runtime_controls: RuntimeControlRelease
 
@@ -210,7 +284,7 @@ class AgentReleaseComponents(ReleaseModel):
 class AgentReleaseManifest(ReleaseModel):
     """Image-bound payload. Container digest deliberately lives outside this model."""
 
-    schema_version: Literal["1.1"] = "1.1"
+    schema_version: Literal["1.2"] = "1.2"
     release_id: str = Field(pattern=_RELEASE_ID_PATTERN)
     environment: Literal["evaluation", "production"]
     generated_at_utc: datetime
@@ -308,9 +382,11 @@ class RuntimeReleaseInputs:
     fund_execution_policy: Literal["locked", "public_fund_v1_approved"]
     schema_dense_enabled: bool = False
     product_dense_enabled: bool = False
+    relation_retrieval_artifact: RelationRetrievalArtifactRelease | None = None
+    relation_retrieval_artifact_file_sha256: str | None = None
     platform: Literal["linux/amd64", "linux/arm64"] = "linux/amd64"
     hcx_timeout_seconds: float = 45.0
-    official_answer_timeout_seconds: float = 55.0
+    official_answer_timeout_seconds: float = 270.0
     official_answer_max_inflight: int = 2
     worker_count: int = 1
     audit_schema_version: Literal["1.2"] = "1.2"
@@ -332,6 +408,19 @@ def _canonical_json(value: object) -> str:
 
 def canonical_sha256(value: object) -> str:
     return hashlib.sha256(_canonical_json(value).encode("utf-8")).hexdigest()
+
+
+def relation_retrieval_artifact_file_bytes(
+    artifact: RelationRetrievalArtifactRelease,
+) -> bytes:
+    """Return the only accepted on-disk representation of an activation artifact."""
+
+    if type(artifact) is not RelationRetrievalArtifactRelease:
+        raise AgentReleaseError(
+            AgentReleaseCode.RUNTIME_MISMATCH,
+            "relation retrieval activation requires the public artifact contract",
+        )
+    return (_canonical_json(artifact.model_dump(mode="json")) + "\n").encode("utf-8")
 
 
 def _raw_resource(package: str, name: str) -> bytes:
@@ -428,6 +517,58 @@ def _runtime_model(inputs: RuntimeReleaseInputs) -> ModelRelease:
         revision_status="provider_revision_not_exposed",
         queryplan_operation_enabled=queryplan_enabled,
         grounded_answer_operation_enabled=answer_enabled,
+    )
+
+
+def _public_knowledge_retrieval(
+    inputs: RuntimeReleaseInputs,
+) -> PublicKnowledgeRetrievalRelease:
+    artifact = inputs.relation_retrieval_artifact
+    artifact_file_sha256 = inputs.relation_retrieval_artifact_file_sha256
+    if artifact is None:
+        if artifact_file_sha256 is not None:
+            raise AgentReleaseError(
+                AgentReleaseCode.RUNTIME_MISMATCH,
+                "relation retrieval artifact hash cannot be set while retrieval is disabled",
+            )
+        relation = PublicRelationRetrievalRelease(status="disabled_not_activated")
+    else:
+        if type(artifact) is not RelationRetrievalArtifactRelease:
+            raise AgentReleaseError(
+                AgentReleaseCode.RUNTIME_MISMATCH,
+                "an internal knowledge release cannot activate public relation retrieval",
+            )
+        try:
+            artifact = RelationRetrievalArtifactRelease.model_validate(
+                artifact.model_dump(mode="json")
+            )
+        except ValueError as error:
+            raise AgentReleaseError(
+                AgentReleaseCode.RUNTIME_MISMATCH,
+                "relation retrieval artifact violates the public activation contract",
+            ) from error
+        if not isinstance(artifact_file_sha256, str) or not re.fullmatch(
+            _SHA256_PATTERN,
+            artifact_file_sha256,
+        ):
+            raise AgentReleaseError(
+                AgentReleaseCode.ARTIFACT_HASH_MISMATCH,
+                "relation retrieval activation requires a trusted artifact file SHA-256",
+            )
+        canonical_file_sha256 = _raw_sha256(relation_retrieval_artifact_file_bytes(artifact))
+        if canonical_file_sha256 != artifact_file_sha256:
+            raise AgentReleaseError(
+                AgentReleaseCode.ARTIFACT_HASH_MISMATCH,
+                "relation retrieval artifact differs from its trusted SHA-256",
+            )
+        relation = PublicRelationRetrievalRelease(
+            status="activated",
+            artifact=artifact,
+            artifact_file_sha256=artifact_file_sha256,
+        )
+    return PublicKnowledgeRetrievalRelease(
+        relation=relation,
+        document=PublicDocumentRetrievalRelease(),
     )
 
 
@@ -547,6 +688,7 @@ def build_release_components(inputs: RuntimeReleaseInputs) -> AgentReleaseCompon
             core_version=__version__,
             backend_version=inputs.backend_version,
         ),
+        knowledge_retrieval=_public_knowledge_retrieval(inputs),
         runtime_features=RuntimeFeatureRelease(
             fund_execution_policy=inputs.fund_execution_policy,
             model=_runtime_model(inputs),
@@ -708,6 +850,46 @@ def _read_release_file(path: str | Path) -> tuple[Path, bytes, str]:
     finally:
         os.close(descriptor)
     return target, data, _raw_sha256(data)
+
+
+def load_relation_retrieval_artifact_release(
+    *,
+    artifact_path: str | Path,
+    expected_file_sha256: str,
+) -> RelationRetrievalArtifactRelease:
+    """Load one canonical, immutable artifact behind an explicit trust anchor."""
+
+    if not isinstance(expected_file_sha256, str) or not re.fullmatch(
+        _SHA256_PATTERN,
+        expected_file_sha256,
+    ):
+        raise AgentReleaseError(
+            AgentReleaseCode.ARTIFACT_HASH_MISMATCH,
+            "relation retrieval artifact trust anchor is invalid",
+        )
+    _, data, actual_file_sha256 = _read_release_file(artifact_path)
+    if actual_file_sha256 != expected_file_sha256:
+        raise AgentReleaseError(
+            AgentReleaseCode.ARTIFACT_HASH_MISMATCH,
+            "relation retrieval artifact differs from the trusted SHA-256",
+        )
+    try:
+        artifact = RelationRetrievalArtifactRelease.model_validate(
+            _strict_json_object(data, "RelationRetrievalArtifactRelease")
+        )
+    except AgentReleaseError:
+        raise
+    except ValueError as error:
+        raise AgentReleaseError(
+            AgentReleaseCode.INVALID_JSON,
+            "relation retrieval artifact violates the strict public schema",
+        ) from error
+    if data != relation_retrieval_artifact_file_bytes(artifact):
+        raise AgentReleaseError(
+            AgentReleaseCode.INVALID_JSON,
+            "relation retrieval artifact is not in canonical file form",
+        )
+    return artifact
 
 
 @dataclass(frozen=True, slots=True)
@@ -892,6 +1074,12 @@ __all__ = [
     "AgentReleaseError",
     "AgentReleaseManifest",
     "DeploymentBinding",
+    "DocumentRetrievalArtifactRelease",
+    "KnowledgeRetrievalRelease",
+    "PublicDocumentRetrievalRelease",
+    "PublicKnowledgeRetrievalRelease",
+    "PublicRelationRetrievalRelease",
+    "RelationRetrievalArtifactRelease",
     "ResolvedAgentRelease",
     "RollbackRelease",
     "RuntimeControlRelease",
@@ -901,6 +1089,8 @@ __all__ = [
     "canonical_sha256",
     "deployment_binding_file_bytes",
     "manifest_file_bytes",
+    "load_relation_retrieval_artifact_release",
+    "relation_retrieval_artifact_file_bytes",
     "resolve_agent_release",
     "sha256_runtime_tree",
 ]

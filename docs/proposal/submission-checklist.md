@@ -2,7 +2,7 @@
 
 상태: 활성
 
-기준일: 2026-08-07
+기준일: 2026-08-20
 
 공식 과제 소개자료 7페이지의 예선 제출 항목과 변경 금지 조건을 기준으로 한다.
 
@@ -32,10 +32,23 @@
 - [ ] 비밀정보, 로컬 경로, 모델 weight, `artifacts/`가 Git에 없는지 확인
 - [ ] 공식 제출 범위 확정 후 로컬 LLM provider·설정·스크립트·의존성 제거
 - [ ] Git 이력을 재작성하지 않고 개발 이력과 제출 경로를 투명하게 분리
+- [x] 외부 문서의 금융·데이터 권한 독립 review·HTTPS 출처·본문 hash·변조 차단 계약
+- [ ] 실제 외부 corpus 출처·사용 권한·snapshot·manifest SHA-256 승인
+- [ ] 승인 corpus BM25 검색 품질·충돌·최신성 평가 후 Release에 연결
+- [x] 승인 상품 DB 제공 관계 58,005개 색인·상품 ID 재검증·출처·해시 계약
+- [ ] 관계 값·한영 표기·동의어의 금융 도메인 검수
+- [x] P0-7 관계·문서 Typed Plan·Claim Verifier·결정론적 fallback 내부 계약
+- [x] P0-10 공개 Router·Backend adapter와 manifest에 해시로 고정된 Agent Release 계약 연결을 로컬에서 검증
+- [x] 관계 검색의 exact FTS 후보·canonical full match·공식 DB identity 재검증·field evidence·인과적 Audit 계약
+- [x] P0-10 집중 회귀 522/522, Agent Core 1,443 passed·2 skipped, Backend 358 passed·2 warnings
+- [x] 빈 Docker volume에서 Backend smoke 8/8·공식 형식 GET 호환 smoke 8/8, 관계 3 products/3 citations, 부분 표현 `not_found` 확인
+- [x] 관계 색인·DB 변조 시 health·API가 HTTP 503으로 fail-closed되는 로컬 계약 확인
+- [ ] 금융 alias·관계 의미의 독립 blind 평가로 정확도·오수락 확인
 
-현재 상태: Conda·pip와 Agent Core wheel, 공식 XLSX 준비와 FastAPI를 잇는 통합
-Docker 실행은 재현 완료. `nextjs-frontend/`는 아직 저장소에 없으며 화면 합류 후
-같은 루트 Compose 실행 경로에 추가해야 한다.
+현재 상태: Conda·pip와 Agent Core wheel, 공식 XLSX 준비와 FastAPI, P0-10
+공개 관계 검색을 잇는 통합 Docker 경로는 로컬에서 재현 완료. 이 표시는
+`local implementation verified`이며 NCP 실제 배포 완료를 뜻하지 않는다. `nextjs-frontend/`는
+아직 저장소에 없으며 화면 합류 후 같은 루트 Compose 실행 경로에 추가해야 한다.
 
 ## 2. 기술 제안서
 
@@ -58,13 +71,15 @@ Docker 실행은 재현 완료. `nextjs-frontend/`는 아직 저장소에 없으
 - [x] `GET /answer` route와 다섯 문자열 response model
 - [x] `question_id`, `question` 필수 query parameter 규격 확인
 - [x] 다섯 필수 응답 필드가 모두 문자열인 규격 확인
-- [x] 성공·미검색·역질문·미지원·오류가 동일한 다섯 필드와 HTTP 200 반환
+- [x] 성공·미검색·역질문·미지원·재시도 불필요 오류가 동일한 다섯 필드와 HTTP 200 반환
 - [x] 정의되지 않은 query parameter에도 HTTP 500을 반환하지 않음
-- [x] 질문당 60초 권장보다 짧은 55초 외곽 timeout과 안전 응답 처리
-- [ ] 미확정 QPS·동시 요청·최대 입력 길이·retry 정책 확인 후 처리
+- [x] 질문당 300초 제한보다 짧은 270초 외곽 timeout과 HTTP 504 안전 응답 처리
+- [x] timeout·5xx 최대 2회 재시도에 맞춘 일시 장애 503/504와 동일 요청 중복 실행 방지
+- [ ] 미확정 QPS·동시 요청·최대 입력 길이 확인 후 처리
 - [ ] 인증이 필요하면 주최 측 호출 방식과 호환
 - [ ] health check·구조화 로그·credential masking
 - [x] provider·dataset 장애의 안전한 공식 응답 계약
+- [x] 관계 artifact·DB 변조를 `/health`와 질문 API 모두에서 503으로 차단하는 계약
 - [ ] 평가 기간 가용성·재시작·모니터링 계획
 
 ### 공식 예시와 내부 DTO의 경계
@@ -93,7 +108,8 @@ Docker 실행은 재현 완료. `nextjs-frontend/`는 아직 저장소에 없으
 - [ ] `retrieved_context`, `think_trace`의 세부 채점 방식
 - [ ] 숨은 사고과정 대신 구조화 실행 기록을 제공해도 되는지
 - [x] 공식 제출 adapter는 예시의 다섯 필드만 반환하기로 결정
-- [ ] timeout·QPS·retry-after·동시 요청·입력 길이
+- [x] 후속 운영 정보의 300초·timeout/5xx 최대 2회 재시도를 270초 외곽 계약으로 반영
+- [ ] QPS·retry-after·동시 요청·입력 길이
 - [x] 답할 수 없는 질문도 같은 응답 스키마와 HTTP 200 사용
 - [ ] 잘못된 필수 입력의 공식 처리 규칙
 - [ ] Docker·DB·외부 데이터·네트워크 제약
@@ -103,7 +119,7 @@ Docker 실행은 재현 완료. `nextjs-frontend/`는 아직 저장소에 없으
 - [ ] 임베딩 허용 근거로 제출할 공식 문구 원본 보존
 - [ ] 로컬 LLM을 개발 단계에 사용한 코드·문서·Git 이력의 제출 허용 범위
 - [ ] 보수 0·수익률 0·판매 가능 상태·공모펀드 grain의 공식 의미
-- [x] 평가 배점 20·40·40, 예상 30문항·미응답 5문항, 60초 권장 확인
+- [x] 평가 배점 20·40·40, 예상 30문항·미응답 5문항, 초기 60초 권장·후속 300초 제한 기록 분리
 - [x] 도메인별 Ontology `.ttl` 5개를 서면 기준으로 준비하기로 결정
 - [ ] 구두 메모와 충돌하는 Ontology 형식을 서면으로 재확인
 - [ ] HyperCLOVA X가 20만 원 크레딧 적용 서비스인지 확인
@@ -117,4 +133,8 @@ Docker 실행은 재현 완료. `nextjs-frontend/`는 아직 저장소에 없으
 - [ ] external blind 최초 실행 결과와 사후 수정 결과 분리
 - [ ] 최소 2명 사람 평가 완료
 - [ ] API smoke·contract·load·장애 복구 테스트 완료
+- [ ] NCP에 서명된 release를 실제 배포하고 공인 IP `GET /answer`·`/health` smoke 완료
+- [ ] 서명된 두 release를 사용한 forward·rollback drill과 Audit receipt 보존
+- [ ] 관계 답변용 HyperCLOVA X claim provider 계약·답변 검증·장애 fallback 실험
+- [ ] 실제 승인 문서 corpus 반입·검색 정확도·release 결속 검증
 - [ ] 제출 후 변경 금지 절차를 팀 전원이 확인

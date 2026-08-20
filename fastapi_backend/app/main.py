@@ -21,7 +21,7 @@ from app.dependencies import (
 )
 from app.errors import request_validation_error_response
 from app.http_audit import AnswerHttpAuditMiddleware
-from app.request_execution import wait_for_request_workers
+from app.request_execution import IdempotentRequestCoordinator, wait_for_request_workers
 from app.routes.answer import router as answer_router
 from app.routes.health import router as health_router
 from app.shadow_runtime import ShadowRuntimeState
@@ -50,6 +50,7 @@ def create_app(
         require_approved_database_paths(resolved_settings.database_paths)
     resolved_audit_sink = build_audit_sink(resolved_settings)
     audit_runtime = AuditRuntimeState(resolved_audit_sink)
+    request_coordinator = IdempotentRequestCoordinator()
 
     try:
         if agent is not None:
@@ -153,6 +154,7 @@ def create_app(
     application.state.shadow_runtime = shadow_runtime
     application.state.shadow_shutdown_drained = None
     application.state.agent = resolved_agent
+    application.state.request_coordinator = request_coordinator
     application.add_exception_handler(
         RequestValidationError,
         request_validation_error_response,

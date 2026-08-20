@@ -1,0 +1,169 @@
+{
+  "schema_version": "1.0",
+  "baseline_id": "p0-7-knowledge-claim-contract-v1",
+  "recorded_on": "2026-08-20",
+  "dataset": "p0-7-typed-plan-claim-contract-and-approved-relation-smoke-v1",
+  "evaluation_layer": "system_contract",
+  "status": "verified_internal_knowledge_contract_not_public_agent_activated",
+  "provider": {
+    "name": "deterministic-python-sqlite-with-fake-claim-contract",
+    "official_submission_provider": false,
+    "network_used": false,
+    "hclx_called": false,
+    "local_llm_called": false,
+    "embedding_model_called": false
+  },
+  "model": {
+    "name": "none",
+    "reason": "실제 모델 품질이 아니라 Typed KnowledgeQueryPlan, exact authority gate, evidence claim 검증과 deterministic fallback 계약을 검사"
+  },
+  "suite": {
+    "id": "p0-7-knowledge-claim-contract-v1",
+    "version": "1.0",
+    "path": "evaluation/protocols/p0-7-knowledge-claim-contract-v1.protocol.json",
+    "sha256": "28eb149189034306e89da076858badcae06fc19f300c3020808bbdc48f64c6db"
+  },
+  "data": {
+    "fixture_kind": "pytest_synthetic_contract_cases_and_approved_product_relation_smoke",
+    "fixture_definition_sha256": "66a4a9d330fc4b6d48cc8c0052fdd78258748b9f038c06bc5d6f936dbd5a6626",
+    "official_competition_data_used": true,
+    "actual_external_document_corpus_used": false,
+    "not_applicable_reason": "독립 질문 정답률이나 LLM 생성 품질이 아니라 허용 계획·릴리스 artifact·field evidence·fallback의 시스템 계약 검사"
+  },
+  "implementation": {
+    "commit": "ae1f7e539e2b09a1eef0739a3325050995770149",
+    "knowledge_plan_sha256": "30bb536071235b5cb17aa7cf30edc698a7ec7456515269368b16853f5848671a",
+    "claim_verifier_sha256": "7651e88e2a07c09b6ab409a2279b2b63e2381626f46278d7a560bef7ad4a207f",
+    "knowledge_service_sha256": "e4e327782d0f57d21211c985c4ee6957b8f176b7bda373517dc981e460773b47",
+    "knowledge_cli_sha256": "f2030f76bd4ef17e08e02f7f7246fd4777923325bae54029098941a28eb5d8eb",
+    "release_contract_file_sha256": "b4a7a362157e76c638f85cf0bcd6da19fde20071ab0802eac5d4bbc3ed04fb92",
+    "tests_sha256": "66a4a9d330fc4b6d48cc8c0052fdd78258748b9f038c06bc5d6f936dbd5a6626"
+  },
+  "knowledge_contract": {
+    "allowed_operations": [
+      "relation_search",
+      "document_search"
+    ],
+    "relation_predicates_per_request": 1,
+    "maximum_top_k": 20,
+    "extra_fields_forbidden": true,
+    "model_plan_must_exactly_match_server_plan": true,
+    "claim_count_order_values_and_evidence_refs_exact": true,
+    "provider_failure_or_claim_mismatch": "deterministic_fallback",
+    "not_found_provider_call_count": 0,
+    "public_router_connected": false,
+    "public_answer_endpoint_connected": false,
+    "agent_release_activated": false
+  },
+  "relation_release": {
+    "contract_sha256": "3607d1b7dfbb9f446db808ee7b861899ab3e6b70c98fadff3c1c06f49fdd5cb1",
+    "index_sha256": "3d120722a14537b7999168aecb1e1da98fc67d12e27c181731adc4f713f491d8",
+    "approval_manifest_sha256": "deecdaff1125f7460ffb1ed5235e92d81bded435911eea7b22593d3bbe3737f6",
+    "relation_set_sha256": "4d1d39119b405d96dd5845add13f7bb86f8fd74b9b020e864f244ca66732d632",
+    "relation_count": 58005
+  },
+  "approved_data_smoke_observations": [
+    {
+      "case_id": "managed_by_miraeasset",
+      "status": "found",
+      "candidate_count": 3,
+      "top_product_identifiers": [
+        "KR70000D0009",
+        "KR70001S0001",
+        "KR70008S0004"
+      ],
+      "answer_mode": "deterministic",
+      "authority_status": "authorized_exact_match"
+    },
+    {
+      "case_id": "invests_in_usa",
+      "status": "found",
+      "candidate_count": 3,
+      "top_product_identifiers": [
+        "KR70000J0003",
+        "KR70004G0002",
+        "KR70005A0007"
+      ],
+      "answer_mode": "deterministic",
+      "authority_status": "authorized_exact_match"
+    },
+    {
+      "case_id": "tracks_kospi200",
+      "status": "found",
+      "candidate_count": 3,
+      "top_product_identifiers": [
+        "KR7407160001",
+        "KR7407170000",
+        "KR7427110002"
+      ],
+      "answer_mode": "deterministic",
+      "authority_status": "authorized_exact_match"
+    },
+    {
+      "case_id": "issued_by_kepco",
+      "status": "found",
+      "candidate_count": 3,
+      "top_product_identifiers": [
+        "KR350101G355",
+        "KR350101G488",
+        "KR350101G7B6"
+      ],
+      "answer_mode": "deterministic",
+      "authority_status": "authorized_exact_match"
+    }
+  ],
+  "tests": {
+    "targeted": {
+      "tests": 22,
+      "passed": 22,
+      "failed": 0,
+      "duration_seconds": 0.74
+    },
+    "agent_core_full": {
+      "tests": 1329,
+      "passed": 1327,
+      "failed": 0,
+      "skipped": 2,
+      "duration_seconds": 31.523
+    },
+    "ruff_check": "passed",
+    "changed_files_ruff_format_check": "passed",
+    "git_diff_check": "passed",
+    "approved_relation_smoke_total": 4,
+    "approved_relation_smoke_passed": 4
+  },
+  "metrics": {
+    "total": 22,
+    "passed": 22,
+    "strict_accuracy": 1.0,
+    "strict_accuracy_scope": "합성 Typed Plan·Claim·fallback 계약 통과율이며 독립 관계 질문 정확도·LLM 성능·공모전 점수가 아님"
+  },
+  "reports": [
+    {
+      "role": "targeted_pytest_junit",
+      "artifact_name": "p0-7-knowledge-agent-targeted.xml",
+      "sha256": "d974ff02f726adc34fdd524c28699e92ec605b2ebe4870ff1bdc5ee3f0f2e1de"
+    },
+    {
+      "role": "agent_core_full_pytest_junit",
+      "artifact_name": "p0-7-knowledge-agent-full.xml",
+      "sha256": "a9be7d63df877c0016d9447163653e1a616b393e3d373d4fcc84e87c82c1a8ca"
+    }
+  ],
+  "reproduce": {
+    "targeted": "python -m pytest packages/finance_agent_core/tests/test_knowledge_agent.py -q",
+    "full": "python -m pytest packages/finance_agent_core/tests -q",
+    "schema": "python -m finance_agent_core.agent.knowledge_cli schema --kind plan",
+    "approved_relation": "python -m finance_agent_core.agent.knowledge_cli execute --plan <plan.json> --release <release.json> --relation-index <relations.sqlite3> --database-dir <approved-db-dir>"
+  },
+  "limitations": [
+    "P0-7 경로는 기존 자연어 Intent Router와 공개 GET /answer에 연결하지 않았고 내부 CLI로만 실행함",
+    "KnowledgeRetrievalRelease는 내부 후보이며 P0-10 AgentReleaseManifest와 Docker release에 아직 포함하지 않음",
+    "실제 승인 외부 문서 corpus가 0건이므로 문서 경로는 합성 문서로만 계약을 검증함",
+    "관계 smoke는 P0-6과 같은 공개 질의 4개를 재사용했으므로 독립 blind가 아님",
+    "가짜 structured claim provider는 허위 상품·문서 발췌·timeout fallback을 검사하기 위한 test double이며 HyperCLOVA X나 Qwen 품질 결과가 아님",
+    "관계 검색은 한 요청에 predicate 하나만 허용하며 공모펀드·테마·편입종목·외부 문서 관계는 계속 비활성임",
+    "금융 alias·한영 표기·동의어와 관계 의미의 타당성은 금융 도메인 검수 전까지 자동 보정하지 않음",
+    "22/22와 4/4는 시스템 안전 계약과 공개 smoke 통과이며 독립 일반화 성능이나 공모전 예상 점수가 아님"
+  ]
+}

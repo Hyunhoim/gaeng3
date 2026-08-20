@@ -28,6 +28,12 @@ DB, 원천 XLSX, 전체 report, 모델 가중치는 계속 `artifacts/` 또는 �
 
 | 파일 | 범위 |
 | --- | --- |
+| [P0-4 공식 Acceptance](baselines/official-acceptance-p0-4-v1.json) | 설명회 공개 예시 8개와 HTTP 경계 8개를 clean Docker 순차 GET으로 검증한 계약 기준선 16/16 |
+| [P0-8 timeout·5xx 재시도 계약](baselines/retry-contract-p0-8-v1.json) | 답변·제어 200, 일시 장애 503, timeout 504, 270초와 동일 요청 single-flight·replay의 단위·Docker 검증 |
+| [P0-5 외부 corpus 반입 계약](baselines/external-corpus-intake-contract-v1.json) | 독립 review·사용 권한·출처·해시·경로·변조 차단과 검증된 BM25 색인 build의 합성 계약 24/24 |
+| [P0-6 제공 관계 검색](baselines/p0-6-provided-relation-retrieval-v1.json) | 승인 DB 3개의 제공 필드 관계 58,005개, 공식 상품 ID 재조회, 14개 fail-closed 계약과 실제 4종 smoke |
+| [P0-7 관계·문서 계획과 주장 검증](baselines/p0-7-knowledge-claim-contract-v1.json) | Typed Plan·서버 exact 권한·evidence Claim Verifier·전체 fallback 22/22와 승인 관계 전체 경로 smoke 4/4; 공개 Agent는 비활성 |
+| [P0-10 공개 관계 검색·릴리스 통합](baselines/p0-10-public-relation-release-integration-v1.json) | 공개 Router·Backend·Docker·manifest 해시 고정 릴리스 결합과 변조 차단 집중 회귀 522/522; 실제 NCP·HCX·서명 rollback은 미실행 |
 | [설명회 공개 예시 채권 개선](baselines/briefing-examples-v1-bond-improved.json) | 원화·판매 가능·AA- 이상 검색과 근거 검증을 연결한 회귀 |
 | [설명회 공개 예시 최초 관측](baselines/briefing-examples-v1-initial.json) | 답변 가능 5개·답변 불가 3개의 Router→Oracle→Verifier 현재 도달 범위 |
 | [설명회 공개 예시 안전 개선](baselines/briefing-examples-v1-safety-improved.json) | 잘못된 신용등급 차단과 요청 어미 오분류 수정 후 회귀 |
@@ -188,6 +194,21 @@ strict 1/40·safety 32/40은 유지되며 E2 사후 회귀의 비교점이다.
 답변 가능 실행 1/5를 기록한다.
 이 질문들은 실제 평가 문항이 아니며, 공개 후 수정 결과도 blind 성능으로 해석하지
 않는다.
+
+`official-acceptance-p0-4-v1`은 위 공개 예시 8개와 HTTP 경계 사례 8개를 실제
+Docker의 인증 없는 순차 `GET /answer`로 재생한다. 다섯 문자열·UTF-8·입력 보존·
+내부 JSON·안전한 무실행 11/11과 공식 원본 이미지 SHA-256을 확인해 계약 16/16을
+기록했다. 답변 가능한 공개 예시 5개 중 실제 success 관측은 1개이므로 이 16/16은
+상품 정답 정확도, 독립 blind 또는 공모전 예상 점수가 아니다. 구현·재현·남은
+공백은 [P0-4 인수인계 보고서](../docs/p0-4-official-acceptance-handover-2026-08-19.md)를
+따른다.
+
+`retry-contract-p0-8-v1`은 주최 측 300초·timeout/5xx 최대 2회 재시도 운영 정보에
+맞춰 공식 GET의 상태와 중복 실행을 검증한다. 정상 동일 요청 2회는 HTTP 200·200이지만
+Agent 실행 1회와 replay Audit 1건, 존재하지 않는 채권 DB 장애는 HTTP 503·503과
+Agent 실행 시도 2회·replay 0건, 강제 outer timeout은 HTTP 504를 기록했다. 실제
+주최 측 evaluator나 HyperCLOVA X를 호출한 결과는 아니며 자세한 구현·한계는
+[P0-8 인수인계 보고서](../docs/p0-8-retry-contract-handover-2026-08-19.md)를 따른다.
 
 `official-mock-v1-30`은 설명회의 예상 난이도 하·중·상 각 10개와 답변 불가
 5개 분포만 모사한 공개 모의평가다. 로컬 Qwen에서 검색·비교·집계·안전·근거·

@@ -98,6 +98,17 @@ jobs:
           test "$(git rev-parse HEAD)" = "$TRUSTED_SOURCE_COMMIT"
           test -z "$(git status --porcelain=v1 --untracked-files=all)"
 
+      - name: Materialize the approved relation release artifact
+        id: relation_artifact
+        env:
+          RELATION_RETRIEVAL_ARTIFACT_B64: ${{ secrets.APPROVED_RELATION_RETRIEVAL_ARTIFACT_B64 }}
+          RELATION_RETRIEVAL_ARTIFACT_SHA256: ${{ vars.APPROVED_RELATION_RETRIEVAL_ARTIFACT_SHA256 }}
+        run: |
+          set -euo pipefail
+          python3 fastapi_backend/scripts/release_ci.py materialize-relation-artifact \
+            --output "$RUNNER_TEMP/relation-retrieval-artifact.json" \
+            --github-output "$GITHUB_OUTPUT"
+
       - name: Run release QA before any registry mutation
         env:
           QA_VENV: ${{ runner.temp }}/finance-release-qa-venv
@@ -136,6 +147,50 @@ jobs:
           )
           test -z "$(git status --porcelain=v1 --untracked-files=all)"
 
+      - name: Create AgentReleaseManifest from the clean checkout
+        env:
+          RELEASE_ID: ${{ steps.release_inputs.outputs.release_id }}
+          RELEASE_ENVIRONMENT: ${{ steps.release_inputs.outputs.environment }}
+          SOURCE_COMMIT: ${{ steps.release_inputs.outputs.source_commit }}
+          RUNTIME_PLATFORM: ${{ steps.release_inputs.outputs.platform }}
+          ANSWER_PROVIDER: ${{ steps.release_inputs.outputs.answer_provider }}
+          HCX_QUERYPLAN_ENABLED: ${{ steps.release_inputs.outputs.hcx_queryplan_enabled }}
+          MODEL_ID: ${{ steps.release_inputs.outputs.model_id }}
+          RELATION_RETRIEVAL_ARTIFACT_FILE: ${{ steps.relation_artifact.outputs.artifact_path }}
+          RELATION_RETRIEVAL_ARTIFACT_SHA256: ${{ steps.relation_artifact.outputs.artifact_sha256 }}
+        run: |
+          set -euo pipefail
+          python3 -c 'import sys; assert sys.version_info[:2] == (3, 12)'
+          python3 -m venv "$RUNNER_TEMP/release-venv"
+          "$RUNNER_TEMP/release-venv/bin/python" -m pip install \
+            --disable-pip-version-check \
+            --requirement fastapi_backend/requirements.txt
+          manifest_arguments=(
+            --release-id "$RELEASE_ID"
+            --environment "$RELEASE_ENVIRONMENT"
+            --source-commit "$SOURCE_COMMIT"
+            --git-root "$GITHUB_WORKSPACE"
+            --backend-root "$GITHUB_WORKSPACE/fastapi_backend/app"
+            --platform "$RUNTIME_PLATFORM"
+            --answer-provider "$ANSWER_PROVIDER"
+            --relation-retrieval-artifact "$RELATION_RETRIEVAL_ARTIFACT_FILE"
+            --relation-retrieval-artifact-sha256 "$RELATION_RETRIEVAL_ARTIFACT_SHA256"
+            --output "$RELEASE_OUTPUT_DIR/agent-release-manifest.json"
+          )
+          if [ "$MODEL_ID" = "HCX-007" ]; then
+            manifest_arguments+=(--hcx-model HCX-007)
+          fi
+          if [ "$HCX_QUERYPLAN_ENABLED" = "true" ]; then
+            manifest_arguments+=(--hcx-queryplan-enabled)
+          fi
+          PYTHONPATH="$GITHUB_WORKSPACE/finance_agent/packages/finance_agent_core/src" \
+            "$RUNNER_TEMP/release-venv/bin/python" \
+            -m finance_agent_core.release_cli manifest "${manifest_arguments[@]}"
+          python3 fastapi_backend/scripts/release_ci.py verify-relation-manifest-binding \
+            --manifest "$RELEASE_OUTPUT_DIR/agent-release-manifest.json" \
+            --relation-artifact "$RELATION_RETRIEVAL_ARTIFACT_FILE" \
+            --relation-artifact-sha256 "$RELATION_RETRIEVAL_ARTIFACT_SHA256"
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
 
@@ -172,42 +227,6 @@ jobs:
             --digest "$BUILD_DIGEST" \
             --image-repository "$IMAGE_REPOSITORY" \
             --github-output "$GITHUB_OUTPUT"
-
-      - name: Create AgentReleaseManifest from the clean checkout
-        env:
-          RELEASE_ID: ${{ steps.release_inputs.outputs.release_id }}
-          RELEASE_ENVIRONMENT: ${{ steps.release_inputs.outputs.environment }}
-          SOURCE_COMMIT: ${{ steps.release_inputs.outputs.source_commit }}
-          RUNTIME_PLATFORM: ${{ steps.release_inputs.outputs.platform }}
-          ANSWER_PROVIDER: ${{ steps.release_inputs.outputs.answer_provider }}
-          HCX_QUERYPLAN_ENABLED: ${{ steps.release_inputs.outputs.hcx_queryplan_enabled }}
-          MODEL_ID: ${{ steps.release_inputs.outputs.model_id }}
-        run: |
-          set -euo pipefail
-          python3 -c 'import sys; assert sys.version_info[:2] == (3, 12)'
-          python3 -m venv "$RUNNER_TEMP/release-venv"
-          "$RUNNER_TEMP/release-venv/bin/python" -m pip install \
-            --disable-pip-version-check \
-            --requirement fastapi_backend/requirements.txt
-          manifest_arguments=(
-            --release-id "$RELEASE_ID"
-            --environment "$RELEASE_ENVIRONMENT"
-            --source-commit "$SOURCE_COMMIT"
-            --git-root "$GITHUB_WORKSPACE"
-            --backend-root "$GITHUB_WORKSPACE/fastapi_backend/app"
-            --platform "$RUNTIME_PLATFORM"
-            --answer-provider "$ANSWER_PROVIDER"
-            --output "$RELEASE_OUTPUT_DIR/agent-release-manifest.json"
-          )
-          if [ "$MODEL_ID" = "HCX-007" ]; then
-            manifest_arguments+=(--hcx-model HCX-007)
-          fi
-          if [ "$HCX_QUERYPLAN_ENABLED" = "true" ]; then
-            manifest_arguments+=(--hcx-queryplan-enabled)
-          fi
-          PYTHONPATH="$GITHUB_WORKSPACE/finance_agent/packages/finance_agent_core/src" \
-            "$RUNNER_TEMP/release-venv/bin/python" \
-            -m finance_agent_core.release_cli manifest "${manifest_arguments[@]}"
 
       - name: Build and push the manifest-bound release image
         id: release_build
@@ -356,6 +375,7 @@ jobs:
           RUNTIME_PLATFORM: ${{ steps.release_inputs.outputs.platform }}
           BASE_IMAGE_REFERENCE: ${{ steps.base_image.outputs.image_reference }}
           RELEASE_IMAGE_REFERENCE: ${{ steps.release_image.outputs.image_reference }}
+          RELATION_RETRIEVAL_ARTIFACT_SHA256: ${{ steps.relation_artifact.outputs.artifact_sha256 }}
           TRUSTED_RUN_ID: ${{ github.run_id }}
           TRUSTED_RUN_ATTEMPT: ${{ github.run_attempt }}
         run: |
@@ -373,6 +393,7 @@ jobs:
             --release-image-reference "$RELEASE_IMAGE_REFERENCE" \
             --manifest-sha256 "$manifest_sha256" \
             --binding-sha256 "$binding_sha256" \
+            --relation-artifact-sha256 "$RELATION_RETRIEVAL_ARTIFACT_SHA256" \
             --github-run-id "$TRUSTED_RUN_ID" \
             --github-run-attempt "$TRUSTED_RUN_ATTEMPT"
           sha256sum \

@@ -8,6 +8,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query, Request, Response
 from fastapi.responses import JSONResponse
 from finance_agent_core.agent import (
+    AnswerAdapterResult,
     execute_answer_request,
     invalid_official_request_response,
     official_response_from_backend,
@@ -19,7 +20,12 @@ from finance_agent_core.contracts.backend import (
     BackendStatus,
 )
 from finance_agent_core.contracts.official import OfficialAnswerResponse
-from finance_agent_core.observability import AuditOutcome, AuditStage, bind_request_audit
+from finance_agent_core.observability import (
+    AuditOutcome,
+    AuditStage,
+    RequestAuditRecorder,
+    bind_request_audit,
+)
 
 from app.answer_controls import (
     backend_overloaded_response,
@@ -30,12 +36,20 @@ from app.config import Settings
 from app.dependencies import (
     AgentService,
     get_agent,
+    get_request_coordinator,
     get_settings,
     request_audit_recorder,
 )
-from app.http_audit import mark_request_audit_terminal, mark_response_serialization_start
+from app.http_audit import (
+    mark_request_audit_terminal,
+    mark_response_serialization_start,
+    request_agent_audit,
+)
 from app.request_execution import (
+    IdempotentRequestCoordinator,
+    RequestExecutionDisposition,
     RequestExecutionTimeoutError,
+    RequestIdentityConflictError,
     RequestOverloadedError,
     execute_bounded_request,
 )
@@ -51,6 +65,31 @@ class OfficialJsonResponse(JSONResponse):
     """Return the exact UTF-8 JSON media type required by the evaluator."""
 
     media_type = "application/json; charset=utf-8"
+
+
+def _cache_official_result(result: AnswerAdapterResult) -> bool:
+    """Replay successful or permanent safe results, never transient failures."""
+
+    error = result.response.error
+    return result.http_status_code == 200 or error is None or not error.retryable
+
+
+def _emit_idempotency_audit(
+    audit: RequestAuditRecorder | None,
+    disposition: RequestExecutionDisposition,
+) -> None:
+    if disposition is RequestExecutionDisposition.EXECUTED or audit is None:
+        return
+    audit.emit(
+        stage=AuditStage.REQUEST,
+        outcome=AuditOutcome.SUCCEEDED,
+        reason_code=(
+            "idempotent_request_joined"
+            if disposition is RequestExecutionDisposition.JOINED
+            else "idempotent_result_replayed"
+        ),
+        duration_ms=0,
+    )
 
 
 @router.post(
@@ -121,11 +160,20 @@ async def answer(
     "/answer",
     response_model=OfficialAnswerResponse,
     response_class=OfficialJsonResponse,
+    responses={
+        503: {"model": OfficialAnswerResponse},
+        504: {"model": OfficialAnswerResponse},
+    },
 )
 async def official_answer(
     http_request: Request,
+    http_response: Response,
     service: Annotated[AgentService, Depends(get_agent)],
     settings: Annotated[Settings, Depends(get_settings)],
+    coordinator: Annotated[
+        IdempotentRequestCoordinator,
+        Depends(get_request_coordinator),
+    ],
     question_id: Annotated[str | None, Query()] = None,
     question: Annotated[str | None, Query()] = None,
 ) -> OfficialAnswerResponse:
@@ -149,6 +197,11 @@ async def official_answer(
             question=question,
         )
     request = BackendAgentRequest(request_id=question_id, question=question)
+    transport_audit = request_agent_audit(
+        http_request,
+        request_id=question_id,
+        question=question,
+    )
     audit = request_audit_recorder(
         service,
         request=http_request,
@@ -158,10 +211,25 @@ async def official_answer(
     audit_context = bind_request_audit(audit) if audit is not None else nullcontext()
     with audit_context:
         try:
-            result = await execute_bounded_request(
+            execution = await coordinator.execute(
                 partial(execute_answer_request, service, request),
+                request_key=question_id,
+                request_input=question,
                 timeout_seconds=settings.official_answer_timeout_seconds,
                 max_inflight=settings.official_answer_max_inflight,
+                cache_result=_cache_official_result,
+            )
+            result = execution.value
+            _emit_idempotency_audit(transport_audit, execution.disposition)
+        except RequestIdentityConflictError:
+            mark_request_audit_terminal(
+                http_request,
+                outcome=AuditOutcome.BLOCKED,
+                reason_code="request_identity_conflict",
+            )
+            return invalid_official_request_response(
+                question_id=question_id,
+                question=question,
             )
         except RequestOverloadedError:
             mark_request_audit_terminal(
@@ -169,6 +237,7 @@ async def official_answer(
                 outcome=AuditOutcome.BLOCKED,
                 reason_code="admission_rejected",
             )
+            http_response.status_code = 503
             return official_overloaded_response(
                 question_id=question_id,
                 question=question,
@@ -179,16 +248,19 @@ async def official_answer(
                 outcome=AuditOutcome.TIMED_OUT,
                 reason_code="deadline_exceeded",
             )
+            http_response.status_code = 504
             return official_timeout_response(
                 question_id=question_id,
                 question=question,
             )
-    if result.http_status_code == 504:
+    retryable_error = result.response.error is not None and result.response.error.retryable
+    if result.http_status_code == 504 and retryable_error:
         mark_request_audit_terminal(
             http_request,
             outcome=AuditOutcome.TIMED_OUT,
             reason_code="deadline_exceeded",
         )
+        http_response.status_code = 504
         return official_timeout_response(
             question_id=question_id,
             question=question,
@@ -220,9 +292,13 @@ async def official_answer(
         )
     mark_request_audit_terminal(
         http_request,
-        outcome=(AuditOutcome.SUCCEEDED if result.http_status_code == 200 else AuditOutcome.FAILED),
-        reason_code=("response_completed" if result.http_status_code == 200 else "adapter_failure"),
+        outcome=(AuditOutcome.FAILED if retryable_error else AuditOutcome.SUCCEEDED),
+        reason_code=("retryable_adapter_failure" if retryable_error else "response_completed"),
     )
+    if retryable_error:
+        # The evaluator retries timeout or 5xx. Collapse retryable non-timeout
+        # adapter failures to 503 while preserving the five-string body.
+        http_response.status_code = 503
     if result.response.status in {BackendStatus.SUCCESS, BackendStatus.NOT_FOUND}:
         mark_response_serialization_start(http_request)
     return response

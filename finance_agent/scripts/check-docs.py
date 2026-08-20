@@ -68,6 +68,12 @@ REQUIRED_INDEX_TARGETS = {
     "evaluation-schema-embedding-cpu.md",
     "schema-dense-stage4-stage5-readiness-2026-08-13.md",
     "stage4-audit-blind-image-api-report-2026-08-13.md",
+    "p0-4-official-acceptance-handover-2026-08-19.md",
+    "p0-8-retry-contract-handover-2026-08-19.md",
+    "p0-5-external-corpus-intake-2026-08-19.md",
+    "p0-6-provided-relation-retrieval-handover-2026-08-19.md",
+    "p0-7-knowledge-claim-verifier-handover-2026-08-20.md",
+    "p0-10-public-relation-release-integration-handover-2026-08-20.md",
     "submission-model-boundary.md",
     "hyperclova-provider.md",
     "evaluation-pre-hcx-diagnostic.md",
@@ -85,6 +91,12 @@ REQUIRED_INDEX_TARGETS = {
     "../evaluation/README.md",
 }
 REQUIRED_BASELINES = {
+    "official-acceptance-p0-4-v1.json",
+    "retry-contract-p0-8-v1.json",
+    "external-corpus-intake-contract-v1.json",
+    "p0-6-provided-relation-retrieval-v1.json",
+    "p0-7-knowledge-claim-contract-v1.json",
+    "p0-10-public-relation-release-integration-v1.json",
     "briefing-examples-v1-bond-improved.json",
     "briefing-examples-v1-initial.json",
     "briefing-examples-v1-safety-improved.json",
@@ -150,35 +162,52 @@ REQUIRED_BASELINE_KEYS = {
     "limitations",
 }
 # Frozen evidence files are immutable.  These exact successor hashes pin components
-# intentionally superseded by the Stage 4 audit/single-worker release contract; keeping
-# the migration here avoids rewriting the Stage 3 evidence whose own SHA-256 is cited.
+# intentionally superseded by later Stage 4 and P0-10 release contracts; keeping the
+# migration here avoids rewriting historical evidence whose own SHA-256 is cited.
+HISTORICAL_BASELINE_SUITE_SUCCESSOR_SHA256 = {
+    "docker-http-smoke-v2.json": (
+        "e21c2a409f740e291cca284d883896df46c6e54344737f9442a97e4aec163992"
+    ),
+    "docker-http-smoke-qwen-v2.json": (
+        "e21c2a409f740e291cca284d883896df46c6e54344737f9442a97e4aec163992"
+    ),
+}
 HISTORICAL_BASELINE_COMPONENT_ALLOWLIST = {
     "stage3-local-oci-rollback-2026-08-12.json": {
         "compose-release.sh": (
-            "714990529f1be9a0d51f8dbdc3c3c260baeedf158301303245128d62113f2158"
+            "d41531f973fed6a7b748a85a6dda41c3286b7ffa727acce1205e870b635cc7b6"
         ),
         "fastapi_backend/docker-compose.release.yml": (
-            "6c243ae91240a7ccc752ce9393e466688d5279dec54be0619344a87f898377e8"
+            "3c308f367b1fa6ff84d9c4f847831f40685d797b79b0b8bee0a4fb0a73012949"
         ),
         "fastapi_backend/scripts/rollback_drill.py": (
-            "c6ed97df526f737ead8b2b3c47914c78b67db4d22d73cbf58da0ad04c79d6d8f"
+            "c200715cb377290836d3e589030211b600ecab35d6a7db45beed27a9675ca433"
+        ),
+        "fastapi_backend/scripts/release_ci.py": (
+            "102324f87619ef5c6667e2bcc6dda38df076807af4ba814b76c5fef685d52b14"
         ),
     },
     "stage3-release-contract-2026-08-12.json": {
         "fastapi_backend/tests/test_release_deployment_contract.py": (
-            "7723d8e380c22acec939e3b9fa1dcbb8342d78b6c23f69e069664306ae87ca12"
+            "2239e0df11a7677ec136924aebf2411d22dad50cb155502f8b766cc175b24104"
         ),
         "fastapi_backend/tests/test_release_rollback_drill.py": (
-            "3813e01de811fb27389550678fa1b205d0079229de660795e382ac2e81a17fe5"
+            "b2857df27b76301ff6195f39ef21480c8b3fac832cbb3a0830b44fcb9409e64c"
         ),
         "fastapi_backend/tests/test_release_startup.py": (
-            "4ba967aeda827b7bd1dbbca8d1b83fc9851efddebabfdc36edd87f56a6ca39dc"
+            "89c1282710d698a634878571846c230081bc0d26cefc6cfa6db9d15e7468196c"
         ),
         "finance_agent/packages/finance_agent_core/tests/test_agent_release.py": (
-            "3c0da4b7129fdb923e039cf0f53dfc2aa07cf51bdbead98537c51c705b5a8486"
+            "86213e6adf151a145de06f7e3839ccff65486feaab002939e041124fdbdd0376"
         ),
         "finance_agent/packages/finance_agent_core/tests/test_plan_authority.py": (
             "f33e0d47813d73e91a7e6778490d34ca2efd92e6cbbf97b58c0614c332ccd54f"
+        ),
+        "finance_agent/packages/finance_agent_core/tests/test_release_cli.py": (
+            "0116d25054ac2a4baf2fa2dcf7101b236517914457d70a164e3e19c0127f2c52"
+        ),
+        "fastapi_backend/tests/test_release_ci_contract.py": (
+            "443a5e668c62e833dbea757b50d3391ba6d93d49c0b600f491ef068642a50913"
         ),
     },
 }
@@ -430,9 +459,14 @@ def _check_baseline(path: Path) -> list[str]:
             )
     if not suite_path.is_file():
         errors.append(f"{name}: suite path does not exist")
-    elif _sha256(suite_path) != tracked_contract_sha256:
-        errors.append(f"{name}: tracked suite SHA-256 differs")
     else:
+        actual_suite_sha256 = _sha256(suite_path)
+        approved_successor_sha256 = HISTORICAL_BASELINE_SUITE_SUCCESSOR_SHA256.get(name)
+        if (
+            actual_suite_sha256 != tracked_contract_sha256
+            and actual_suite_sha256 != approved_successor_sha256
+        ):
+            errors.append(f"{name}: tracked suite SHA-256 differs")
         try:
             suite_payload = json.loads(suite_path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):

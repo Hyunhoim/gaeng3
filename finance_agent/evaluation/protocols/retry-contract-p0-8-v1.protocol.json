@@ -1,0 +1,51 @@
+{
+  "schema_version": "1.0",
+  "protocol_id": "retry-contract-p0-8-v1",
+  "status": "public_system_contract_not_blind",
+  "source": {
+    "path": "docs/p0-p1-remaining-roadmap-2026-08-14.html",
+    "evaluator_timeout_seconds": 300,
+    "evaluator_max_retries": 2,
+    "retry_conditions": ["timeout", "http_5xx"]
+  },
+  "fixed_controls": {
+    "outer_timeout_seconds": 270,
+    "safe_replay_ttl_seconds": 300,
+    "safe_replay_max_entries": 2048,
+    "production_web_concurrency": 1
+  },
+  "scenarios": [
+    {
+      "id": "safe_result_replay",
+      "request_count": 2,
+      "same_question_id": true,
+      "same_question": true,
+      "expected_http_statuses": [200, 200],
+      "expected_agent_execution_count": 1,
+      "expected_replay_event_count": 1
+    },
+    {
+      "id": "retryable_dataset_failure",
+      "request_count": 2,
+      "same_question_id": true,
+      "same_question": true,
+      "fault": "configured bond database path does not exist",
+      "expected_http_statuses": [503, 503],
+      "expected_agent_execution_count": 2,
+      "expected_replay_event_count": 0
+    },
+    {
+      "id": "outer_timeout",
+      "request_count": 1,
+      "configured_timeout_seconds": 0.000001,
+      "expected_http_statuses": [504],
+      "expected_control_code": "request_timeout",
+      "require_official_five_string_body": true
+    }
+  ],
+  "non_claims": [
+    "실제 주최 측 evaluator 실행이 아님",
+    "HyperCLOVA X 품질·latency·비용 평가가 아님",
+    "NCP Load Balancer 전달 계약 검증이 아님"
+  ]
+}

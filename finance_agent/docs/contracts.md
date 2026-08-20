@@ -1,7 +1,7 @@
 # Field Registry와 QueryPlan 계약
 
-상태: P1 네 상품군 field 계약 정본
-기준일: 2026-07-29
+상태: P1 네 상품군 field 계약 및 P0-10 공개 관계·문서 경계 정본
+기준일: 2026-08-20
 
 이 문서는 자연어 질문과 결정론적 검색기 사이의 계약을 설명한다. 해외 ETP,
 국내 ETP, 국내채권은 실행 가능하다. 공모펀드는 grain·field capability와
@@ -43,6 +43,10 @@
 | [`product_comparison_cli.py`](../packages/finance_agent_core/src/finance_agent_core/evaluation/product_comparison_cli.py) | DB·manifest hash 검증 후 30문항 공통 비교 실행 |
 | [`search_aggregate_benchmark.py`](../packages/finance_agent_core/src/finance_agent_core/evaluation/search_aggregate_benchmark.py) | 새 프로세스 8문항의 결과 지문·지연·RSS 회귀 |
 | [`routed_service.py`](../packages/finance_agent_core/src/finance_agent_core/agent/routed_service.py) | SEARCH의 서버 기준계획·선택적 HCX 계획 완전 일치 guard와 공통 실행 |
+| [`contracts/knowledge.py`](../packages/finance_agent_core/src/finance_agent_core/contracts/knowledge.py) | 관계·문서 검색의 별도 `KnowledgeQueryPlan`과 엄격한 입력·결과 계약 |
+| [`agent/knowledge_service.py`](../packages/finance_agent_core/src/finance_agent_core/agent/knowledge_service.py) | 서버 기준계획·선택적 모델 제안 완전 일치, release 검증, 검색·주장·답변 조립 |
+| [`answering/claims.py`](../packages/finance_agent_core/src/finance_agent_core/answering/claims.py) | 허용된 관계·문서 주장 생성과 exact claim verifier·결정론적 fallback |
+| [`agent/knowledge_cli.py`](../packages/finance_agent_core/src/finance_agent_core/agent/knowledge_cli.py) | Backend 통합 전 strict JSON schema·실행 계약을 확인하는 CLI |
 
 ## 2. 두 스키마를 분리하는 이유
 
@@ -398,6 +402,53 @@ Verifier를 모두 통과해야 `llm_grounded`다. 다른 상품군 언급·직�
 남기지 않고 전체를 `deterministic_fallback`으로 교체한다. 전체 빈 결과와
 control route는 Answer provider를 호출하지 않는다.
 
+### 7.6 관계·문서 검색과 주장 검증 계약
+
+P0-7 지식 검색은 기존 상품 `QueryPlan`과 섞지 않고 별도
+`KnowledgeQueryPlan`을 사용한다. 현재 허용 범위는 다음 두 가지다.
+
+- `relation`: 승인된 `manager`, `region`, `index`, `asset`, `issuer` 관계 중 정확히 한 조건 검색
+- `document`: 승인된 문서 BM25 index에서 질문과 관련된 passage 검색
+
+서버가 만든 기준계획과 모델 제안 계획이 완전히 같을 때만 검색한다. 모델 제안이
+없으면 서버 계획만으로 실행하며, 다르면 모델 값을 보정해 실행하지 않고 즉시
+차단한다. 관계 검색은 상품군·관계 종류·상한을, 문서 검색은 문서 집합·상한을
+엄격히 제한한다.
+
+검색 결과를 설명 문장으로 바꾸기 전에는 허용된 구조의 claim을 먼저 만든다.
+검증기는 claim의 개수·종류·순서·값·evidence 참조가 검색 결과와 정확히 같은지
+확인한다. 하나라도 다르거나 생성기가 실패하면 모델 문장을 남기지 않고 같은
+근거에서 만든 결정론적 답변으로 교체한다. 검색 결과가 없으면 모델을 호출하지 않는다.
+
+관계·문서 index는 내부 `KnowledgeRetrievalRelease`가 SHA-256·크기·승인 상태와
+공식 상품 DB identity를 고정한다. P0-7 내부 후보 기록과 실행법은
+[P0-7 인수인계 보고서](p0-7-knowledge-claim-verifier-handover-2026-08-20.md)를 따른다.
+
+2026-08-20 P0-10에서는 **관계 검색만** 공개 `AgentReleaseManifest` 1.2와 일반
+Router·Backend에 연결했다. 문서 검색은 승인 corpus가 없어
+`disabled_no_approved_corpus` 상태를 유지한다. 공개 관계 계약은 다음을 추가로 강제한다.
+
+- FTS 질의는 후보 생성에만 사용하고, 정규화한 질문 관계명과 저장 관계명 전체가
+  정확히 같은 행만 evidence로 승인한다. 공백·문장부호·대소문자·호환 유니코드 차이는
+  정규화하지만 부분 문자열이나 공통 법인어가 겹친 결과는 허용하지 않는다.
+- `PublicKnowledgeRetrievalRelease`는 claim provider를 받을 수 없다. 현재 공개 관계 답변은
+  검증된 evidence를 이용한 결정론적 renderer만 사용하며, 임의 provider 호출을 HCLX
+  감사 event로 기록하지 않는다.
+- `RoutedFinanceAgent`는 release manifest에 해시로 고정된 관계 검색 계약이
+  활성화됐을 때만
+  `DeterministicKnowledgeRouter`와 `KnowledgeAgent`를 요구한다. Agent의 공개 release가
+  manifest의 `knowledge_retrieval`과 exact equality가 아니거나 provider가 붙으면 시작과
+  매 요청 경계에서 fail-closed로 거부한다. manifest 상태가 disabled인데 Agent만 붙이는
+  역방향 불일치도 거부한다.
+- authority, artifact·DB 확인, SQL, evidence·claim verifier, renderer와 answer event는
+  같은 plan·상품군·`relation_set_sha256`에 묶인다. deadline은 각 비싼 경계 전후에
+  검사하며 timeout을 `failed`나 `succeeded`로 바꾸지 않는다. validator는 terminal 원인과
+  앞선 실패 stage가 맞지 않는 trace, 중복 stage와 성공 뒤 실패 같은 불가능한 trace를
+  거부한다.
+- 실행 실패는 검증된 `KnowledgeRouteDecision`을 예외 wrapper에 보존한다. Backend의 안전한
+  오류 DTO는 이 결정에서 `intent=search`와 상품군을 복원하되 질문 외의 내부 경로·hash·
+  예외 문자열을 공개하지 않는다.
+
 ## 8. 검증
 
 `finance_agent/` 디렉터리에서 실행한다.
@@ -430,6 +481,11 @@ control route는 Answer provider를 호출하지 않는다.
 - 교차 상품군 SEARCH가 family 순서·plan·manifest·부분 결과를 잃거나, family
   evidence 경계를 넘겨 모델에 전달하거나, 교차 연산 문구를 최종 답변에 남기거나,
   한 family 실패 후 전체 결정론 fallback을 거치지 않는 변경
+- 관계 FTS 후보의 일부 토큰 일치만으로 다른 법인의 상품을 evidence에 넣는 변경
+- 공개 관계 release에 claim provider를 붙이거나 release manifest의
+  `knowledge_retrieval`과 실제 Agent release를 다르게 조립하는 변경
+- 관계 deadline·SQL·검증 실패의 감사 원인을 다른 terminal outcome으로 바꾸거나,
+  실패 DTO에서 이미 검증된 `search` intent·상품군을 잃는 변경
 
 ## 9. 연결 상태와 다음 순서
 
@@ -462,6 +518,10 @@ control route는 Answer provider를 호출하지 않는다.
     부분 결과·Backend family DTO와 공개 실제 데이터 회귀 4/4
 19. 교차 상품군 family별 evidence-only grounded answer, 교차 문구 verifier,
     전체 결정론 fallback과 expected·로컬 Qwen 공개 회귀 각각 4/4
+20. 제공 데이터 관계 검색의 공개 Router·Backend DTO·`AgentReleaseManifest` 1.2 연결,
+    관계명 전체 exact match, 공개 claim provider 차단과 causal audit validation
+21. 개발 sidecar와 release explicit SHA-256의 exact-one 신뢰원, 기동 뒤 파일 drift를
+    `/health`와 요청에서 fail-closed로 탐지하는 clean Docker 경로
 
 다음:
 
@@ -470,6 +530,8 @@ control route는 Answer provider를 호출하지 않는다.
 3. 승인된 실제 문서 corpus를 적재하고 출처·활용 범위를 검수한다.
 4. 최소 두 명의 reviewer가 사람 평가 rubric을 실제로 수행한다.
 5. HCX schema에 fund를 노출하고 공식 HyperCLOVA X provider에서 같은 fixture를 재사용한다.
-6. FastAPI `/answer` route에 service adapter, 인증과 request validation을 연결한다.
+6. 관계 설명용 HyperCLOVA X가 필요하면 provider·Prompt·schema·감사 경계를 공개 release에
+   추가한 뒤 별도 검증·서명한다. 현재 공개 관계 답변은 결정론적이다.
+7. 보호된 GitHub Environment와 NCP에서 서명된 두 release를 발급해 실제 rollback을 검증한다.
 
 다른 상품군을 추가할 때는 HCX enum만 늘리지 않는다. 데이터 감사, logical grain, sentinel, 단위, 기준일, field capability, 계약 테스트를 함께 추가해야 한다.

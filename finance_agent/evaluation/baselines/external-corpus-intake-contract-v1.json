@@ -1,0 +1,78 @@
+{
+  "schema_version": "1.0",
+  "baseline_id": "external-corpus-intake-contract-v1",
+  "recorded_on": "2026-08-19",
+  "dataset": "synthetic-external-corpus-contract-v1",
+  "evaluation_layer": "system_contract",
+  "status": "p0_5_intake_gate_verified_no_real_external_corpus",
+  "provider": {
+    "name": "deterministic-python-sqlite",
+    "official_submission_provider": false,
+    "network_used": false,
+    "hclx_called": false,
+    "local_llm_called": false,
+    "external_document_downloaded": false
+  },
+  "model": {
+    "name": "none",
+    "reason": "문서 생성 품질이 아니라 승인·해시·경로·SQLite 반입 계약을 검증"
+  },
+  "suite": {
+    "id": "external-corpus-intake-contract-v1",
+    "version": "1.0",
+    "path": "evaluation/protocols/external-corpus-intake-contract-v1.protocol.json",
+    "sha256": "0393be4acbff4ae42b3b181404bc3e3a7054352d9dbf7ae1798c5f334062abd6"
+  },
+  "data": {
+    "fixture_kind": "pytest_temporary_utf8_text_only",
+    "fixture_definition_sha256": "28302e2a5e6c2d2d747cb07a0787cf3ca248e97a1111176c1ea2f7ea713584d2",
+    "real_external_corpus_used": false,
+    "official_competition_data_used": false,
+    "not_applicable_reason": "실제 문서 정확도가 아닌 external_approved 반입 경계의 합성 계약 검사"
+  },
+  "implementation": {
+    "commit": "0d76042444ff06f7299b53c67bfc14b05dfb7c53",
+    "corpus_contract_sha256": "fba85139d31cc16aa9f9fbf26e424d2fc29f8200b274ebfef11e6f0ec8324113",
+    "corpus_cli_sha256": "01e982c2661915d8a708ab5b50abaf9be061d84ca9775caf506893e3a3fcdf2c",
+    "corpus_tests_sha256": "28302e2a5e6c2d2d747cb07a0787cf3ca248e97a1111176c1ea2f7ea713584d2",
+    "sqlite_fts_sha256": "46865923eb33ea0ae0da4eb0a77fe92ead6cf9f7e0bf5f784aee732311524618",
+    "required_review_roles": [
+      "data_rights",
+      "finance_domain"
+    ],
+    "required_usage_right_count": 4,
+    "max_document_bytes": 16777216,
+    "max_corpus_bytes": 134217728,
+    "automatic_download": false,
+    "release_activation_changed": false
+  },
+  "regression": {
+    "targeted_corpus_and_retrieval_tests_passed": 24,
+    "agent_core_tests_passed": 1291,
+    "agent_core_tests_skipped": 2,
+    "ruff_passed": true,
+    "git_diff_check_passed": true
+  },
+  "metrics": {
+    "total": 24,
+    "passed": 24,
+    "strict_accuracy": 1.0,
+    "strict_accuracy_scope": "합성 승인 반입·변조 차단·SQLite 검색 계약 통과율이며 실제 corpus 검색 정확도나 공모전 점수가 아님"
+  },
+  "reports": [
+    {
+      "role": "targeted_pytest_junit",
+      "artifact_name": "p0-5-corpus-intake-contract-targeted.xml",
+      "sha256": "be5d9afa067402cc8914a16cba71aec434bde756382b5e1f59e7d5693a57792d"
+    }
+  ],
+  "reproduce": "python -m pytest finance_agent/packages/finance_agent_core/tests/test_corpus_approval.py finance_agent/packages/finance_agent_core/tests/test_retrieval.py -q",
+  "limitations": [
+    "실제 외부 금융 문서를 수집·저장·색인하지 않았으며 source·license 승인 결과가 아님",
+    "테스트의 HTTPS URI와 문서는 tmp_path 합성 fixture이며 실제 publisher 증거가 아님",
+    "두 reviewer ID와 approval note는 감사 가능한 기록 필드일 뿐 전자서명이나 법률 자문을 대신하지 않음",
+    "승인 manifest hash는 향후 AgentReleaseManifest에 연결하기 전까지 production 신뢰 기준으로 사용할 수 없음",
+    "release의 document_bm25 상태는 disabled_no_approved_corpus 그대로이며 Agent 답변에 연결되지 않음",
+    "실제 corpus가 확정된 뒤 별도 retrieval 질문·gold·충돌 우선순위·latency 평가가 필요함"
+  ]
+}

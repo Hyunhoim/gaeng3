@@ -1,12 +1,12 @@
 # 개발 환경과 현재 구현 상태
 
 상태: 현재 정본
-기준일: 2026-08-07
+기준일: 2026-08-20
 
 ## 저장소 상태
 
-- 로컬 branch: `haeyeongcho`
-- upstream: `origin/haeyeongcho`
+- 로컬 branch: `haeyeongcho-p0-10-release-integration`
+- 기반 순서: `haeyeongcho` → P0-5 → P0-6 → P0-7 → P0-10
 - AI Agent와 FastAPI Backend 통합 코드가 같은 branch에 있음
 - 로컬 branch는 이번 검증 커밋을 포함해 upstream보다 앞서며, 이 문서는 특정
   commit ID 대신 source-freeze manifest로 검증 대상을 고정
@@ -84,6 +84,17 @@ SOURCE_DATE_EPOCH=1785283200 \
   흔적이 남은 현재 소스를 `submission`에서 의도적으로 차단
 - 최신 source-freeze 값과 wheel 검증 결과는
   [연결 전 준비 기준](pre-hcx-readiness.md)과 source-freeze manifest에 기록
+
+2026-08-20 P0-7 추가 검증 당시의 역사적 snapshot:
+
+- 관계·문서 Typed Plan·exact 권한 gate·Claim Verifier·fallback 전용 22/22
+- 관계·문서·릴리스 관련 회귀 82/82
+- Agent Core 전체 1,327 passed·2 조건부 skip
+- 승인 관계 전체 경로 공개 smoke 4/4
+- Ruff lint와 P0-7 변경 파일 format 검사 통과
+- 코드 기준 commit `ae1f7e539e2b09a1eef0739a3325050995770149`
+- 당시에는 공개 Router·`GET /answer`·P0-10 Agent Release가 비활성이었으며,
+  관계 검색은 아래 P0-10 후속 기준선에서 연결 완료. 문서 검색은 계속 비활성
 
 ## P1 계약 구현
 
@@ -278,8 +289,9 @@ header·credential은 크레딧 수령 전이라 아직 연결하지 않았다. 
 이 수치는 자유 생성 LLM 점수가 아니라 제한된 hybrid system의 계약 준수율이다.
 네 상품군·일곱 intent Router, capability matrix, BM25/SQLite FTS 문서 검색,
 사람 rubric validator와 Backend DTO까지 구현했다. 다음 평가는 금융 도메인
-담당자의 external blind 100문항 parser→답변 E2E와 실제 사람 평가이며, 이후
-공식 API 계약에 맞는 HyperCLOVA X HTTP transport와 FastAPI route를 연결한다.
+담당자의 external blind 100문항 parser→답변 E2E와 실제 사람 평가다. P0-7은
+관계·문서 계획과 evidence 주장 검증을 내부 CLI까지 연결했으며, 이후 P0-10에서
+공개 Router·FastAPI adapter·Agent Release를 같은 clean image로 고정한다.
 
 같은 상품군의 정확한 두 상품 COMPARE도 네 상품군 공통 경로로 일반화했다.
 해외·국내 ETP·국내채권 exact resolver, registry 비교 capability,
@@ -340,3 +352,58 @@ fallback·timeout·Router 무호출·비활성 공모펀드·서버 계획 guard
 정상·provider 설정·인증·rate limit·서비스·timeout·transport·응답 오류,
 dataset 장애, 알 수 없는 내부 오류와 grounded answer fallback을 포함한
 12개 시나리오가 12/12다. 실제 FastAPI route나 네트워크 호출은 포함하지 않는다.
+
+## P0-10 공개 관계 검색 기준선 — 2026-08-20
+
+P0-7의 내부 관계 검색 후보를 공개 실행 경로에 연결했다. 문서 검색은 승인 corpus가
+없으므로 계속 비활성이다.
+
+```text
+자연어 관계 질문
+  → DeterministicKnowledgeRouter
+  → evaluation·production에서는 release manifest에 해시로 고정된
+    knowledge_retrieval 계약과 실제 KnowledgeAgent의 exact binding 확인
+    development에서는 data-init artifact와 read-only SHA sidecar 결합 확인
+  → FTS 후보 생성
+  → 정규화한 관계명 전체 exact match
+  → 공식 상품 DB identity 재검증
+  → field-level relation evidence
+  → claim/evidence exact verifier
+  → 결정론적 답변과 Backend DTO
+```
+
+공개 `PublicKnowledgeRetrievalRelease`에는 claim provider를 주입할 수 없다. 따라서 현재
+공개 관계 경로는 Qwen이나 HyperCLOVA X를 호출하지 않는다. 모델 기반 관계 설명을
+활성화하려면 provider·model·Prompt·schema를 별도의 공개 release 계약에 넣고 다시
+서명해야 한다.
+
+deadline은 authority, release·DB hash 확인, SQLite 검색, evidence 검증과 답변 조립
+전후에 협력적으로 검사한다. 중간에 시간이 끝나면 해당 경계와 요청 terminal이
+`timed_out`으로 이어지고 성공 event를 남기지 않는다. 관계 실행 오류는
+`KnowledgeRoutedExecutionError`가 이미 검증된 plan을 보존하므로 Backend 오류 DTO도
+`intent=search`와 원래 상품군을 유지한다. 내부 예외·경로·hash는 응답에 넣지 않는다.
+
+개발과 release의 관계 artifact 신뢰원은 의도적으로 다르다.
+
+| 실행 프로필 | 유일한 신뢰원 | 금지 사항 |
+| --- | --- | --- |
+| 기본 개발 Compose | `/data/relation-retrieval-artifact.sha256` read-only sidecar | 명시적 release SHA와 동시 사용 |
+| evaluation·production release Compose | `FINANCE_RELATION_RETRIEVAL_ARTIFACT_SHA256` | 개발 sidecar 상속 |
+
+`docker-compose.release.yml`은 YAML `!reset null`로 base Compose의 sidecar 환경변수를
+없앤다. 최종 렌더링에서 두 신뢰원이 동시에 남지 않는 계약도 회귀 테스트한다.
+
+현재 검증 결과:
+
+- Agent Core 전체: `1,443 passed, 2 skipped in 33.68s`
+- FastAPI Backend 전체: `358 passed, 2 warnings in 8.75s`
+- P0-10 집중 회귀: `522/522`
+- fresh Docker `gaeng3-p010-review2`, port `18004`: data-init exit 0, health ok
+- 일반 상품 검색 성공, exact 관계 검색 결과 3건·관계 근거 3건
+- 부분 관계명 검색 0건, 관계와 수익률을 섞은 미지원 질문 안전 차단
+- Backend smoke 8/8, 공식 형식 GET 호환 smoke 8/8
+- 기동 뒤 관계 index 1바이트 변조: health HTTP 503, 관계 요청 HTTP 503
+- 검증 뒤 `down --volumes --remove-orphans`로 전용 project·volume 정리
+
+위 숫자는 같은 작업 tree의 로컬 회귀와 clean Docker 통합 증거다. 보호된 GitHub
+Environment에서 발급·서명한 두 NCP release와 실제 rollback은 아직 실행하지 않았다.

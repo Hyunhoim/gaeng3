@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
@@ -9,18 +10,24 @@ import pytest
 from pydantic import ValidationError
 
 from finance_agent_core.agent import RoutedFinanceAgent
+from finance_agent_core.agent.knowledge_router import DeterministicKnowledgeRouter
+from finance_agent_core.agent.knowledge_service import KnowledgeAgent
 from finance_agent_core.execution import PlanAuthorityCode, PlanAuthorityError, SQLiteOracle
 from finance_agent_core.release import (
     AgentReleaseCode,
     AgentReleaseError,
     AgentReleaseManifest,
     DeploymentBinding,
+    KnowledgeRetrievalRelease,
+    RelationRetrievalArtifactRelease,
     RollbackRelease,
     RuntimeReleaseInputs,
     build_agent_release_manifest,
     build_release_components,
     deployment_binding_file_bytes,
+    load_relation_retrieval_artifact_release,
     manifest_file_bytes,
+    relation_retrieval_artifact_file_bytes,
     resolve_agent_release,
     sha256_runtime_tree,
 )
@@ -53,6 +60,14 @@ def _write_read_only(path: Path, data: bytes) -> None:
         path.chmod(0o644)
     path.write_bytes(data)
     path.chmod(0o444)
+
+
+def _relation_artifact() -> RelationRetrievalArtifactRelease:
+    return RelationRetrievalArtifactRelease(
+        index_sha256="1" * 64,
+        approval_manifest_sha256="2" * 64,
+        relation_set_sha256="3" * 64,
+    )
 
 
 def _write_release(
@@ -96,7 +111,7 @@ def test_release_manifest_pins_code_contract_prompt_data_model_and_disabled_inde
     manifest, binding, resolved, _, _ = _write_release(tmp_path)
 
     assert resolved.release_id == manifest.release_id == binding.release_id
-    assert manifest.schema_version == "1.1"
+    assert manifest.schema_version == "1.2"
     assert binding.schema_version == "1.0"
     assert len(manifest.components.code.core_package_sha256) == 64
     assert len(manifest.components.code.backend_package_sha256) == 64
@@ -110,27 +125,268 @@ def test_release_manifest_pins_code_contract_prompt_data_model_and_disabled_inde
     }
     assert manifest.components.runtime_features.model.provider == "disabled"
     assert manifest.components.runtime_controls.hcx_timeout_seconds == 45.0
-    assert manifest.components.runtime_controls.official_answer_timeout_seconds == 55.0
+    assert manifest.components.runtime_controls.official_answer_timeout_seconds == 270.0
     assert manifest.components.runtime_controls.official_answer_max_inflight == 2
     assert manifest.components.runtime_controls.worker_count == 1
     assert manifest.components.runtime_features.retrieval.schema_dense == "disabled_offline_only"
     assert (
         manifest.components.runtime_features.retrieval.product_dense == "disabled_not_implemented"
     )
+    assert manifest.components.knowledge_retrieval.relation.status == "disabled_not_activated"
+    assert manifest.components.knowledge_retrieval.relation.artifact is None
+    assert manifest.components.knowledge_retrieval.document.status == "disabled_no_approved_corpus"
     assert "image_reference" not in manifest.model_dump(mode="json")
     assert binding.image_reference == _IMAGE_REFERENCE
 
 
-def test_stage4_manifest_rejects_pre_audit_schema_while_binding_remains_v1(
+@pytest.mark.parametrize("legacy_version", ["1.0", "1.1"])
+def test_stage4_manifest_rejects_legacy_schema_while_binding_remains_v1(
     tmp_path: Path,
+    legacy_version: str,
 ) -> None:
     manifest, binding, _, _, _ = _write_release(tmp_path)
     legacy_manifest = manifest.model_dump(mode="python")
-    legacy_manifest["schema_version"] = "1.0"
+    legacy_manifest["schema_version"] = legacy_version
 
     with pytest.raises(ValidationError):
         AgentReleaseManifest.model_validate(legacy_manifest)
     assert binding.schema_version == "1.0"
+
+
+def test_public_relation_activation_requires_exact_canonical_artifact_hash() -> None:
+    artifact = _relation_artifact()
+    artifact_file_sha256 = hashlib.sha256(
+        relation_retrieval_artifact_file_bytes(artifact)
+    ).hexdigest()
+    runtime = replace(
+        _inputs(),
+        relation_retrieval_artifact=artifact,
+        relation_retrieval_artifact_file_sha256=artifact_file_sha256,
+    )
+
+    state = build_release_components(runtime).knowledge_retrieval
+
+    assert state.relation.status == "activated"
+    assert state.relation.artifact == artifact
+    assert state.relation.artifact_file_sha256 == artifact_file_sha256
+    assert state.document.status == "disabled_no_approved_corpus"
+
+
+@pytest.mark.parametrize(
+    ("artifact", "artifact_file_sha256", "expected_code"),
+    [
+        (_relation_artifact(), None, AgentReleaseCode.ARTIFACT_HASH_MISMATCH),
+        (_relation_artifact(), "f" * 64, AgentReleaseCode.ARTIFACT_HASH_MISMATCH),
+        (None, "f" * 64, AgentReleaseCode.RUNTIME_MISMATCH),
+    ],
+)
+def test_public_relation_activation_fails_closed_on_incomplete_or_wrong_hash(
+    artifact: RelationRetrievalArtifactRelease | None,
+    artifact_file_sha256: str | None,
+    expected_code: AgentReleaseCode,
+) -> None:
+    with pytest.raises(AgentReleaseError) as raised:
+        build_release_components(
+            replace(
+                _inputs(),
+                relation_retrieval_artifact=artifact,
+                relation_retrieval_artifact_file_sha256=artifact_file_sha256,
+            )
+        )
+
+    assert raised.value.code is expected_code
+
+
+def test_internal_knowledge_release_cannot_masquerade_as_public_activation() -> None:
+    internal = KnowledgeRetrievalRelease(relation=_relation_artifact())
+
+    with pytest.raises(AgentReleaseError) as raised:
+        build_release_components(
+            replace(
+                _inputs(),
+                relation_retrieval_artifact=internal,  # type: ignore[arg-type]
+                relation_retrieval_artifact_file_sha256="f" * 64,
+            )
+        )
+
+    assert raised.value.code is AgentReleaseCode.RUNTIME_MISMATCH
+
+
+def test_public_agent_requires_exact_signed_knowledge_runtime(tmp_path: Path) -> None:
+    artifact = _relation_artifact()
+    artifact_file_sha256 = hashlib.sha256(
+        relation_retrieval_artifact_file_bytes(artifact)
+    ).hexdigest()
+    runtime = replace(
+        _inputs(),
+        relation_retrieval_artifact=artifact,
+        relation_retrieval_artifact_file_sha256=artifact_file_sha256,
+    )
+    _, _, resolved, _, _ = _write_release(tmp_path, runtime)
+    signed_release = resolved.manifest.components.knowledge_retrieval
+    relation_path = tmp_path / "relations.sqlite3"
+    product_path = tmp_path / "domestic-etp.sqlite3"
+
+    matching_agent = KnowledgeAgent(
+        release=signed_release,
+        relation_index_path=relation_path,
+        relation_database_paths={"domestic_etp": product_path},
+    )
+    service = RoutedFinanceAgent(
+        {},
+        release_guard=resolved,
+        require_agent_release=True,
+        knowledge_router=DeterministicKnowledgeRouter(),
+        knowledge_agent=matching_agent,
+    )
+    assert service.knowledge_agent is matching_agent
+
+    matching_agent.release = signed_release.model_copy(
+        update={
+            "relation": signed_release.relation.model_copy(
+                update={"artifact_file_sha256": "e" * 64}
+            )
+        }
+    )
+    with pytest.raises(AgentReleaseError) as drifted:
+        service._assert_signed_knowledge_current()
+    assert drifted.value.code is AgentReleaseCode.RUNTIME_MISMATCH
+    matching_agent.release = signed_release
+
+    with pytest.raises(ValueError, match="requires its public router and Agent"):
+        RoutedFinanceAgent(
+            {},
+            release_guard=resolved,
+            require_agent_release=True,
+        )
+
+    internal_agent = KnowledgeAgent(
+        release=KnowledgeRetrievalRelease(relation=artifact),
+        relation_index_path=relation_path,
+        relation_database_paths={"domestic_etp": product_path},
+    )
+    with pytest.raises(ValueError, match="signed public knowledge release"):
+        RoutedFinanceAgent(
+            {},
+            release_guard=resolved,
+            require_agent_release=True,
+            knowledge_router=DeterministicKnowledgeRouter(),
+            knowledge_agent=internal_agent,
+        )
+
+    mismatched_agent = KnowledgeAgent(
+        release=signed_release.model_copy(
+            update={
+                "relation": signed_release.relation.model_copy(
+                    update={
+                        "artifact_file_sha256": "f" * 64,
+                    }
+                )
+            }
+        ),
+        relation_index_path=relation_path,
+        relation_database_paths={"domestic_etp": product_path},
+    )
+    with pytest.raises(ValueError, match="signed public knowledge release"):
+        RoutedFinanceAgent(
+            {},
+            release_guard=resolved,
+            require_agent_release=True,
+            knowledge_router=DeterministicKnowledgeRouter(),
+            knowledge_agent=mismatched_agent,
+        )
+
+
+def test_disabled_signed_relation_release_rejects_attached_agent(tmp_path: Path) -> None:
+    _, _, resolved, _, _ = _write_release(tmp_path)
+    internal_agent = KnowledgeAgent(
+        release=KnowledgeRetrievalRelease(relation=_relation_artifact()),
+        relation_index_path=tmp_path / "relations.sqlite3",
+        relation_database_paths={"domestic_etp": tmp_path / "domestic-etp.sqlite3"},
+    )
+
+    with pytest.raises(ValueError, match="disabled signed relation release"):
+        RoutedFinanceAgent(
+            {},
+            release_guard=resolved,
+            require_agent_release=True,
+            knowledge_router=DeterministicKnowledgeRouter(),
+            knowledge_agent=internal_agent,
+        )
+
+
+def test_constructed_invalid_relation_artifact_is_revalidated_before_activation() -> None:
+    invalid = RelationRetrievalArtifactRelease.model_construct(
+        index_sha256="not-a-sha256",
+        approval_manifest_sha256="2" * 64,
+        relation_set_sha256="3" * 64,
+    )
+    file_sha256 = hashlib.sha256(relation_retrieval_artifact_file_bytes(invalid)).hexdigest()
+
+    with pytest.raises(AgentReleaseError) as raised:
+        build_release_components(
+            replace(
+                _inputs(),
+                relation_retrieval_artifact=invalid,
+                relation_retrieval_artifact_file_sha256=file_sha256,
+            )
+        )
+
+    assert raised.value.code is AgentReleaseCode.RUNTIME_MISMATCH
+
+
+def test_public_knowledge_retrieval_is_required_in_manifest() -> None:
+    manifest = build_agent_release_manifest(
+        _inputs(),
+        release_id="finance-agent-test-v1",
+        generated_at_utc=_GENERATED_AT,
+    ).model_dump(mode="python")
+    manifest["components"].pop("knowledge_retrieval")
+
+    with pytest.raises(ValidationError):
+        AgentReleaseManifest.model_validate(manifest)
+
+
+def test_relation_artifact_loader_rejects_hash_mismatch_and_internal_contract(
+    tmp_path: Path,
+) -> None:
+    artifact = _relation_artifact()
+    artifact_path = tmp_path / "relation-artifact.json"
+    artifact_data = relation_retrieval_artifact_file_bytes(artifact)
+    _write_read_only(artifact_path, artifact_data)
+    artifact_sha256 = hashlib.sha256(artifact_data).hexdigest()
+
+    assert (
+        load_relation_retrieval_artifact_release(
+            artifact_path=artifact_path,
+            expected_file_sha256=artifact_sha256,
+        )
+        == artifact
+    )
+    with pytest.raises(AgentReleaseError) as mismatched:
+        load_relation_retrieval_artifact_release(
+            artifact_path=artifact_path,
+            expected_file_sha256="f" * 64,
+        )
+    assert mismatched.value.code is AgentReleaseCode.ARTIFACT_HASH_MISMATCH
+
+    internal = KnowledgeRetrievalRelease(relation=artifact)
+    internal_data = (
+        json.dumps(
+            internal.model_dump(mode="json"),
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+        + b"\n"
+    )
+    _write_read_only(artifact_path, internal_data)
+    with pytest.raises(AgentReleaseError) as internal_error:
+        load_relation_retrieval_artifact_release(
+            artifact_path=artifact_path,
+            expected_file_sha256=hashlib.sha256(internal_data).hexdigest(),
+        )
+    assert internal_error.value.code is AgentReleaseCode.INVALID_JSON
 
 
 def test_manifest_bytes_are_canonical_for_the_same_release(tmp_path: Path) -> None:

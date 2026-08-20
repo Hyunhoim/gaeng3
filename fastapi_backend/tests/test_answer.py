@@ -216,7 +216,7 @@ def test_request_time_approval_failure_is_safe_for_post_and_official_get() -> No
     assert post_body.error.code.value == "dataset_unavailable"
     assert secret not in post.text
 
-    assert official.status_code == 200
+    assert official.status_code == 503
     official_body = OfficialAnswerResponse.model_validate(official.json())
     assert "데이터에 접근할 수 없습니다" in official_body.answer
     assert secret not in official.text
@@ -279,7 +279,7 @@ def _backend_status_response(status: BackendStatus) -> tuple[int, BackendAgentRe
 
 
 @pytest.mark.parametrize("status", list(BackendStatus))
-def test_official_get_answer_normalizes_every_internal_status_to_http_200(
+def test_official_get_answer_returns_5xx_only_for_retryable_internal_error(
     status: BackendStatus,
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
@@ -300,7 +300,7 @@ def test_official_get_answer_normalizes_every_internal_status_to_http_200(
         params={"question_id": f"Q-{status.value}", "question": "평가 질문"},
     )
 
-    assert response.status_code == 200
+    assert response.status_code == (503 if status is BackendStatus.ERROR else 200)
     body = OfficialAnswerResponse.model_validate(response.json())
     assert body.question_id == f"Q-{status.value}"
     assert set(response.json()) == {
@@ -312,7 +312,7 @@ def test_official_get_answer_normalizes_every_internal_status_to_http_200(
     }
 
 
-def test_official_get_answer_returns_safe_http_200_before_outer_budget() -> None:
+def test_official_get_answer_returns_504_before_outer_budget() -> None:
     slow_agent = FakeAgentService()
     original_answer = slow_agent.answer
 
@@ -332,7 +332,7 @@ def test_official_get_answer_returns_safe_http_200_before_outer_budget() -> None
             params={"question_id": "Q-TIMEOUT", "question": "오래 걸리는 평가 질문"},
         )
 
-    assert response.status_code == 200
+    assert response.status_code == 504
     body = OfficialAnswerResponse.model_validate(response.json())
     assert "시간이 초과" in body.answer
     assert "request_timeout" in body.think_trace
@@ -357,7 +357,7 @@ def test_official_get_answer_normalizes_inner_timeout_control_code(
         params={"question_id": "Q-INNER-TIMEOUT", "question": "해외 ETF 조회"},
     )
 
-    assert response.status_code == 200
+    assert response.status_code == 504
     body = OfficialAnswerResponse.model_validate(response.json())
     assert json.loads(body.think_trace)["control_code"] == "request_timeout"
     assert "시간이 초과" in body.answer
@@ -401,7 +401,7 @@ def test_get_and_post_reject_overload_without_starting_another_agent_call() -> N
             params={"question_id": "Q-BLOCKING", "question": "오래 걸리는 질문"},
         )
         assert started.is_set()
-        assert timed_out.status_code == 200
+        assert timed_out.status_code == 504
         assert (
             "request_timeout" in OfficialAnswerResponse.model_validate(timed_out.json()).think_trace
         )
@@ -410,7 +410,7 @@ def test_get_and_post_reject_overload_without_starting_another_agent_call() -> N
             "/answer",
             params={"question_id": "Q-OVERLOAD", "question": "두 번째 질문"},
         )
-        assert overloaded_get.status_code == 200
+        assert overloaded_get.status_code == 503
         official_body = OfficialAnswerResponse.model_validate(overloaded_get.json())
         assert set(overloaded_get.json()) == {
             "question_id",
@@ -471,7 +471,7 @@ def test_timeout_signals_worker_deadline_and_releases_capacity_after_cleanup() -
             params={"question_id": "Q-CANCEL", "question": "취소 신호 테스트"},
         )
 
-    assert response.status_code == 200
+    assert response.status_code == 504
     assert deadline_seen.is_set()
     assert cleaned.wait(1)
     _wait_for_active_requests(0)
@@ -522,7 +522,7 @@ def test_post_outer_timeout_returns_504_safe_backend_dto() -> None:
     _wait_for_active_requests(0)
 
 
-@pytest.mark.parametrize("timeout_seconds", [0, 60])
+@pytest.mark.parametrize("timeout_seconds", [0, 300])
 def test_settings_rejects_official_budget_outside_safe_range(
     timeout_seconds: float,
 ) -> None:
@@ -540,3 +540,57 @@ def test_settings_rejects_official_inflight_outside_process_bound(
 
 def test_default_request_admission_uses_benchmarked_safe_limit() -> None:
     assert Settings().official_answer_max_inflight == 2
+
+
+def test_default_official_budget_leaves_margin_below_evaluator_timeout() -> None:
+    assert Settings().official_answer_timeout_seconds == 270
+
+
+def test_official_get_replays_safe_result_without_second_agent_execution(
+    client: TestClient,
+    fake_agent: FakeAgentService,
+) -> None:
+    params = {"question_id": "Q-IDEMPOTENT", "question": "안전한 상품을 추천해 주세요."}
+
+    first = client.get("/answer", params=params)
+    second = client.get("/answer", params=params)
+
+    assert first.status_code == second.status_code == 200
+    assert first.json() == second.json()
+    assert fake_agent.calls == [(params["question"], params["question_id"])]
+
+
+def test_official_get_rejects_request_id_reuse_with_different_question(
+    client: TestClient,
+    fake_agent: FakeAgentService,
+) -> None:
+    first = client.get(
+        "/answer",
+        params={"question_id": "Q-ID-CONFLICT", "question": "첫 번째 질문"},
+    )
+    conflict = client.get(
+        "/answer",
+        params={"question_id": "Q-ID-CONFLICT", "question": "다른 질문"},
+    )
+
+    assert first.status_code == 200
+    assert conflict.status_code == 200
+    body = OfficialAnswerResponse.model_validate(conflict.json())
+    assert json.loads(body.think_trace)["control_code"] == "invalid_request"
+    assert fake_agent.calls == [("첫 번째 질문", "Q-ID-CONFLICT")]
+
+
+def test_official_get_does_not_replay_retryable_failure() -> None:
+    agent = FakeAgentService(error=DatasetApprovalError("PRIVATE_TRANSIENT_FAILURE"))
+    application = create_app(settings=Settings(), agent=agent)
+    params = {"question_id": "Q-TRANSIENT", "question": "국내채권 조회"}
+
+    with TestClient(application) as client:
+        first = client.get("/answer", params=params)
+        second = client.get("/answer", params=params)
+
+    assert first.status_code == second.status_code == 503
+    assert agent.calls == [
+        (params["question"], params["question_id"]),
+        (params["question"], params["question_id"]),
+    ]

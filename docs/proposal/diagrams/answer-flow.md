@@ -1,19 +1,36 @@
 # 금융상품 Agent 주요 기능 흐름도
 
-상태: 초안 v0.1
+상태: 초안 v0.3 · P0-10 공개 관계 검색 로컬 검증 반영
 
-기준일: 2026-07-31
+기준일: 2026-08-20
+
+실선으로 표시한 관계 검색 경로의 판정은 `local implementation verified`이며,
+NCP 실제 배포 완료를 뜻하지 않는다.
 
 ```mermaid
 flowchart TD
-    Q["사용자 자연어 질문"] --> R["Intent Router"]
+    Q["사용자 자연어 질문"] --> SAFE["입력·정책 안전 검사"]
+    SAFE --> R["Fail-closed Intent Router"]
 
     R --> S["SEARCH<br/>조건 검색·상세 조회"]
     R --> C["COMPARE<br/>같은 상품군 두 상품"]
     R --> A["AGGREGATE<br/>집계·계산·순위"]
     R --> E["EXPLAIN<br/>근거 설명"]
+    R --> RS["RELATION_SEARCH<br/>발행사·운용사·기초지수 등"]
     R --> CL["CLARIFY<br/>모호한 조건 역질문"]
     R --> U["UNSUPPORTED<br/>예측·추천·미지원 요청"]
+
+    RS --> KR["결정론적 Relation Router"]
+    KR --> KB["Manifest 해시 고정 Public Release 결속<br/>artifact·DB identity·SHA-256"]
+    KB --> KFTS["Exact FTS 후보 검색"]
+    KFTS --> KFULL{"정규화된 전체 표현과<br/>canonical full match?"}
+    KFULL -->|"아니오"| KNF["not_found<br/>부분 일치로 추측하지 않음"]
+    KFULL -->|"예"| KID["공식 상품 DB identity 재검증"]
+    KID --> KEV["Relation Field-level Evidence<br/>값·출처·기준일·citation"]
+    KEV --> KANS["근거만으로 결정론적 답변 생성"]
+    KANS --> KAUD["인과 순서 Audit<br/>Router → Release → SQL → Evidence → Answer"]
+    KNF --> KAUD
+    KAUD --> KOUT["관계 근거 답변 또는 not_found"]
 
     S --> MF{"복수 상품군?"}
     MF -->|"아니오"| P["서버 QueryPlan 검증"]
@@ -55,5 +72,10 @@ flowchart TD
 - COMPARE는 같은 상품군의 정확한 두 상품과 승인 필드만 실행
 - AGGREGATE는 허용 함수·그룹·통화 정책을 서버가 결정
 - EXPLAIN은 검증된 정형 evidence를 사용하며 실제 문서 corpus는 승인 대기
+- RELATION_SEARCH는 manifest에 해시로 고정된 public release 계약에서 허용한 관계만 실행하고,
+  exact FTS 후보를 canonical 전체 일치와 공식 DB identity로 다시 검증
+- 관계 검색은 현재 HyperCLOVA X claim provider를 사용하지 않고 필드 근거만으로
+  결정론적 답변을 생성하며, 부분 표현은 유사 상품으로 넘기지 않고 `not_found`로 종료
+- 공개 관계 경로의 NCP 실제 배포·관계 HCLX·alias 의미 blind는 후속 검증
 - CLARIFY·UNSUPPORTED는 Oracle과 답변 모델을 불필요하게 호출하지 않음
 - 답변 검증 실패는 근거 없는 재생성이 아니라 결정론적 fallback으로 종료

@@ -158,6 +158,21 @@ class ExpectedAuditReleaseLinkage:
     approved_dataset_manifest_sha256: str
     datasets: Mapping[ProductFamily, ExpectedDatasetFingerprint]
     binding_trust_anchor_verified: bool
+    relation_retrieval_activated: bool = False
+    relation_set_sha256: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.relation_retrieval_activated != (self.relation_set_sha256 is not None):
+            raise ValueError("relation activation and release linkage must agree")
+        if (
+            self.relation_set_sha256 is not None
+            and re.fullmatch(
+                _SHA256_PATTERN,
+                self.relation_set_sha256,
+            )
+            is None
+        ):
+            raise ValueError("relation release linkage must be a lowercase SHA-256")
 
 
 @dataclass(frozen=True, slots=True)
@@ -166,6 +181,7 @@ class AuditValidationPolicy:
     require_execution_path: bool = True
     require_release_linkage: bool = False
     require_dataset_linkage: bool = False
+    require_relation_linkage: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -528,6 +544,8 @@ def load_expected_audit_release_linkage(
         }
     )
     datasets = manifest.components.approved_datasets
+    public_relation = manifest.components.knowledge_retrieval.relation
+    relation_artifact = public_relation.artifact if public_relation.status == "activated" else None
     return ExpectedAuditReleaseLinkage(
         release_id=manifest.release_id,
         agent_release_id_sha256=sha256_text(manifest.release_id),
@@ -545,6 +563,10 @@ def load_expected_audit_release_linkage(
             for name, snapshot in datasets.snapshots.items()
         },
         binding_trust_anchor_verified=expected_binding_sha256 is not None,
+        relation_retrieval_activated=relation_artifact is not None,
+        relation_set_sha256=(
+            relation_artifact.relation_set_sha256 if relation_artifact is not None else None
+        ),
     )
 
 
@@ -571,6 +593,28 @@ def _dataset_tuple(event: AuditEvent) -> tuple[str, str, str, str, str] | None:
     if all(value is not None for value in values):
         return values  # type: ignore[return-value]
     return None
+
+
+def _is_knowledge_event(event: AuditEvent) -> bool:
+    return event.reason_code.startswith(("knowledge_", "relation_"))
+
+
+def _requires_relation_linkage(event: AuditEvent) -> bool:
+    return (
+        _is_knowledge_event(event)
+        and event.route_disposition is RouteDisposition.EXECUTE
+        and event.stage
+        in {
+            AuditStage.ROUTE,
+            AuditStage.COMPILER,
+            AuditStage.AUTHORITY,
+            AuditStage.SQL,
+            AuditStage.VERIFIER,
+            AuditStage.HCLX,
+            AuditStage.RENDERER,
+            AuditStage.ANSWER,
+        }
+    )
 
 
 def _add_event_issue(
@@ -658,10 +702,31 @@ def _validate_release_and_dataset_linkage(
             event.outcome is AuditOutcome.SUCCEEDED
             and event.route_disposition is RouteDisposition.EXECUTE
             and event.stage in data_required_stages
+            and not _is_knowledge_event(event)
         )
         if (policy.require_dataset_linkage or expected_release is not None) and requires_dataset:
             if dataset_values is None:
                 _add_event_issue(issues, "dataset_linkage_missing", located)
+        if _requires_relation_linkage(event):
+            if expected_release is not None:
+                if not expected_release.relation_retrieval_activated:
+                    _add_event_issue(
+                        issues,
+                        "knowledge_relation_release_not_activated",
+                        located,
+                    )
+                elif event.relation_set_sha256 is None:
+                    _add_event_issue(issues, "relation_linkage_missing", located)
+                elif event.relation_set_sha256 != expected_release.relation_set_sha256:
+                    _add_event_issue(issues, "relation_linkage_mismatch", located)
+            elif policy.require_relation_linkage and event.relation_set_sha256 is None:
+                _add_event_issue(issues, "relation_linkage_missing", located)
+        elif (
+            expected_release is not None
+            and not expected_release.relation_retrieval_activated
+            and event.relation_set_sha256 is not None
+        ):
+            _add_event_issue(issues, "relation_linkage_unexpected", located)
     return release_linked, dataset_linked, database_linked
 
 
@@ -858,6 +923,685 @@ def _validate_success_path(
     return complete
 
 
+def _validate_knowledge_success_path(
+    invocation: list[_LocatedEvent],
+    answer: _LocatedEvent,
+    *,
+    issues: _IssueAccumulator,
+) -> bool:
+    """Validate the relation lifecycle without pretending it used the product Oracle."""
+
+    complete = True
+
+    def fail(code: str, located: _LocatedEvent = answer) -> None:
+        nonlocal complete
+        complete = False
+        _add_event_issue(issues, code, located)
+
+    preceding = [item for item in invocation if item.line_number < answer.line_number]
+
+    def require_one(
+        stage: AuditStage,
+        reason_code: str,
+        outcome: AuditOutcome,
+        missing_code: str,
+    ) -> _LocatedEvent | None:
+        matches = [
+            item
+            for item in preceding
+            if item.event.stage is stage
+            and item.event.reason_code == reason_code
+            and item.event.outcome is outcome
+        ]
+        if not matches:
+            fail(missing_code)
+            return None
+        if len(matches) > 1:
+            fail("knowledge_stage_duplicate", matches[1])
+        return matches[0]
+
+    safety = require_one(
+        AuditStage.SAFETY,
+        "guard_allowed",
+        AuditOutcome.SUCCEEDED,
+        "knowledge_safety_missing",
+    )
+    route = require_one(
+        AuditStage.ROUTE,
+        "knowledge_routed_execute",
+        AuditOutcome.SUCCEEDED,
+        "knowledge_route_missing",
+    )
+    compiler = require_one(
+        AuditStage.COMPILER,
+        "knowledge_plan_compiled",
+        AuditOutcome.SUCCEEDED,
+        "knowledge_plan_missing",
+    )
+    authority = require_one(
+        AuditStage.AUTHORITY,
+        "knowledge_authority_granted",
+        AuditOutcome.SUCCEEDED,
+        "knowledge_authority_missing",
+    )
+    lookup = require_one(
+        AuditStage.SQL,
+        "relation_lookup_completed",
+        AuditOutcome.SUCCEEDED,
+        "knowledge_relation_lookup_missing",
+    )
+    evidence_verifier = require_one(
+        AuditStage.VERIFIER,
+        "relation_evidence_verified",
+        AuditOutcome.SUCCEEDED,
+        "knowledge_evidence_verifier_missing",
+    )
+    renderer = require_one(
+        AuditStage.RENDERER,
+        "knowledge_rendering_completed",
+        AuditOutcome.SUCCEEDED,
+        "knowledge_renderer_missing",
+    )
+
+    fallback = answer.event.reason_code == "knowledge_execution_fallback"
+    not_found = answer.event.reason_code == "knowledge_execution_not_found"
+    if answer.event.reason_code not in {
+        "knowledge_execution_completed",
+        "knowledge_execution_not_found",
+        "knowledge_execution_fallback",
+    }:
+        fail("knowledge_answer_reason_invalid")
+
+    claims_reason = "knowledge_claims_rejected" if fallback else "knowledge_claims_verified"
+    claims_outcome = AuditOutcome.FAILED if fallback else AuditOutcome.SUCCEEDED
+    claims_verifier = require_one(
+        AuditStage.VERIFIER,
+        claims_reason,
+        claims_outcome,
+        "knowledge_claim_verifier_missing",
+    )
+    hclx = [item for item in preceding if item.event.stage is AuditStage.HCLX]
+    if fallback:
+        if len(hclx) != 1:
+            fail(
+                "knowledge_fallback_generation_missing" if not hclx else "knowledge_stage_duplicate"
+            )
+        elif (
+            hclx[0].event.reason_code,
+            hclx[0].event.outcome,
+        ) not in {
+            ("knowledge_generation_completed", AuditOutcome.SUCCEEDED),
+            ("knowledge_generation_failed", AuditOutcome.FAILED),
+        }:
+            fail("knowledge_generation_event_invalid", hclx[0])
+    elif not_found:
+        if hclx:
+            fail("knowledge_not_found_called_model", hclx[0])
+        if any(
+            value != 0
+            for value in (
+                answer.event.candidate_count,
+                answer.event.result_count,
+                answer.event.evidence_count,
+            )
+        ):
+            fail("knowledge_not_found_counts_nonzero")
+    else:
+        if len(hclx) > 1:
+            fail("knowledge_stage_duplicate", hclx[1])
+        elif hclx and (
+            hclx[0].event.reason_code != "knowledge_generation_completed"
+            or hclx[0].event.outcome is not AuditOutcome.SUCCEEDED
+        ):
+            fail("knowledge_generation_event_invalid", hclx[0])
+        if (
+            min(
+                answer.event.candidate_count,
+                answer.event.result_count,
+                answer.event.evidence_count,
+            )
+            < 1
+        ):
+            fail("knowledge_found_counts_empty")
+
+    ordered = [
+        safety,
+        route,
+        compiler,
+        authority,
+        lookup,
+        evidence_verifier,
+        *hclx,
+        claims_verifier,
+        renderer,
+        answer,
+    ]
+    located_order = [item for item in ordered if item is not None]
+    if [item.line_number for item in located_order] != sorted(
+        item.line_number for item in located_order
+    ):
+        fail("knowledge_stage_order_invalid", located_order[-1])
+
+    expected_plan = answer.event.plan_sha256
+    if expected_plan is None:
+        fail("knowledge_answer_plan_link_missing")
+    expected_families = answer.event.product_families
+    for located in located_order[:-1]:
+        event = located.event
+        if event.stage is AuditStage.SAFETY:
+            continue
+        if event.stage is AuditStage.ROUTE:
+            if event.route_disposition is not RouteDisposition.EXECUTE:
+                fail("knowledge_route_disposition_invalid", located)
+        elif event.plan_sha256 != expected_plan:
+            fail("knowledge_plan_link_mismatch", located)
+        if event.product_families != expected_families:
+            fail("knowledge_family_link_mismatch", located)
+        if event.relation_set_sha256 != answer.event.relation_set_sha256:
+            fail("knowledge_relation_linkage_inconsistent", located)
+    if any(item.event.stage is AuditStage.ORACLE for item in preceding):
+        fail("knowledge_forbidden_oracle_stage")
+    canonical_reasons = {
+        AuditStage.SAFETY: {"guard_allowed"},
+        AuditStage.ROUTE: {"knowledge_routed_execute"},
+        AuditStage.COMPILER: {"knowledge_plan_compiled"},
+        AuditStage.AUTHORITY: {"knowledge_authority_granted"},
+        AuditStage.SQL: {"relation_lookup_completed"},
+        AuditStage.VERIFIER: {
+            "relation_evidence_verified",
+            "knowledge_claims_verified",
+            "knowledge_claims_rejected",
+        },
+        AuditStage.HCLX: {
+            "knowledge_generation_completed",
+            "knowledge_generation_failed",
+        },
+        AuditStage.RENDERER: {"knowledge_rendering_completed"},
+    }
+    for located in preceding:
+        allowed = canonical_reasons.get(located.event.stage)
+        if allowed is not None and located.event.reason_code not in allowed:
+            fail("knowledge_noncanonical_stage", located)
+        if located.event.stage in {AuditStage.PLAN, AuditStage.EXECUTION}:
+            fail("knowledge_noncanonical_stage", located)
+    return complete
+
+
+def _validate_knowledge_control_path(
+    invocation: list[_LocatedEvent],
+    answer: _LocatedEvent,
+    *,
+    issues: _IssueAccumulator,
+) -> None:
+    clarify = answer.event.outcome is AuditOutcome.CLARIFIED
+    expected_route_reason = (
+        "knowledge_routed_clarify" if clarify else "knowledge_routed_unsupported"
+    )
+    expected_answer_reason = (
+        "knowledge_execution_clarified" if clarify else "knowledge_execution_unsupported"
+    )
+    expected_disposition = RouteDisposition.CLARIFY if clarify else RouteDisposition.UNSUPPORTED
+    preceding = [item for item in invocation if item.line_number < answer.line_number]
+    safety = [
+        item
+        for item in preceding
+        if item.event.stage is AuditStage.SAFETY
+        and item.event.outcome is AuditOutcome.SUCCEEDED
+        and item.event.reason_code == "guard_allowed"
+    ]
+    routes = [
+        item
+        for item in preceding
+        if item.event.stage is AuditStage.ROUTE
+        and item.event.reason_code == expected_route_reason
+        and item.event.route_disposition is expected_disposition
+        and item.event.outcome is answer.event.outcome
+    ]
+    if len(routes) != 1:
+        _add_event_issue(
+            issues,
+            "knowledge_control_route_missing" if not routes else "knowledge_stage_duplicate",
+            answer if not routes else routes[1],
+        )
+    if len(safety) != 1 or (routes and safety[0].line_number >= routes[0].line_number):
+        _add_event_issue(
+            issues,
+            "knowledge_safety_missing" if not safety else "knowledge_stage_order_invalid",
+            answer if not safety else safety[-1],
+        )
+    if (
+        answer.event.reason_code != expected_answer_reason
+        or answer.event.route_disposition is not expected_disposition
+    ):
+        _add_event_issue(issues, "knowledge_control_answer_invalid", answer)
+    forbidden = next(
+        (
+            item
+            for item in preceding
+            if item.event.stage
+            in {
+                AuditStage.COMPILER,
+                AuditStage.AUTHORITY,
+                AuditStage.EXECUTION,
+                AuditStage.SQL,
+                AuditStage.ORACLE,
+                AuditStage.VERIFIER,
+                AuditStage.HCLX,
+                AuditStage.RENDERER,
+            }
+        ),
+        None,
+    )
+    if forbidden is not None:
+        _add_event_issue(issues, "knowledge_control_path_executed", forbidden)
+
+
+def _validate_knowledge_failure_path(
+    invocation: list[_LocatedEvent],
+    answer: _LocatedEvent,
+    *,
+    issues: _IssueAccumulator,
+) -> None:
+    """Validate a failed relation execution as a closed, linked state machine.
+
+    A terminal failure is not evidence that execution was attempted.  The trace
+    must first prove the same safety, route, and compiler decisions used by the
+    successful relation path, then identify exactly one failure at a supported
+    trust boundary.  This prevents a fabricated ``request -> failed answer``
+    trace from being accepted as an auditable execution failure.
+    """
+
+    def fail(code: str, located: _LocatedEvent = answer) -> None:
+        _add_event_issue(issues, code, located)
+
+    expected_reason = (
+        "knowledge_deadline_exceeded"
+        if answer.event.outcome is AuditOutcome.TIMED_OUT
+        else "knowledge_execution_failed"
+    )
+    if answer.event.reason_code != expected_reason:
+        fail("knowledge_failure_reason_invalid")
+    if answer.event.route_disposition is not RouteDisposition.EXECUTE:
+        fail("knowledge_route_disposition_invalid")
+
+    preceding = [item for item in invocation if item.line_number < answer.line_number]
+    prior_answers = [item for item in preceding if item.event.stage is AuditStage.ANSWER]
+    if prior_answers:
+        fail("answer_terminal_duplicate", prior_answers[0])
+    late_execution = next(
+        (
+            item
+            for item in invocation
+            if item.line_number > answer.line_number
+            and item.event.stage not in {AuditStage.REQUEST, AuditStage.SCHEMA_LINK_SHADOW}
+        ),
+        None,
+    )
+    if late_execution is not None:
+        fail("knowledge_success_after_failure", late_execution)
+
+    def require_one(
+        stage: AuditStage,
+        reason_code: str,
+        outcome: AuditOutcome,
+        missing_code: str,
+    ) -> _LocatedEvent | None:
+        matches = [
+            item
+            for item in preceding
+            if item.event.stage is stage
+            and item.event.reason_code == reason_code
+            and item.event.outcome is outcome
+        ]
+        if not matches:
+            fail(missing_code)
+            return None
+        if len(matches) > 1:
+            fail("knowledge_stage_duplicate", matches[1])
+        return matches[0]
+
+    safety = require_one(
+        AuditStage.SAFETY,
+        "guard_allowed",
+        AuditOutcome.SUCCEEDED,
+        "knowledge_safety_missing",
+    )
+    route = require_one(
+        AuditStage.ROUTE,
+        "knowledge_routed_execute",
+        AuditOutcome.SUCCEEDED,
+        "knowledge_route_missing",
+    )
+    compiler = require_one(
+        AuditStage.COMPILER,
+        "knowledge_plan_compiled",
+        AuditOutcome.SUCCEEDED,
+        "knowledge_plan_missing",
+    )
+    canonical_prefix_events = {
+        (
+            AuditStage.SAFETY,
+            "guard_allowed",
+            AuditOutcome.SUCCEEDED,
+        ),
+        (
+            AuditStage.ROUTE,
+            "knowledge_routed_execute",
+            AuditOutcome.SUCCEEDED,
+        ),
+        (
+            AuditStage.COMPILER,
+            "knowledge_plan_compiled",
+            AuditOutcome.SUCCEEDED,
+        ),
+    }
+    for located in preceding:
+        event = located.event
+        if (
+            event.stage in {AuditStage.SAFETY, AuditStage.ROUTE, AuditStage.COMPILER}
+            and (
+                event.stage,
+                event.reason_code,
+                event.outcome,
+            )
+            not in canonical_prefix_events
+        ):
+            fail("knowledge_noncanonical_stage", located)
+
+    failed_boundaries = {
+        (AuditStage.AUTHORITY, "knowledge_authority_rejected", AuditOutcome.FAILED),
+        (
+            AuditStage.AUTHORITY,
+            "knowledge_post_authority_rejected",
+            AuditOutcome.FAILED,
+        ),
+        (AuditStage.SQL, "relation_lookup_failed", AuditOutcome.FAILED),
+        (AuditStage.VERIFIER, "relation_evidence_rejected", AuditOutcome.FAILED),
+    }
+    timeout_boundaries = {
+        (
+            AuditStage.AUTHORITY,
+            "knowledge_authority_timed_out",
+            AuditOutcome.TIMED_OUT,
+        ),
+        (AuditStage.SQL, "relation_lookup_timed_out", AuditOutcome.TIMED_OUT),
+        (
+            AuditStage.VERIFIER,
+            "relation_verification_timed_out",
+            AuditOutcome.TIMED_OUT,
+        ),
+        (AuditStage.HCLX, "knowledge_generation_timed_out", AuditOutcome.TIMED_OUT),
+        (
+            AuditStage.RENDERER,
+            "knowledge_rendering_timed_out",
+            AuditOutcome.TIMED_OUT,
+        ),
+    }
+    permitted_boundary_failures = failed_boundaries | timeout_boundaries
+    boundary_failures = [
+        item
+        for item in preceding
+        if (
+            item.event.stage,
+            item.event.reason_code,
+            item.event.outcome,
+        )
+        in permitted_boundary_failures
+    ]
+    if not boundary_failures:
+        fail("knowledge_failure_stage_missing")
+        boundary = None
+    else:
+        boundary = boundary_failures[0]
+        if len(boundary_failures) > 1:
+            fail("knowledge_failure_stage_duplicate", boundary_failures[1])
+
+    prefix = [item for item in (safety, route, compiler, boundary) if item is not None]
+    if [item.line_number for item in prefix] != sorted(item.line_number for item in prefix):
+        fail("knowledge_stage_order_invalid", prefix[-1])
+
+    expected_plan = answer.event.plan_sha256
+    expected_families = answer.event.product_families
+    expected_relation_set = answer.event.relation_set_sha256
+    if expected_plan is None:
+        fail("knowledge_answer_plan_link_missing")
+    if not expected_families:
+        fail("knowledge_family_link_missing")
+    if expected_relation_set is None:
+        fail("knowledge_relation_linkage_missing")
+
+    execution_stages = {
+        AuditStage.ROUTE,
+        AuditStage.COMPILER,
+        AuditStage.AUTHORITY,
+        AuditStage.SQL,
+        AuditStage.VERIFIER,
+        AuditStage.HCLX,
+        AuditStage.RENDERER,
+    }
+    linked_events = [item for item in preceding if item.event.stage in execution_stages]
+    for located in linked_events:
+        event = located.event
+        if event.route_disposition is not RouteDisposition.EXECUTE:
+            fail("knowledge_route_disposition_invalid", located)
+        if event.product_families != expected_families:
+            fail("knowledge_family_link_mismatch", located)
+        if event.relation_set_sha256 != expected_relation_set:
+            fail("knowledge_relation_linkage_inconsistent", located)
+        if event.stage is not AuditStage.ROUTE and event.plan_sha256 != expected_plan:
+            fail("knowledge_plan_link_mismatch", located)
+
+    if boundary is None:
+        return
+
+    canonical_execution_events = {
+        (
+            AuditStage.AUTHORITY,
+            "knowledge_authority_granted",
+            AuditOutcome.SUCCEEDED,
+        ): "authority",
+        (
+            AuditStage.SQL,
+            "relation_lookup_completed",
+            AuditOutcome.SUCCEEDED,
+        ): "lookup",
+        (
+            AuditStage.VERIFIER,
+            "relation_evidence_verified",
+            AuditOutcome.SUCCEEDED,
+        ): "evidence",
+        (
+            AuditStage.HCLX,
+            "knowledge_generation_completed",
+            AuditOutcome.SUCCEEDED,
+        ): "generation_ok",
+        (
+            AuditStage.HCLX,
+            "knowledge_generation_failed",
+            AuditOutcome.FAILED,
+        ): "generation_failed",
+        (
+            AuditStage.VERIFIER,
+            "knowledge_claims_verified",
+            AuditOutcome.SUCCEEDED,
+        ): "claims_ok",
+        (
+            AuditStage.VERIFIER,
+            "knowledge_claims_rejected",
+            AuditOutcome.FAILED,
+        ): "claims_failed",
+        (
+            AuditStage.RENDERER,
+            "knowledge_rendering_completed",
+            AuditOutcome.SUCCEEDED,
+        ): "renderer",
+    }
+    observed_execution: list[tuple[str, _LocatedEvent]] = []
+    for located in preceding:
+        if located.event.stage not in {
+            AuditStage.AUTHORITY,
+            AuditStage.SQL,
+            AuditStage.VERIFIER,
+            AuditStage.HCLX,
+            AuditStage.RENDERER,
+        }:
+            if located.event.stage in {
+                AuditStage.PLAN,
+                AuditStage.PLANNING,
+                AuditStage.LEXICAL,
+                AuditStage.DENSE,
+                AuditStage.EXECUTION,
+                AuditStage.ORACLE,
+                AuditStage.SERIALIZATION,
+            }:
+                fail("knowledge_noncanonical_stage", located)
+            continue
+        key = (
+            located.event.stage,
+            located.event.reason_code,
+            located.event.outcome,
+        )
+        if located is boundary:
+            continue
+        token = canonical_execution_events.get(key)
+        if token is None:
+            fail("knowledge_noncanonical_stage", located)
+        else:
+            observed_execution.append((token, located))
+
+    if compiler is not None and any(
+        item.line_number <= compiler.line_number for _, item in observed_execution
+    ):
+        fail("knowledge_stage_order_invalid", compiler)
+    if any(item.line_number > boundary.line_number for _, item in observed_execution):
+        fail("knowledge_success_after_failure", answer)
+
+    observed_tokens = tuple(token for token, _ in observed_execution)
+    possible_runtime_prefixes = {
+        path[:length]
+        for path in {
+            ("authority", "lookup", "evidence", "claims_ok", "renderer"),
+            (
+                "authority",
+                "lookup",
+                "evidence",
+                "generation_ok",
+                "claims_ok",
+                "renderer",
+            ),
+            (
+                "authority",
+                "lookup",
+                "evidence",
+                "generation_ok",
+                "claims_failed",
+                "renderer",
+            ),
+            (
+                "authority",
+                "lookup",
+                "evidence",
+                "generation_failed",
+                "claims_failed",
+                "renderer",
+            ),
+            ("authority", "lookup", "evidence", "claims_failed", "renderer"),
+        }
+        for length in range(len(path) + 1)
+    }
+    completed_result_paths = {
+        path for path in possible_runtime_prefixes if path and path[-1] == "renderer"
+    }
+    boundary_key = (
+        boundary.event.stage,
+        boundary.event.reason_code,
+        boundary.event.outcome,
+    )
+    if boundary_key in {
+        (
+            AuditStage.AUTHORITY,
+            "knowledge_authority_rejected",
+            AuditOutcome.FAILED,
+        ),
+        (
+            AuditStage.AUTHORITY,
+            "knowledge_authority_timed_out",
+            AuditOutcome.TIMED_OUT,
+        ),
+    }:
+        permitted_prefixes = (
+            {()} | completed_result_paths
+            if boundary.event.reason_code == "knowledge_authority_timed_out"
+            else {()}
+        )
+    elif boundary_key == (
+        AuditStage.AUTHORITY,
+        "knowledge_post_authority_rejected",
+        AuditOutcome.FAILED,
+    ):
+        permitted_prefixes = completed_result_paths
+    elif boundary_key in {
+        (AuditStage.SQL, "relation_lookup_failed", AuditOutcome.FAILED),
+        (AuditStage.SQL, "relation_lookup_timed_out", AuditOutcome.TIMED_OUT),
+    }:
+        permitted_prefixes = {("authority",)}
+    elif boundary_key == (
+        AuditStage.VERIFIER,
+        "relation_evidence_rejected",
+        AuditOutcome.FAILED,
+    ):
+        permitted_prefixes = {("authority", "lookup")}
+    elif boundary_key == (
+        AuditStage.VERIFIER,
+        "relation_verification_timed_out",
+        AuditOutcome.TIMED_OUT,
+    ):
+        permitted_prefixes = {("authority", "lookup")}
+    elif boundary_key == (
+        AuditStage.HCLX,
+        "knowledge_generation_timed_out",
+        AuditOutcome.TIMED_OUT,
+    ):
+        permitted_prefixes = {("authority", "lookup", "evidence")}
+    elif boundary_key == (
+        AuditStage.RENDERER,
+        "knowledge_rendering_timed_out",
+        AuditOutcome.TIMED_OUT,
+    ):
+        permitted_prefixes = {
+            path
+            for path in possible_runtime_prefixes
+            if path[:3] == ("authority", "lookup", "evidence")
+            and (not path or path[-1] != "renderer")
+        }
+    else:  # pragma: no cover - every permitted boundary is enumerated above
+        permitted_prefixes = set()
+    if observed_tokens not in permitted_prefixes:
+        fail("knowledge_failure_prefix_invalid", boundary)
+
+    boundary_timed_out = boundary.event.outcome is AuditOutcome.TIMED_OUT
+    answer_timed_out = answer.event.outcome is AuditOutcome.TIMED_OUT
+    if boundary_timed_out != answer_timed_out:
+        fail("knowledge_failure_outcome_mismatch", answer)
+    request_terminals = [
+        item
+        for item in invocation
+        if item.line_number > answer.line_number
+        and item.event.stage is AuditStage.REQUEST
+        and item.event.outcome is not AuditOutcome.STARTED
+    ]
+    if answer_timed_out and request_terminals:
+        terminal = request_terminals[0]
+        if (
+            terminal.event.outcome is not AuditOutcome.TIMED_OUT
+            or terminal.event.reason_code != "deadline_exceeded"
+        ):
+            fail("knowledge_timeout_terminal_mismatch", terminal)
+    elif not answer_timed_out and request_terminals:
+        if request_terminals[0].event.outcome is not AuditOutcome.FAILED:
+            fail("knowledge_failure_terminal_mismatch", request_terminals[0])
+
+
 def _validate_invocations(
     events: list[_LocatedEvent],
     *,
@@ -977,7 +1721,10 @@ def _validate_invocations(
             timeout_count += 1
         if any(item.event.reason_code == "admission_rejected" for item in invocation):
             overload_count += 1
-        if any(item.event.reason_code == "execution_fallback" for item in invocation):
+        if any(
+            item.event.reason_code in {"execution_fallback", "knowledge_execution_fallback"}
+            for item in invocation
+        ):
             fallback_count += 1
         if any(item.event.outcome is AuditOutcome.FAILED for item in invocation):
             failed_count += 1
@@ -998,13 +1745,23 @@ def _validate_invocations(
             if len(successful_answers) > 1:
                 _add_event_issue(issues, "answer_terminal_duplicate", successful_answers[1])
             answer = successful_answers[-1]
-            if not policy.require_execution_path or _validate_success_path(
-                invocation,
-                answer,
-                expected_release=expected_release,
-                require_dataset_linkage=policy.require_dataset_linkage,
-                issues=issues,
-            ):
+            path_complete = True
+            if policy.require_execution_path:
+                if _is_knowledge_event(answer.event):
+                    path_complete = _validate_knowledge_success_path(
+                        invocation,
+                        answer,
+                        issues=issues,
+                    )
+                else:
+                    path_complete = _validate_success_path(
+                        invocation,
+                        answer,
+                        expected_release=expected_release,
+                        require_dataset_linkage=policy.require_dataset_linkage,
+                        issues=issues,
+                    )
+            if path_complete:
                 execution_path_complete += 1
 
         control_answers = [
@@ -1014,6 +1771,12 @@ def _validate_invocations(
             and item.event.outcome in {AuditOutcome.CLARIFIED, AuditOutcome.UNSUPPORTED}
         ]
         for answer in control_answers:
+            if _is_knowledge_event(answer.event):
+                _validate_knowledge_control_path(
+                    invocation,
+                    answer,
+                    issues=issues,
+                )
             if any(
                 item.line_number < answer.line_number
                 and (
@@ -1036,6 +1799,22 @@ def _validate_invocations(
                 for item in invocation
             ):
                 _add_event_issue(issues, "control_path_executed", answer)
+
+        knowledge_failures = [
+            item
+            for item in invocation
+            if item.event.stage is AuditStage.ANSWER
+            and item.event.outcome in {AuditOutcome.FAILED, AuditOutcome.TIMED_OUT}
+            and _is_knowledge_event(item.event)
+        ]
+        if len(knowledge_failures) > 1:
+            _add_event_issue(issues, "answer_terminal_duplicate", knowledge_failures[1])
+        if knowledge_failures:
+            _validate_knowledge_failure_path(
+                invocation,
+                knowledge_failures[-1],
+                issues=issues,
+            )
 
     return (
         len(groups),

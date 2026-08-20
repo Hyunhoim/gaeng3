@@ -21,7 +21,8 @@ generation N-1 기동·health 확인
 `POST /answer`는 국내채권 SEARCH 한 건이 `status=success`, `intent=search`인지 확인한다.
 각 probe 뒤에는 owner-only append-only JSONL에서 같은 invocation의
 Request→Safety→Lexical→Planning→Route→Compiler→Authority→SQL→Oracle→Verifier→
-Renderer→Answer→Request 순서, 연속 sequence, release·manifest·Binding hash,
+Renderer→Answer→Serialization(Backend DTO)→Serialization(HTTP 응답)→Request 순서의
+**15개 event·13개 고유 stage**, 연속 sequence, release·manifest·Binding hash,
 승인 dataset·QueryPlan hash를 다시 확인한다. N-1과 N은 하나의 감사 디렉터리를 보존해야
 하며 파일 교체·부분 JSON·중복 key·2 MiB 초과 신규 구간은 모두 차단한다.
 이는 질문 전체의 품질 평가가 아니라 rollback 뒤 실제 Agent 경로가 동작하는지 확인하는
@@ -45,6 +46,8 @@ snapshot이 없다는 뜻이지 image·DB volume 삭제를 뜻하지 않는다.
 - `/usr/local/bin/cosign`에 설치된 고정 `v3.1.3` 검증기
 - 로컬 Docker에 존재하는 두 개의 digest-pinned release image
 - 이미 적재·승인된 서로 다른 release-specific DB volume 두 개
+- 각 release manifest와 같은 관계 artifact·index·세 상품 DB가 들어 있는 volume 및
+  `.env.release`의 `FINANCE_RELATION_RETRIEVAL_ARTIFACT_SHA256`
 - UID `10001` 소유의 owner-only 감사 디렉터리 하나와 `WEB_CONCURRENCY=1`, event별 fsync
 - 감사 JSONL을 읽을 수 있는 root 권한. UID `10001` 계정에 Docker socket과 모든 release
   artifact 읽기 권한을 별도로 부여한 환경이라면 그 계정으로도 실행할 수 있다.
@@ -110,7 +113,7 @@ N-1→N→N-1 복귀 가능성을 별도 project에서 확인하기 위해 같�
 - project override용 Compose 환경변수와 release identity shell 변수를 제거한다.
 - `127.0.0.1:<명시한 포트>`로만 bind한다.
 - 전역 prune, image 삭제, volume 삭제, 다른 project 조작을 수행하지 않는다.
-- 현재 13-stage 감사 chain은 deterministic Fast Path에만 고정되어 있다.
+- 현재 15-event·13-stage 감사 chain은 deterministic 상품 SEARCH Fast Path에만 고정되어 있다.
   따라서 HCLX QueryPlan·grounded answer profile은 정상 release여도 이 drill에서
   명시적으로 거부하며, 실제 HCLX event 경로를 고정한 후 별도로 확장한다.
 - deterministic profile은 HCLX model·provider·credential 설정이 있으면 거부한다.
@@ -144,3 +147,22 @@ marker 계약도 이 실기동에서 검증했다. 합성 image·volume·Registr
 단, 합성 artifact에는 GitHub OIDC·cosign 서명이 없어서 `release_trust.py` 호출만 격리된
 test stub으로 대체했다. 따라서 이 결과는 rollback mechanics(실제 복귀 동작) 검증이며,
 NCP Registry·Sigstore 외부 trust anchor·운영 traffic 전환 검증은 아니다.
+
+## P0-10 관계 검색 통합 기록 — 2026-08-20
+
+현재 rollback runner는 두 release 환경 모두에 명시적
+`FINANCE_RELATION_RETRIEVAL_ARTIFACT_SHA256`을 요구한다. release Compose가 개발용 SHA
+sidecar를 제거하므로, rollback 대상도 각 release manifest에 고정된 값과 같은 explicit
+relation artifact SHA-256·release별 data volume을 가져야 한다. Backend startup과 `/health`가
+artifact·index·세 상품 DB 결속을 다시 검사한다.
+
+별도의 fresh Docker 통합에서는 관계 검색 data-init, exact 관계 질문 3건·근거 3건,
+부분 관계명 0건, Backend 8/8·공식 GET 8/8 smoke와 index 1바이트 변조 후 health·관계
+요청 HTTP 503을 확인했다. 그러나 rollback runner의 대표 probe 자체는 여전히 국내채권
+상품 SEARCH 한 건이며, 관계 질문의 N-1→N→N-1 실행·관계 감사 chain을 검증한다고
+주장하지 않는다.
+
+특히 **보호된 GitHub Environment에서 발급·cosign 서명된 연속 두 NCP release**로
+`rollback_drill.py --execute`를 실행한 적은 없다. 2026-08-12 기록은 서명 verifier를
+test stub으로 바꾼 localhost 합성 mechanics 시험이고, 2026-08-20 기록은 단일 fresh
+Docker 관계 통합·변조 시험이다. 따라서 실제 NCP signed rollback 완료 상태가 아니다.

@@ -6,6 +6,11 @@ from typing import Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, model_validator
 
+from finance_agent_core.agent.knowledge_router import (
+    KnowledgeRouteDecision,
+    KnowledgeRoutedExecutionError,
+)
+from finance_agent_core.agent.knowledge_service import KnowledgeServiceError
 from finance_agent_core.agent.providers import (
     HyperClovaXAuthenticationError,
     HyperClovaXConfigurationError,
@@ -26,6 +31,10 @@ from finance_agent_core.contracts.backend import (
     BackendStatus,
     routed_result_to_backend,
 )
+from finance_agent_core.contracts.knowledge import (
+    KnowledgePlanAuthorityError,
+    RelationKnowledgeOperation,
+)
 from finance_agent_core.contracts.routing import (
     InteractionIntent,
     RouteDecision,
@@ -40,6 +49,7 @@ from finance_agent_core.execution.authority import (
     PlanAuthorityError,
 )
 from finance_agent_core.release import AgentReleaseError
+from finance_agent_core.retrieval.relations import RelationIndexError
 from finance_agent_core.storage import DatasetApprovalError
 
 
@@ -98,6 +108,13 @@ def _map_error(error: Exception) -> _ErrorMapping:
             code=BackendErrorCode.INTERNAL_ERROR,
             message=_RELEASE_UNAVAILABLE,
             retryable=True,
+        )
+    if isinstance(error, KnowledgePlanAuthorityError):
+        return _ErrorMapping(
+            http_status_code=500,
+            code=BackendErrorCode.INTERNAL_ERROR,
+            message=_INTERNAL_ERROR,
+            retryable=False,
         )
     if isinstance(error, PlanAuthorityError):
         if error.code is PlanAuthorityCode.DEADLINE_EXCEEDED:
@@ -177,7 +194,16 @@ def _map_error(error: Exception) -> _ErrorMapping:
             message=_PROVIDER_UNAVAILABLE,
             retryable=True,
         )
-    if isinstance(error, (DatasetApprovalError, sqlite3.Error, OSError)):
+    if isinstance(
+        error,
+        (
+            DatasetApprovalError,
+            KnowledgeServiceError,
+            RelationIndexError,
+            sqlite3.Error,
+            OSError,
+        ),
+    ):
         return _ErrorMapping(
             http_status_code=503,
             code=BackendErrorCode.DATASET_UNAVAILABLE,
@@ -194,14 +220,32 @@ def _map_error(error: Exception) -> _ErrorMapping:
 
 def _error_response(
     request: BackendAgentRequest,
-    decision: RouteDecision | None,
+    decision: RouteDecision | KnowledgeRouteDecision | None,
     mapping: _ErrorMapping,
 ) -> BackendAgentResponse:
+    if isinstance(decision, RouteDecision):
+        intent = decision.draft.intent
+        product_families = decision.draft.product_families
+    elif isinstance(decision, KnowledgeRouteDecision) and decision.plan is not None:
+        operation = decision.plan.operation
+        intent = (
+            InteractionIntent.SEARCH
+            if isinstance(operation, RelationKnowledgeOperation)
+            else InteractionIntent.EXPLAIN
+        )
+        product_families = (
+            list(operation.product_families)
+            if isinstance(operation, RelationKnowledgeOperation)
+            else []
+        )
+    else:
+        intent = InteractionIntent.UNSUPPORTED
+        product_families = []
     return BackendAgentResponse(
         request_id=request.request_id,
         status=BackendStatus.ERROR,
-        intent=(decision.draft.intent if decision is not None else InteractionIntent.UNSUPPORTED),
-        product_families=(decision.draft.product_families if decision is not None else []),
+        intent=intent,
+        product_families=product_families,
         answer=mapping.message,
         query_plan=None,
         candidate_count=None,
@@ -230,6 +274,44 @@ def execute_answer_request(
     request: BackendAgentRequest,
 ) -> AnswerAdapterResult:
     """Run one validated request and normalize safe HTTP/body semantics."""
+
+    answer_public_atomically = getattr(service, "_answer_public_atomically", None)
+    if callable(answer_public_atomically):
+        try:
+            public_result = answer_public_atomically(request.question, request.request_id)
+            from finance_agent_core.agent.knowledge_backend_adapter import (
+                knowledge_result_to_backend,
+                knowledge_route_control_to_backend,
+            )
+            from finance_agent_core.agent.knowledge_service import KnowledgeAgentResult
+            from finance_agent_core.agent.routed_service import RoutedAgentResult
+
+            if type(public_result) is RoutedAgentResult:
+                response = routed_result_to_backend(public_result)
+            elif type(public_result) is KnowledgeAgentResult:
+                response = knowledge_result_to_backend(public_result)
+            elif type(public_result) is KnowledgeRouteDecision:
+                response = knowledge_route_control_to_backend(
+                    public_result,
+                    request_id=request.request_id,
+                )
+            else:
+                raise TypeError("public Agent returned an unsupported result contract")
+            return AnswerAdapterResult(http_status_code=200, response=response)
+        except Exception as error:  # noqa: BLE001 - outer application boundary
+            trusted_decision = None
+            actual_error = error
+            if isinstance(error, RoutedExecutionError):
+                trusted_decision = error.decision
+                actual_error = error.cause
+            elif isinstance(error, KnowledgeRoutedExecutionError):
+                trusted_decision = error.decision
+                actual_error = error.cause
+            mapping = _map_error(actual_error)
+            return AnswerAdapterResult(
+                http_status_code=mapping.http_status_code,
+                response=_error_response(request, trusted_decision, mapping),
+            )
 
     answer_atomically = getattr(service, "_answer_atomically", None)
     if callable(answer_atomically):

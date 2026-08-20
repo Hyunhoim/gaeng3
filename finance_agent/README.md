@@ -18,6 +18,10 @@
 - 결과와 최종 답변의 상품명·수치·순위·출처 검증
 - 공개 회귀·blind·red-team·사람 평가를 위한 도구와 기준선
 - field registry에서 제출용 Ontology Turtle 5개를 생성·검사하는 도구
+- 승인 상품 DB에서 발행사·운용사·기초지수·자산유형·투자지역 관계를 만들고 상품 ID를 재검증하는 도구
+- 관계·문서 Typed Plan과 모델 주장·evidence를 정확히 대조해 오류 시 안전 답변으로 바꾸는 P0-7 내부 경로
+- 명시적 관계 질문을 분리하고 전체 엔터티 exact match 후 공개 Backend DTO로 답하는 P0-10 경로
+- 관계 artifact·승인 데이터·공개 Agent release·AuditEvent 1.2의 fail-closed 결합
 - 개발 전용 로컬 Qwen과 HyperCLOVA X provider·공식 HTTP transport 계약
 
 ### 포함하지 않는 것
@@ -31,9 +35,14 @@
 
 ```mermaid
 flowchart TD
-    Q["사용자 자연어 질문"] --> R["Intent Router<br/>질문 종류·상품군 판단"]
+    Q["사용자 자연어 질문"] --> S["전역 안전 검사"]
+    S --> KR{"명시적 관계 질문인가"}
+    KR -->|아니오| R["기존 Intent Router<br/>질문 종류·상품군 판단"]
     R --> P["Typed QueryPlan<br/>조건을 검증 가능한 구조로 변환"]
     P --> O["SQLite Oracle<br/>검색·정렬·비교·계산"]
+    KR -->|예| KP["KnowledgeQueryPlan<br/>단일 관계·엔터티 확정"]
+    KP --> RO["관계 FTS 후보·전체 엔터티 exact match"]
+    RO --> V
     O --> V["Result Verifier<br/>검색 결과 재검사"]
     V --> E["Field-level Evidence<br/>값·출처·기준일 보존"]
     E --> A["답변 생성"]
@@ -53,7 +62,8 @@ LLM은 수치 계산, 필터, 정렬, 상품 순위와 출처를 직접 만들�
 | 국내 ETF·ETN | 검색·상세·비교·집계·근거 검증 |
 | 해외 ETF·ETN | 검색·상세·비교·집계·교차 상품군 검색·근거 검증 |
 | 공모펀드 | 검색·비교·집계·grounded answer 내부 검증, 공식 실행은 정책상 비활성 |
-| 문서 검색 | 제공된 문서를 대상으로 하는 BM25·SQLite FTS 최소 기능 |
+| 문서 검색 | BM25·SQLite FTS 최소 기능과 외부 문서 승인·권한·해시·변조 차단 반입 계약. 실제 corpus는 승인 대기 |
+| 관계 검색 | 국내채권·국내/해외 ETP 관계 58,005개, 공개 Router·Backend DTO·full-entity exact match·Release·Audit·Docker 연결 완료. 공모펀드·외부 문서·alias 의미 검색은 대기 |
 | Backend 연동 | 요청·응답 DTO, 오류 adapter와 JSON Schema 제공 |
 
 세부 필드와 제한은 [Capability matrix](docs/capability-matrix.md), 최신 구현·평가 상태는
@@ -176,6 +186,10 @@ evaluation/production에서는 일반 `QueryPlan` 실행 권한뿐 아니라 코
 index·공식 데이터·Docker image가 같은 release인지도 검증한다. 상세 발급·시작·실패
 계약은 [AgentReleaseManifest 배포 계약](docs/agent-release-manifest.md)을 따른다.
 
+관계 검색은 위 경계에 관계 artifact와 `relation_set_sha256`을 추가해 공개 release와
+정확히 결합. 현재 지원 범위, 개발·release SHA 차이, Docker 재현과 미검증 항목은
+[P0-10 공개 관계 검색·릴리스 통합 인수인계](docs/p0-10-public-relation-release-integration-handover-2026-08-20.md)를 기준으로 확인
+
 ## 9. LLM 사용 경계
 
 - 평가·제출 LLM은 공식 규칙에 따라 HyperCLOVA X로 제한
@@ -220,7 +234,8 @@ conda run -n gaeng3-embedding-eval \
 5. [데이터 감사 기준](docs/data-audit.md)
 6. [Field Registry와 QueryPlan 계약](docs/contracts.md)
 7. [Backend DTO](docs/backend-contract.md)
-8. [평가 README](evaluation/README.md)
+8. [P0-10 공개 관계 검색·릴리스 통합](docs/p0-10-public-relation-release-integration-handover-2026-08-20.md)
+9. [평가 README](evaluation/README.md)
 
 연구 답변과 과거 프롬프트는 구현 정본이 아님. 현재 판단에는 문서 인덱스가 지정한
 정본과 동결된 평가 기준선을 우선 사용

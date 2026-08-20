@@ -27,18 +27,20 @@ ETF·ETN, 공모펀드를 조회·비교·계산한 뒤 근거와 기준일을 �
 
 | 영역 | 현재 상태 |
 | --- | --- |
-| 데이터 | 공식 XLSX에서 네 상품군 SQLite를 자동 생성·검증하는 경로 구현 |
+| 데이터 | 공식 XLSX에서 네 상품군 SQLite와 관계 artifact·SHA sidecar·관계 SQLite를 자동 생성·검증 |
 | Ontology | 공식 파일명 Turtle 5개를 field registry에서 자동 생성·문법·정합성 검사 |
-| AI Agent | 검색·비교·집계·근거 생성·결과 검증과 현재 OFF인 Schema Dense Shadow 격리 구현 |
-| Backend | FastAPI `GET /health`, 내부용 `POST /answer`, 평가용 `GET /answer`, Audit·Shadow readiness 구현 |
-| Release | 코드·Prompt·Model·index·공식 데이터와 Docker digest를 묶는 Stage 3 fail-closed 계약과 host anti-replay 구현, localhost Registry·합성 N-1→N→N-1 실기동 검증 완료, NCP 공식 발급 대기 |
+| AI Agent | 검색·비교·집계·근거 생성·결과 검증과 공개 관계 Router 구현. 관계 엔터티 전체 값 exact match와 기존 상품 경로 fallthrough 적용 |
+| Backend | FastAPI `GET /health`, 내부용 `POST /answer`, 평가용 `GET /answer`, 관계 DTO·Audit·Shadow·관계 readiness 구현 |
+| Release | `AgentReleaseManifest 1.2`가 코드·Prompt·Model·index·공식 데이터·관계 artifact·Docker digest를 결합. 로컬 fail-closed 검증 완료, 실제 NCP 서명 배포 대기 |
 | Frontend | 동료의 `nextjs-frontend/` 코드 합류 후 연결 예정 |
 | LLM | 로컬 Qwen은 내부 개발 전용. HyperCLOVA X answer-only 실제 DETAIL·SEARCH 호출과 검증된 fallback 확인, QueryPlan은 OFF이며 production grounded planning과 clean NCP release는 대기 |
-| 자동 검증 | 동결 QA 기준 AI Core pytest 507개·Backend 34개를 보존하며, 현재 작업 트리 전체 회귀 Core 1,267개·Backend 311개 통과, 승인 DB 경로 opt-in 1개 skip(기존 fork warning 2건) |
+| 자동 검증 | 동결 QA 기준 AI Core pytest 507개·Backend 34개를 보존하며, P0-10 고정 522/522, 현재 Core 1,443개·Backend 358개 통과, opt-in 2개 skip |
 
 세부 기능과 평가 결과는 [AI Agent 작업공간](finance_agent/README.md)에서 관리
 배포 버전 고정과 평가·운영 실행은
 [AgentReleaseManifest 배포 계약](finance_agent/docs/agent-release-manifest.md)을 기준으로 한다.
+관계 검색의 공개 Router·Backend·Release·Docker 검증과 실제 NCP 배포 전 남은 일은
+[P0-10 인수인계 보고서](finance_agent/docs/p0-10-public-relation-release-integration-handover-2026-08-20.md)에서 확인한다.
 
 ## 3. 전체 구조
 
@@ -47,7 +49,7 @@ flowchart LR
     U["사용자"] --> F["Next.js Frontend<br/>nextjs-frontend · 합류 예정"]
     F --> B["FastAPI Backend<br/>fastapi_backend"]
     B --> A["Finance Agent Core<br/>finance_agent"]
-    A --> D["네 상품군 SQLite<br/>Docker volume"]
+    A --> D["네 상품군 SQLite·관계 색인<br/>읽기 전용 Docker volume"]
     X["공식 원천 XLSX<br/>읽기 전용"] --> I["data-init<br/>정규화·검증"]
     I --> D
 ```
@@ -104,9 +106,10 @@ test -f fastapi_backend/.env || \
 
 1. Backend 이미지 빌드
 2. 공식 XLSX에서 네 상품군 SQLite 생성 또는 재사용
-3. 데이터 무결성과 상품군 확인
-4. 데이터 준비 성공 후 FastAPI Backend 시작
-5. Backend가 정상 상태가 될 때까지 대기
+3. 관계 artifact JSON·SHA sidecar·관계 SQLite 생성 또는 검증
+4. 데이터 무결성·상품군·관계 승인 manifest 결합 확인
+5. 데이터 준비 성공 후 FastAPI Backend 시작
+6. Backend와 관계 검색이 정상 상태가 될 때까지 대기
 
 `nextjs-frontend/`와 Compose `frontend` 서비스가 추가된 뒤에도 같은 명령으로 전체
 서비스를 실행할 예정
@@ -130,6 +133,19 @@ curl --fail-with-body \
   --data '{"schema_version":"1.0","request_id":"manual-001","question":"매수 가능한 국내채권을 매수수익률 높은 순으로 3개 보여줘.","locale":"ko-KR"}' \
   http://127.0.0.1:18001/answer
 ```
+
+발행사 관계 질문 예시
+
+```bash
+curl --fail-with-body \
+  --request POST \
+  --header 'Content-Type: application/json' \
+  --data '{"schema_version":"1.0","request_id":"relation-001","question":"한국주택금융공사가 발행한 국내채권 3개 보여줘.","locale":"ko-KR"}' \
+  http://127.0.0.1:18001/answer
+```
+
+정상 개발 환경의 `/health`에는 `relation_retrieval_status=ready`가 포함. 관계 파일을
+기동 후 수정하거나 교체하면 health와 관계 요청이 모두 503으로 fail closed
 
 위 `POST /answer`는 Frontend가 상품·근거·상태를 세부적으로 받기 위한 내부 API다.
 주최 측 평가 규격을 확인하는 `GET /answer`는 다음처럼 호출한다.

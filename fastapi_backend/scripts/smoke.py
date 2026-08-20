@@ -12,6 +12,10 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
+from finance_agent_core.evaluation.official_acceptance import (
+    build_official_acceptance_transport_cases,
+)
+
 EXPECTED_FAMILIES = ["bond", "domestic_etp", "overseas_etp", "fund"]
 
 
@@ -26,6 +30,9 @@ class SmokeCase:
     expected_answer_mode: str = "control"
     expected_product_count: int = 0
     expected_dataset: str | None = None
+    expected_query_plan_kind: str | None = None
+    expected_citation_kind: str | None = None
+    uses_answer_provider: bool = True
     expected_clarification_code: str | None = None
     expected_error_code: str | None = None
 
@@ -96,6 +103,19 @@ CASES = (
         expected_dataset="overseas_etp",
     ),
     SmokeCase(
+        case_id="docker-smoke-relation-issued-by-001",
+        question="한국주택금융공사가 발행한 국내채권 3개 보여줘.",
+        expected_http_status=200,
+        expected_status="success",
+        expected_intent="search",
+        expected_families=("bond",),
+        expected_answer_mode="deterministic",
+        expected_product_count=3,
+        expected_query_plan_kind="relation_search",
+        expected_citation_kind="relation_field",
+        uses_answer_provider=False,
+    ),
+    SmokeCase(
         case_id="docker-smoke-fund-locked-001",
         question=(
             "당사에서 판매 중인 해외 주식형 공모펀드 중 3개월 수익률이 높은 상품 5개 보여줘."
@@ -131,93 +151,35 @@ CASES = (
     ),
 )
 
-_MALICIOUS_FRAGMENT = "<script>alert(1)</script>"
-_LONG_QUESTION = "가" * 2001
-_FUND_LOCKED_QUESTION = (
-    "당사에서 판매 중인 해외 주식형 공모펀드 중 3개월 수익률이 높은 상품 5개 보여줘."
-)
-OFFICIAL_CASES = (
+OFFICIAL_CASES = tuple(
     OfficialSmokeCase(
-        case_id="official-valid",
-        query=(
-            ("question_id", "docker-smoke-official-001"),
-            ("question", "현재 판매 가능한 원화채권 중 AA- 이상 종목 알려줘"),
-            ("unexpected", "ignored"),
+        case_id=case.id,
+        query=case.query,
+        expected_question_id=case.expected_question_id,
+        expected_question=case.expected_question,
+        expected_control_code=case.expected_control_code,
+        expected_trace_status=(
+            case.expected_trace_statuses[0] if len(case.expected_trace_statuses) == 1 else None
         ),
-        expected_question_id="docker-smoke-official-001",
-        expected_question="현재 판매 가능한 원화채권 중 AA- 이상 종목 알려줘",
-        expected_evidence=True,
-    ),
-    OfficialSmokeCase(
-        case_id="official-unicode-and-markup",
-        query=(
-            ("question_id", "평가-😀-001"),
-            (
-                "question",
-                f"내일 가장 오를 ETF를 예측해줘 & {_MALICIOUS_FRAGMENT}",
-            ),
-        ),
-        expected_question_id="평가-😀-001",
-        expected_question=f"내일 가장 오를 ETF를 예측해줘 & {_MALICIOUS_FRAGMENT}",
-        forbidden_output_fragments=(_MALICIOUS_FRAGMENT,),
-    ),
-    OfficialSmokeCase(
-        case_id="official-fund-locked",
-        query=(
-            ("question_id", "docker-smoke-official-fund-locked-001"),
-            ("question", _FUND_LOCKED_QUESTION),
-        ),
-        expected_question_id="docker-smoke-official-fund-locked-001",
-        expected_question=_FUND_LOCKED_QUESTION,
-        expected_trace_status="unsupported",
-        expected_intent="unsupported",
-        expected_families=("fund",),
-        expected_empty_context=True,
-    ),
-    OfficialSmokeCase(
-        case_id="official-blank-values",
-        query=(("question_id", " "), ("question", " ")),
-        expected_question_id="invalid-question-id",
-        expected_question=" ",
-        expected_control_code="invalid_request",
-    ),
-    OfficialSmokeCase(
-        case_id="official-missing-id",
-        query=(("question", "해외 ETF를 알려줘"),),
-        expected_question_id="invalid-question-id",
-        expected_question="해외 ETF를 알려줘",
-        expected_control_code="invalid_request",
-    ),
-    OfficialSmokeCase(
-        case_id="official-missing-question",
-        query=(("question_id", "Q-MISSING"),),
-        expected_question_id="Q-MISSING",
-        expected_question="",
-        expected_control_code="invalid_request",
-    ),
-    OfficialSmokeCase(
-        case_id="official-id-too-long",
-        query=(("question_id", "Q" * 129), ("question", "국내채권을 알려줘")),
-        expected_question_id="invalid-question-id",
-        expected_question="국내채권을 알려줘",
-        expected_control_code="invalid_request",
-    ),
-    OfficialSmokeCase(
-        case_id="official-question-too-long",
-        query=(("question_id", "Q-LONG"), ("question", _LONG_QUESTION)),
-        expected_question_id="Q-LONG",
-        expected_question=_LONG_QUESTION[:2000],
-        expected_control_code="invalid_request",
-    ),
+        expected_intent=(case.expected_intents[0] if len(case.expected_intents) == 1 else None),
+        expected_families=tuple(family.value for family in case.expected_families),
+        expected_evidence=case.require_evidence,
+        expected_empty_context=case.require_no_execution,
+        forbidden_output_fragments=case.forbidden_output_fragments,
+    )
+    for case in build_official_acceptance_transport_cases()
 )
 
 
-def smoke_cases(fund_execution_policy: str) -> tuple[SmokeCase, ...]:
-    if fund_execution_policy == "locked":
-        return CASES
-    if fund_execution_policy != "public_fund_v1_approved":
+def smoke_cases(
+    fund_execution_policy: str,
+    relation_retrieval_status: str = "ready",
+) -> tuple[SmokeCase, ...]:
+    if fund_execution_policy not in {"locked", "public_fund_v1_approved"}:
         raise ValueError(f"unsupported fund execution policy: {fund_execution_policy}")
-    return tuple(
+    if relation_retrieval_status not in {"disabled", "ready"}:
+        raise ValueError(f"unsupported relation retrieval status: {relation_retrieval_status}")
+    cases = tuple(
         replace(
             case,
             case_id="docker-smoke-fund-approved-001",
@@ -228,9 +190,27 @@ def smoke_cases(fund_execution_policy: str) -> tuple[SmokeCase, ...]:
             expected_dataset="fund",
             expected_clarification_code=None,
         )
-        if case.case_id == "docker-smoke-fund-locked-001"
+        if fund_execution_policy == "public_fund_v1_approved"
+        and case.case_id == "docker-smoke-fund-locked-001"
         else case
         for case in CASES
+    )
+    if relation_retrieval_status == "ready":
+        return cases
+    return tuple(
+        replace(
+            case,
+            expected_status="unsupported",
+            expected_intent="unsupported",
+            expected_families=(),
+            expected_answer_mode="control",
+            expected_product_count=0,
+            expected_query_plan_kind=None,
+            expected_citation_kind=None,
+        )
+        if case.case_id == "docker-smoke-relation-issued-by-001"
+        else case
+        for case in cases
     )
 
 
@@ -278,6 +258,7 @@ def validate_health(
     body: dict[str, Any],
     *,
     expected_fund_execution_policy: str | None = None,
+    expected_relation_retrieval_status: str | None = None,
 ) -> list[str]:
     errors: list[str] = []
     _expect(errors, http_status == 200, f"expected HTTP 200, got {http_status}")
@@ -303,6 +284,12 @@ def validate_health(
             errors,
             body.get("fund_execution_policy") == expected_fund_execution_policy,
             "fund execution policy differs",
+        )
+    if expected_relation_retrieval_status is not None:
+        _expect(
+            errors,
+            body.get("relation_retrieval_status") == expected_relation_retrieval_status,
+            "relation retrieval status differs",
         )
     return errors
 
@@ -331,9 +318,10 @@ def validate_answer(
         "product families differ",
     )
     success_expected = case.expected_status == "success"
-    expected_answer_mode = success_answer_mode if success_expected else case.expected_answer_mode
-    expected_fallback = success_expected and success_answer_mode == "deterministic_fallback"
-    expected_provider_model = provider_model if success_expected else None
+    provider_expected = success_expected and case.uses_answer_provider
+    expected_answer_mode = success_answer_mode if provider_expected else case.expected_answer_mode
+    expected_fallback = provider_expected and success_answer_mode == "deterministic_fallback"
+    expected_provider_model = provider_model if provider_expected else None
     _expect(errors, body.get("answer_mode") == expected_answer_mode, "answer mode differs")
     _expect(
         errors,
@@ -367,9 +355,34 @@ def validate_answer(
         _expect(errors, isinstance(citations, list) and bool(citations), "citations are missing")
         _expect(errors, bool(body.get("as_of_dates")), "as_of_dates are missing")
         manifest = body.get("source_manifest")
-        _expect(errors, isinstance(manifest, dict), "source_manifest is missing")
-        if isinstance(manifest, dict):
-            _expect(errors, manifest.get("dataset") == case.expected_dataset, "dataset differs")
+        if case.expected_dataset is not None:
+            _expect(errors, isinstance(manifest, dict), "source_manifest is missing")
+            if isinstance(manifest, dict):
+                _expect(
+                    errors,
+                    manifest.get("dataset") == case.expected_dataset,
+                    "dataset differs",
+                )
+        if case.expected_query_plan_kind is not None:
+            query_plan = body.get("query_plan")
+            operation = query_plan.get("operation") if isinstance(query_plan, dict) else None
+            _expect(
+                errors,
+                isinstance(operation, dict)
+                and operation.get("kind") == case.expected_query_plan_kind,
+                "query plan kind differs",
+            )
+        if case.expected_citation_kind is not None and isinstance(citations, list):
+            _expect(
+                errors,
+                bool(citations)
+                and all(
+                    isinstance(citation, dict)
+                    and citation.get("kind") == case.expected_citation_kind
+                    for citation in citations
+                ),
+                "citation kind differs",
+            )
         _expect(errors, body.get("error") is None, "success response contains an error")
         _expect(
             errors,
@@ -551,6 +564,11 @@ def build_parser() -> argparse.ArgumentParser:
         choices=("locked", "public_fund_v1_approved"),
         default="locked",
     )
+    parser.add_argument(
+        "--expected-relation-retrieval-status",
+        choices=("disabled", "ready"),
+        default="ready",
+    )
     parser.add_argument("--output", type=Path)
     return parser
 
@@ -563,7 +581,10 @@ def main(argv: list[str] | None = None) -> int:
     if arguments.success_answer_mode != "deterministic" and not arguments.provider_model:
         parser.error("LLM answer modes require --provider-model")
     base_url = arguments.base_url.rstrip("/")
-    cases = smoke_cases(arguments.expected_fund_execution_policy)
+    cases = smoke_cases(
+        arguments.expected_fund_execution_policy,
+        arguments.expected_relation_retrieval_status,
+    )
     started_at = datetime.now(UTC)
     try:
         health_status, health_body, health_bytes, health_duration, _ = _request_json(
@@ -574,6 +595,7 @@ def main(argv: list[str] | None = None) -> int:
             health_status,
             health_body,
             expected_fund_execution_policy=arguments.expected_fund_execution_policy,
+            expected_relation_retrieval_status=(arguments.expected_relation_retrieval_status),
         )
         results = []
         for case in cases:

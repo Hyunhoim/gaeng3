@@ -1,0 +1,130 @@
+{
+  "schema_version": "1.0",
+  "baseline_id": "p0-10-public-relation-release-integration-v1",
+  "recorded_on": "2026-08-20",
+  "dataset": "approved-provided-product-databases-and-local-release-contract-v1",
+  "evaluation_layer": "system_contract",
+  "status": "local_implementation_verified_external_release_not_executed",
+  "provider": {
+    "name": "deterministic-python-sqlite-fastapi-docker",
+    "official_submission_provider": false,
+    "network_used": "docker_loopback_only",
+    "hclx_called": false,
+    "local_llm_called": false,
+    "embedding_model_called": false
+  },
+  "model": {
+    "name": "none",
+    "reason": "생성 모델 품질이 아니라 공개 관계 라우팅, exact 검색, 릴리스 결합, 감사 로그와 변조 차단 시스템 계약을 검증"
+  },
+  "suite": {
+    "id": "p0-10-public-relation-release-integration-v1",
+    "version": "1.0",
+    "path": "evaluation/protocols/p0-10-public-relation-release-integration-v1.protocol.json",
+    "sha256": "b71e59f7eb3b14efdfc212947b6618b61c53840a119de8fd295236e694e89b8e",
+    "total_cases": 522
+  },
+  "data": {
+    "fixture_kind": "pytest_contract_cases_approved_product_databases_and_fresh_local_docker_volume",
+    "fixture_definition_sha256": "b71e59f7eb3b14efdfc212947b6618b61c53840a119de8fd295236e694e89b8e",
+    "official_competition_data_used": true,
+    "external_document_corpus_used": false,
+    "not_applicable_reason": "독립 금융 질문 정답률이나 생성 모델 품질이 아니라 제공 데이터 관계 검색의 공개 실행·릴리스·무결성 계약 검사"
+  },
+  "implementation": {
+    "agent_commit": "82e62f3",
+    "runtime_commit": "6e972a8",
+    "release_commit": "eac71c0",
+    "format_commit": "6f34aba",
+    "working_branch": "haeyeongcho-p0-10-release-integration"
+  },
+  "tests": {
+    "p0_10_focused": {
+      "tests": 522,
+      "passed": 522,
+      "failed": 0,
+      "duration_seconds": 20.07,
+      "junit_sha256": "e2b23c9d1da488c7d8ce72a6b9d5b5b9ab2797a284d071c23be4a79b4c64b7f8"
+    },
+    "agent_core_full": {
+      "passed": 1443,
+      "failed": 0,
+      "skipped": 2,
+      "duration_seconds": 33.68
+    },
+    "backend_full": {
+      "passed": 358,
+      "failed": 0,
+      "warnings": 2,
+      "duration_seconds": 8.75,
+      "warning_scope": "activation lock 동시성 시험의 Python fork deprecation warning"
+    }
+  },
+  "docker_observation": {
+    "project": "gaeng3-p010-review2",
+    "image": "gaeng3-backend:p010-review2",
+    "loopback_port": 18004,
+    "data_init_exit_code": 0,
+    "health_status": "ok",
+    "relation_retrieval_status": "ready",
+    "ready_product_family_count": 4,
+    "backend_smoke_total": 8,
+    "backend_smoke_passed": 8,
+    "official_smoke_total": 8,
+    "official_smoke_passed": 8,
+    "exact_relation_product_count": 3,
+    "exact_relation_citation_count": 3,
+    "partial_entity_status": "not_found",
+    "mixed_relation_numeric_condition_status": "unsupported",
+    "raw_smoke_sha256": "d9e4ca32f37d0817e0fb6045fa47329e3cdfc05e9c2fd01c7f93bfa5f3cf38b8"
+  },
+  "tamper_observation": {
+    "mutation": "격리된 관계 SQLite 색인 끝에 한 바이트 추가",
+    "health_http_status": 503,
+    "relation_request_http_status": 503,
+    "error_contract": "dataset_unavailable with trusted search intent and bond family",
+    "cleanup": "격리 Compose project, network와 생성 volume 제거 완료"
+  },
+  "release_contract": {
+    "public_relation_claim_provider": "disabled",
+    "development_trust_source": "read_only_sha256_sidecar",
+    "evaluation_production_trust_source": "explicit_sha256_only",
+    "ci_artifact_transport": "protected_environment_secret_strict_base64",
+    "ci_checks": [
+      "canonical JSON",
+      "external artifact SHA-256",
+      "approved dataset manifest binding",
+      "exclusive read-only materialization before registry mutation"
+    ]
+  },
+  "metrics": {
+    "total": 522,
+    "passed": 522,
+    "strict_accuracy": 1.0,
+    "strict_accuracy_scope": "고정된 공개 관계 검색·릴리스 시스템 계약 통과율이며 독립 질의 일반화·LLM 성능·공모전 예상 점수가 아님"
+  },
+  "reports": [
+    {
+      "role": "p0_10_focused_pytest_junit",
+      "artifact_name": "p0-10-public-relation-release-integration-v1.xml",
+      "sha256": "e2b23c9d1da488c7d8ce72a6b9d5b5b9ab2797a284d071c23be4a79b4c64b7f8"
+    }
+  ],
+  "reproduce": {
+    "precondition": "저장소 루트에서 Conda 환경 gaeng3-dev를 활성화한 뒤 실행",
+    "focused": "PYTHONPATH=fastapi_backend:finance_agent/packages/finance_agent_core/src python -m pytest -q --junitxml=finance_agent/artifacts/evaluation/p0-10-public-relation-release-integration-v1.xml $(python -c 'import json; print(\" \".join(json.load(open(\"finance_agent/evaluation/protocols/p0-10-public-relation-release-integration-v1.protocol.json\"))[\"test_files\"]))')",
+    "agent_core_full": "PYTHONPATH=finance_agent/packages/finance_agent_core/src python -m pytest -q finance_agent/packages/finance_agent_core/tests",
+    "backend_full": "PYTHONPATH=fastapi_backend:finance_agent/packages/finance_agent_core/src python -m pytest -q fastapi_backend/tests",
+    "docker": "Use a fresh isolated Compose project and data volume, run data-init and backend, then run fastapi_backend/scripts/smoke.py against its loopback port"
+  },
+  "limitations": [
+    "P0-10 집중 522/522는 고정 테스트 파일을 다시 실행한 시스템 회귀이며 독립 blind 금융 질문 정확도가 아니다",
+    "Docker 관측은 단일 로컬 Ubuntu 호스트의 격리 loopback 실행이며 NCP Server나 공인 IP 결과가 아니다",
+    "보호된 GitHub Environment에서 workflow를 실제 dispatch하거나 NCP Registry에 push하지 않았다",
+    "Sigstore 서명과 실제 서명된 N-1, N 두 릴리스 rollback을 실행하지 않았다",
+    "관계 답변에 HyperCLOVA X 또는 로컬 LLM claim provider를 연결하지 않았다",
+    "공모펀드, 테마, 편입종목, 외부 문서 관계와 금융 alias·동의어·번역 일반화는 검증 범위 밖이다",
+    "변조 관측은 격리 테스트 volume을 대상으로 한 단일 로컬 실험이며 장시간 운영 보안 시험이 아니다",
+    "원본 Docker smoke JSON은 임시 실행 산출물이고 baseline에는 그 SHA-256과 요약 관측만 보존한다"
+  ]
+}

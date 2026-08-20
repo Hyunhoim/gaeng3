@@ -1,0 +1,64 @@
+{
+  "schema_version": "1.0",
+  "protocol_id": "external-corpus-intake-contract-v1",
+  "status": "synthetic_contract_no_real_external_corpus",
+  "source": {
+    "path": "docs/p0-p1-remaining-roadmap-2026-08-14.html",
+    "requirement": "P0-5 External Approved Corpus",
+    "required_identity": [
+      "source_uri",
+      "collected_at_utc",
+      "license",
+      "content_sha256",
+      "normalized_text_sha256"
+    ]
+  },
+  "approval_boundary": {
+    "required_review_roles": [
+      "data_rights",
+      "finance_domain"
+    ],
+    "reviewer_ids_must_differ": true,
+    "required_usage_rights": [
+      "storage_allowed",
+      "retrieval_allowed",
+      "competition_use_allowed",
+      "deployment_bundle_allowed"
+    ],
+    "source_and_license_uri_scheme": "https",
+    "snapshot_media_types": [
+      "text/markdown",
+      "text/plain"
+    ]
+  },
+  "positive_cases": [
+    "reviewed intake spec seals canonical manifest",
+    "unchanged snapshot verifies against byte and normalized text hashes",
+    "verified snapshot builds a new read-only SQLite FTS5 index",
+    "BM25 evidence preserves external_approved source and corpus metadata"
+  ],
+  "fail_closed_cases": [
+    "any required usage right is false",
+    "finance and rights reviewer identities are equal",
+    "review predates source collection",
+    "HTTP source or license URI",
+    "absolute, parent, backslash, PDF, or duplicate snapshot path",
+    "snapshot or output symbolic link",
+    "same-size snapshot byte tampering",
+    "invalid UTF-8, BOM, NUL, or blank text",
+    "duplicate JSON key or non-canonical approved manifest",
+    "existing manifest, receipt, or SQLite output"
+  ],
+  "activation_policy": {
+    "actual_external_document_included": false,
+    "release_document_bm25_state": "disabled_no_approved_corpus",
+    "automatic_download_or_crawler": false,
+    "pdf_ocr_or_translation": false
+  },
+  "non_claims": [
+    "실제 외부 문서의 사용 권한이 승인되었다는 결과가 아님",
+    "실제 문서 corpus의 BM25 검색 정확도 평가가 아님",
+    "법률 자문이나 라이선스 법적 판단을 자동화한 결과가 아님",
+    "P0-5 production 활성화 또는 Agent 답변 연결 완료가 아님"
+  ]
+}

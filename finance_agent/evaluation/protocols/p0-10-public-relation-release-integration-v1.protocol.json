@@ -1,0 +1,73 @@
+{
+  "schema_version": "1.0",
+  "suite_id": "p0-10-public-relation-release-integration-v1",
+  "recorded_on": "2026-08-20",
+  "purpose": "P0-10 공개 관계 검색의 exact 검색, AgentReleaseManifest 결합, FastAPI·Docker 실행, 감사 로그, 변조 차단과 릴리스 승격 계약을 하나의 재현 가능한 로컬 검증 범위로 고정",
+  "implementation_commits": [
+    "82e62f3",
+    "6e972a8",
+    "eac71c0",
+    "6f34aba"
+  ],
+  "test_files": [
+    "finance_agent/packages/finance_agent_core/tests/test_relation_retrieval.py",
+    "finance_agent/packages/finance_agent_core/tests/test_relation_data_prepare.py",
+    "finance_agent/packages/finance_agent_core/tests/test_knowledge_router.py",
+    "finance_agent/packages/finance_agent_core/tests/test_knowledge_agent.py",
+    "finance_agent/packages/finance_agent_core/tests/test_knowledge_backend_adapter.py",
+    "finance_agent/packages/finance_agent_core/tests/test_agent_release.py",
+    "finance_agent/packages/finance_agent_core/tests/test_audit_validation.py",
+    "finance_agent/packages/finance_agent_core/tests/test_data_prepare.py",
+    "finance_agent/packages/finance_agent_core/tests/test_observability.py",
+    "finance_agent/packages/finance_agent_core/tests/test_release_cli.py",
+    "fastapi_backend/tests/test_relation_runtime_wiring.py",
+    "fastapi_backend/tests/test_health.py",
+    "fastapi_backend/tests/test_smoke.py",
+    "fastapi_backend/tests/test_dependencies.py",
+    "fastapi_backend/tests/test_answer.py",
+    "fastapi_backend/tests/test_approved_startup.py",
+    "fastapi_backend/tests/test_release_ci_contract.py",
+    "fastapi_backend/tests/test_release_deployment_contract.py",
+    "fastapi_backend/tests/test_release_rollback_drill.py",
+    "fastapi_backend/tests/test_release_startup.py"
+  ],
+  "test_file_sha256": {
+    "finance_agent/packages/finance_agent_core/tests/test_relation_retrieval.py": "2bd256b9056733ab38dc97cdc8e40b1f42ba1e37612bc7d70dd163357e9f2f41",
+    "finance_agent/packages/finance_agent_core/tests/test_relation_data_prepare.py": "c2e9cf2ea85f02c375b8f69a721b63c908b72de5c58523e6494f021ed8bf064b",
+    "finance_agent/packages/finance_agent_core/tests/test_knowledge_router.py": "d06cee6cde63def39590036769acd3591fd5e7167dd8d2ad343772ad97e3a65a",
+    "finance_agent/packages/finance_agent_core/tests/test_knowledge_agent.py": "ed08419abcb26b4a66ccd4037ac6a1c531433bd72a8796ef9c12673cd8eb7a21",
+    "finance_agent/packages/finance_agent_core/tests/test_knowledge_backend_adapter.py": "ba55e436256ee3cf981c870ddcae3a5bb2eb283db5a39c2c8e8e2718ae4ecc2c",
+    "finance_agent/packages/finance_agent_core/tests/test_agent_release.py": "86213e6adf151a145de06f7e3839ccff65486feaab002939e041124fdbdd0376",
+    "finance_agent/packages/finance_agent_core/tests/test_audit_validation.py": "0a21df565bd794fe4acd6f94a916cbc29df3b77a41a41f44714f4f169e5d8522",
+    "finance_agent/packages/finance_agent_core/tests/test_data_prepare.py": "dcbac561bed86cfe961dce30f3d5f2348ceec871c37964229940b0e2b3ab6aaa",
+    "finance_agent/packages/finance_agent_core/tests/test_observability.py": "3e88843b88cc919429145efa3f224838e7e30826e1d52e7ffa8ca5fcbc6ab45e",
+    "finance_agent/packages/finance_agent_core/tests/test_release_cli.py": "0116d25054ac2a4baf2fa2dcf7101b236517914457d70a164e3e19c0127f2c52",
+    "fastapi_backend/tests/test_relation_runtime_wiring.py": "2718f6a8f65ada138ad2f430324884ac4b000fbd2bf30bad90d033d465c34505",
+    "fastapi_backend/tests/test_health.py": "4964f6a81d5f89bf8257b6af300a6762a7b6455fa5b76ceabf5b280077f0c8b4",
+    "fastapi_backend/tests/test_smoke.py": "80b20f49cd83991f1e1b11fa7d4b4505deaa7318d805bf82b477262e2148bbb6",
+    "fastapi_backend/tests/test_dependencies.py": "a32e0026e0fe53abac4406eddac5827843c425848e136872ef21147e7001b5dc",
+    "fastapi_backend/tests/test_answer.py": "db2698a6b2a04f0c8ba608f5406cef3833d572f0f2d689820f798f23f7bf5622",
+    "fastapi_backend/tests/test_approved_startup.py": "f1063b173c88ff9ab238562445c7c7e0636f63b03072664cbd0979bc13b5beca",
+    "fastapi_backend/tests/test_release_ci_contract.py": "443a5e668c62e833dbea757b50d3391ba6d93d49c0b600f491ef068642a50913",
+    "fastapi_backend/tests/test_release_deployment_contract.py": "2239e0df11a7677ec136924aebf2411d22dad50cb155502f8b766cc175b24104",
+    "fastapi_backend/tests/test_release_rollback_drill.py": "b2857df27b76301ff6195f39ef21480c8b3fac832cbb3a0830b44fcb9409e64c",
+    "fastapi_backend/tests/test_release_startup.py": "89c1282710d698a634878571846c230081bc0d26cefc6cfa6db9d15e7468196c"
+  },
+  "required_assertions": [
+    "관계 엔터티는 공백·문장부호 정규화 이후 전체 값이 정확히 일치해야 하며 부분 토큰은 상품을 반환하지 않는다",
+    "공개 관계 경로는 결정론적 Router와 release manifest에 해시로 고정된 PublicKnowledgeRetrievalRelease에 정확히 결합된다",
+    "공개 관계 경로에는 별도 claim provider를 연결할 수 없고 근거 기반 결정론적 답변만 허용된다",
+    "관계 계획·검색·검증·답변·오류 DTO는 동일한 request, plan, family와 relation_set_sha256 인과관계를 보존한다",
+    "관계 artifact, 색인과 승인 상품 DB는 data-init에서 재현되며 기동 후 변경되면 health와 요청이 fail closed 된다",
+    "개발 Compose는 read-only SHA sidecar를 사용하고 evaluation·production은 명시적 SHA-256만 신뢰한다",
+    "보호된 GitHub Environment의 관계 artifact는 strict base64, canonical JSON, 외부 SHA-256과 승인 dataset manifest 결합을 통과한 뒤에만 릴리스 manifest에 포함된다",
+    "Docker 공개 API smoke는 네 상품군 기본 경로와 발행기관 관계 검색, 안전 제어와 공식 형식 GET 호환 계약을 함께 검사한다"
+  ],
+  "external_provider_calls_allowed": false,
+  "external_deployment_assertions_excluded": [
+    "실제 HyperCLOVA X 관계 답변 생성",
+    "보호된 GitHub Environment workflow dispatch와 실제 NCP Registry push",
+    "Sigstore 서명과 NCP 공인 IP smoke",
+    "서명된 실제 N-1과 N 릴리스의 운영 rollback"
+  ]
+}

@@ -19,6 +19,13 @@
 | N-1 → N → N-1 rollback을 어떻게 검증하는지 | [Rollback drill runbook](../../fastapi_backend/ROLLBACK_DRILL.md) |
 | 제출용 Ontology가 무엇인지 | [Ontology 제출 계약](ontology.md) |
 | 평가 수치를 어떻게 해석하는지 | [평가 README](../evaluation/README.md) |
+| 공식 설명회 예시와 API 계약을 어떻게 검증했는지 | [P0-4 공식 Acceptance 인수인계](p0-4-official-acceptance-handover-2026-08-19.md) |
+| 평가기 timeout·5xx 재시도와 동일 요청 중복 실행을 어떻게 처리하는지 | [P0-8 재시도 계약 인수인계](p0-8-retry-contract-handover-2026-08-19.md) |
+| 외부 금융 문서를 어떤 승인·해시 절차로 받는지 | [P0-5 외부 문서 반입 계약](p0-5-external-corpus-intake-2026-08-19.md) |
+| 발행사·운용사·지수·자산·지역 관계를 어떻게 안전하게 찾는지 | [P0-6 제공 관계 검색 인수인계](p0-6-provided-relation-retrieval-handover-2026-08-19.md) |
+| 관계·문서 검색을 모델이 임의 변경하지 못하게 어떻게 검증하는지 | [P0-7 계획·주장 검증 인수인계](p0-7-knowledge-claim-verifier-handover-2026-08-20.md) |
+| 관계 검색을 공개 Router·Backend·Release·Docker에 어떻게 연결했는지 | [P0-10 공개 관계 검색·릴리스 통합 인수인계](p0-10-public-relation-release-integration-handover-2026-08-20.md) |
+| P0-4~P0-10 전체가 어디까지 완료됐고 무엇이 남았는지 | [현재 상태 인수인계 HTML](p0-4-p0-10-current-status-handover-2026-08-20.html) |
 | 현재 승인 DB로 Stage 2 지문을 다시 계산한 결과 | [Stage 2 승인 DB 재검증 baseline](../evaluation/baselines/stage2-approved-db-revalidation-2026-08-12.json) |
 | Stage 3 release·anti-replay 자동 계약 결과 | [Stage 3 release 계약 baseline](../evaluation/baselines/stage3-release-contract-2026-08-12.json) |
 | localhost OCI push·합성 rollback 실기동 결과 | [Stage 3 OCI·rollback baseline](../evaluation/baselines/stage3-local-oci-rollback-2026-08-12.json) |
@@ -40,8 +47,9 @@
 | 현재 기준 | 공식 제약, 구현 상태, 우선순위 | [프로젝트 기준](project-baseline.md) |
 | 데이터·계약 | 원천 데이터 품질, 필드, QueryPlan, 실행 권한, 배포 release, rollback, API DTO | [데이터 감사](data-audit.md), [계약](contracts.md), [실행 권한](plan-authority.md), [배포 계약](agent-release-manifest.md), [rollback runbook](../../fastapi_backend/ROLLBACK_DRILL.md) |
 | Ontology | 공식 Turtle 5개, 생성·문법·registry 정합성 | [Ontology 제출 계약](ontology.md) |
-| 기능 설계 | 검색, 비교, 집계, 문서 RAG, 답변 검증 | [상세 문서 인덱스](project-index.md) |
+| 기능 설계 | 검색, 비교, 집계, 문서 RAG·외부 corpus 반입, 제공 데이터 관계 검색, 답변 검증 | [상세 문서 인덱스](project-index.md), [P0-5 반입 계약](p0-5-external-corpus-intake-2026-08-19.md), [P0-6 관계 검색](p0-6-provided-relation-retrieval-handover-2026-08-19.md), [P0-7 계획·주장 검증](p0-7-knowledge-claim-verifier-handover-2026-08-20.md), [P0-10 공개 통합](p0-10-public-relation-release-integration-handover-2026-08-20.md) |
 | 평가 해석 | 공개 회귀, Stage 2 승인 DB, Stage 3 release·rollback, blind, red-team, 사람 평가 | [평가 README](../evaluation/README.md), [Stage 2 baseline](../evaluation/baselines/stage2-approved-db-revalidation-2026-08-12.json), [Stage 3 release baseline](../evaluation/baselines/stage3-release-contract-2026-08-12.json), [Stage 3 rollback baseline](../evaluation/baselines/stage3-local-oci-rollback-2026-08-12.json) |
+| 작업 인수인계 | 완료 범위, 검증 근거, 재현 명령, 남은 위험과 다음 담당 | [P0-4 공식 Acceptance](p0-4-official-acceptance-handover-2026-08-19.md), [P0-5 반입 계약](p0-5-external-corpus-intake-2026-08-19.md), [P0-6 관계 검색](p0-6-provided-relation-retrieval-handover-2026-08-19.md), [P0-7 계획·주장 검증](p0-7-knowledge-claim-verifier-handover-2026-08-20.md), [P0-8 재시도 계약](p0-8-retry-contract-handover-2026-08-19.md), [P0-10 공개 통합](p0-10-public-relation-release-integration-handover-2026-08-20.md) |
 | 개발 전용 | 로컬 Qwen 실행과 안전 경계 | [로컬 LLM](local-llm.md) |
 | 과거 기록 | 초기 프롬프트와 외부 연구 답변 | `prompts/`, `research/` |
 
@@ -49,8 +57,10 @@
 
 - 팀원 기록, 현장 사진, 네이버클라우드 공식 PDF 교차 검토 완료
 - 평가용 `GET /answer`의 query parameter와 다섯 문자열 응답 필드 확인·구현
-- 성공·결과 없음·역질문·미지원·오류의 HTTP 200 계약 테스트 완료
-- 예상 30문항·미응답 5문항·60초 권장과 도메인별 `.ttl` 제출 화면 확인
+- 성공·결과 없음·역질문·미지원은 HTTP 200, 후속 운영 정보의 일시 장애·timeout은
+  503/504로 분리하는 계약 테스트 완료
+- 예상 30문항·미응답 5문항과 도메인별 `.ttl` 제출 화면을 확인하고, 후속 운영 정보의
+  문항당 300초·timeout/5xx 최대 2회 재시도를 270초 outer deadline으로 반영
 - 같은 10/10/10·미응답 5개 분포의 공개 모의평가를 구성해 로컬 Qwen 전체 경로 30/30 확인
 - Qwen이 만든 의미 보존 변형 77개를 전체 Agent로 재생해 77/77·fallback 0 확인
 - 원문 문장을 숨긴 의미 재구성 64개에서 최초 15/64를 보존하고 출력·계획 의미 64/64로 개선

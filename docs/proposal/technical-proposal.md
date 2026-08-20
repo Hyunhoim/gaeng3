@@ -1,8 +1,8 @@
 # 금융상품 Agent 기술 제안서
 
-상태: 팀 검토 전 초안 v0.2 · 설명회 계약 반영
+상태: 팀 검토 전 초안 v0.5 · P0-10 공개 관계 검색 릴리스 로컬 검증 반영
 
-기준일: 2026-08-08
+기준일: 2026-08-20
 
 이 문서는 최종 PDF 또는 발표자료를 만들기 위한 내용 정본이다. 구현되지 않은
 기능과 외부 확인이 필요한 항목은 완료된 기능처럼 표현하지 않는다.
@@ -17,6 +17,11 @@ QueryPlan으로 변환하고 결과를 설명하게 하되, 상품 필터링·�
 수치 검증은 Python·SQLite의 결정론적 도구가 담당한다. 최종 답변은 상품별
 field-level evidence와 기준일을 갖추며, 검증에 실패하면 근거 없는 생성을
 중단하고 결정론적 답변 또는 역질문으로 전환한다.
+
+발행사·운용사·기초지수 등을 묻는 제공 데이터 관계 질문은 공개 질문
+경로에 연결했다. 단, 현재 증거는 manifest에 해시로 고정된 릴리스 계약과 clean Docker에서
+수행한 `local implementation verified`이며, NCP 실제 배포나 공식 정확도를 입증한
+결과는 아니다.
 
 ## 2. 문제 정의
 
@@ -60,6 +65,15 @@ field-level evidence와 기준일을 갖추며, 검증에 실패하면 근거 �
 - 비교는 같은 상품군의 정확한 두 상품과 승인 필드에 한정
 - 집계는 Decimal 기반 COUNT·MIN·MAX·AVG와 제한된 SUM을 지원
 - 통화·단위·기준일이 호환되지 않으면 차이 또는 합산을 차단
+- 제공 데이터의 발행사·운용사·기초지수·자산유형·투자지역은 별도 SQLite FTS5
+  관계 색인으로 구성하고, 후보 상품 ID를 공식 상품 DB에서 다시 확인
+- 현재 승인 DB에서 관계 58,005개와 검색 smoke 4/4를 검증하고, 관계·문서 전용
+  Typed Plan과 Claim Verifier를 내부 경로에 연결
+- P0-10에서 안전 검사 → 결정론적 관계 Router → manifest에 해시로 고정된 public release 결속 →
+  exact FTS 후보 → canonical 전체 일치 → 공식 DB identity 재검증 순서로 공개
+  Router·Backend adapter·`GET /answer`에 연결
+- 일부 토큰만 맞는 표현은 유사 결과를 추측하지 않고 `not_found`로 종료
+- 금융 alias·관계 의미 검수와 독립 blind 성능은 아직 확정하지 않음
 
 ### 3.4 근거와 답변 검증
 
@@ -68,13 +82,22 @@ field-level evidence와 기준일을 갖추며, 검증에 실패하면 근거 �
 - LLM은 상품군별 질문·계획·검증된 evidence만 입력받아 설명 초안을 생성
 - 서버가 상품군별 답변 섹션을 조합하고, 교차 상품군 문구·비교·집계를 다시 검증
 - Answer Verifier가 상품명·수치·순위·근거·기준일을 다시 확인
+- 관계·문서 답변에서는 모델 주장을 evidence의 개수·순서·값·참조와 정확히 대조하고,
+  자유 수치·요약 필드를 허용하지 않음
+- 현재 공개 관계 경로는 HyperCLOVA X claim provider를 사용하지 않고 검증된
+  field evidence만으로 결정론적 답변을 생성
+- Router 판단, release·artifact 검증, SQL 검색, 주장 검증, 최종 결과를 인과
+  순서가 역전될 수 없는 Audit event로 남김
 - 하나라도 검증에 실패하면 전체 답변을 deterministic fallback으로 전환하며, 데이터 부족이면 역질문, 금지 요청이면 거절
 
 ### 3.5 문서 설명
 
 BM25/SQLite FTS 기반 문서 검색의 적재·필터·출처·기준일 계약을 구현했다.
-현재는 synthetic contract 수준이며, 실제 투자설명서·약관·용어집은 출처와
-활용 범위를 확인한 뒤 연결한다.
+외부 문서는 금융·데이터 권한 독립 review, HTTPS 출처, 사용 권한 4종,
+byte·정규화 본문 SHA-256, canonical manifest, 변조·경로·덮어쓰기 차단을 통과해야
+별도 BM25 색인으로 build된다. 이 반입 계약은 합성 문서 24/24를 통과했지만,
+실제 투자설명서·약관·용어집은 출처·사용 권한·검색 품질을 확인한 뒤에만
+Release에 연결한다.
 
 ## 4. 시스템 구성도
 
@@ -84,8 +107,11 @@ BM25/SQLite FTS 기반 문서 검색의 적재·필터·출처·기준일 계약
   FastAPI 내부 `POST /answer`, 공식 `GET /answer` 계약, Ontology Turtle 5개,
   Docker 데이터 준비·HTTP smoke
 - 교차 상품군 SEARCH의 family별 근거 격리·답변 검증·전체 fallback
-- 외부 통합 대기: Next.js, 공식 `GET /answer` 공개 통신 재현,
-  HyperCLOVA X transport, 공개 API 서버
+- 승인 상품 DB의 제공 관계 58,005개 색인·공식 상품 ID 재검증·출처 추적
+- 관계 Typed Plan·정확 일치·manifest에 해시로 고정된 public release 계약·공식 DB identity 재검증·
+  field evidence·결정론적 답변·인과적 Audit의 P0-10 로컬 공개 경로
+- 외부 통합 대기: Next.js, NCP의 실제 서명 배포·공인 IP,
+  서명된 두 release rollback, 관계 HyperCLOVA X claim provider, 공개 API 운영
 
 목표 구조를 현재 구현 완료 상태로 오해하지 않도록 실선과 점선으로 구분한다.
 
@@ -98,7 +124,8 @@ BM25/SQLite FTS 기반 문서 검색의 적재·필터·출처·기준일 계약
 | SEARCH | 네 상품군 조건 검색·상세 조회, 복수 상품군 독립 검색과 family별 grounded answer | 공통 조건만 상품군별 실행·근거를 family별로 격리·직접 비교 금지 |
 | COMPARE | 같은 상품군의 정확한 두 상품 | 통화·기준일·결측 불일치 차단 |
 | AGGREGATE | 네 상품군 COUNT·MIN·MAX·AVG·제한 SUM | 독립 Python 재검산 |
-| EXPLAIN | 정형 evidence 설명, 문서 RAG 최소 계약 | 실제 corpus 승인 대기 |
+| RELATION SEARCH | 발행사·운용사·기초지수·자산유형·투자지역의 제공 관계 조회 | exact FTS 후보를 canonical 전체 일치와 공식 DB identity로 재검증·부분 표현은 `not_found` |
+| EXPLAIN | 정형 evidence 설명, 문서 RAG·승인 반입 최소 계약 | 실제 corpus 출처·권한·검색 평가 대기 |
 | CLARIFY | 상품군·식별자·기준 누락 | Oracle·LLM 불필요 호출 차단 |
 | UNSUPPORTED | 전망·수익 보장·단정 추천 | 근거 없는 생성 금지 |
 
@@ -114,7 +141,8 @@ BM25/SQLite FTS 기반 문서 검색의 적재·필터·출처·기준일 계약
 3. 국내 ETF 또는 공모펀드의 조건 집계
 4. 같은 상품군 두 상품 비교
 5. 국내·해외 ETP 교차 검색과 family별 근거 답변
-6. 모호한 조건 역질문과 단정적 추천 거절
+6. 발행사·운용사를 기준으로 한 제공 데이터 관계 검색과 필드별 citation
+7. 모호한 조건 역질문과 단정적 추천 거절
 
 최종 화면 시나리오는 Next.js 통합 후 실제 캡처와 API 응답으로 교체한다.
 
@@ -150,8 +178,13 @@ BM25/SQLite FTS 기반 문서 검색의 적재·필터·출처·기준일 계약
 현재 대표 근거:
 
 - 4종 원천 145,393행 감사, 핵심 expectation 65/65
-- Agent Core pytest 507개와 Backend pytest 34개 통과
+- Agent Core 1,443 passed·2 skipped, Backend 358 passed·2 warnings
 - 공식 XLSX에서 SQLite 4개를 자동 생성·검증한 뒤 Backend를 시작하는 Docker 경로 완료
+- 승인 상품 DB 관계 58,005개·관계 계약 14/14·실제 검색 smoke 4/4와 공식 상품 ID 재검증 완료
+- P0-7 관계·문서 계획·주장 검증 계약 22/22, 승인 관계 전체 경로 smoke 4/4
+- P0-10 집중 회귀 522/522, clean Docker Backend smoke
+  8/8·공식 형식 GET 호환 smoke 8/8, 관계 질문 3 products/3 citations, 부분 표현 `not_found`,
+  변조 후 health·API 503 ([machine-readable baseline](../../finance_agent/evaluation/baselines/p0-10-public-relation-release-integration-v1.json)·[P0-10 인수인계](../../finance_agent/docs/p0-10-public-relation-release-integration-handover-2026-08-20.md))
 - 국내·해외 ETP 교차 SEARCH 공개 실제 데이터 회귀 4/4
 - 교차 상품군 grounded answer 공개 회귀 expected·로컬 Qwen 각각 4/4, 생성 대상 2문항 모두 grounded, 모델 호출 3회, fallback 0
 - 내부 red-team 40문항 수정 후 strict·safety·evidence 40/40
@@ -196,6 +229,8 @@ BM25/SQLite FTS 기반 문서 검색의 적재·필터·출처·기준일 계약
   도메인별 Ontology 제출 요구 확인
 
 내부 공개 평가의 100%는 배선·회귀 안정성이지 독립 blind 일반화 성능이 아니다.
+P0-10 수치도 로컬 구현·계약 검증이며 NCP 실제 배포, 서명된 두 release
+rollback, 관계 HyperCLOVA X 답변 품질을 의미하지 않는다.
 
 ## 9. 현업 활용성과 리스크 관리
 
@@ -204,6 +239,8 @@ BM25/SQLite FTS 기반 문서 검색의 적재·필터·출처·기준일 계약
 - 확인 불가능한 조건은 추정하지 않고 확인 불가 또는 역질문
 - 수익률 전망·수익 보장·단정적 투자 추천 금지
 - provider·dataset 장애는 evidence 없는 안전한 오류 DTO로 변환
+- 관계 artifact·DB의 경로·크기·수정 상태가 릴리스 검증 시점과 달라지면
+  health·질문 API를 503으로 중단
 - 실제 사람 평가는 금융 도메인 담당자와 제품 담당자가 독립 rubric으로 수행
 
 ## 10. 완료 전 게이트
@@ -212,7 +249,10 @@ BM25/SQLite FTS 기반 문서 검색의 적재·필터·출처·기준일 계약
 - 최소 2명의 독립 reviewer가 수행한 사람 평가
 - 허용된 실제 비정형 문서 corpus와 사용 범위
 - HyperCLOVA X 모델·endpoint·인증·Structured Outputs 확인과 실제 재현
-- FastAPI 공식 `GET /answer` Docker·공개 서버 통합
+- NCP에 서명된 release 실제 배포·공인 IP `GET /answer`·`/health` 재현
+- 서명된 두 release 간 forward·rollback drill과 Audit receipt 보존
+- 관계 답변용 HyperCLOVA X claim provider 결속·주장 검증·장애 fallback
+- 금융 alias·관계 의미의 독립 blind 평가
 - Ontology 용어의 금융 도메인 검수와 주최 측 최종 형식 확인
 - `think_trace`의 구조화 실행 기록에 대한 세부 평가 방식 확인
 - 크레딧 승인과 HyperCLOVA X 적용 서비스 확인

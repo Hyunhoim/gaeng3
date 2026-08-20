@@ -58,13 +58,19 @@ services:
       APP_ENV: ${APP_ENV:-development}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       WEB_CONCURRENCY: ${WEB_CONCURRENCY:-1}
-      OFFICIAL_ANSWER_TIMEOUT_SECONDS: ${OFFICIAL_ANSWER_TIMEOUT_SECONDS:-55}
+      OFFICIAL_ANSWER_TIMEOUT_SECONDS: ${OFFICIAL_ANSWER_TIMEOUT_SECONDS:-270}
       OFFICIAL_ANSWER_MAX_INFLIGHT: ${OFFICIAL_ANSWER_MAX_INFLIGHT:-2}
       FINANCE_BACKEND_FUND_EXECUTION_POLICY: ${FINANCE_BACKEND_FUND_EXECUTION_POLICY:-locked}
       FINANCE_DB_OVERSEAS_ETP: /data/overseas_etp.sqlite3
       FINANCE_DB_DOMESTIC_ETP: /data/domestic_etp.sqlite3
       FINANCE_DB_BOND: /data/bond.sqlite3
       FINANCE_DB_FUND: /data/fund.sqlite3
+      # Development data-init publishes one canonical relation artifact and a
+      # read-only digest sidecar. Evaluation/production replaces the sidecar
+      # trust source with an explicit release SHA-256.
+      FINANCE_RELATION_RETRIEVAL_ARTIFACT_FILE: /data/relation-retrieval-artifact.json
+      FINANCE_RELATION_RETRIEVAL_ARTIFACT_SHA256_FILE: /data/relation-retrieval-artifact.sha256
+      FINANCE_RELATION_INDEX_FILE: /data/provided-relations.sqlite3
     ports:
       - "${BACKEND_BIND_ADDRESS:-127.0.0.1}:${BACKEND_PORT:-18001}:8000"
     volumes:

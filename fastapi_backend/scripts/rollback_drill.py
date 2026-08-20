@@ -58,6 +58,7 @@ _AUDIT_STAGES = {
     "verifier",
     "renderer",
     "answer",
+    "serialization",
 }
 _AUDIT_OUTCOMES = {
     "started",
@@ -79,7 +80,7 @@ _AUDIT_INTERACTION_INTENTS = {
     "unsupported",
 }
 _AUDIT_PRODUCT_FAMILIES = {"bond", "domestic_etp", "overseas_etp", "fund"}
-_AUDIT_EVENT_V11_FIELDS = frozenset(
+_AUDIT_EVENT_V12_FIELDS = frozenset(
     {
         "schema_version",
         "observed_at_utc",
@@ -109,6 +110,7 @@ _AUDIT_EVENT_V11_FIELDS = frozenset(
         "model_revision_sha256",
         "model_snapshot_manifest_sha256",
         "index_manifest_sha256",
+        "relation_set_sha256",
         "product_family_count",
         "candidate_count",
         "result_count",
@@ -135,6 +137,7 @@ _AUDIT_OPTIONAL_SHA256_FIELDS = {
     "model_revision_sha256",
     "model_snapshot_manifest_sha256",
     "index_manifest_sha256",
+    "relation_set_sha256",
 }
 _EXPECTED_PROBE_AUDIT_PATH = (
     ("request", "started", "received"),
@@ -149,6 +152,8 @@ _EXPECTED_PROBE_AUDIT_PATH = (
     ("verifier", "succeeded", "verification_passed"),
     ("renderer", "succeeded", "rendering_completed"),
     ("answer", "succeeded", "execution_completed"),
+    ("serialization", "succeeded", "backend_dto_built"),
+    ("serialization", "succeeded", "http_response_serialized"),
     ("request", "succeeded", "response_completed"),
 )
 _ANSWER_PROBE_MARKER = "FINANCE_ROLLBACK_PROBE_RESULT="
@@ -188,6 +193,7 @@ _ALLOWED_RELEASE_KEYS = {
     "FINANCE_DEPLOYMENT_BINDING_HOST_FILE",
     "FINANCE_DEPLOYMENT_BINDING_SHA256",
     "FINANCE_DATA_VOLUME_NAME",
+    "FINANCE_RELATION_RETRIEVAL_ARTIFACT_SHA256",
     "FINANCE_RELEASE_MANIFEST_HOST_FILE",
     "FINANCE_RELEASE_MANIFEST_SIGSTORE_BUNDLE_HOST_FILE",
     "FINANCE_DEPLOYMENT_BINDING_SIGSTORE_BUNDLE_HOST_FILE",
@@ -279,17 +285,17 @@ def _require_audit_reader_identity() -> None:
         raise RollbackDrillError("rollback audit verification must run as root or UID 10001")
 
 
-def _validate_audit_event_v11(event: dict[str, Any]) -> None:
-    """Validate the complete serialized AuditEvent v1.1 wire contract.
+def _validate_audit_event_v12(event: dict[str, Any]) -> None:
+    """Validate the complete serialized AuditEvent v1.2 wire contract.
 
     The rollback host intentionally cannot import the application package.  This
     closed, stdlib-only mirror therefore rejects omitted default fields as well
     as unknown fields; a real ``AuditEvent.model_dump_json()`` emits every key.
     """
 
-    if set(event) != _AUDIT_EVENT_V11_FIELDS:
-        raise RollbackDrillError("rollback audit event does not match AuditEvent v1.1")
-    if event["schema_version"] != "1.1":
+    if set(event) != _AUDIT_EVENT_V12_FIELDS:
+        raise RollbackDrillError("rollback audit event does not match AuditEvent v1.2")
+    if event["schema_version"] != "1.2":
         raise RollbackDrillError("rollback audit event schema version is invalid")
     observed_at = event["observed_at_utc"]
     if not isinstance(observed_at, str):
@@ -604,6 +610,7 @@ def _load_target(path: Path) -> ReleaseTarget:
         "FINANCE_DEPLOYMENT_BINDING_HOST_FILE",
         "FINANCE_DEPLOYMENT_BINDING_SHA256",
         "FINANCE_DATA_VOLUME_NAME",
+        "FINANCE_RELATION_RETRIEVAL_ARTIFACT_SHA256",
         "FINANCE_AUDIT_HOST_DIR",
         "WEB_CONCURRENCY",
     }
@@ -625,6 +632,11 @@ def _load_target(path: Path) -> ReleaseTarget:
         environment["FINANCE_SOURCE_COMMIT"],
         _SOURCE_COMMIT,
         "FINANCE_SOURCE_COMMIT",
+    )
+    _require_pattern(
+        environment["FINANCE_RELATION_RETRIEVAL_ARTIFACT_SHA256"],
+        _SHA256,
+        "FINANCE_RELATION_RETRIEVAL_ARTIFACT_SHA256",
     )
     binding_sha256 = _require_pattern(
         environment["FINANCE_DEPLOYMENT_BINDING_SHA256"],
@@ -1101,7 +1113,7 @@ class DockerClient:
         if any(len(line) + 1 > _MAX_AUDIT_EVENT_BYTES for line in appended.splitlines()):
             raise RollbackDrillError("rollback audit event exceeds the AuditEvent size limit")
         for event in events:
-            _validate_audit_event_v11(event)
+            _validate_audit_event_v12(event)
         answer_events = [
             event
             for event in events

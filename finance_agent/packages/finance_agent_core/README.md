@@ -13,12 +13,18 @@ evidence, 동결 50문항 계약, 개발 전용 로컬 parser와 grounded answer
 24문항의 parser부터 grounded answer 후검증까지 잇는 통합 E2E도 구현했다.
 네 상품군·일곱 intent의 fail-closed Router와 서버 QueryPlan compiler를
 구현했다. 상품 검색·비교는 Oracle→Result Verifier→field evidence→Answer
-Verifier 경로를 사용한다. BM25/SQLite FTS 문서 검색, 프레임워크 독립
+Verifier 경로를 사용한다. BM25/SQLite FTS 문서 검색과 외부 문서의
+독립 승인·사용 권한·해시·변조 차단 반입 계약, 프레임워크 독립
 Backend DTO·`/answer` service adapter와 사람 평가 rubric은 별도 계약으로
 제공한다. 네 상품군 40문항의 공개 `internal-red-team-v1`은 Router부터
 로컬 Qwen·Oracle·Verifier·Backend DTO까지 한 경로로 회귀 검증한다.
 금융 도메인 담당자 작성 40문항은 별도 개발 QA로 hash를 고정하고 route·
 safety·evidence·answer 단계별 현재 상태를 측정한다.
+승인 국내채권·국내/해외 ETP DB의 발행사·운용사·기초지수·자산·지역 관계를
+SQLite FTS5로 색인하고, 후보 상품 ID를 공식 DB에서 다시 확인하는 P0-6 기반도
+제공한다. P0-7은 관계·문서 전용 Typed Plan, 서버 계획 exact-match gate,
+구조화 Claim Verifier와 결정론적 fallback을 내부 CLI까지 연결했다. 기존 자연어
+Router·공개 `GET /answer`·운영 Agent Release에는 아직 활성화하지 않는다.
 필드 registry와 실제 DB에서 대표 검색·정렬·비교·집계 계획을 자동 만들고,
 직접 Oracle 정답과 자연어 Agent의 계획·근거를 비교하는 커버리지 평가도 제공한다.
 네 상품군 공통 AGGREGATE는 COUNT·MIN·MAX·AVG·허용 SUM, 최대 두 범주
@@ -78,6 +84,9 @@ Answer Verifier, 결정론적 evidence compiler와 safe fallback으로 구성한
 - [계약 설명](../../docs/contracts.md): 설계 근거, 첫 vertical slice 예시, 확장 규칙
 - [공모펀드 계약](../../docs/public-fund-contract.md): product grain, capability, 품질 규칙, 실행 승인 조건
 - [문서 RAG 계약](../../docs/document-rag.md): 승인 문서 BM25/SQLite FTS 검색
+- [P0-5 외부 문서 반입 계약](../../docs/p0-5-external-corpus-intake-2026-08-19.md): 독립 review·HTTPS 출처·권한 4종·byte/정규화 hash·canonical manifest·BM25 build
+- [P0-6 제공 관계 검색](../../docs/p0-6-provided-relation-retrieval-handover-2026-08-19.md): 발행사·운용사·지수·자산·지역 관계·출처·기준일·공식 상품 ID 재검증
+- [P0-7 관계·문서 계획과 주장 검증](../../docs/p0-7-knowledge-claim-verifier-handover-2026-08-20.md): Typed Plan·exact 권한·Claim Verifier·전체 fallback·내부 릴리스 해시
 - [공통 AGGREGATE 계약](../../docs/aggregate-engine.md): 함수·그룹·통화·결측·근거
 - [공통 COMPARE 계약](../../docs/comparison-engine-design.md): exact identity·필드·통화·기준일·stale
 - [교차 상품군 SEARCH·답변 계약](../../docs/cross-family-search.md): 상품군별 계획·병렬 실행·evidence 격리 생성·전체 fallback

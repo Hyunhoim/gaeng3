@@ -135,6 +135,7 @@ def _release_pair(tmp_path: Path) -> tuple[Path, Path, dict[str, object], dict[s
                         "FINANCE_DATA_VOLUME_NAME=finance-data-"
                         f"{binding['release_id']}-{manifest_sha256[:12]}"
                     ),
+                    "FINANCE_RELATION_RETRIEVAL_ARTIFACT_SHA256=" + "9" * 64,
                     "WEB_CONCURRENCY=1",
                     "FINANCE_BACKEND_ANSWER_PROVIDER=deterministic",
                     "FINANCE_BACKEND_HCX_QUERY_PLAN_ENABLED=false",
@@ -216,6 +217,7 @@ def test_rollback_snapshot_is_traversable_and_binding_readable_under_private_uma
     target = _load_test_target(monkeypatch, previous_env)
     snapshot_root = tmp_path / "snapshots"
     snapshot_root.mkdir(mode=0o711)
+    snapshot_root.chmod(0o711)
     old_umask = os.umask(0o077)
     try:
         snapshot = rollback_drill._snapshot_target(target, snapshot_root, "previous")
@@ -390,7 +392,7 @@ def _valid_probe_events(
         1,
     ):
         event: dict[str, object] = {
-            "schema_version": "1.1",
+            "schema_version": "1.2",
             "observed_at_utc": "2026-08-13T00:00:00Z",
             "stage": stage,
             "outcome": outcome,
@@ -426,6 +428,7 @@ def _valid_probe_events(
             "model_revision_sha256": None,
             "model_snapshot_manifest_sha256": None,
             "index_manifest_sha256": None,
+            "relation_set_sha256": None,
             "product_family_count": 0,
             "candidate_count": 0,
             "result_count": 0,
@@ -459,8 +462,8 @@ def _valid_probe_events(
     return events
 
 
-def test_rollback_stdlib_audit_contract_tracks_audit_event_v11_fields() -> None:
-    assert rollback_drill._AUDIT_EVENT_V11_FIELDS == frozenset(AuditEvent.model_fields)
+def test_rollback_stdlib_audit_contract_tracks_audit_event_v12_fields() -> None:
+    assert rollback_drill._AUDIT_EVENT_V12_FIELDS == frozenset(AuditEvent.model_fields)
 
 
 def _audit_payload(events: list[dict[str, object]], *, allow_nan: bool = False) -> bytes:
@@ -478,7 +481,7 @@ def _audit_payload(events: list[dict[str, object]], *, allow_nan: bool = False) 
     ).encode()
 
 
-def test_audit_chain_requires_every_serialized_audit_event_v11_field(
+def test_audit_chain_requires_every_serialized_audit_event_v12_field(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -487,7 +490,7 @@ def test_audit_chain_requires_every_serialized_audit_event_v11_field(
     events = _valid_probe_events(target)
     del events[1]["index_manifest_sha256"]
 
-    with pytest.raises(rollback_drill.RollbackDrillError, match="AuditEvent v1.1"):
+    with pytest.raises(rollback_drill.RollbackDrillError, match="AuditEvent v1.2"):
         rollback_drill.DockerClient._verify_audit_chain(target, _audit_payload(events))
 
 
@@ -500,7 +503,7 @@ def test_audit_chain_rejects_unknown_audit_event_field(
     events = _valid_probe_events(target)
     events[1]["raw_question"] = "must never be accepted"
 
-    with pytest.raises(rollback_drill.RollbackDrillError, match="AuditEvent v1.1"):
+    with pytest.raises(rollback_drill.RollbackDrillError, match="AuditEvent v1.2"):
         rollback_drill.DockerClient._verify_audit_chain(target, _audit_payload(events))
 
 
@@ -515,7 +518,7 @@ def test_audit_chain_rejects_unknown_audit_event_field(
         (11, "route_disposition", "clarify", "non-executable route"),
     ],
 )
-def test_audit_chain_rejects_invalid_audit_event_v11_semantics(
+def test_audit_chain_rejects_invalid_audit_event_v12_semantics(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     event_index: int,
@@ -757,8 +760,8 @@ def test_fake_docker_drill_activates_n_minus_one_n_then_n_minus_one(
         current["release_id"],
         previous["release_id"],
     ]
-    assert all(item["event_count"] == 13 for item in result["audit_observations"])
-    assert all(item["terminal_sequence"] == 13 for item in result["audit_observations"])
+    assert all(item["event_count"] == 15 for item in result["audit_observations"])
+    assert all(item["terminal_sequence"] == 15 for item in result["audit_observations"])
     audit_root = Path(
         next(
             line.split("=", 1)[1]
@@ -770,8 +773,8 @@ def test_fake_docker_drill_activates_n_minus_one_n_then_n_minus_one(
         AuditEvent.model_validate_json(line)
         for line in (audit_root / "events.jsonl").read_text(encoding="utf-8").splitlines()
     ]
-    assert len(audit_events) == 39
-    assert [event.event_sequence for event in audit_events] == [*range(1, 14)] * 3
+    assert len(audit_events) == 45
+    assert [event.event_sequence for event in audit_events] == [*range(1, 16)] * 3
     calls = capture.read_text(encoding="utf-8").splitlines()
     activations = [line for line in calls if " up --detach --wait " in f" {line} "]
     assert len(activations) == 3

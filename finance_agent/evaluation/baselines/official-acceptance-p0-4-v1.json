@@ -1,0 +1,92 @@
+{
+  "schema_version": "1.0",
+  "baseline_id": "official-acceptance-p0-4-v1",
+  "recorded_on": "2026-08-19",
+  "dataset": "official-briefing-examples-v1+transport-edges",
+  "evaluation_layer": "system_contract",
+  "status": "official_contract_acceptance_public_not_blind",
+  "provider": {
+    "name": "deterministic-fastapi",
+    "official_submission_provider": false,
+    "network_used": true,
+    "network_scope": "localhost Docker GET /answer",
+    "hclx_called": false,
+    "local_llm_called": false
+  },
+  "model": {
+    "name": "none",
+    "reason": "P0-4는 LLM 생성 품질이 아니라 공식 HTTP 응답 계약과 안전한 무실행을 검증"
+  },
+  "suite": {
+    "id": "briefing-examples-v1-8",
+    "version": "1.0",
+    "path": "packages/finance_agent_core/src/finance_agent_core/evaluation/suites/briefing_examples_v1.json",
+    "sha256": "e448b0edda5957145e624aa2a60b97fcc697efc347c49e14074ba833944762c1",
+    "public_examples": 8,
+    "transport_edge_cases": 8,
+    "transport_fixture_path": "packages/finance_agent_core/src/finance_agent_core/evaluation/official_acceptance.py",
+    "transport_fixture_sha256": "d6653e2aeddbf6f663b985fc2cd989d9658e1dd4089c5138e95715686233815e"
+  },
+  "data": {
+    "fixture_definition_sha256": "d6653e2aeddbf6f663b985fc2cd989d9658e1dd4089c5138e95715686233815e",
+    "official_source_artifact": "KakaoTalk_Photo_2026-08-06-15-24-27 011.jpeg",
+    "official_source_artifact_sha256": "1f06e7dbbbe7505516ff7f7dc0524cd45d86e8005bb49ae248e04526da877437",
+    "official_source_artifact_verified": true,
+    "not_applicable_reason": "상품 정답 정확도나 DB 품질 평가가 아니라 공식 예시 원문·HTTP 전송·응답 필드·안전 제어 계약 평가"
+  },
+  "runtime": {
+    "implementation_commit": "28eb502ca7c5a1c658ec81321acc5c23bf87aaf9",
+    "image_reference": "gaeng3-backend@sha256:7282df380275cb2ad9744b1ed194897fffe91d56e86186858691ef3bd6fa57ab",
+    "base_url": "http://127.0.0.1:18002",
+    "request_contract": "unauthenticated_sequential_get",
+    "fund_execution_policy": "locked"
+  },
+  "metrics": {
+    "total": 16,
+    "passed": 16,
+    "strict_accuracy": 1.0,
+    "strict_accuracy_scope": "공식 HTTP 계약과 사례별 안전 조건의 통과율이며 상품 정답 정확도·독립 blind·공모전 예상 점수가 아님",
+    "contract_passed": 16,
+    "public_examples_total": 8,
+    "public_examples_contract_passed": 8,
+    "public_answerable_total": 5,
+    "public_answerable_success_observed": 1,
+    "public_unanswerable_total": 3,
+    "public_unanswerable_safely_handled": 3,
+    "transport_edge_total": 8,
+    "transport_edge_passed": 8,
+    "no_execution_total": 11,
+    "no_execution_passed": 11,
+    "health_passed": true,
+    "observed_request_p50_ms": 1.692,
+    "observed_request_max_ms": 776.792,
+    "performance_scope": "warm 단일 순차 16건의 참고 관측이며 성능 기준선이나 SLO가 아님"
+  },
+  "regression": {
+    "agent_core_passed": 1272,
+    "agent_core_skipped": 2,
+    "backend_passed": 311,
+    "backend_warnings": 2,
+    "docker_internal_post_smoke_passed": 7,
+    "docker_official_get_smoke_passed": 8,
+    "changed_file_ruff_passed": true,
+    "ontology_files_verified": 5
+  },
+  "reports": [
+    {
+      "role": "case_level_official_acceptance_report",
+      "artifact_name": "official-acceptance-p0-4-v1-full.json",
+      "sha256": "cfcff744041d3e5b6332e22ed1044b457c59e22ec0ce03f19d19fc944044a03b"
+    }
+  ],
+  "reproduce": "python -m finance_agent_core.evaluation.official_acceptance_cli --base-url http://127.0.0.1:18002 --implementation-commit <commit> --runtime-image-reference <image-digest> --source-artifact <official-source-image> --output artifacts/evaluation/official-acceptance-p0-4-v1-full.json --require-perfect",
+  "limitations": [
+    "공개 예시 8개는 설명회 화면에 공개된 개발 자료이며 실제 평가 문항이나 독립 blind가 아님",
+    "16/16은 GET·다섯 문자열·UTF-8·입력 보존·JSON·안전 무실행 계약 통과를 뜻함",
+    "답변 가능한 공개 예시 5개 중 success 관측은 1개이므로 의미 이해와 검색 완성도를 8/8로 주장할 수 없음",
+    "복잡한 문서·관계 질문의 의미 완결성은 P0-5~P0-7에서 별도로 구현·검증해야 함",
+    "HyperCLOVA X와 로컬 Qwen을 호출하지 않았으므로 생성 품질·비용·provider 안정성을 평가하지 않음",
+    "공모펀드는 default locked 정책으로 실행하지 않았으며 주최 측 정정·팀 승인 전 활성화 근거가 아님",
+    "성능 수치는 로컬 warm 순차 16건의 참고값이며 NCP·동시성·장시간 안정성 근거가 아님"
+  ]
+}

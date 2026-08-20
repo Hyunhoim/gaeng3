@@ -3,6 +3,7 @@ from __future__ import annotations
 import contextvars
 import hashlib
 import json
+import sqlite3
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
@@ -22,6 +23,17 @@ from finance_agent_core.agent.grounded_planning import (
     GroundedPlanRejectedError,
     grounded_plan_is_eligible,
 )
+from finance_agent_core.agent.knowledge_router import (
+    DeterministicKnowledgeRouter,
+    KnowledgeRouteDecision,
+    KnowledgeRoutedExecutionError,
+    KnowledgeRouteDisposition,
+)
+from finance_agent_core.agent.knowledge_service import (
+    KnowledgeAgent,
+    KnowledgeAgentResult,
+    KnowledgeServiceError,
+)
 from finance_agent_core.agent.planning_policy import (
     AdaptiveShadowPlanningPolicy,
     PlanningDecision,
@@ -30,6 +42,7 @@ from finance_agent_core.agent.planning_policy import (
 )
 from finance_agent_core.agent.providers import HyperClovaXTimeoutError, QueryPlanProvider
 from finance_agent_core.agent.router import IntentRouter
+from finance_agent_core.agent.safety import SafetyDisposition
 from finance_agent_core.agent.semantic_gate import SemanticCoverageDecision
 from finance_agent_core.answering import (
     AnswerComposition,
@@ -38,9 +51,17 @@ from finance_agent_core.answering import (
     compose_grounded_answer,
 )
 from finance_agent_core.contracts import QueryPlan, RouteDecision, RouteDisposition
+from finance_agent_core.contracts.knowledge import (
+    KnowledgePlanAuthorityError,
+    canonical_knowledge_plan_sha256,
+)
 from finance_agent_core.contracts.queryplan import Intent, ProductFamily
 from finance_agent_core.contracts.routing import InteractionIntent, RoutedExecutionError
-from finance_agent_core.deadline import RequestDeadlineExceeded, current_request_deadline
+from finance_agent_core.deadline import (
+    RequestDeadlineExceeded,
+    current_request_deadline,
+    raise_if_request_stopped,
+)
 from finance_agent_core.domain import (
     AggregateEvidence,
     ComparisonEvidence,
@@ -91,7 +112,13 @@ from finance_agent_core.observability import (
     bind_request_audit,
     current_request_audit,
 )
-from finance_agent_core.release import ResolvedAgentRelease
+from finance_agent_core.release import (
+    AgentReleaseCode,
+    AgentReleaseError,
+    PublicKnowledgeRetrievalRelease,
+    ResolvedAgentRelease,
+)
+from finance_agent_core.retrieval.relations import RelationIndexError
 from finance_agent_core.retrieval.schema_shadow import (
     AsyncSchemaLinkShadowObserver,
     SchemaLinkShadowObserver,
@@ -327,6 +354,8 @@ class RoutedFinanceAgent:
         identity_cache: ProductIdentitySnapshotCache | None = None,
         schema_link_shadow_observer: SchemaLinkShadowObserver | None = None,
         audit_sink: BoundedAsyncAuditSink | None = None,
+        knowledge_router: DeterministicKnowledgeRouter | None = None,
+        knowledge_agent: KnowledgeAgent | None = None,
     ) -> None:
         if type(hclx_planning_enabled) is not bool:
             raise TypeError("hclx_planning_enabled must be a boolean")
@@ -354,6 +383,17 @@ class RoutedFinanceAgent:
             identity_cache=self.identity_cache,
         )
         self.answer_provider = answer_provider
+        if (
+            knowledge_router is not None
+            and type(knowledge_router) is not DeterministicKnowledgeRouter
+        ):
+            raise TypeError("knowledge_router must be the deterministic public router")
+        if knowledge_agent is not None and type(knowledge_agent) is not KnowledgeAgent:
+            raise TypeError("knowledge_agent must be a KnowledgeAgent")
+        if knowledge_agent is not None and knowledge_router is None:
+            raise ValueError("knowledge execution requires the public knowledge router")
+        self.knowledge_router = knowledge_router
+        self.knowledge_agent = knowledge_agent
         self.allow_internal_disabled_dataset = allow_internal_disabled_dataset
         self.capability_execution_overrides = frozenset(
             ProductFamily(family) for family in capability_execution_overrides or set()
@@ -367,6 +407,30 @@ class RoutedFinanceAgent:
             raise ValueError(
                 "the current public Agent release profile keeps Schema Dense shadow disabled"
             )
+        if require_agent_release:
+            assert release_guard is not None
+            signed_knowledge = release_guard.manifest.components.knowledge_retrieval
+            relation_activated = signed_knowledge.relation.status == "activated"
+            if relation_activated:
+                if knowledge_router is None or knowledge_agent is None:
+                    raise ValueError(
+                        "the signed relation release requires its public router and Agent"
+                    )
+                if (
+                    type(knowledge_agent.release) is not PublicKnowledgeRetrievalRelease
+                    or knowledge_agent.release != signed_knowledge
+                ):
+                    raise ValueError(
+                        "the knowledge Agent must equal the signed public knowledge release"
+                    )
+                if knowledge_agent.claim_provider is not None:
+                    raise ValueError(
+                        "the signed public knowledge release keeps claim generation disabled"
+                    )
+            elif knowledge_agent is not None:
+                raise ValueError(
+                    "a disabled signed relation release cannot attach a knowledge Agent"
+                )
         self.release_guard = release_guard
         self.require_agent_release = require_agent_release
         if audit_sink is not None and type(audit_sink) is not BoundedAsyncAuditSink:
@@ -396,6 +460,34 @@ class RoutedFinanceAgent:
             require_validated_plan(validated_plan, database_path)
             return snapshot.records
         return load_projected_verifier_records(database_path, validated_plan)
+
+    def _assert_signed_knowledge_current(self) -> None:
+        """Recheck the in-process knowledge assembly at every public boundary."""
+
+        if not self.require_agent_release:
+            return
+        assert self.release_guard is not None
+        signed = self.release_guard.manifest.components.knowledge_retrieval
+        activated = signed.relation.status == "activated"
+        agent = self.knowledge_agent
+        if activated:
+            matches = (
+                type(self.knowledge_router) is DeterministicKnowledgeRouter
+                and type(agent) is KnowledgeAgent
+                and type(agent.release) is PublicKnowledgeRetrievalRelease
+                and agent.release == signed
+                and agent.claim_provider is None
+            )
+        else:
+            matches = (
+                self.knowledge_router is None
+                or type(self.knowledge_router) is DeterministicKnowledgeRouter
+            ) and agent is None
+        if not matches:
+            raise AgentReleaseError(
+                AgentReleaseCode.RUNTIME_MISMATCH,
+                "knowledge runtime differs from the signed public release",
+            )
 
     def answer(self, question: str, request_id: str) -> RoutedAgentResult:
         return self._execute_audited(
@@ -431,6 +523,353 @@ class RoutedFinanceAgent:
             request_id,
             atomic=True,
         )
+
+    def _answer_public_atomically(
+        self,
+        question: str,
+        request_id: str,
+    ) -> RoutedAgentResult | KnowledgeAgentResult | KnowledgeRouteDecision:
+        """Route one public request without bypassing the established atomic boundary."""
+
+        self._assert_signed_knowledge_current()
+        if self.knowledge_router is None:
+            return self._answer_atomically(question, request_id)
+        safety = self.router.safety_envelope.evaluate(question)
+        if safety.disposition is not SafetyDisposition.ALLOW:
+            return self._answer_atomically(question, request_id)
+        decision = self.knowledge_router.route_after_safety_gate(
+            safety.normalized_question,
+            request_id,
+            safety_gate_passed=True,
+        )
+        if decision.disposition is KnowledgeRouteDisposition.NOT_APPLICABLE:
+            return self._answer_atomically(question, request_id)
+        try:
+            return self._execute_knowledge_audited(decision, question, request_id)
+        except KnowledgeRoutedExecutionError:
+            raise
+        except Exception as error:
+            raise KnowledgeRoutedExecutionError(decision, error) from error
+
+    def _execute_knowledge_audited(
+        self,
+        decision: KnowledgeRouteDecision,
+        question: str,
+        request_id: str,
+    ) -> KnowledgeAgentResult | KnowledgeRouteDecision:
+        if self.audit_sink is None:
+            return self._execute_knowledge_route_checked(decision)
+        inherited = current_request_audit()
+        if inherited is not None and inherited.sink is self.audit_sink:
+            recorder = inherited.with_request(request_id=request_id, question=question)
+        else:
+            release = self.release_guard
+            recorder = RequestAuditRecorder(
+                request_id=request_id,
+                question=question,
+                sink=self.audit_sink,
+                agent_release_id=(release.release_id if release is not None else None),
+                agent_release_manifest_sha256=(
+                    release.manifest_file_sha256 if release is not None else None
+                ),
+                deployment_binding_sha256=(
+                    release.binding_file_sha256 if release is not None else None
+                ),
+                release_context_sha256=(
+                    release.release_context_sha256 if release is not None else None
+                ),
+            )
+        started = perf_counter()
+        with bind_request_audit(recorder):
+            try:
+                result = self._execute_knowledge_route_checked(decision)
+            except Exception as error:
+                self._emit_knowledge_terminal_audit(
+                    recorder,
+                    started=started,
+                    result=None,
+                    decision=decision,
+                    error=error,
+                )
+                raise
+            self._emit_knowledge_terminal_audit(
+                recorder,
+                started=started,
+                result=result,
+                decision=result if isinstance(result, KnowledgeRouteDecision) else decision,
+                error=None,
+            )
+            return result
+
+    def _execute_knowledge_route_checked(
+        self,
+        decision: KnowledgeRouteDecision,
+    ) -> KnowledgeAgentResult | KnowledgeRouteDecision:
+        resolved = decision
+        if (
+            decision.disposition is KnowledgeRouteDisposition.EXECUTE
+            and self.knowledge_agent is None
+        ):
+            resolved = KnowledgeRouteDecision(
+                disposition=KnowledgeRouteDisposition.UNSUPPORTED,
+                reason_code="knowledge_retrieval_not_activated",
+                reason="관계 검색이 현재 공개 릴리스에서 활성화되지 않음",
+            )
+        self._emit_knowledge_route_audit(resolved)
+        if resolved.disposition is not KnowledgeRouteDisposition.EXECUTE:
+            return resolved
+        try:
+            raise_if_request_stopped()
+            if self.release_guard is not None:
+                self.release_guard.assert_request_current()
+            self._assert_signed_knowledge_current()
+            if self.require_approved_databases:
+                require_approved_database_paths(self.database_paths)
+            raise_if_request_stopped()
+        except RequestDeadlineExceeded:
+            self._emit_knowledge_boundary_failure(
+                resolved,
+                stage=AuditStage.AUTHORITY,
+                outcome=AuditOutcome.TIMED_OUT,
+                reason_code="knowledge_authority_timed_out",
+            )
+            raise
+        except Exception:
+            self._emit_knowledge_boundary_failure(
+                resolved,
+                stage=AuditStage.AUTHORITY,
+                reason_code="knowledge_authority_rejected",
+            )
+            raise
+        try:
+            assert resolved.plan is not None
+            assert self.knowledge_agent is not None
+            result = self.knowledge_agent.execute(resolved.plan)
+        except (
+            KnowledgeServiceError,
+            KnowledgePlanAuthorityError,
+            RelationIndexError,
+            RequestDeadlineExceeded,
+            sqlite3.Error,
+        ):
+            raise
+        except Exception:
+            # KnowledgeAgent owns its SQL/verifier boundary events.  An
+            # unexpected exception is deliberately left without a fabricated
+            # boundary so the audit validator can reject an impossible trace.
+            raise
+        try:
+            if self.require_approved_databases:
+                require_approved_database_paths(self.database_paths)
+            self._assert_signed_knowledge_current()
+            if self.release_guard is not None:
+                self.release_guard.assert_request_current()
+            raise_if_request_stopped()
+            return result
+        except RequestDeadlineExceeded:
+            self._emit_knowledge_boundary_failure(
+                resolved,
+                stage=AuditStage.AUTHORITY,
+                outcome=AuditOutcome.TIMED_OUT,
+                reason_code="knowledge_authority_timed_out",
+            )
+            raise
+        except Exception:
+            self._emit_knowledge_boundary_failure(
+                resolved,
+                stage=AuditStage.AUTHORITY,
+                reason_code="knowledge_post_authority_rejected",
+            )
+            raise
+
+    def _emit_knowledge_boundary_failure(
+        self,
+        decision: KnowledgeRouteDecision,
+        *,
+        stage: AuditStage,
+        outcome: AuditOutcome = AuditOutcome.FAILED,
+        reason_code: str,
+    ) -> None:
+        audit = current_request_audit()
+        if audit is None or decision.plan is None:
+            return
+        operation = decision.plan.operation
+        audit.emit(
+            stage=stage,
+            outcome=outcome,
+            reason_code=reason_code,
+            duration_ms=0,
+            route_disposition=RouteDisposition.EXECUTE,
+            interaction_intent=InteractionIntent.SEARCH,
+            product_families=tuple(operation.product_families),
+            plan_sha256=canonical_knowledge_plan_sha256(decision.plan),
+            relation_set_sha256=(
+                self.knowledge_agent.relation_set_sha256
+                if self.knowledge_agent is not None
+                else None
+            ),
+        )
+
+    def _emit_knowledge_route_audit(self, decision: KnowledgeRouteDecision) -> None:
+        audit = current_request_audit()
+        if audit is None:
+            return
+        operation = decision.plan.operation if decision.plan is not None else None
+        families = tuple(operation.product_families) if operation is not None else ()
+        disposition = {
+            KnowledgeRouteDisposition.EXECUTE: RouteDisposition.EXECUTE,
+            KnowledgeRouteDisposition.CLARIFY: RouteDisposition.CLARIFY,
+            KnowledgeRouteDisposition.UNSUPPORTED: RouteDisposition.UNSUPPORTED,
+        }.get(decision.disposition)
+        if disposition is None:
+            raise ValueError("non-applicable knowledge route cannot be audited as public")
+        outcome = {
+            KnowledgeRouteDisposition.EXECUTE: AuditOutcome.SUCCEEDED,
+            KnowledgeRouteDisposition.CLARIFY: AuditOutcome.CLARIFIED,
+            KnowledgeRouteDisposition.UNSUPPORTED: AuditOutcome.UNSUPPORTED,
+        }[decision.disposition]
+        intent = {
+            KnowledgeRouteDisposition.EXECUTE: InteractionIntent.SEARCH,
+            KnowledgeRouteDisposition.CLARIFY: InteractionIntent.CLARIFY,
+            KnowledgeRouteDisposition.UNSUPPORTED: InteractionIntent.UNSUPPORTED,
+        }[decision.disposition]
+        audit.emit(
+            stage=AuditStage.SAFETY,
+            outcome=AuditOutcome.SUCCEEDED,
+            reason_code="guard_allowed",
+            duration_ms=0,
+        )
+        audit.emit(
+            stage=AuditStage.ROUTE,
+            outcome=outcome,
+            reason_code={
+                KnowledgeRouteDisposition.EXECUTE: "knowledge_routed_execute",
+                KnowledgeRouteDisposition.CLARIFY: "knowledge_routed_clarify",
+                KnowledgeRouteDisposition.UNSUPPORTED: "knowledge_routed_unsupported",
+            }[decision.disposition],
+            duration_ms=0,
+            route_disposition=disposition,
+            interaction_intent=intent,
+            product_families=families,
+            relation_set_sha256=(
+                self.knowledge_agent.relation_set_sha256
+                if decision.disposition is KnowledgeRouteDisposition.EXECUTE
+                and self.knowledge_agent is not None
+                else None
+            ),
+        )
+        if decision.plan is not None:
+            audit.emit(
+                stage=AuditStage.COMPILER,
+                outcome=AuditOutcome.SUCCEEDED,
+                reason_code="knowledge_plan_compiled",
+                duration_ms=0,
+                route_disposition=RouteDisposition.EXECUTE,
+                interaction_intent=InteractionIntent.SEARCH,
+                product_families=families,
+                plan_sha256=canonical_knowledge_plan_sha256(decision.plan),
+                relation_set_sha256=(
+                    self.knowledge_agent.relation_set_sha256
+                    if self.knowledge_agent is not None
+                    else None
+                ),
+            )
+
+    def _emit_knowledge_terminal_audit(
+        self,
+        recorder: RequestAuditRecorder,
+        *,
+        started: float,
+        result: KnowledgeAgentResult | KnowledgeRouteDecision | None,
+        decision: KnowledgeRouteDecision,
+        error: Exception | None,
+    ) -> None:
+        duration_ms = (perf_counter() - started) * 1000
+        operation = decision.plan.operation if decision.plan is not None else None
+        families = tuple(operation.product_families) if operation is not None else ()
+        plan_sha256 = (
+            canonical_knowledge_plan_sha256(decision.plan) if decision.plan is not None else None
+        )
+        relation_set_sha256 = (
+            self.knowledge_agent.relation_set_sha256 if self.knowledge_agent is not None else None
+        )
+        if result is None:
+            timed_out = isinstance(
+                error,
+                (HyperClovaXTimeoutError, RequestDeadlineExceeded, TimeoutError),
+            )
+            recorder.emit(
+                stage=AuditStage.ANSWER,
+                outcome=(AuditOutcome.TIMED_OUT if timed_out else AuditOutcome.FAILED),
+                reason_code=(
+                    "knowledge_deadline_exceeded" if timed_out else "knowledge_execution_failed"
+                ),
+                duration_ms=duration_ms,
+                route_disposition=RouteDisposition.EXECUTE,
+                interaction_intent=InteractionIntent.SEARCH,
+                product_families=families,
+                plan_sha256=plan_sha256,
+                relation_set_sha256=relation_set_sha256,
+            )
+            self._increment_audit_metric(MetricCounter.REQUESTS)
+            if timed_out:
+                self._increment_audit_metric(MetricCounter.TIMEOUTS)
+            return
+        if isinstance(result, KnowledgeRouteDecision):
+            clarify = result.disposition is KnowledgeRouteDisposition.CLARIFY
+            recorder.emit(
+                stage=AuditStage.ANSWER,
+                outcome=(AuditOutcome.CLARIFIED if clarify else AuditOutcome.UNSUPPORTED),
+                reason_code=(
+                    "knowledge_execution_clarified"
+                    if clarify
+                    else "knowledge_execution_unsupported"
+                ),
+                duration_ms=duration_ms,
+                route_disposition=(
+                    RouteDisposition.CLARIFY if clarify else RouteDisposition.UNSUPPORTED
+                ),
+                interaction_intent=(
+                    InteractionIntent.CLARIFY if clarify else InteractionIntent.UNSUPPORTED
+                ),
+            )
+            self._increment_audit_metric(MetricCounter.REQUESTS)
+            self._increment_audit_metric(
+                MetricCounter.CLARIFICATIONS if clarify else MetricCounter.UNSUPPORTED
+            )
+            return
+        assert decision.plan is not None
+        evidence = result.relation_response.evidence if result.relation_response is not None else ()
+        reason_code = {
+            "deterministic_fallback": "knowledge_execution_fallback",
+            "structured_grounded": "knowledge_execution_completed",
+            "deterministic": (
+                "knowledge_execution_not_found"
+                if result.status == "not_found"
+                else "knowledge_execution_completed"
+            ),
+        }[result.answer.mode]
+        recorder.emit(
+            stage=AuditStage.ANSWER,
+            outcome=AuditOutcome.SUCCEEDED,
+            reason_code=reason_code,
+            duration_ms=duration_ms,
+            route_disposition=RouteDisposition.EXECUTE,
+            interaction_intent=InteractionIntent.SEARCH,
+            product_families=families,
+            plan_sha256=plan_sha256,
+            relation_set_sha256=relation_set_sha256,
+            candidate_count=result.candidate_count,
+            result_count=len(evidence),
+            evidence_count=len(evidence),
+            evidence_ids=(item.evidence_id for item in evidence),
+        )
+        self._increment_audit_metric(MetricCounter.REQUESTS)
+        self._increment_audit_metric(MetricCounter.ROUTE_EXECUTIONS)
+        self._increment_audit_metric(MetricCounter.EVIDENCE_EXPECTED)
+        self._increment_audit_metric(MetricCounter.EVIDENCE_PRESENT)
+        if result.answer.mode == "deterministic_fallback":
+            self._increment_audit_metric(MetricCounter.FALLBACKS)
 
     def _answer_atomically_checked(self, question: str, request_id: str) -> RoutedAgentResult:
         """Run atomic checks; audit correlation is owned by the outer wrapper."""

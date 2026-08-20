@@ -1,7 +1,7 @@
 # 금융상품 Agent 현재 프로젝트 기준
 
 상태: 현재 정본
-기준일: 2026-08-12
+기준일: 2026-08-20
 대상 저장소: `https://github.com/Hyunhoim/gaeng3`
 
 ## 1. 한 문장 목표
@@ -14,8 +14,9 @@
 - 원천 145,393행의 1차 감사와 GPT Pro 전략 연구를 마쳤다.
 - GPT Pro 산출물은 유용한 연구 근거지만, 그대로 실행 가능한 구현 명세는 아니다.
 - 애플리케이션 저장소 로컬 경로는 `3. Workspace/gaeng3`로 정했다.
-- 로컬 `haeyeongcho` branch가 `origin/haeyeongcho`를 추적하며 공모펀드 구현·문서
-  commit `be2797a`까지 원격에 push했다.
+- 초기 공모펀드 수직 구현 시점에는 `haeyeongcho` branch의 commit `be2797a`까지
+  원격에 push했다. 현재 P0-10 통합 작업 branch는
+  `haeyeongcho-p0-10-release-integration`이다.
 - 동료가 가져올 `vintasoftware/nextjs-fastapi-template`은 루트의 `fastapi_backend`, `nextjs-frontend`, `docs` 구조와 UV를 사용한다. Agent·데이터 작업공간은 `finance_agent/`에 격리하고, 애플리케이션이 재사용할 Python 코드는 `finance_agent/packages/finance_agent_core`에서 개발한다.
 - `gaeng3-dev` Conda 환경과 pip requirements를 만들고, 표준 라이브러리 기반 데이터 감사기를 구현했다.
 - 4종 145,393행 감사, expectation 65/65, 8개 입력 hash 대조, 두 번의 결정적 재실행을 통과했다.
@@ -159,7 +160,46 @@
   모델을 호출하지 않았다. 다른 상품군 언급이나 교차 연산 문구, 한 family의
   실패가 있으면 전체를 결정론적 답변으로 교체한다.
 - caller-fed BM25/SQLite FTS 문서 검색은 chunk·필터·top-k·출처·기준일·
-  provided 우선순위·not-found를 검증했다. 실제 corpus는 승인 전이다.
+  provided 우선순위·not-found를 검증했다. 외부 문서는 금융·데이터 권한
+  독립 review, HTTPS 출처, 사용 권한 4종, byte·정규화 본문 hash,
+  canonical manifest, 변조·경로·덮어쓰기 차단을 통과해야만 별도 BM25 색인으로
+  build할 수 있다. 실제 corpus 승인·검색 평가·Release 활성화는 남아 있다.
+- 승인 상품 DB의 제공 필드만 사용해 국내채권·국내/해외 ETP의 발행사·운용사·
+  기초지수·자산유형·투자지역 관계 58,005개를 SQLite FTS5 색인으로 만들었다.
+  검색된 상품 ID는 공식 상품 DB에서 다시 확인하고 원천 행·열·기준일·DB hash를
+  보존한다. 관계 전용 계약 14/14와 실제 검색 smoke 4/4를 통과했다.
+  공모펀드·테마·편입종목·외부 문서 관계와 금융 alias는 출처·도메인 검수 대기다.
+- 관계·문서 전용 `KnowledgeQueryPlan`, 서버 계획 exact-match 권한 gate, 구조화
+  Claim Verifier와 결정론적 fallback을 P0-7 내부 경로로 연결했다. 모델이 상품·관계·
+  문서 발췌·evidence를 바꾸거나 실패하면 초안을 버리고 서버 근거 답변을 사용한다.
+  전용 계약 22/22, 승인 관계 CLI smoke 4/4를 통과했다. P0-7 당시에는 기존 자연어
+  Router와 공개 `GET /answer`, 운영 `AgentReleaseManifest`에 연결하지 않았다.
+- 2026-08-20 P0-10에서 제공 데이터 관계 검색을 공개 자연어 Router, Backend DTO,
+  `AgentReleaseManifest` 1.2와 clean Docker 경로에 연결했다. FTS는 후보 생성에만 쓰고
+  정규화한 관계명 전체가 정확히 같은 행만 evidence로 승인하므로, 회사명 일부나
+  `주식회사` 같은 공통 토큰만 겹치는 상품은 결과에 포함하지 않는다.
+- 공개 관계 release는 임의 claim provider를 허용하지 않는다. 현재 관계 답변은 검증된
+  evidence로 만든 결정론적 문장만 사용하며, 실제 HyperCLOVA X 주장 생성은 별도로 승인된
+  provider 계약이 생기기 전까지 비활성이다. evaluation·production의 공개 Agent는 실행
+  시작과 요청 경계마다 실제 `KnowledgeAgent`의 release가 release manifest에 해시로
+  고정된 `knowledge_retrieval` 계약과 정확히 같은지 다시 확인한다. development는 release
+  manifest 대신 data-init artifact와 read-only SHA sidecar의 결합을 검사한다.
+- 관계 실행의 deadline, SQL, evidence·claim 검증, renderer, 최종 answer를 하나의
+  인과적 감사 trace로 연결했다. timeout은 성공이나 일반 실패로 바뀌지 않고
+  `timed_out`으로 종결하며, 불가능하거나 중복된 실패 trace는 validator가 거부한다.
+  실행 중 오류가 나더라도 Backend 오류 DTO는 검증된 관계 계획의 `search` intent와
+  상품군을 보존하되 내부 경로·hash·예외 상세는 노출하지 않는다.
+- 개발 Compose는 data-init이 만든 read-only SHA sidecar를 신뢰하고, evaluation·production
+  release Compose는 sidecar를 명시적으로 제거한 뒤 배포 control plane이 주입한 SHA-256만
+  신뢰한다. 두 값이 동시에 활성화되거나 둘 다 없으면 시작하지 않는다.
+- clean Docker `gaeng3-p010-review2`에서 data-init, health, 일반 상품 검색, 관계명 exact
+  검색 3건·근거 3건, 부분 관계명 0건, 관계+수익률 혼합 질문의 안전 차단을 확인했다.
+  Backend·공식 API smoke는 각각 8/8이고, 실행 뒤 관계 index를 1바이트 바꾸면 health와
+  관계 요청이 모두 HTTP 503으로 전환됐다. 검증용 project·volume은 종료 후 삭제했다.
+- 같은 source tree의 현재 회귀는 Agent Core `1,443 passed, 2 skipped`, Backend
+  `358 passed, 2 warnings`, P0-10 집중 회귀 `522/522`다. 이는 로컬 코드·Docker
+  통합 증거이며, 실제 서명된 NCP 두 release 발급·활성화·rollback이나 HyperCLOVA X
+  관계 답변 품질을 입증하지 않는다.
 - 사람 평가 rubric v1과 프레임워크 독립 Backend DTO·JSON 예시를 구현했다.
   실제 사람 평가는 외부 게이트다.
 - 금융 도메인 담당자가 작성한 40문항을 hash·schema·분포로 검증하고 현재
@@ -183,8 +223,8 @@
   사후 회귀했다. 최신 실행 의미 보조 strict는 242/391이며, 각 검색 단계의 기존
   통과 문항 퇴행은 0건이다. 이는 개발에 사용한 같은 질문의 회귀이지 blind가 아니다.
 - pre-HCX 동결 시점의 Agent Core pytest 507개·Backend 34개 기록은 역사 baseline으로
-  보존한다. 현재 작업 트리 전체 회귀는 Agent Core 1,061개·Backend 162개이며 Ruff
-  lint·format을 통과했다.
+  보존한다. P0-7 코드 기준 전체 회귀는 Agent Core 1,327 passed·2 skipped,
+  Backend 최근 P0-8 기준은 320 passed이며 Ruff lint·변경 파일 format을 통과했다.
 - Docker `data-init`은 읽기 전용 공식 XLSX에서 네 SQLite를 자동 생성·검증하고,
   같은 원천과 registry에서는 재사용한다. 모든 DB 준비가 성공한 뒤에만 Backend를
   시작하며 Backend에는 생성 volume을 읽기 전용으로 연결한다.
@@ -217,9 +257,11 @@
 - 공식 `GET /answer` 요청·응답 계약과 주최 측 실행 환경을 최종적으로 준수한다.
 - 공식 adapter는 `question_id`, `question`, `retrieved_context`, `think_trace`,
   `answer`의 다섯 문자열 필드를 반환한다.
-- 답을 찾지 못하거나 처리할 수 없는 질문도 같은 스키마와 HTTP 200으로 응답한다.
-- 위 공식 adapter의 DTO·FastAPI route·전 상태·예외·추가 parameter·기본 55초
-  외곽 시간 예산은 2026-08-07 자동 테스트를 통과했으며, 공개 서버 배포는 남아 있다.
+- 답을 찾지 못하거나 지원하지 않는 질문은 같은 스키마와 HTTP 200, 재시도 가능한
+  일시 장애는 HTTP 503, 시간 초과는 HTTP 504로 응답한다.
+- 위 공식 adapter의 DTO·FastAPI route·상태·예외·추가 parameter·기본 270초
+  외곽 시간 예산과 동일 요청 중복 실행 방지는 자동 테스트를 통과했으며, 공개 서버
+  배포는 남아 있다.
 - 도메인별 `common.ttl`, `bond_kr.ttl`, `etf_kr.ttl`, `etf_gl.ttl`,
   `fund_pub.ttl`을 제출 기준으로 준비한다.
 - 위 다섯 파일은 field registry에서 자동 생성하며 RDFLib Turtle 문법과 registry
@@ -375,6 +417,10 @@ QueryPlan에는 최소한 intent, 상품군, 필수 조건, 완화 전 확인이
 - [x] 공모펀드 product-grain·field capability·품질 규칙을 동결한다.
 - [x] 동결된 공모펀드 계약으로 product·attribute·quarantine 정규화 적재를 구현한다.
 - [x] 공모펀드 정규화 DB에 oracle·verifier·field evidence를 연결한다.
+- [x] 승인 상품 DB에서 제공 관계 58,005개를 색인하고 상품 identity·출처·해시를
+  fail-closed로 재검증하는 P0-6 기반을 구현한다.
+- [x] relation/document Typed Plan·exact 권한 gate·Claim Verifier·전체 fallback을
+  P0-7 내부 실행 경로로 연결한다.
 
 ### P2 — Agent 수직 통합
 
@@ -402,6 +448,9 @@ QueryPlan에는 최소한 intent, 상품군, 필수 조건, 완화 전 확인이
   공식 GET 예외 입력을 실제 HTTP 14개 요청으로 재현한다.
 - [x] 공식 endpoint·Bearer 인증·Structured Outputs 계약에 맞는 HyperCLOVA X HTTP
   transport와 FastAPI 무호출 조립을 구현한다.
+- [x] P0-7 내부 relation 경로를 공개 Router·Backend adapter와
+  `AgentReleaseManifest`에 연결하고 clean Docker HTTP로 재검증한다. 승인된 실제 문서
+  corpus가 없어 document 경로는 계속 비활성이다.
 - [ ] 실제 API Key로 인증·HCX-007 권한·응답 호환성을 확인하고 NCP 실행 환경에서
   최소 호출을 재현한다.
 
@@ -430,6 +479,8 @@ QueryPlan에는 최소한 intent, 상품군, 필수 조건, 완화 전 확인이
   matrix를 구현하고 도입 전·후 결과를 분리 보존한다.
 - [x] 서버 MinimalQueryDraft→QueryPlan compiler와 공통 답변 경로를 구현한다.
 - [x] BM25/SQLite FTS 문서 검색 최소 기능과 synthetic contract test를 구현한다.
+- [x] 외부 문서의 독립 승인·사용 권한·해시·경로를 봉인하는 P0-5 반입 게이트를 구현한다.
+- [ ] 실제 외부 corpus를 승인하고 BM25 검색 품질·충돌·최신성을 평가한 뒤 Release에 연결한다.
 - [x] 사람 평가 rubric·집계 validator와 Backend DTO·JSON 예시를 확정한다.
 - [ ] 금융 도메인 담당자가 새 blind 100문항과 비공개 정답키를 독립 작성한다.
 - [x] 금융 도메인 개발 QA 40문항의 Router·linker 안전 경계를 개선하고

@@ -13,6 +13,7 @@ from finance_agent_core.retrieval.models import (
     DocumentSearchRequest,
     DocumentSearchResponse,
 )
+from finance_agent_core.storage import connect_read_only
 
 _QUERY_TOKEN = re.compile(r"[0-9A-Za-z가-힣]+")
 _KOREAN_SUFFIXES = (
@@ -40,11 +41,15 @@ class DocumentConflictError(ValueError):
     """Raised when an existing document ID is reused for different content."""
 
 
-def _normalized_text(text: str) -> str:
+def normalize_document_text(text: str) -> str:
+    """Return the canonical text representation used for hashing and indexing."""
+
     return "\n".join(line.rstrip() for line in text.replace("\r\n", "\n").splitlines()).strip()
 
 
-def _sha256_text(text: str) -> str:
+def sha256_document_text(text: str) -> str:
+    """Hash canonical document text rather than transport-specific line endings."""
+
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
@@ -83,7 +88,7 @@ def chunk_document(
         raise ValueError("max_chars must be at least 100")
     if overlap_chars < 0 or overlap_chars >= max_chars // 2:
         raise ValueError("overlap_chars must be non-negative and less than half max_chars")
-    normalized = _normalized_text(text)
+    normalized = normalize_document_text(text)
     paragraphs = [
         paragraph.strip() for paragraph in re.split(r"\n\s*\n", normalized) if paragraph.strip()
     ]
@@ -174,8 +179,8 @@ class SQLiteDocumentIndex:
         max_chars: int = 800,
         overlap_chars: int = 80,
     ) -> DocumentIngestionResult:
-        normalized = _normalized_text(document.text)
-        document_sha256 = _sha256_text(normalized)
+        normalized = normalize_document_text(document.text)
+        document_sha256 = sha256_document_text(normalized)
         chunks = chunk_document(
             normalized,
             max_chars=max_chars,
@@ -313,7 +318,7 @@ class SQLiteDocumentIndex:
             LIMIT ?
         """
         parameters.append(request.top_k)
-        with sqlite3.connect(self.database_path) as connection:
+        with connect_read_only(self.database_path) as connection:
             connection.row_factory = sqlite3.Row
             rows = connection.execute(sql, parameters).fetchall()
         evidence = [

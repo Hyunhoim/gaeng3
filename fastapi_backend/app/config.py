@@ -67,9 +67,9 @@ class Settings(BaseSettings):
         validation_alias="CLOVASTUDIO_API_KEY_FILE",
     )
     official_answer_timeout_seconds: float = Field(
-        default=55.0,
+        default=270.0,
         gt=0,
-        lt=60,
+        lt=300,
         validation_alias="OFFICIAL_ANSWER_TIMEOUT_SECONDS",
     )
     official_answer_max_inflight: int = Field(
@@ -147,6 +147,23 @@ class Settings(BaseSettings):
         default=False,
         validation_alias="FINANCE_PRODUCT_DENSE_ENABLED",
     )
+    relation_retrieval_artifact_file: Path | None = Field(
+        default=None,
+        validation_alias="FINANCE_RELATION_RETRIEVAL_ARTIFACT_FILE",
+    )
+    relation_retrieval_artifact_sha256: str | None = Field(
+        default=None,
+        pattern=r"^[0-9a-f]{64}$",
+        validation_alias="FINANCE_RELATION_RETRIEVAL_ARTIFACT_SHA256",
+    )
+    relation_retrieval_artifact_sha256_file: Path | None = Field(
+        default=None,
+        validation_alias="FINANCE_RELATION_RETRIEVAL_ARTIFACT_SHA256_FILE",
+    )
+    relation_index_file: Path | None = Field(
+        default=None,
+        validation_alias="FINANCE_RELATION_INDEX_FILE",
+    )
     overseas_etp_db: Path | None = Field(
         default=None,
         validation_alias="FINANCE_DB_OVERSEAS_ETP",
@@ -220,6 +237,35 @@ class Settings(BaseSettings):
             self.dense_schema_linker_enabled or self.product_dense_enabled
         ):
             raise ValueError("production Dense retrieval remains disabled in release schema v1")
+        relation_artifacts = (
+            self.relation_retrieval_artifact_file,
+            self.relation_index_file,
+        )
+        relation_trust = (
+            self.relation_retrieval_artifact_sha256,
+            self.relation_retrieval_artifact_sha256_file,
+        )
+        if any(value is not None for value in (*relation_artifacts, *relation_trust)) and (
+            not all(value is not None for value in relation_artifacts)
+            or sum(value is not None for value in relation_trust) != 1
+        ):
+            raise ValueError(
+                "relation retrieval requires both artifacts and exactly one SHA-256 trust source"
+            )
+        relation_paths = (
+            self.relation_retrieval_artifact_file,
+            self.relation_index_file,
+            self.relation_retrieval_artifact_sha256_file,
+        )
+        if any(path is not None and not path.is_absolute() for path in relation_paths):
+            raise ValueError("relation retrieval files must use absolute paths")
+        if (
+            self.app_env in {"evaluation", "production"}
+            and self.relation_retrieval_artifact_sha256_file is not None
+        ):
+            raise ValueError(
+                "evaluation/production requires the explicit relation artifact SHA-256"
+            )
         if self.audit_mode == "disabled" and self.audit_file is not None:
             raise ValueError("disabled audit mode cannot configure FINANCE_AUDIT_FILE")
         if self.audit_mode == "jsonl" and (
@@ -258,6 +304,17 @@ class Settings(BaseSettings):
         """Return whether any request path needs the official HCLX transport."""
 
         return self.answer_provider == "hyperclova" or self.hcx_query_plan_enabled
+
+    @property
+    def relation_retrieval_configured(self) -> bool:
+        return (
+            self.relation_retrieval_artifact_file is not None
+            and self.relation_index_file is not None
+            and (
+                (self.relation_retrieval_artifact_sha256 is None)
+                != (self.relation_retrieval_artifact_sha256_file is None)
+            )
+        )
 
     @property
     def capability_execution_overrides(self) -> set[ProductFamily]:

@@ -2,7 +2,7 @@
 
 상태: 금융 도메인·화면 검수 전 초안
 
-기준일: 2026-08-05
+기준일: 2026-08-20
 
 제안서와 데모에서 사용할 사용자 관점의 흐름을 정의한다. 실제 상품명과 수치는
 최종 평가용 fixture 또는 최신 허용 데이터로 교체한다.
@@ -172,14 +172,49 @@ Agent Core 검증 완료, 금융 문구 사람 검수 대기
 
 공통 Router와 내부 red-team에서 안전 처리 검증 완료
 
+## 7. 발행사를 기준으로 한 제공 데이터 관계 검색
+
+**사용자 목적**
+
+특정 기관이 발행한 국내채권을 제공 데이터와 필드별 근거로 확인
+
+**예시 질문**
+
+> 한국주택금융공사가 발행한 국내채권 3개 보여줘
+
+**Agent 처리**
+
+1. 입력·정책 안전 검사 후 결정론적 Relation Router가 발행사 조건을 판단
+2. manifest에 해시로 고정된 public release 계약이 허용한 artifact·DB identity·SHA-256와 현재 파일을 대조
+3. Exact FTS로 후보를 찾고 정규화된 발행사 전체 표현과 일치하는지 재검사
+4. 후보 상품 ID를 공식 상품 SQLite에서 다시 확인
+5. 상품명·관계 값·출처·기준일의 field-level evidence와 citation을 생성
+6. 모델의 추측 없이 근거만으로 답변하고 Router·Release·SQL·Evidence·Answer를 인과 순서 Audit로 보존
+
+**화면 결과**
+
+- 조건에 정확히 일치하는 상품 목록과 상품별 관계 citation
+- 상품명·발행사·출처·기준일을 재확인할 수 있는 필드 근거
+- 일부 단어만 맞는 발행사는 유사 결과로 추측하지 않고 `not_found`
+- artifact·DB 변조가 감지되면 일부 결과를 보여주지 않고 HTTP 503
+
+**현재 상태**
+
+clean Docker에서 예시 관계 질문이 3개 상품·3개 citation을 반환했고,
+부분 표현은 `not_found`, 변조 후 health·질문 API는 503을 반환함
+이는 `local implementation verified`이며 NCP 실제 서명 배포·공인 IP, 관계
+HyperCLOVA X claim provider, 금융 alias·의미 blind를 입증한 결과는 아님
+([P0-10 인수인계](../../finance_agent/docs/p0-10-public-relation-release-integration-handover-2026-08-20.md))
+
 ## 데모 선정 기준
 
-최종 데모는 다음 네 장면을 우선한다.
+최종 데모는 다음 다섯 장면을 우선한다.
 
 1. 복합 조건 SEARCH와 field evidence
 2. 복수 상품군 검색의 부분 결과와 family별 근거 답변
 3. 비교 또는 집계의 결정론적 계산
-4. 모호성·결측·추천 요청의 안전 처리
+4. 발행사·운용사 등 제공 데이터 관계 검색과 변조 차단
+5. 모호성·결측·추천 요청의 안전 처리
 
 금융 도메인 담당자는 질문 표현과 위험 문구를, Frontend & Backend 담당자는
 실제 화면 단계와 응답 시간을, AI Agent 담당자는 조건·근거·평가 수치를 검수한다.

@@ -13,14 +13,18 @@ from finance_agent_core.answering.models import (
     GroundedAnswerProvider,
     ProductAnswerDraft,
 )
+from finance_agent_core.answering.verifier import (
+    AnswerVerifier,
+    CrossFamilyAnswerVerifier,
+)
+
+# Providers cross into the agent package. Bind the verifier symbols used by
+# routed_service first so direct imports of answering submodules remain safe.
+# isort: split
 from finance_agent_core.answering.providers import (
     ExpectedGroundedAnswerProvider,
     HyperClovaXGroundedAnswerProvider,
     LocalGroundedAnswerProvider,
-)
-from finance_agent_core.answering.verifier import (
-    AnswerVerifier,
-    CrossFamilyAnswerVerifier,
 )
 
 __all__ = [

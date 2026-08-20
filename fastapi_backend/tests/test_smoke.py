@@ -71,6 +71,41 @@ def test_validate_health_checks_declared_fund_execution_policy() -> None:
     )
 
 
+def test_validate_health_checks_relation_retrieval_readiness() -> None:
+    body = {
+        "status": "ok",
+        "configured_product_families": [
+            "bond",
+            "domestic_etp",
+            "overseas_etp",
+            "fund",
+        ],
+        "ready_product_families": [
+            "bond",
+            "domestic_etp",
+            "overseas_etp",
+            "fund",
+        ],
+        "missing_product_families": [],
+        "unavailable_product_families": [],
+        "relation_retrieval_status": "ready",
+    }
+
+    assert (
+        validate_health(
+            200,
+            body,
+            expected_relation_retrieval_status="ready",
+        )
+        == []
+    )
+    assert "relation retrieval status differs" in validate_health(
+        200,
+        body,
+        expected_relation_retrieval_status="disabled",
+    )
+
+
 def test_smoke_cases_switch_only_fund_expectation_for_approved_policy() -> None:
     locked = smoke_cases("locked")
     approved = smoke_cases("public_fund_v1_approved")
@@ -88,6 +123,68 @@ def test_smoke_cases_switch_only_fund_expectation_for_approved_policy() -> None:
 
     with pytest.raises(ValueError, match="unsupported fund execution policy"):
         smoke_cases("unsafe")
+
+
+def test_smoke_cases_cover_relation_execution_and_disabled_control() -> None:
+    ready = next(
+        case
+        for case in smoke_cases("locked", "ready")
+        if case.case_id == "docker-smoke-relation-issued-by-001"
+    )
+    disabled = next(
+        case
+        for case in smoke_cases("locked", "disabled")
+        if case.case_id == "docker-smoke-relation-issued-by-001"
+    )
+
+    assert ready.expected_status == "success"
+    assert ready.expected_query_plan_kind == "relation_search"
+    assert ready.expected_citation_kind == "relation_field"
+    assert ready.uses_answer_provider is False
+    assert disabled.expected_status == "unsupported"
+    assert disabled.expected_intent == "unsupported"
+    assert disabled.expected_families == ()
+
+    with pytest.raises(ValueError, match="unsupported relation retrieval status"):
+        smoke_cases("locked", "degraded")
+
+
+def test_validate_answer_checks_relation_plan_and_evidence_kind() -> None:
+    case = next(
+        case
+        for case in smoke_cases("locked", "ready")
+        if case.case_id == "docker-smoke-relation-issued-by-001"
+    )
+    body = {
+        "request_id": case.case_id,
+        "status": "success",
+        "intent": "search",
+        "product_families": ["bond"],
+        "answer_mode": "deterministic",
+        "fallback_used": False,
+        "provider_model": None,
+        "query_plan": {"operation": {"kind": "relation_search"}},
+        "products": [{"product_id": "BOND-001"}] * 3,
+        "citations": [{"kind": "relation_field"}] * 3,
+        "candidate_count": 3,
+        "as_of_dates": ["2026-07-11"],
+        "source_manifest": None,
+        "clarification": None,
+        "error": None,
+    }
+
+    assert (
+        validate_answer(
+            case,
+            200,
+            body,
+            success_answer_mode="llm_grounded",
+            provider_model="qwen3-local-test",
+        )
+        == []
+    )
+    body["citations"] = [{"kind": "product_field"}] * 3
+    assert "citation kind differs" in validate_answer(case, 200, body)
 
 
 def test_official_smoke_keeps_public_fund_locked() -> None:
