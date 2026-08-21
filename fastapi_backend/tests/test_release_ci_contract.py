@@ -54,6 +54,8 @@ def _valid_input_arguments(output: Path) -> list[str]:
         "hyperclova",
         "--hcx-queryplan-enabled",
         "false",
+        "--fund-execution-policy",
+        "public_fund_v1_approved",
         "--python-base-image",
         "docker.io/library/python@sha256:" + "a" * 64,
         "--source-commit",
@@ -136,28 +138,35 @@ def test_release_ci_accepts_only_normalized_protected_main_inputs(tmp_path: Path
     assert values["rollback_mode"] == "initial_bootstrap"
     assert values["answer_provider"] == "hyperclova"
     assert values["hcx_queryplan_enabled"] == "false"
+    assert values["fund_execution_policy"] == "public_fund_v1_approved"
     assert values["model_id"] == "HCX-007"
 
 
 @pytest.mark.parametrize(
-    ("answer_provider", "hcx_queryplan_enabled"),
-    [("deterministic", "false"), ("hyperclova", "true")],
+    ("answer_provider", "hcx_queryplan_enabled", "fund_execution_policy"),
+    [
+        ("deterministic", "false", "public_fund_v1_approved"),
+        ("hyperclova", "true", "public_fund_v1_approved"),
+        ("hyperclova", "false", "locked"),
+    ],
 )
 def test_release_ci_rejects_profiles_outside_the_frozen_final_boundary(
     tmp_path: Path,
     answer_provider: str,
     hcx_queryplan_enabled: str,
+    fund_execution_policy: str,
 ) -> None:
     output = tmp_path / "github-output"
     output.touch()
     arguments = _valid_input_arguments(output)
     arguments[arguments.index("--answer-provider") + 1] = answer_provider
     arguments[arguments.index("--hcx-queryplan-enabled") + 1] = hcx_queryplan_enabled
+    arguments[arguments.index("--fund-execution-policy") + 1] = fund_execution_policy
 
     completed = _run(*arguments)
 
     assert completed.returncode != 0
-    assert "HyperCLOVA answer-only" in completed.stderr
+    assert "approved public-fund v1" in completed.stderr
     assert output.read_text(encoding="utf-8") == ""
 
 
@@ -733,6 +742,7 @@ def test_release_workflow_materializes_and_binds_the_approved_relation_artifact(
         '--relation-retrieval-artifact-sha256 "$RELATION_RETRIEVAL_ARTIFACT_SHA256"'
         in manifest_step["run"]
     )
+    assert '--fund-execution-policy "$FUND_EXECUTION_POLICY"' in manifest_step["run"]
     assert "release_ci.py verify-relation-manifest-binding" in manifest_step["run"]
     assert '--manifest "$RELEASE_OUTPUT_DIR/agent-release-manifest.json"' in manifest_step["run"]
     assert '--relation-artifact "$RELATION_RETRIEVAL_ARTIFACT_FILE"' in manifest_step["run"]
@@ -788,8 +798,10 @@ def test_release_workflow_has_a_commit_pinned_keyless_trust_boundary() -> None:
     assert "repository" not in dispatch_inputs
     assert "answer_provider" not in dispatch_inputs
     assert "hcx_queryplan_enabled" not in dispatch_inputs
+    assert "fund_execution_policy" not in dispatch_inputs
     assert release["env"]["FINAL_ANSWER_PROVIDER"] == "hyperclova"
     assert release["env"]["FINAL_HCX_QUERYPLAN_ENABLED"] == "false"
+    assert release["env"]["FINAL_FUND_EXECUTION_POLICY"] == "public_fund_v1_approved"
     assert "check-submission-boundary.py" in text
     assert "--profile development" in text
 

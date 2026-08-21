@@ -481,8 +481,9 @@ RELEASE_ENV_FILE=fastapi_backend/.env.release \
 호출하지 않는다. 애플리케이션 시작도 API healthcheck를 보내지 않지만, HCLX release로
 실제 `/answer`를 요청하면 과금 가능한 호출이 발생한다. 2026-08-14 연구실 환경에서
 answer-only 실제 호출 3회(초기 2,048-token timeout 1회, 출력 예산 보완 뒤 DETAIL·SEARCH
-성공 2회)를 확인했다. 이는 clean NCP signed release 증거가 아니다. 최종 evaluation은
-HCLX answer-only, QueryPlan·Dense OFF, 공모펀드 locked로 고정한다.
+성공 2회)를 확인했다. 2026-08-22에는 NCP 격리 후보에서 공모펀드 SEARCH·DETAIL·COMPARE
+HCLX 답변과 결정론적 AGGREGATE, 미지원 수수료 무실행을 확인했다. 최종 evaluation은
+HCLX answer-only, QueryPlan·Dense OFF이며 보호된 Release만 공모펀드 v1을 승인한다.
 
 - [CLOVA Studio API 개요](https://api.ncloud-docs.com/docs/ai-naver-clovastudio-summary)
 - [Structured Outputs](https://api.ncloud-docs.com/docs/clovastudio-chatcompletionsv3-so)

@@ -14,7 +14,7 @@
     "hcx_model": "HCX-007",
     "hcx_queryplan_enabled": false,
     "credential_mode": "read_only_file_only",
-    "fund_execution_policy": "locked",
+    "fund_execution_policy": "public_fund_v1_approved",
     "schema_dense": "disabled_offline_only",
     "product_dense": "disabled_not_implemented",
     "document_bm25": "disabled_no_approved_corpus",
@@ -74,14 +74,14 @@
     "fastapi_backend/tests/test_relation_runtime_wiring.py": "4fac71fa83941887a58f52a08de29ca05cf561647a6917d0d365e98c1c3abc8e",
     "fastapi_backend/tests/test_smoke.py": "c37c4a2d263a8077598baa4af7bfbeacb8d5abf229493aafb7da56c03b851b66",
     "fastapi_backend/tests/test_release_activation.py": "7aa29731e8820665ec15fa51c51ed770584d485b386465b066b2ab602d9d97df",
-    "fastapi_backend/tests/test_release_ci_contract.py": "09aaf4af10db8de17a941c9b410808be9c9c2350558ceed0d2dec75fd8ca4906",
+    "fastapi_backend/tests/test_release_ci_contract.py": "332b179b34d16bb650678b37f855c6bf0a0b4139077ad88e86fdcc9d002cdd23",
     "fastapi_backend/tests/test_release_deployment_contract.py": "abcb375125ca67df6bbb167b731ad665cd1d5a28e1d5cd7bc9fc81b8bcfbf131",
     "fastapi_backend/tests/test_release_rollback_drill.py": "488fec38c6120726a0a4b29061506c4d6307d2810db781d45cfb3c2279681a76",
     "fastapi_backend/tests/test_release_startup.py": "89c1282710d698a634878571846c230081bc0d26cefc6cfa6db9d15e7468196c",
     "fastapi_backend/tests/test_release_trust.py": "b21471c2ed4a684294370455d662307b94e7db1670bddfce585c983e793a01ac"
   },
   "implementation_sha256": {
-    ".github/workflows/immutable-ncp-release.yml": "cbbeff5d59f16cec7bdba0fc410b59f2d29c3c607719669518317b1cc449090c",
+    ".github/workflows/immutable-ncp-release.yml": "80ff0380ec2366e0aac58662195434203f418d92955663931d86b72cf660cbe0",
     "compose-release.sh": "6e92816c7cd6279537ac3c593defd0369d3b3b4845706524d2e7fdedf3916599",
     "docker-compose.yml": "7e111aeffdf5fd174870550b983254b7908ac170b1554ccab82a4ae253fa0acd",
     "fastapi_backend/Dockerfile": "84c52ee0aac7e565d48242fef2a13c3bcde0b997b1d54ebd8e7f13998c07684d",
@@ -93,7 +93,7 @@
     "fastapi_backend/app/answer_controls.py": "f9ab89a10aa3b2d98e1e730c967de063a86cde6d448708d21beb2a48dec4fc72",
     "fastapi_backend/app/audit_runtime.py": "331e7b882dbe251c05dc2b0d41c02c17a6ad52c3db36f6b8de549eacf0616a5c",
     "fastapi_backend/app/routes/answer.py": "0987cd551faa7d5d1bf1b4f197a1de1bb09305dd0d3a31df1ab00796f917dd31",
-    "fastapi_backend/scripts/release_ci.py": "1086929554fa26ed9883e52c51608d9af22e2595bdb548aaef8c361b3bf57bd6",
+    "fastapi_backend/scripts/release_ci.py": "da01a8a4d21295a795f5aeb4c2fd303be102bb7bc8d30a7ed4fee0dca36d0619",
     "fastapi_backend/scripts/image_runtime_boundary.py": "44338c2eb83e45f17f234f2324b7f464000fda5351336cc6c473afd2a8ab39b0",
     "fastapi_backend/scripts/install_cosign_verifier.sh": "1973f0b955b0361920c7166234a929600c788d15cec151ec8505f1f1dfacd178",
     "fastapi_backend/scripts/release_activation.py": "69b7ca1fb427f4733e540a2a684cbfd59d3ff923a1a868992c922269c75eaced",
@@ -117,7 +117,7 @@
     "finance_agent/packages/finance_agent_core/src/finance_agent_core/release_cli.py": "ffc1a97863ca58328db446fd6b0cfb41ea5a661cccc530bafcda0780fc651d97",
     "finance_agent/packages/finance_agent_core/src/finance_agent_core/config/submission_boundary.py": "f1aaeee783bae261b1bc4fd9b60ed489bf81a02e451d1ef6ce99e4c0661d56bc",
     "finance_agent/packages/finance_agent_core/src/finance_agent_core/contracts/hcx_schema.py": "1a733a5d667df3b84e8f9f053d335efa2d4209d95e2065f4a179446f26b5ccbf",
-    "finance_agent/scripts/check-docs.py": "292ebecaf17f3b767a7a79eec51557598bebbee2afc115bca9e8ebd30d27b025",
+    "finance_agent/scripts/check-docs.py": "ab5b90a751537713af99de26f18bd626aaa2876dc4519f9da8707a3bdd74d3ef",
     "finance_agent/scripts/check-submission-boundary.py": "50543cd4537e1fea6141ab3375fd732022f3ec9de55ec70d662338f8b988d717"
   },
   "input_file_sha256": {
@@ -133,6 +133,7 @@
   "required_assertions": [
     "Release workflow에서 answer provider는 hyperclova로 고정되고 운영자가 deterministic으로 바꿀 수 없다",
     "HCLX QueryPlan은 false로 고정되며 true 입력은 Release CI에서 거부된다",
+    "공모펀드 v1은 보호된 최종 Release profile에서만 public_fund_v1_approved로 고정되며 locked 또는 임의 값은 거부된다",
     "평가 credential은 read-only key file만 허용하고 inline key는 거부된다",
     "HCLX 성공과 인증·429·5xx·timeout·transport·response 오류가 원인별 Audit와 metric으로 분리된다",
     "Audit에는 질문·prompt·credential·provider response 원문이 기록되지 않는다",

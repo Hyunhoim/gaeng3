@@ -31,7 +31,7 @@
 | KURE Schema Dense | OFF | test-only shadow smoke만 완료, 사용자 결과 변경 권한 없음 |
 | Product Dense·Re-ranker | OFF | 구현·승인 기준선이 없음 |
 | 외부 문서 BM25/RAG | OFF | 승인된 실제 corpus가 없음 |
-| 공모펀드 실행 | locked | 주최 측 데이터 정정 공지 전 공개 실행 금지 |
+| 공모펀드 실행 | public_fund_v1_approved | 전수 정규화·Oracle·Verifier·공식 GET·실제 HCLX 후보 검증을 통과한 보호 Release에서만 실행 |
 | 로컬 Qwen | 평가 runtime 실행 불가 | 개발 이력에만 남고 evaluation·production 설정에서 차단 |
 
 최종 환경값은 다음과 같다.
@@ -45,7 +45,7 @@ LLM_PROVIDER=hyperclova
 HCX_MODEL=HCX-007
 HCX_TIMEOUT_SECONDS=45
 CLOVASTUDIO_API_KEY_FILE=/run/secrets/clovastudio_api_key
-FINANCE_BACKEND_FUND_EXECUTION_POLICY=locked
+FINANCE_BACKEND_FUND_EXECUTION_POLICY=public_fund_v1_approved
 FINANCE_DENSE_SCHEMA_LINKER_ENABLED=false
 FINANCE_PRODUCT_DENSE_ENABLED=false
 WEB_CONCURRENCY=1

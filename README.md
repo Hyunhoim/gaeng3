@@ -33,7 +33,7 @@ ETF·ETN, 공모펀드를 조회·비교·계산한 뒤 근거와 기준일을 �
 | Backend | FastAPI `GET /health`, 내부용 `POST /answer`, 평가용 `GET /answer`, 관계 DTO·Audit·Shadow·관계 readiness 구현 |
 | Release | `AgentReleaseManifest 1.2`가 코드·Prompt·Model·index·공식 데이터·관계 artifact·Docker digest를 결합. 로컬 fail-closed 검증 완료, 실제 NCP 서명 배포 대기 |
 | Frontend | 동료의 `nextjs-frontend/` 코드 합류 후 연결 예정 |
-| LLM | 최종 평가는 HyperCLOVA X answer-only로 고정. 실제 DETAIL·SEARCH 호출과 검증된 fallback을 확인했으며 HCLX QueryPlan·grounded planning·Dense는 OFF, 공모펀드는 locked |
+| LLM | 최종 평가는 HyperCLOVA X answer-only로 고정. 실제 공모펀드 SEARCH·DETAIL·COMPARE와 검증된 fallback을 확인했으며 HCLX QueryPlan·grounded planning·Dense는 OFF, 공모펀드 v1은 승인 Release에서만 ON |
 | 자동 검증 | pre-HCX 동결 QA의 AI Core pytest 507개·Backend 34개와 P0-10 522/522를 역사 기록으로 보존. 2026-08-21 최종 동결 후보는 Core 1,481개·Backend 430개 통과, opt-in 2개 skip |
 
 세부 기능과 평가 결과는 [AI Agent 작업공간](finance_agent/README.md)에서 관리
