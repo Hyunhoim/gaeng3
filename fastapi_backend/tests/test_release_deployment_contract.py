@@ -26,9 +26,7 @@ def _write_test_release_launcher(target: Path, *, repository_dir: Path) -> None:
     secret_uid_marker = "secret_stat.st_uid != 10001"
     repository_marker = 'REPOSITORY_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"'
     persistent_binding_marker = (
-        'PERSISTENT_BINDING_ROOT = Path(\n'
-        '    "/var/lib/finance-agent-release/runtime-bindings"\n'
-        ')'
+        'PERSISTENT_BINDING_ROOT = Path(\n    "/var/lib/finance-agent-release/runtime-bindings"\n)'
     )
     assert canonical_launcher.count(uid_marker) == 1
     assert canonical_launcher.count(secret_uid_marker) == 1
@@ -424,12 +422,11 @@ def test_release_launcher_rejects_unknown_global_option_before_trust(tmp_path: P
 def test_release_launcher_rejects_persistent_binding_collision(tmp_path: Path) -> None:
     environment_path, environment, capture, test_launcher = _release_launcher_fixture(tmp_path)
     values = dict(
-        line.split("=", 1)
-        for line in environment_path.read_text(encoding="utf-8").splitlines()
+        line.split("=", 1) for line in environment_path.read_text(encoding="utf-8").splitlines()
     )
     persistent_root = tmp_path / "persistent-bindings"
     persistent_root.mkdir(mode=0o700)
-    collision = persistent_root / f'{values["FINANCE_DEPLOYMENT_BINDING_SHA256"]}.json'
+    collision = persistent_root / f"{values['FINANCE_DEPLOYMENT_BINDING_SHA256']}.json"
     collision.write_text("tampered\n", encoding="utf-8")
     collision.chmod(0o444)
 
