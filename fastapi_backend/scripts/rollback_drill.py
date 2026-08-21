@@ -11,7 +11,7 @@ import subprocess
 import sys
 import tempfile
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from time import monotonic, sleep
@@ -29,6 +29,7 @@ _AUDIT_FILE_NAME = "events.jsonl"
 _AUDIT_PROBE_TIMEOUT_SECONDS = 10.0
 _MAX_AUDIT_PROBE_BYTES = 2 * 1024 * 1024
 _MAX_AUDIT_EVENT_BYTES = 64 * 1024
+_MAX_HCX_API_KEY_FILE_BYTES = 4096
 _PROBE_REQUEST_ID = "rollback-drill-probe"
 _PROBE_QUESTION = "매수 가능한 국내채권을 매수수익률 높은 순으로 1개 보여줘."
 _PROBE_REQUEST_SHA256 = hashlib.sha256(_PROBE_REQUEST_ID.encode()).hexdigest()
@@ -139,50 +140,123 @@ _AUDIT_OPTIONAL_SHA256_FIELDS = {
     "index_manifest_sha256",
     "relation_set_sha256",
 }
-_EXPECTED_PROBE_AUDIT_PATH = (
+_DETERMINISTIC_PROBE_PREFIX = (
     ("request", "started", "received"),
     ("safety", "succeeded", "guard_allowed"),
     ("lexical", "succeeded", "lexical_completed"),
     ("planning", "succeeded", "policy_completed"),
     ("route", "succeeded", "routed_execute"),
-    ("compiler", "succeeded", "plan_compiled"),
+)
+_COMPILER_PROBE_PATH = (("compiler", "succeeded", "plan_compiled"),)
+_QUERYPLAN_HCLX_PROBE_PATH = (("hclx", "succeeded", "provider_completed"),)
+_EXECUTION_PROBE_PATH = (
+    ("sql", "succeeded", "authority_connection_opened"),
     ("authority", "succeeded", "authority_granted"),
+    ("sql", "succeeded", "oracle_connection_opened"),
+    ("sql", "succeeded", "oracle_statements_completed"),
     ("sql", "succeeded", "parameterized_statement_completed"),
     ("oracle", "succeeded", "oracle_completed"),
+    ("sql", "succeeded", "verifier_projection_connection_opened"),
+    ("sql", "succeeded", "verifier_projection_fetched"),
+    ("verifier", "succeeded", "verifier_rows_materialized"),
+    ("verifier", "succeeded", "verifier_universe_loaded"),
+    ("verifier", "succeeded", "pure_verification_passed"),
     ("verifier", "succeeded", "verification_passed"),
-    ("renderer", "succeeded", "rendering_completed"),
+)
+_RENDERER_PROBE_PATH = (("renderer", "succeeded", "rendering_completed"),)
+_GROUNDED_ANSWER_HCLX_PROBE_PATH = (
+    ("hclx", "succeeded", "generation_completed"),
+    ("verifier", "succeeded", "composition_verified"),
+)
+_PROBE_SUFFIX = (
     ("answer", "succeeded", "execution_completed"),
+    ("serialization", "succeeded", "citations_built"),
     ("serialization", "succeeded", "backend_dto_built"),
+    ("serialization", "succeeded", "official_dto_built"),
     ("serialization", "succeeded", "http_response_serialized"),
     ("request", "succeeded", "response_completed"),
+)
+_EXPECTED_PROBE_AUDIT_PATH = (
+    _DETERMINISTIC_PROBE_PREFIX
+    + _COMPILER_PROBE_PATH
+    + _EXECUTION_PROBE_PATH
+    + _RENDERER_PROBE_PATH
+    + _PROBE_SUFFIX
+)
+_EXPECTED_HCLX_ANSWER_PROBE_AUDIT_PATH = (
+    _DETERMINISTIC_PROBE_PREFIX
+    + _COMPILER_PROBE_PATH
+    + _EXECUTION_PROBE_PATH
+    + _RENDERER_PROBE_PATH
+    + _GROUNDED_ANSWER_HCLX_PROBE_PATH
+    + _PROBE_SUFFIX
+)
+_EXPECTED_HCLX_QUERYPLAN_ANSWER_PROBE_AUDIT_PATH = (
+    _DETERMINISTIC_PROBE_PREFIX
+    + _COMPILER_PROBE_PATH
+    + _QUERYPLAN_HCLX_PROBE_PATH
+    + _EXECUTION_PROBE_PATH
+    + _RENDERER_PROBE_PATH
+    + _GROUNDED_ANSWER_HCLX_PROBE_PATH
+    + _PROBE_SUFFIX
 )
 _ANSWER_PROBE_MARKER = "FINANCE_ROLLBACK_PROBE_RESULT="
 _ANSWER_PROBE = """
 import json
+import sys
+import urllib.parse
 import urllib.request
 
-payload = json.dumps({
+timeout_seconds = float(sys.argv[1])
+expected_answer_mode = sys.argv[2]
+query = urllib.parse.urlencode({
+    "question_id": "rollback-drill-probe",
     "question": "매수 가능한 국내채권을 매수수익률 높은 순으로 1개 보여줘.",
-    "request_id": "rollback-drill-probe",
-}).encode()
+})
 request = urllib.request.Request(
-    "http://127.0.0.1:8000/answer",
-    data=payload,
-    headers={"content-type": "application/json"},
-    method="POST",
+    "http://127.0.0.1:8000/answer?" + query,
+    method="GET",
 )
-with urllib.request.urlopen(request, timeout=20) as response:
+with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
     body = json.load(response)
-if body.get("status") != "success" or body.get("intent") != "search":
-    raise SystemExit("representative answer contract failed")
-with urllib.request.urlopen("http://127.0.0.1:8000/health", timeout=20) as response:
+required_fields = {"question_id", "question", "retrieved_context", "think_trace", "answer"}
+if set(body) != required_fields or any(not isinstance(body[field], str) for field in required_fields):
+    raise SystemExit("representative official answer contract failed")
+if (
+    body["question_id"] != "rollback-drill-probe"
+    or body["question"] != "매수 가능한 국내채권을 매수수익률 높은 순으로 1개 보여줘."
+    or not body["retrieved_context"]
+    or not body["answer"]
+):
+    raise SystemExit("representative official answer contract failed")
+try:
+    trace = json.loads(body["think_trace"])
+    context = json.loads(body["retrieved_context"])
+except (TypeError, ValueError):
+    raise SystemExit("representative official answer contract failed") from None
+if (
+    not isinstance(trace, dict)
+    or not isinstance(context, dict)
+    or trace.get("status") != "success"
+    or trace.get("intent") != "search"
+    or trace.get("product_families") != ["bond"]
+    or trace.get("answer_mode") != expected_answer_mode
+    or trace.get("fallback_used") is not False
+):
+    raise SystemExit("representative official answer contract failed")
+with urllib.request.urlopen(
+    "http://127.0.0.1:8000/health",
+    timeout=timeout_seconds,
+) as response:
     health = json.load(response)
 if health.get("status") != "ok" or health.get("audit_status") != "ok":
     raise SystemExit("representative health audit contract failed")
 print("FINANCE_ROLLBACK_PROBE_RESULT=" + json.dumps({
+    "answer_mode": trace["answer_mode"],
     "audit_status": health["audit_status"],
-    "status": body["status"],
-    "intent": body["intent"],
+    "fallback_used": trace["fallback_used"],
+    "intent": trace["intent"],
+    "status": trace["status"],
 }, separators=(",", ":")))
 """.strip()
 _ALLOWED_RELEASE_KEYS = {
@@ -230,6 +304,8 @@ class ReleaseTarget:
     binding_file: Path
     binding_sha256: str
     binding: dict[str, Any]
+    hclx_secret_file: Path | None = field(default=None, repr=False)
+    hclx_secret_fingerprint: tuple[int, ...] | None = field(default=None, repr=False)
 
     @property
     def release_id(self) -> str:
@@ -246,6 +322,25 @@ class ReleaseTarget:
     @property
     def activation_generation(self) -> int:
         return int(self.binding["activation_generation"])
+
+    @property
+    def answer_provider(self) -> str:
+        return self.environment.get("FINANCE_BACKEND_ANSWER_PROVIDER", "deterministic")
+
+    @property
+    def hclx_query_plan_enabled(self) -> bool:
+        return (
+            self.environment.get("FINANCE_BACKEND_HCX_QUERY_PLAN_ENABLED", "false").lower()
+            == "true"
+        )
+
+    @property
+    def uses_hclx(self) -> bool:
+        return self.answer_provider == "hyperclova"
+
+    @property
+    def expected_answer_mode(self) -> str:
+        return "llm_grounded" if self.uses_hclx else "deterministic"
 
 
 def _strict_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
@@ -327,8 +422,8 @@ def _validate_audit_event_v12(event: dict[str, Any]) -> None:
         raise RollbackDrillError("rollback audit duration is invalid")
     if not _is_sha256(event["request_id_sha256"]) or not _is_sha256(event["question_sha256"]):
         raise RollbackDrillError("rollback audit request linkage is invalid")
-    for field in _AUDIT_OPTIONAL_SHA256_FIELDS:
-        value = event[field]
+    for field_name in _AUDIT_OPTIONAL_SHA256_FIELDS:
+        value = event[field_name]
         if value is not None and not _is_sha256(value):
             raise RollbackDrillError("rollback audit SHA-256 linkage is invalid")
 
@@ -400,8 +495,8 @@ def _validate_audit_event_v12(event: dict[str, Any]) -> None:
         "evidence_count": 100_000,
         "shadow_candidate_count": 100_000,
     }
-    for field, maximum in count_limits.items():
-        if not _is_bounded_integer(event[field], minimum=0, maximum=maximum):
+    for field_name, maximum in count_limits.items():
+        if not _is_bounded_integer(event[field_name], minimum=0, maximum=maximum):
             raise RollbackDrillError("rollback audit count is invalid")
     if event["result_count"] > event["candidate_count"]:
         raise RollbackDrillError("rollback audit result count exceeds candidates")
@@ -410,8 +505,8 @@ def _validate_audit_event_v12(event: dict[str, Any]) -> None:
         ("product_id_sha256s", 100, "result_count"),
         ("evidence_id_sha256s", 2_000, "evidence_count"),
     )
-    for field, maximum, count_field in linkage_fields:
-        values = event[field]
+    for field_name, maximum, count_field in linkage_fields:
+        values = event[field_name]
         if (
             not isinstance(values, list)
             or len(values) > maximum
@@ -549,18 +644,62 @@ def _require_pattern(value: str | None, pattern: re.Pattern[str], name: str) -> 
     return value
 
 
-def _validate_provider_profile(environment: dict[str, str]) -> None:
+def _secret_file_fingerprint(metadata: os.stat_result) -> tuple[int, ...]:
+    return (
+        metadata.st_dev,
+        metadata.st_ino,
+        metadata.st_mode,
+        metadata.st_uid,
+        metadata.st_nlink,
+        metadata.st_size,
+        metadata.st_mtime_ns,
+        metadata.st_ctime_ns,
+    )
+
+
+def _validate_hclx_secret_file(path_value: str) -> tuple[Path, tuple[int, ...]]:
+    secret = Path(path_value)
+    if not secret.is_absolute() or secret != Path(os.path.abspath(secret)):
+        raise RollbackDrillError("HyperCLOVA release secret path is invalid")
+    try:
+        metadata = secret.stat(follow_symlinks=False)
+    except OSError:
+        raise RollbackDrillError("HyperCLOVA release secret is unavailable") from None
+    if (
+        secret.is_symlink()
+        or not stat.S_ISREG(metadata.st_mode)
+        or metadata.st_uid != _RELEASE_BACKEND_UID
+        or metadata.st_nlink != 1
+        or metadata.st_mode & (stat.S_IRWXG | stat.S_IRWXO)
+        or not 0 < metadata.st_size <= _MAX_HCX_API_KEY_FILE_BYTES
+    ):
+        raise RollbackDrillError("HyperCLOVA release secret is not a secure regular file")
+    return secret, _secret_file_fingerprint(metadata)
+
+
+def _validate_provider_profile(
+    environment: dict[str, str],
+) -> tuple[Path | None, tuple[int, ...] | None]:
     answer_provider = environment.get("FINANCE_BACKEND_ANSWER_PROVIDER", "deterministic")
     hcx_query_plan = environment.get("FINANCE_BACKEND_HCX_QUERY_PLAN_ENABLED", "false").lower()
     if answer_provider not in {"deterministic", "hyperclova"}:
         raise RollbackDrillError("release answer provider is invalid")
     if hcx_query_plan not in {"true", "false"}:
         raise RollbackDrillError("release HCLX QueryPlan flag is invalid")
-    uses_hcx = answer_provider == "hyperclova" or hcx_query_plan == "true"
-    if uses_hcx:
+    if answer_provider == "deterministic" and hcx_query_plan == "true":
         raise RollbackDrillError(
-            "rollback audit drill supports only the deterministic HCLX-disabled profile"
+            "rollback audit drill does not support the QueryPlan-only HCLX profile"
         )
+    if answer_provider == "hyperclova":
+        if (
+            environment.get("FINANCE_AGENT_LLM_MODE") != environment.get("APP_ENV")
+            or environment.get("LLM_PROVIDER") != "hyperclova"
+            or environment.get("HCX_MODEL") != "HCX-007"
+            or not environment.get("CLOVASTUDIO_API_KEY_HOST_FILE")
+            or environment.get("CLOVASTUDIO_API_KEY_FILE") != "/run/secrets/clovastudio_api_key"
+        ):
+            raise RollbackDrillError("HyperCLOVA release provider profile is incomplete")
+        return _validate_hclx_secret_file(environment["CLOVASTUDIO_API_KEY_HOST_FILE"])
 
     if environment.get("FINANCE_AGENT_LLM_MODE", "disabled") != "disabled":
         raise RollbackDrillError("deterministic release must disable LLM mode")
@@ -575,6 +714,22 @@ def _validate_provider_profile(environment: dict[str, str]) -> None:
         )
     ):
         raise RollbackDrillError("deterministic release must not configure HCLX credentials")
+    return None, None
+
+
+def _require_hclx_secret_current(target: ReleaseTarget) -> None:
+    if not target.uses_hclx:
+        if target.hclx_secret_file is not None or target.hclx_secret_fingerprint is not None:
+            raise RollbackDrillError("deterministic rollback target retained HCLX secret state")
+        return
+    if target.hclx_secret_file is None or target.hclx_secret_fingerprint is None:
+        raise RollbackDrillError("HyperCLOVA rollback target lacks verified secret state")
+    observed_file, observed_fingerprint = _validate_hclx_secret_file(str(target.hclx_secret_file))
+    if (
+        observed_file != target.hclx_secret_file
+        or observed_fingerprint != target.hclx_secret_fingerprint
+    ):
+        raise RollbackDrillError("HyperCLOVA release secret changed during rollback verification")
 
 
 def _validate_audit_profile(environment: dict[str, str]) -> Path:
@@ -600,6 +755,35 @@ def _validate_audit_profile(environment: dict[str, str]) -> Path:
     return audit_root
 
 
+def _validate_timeout(
+    environment: dict[str, str],
+    name: str,
+    *,
+    default: float,
+    maximum: float,
+    maximum_inclusive: bool,
+) -> float:
+    try:
+        value = float(environment.get(name, str(default)))
+    except ValueError as error:
+        raise RollbackDrillError(f"{name} is invalid") from error
+    maximum_valid = value <= maximum if maximum_inclusive else value < maximum
+    if not math.isfinite(value) or value <= 0 or not maximum_valid:
+        raise RollbackDrillError(f"{name} is invalid")
+    return value
+
+
+def _official_probe_timeout_seconds(target: ReleaseTarget) -> float:
+    configured = _validate_timeout(
+        target.environment,
+        "OFFICIAL_ANSWER_TIMEOUT_SECONDS",
+        default=270.0,
+        maximum=300.0,
+        maximum_inclusive=False,
+    )
+    return min(299.0, configured + 1.0)
+
+
 def _load_target(path: Path) -> ReleaseTarget:
     env_file, environment = _load_environment(path)
     required = {
@@ -621,7 +805,22 @@ def _load_target(path: Path) -> ReleaseTarget:
         raise RollbackDrillError("APP_ENV must be evaluation or production")
     if environment["FINANCE_RUNTIME_PLATFORM"] != "linux/amd64":
         raise RollbackDrillError("official rollback platform must be linux/amd64")
-    _validate_provider_profile(environment)
+    hclx_secret_file, hclx_secret_fingerprint = _validate_provider_profile(environment)
+    _validate_timeout(
+        environment,
+        "OFFICIAL_ANSWER_TIMEOUT_SECONDS",
+        default=270.0,
+        maximum=300.0,
+        maximum_inclusive=False,
+    )
+    if hclx_secret_file is not None:
+        _validate_timeout(
+            environment,
+            "HCX_TIMEOUT_SECONDS",
+            default=45.0,
+            maximum=300.0,
+            maximum_inclusive=True,
+        )
     environment["FINANCE_AUDIT_HOST_DIR"] = str(_validate_audit_profile(environment))
     _require_pattern(
         environment["FINANCE_IMAGE_REFERENCE"],
@@ -698,6 +897,8 @@ def _load_target(path: Path) -> ReleaseTarget:
         binding_file=binding_file,
         binding_sha256=binding_sha256,
         binding=binding,
+        hclx_secret_file=hclx_secret_file,
+        hclx_secret_fingerprint=hclx_secret_fingerprint,
     )
 
 
@@ -734,6 +935,14 @@ def _verify_chain(previous: ReleaseTarget, current: ReleaseTarget) -> None:
     }
     if rollback != expected:
         raise RollbackDrillError("current Binding does not pin the exact previous release")
+
+
+def _expected_probe_audit_path(target: ReleaseTarget) -> tuple[tuple[str, str, str], ...]:
+    if not target.uses_hclx:
+        return _EXPECTED_PROBE_AUDIT_PATH
+    if target.hclx_query_plan_enabled:
+        return _EXPECTED_HCLX_QUERYPLAN_ANSWER_PROBE_AUDIT_PATH
+    return _EXPECTED_HCLX_ANSWER_PROBE_AUDIT_PATH
 
 
 def _snapshot_target(target: ReleaseTarget, root: Path, name: str) -> ReleaseTarget:
@@ -796,6 +1005,8 @@ def _snapshot_target(target: ReleaseTarget, root: Path, name: str) -> ReleaseTar
         binding_file=binding_file,
         binding_sha256=target.binding_sha256,
         binding=target.binding,
+        hclx_secret_file=target.hclx_secret_file,
+        hclx_secret_fingerprint=target.hclx_secret_fingerprint,
     )
 
 
@@ -838,6 +1049,7 @@ class DockerClient:
         arguments: Sequence[str],
         *,
         allow_failure: bool = False,
+        timeout_seconds: float = 240.0,
     ) -> subprocess.CompletedProcess[str]:
         completed = subprocess.run(
             ["docker", *arguments],
@@ -846,7 +1058,7 @@ class DockerClient:
             check=False,
             capture_output=True,
             text=True,
-            timeout=240,
+            timeout=timeout_seconds,
         )
         if completed.returncode != 0 and not allow_failure:
             operation = " ".join(arguments[:3])
@@ -898,6 +1110,7 @@ class DockerClient:
             raise RollbackDrillError("isolated rollback drill project network already exists")
 
     def require_artifacts(self, target: ReleaseTarget) -> None:
+        _require_hclx_secret_current(target)
         trust = subprocess.run(
             [
                 sys.executable,
@@ -917,8 +1130,10 @@ class DockerClient:
         self.run(["image", "inspect", target.image_reference])
         self.run(["volume", "inspect", target.data_volume])
         self.compose(target, ["config", "--quiet"])
+        _require_hclx_secret_current(target)
 
     def activate_and_verify(self, target: ReleaseTarget) -> None:
+        _require_hclx_secret_current(target)
         audit_checkpoint = self._audit_checkpoint(target)
         self.compose(
             target,
@@ -962,7 +1177,19 @@ class DockerClient:
             raise RollbackDrillError("active Binding mount source is not resolvable") from error
         if observed_binding != target.binding_file:
             raise RollbackDrillError("active container Binding mount differs from the release")
-        probe = self.run(["exec", container_id, "python", "-c", _ANSWER_PROBE]).stdout
+        probe_timeout = _official_probe_timeout_seconds(target)
+        probe = self.run(
+            [
+                "exec",
+                container_id,
+                "python",
+                "-c",
+                _ANSWER_PROBE,
+                str(probe_timeout),
+                target.expected_answer_mode,
+            ],
+            timeout_seconds=min(300.0, probe_timeout + 1.0),
+        ).stdout
         result_lines = [
             line.removeprefix(_ANSWER_PROBE_MARKER)
             for line in probe.splitlines()
@@ -978,9 +1205,17 @@ class DockerClient:
             raise RollbackDrillError(
                 "representative /answer probe returned invalid JSON"
             ) from error
-        if probe_result != {"audit_status": "ok", "status": "success", "intent": "search"}:
+        expected_probe_result = {
+            "answer_mode": target.expected_answer_mode,
+            "audit_status": "ok",
+            "fallback_used": False,
+            "intent": "search",
+            "status": "success",
+        }
+        if probe_result != expected_probe_result:
             raise RollbackDrillError("representative /answer probe failed")
         self.audit_observations.append(self._wait_for_audit_chain(target, audit_checkpoint))
+        _require_hclx_secret_current(target)
 
     @staticmethod
     def _audit_checkpoint(target: ReleaseTarget) -> tuple[tuple[int, int] | None, int]:
@@ -1144,8 +1379,10 @@ class DockerClient:
         observed_path = tuple(
             (event["stage"], event["outcome"], event["reason_code"]) for event in chain
         )
-        if observed_path != _EXPECTED_PROBE_AUDIT_PATH:
-            raise RollbackDrillError("rollback audit invocation path is not exactly deterministic")
+        if observed_path != _expected_probe_audit_path(target):
+            raise RollbackDrillError(
+                "rollback audit invocation path differs from its frozen provider profile"
+            )
         expected_release_id = hashlib.sha256(target.release_id.encode()).hexdigest()
         expected_release_context = _canonical_sha256(
             {
@@ -1278,6 +1515,13 @@ def _parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Leave the verified N-1 container running; valid only with --execute.",
     )
+    parser.add_argument(
+        "--allow-billable-hclx",
+        action="store_true",
+        help=(
+            "Explicitly authorize billable HCLX probes during --execute; dry-run never calls HCLX."
+        ),
+    )
     return parser
 
 
@@ -1296,11 +1540,22 @@ def main(argv: Sequence[str] | None = None) -> int:
             raise RollbackDrillError(
                 "--leave-running is incompatible with immutable rollback snapshots"
             )
+        if arguments.allow_billable_hclx and not arguments.execute:
+            raise RollbackDrillError("--allow-billable-hclx is valid only with --execute")
         if arguments.execute:
             _require_audit_reader_identity()
         previous = _load_target(arguments.previous_env)
         current = _load_target(arguments.current_env)
         _verify_chain(previous, current)
+        uses_hclx = previous.uses_hclx or current.uses_hclx
+        if arguments.execute and uses_hclx and not arguments.allow_billable_hclx:
+            raise RollbackDrillError(
+                "HCLX rollback execution requires explicit billable-call authorization"
+            )
+        if arguments.allow_billable_hclx and not uses_hclx:
+            raise RollbackDrillError(
+                "billable HCLX authorization is invalid for deterministic rollback targets"
+            )
         if not arguments.execute:
             print(
                 json.dumps(

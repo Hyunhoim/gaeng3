@@ -303,6 +303,20 @@ def _intent(question: str, families: list[ProductFamily]) -> InteractionIntent:
     return InteractionIntent.SEARCH
 
 
+def classify_interaction_intent(question: str) -> InteractionIntent:
+    """Classify a normalized question without emitting Audit or planning events.
+
+    Public specialist routers use this read-only classifier only to decide whether
+    they may handle a SEARCH.  Every other intent remains owned by ``IntentRouter``
+    so adding a specialist cannot preempt DETAIL, COMPARE, AGGREGATE or EXPLAIN.
+    """
+
+    stripped = question.strip()
+    if not stripped:
+        raise ValueError("question cannot be blank")
+    return _intent(stripped, _product_families(stripped))
+
+
 class IntentRouter:
     """Deterministic, fail-closed router in front of any model-generated plan."""
 

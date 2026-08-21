@@ -1,0 +1,73 @@
+{
+  "schema_version": "1.0",
+  "baseline_id": "final-hcx-answer-release-freeze-v1",
+  "recorded_on": "2026-08-21",
+  "dataset": "not_applicable_hcx_answer_release_contract",
+  "evaluation_layer": "system_contract",
+  "status": "final_hcx_answer_release_contract_frozen",
+  "provider": {
+    "name": "hyperclova-fake-transport-and-local-release-contract",
+    "official_submission_provider": false,
+    "network_used": false,
+    "hclx_called": false,
+    "local_llm_called": false
+  },
+  "model": {
+    "name": "HCX-007",
+    "operation_scope": "grounded_answer_only",
+    "queryplan_enabled": false,
+    "reason": "실제 모델 품질이 아니라 HCX-007 answer-only Release와 장애·Audit·fallback 계약을 검증"
+  },
+  "suite": {
+    "id": "final-hcx-answer-release-freeze-v1",
+    "version": "1.0",
+    "path": "evaluation/protocols/final-hcx-answer-release-freeze-v1.protocol.json",
+    "sha256": "c324068589ec113217d9c21b8278401154c301874315e14d4de9a092f1f80ac9",
+    "total_cases": 1911
+  },
+  "data": {
+    "fixture_kind": "pytest_fake_transport_and_release_contract",
+    "fixture_definition_sha256": "c324068589ec113217d9c21b8278401154c301874315e14d4de9a092f1f80ac9",
+    "not_applicable_reason": "상품 정답 정확도가 아니라 HCLX answer-only 실행·오류·Audit·Release·rollback 시스템 계약"
+  },
+  "release_profile": {
+    "answer_provider": "hyperclova",
+    "hcx_model": "HCX-007",
+    "hcx_queryplan_enabled": false,
+    "fund_execution_policy": "locked",
+    "schema_dense_enabled": false,
+    "product_dense_enabled": false
+  },
+  "metrics": {
+    "total": 1911,
+    "passed": 1911,
+    "skipped": 2,
+    "strict_accuracy": 1.0,
+    "strict_accuracy_scope": "고정된 시스템 계약 통과율이며 금융 질의 일반화 정확도나 공모전 예상 점수가 아님",
+    "external_network_calls": 0,
+    "live_hclx_calls": 0,
+    "core_passed": 1481,
+    "backend_passed": 430,
+    "answer_only_official_get_focused_passed": 17
+  },
+  "reports": [
+    {
+      "role": "final_hcx_answer_release_freeze_protocol",
+      "artifact_name": "final-hcx-answer-release-freeze-v1.protocol.json",
+      "sha256": "c324068589ec113217d9c21b8278401154c301874315e14d4de9a092f1f80ac9"
+    }
+  ],
+  "reproduce": {
+    "core": "python -m pytest -q finance_agent/packages/finance_agent_core/tests",
+    "backend": "PYTHONPATH=fastapi_backend:finance_agent/packages/finance_agent_core/src python -m pytest -q fastapi_backend/tests",
+    "docs": "python finance_agent/scripts/check-docs.py",
+    "boundary": "PYTHONPATH=finance_agent/packages/finance_agent_core/src python finance_agent/scripts/check-submission-boundary.py --profile development"
+  },
+  "limitations": [
+    "fake transport와 로컬 계약 테스트이며 실제 HCLX 품질 baseline이 아님",
+    "실제 HCLX credential·latency·token·비용은 별도의 sanitized smoke evidence로 관리",
+    "External Blind를 수행하지 않았으므로 HCLX QueryPlan과 Dense는 최종 Release에서 비활성",
+    "실제 NCP image digest·Cosign·공인 IP·signed rollback 완료 증거가 아님",
+    "공모펀드는 주최 측 데이터 정정 전까지 잠금"
+  ]
+}

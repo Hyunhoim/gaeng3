@@ -164,6 +164,52 @@ def _release_pair(tmp_path: Path) -> tuple[Path, Path, dict[str, object], dict[s
     return previous_env, current_env, previous_binding, current_binding
 
 
+def _configure_hclx_pair(
+    tmp_path: Path,
+    previous_env: Path,
+    current_env: Path,
+    *,
+    query_plan_enabled: bool,
+) -> Path:
+    secret = tmp_path / "clovastudio-api-key"
+    secret.write_text("test-hclx-rollback-key-never-log\n", encoding="utf-8")
+    secret.chmod(0o600)
+    for environment_file in (previous_env, current_env):
+        contents = environment_file.read_text(encoding="utf-8")
+        contents = (
+            contents.replace(
+                "FINANCE_BACKEND_ANSWER_PROVIDER=deterministic",
+                "FINANCE_BACKEND_ANSWER_PROVIDER=hyperclova",
+            )
+            .replace(
+                "FINANCE_BACKEND_HCX_QUERY_PLAN_ENABLED=false",
+                (
+                    "FINANCE_BACKEND_HCX_QUERY_PLAN_ENABLED=true"
+                    if query_plan_enabled
+                    else "FINANCE_BACKEND_HCX_QUERY_PLAN_ENABLED=false"
+                ),
+            )
+            .replace(
+                "FINANCE_AGENT_LLM_MODE=disabled",
+                "FINANCE_AGENT_LLM_MODE=evaluation",
+            )
+            .replace(
+                "LLM_PROVIDER=disabled",
+                "LLM_PROVIDER=hyperclova",
+            )
+        )
+        contents += "\n".join(
+            [
+                "HCX_MODEL=HCX-007",
+                "HCX_TIMEOUT_SECONDS=45",
+                f"CLOVASTUDIO_API_KEY_HOST_FILE={secret}",
+                "CLOVASTUDIO_API_KEY_FILE=/run/secrets/clovastudio_api_key",
+            ]
+        )
+        environment_file.write_text(contents + "\n", encoding="utf-8")
+    return secret
+
+
 def _command(previous_env: Path, current_env: Path, *extra: str) -> list[str]:
     test_script = _copy_test_rollback_script(previous_env.parent / "rollback_drill-test.py")
     return [
@@ -278,16 +324,46 @@ def test_rollback_drill_rejects_hcx_secret_on_deterministic_release(tmp_path: Pa
     assert "must not configure HCLX credentials" in completed.stderr
 
 
-def test_rollback_drill_rejects_hclx_profile_until_its_audit_path_is_frozen(
+@pytest.mark.parametrize("query_plan_enabled", [False, True])
+def test_rollback_drill_dry_run_accepts_frozen_hclx_profiles_without_calling_docker(
     tmp_path: Path,
+    query_plan_enabled: bool,
 ) -> None:
     previous_env, current_env, _, _ = _release_pair(tmp_path)
-    for env_file in (previous_env, current_env):
-        contents = env_file.read_text(encoding="utf-8").replace(
-            "FINANCE_BACKEND_ANSWER_PROVIDER=deterministic",
-            "FINANCE_BACKEND_ANSWER_PROVIDER=hyperclova",
-        )
-        env_file.write_text(contents, encoding="utf-8")
+    secret = _configure_hclx_pair(
+        tmp_path,
+        previous_env,
+        current_env,
+        query_plan_enabled=query_plan_enabled,
+    )
+    environment = os.environ.copy()
+    environment["PATH"] = str(tmp_path)
+
+    completed = subprocess.run(
+        _command(previous_env, current_env),
+        cwd=_repository_root(),
+        env=environment,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    assert json.loads(completed.stdout)["status"] == "validated"
+    assert str(secret) not in completed.stdout
+    assert "test-hclx-rollback-key-never-log" not in completed.stdout
+    assert completed.stderr == ""
+
+
+def test_rollback_drill_rejects_queryplan_only_hclx_profile(tmp_path: Path) -> None:
+    previous_env, current_env, _, _ = _release_pair(tmp_path)
+    previous_env.write_text(
+        previous_env.read_text(encoding="utf-8").replace(
+            "FINANCE_BACKEND_HCX_QUERY_PLAN_ENABLED=false",
+            "FINANCE_BACKEND_HCX_QUERY_PLAN_ENABLED=true",
+        ),
+        encoding="utf-8",
+    )
 
     completed = subprocess.run(
         _command(previous_env, current_env),
@@ -298,7 +374,108 @@ def test_rollback_drill_rejects_hclx_profile_until_its_audit_path_is_frozen(
     )
 
     assert completed.returncode == 2
-    assert "supports only the deterministic HCLX-disabled profile" in completed.stderr
+    assert "QueryPlan-only HCLX profile" in completed.stderr
+
+
+@pytest.mark.parametrize(
+    ("needle", "replacement"),
+    [
+        ("HCX_MODEL=HCX-007\n", ""),
+        ("LLM_PROVIDER=hyperclova", "LLM_PROVIDER=disabled"),
+        (
+            "CLOVASTUDIO_API_KEY_FILE=/run/secrets/clovastudio_api_key",
+            "CLOVASTUDIO_API_KEY_FILE=/tmp/not-an-approved-secret-path",
+        ),
+    ],
+)
+def test_rollback_drill_rejects_incomplete_hclx_profile(
+    tmp_path: Path,
+    needle: str,
+    replacement: str,
+) -> None:
+    previous_env, current_env, _, _ = _release_pair(tmp_path)
+    _configure_hclx_pair(
+        tmp_path,
+        previous_env,
+        current_env,
+        query_plan_enabled=False,
+    )
+    previous_env.write_text(
+        previous_env.read_text(encoding="utf-8").replace(needle, replacement),
+        encoding="utf-8",
+    )
+
+    completed = subprocess.run(
+        _command(previous_env, current_env),
+        cwd=_repository_root(),
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 2
+    assert "provider profile is incomplete" in completed.stderr
+    assert "test-hclx-rollback-key-never-log" not in completed.stderr
+
+
+@pytest.mark.parametrize(
+    "unsafe_kind", ["empty", "oversized", "group_readable", "hardlink", "symlink"]
+)
+def test_rollback_drill_rejects_insecure_hclx_secret_metadata(
+    tmp_path: Path,
+    unsafe_kind: str,
+) -> None:
+    previous_env, current_env, _, _ = _release_pair(tmp_path)
+    secret = _configure_hclx_pair(
+        tmp_path,
+        previous_env,
+        current_env,
+        query_plan_enabled=False,
+    )
+    if unsafe_kind == "empty":
+        secret.write_bytes(b"")
+    elif unsafe_kind == "oversized":
+        secret.write_bytes(b"x" * 4097)
+    elif unsafe_kind == "group_readable":
+        secret.chmod(0o640)
+    elif unsafe_kind == "hardlink":
+        os.link(secret, tmp_path / "secret-hardlink")
+    else:
+        secret.unlink()
+        target = tmp_path / "secret-target"
+        target.write_text("test-hclx-rollback-key-never-log\n", encoding="utf-8")
+        target.chmod(0o600)
+        secret.symlink_to(target)
+
+    completed = subprocess.run(
+        _command(previous_env, current_env),
+        cwd=_repository_root(),
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 2
+    assert "not a secure regular file" in completed.stderr
+    assert str(secret) not in completed.stderr
+    assert "test-hclx-rollback-key-never-log" not in completed.stderr
+
+
+def test_rollback_drill_rejects_hclx_secret_owned_by_another_uid(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    previous_env, current_env, _, _ = _release_pair(tmp_path)
+    _configure_hclx_pair(
+        tmp_path,
+        previous_env,
+        current_env,
+        query_plan_enabled=False,
+    )
+    monkeypatch.setattr(rollback_drill, "_RELEASE_BACKEND_UID", os.geteuid() + 1)
+
+    with pytest.raises(rollback_drill.RollbackDrillError, match="secure regular file"):
+        rollback_drill._load_target(previous_env)
 
 
 @pytest.mark.parametrize("effective_uid", [0, 10001])
@@ -513,9 +690,9 @@ def test_audit_chain_rejects_unknown_audit_event_field(
         (1, "stage", "unknown", "stage or outcome"),
         (1, "reason_code", "prompt_leaked", "reason code"),
         (1, "duration_ms", -1, "duration"),
-        (11, "product_family_count", 2, "product family count"),
-        (11, "result_count", 255, "result count exceeds"),
-        (11, "route_disposition", "clarify", "non-executable route"),
+        (19, "product_family_count", 2, "product family count"),
+        (19, "result_count", 255, "result count exceeds"),
+        (19, "route_disposition", "clarify", "non-executable route"),
     ],
 )
 def test_audit_chain_rejects_invalid_audit_event_v12_semantics(
@@ -571,7 +748,7 @@ def test_audit_chain_requires_exact_deterministic_stage_outcome_reason_path(
     events = _valid_probe_events(target)
     events[event_index][field] = value
 
-    with pytest.raises(rollback_drill.RollbackDrillError, match="exactly deterministic"):
+    with pytest.raises(rollback_drill.RollbackDrillError, match="frozen provider profile"):
         rollback_drill.DockerClient._verify_audit_chain(target, _audit_payload(events))
 
 
@@ -596,13 +773,14 @@ def test_audit_chain_requires_complete_answer_semantics(
     previous_env, _, _, _ = _release_pair(tmp_path)
     target = _load_test_target(monkeypatch, previous_env)
     events = _valid_probe_events(target)
-    events[11][field] = value
+    answer = next(event for event in events if event["stage"] == "answer")
+    answer[field] = value
     if field == "product_families":
-        events[11]["product_family_count"] = 1
+        answer["product_family_count"] = 1
     if field == "result_count":
-        events[11]["product_id_sha256s"] = []
+        answer["product_id_sha256s"] = []
     if field == "evidence_count":
-        events[11]["evidence_id_sha256s"] = []
+        answer["evidence_id_sha256s"] = []
 
     with pytest.raises(rollback_drill.RollbackDrillError, match=message):
         rollback_drill.DockerClient._verify_audit_chain(target, _audit_payload(events))
@@ -760,8 +938,8 @@ def test_fake_docker_drill_activates_n_minus_one_n_then_n_minus_one(
         current["release_id"],
         previous["release_id"],
     ]
-    assert all(item["event_count"] == 15 for item in result["audit_observations"])
-    assert all(item["terminal_sequence"] == 15 for item in result["audit_observations"])
+    assert all(item["event_count"] == 25 for item in result["audit_observations"])
+    assert all(item["terminal_sequence"] == 25 for item in result["audit_observations"])
     audit_root = Path(
         next(
             line.split("=", 1)[1]
@@ -773,8 +951,8 @@ def test_fake_docker_drill_activates_n_minus_one_n_then_n_minus_one(
         AuditEvent.model_validate_json(line)
         for line in (audit_root / "events.jsonl").read_text(encoding="utf-8").splitlines()
     ]
-    assert len(audit_events) == 45
-    assert [event.event_sequence for event in audit_events] == [*range(1, 16)] * 3
+    assert len(audit_events) == 75
+    assert [event.event_sequence for event in audit_events] == [*range(1, 26)] * 3
     calls = capture.read_text(encoding="utf-8").splitlines()
     activations = [line for line in calls if " up --detach --wait " in f" {line} "]
     assert len(activations) == 3
@@ -789,6 +967,161 @@ def test_fake_docker_drill_activates_n_minus_one_n_then_n_minus_one(
     assert calls[-1] == "network inspect finance-agent-rollback-drill-test01_default"
     assert previous["release_id"] in result["activation_sequence"]
     assert current["release_id"] in result["activation_sequence"]
+
+
+def test_hclx_execute_requires_explicit_billable_call_authorization(tmp_path: Path) -> None:
+    previous_env, current_env, _, _ = _release_pair(tmp_path)
+    _configure_hclx_pair(
+        tmp_path,
+        previous_env,
+        current_env,
+        query_plan_enabled=False,
+    )
+
+    completed = subprocess.run(
+        _command(previous_env, current_env, "--execute"),
+        cwd=_repository_root(),
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 2
+    assert "billable-call authorization" in completed.stderr
+    assert "test-hclx-rollback-key-never-log" not in completed.stderr
+
+
+@pytest.mark.parametrize(
+    ("query_plan_enabled", "expected_event_count"),
+    [(False, 27), (True, 28)],
+)
+def test_fake_docker_hclx_drill_verifies_frozen_provider_audit_path(
+    tmp_path: Path,
+    query_plan_enabled: bool,
+    expected_event_count: int,
+) -> None:
+    previous_env, current_env, previous, current = _release_pair(tmp_path)
+    secret = _configure_hclx_pair(
+        tmp_path,
+        previous_env,
+        current_env,
+        query_plan_enabled=query_plan_enabled,
+    )
+    capture = tmp_path / "docker-calls.txt"
+    state = tmp_path / "docker-state.txt"
+    fake_bin = _repository_root() / "fastapi_backend" / "tests" / "fixtures" / "rollback_drill_bin"
+    trust_bin = (
+        _repository_root() / "fastapi_backend" / "tests" / "fixtures" / "release_launcher_bin"
+    )
+    environment = os.environ.copy()
+    environment.update(
+        {
+            "PATH": f"{fake_bin}:{trust_bin}:{environment['PATH']}",
+            "ROLLBACK_DRILL_CAPTURE_FILE": str(capture),
+            "ROLLBACK_DRILL_STATE_FILE": str(state),
+        }
+    )
+    harness = tmp_path / "rollback-hclx-harness"
+    scripts = harness / "fastapi_backend" / "scripts"
+    scripts.mkdir(parents=True)
+    _copy_test_rollback_script(scripts / "rollback_drill.py")
+    (scripts / "release_trust.py").write_text("raise SystemExit(0)\n", encoding="utf-8")
+    command = _command(
+        previous_env,
+        current_env,
+        "--execute",
+        "--allow-billable-hclx",
+    )
+    command[1] = str(scripts / "rollback_drill.py")
+
+    completed = subprocess.run(
+        command,
+        cwd=harness,
+        env=environment,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    result = json.loads(completed.stdout)
+    assert result["status"] == "verified"
+    assert result["audit_chain_verified"] is True
+    assert [item["release_id"] for item in result["audit_observations"]] == [
+        previous["release_id"],
+        current["release_id"],
+        previous["release_id"],
+    ]
+    assert all(item["event_count"] == expected_event_count for item in result["audit_observations"])
+    assert all(
+        item["terminal_sequence"] == expected_event_count for item in result["audit_observations"]
+    )
+    assert str(secret) not in completed.stdout
+    assert "test-hclx-rollback-key-never-log" not in completed.stdout
+    assert "test-hclx-rollback-key-never-log" not in completed.stderr
+
+
+@pytest.mark.parametrize(
+    ("fault_variable", "expected_message"),
+    [
+        ("ROLLBACK_DRILL_FAKE_HCLX_FALLBACK", "representative /answer probe failed"),
+        (
+            "ROLLBACK_DRILL_MUTATE_HCLX_SECRET",
+            "secret changed during rollback verification",
+        ),
+    ],
+)
+def test_fake_docker_hclx_drill_rejects_fallback_or_secret_mutation(
+    tmp_path: Path,
+    fault_variable: str,
+    expected_message: str,
+) -> None:
+    previous_env, current_env, _, _ = _release_pair(tmp_path)
+    secret = _configure_hclx_pair(
+        tmp_path,
+        previous_env,
+        current_env,
+        query_plan_enabled=False,
+    )
+    capture = tmp_path / "docker-calls.txt"
+    state = tmp_path / "docker-state.txt"
+    fake_bin = _repository_root() / "fastapi_backend" / "tests" / "fixtures" / "rollback_drill_bin"
+    environment = os.environ.copy()
+    environment.update(
+        {
+            "PATH": f"{fake_bin}:{environment['PATH']}",
+            "ROLLBACK_DRILL_CAPTURE_FILE": str(capture),
+            "ROLLBACK_DRILL_STATE_FILE": str(state),
+            fault_variable: "1",
+        }
+    )
+    harness = tmp_path / "rollback-hclx-failure-harness"
+    scripts = harness / "fastapi_backend" / "scripts"
+    scripts.mkdir(parents=True)
+    _copy_test_rollback_script(scripts / "rollback_drill.py")
+    (scripts / "release_trust.py").write_text("raise SystemExit(0)\n", encoding="utf-8")
+    command = _command(
+        previous_env,
+        current_env,
+        "--execute",
+        "--allow-billable-hclx",
+    )
+    command[1] = str(scripts / "rollback_drill.py")
+
+    completed = subprocess.run(
+        command,
+        cwd=harness,
+        env=environment,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 2
+    assert expected_message in completed.stderr
+    assert str(secret) not in completed.stderr
+    assert "test-hclx-rollback-key-never-log" not in completed.stderr
+    assert any(line.endswith(" down") for line in capture.read_text(encoding="utf-8").splitlines())
 
 
 def test_fake_docker_drill_fails_closed_when_cleanup_is_incomplete(tmp_path: Path) -> None:

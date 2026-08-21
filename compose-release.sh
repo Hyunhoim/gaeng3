@@ -101,6 +101,10 @@ required = {
     "FINANCE_DEPLOYMENT_BINDING_SIGSTORE_BUNDLE_HOST_FILE",
     "FINANCE_AUDIT_HOST_DIR",
     "WEB_CONCURRENCY",
+    "FINANCE_BACKEND_FUND_EXECUTION_POLICY",
+    "FINANCE_BACKEND_ANSWER_PROVIDER",
+    "FINANCE_BACKEND_HCX_QUERY_PLAN_ENABLED",
+    "HCX_TIMEOUT_SECONDS",
 }
 missing = sorted(name for name in required if not environment.get(name))
 if missing:
@@ -153,8 +157,8 @@ if not 0 < audit_shutdown_timeout <= 60:
 if environment.get("FINANCE_AUDIT_FSYNC_EACH_EVENT", "true").lower() != "true":
     raise SystemExit("release audit fsync must remain enabled")
 
-answer_provider = environment.get("FINANCE_BACKEND_ANSWER_PROVIDER", "deterministic")
-hcx_query_plan = environment.get("FINANCE_BACKEND_HCX_QUERY_PLAN_ENABLED", "false").lower()
+answer_provider = environment["FINANCE_BACKEND_ANSWER_PROVIDER"]
+hcx_query_plan = environment["FINANCE_BACKEND_HCX_QUERY_PLAN_ENABLED"].lower()
 if hcx_query_plan not in {"true", "false"}:
     raise SystemExit("FINANCE_BACKEND_HCX_QUERY_PLAN_ENABLED must be true or false")
 uses_hcx = answer_provider == "hyperclova" or hcx_query_plan == "true"
@@ -181,6 +185,7 @@ if uses_hcx:
         or secret_stat.st_uid != 10001
         or secret_stat.st_nlink != 1
         or secret_stat.st_mode & 0o077
+        or not 0 < secret_stat.st_size <= 4096
     ):
         raise SystemExit("HyperCLOVA release secret must be an absolute regular file")
 elif any(

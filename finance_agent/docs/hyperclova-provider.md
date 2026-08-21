@@ -1,6 +1,6 @@
 # HyperCLOVA X provider 계약
 
-마지막 갱신: 2026-08-14
+마지막 갱신: 2026-08-21
 
 이 문서는 HyperCLOVA X provider, 공식 HTTP transport와 FastAPI 연결 경계를
 설명한다. 2026-08-11 NAVER Cloud 공식 문서 기준 endpoint·Bearer 인증·Structured
@@ -180,8 +180,9 @@ HTTP transport는 `result.message.content`, `finishReason`, `result.usage`를 �
 오류 메시지는 prompt, 질문, credential, 서비스 오류 본문을 포함하지 않는다.
 선택적 call record에는 operation, model, outcome, status, latency, request ID,
 token usage만 기록하고 prompt와 응답 content는 기록하지 않는다. 이 기록의
-`success`는 transport와 content 계약 통과를 뜻하며, 이후 도메인 검증 결과와는
-별도로 해석한다.
+`success`는 transport뿐 아니라 operation별 JSON schema·Pydantic Structured Output
+검사까지 통과했음을 뜻한다. 잘못된 JSON·필드·enum은 `response_error`로 집계하며,
+이후 상품 evidence와 최종 문장 검증 결과는 별도의 Verifier 사건으로 기록한다.
 
 planning provider의 timeout은 안전한 서버 계획으로 조용히 바꾸지 않고 상위 request
 deadline으로 그대로 전파한다. 즉, 시간 예산을 넘긴 호출을 성공처럼 숨기지 않는다.
@@ -263,22 +264,25 @@ transport·응답 오류, dataset 장애, 알 수 없는 예외와 answer fallba
 QueryPlan provider는 별도 flag로 분리했다. 사용자 인증과 실제 네트워크 호출 검증은
 여전히 이 계약의 바깥이다.
 
-## 10. 실제 answer-only 확인 이후 남은 작업
+## 10. 최종 evaluation 동결과 남은 외부 검증
 
-1. 현재 출력 예산 변경을 clean commit·Manifest·OCI digest로 다시 고정
-2. 실제 route를 포함한 Docker/NCP HTTP E2E 검증
-3. SEARCH·DETAIL 외의 허용 intent와 네 상품군 answer-only 독립 평가
-4. token·latency·오류·fallback·예상 비용 측정
-5. 의미상 같은 QueryPlan 표현 차이와 strict equality 실패 유형 분석
-6. 필요할 때만 전체 request deadline 안의 제한적 retry 설계
-7. QueryPlan flag 활성화 여부를 external blind 결과로 결정
-8. 로컬 Qwen 결과와 분리된 HyperCLOVA X 평가 baseline 기록
-9. 공모펀드는 주최 측 데이터 정정 공지 전까지 release에서 잠금 유지
-10. 제출 후보에서 로컬 LLM provider·설정·스크립트·의존성을 제거하고
-    clean checkout에서 재검증
+최종 evaluation은 **HCLX grounded answer만 ON**으로 확정한다. HCLX QueryPlan과
+grounded planning, Schema/Product Dense는 OFF이고 공모펀드는 locked다. 이 결정은
+구현 누락이 아니라 external blind 보정 없이 모델 계획·Dense가 검색 결과를 바꾸지
+못하게 하는 평가 안전 경계다.
 
-현재 정확한 상태는 “공식 HTTP transport·FastAPI answer-only 배선과 실제 DETAIL·
-SEARCH 응답 호환성 확인, QueryPlan·grounded planning과 clean NCP release 미완료”다.
+남은 필수 작업은 다음 네 가지다.
+
+1. 현재 변경을 clean commit으로 만들고 보호된 main에서 Manifest·OCI digest·Cosign
+   서명을 발급한다.
+2. 그 exact image를 NCP에 기동해 공인 IP의 `/health`와 공식 `GET /answer`를 검증한다.
+3. 실제 HCLX 정상·timeout·429·5xx가 answer-only Audit와 deterministic fallback 계약을
+   지키는지 최소 호출로 확인한다.
+4. 서명된 새 generation Binding을 사용해 N-1 → N → N-1 rollback과 순차 요청
+   p50·p95·p99·payload·memory를 측정한다.
+
+현재 정확한 상태는 “공식 HTTP transport·FastAPI answer-only 배선, 실제 DETAIL·SEARCH
+호환성과 로컬 장애 계약 확인 완료; clean signed NCP release 검증 대기”다.
 
 공식 근거:
 

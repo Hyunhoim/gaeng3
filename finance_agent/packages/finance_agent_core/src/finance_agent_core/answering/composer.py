@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import time
 
+from finance_agent_core.agent.providers.hyperclova import hyperclova_failure_reason
 from finance_agent_core.answering.context import build_grounded_answer_context
 from finance_agent_core.answering.models import (
     AnswerComposition,
@@ -129,6 +130,7 @@ def compose_grounded_answer(
             generation_latency_ms=latency_ms,
             draft=None,
             verification=_failed_verification(f"{type(error).__name__}: {error}"),
+            provider_failure_reason=hyperclova_failure_reason(error),
         )
 
     latency_ms = round((time.perf_counter() - started) * 1000, 3)

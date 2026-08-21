@@ -3,8 +3,9 @@ from __future__ import annotations
 import asyncio
 import contextvars
 import hashlib
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from concurrent.futures import Future, ThreadPoolExecutor
+from contextlib import contextmanager
 from dataclasses import dataclass
 from enum import StrEnum
 from threading import Event, Lock
@@ -112,6 +113,141 @@ _PROCESS_EXECUTOR = ThreadPoolExecutor(
     thread_name_prefix="finance-answer",
 )
 _PROCESS_ADMISSION = _ProcessAdmission()
+
+
+class _PendingAuditTerminals:
+    """Track terminal callbacks that must enqueue before Audit sink shutdown."""
+
+    def __init__(self) -> None:
+        self._lock = Lock()
+        self._idle = Event()
+        self._idle.set()
+        self._active = 0
+
+    def acquire(self) -> None:
+        with self._lock:
+            if self._active == 0:
+                self._idle.clear()
+            self._active += 1
+
+    def release(self) -> None:
+        with self._lock:
+            if self._active <= 0:
+                raise RuntimeError("pending Audit terminal counter underflow")
+            self._active -= 1
+            if self._active == 0:
+                self._idle.set()
+
+    def wait_until_idle(self, timeout_seconds: float) -> bool:
+        if timeout_seconds < 0:
+            raise ValueError("timeout_seconds cannot be negative")
+        if not self._idle.wait(timeout_seconds):
+            return False
+        with self._lock:
+            return self._active == 0
+
+
+_PENDING_AUDIT_TERMINALS = _PendingAuditTerminals()
+
+
+class RequestAuditWorkerBarrier:
+    """Defer one transport terminal until its accepted workers have settled.
+
+    The ASGI caller can disappear before synchronous Agent work notices its
+    cooperative deadline.  Every worker still owns the copied request Audit
+    context, so emitting the transport terminal immediately would allow later
+    Agent events to appear after that terminal.  A middleware-owned instance is
+    copied by reference into the worker context and keeps the terminal callback
+    pending until all workers observed by that transport attempt are done.
+    """
+
+    def __init__(self) -> None:
+        self._lock = Lock()
+        self._pending: set[Future[object]] = set()
+        self._terminal_callback: Callable[[], None] | None = None
+        self._terminal_dispatched = False
+        self._drain_registered = False
+
+    def track(self, future: Future[object]) -> None:
+        """Track a worker or shared single-flight future exactly once."""
+
+        with self._lock:
+            if future in self._pending:
+                return
+            if self._terminal_dispatched or self._terminal_callback is not None:
+                raise RuntimeError("request Audit terminal was already requested")
+            if not self._drain_registered:
+                _PENDING_AUDIT_TERMINALS.acquire()
+                self._drain_registered = True
+            self._pending.add(future)
+        # add_done_callback invokes immediately when completion won the race.
+        # Register outside the lock so that immediate invocation cannot deadlock.
+        future.add_done_callback(self._worker_settled)
+
+    def defer_terminal(self, callback: Callable[[], None]) -> None:
+        """Run the terminal callback now or after every tracked worker settles."""
+
+        dispatch = False
+        with self._lock:
+            if self._terminal_dispatched or self._terminal_callback is not None:
+                return
+            if self._pending:
+                self._terminal_callback = callback
+            else:
+                self._terminal_dispatched = True
+                dispatch = True
+        if dispatch:
+            self._dispatch_terminal(callback)
+
+    def _worker_settled(self, future: Future[object]) -> None:
+        callback: Callable[[], None] | None = None
+        with self._lock:
+            self._pending.discard(future)
+            if not self._pending and self._terminal_callback is not None:
+                callback = self._terminal_callback
+                self._terminal_callback = None
+                self._terminal_dispatched = True
+        if callback is not None:
+            self._dispatch_terminal(callback)
+
+    def _dispatch_terminal(self, callback: Callable[[], None]) -> None:
+        try:
+            callback()
+        finally:
+            release_drain = False
+            with self._lock:
+                if self._drain_registered:
+                    self._drain_registered = False
+                    release_drain = True
+            if release_drain:
+                _PENDING_AUDIT_TERMINALS.release()
+
+
+_CURRENT_AUDIT_WORKER_BARRIER: contextvars.ContextVar[RequestAuditWorkerBarrier | None] = (
+    contextvars.ContextVar(
+        "finance_agent_request_audit_worker_barrier",
+        default=None,
+    )
+)
+
+
+@contextmanager
+def bind_request_audit_worker_barrier(
+    barrier: RequestAuditWorkerBarrier,
+) -> Iterator[RequestAuditWorkerBarrier]:
+    """Bind the middleware barrier across async routing and copied worker context."""
+
+    token = _CURRENT_AUDIT_WORKER_BARRIER.set(barrier)
+    try:
+        yield barrier
+    finally:
+        _CURRENT_AUDIT_WORKER_BARRIER.reset(token)
+
+
+def _track_request_audit_worker(future: Future[object]) -> None:
+    barrier = _CURRENT_AUDIT_WORKER_BARRIER.get()
+    if barrier is not None:
+        barrier.track(future)
 
 
 @dataclass(slots=True)
@@ -267,6 +403,7 @@ class IdempotentRequestCoordinator:
             max_inflight=max_inflight,
             cache_result=cache_result,  # type: ignore[arg-type]
         )
+        _track_request_audit_worker(entry.future)
         if entry.future.done():
             return IdempotentExecutionResult(
                 value=entry.future.result(),  # type: ignore[arg-type]
@@ -301,9 +438,12 @@ def request_execution_stats() -> RequestExecutionStats:
 
 
 def wait_for_request_workers(*, timeout_seconds: float) -> bool:
-    """Bound shutdown until timed-out synchronous workers finish cleanup."""
+    """Drain workers and their deferred Audit terminals before sink shutdown."""
 
-    return _PROCESS_ADMISSION.wait_until_idle(timeout_seconds)
+    deadline = monotonic() + timeout_seconds
+    if not _PROCESS_ADMISSION.wait_until_idle(timeout_seconds):
+        return False
+    return _PENDING_AUDIT_TERMINALS.wait_until_idle(max(0.0, deadline - monotonic()))
 
 
 def _run_with_deadline[ResultT](
@@ -354,6 +494,7 @@ async def execute_bounded_request[ResultT](
         _PROCESS_ADMISSION.release()
         raise
     worker_future.add_done_callback(_release_admission)
+    _track_request_audit_worker(worker_future)
 
     async_future = asyncio.wrap_future(worker_future)
     async_future.add_done_callback(_consume_future_exception)

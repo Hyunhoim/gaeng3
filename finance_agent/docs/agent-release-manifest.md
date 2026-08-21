@@ -134,7 +134,8 @@ python -m finance_agent_core.release_cli manifest \
   --git-root "$REPO_ROOT" \
   --backend-root "$REPO_ROOT/fastapi_backend/app" \
   --platform linux/amd64 \
-  --answer-provider deterministic \
+  --answer-provider hyperclova \
+  --hcx-model HCX-007 \
   --relation-retrieval-artifact "$RELATION_RETRIEVAL_ARTIFACT_FILE" \
   --relation-retrieval-artifact-sha256 "$RELATION_RETRIEVAL_ARTIFACT_SHA256" \
   --output "$REPO_ROOT/fastapi_backend/release/agent-release-manifest.json"
@@ -153,9 +154,11 @@ python -m finance_agent_core.release_cli manifest \
 `contract_sha256`을 별도로 교차 검증한다. 이 검증까지 통과해야 registry 변경 단계로
 진행하며, manifest 생성기 하나가 현재 승인 dataset 일치까지 보장하는 것은 아니다.
 
-HCLX release라면 승인된 설정에 맞춰 `--answer-provider hyperclova`,
-`--hcx-model HCX-007`, 필요할 때만 `--hcx-queryplan-enabled`를 사용한다. 이 생성 명령은
-API key를 읽거나 HCLX를 호출하지 않는다.
+위 명령이 최종 evaluation 정본이다. `--hcx-queryplan-enabled`는 넣지 않아 HCLX
+QueryPlan을 OFF로 고정하고, Schema/Product Dense는 비활성, 공모펀드는 locked로 남긴다.
+generic CLI는 과거 signed release rollback을 위해 다른 profile도 표현할 수 있지만,
+공식 final workflow는 `hyperclova + QueryPlan false + HCX-007` 외 조합을 거부한다.
+Manifest 생성은 API key를 읽거나 HCLX를 호출하지 않는다.
 
 ### 4.2 digest-pinned base와 release image 생성
 
@@ -281,8 +284,8 @@ launcher 단계에서 거부된다.
 - global option을 앞세운 `--build`, profile 오인식, 부분 service 실행과
   `--force-recreate=false` 우회 차단
 - rollback data volume·image를 지우는 `down --volumes`, `-v` 결합형, `--rmi` 차단
-- Agent Core 전체 회귀 `1,443 passed, 2 skipped`, FastAPI Backend 전체 회귀
-  `358 passed, 2 warnings`, P0-10 집중 회귀 `522/522`
+- Agent Core 전체 회귀 `1,481 passed, 1 skipped`, FastAPI Backend 전체 회귀
+  `430 passed, 1 skipped`, P0-10 집중 회귀 `522/522`
 - P0-7 관계·문서 계획·검색·주장 검증 표적 회귀 `22/22`, 관련 회귀 `82/82`와 승인
   데이터 관계 검색 스모크 `4/4` 통과
 - P0-7의 내부 relation 후보를 공개 `AgentReleaseManifest` 1.2·Router·Backend에 연결하고,
@@ -315,6 +318,9 @@ launcher 단계에서 거부된다.
 두 개의 연속된 공식 release artifact가 준비되면
 [`fastapi_backend/ROLLBACK_DRILL.md`](../../fastapi_backend/ROLLBACK_DRILL.md)의 격리된
 N-1 → N → N-1 drill로 image·Binding·release별 DB volume 보존과 실제 재기동을 검증한다.
+rollback 지원 기준선은 relation artifact가 `activated`인 최초 서명 Release다. 현재 release
+Compose가 요구하지 않는 과거 `disabled_not_activated` Manifest까지 generic N-1로
+지원한다고 주장하지 않는다.
 현재 localhost 합성 image·Binding·DB volume으로 같은 production harness의 실제 Docker
 N-1 → N → N-1 재기동, health, 대표 `/answer`까지 통과했다. 다만 합성 artifact에는
 GitHub OIDC·cosign 서명이 없어 trust verifier만 격리된 test stub으로 대체했으므로, 이를

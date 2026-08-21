@@ -3,7 +3,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from finance_agent_core.agent.knowledge_router import DeterministicKnowledgeRouter
 from finance_agent_core.release import (
     PublicDocumentRetrievalRelease,
     PublicKnowledgeRetrievalRelease,
@@ -142,10 +141,10 @@ def test_development_rejects_malformed_relation_trust_file(tmp_path: Path) -> No
         _relation_artifact_trust_sha256(settings)
 
 
-def test_development_default_wires_router_but_keeps_relation_execution_disabled() -> None:
+def test_development_default_keeps_relation_router_and_execution_disabled() -> None:
     agent = build_agent(Settings())
 
-    assert type(agent.knowledge_router) is DeterministicKnowledgeRouter
+    assert agent.knowledge_router is None
     assert agent.knowledge_agent is None
 
 

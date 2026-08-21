@@ -19,20 +19,6 @@ on:
         required: true
         default: "1"
         type: string
-      answer_provider:
-        description: Final answer provider pinned into AgentReleaseManifest
-        required: true
-        default: deterministic
-        type: choice
-        options:
-          - deterministic
-          - hyperclova
-      hcx_queryplan_enabled:
-        description: Pin the HCLX QueryPlan operation into AgentReleaseManifest
-        required: true
-        default: false
-        type: boolean
-
 permissions:
   contents: read
 
@@ -58,6 +44,8 @@ jobs:
       OIDC_ISSUER: https://token.actions.githubusercontent.com
       TRUSTED_NCP_REGISTRY: ${{ vars.NCP_REGISTRY_HOST }}
       TRUSTED_NCP_REPOSITORY: ${{ vars.NCP_IMAGE_REPOSITORY }}
+      FINAL_ANSWER_PROVIDER: hyperclova
+      FINAL_HCX_QUERYPLAN_ENABLED: "false"
 
     steps:
       - name: Check out the exact source commit
@@ -73,8 +61,8 @@ jobs:
           INPUT_ENVIRONMENT: ${{ inputs.environment }}
           INPUT_ACTIVATION_GENERATION: ${{ inputs.activation_generation }}
           TRUSTED_PREVIOUS_BINDING_SHA256: ${{ secrets.PREVIOUS_DEPLOYMENT_BINDING_SHA256 }}
-          INPUT_ANSWER_PROVIDER: ${{ inputs.answer_provider }}
-          INPUT_HCX_QUERYPLAN_ENABLED: ${{ inputs.hcx_queryplan_enabled }}
+          INPUT_ANSWER_PROVIDER: ${{ env.FINAL_ANSWER_PROVIDER }}
+          INPUT_HCX_QUERYPLAN_ENABLED: ${{ env.FINAL_HCX_QUERYPLAN_ENABLED }}
           TRUSTED_SOURCE_COMMIT: ${{ github.sha }}
           TRUSTED_GITHUB_REF: ${{ github.ref }}
           TRUSTED_GITHUB_REF_PROTECTED: ${{ github.ref_protected }}
@@ -144,6 +132,9 @@ jobs:
             cd finance_agent
             "$QA_VENV/bin/python" scripts/sync-ontology.py --check
             "$QA_VENV/bin/python" scripts/check-docs.py
+            PYTHONPATH="$GITHUB_WORKSPACE/finance_agent/packages/finance_agent_core/src" \
+              "$QA_VENV/bin/python" scripts/check-submission-boundary.py \
+              --profile development
           )
           test -z "$(git status --porcelain=v1 --untracked-files=all)"
 
@@ -284,6 +275,32 @@ jobs:
             --backend-base-image "$BACKEND_BASE_IMAGE" \
             --python-base-image "$PYTHON_BASE_IMAGE"
 
+      - name: Verify the exact image runtime boundary
+        env:
+          IMAGE_REFERENCE: ${{ steps.release_image.outputs.image_reference }}
+          RELEASE_ID: ${{ steps.release_inputs.outputs.release_id }}
+          SOURCE_COMMIT: ${{ steps.release_inputs.outputs.source_commit }}
+        run: |
+          set -euo pipefail
+          manifest_sha256="$(sha256sum "$RELEASE_OUTPUT_DIR/agent-release-manifest.json" | cut -d ' ' -f 1)"
+          docker run --rm \
+            --network none \
+            --read-only \
+            --tmpfs /tmp:rw,nosuid,nodev,noexec,size=64m \
+            --cap-drop ALL \
+            --security-opt no-new-privileges:true \
+            --env FINANCE_RUNTIME_IMAGE_REFERENCE="$IMAGE_REFERENCE" \
+            --env FINANCE_RELEASE_ID="$RELEASE_ID" \
+            --env FINANCE_SOURCE_COMMIT="$SOURCE_COMMIT" \
+            --env FINANCE_RELEASE_MANIFEST_SHA256="$manifest_sha256" \
+            --entrypoint python \
+            -i "$IMAGE_REFERENCE" - \
+            < fastapi_backend/scripts/image_runtime_boundary.py \
+            > "$RELEASE_OUTPUT_DIR/image-runtime-boundary.json"
+          python3 -c \
+            'import json,sys; p=json.load(open(sys.argv[1], encoding="utf-8")); assert p.get("passed") is True' \
+            "$RELEASE_OUTPUT_DIR/image-runtime-boundary.json"
+
       - name: Restore the independently trusted previous Binding
         if: steps.release_inputs.outputs.rollback_mode == 'pinned_previous_release'
         env:
@@ -399,6 +416,7 @@ jobs:
           sha256sum \
             "$RELEASE_OUTPUT_DIR/agent-release-manifest.json" \
             "$RELEASE_OUTPUT_DIR/deployment-binding.json" \
+            "$RELEASE_OUTPUT_DIR/image-runtime-boundary.json" \
             "$RELEASE_OUTPUT_DIR/release-metadata.json" \
             > "$RELEASE_OUTPUT_DIR/release-artifacts.sha256"
 
@@ -413,6 +431,7 @@ jobs:
             fastapi_backend/release/release-artifacts.sha256
             fastapi_backend/release/release-image-inspect.json
             fastapi_backend/release/release-image-manifest.json
+            fastapi_backend/release/image-runtime-boundary.json
             fastapi_backend/release/base-image-cosign-verification.json
             fastapi_backend/release/release-image-cosign-verification.json
             fastapi_backend/release/agent-release-manifest.sigstore.json

@@ -40,7 +40,11 @@ from finance_agent_core.agent.planning_policy import (
     PlanningPath,
     PlanningTrace,
 )
-from finance_agent_core.agent.providers import HyperClovaXTimeoutError, QueryPlanProvider
+from finance_agent_core.agent.providers import (
+    HyperClovaXTimeoutError,
+    QueryPlanProvider,
+    hyperclova_failure_reason,
+)
 from finance_agent_core.agent.router import IntentRouter
 from finance_agent_core.agent.safety import SafetyDisposition
 from finance_agent_core.agent.semantic_gate import SemanticCoverageDecision
@@ -427,9 +431,9 @@ class RoutedFinanceAgent:
                     raise ValueError(
                         "the signed public knowledge release keeps claim generation disabled"
                     )
-            elif knowledge_agent is not None:
+            elif knowledge_router is not None or knowledge_agent is not None:
                 raise ValueError(
-                    "a disabled signed relation release cannot attach a knowledge Agent"
+                    "a disabled signed relation release cannot attach a knowledge router or Agent"
                 )
         self.release_guard = release_guard
         self.require_agent_release = require_agent_release
@@ -479,15 +483,25 @@ class RoutedFinanceAgent:
                 and agent.claim_provider is None
             )
         else:
-            matches = (
-                self.knowledge_router is None
-                or type(self.knowledge_router) is DeterministicKnowledgeRouter
-            ) and agent is None
+            matches = self.knowledge_router is None and agent is None
         if not matches:
             raise AgentReleaseError(
                 AgentReleaseCode.RUNTIME_MISMATCH,
                 "knowledge runtime differs from the signed public release",
             )
+
+    def _assert_public_knowledge_boundary_current(self) -> None:
+        """Apply the same immutable boundary to every public relation outcome."""
+
+        if self.release_guard is not None:
+            self.release_guard.assert_request_current()
+        self._assert_signed_knowledge_current()
+        if self.require_approved_databases:
+            require_approved_database_paths(self.database_paths)
+        if self.require_agent_release and self.knowledge_agent is not None:
+            # Production assembly verifies the expensive hashes at startup. This
+            # request check is the cheap inode/path fingerprint used by readiness.
+            self.knowledge_agent.assert_ready_current()
 
     def answer(self, question: str, request_id: str) -> RoutedAgentResult:
         return self._execute_audited(
@@ -531,7 +545,7 @@ class RoutedFinanceAgent:
     ) -> RoutedAgentResult | KnowledgeAgentResult | KnowledgeRouteDecision:
         """Route one public request without bypassing the established atomic boundary."""
 
-        self._assert_signed_knowledge_current()
+        self._assert_public_knowledge_boundary_current()
         if self.knowledge_router is None:
             return self._answer_atomically(question, request_id)
         safety = self.router.safety_envelope.evaluate(question)
@@ -545,6 +559,11 @@ class RoutedFinanceAgent:
         if decision.disposition is KnowledgeRouteDisposition.NOT_APPLICABLE:
             return self._answer_atomically(question, request_id)
         try:
+            # A control decision performs no retrieval, so this is its post-route
+            # release check. Executable found/not-found paths additionally guard
+            # both sides of KnowledgeAgent execution below.
+            if decision.disposition is not KnowledgeRouteDisposition.EXECUTE:
+                self._assert_public_knowledge_boundary_current()
             return self._execute_knowledge_audited(decision, question, request_id)
         except KnowledgeRoutedExecutionError:
             raise
@@ -1198,10 +1217,25 @@ class RoutedFinanceAgent:
         if audit is None or composition.mode == "deterministic":
             return
         provider_completed = composition.draft is not None
+        failure_reason = composition.provider_failure_reason
+        provider_timed_out = not provider_completed and failure_reason == "timed_out"
+        if provider_completed:
+            outcome = AuditOutcome.SUCCEEDED
+            reason_code = "generation_completed"
+        elif provider_timed_out:
+            outcome = AuditOutcome.TIMED_OUT
+            reason_code = "generation_timed_out"
+        else:
+            outcome = AuditOutcome.FAILED
+            reason_code = (
+                "provider_failed"
+                if failure_reason in {None, "provider_failed"}
+                else f"generation_{failure_reason}"
+            )
         audit.emit(
             stage=AuditStage.HCLX,
-            outcome=(AuditOutcome.SUCCEEDED if provider_completed else AuditOutcome.FAILED),
-            reason_code=("generation_completed" if provider_completed else "provider_failed"),
+            outcome=outcome,
+            reason_code=reason_code,
             duration_ms=composition.generation_latency_ms,
             candidate_count=candidate_count,
             result_count=result_count,
@@ -1995,13 +2029,20 @@ class RoutedFinanceAgent:
                         duration_ms=(perf_counter() - provider_started) * 1000,
                         **self._decision_audit_fields(decision),
                     )
-            except Exception:
+            except Exception as error:
                 if audit is not None:
+                    failure_reason = hyperclova_failure_reason(error)
                     audit.emit(
                         stage=(AuditStage.COMPILER if provider_observed else AuditStage.HCLX),
                         outcome=AuditOutcome.FAILED,
                         reason_code=(
-                            "grounded_plan_gate_failed" if provider_observed else "provider_failed"
+                            "grounded_plan_gate_failed"
+                            if provider_observed
+                            else (
+                                "provider_failed"
+                                if failure_reason == "provider_failed"
+                                else f"planning_{failure_reason}"
+                            )
                         ),
                         duration_ms=(perf_counter() - provider_started) * 1000,
                         **self._decision_audit_fields(decision),
@@ -2494,12 +2535,17 @@ class RoutedFinanceAgent:
                     **self._decision_audit_fields(decision),
                 )
             raise
-        except Exception:
+        except Exception as error:
             if audit is not None:
+                failure_reason = hyperclova_failure_reason(error)
                 audit.emit(
                     stage=AuditStage.HCLX,
                     outcome=AuditOutcome.FAILED,
-                    reason_code="provider_failed",
+                    reason_code=(
+                        "provider_failed"
+                        if failure_reason == "provider_failed"
+                        else f"planning_{failure_reason}"
+                    ),
                     duration_ms=(perf_counter() - started) * 1000,
                     plan_sha256=query_plan_authority_sha256(server_plan),
                     **self._decision_audit_fields(decision),

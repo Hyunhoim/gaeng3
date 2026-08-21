@@ -7,6 +7,17 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from finance_agent_core.contracts import QueryPlan
 from finance_agent_core.domain import DatabaseManifest, ProductEvidence
 
+type ProviderFailureReason = Literal[
+    "authentication_failed",
+    "configuration_failed",
+    "provider_failed",
+    "rate_limited",
+    "response_rejected",
+    "service_failed",
+    "timed_out",
+    "transport_failed",
+]
+
 
 class AnswerModel(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
@@ -69,6 +80,7 @@ class AnswerComposition(AnswerModel):
     generation_latency_ms: float = Field(ge=0)
     draft: GroundedAnswerDraft | None
     verification: AnswerVerification
+    provider_failure_reason: ProviderFailureReason | None = None
 
 
 class GroundedAnswerProvider(Protocol):

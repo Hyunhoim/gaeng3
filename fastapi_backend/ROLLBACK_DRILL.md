@@ -1,4 +1,4 @@
-# Stage 3 로컬 rollback drill
+# Stage 3 deterministic·HCLX rollback drill
 
 이 drill은 현재 운영 중인 `hyunholim-finance-agent` Compose project를 사용하지 않는다.
 사용자가 명시한 `finance-agent-rollback-drill-...` 전용 project와 포트에서만 다음 순서를
@@ -18,11 +18,18 @@ generation N-1 기동·health 확인
 
 각 기동에서는 실행 container의 image reference, `/data` volume,
 `DeploymentBinding` mount가 해당 release와 정확히 일치하는지도 검사한다. 대표
-`POST /answer`는 국내채권 SEARCH 한 건이 `status=success`, `intent=search`인지 확인한다.
+공식 `GET /answer?question_id=...&question=...`는 다섯 필드가 모두 문자열인지 확인하고,
+국내채권 SEARCH 한 건이 `status=success`, `intent=search`인지 검사한다. deterministic
+release는 `answer_mode=deterministic`, HCLX release는 `answer_mode=llm_grounded`,
+`fallback_used=false`여야 한다. HCLX 오류가 결정론적 fallback으로 가려져도 drill 성공으로
+인정하지 않는다.
 각 probe 뒤에는 owner-only append-only JSONL에서 같은 invocation의
 Request→Safety→Lexical→Planning→Route→Compiler→Authority→SQL→Oracle→Verifier→
-Renderer→Answer→Serialization(Backend DTO)→Serialization(HTTP 응답)→Request 순서의
-**15개 event·13개 고유 stage**, 연속 sequence, release·manifest·Binding hash,
+Renderer→Answer→Serialization(citation·Backend DTO·Official DTO·HTTP 응답)→Request 순서의
+deterministic **25개 event**를 확인한다. HCLX grounded answer profile은 같은 실행·검증
+경로 뒤에 HCLX generation과 Answer Verifier를 포함한 **27개 event**, HCLX QueryPlan과
+grounded answer를 모두 켠 profile은 Compiler 뒤 QueryPlan HCLX까지 포함한 **28개 event**를
+확인한다. 모든 profile은 연속 sequence, release·manifest·Binding hash,
 승인 dataset·QueryPlan hash를 다시 확인한다. N-1과 N은 하나의 감사 디렉터리를 보존해야
 하며 파일 교체·부분 JSON·중복 key·2 MiB 초과 신규 구간은 모두 차단한다.
 이는 질문 전체의 품질 평가가 아니라 rollback 뒤 실제 Agent 경로가 동작하는지 확인하는
@@ -49,6 +56,8 @@ snapshot이 없다는 뜻이지 image·DB volume 삭제를 뜻하지 않는다.
 - 각 release manifest와 같은 관계 artifact·index·세 상품 DB가 들어 있는 volume 및
   `.env.release`의 `FINANCE_RELATION_RETRIEVAL_ARTIFACT_SHA256`
 - UID `10001` 소유의 owner-only 감사 디렉터리 하나와 `WEB_CONCURRENCY=1`, event별 fsync
+- HCLX release라면 UID `10001` 소유, group/other 권한 없음, hardlink·symlink가 아닌
+  1~4096 byte API Key host 파일. container 경로는 `/run/secrets/clovastudio_api_key`로 고정
 - 감사 JSONL을 읽을 수 있는 root 권한. UID `10001` 계정에 Docker socket과 모든 release
   artifact 읽기 권한을 별도로 부여한 환경이라면 그 계정으로도 실행할 수 있다.
 - 다른 사용자나 기존 project가 사용하지 않는 localhost 포트
@@ -59,9 +68,10 @@ manifest hash, Binding file hash, image digest, generation, environment, platfor
 
 ## 1. Dry-run
 
-Dry-run은 Docker를 호출하지 않는다. 두 env·Binding의 hash와 rollback chain, 서로 다른
-image·volume 이름, 격리 project·port와 provider profile만 검증한다. cosign 서명과 실제
-image·volume·API 동작은 `--execute`에서만 검증한다.
+Dry-run은 Docker나 HCLX를 호출하지 않는다. 두 env·Binding의 hash와 rollback chain,
+서로 다른 image·volume 이름, 격리 project·port, provider profile과 HCLX secret의
+metadata만 검증한다. secret 값이나 그 hash는 읽거나 결과에 기록하지 않는다. cosign 서명과
+실제 image·volume·API 동작은 `--execute`에서만 검증한다.
 
 ```bash
 sudo -- python3 fastapi_backend/scripts/rollback_drill.py \
@@ -97,6 +107,25 @@ volume이 없거나, cosign image/blob 검증이 실패하거나, 기존 drill p
 container/network가 발견되거나, 어느 generation 하나라도 healthy·대표 `/answer`·감사
 연결 계약을 통과하지 못하면 fail-closed로 종료한다.
 
+HCLX release는 세 번의 activation마다 실제 공식 GET probe를 수행하므로 grounded answer만
+켠 profile은 최소 3회, QueryPlan도 켠 profile은 최대 6회의 과금 가능한 HCLX 호출이
+발생한다. 따라서 `--execute`만으로는 HCLX release를 시작하지 않으며, 승인한 경우에만 다음
+플래그를 함께 사용한다.
+
+```bash
+sudo -- python3 fastapi_backend/scripts/rollback_drill.py \
+  --previous-env /absolute/release-n-1/.env.release \
+  --current-env /absolute/release-n/.env.release \
+  --project-name finance-agent-rollback-drill-team01 \
+  --port 19081 \
+  --execute \
+  --allow-billable-hclx
+```
+
+HCLX release라도 startup은 네트워크 호출을 하지 않는다. 실제 GET에서 HCX-007 응답이 로컬
+Answer Verifier를 통과해 `llm_grounded`가 되고, profile별 HCLX Audit event가 정확히 남아야
+성공한다. timeout·인증 실패·429·5xx·schema 불일치·fallback은 모두 drill 실패다.
+
 `--leave-running`은 immutable snapshot(실행 중 교체되지 않게 복사한 배포 파일)과 자동
 정리 계약에 맞지 않아 명시적으로 거부한다. drill에서 검증한 N-1을 계속 실행하는 방식으로
 실제 traffic을 전환하지 않는다. 운영 rollback은 별도 승인된 배포 절차로 다시 기동한다.
@@ -113,10 +142,11 @@ N-1→N→N-1 복귀 가능성을 별도 project에서 확인하기 위해 같�
 - project override용 Compose 환경변수와 release identity shell 변수를 제거한다.
 - `127.0.0.1:<명시한 포트>`로만 bind한다.
 - 전역 prune, image 삭제, volume 삭제, 다른 project 조작을 수행하지 않는다.
-- 현재 15-event·13-stage 감사 chain은 deterministic 상품 SEARCH Fast Path에만 고정되어 있다.
-  따라서 HCLX QueryPlan·grounded answer profile은 정상 release여도 이 drill에서
-  명시적으로 거부하며, 실제 HCLX event 경로를 고정한 후 별도로 확장한다.
+- deterministic 25-event, HCLX answer-only 27-event, HCLX QueryPlan+answer 28-event의
+  정적 감사 경로만 허용한다. QueryPlan-only HCLX profile은 아직 drill 대상이 아니므로 거부한다.
 - deterministic profile은 HCLX model·provider·credential 설정이 있으면 거부한다.
+- HCLX profile은 HCX-007과 고정된 Docker secret 경로만 허용한다. host secret은 값·hash·경로를
+  성공 결과나 오류에 남기지 않고, 시작 전과 각 activation 뒤 metadata fingerprint 불변을 확인한다.
 - runner는 감사 JSONL의 원문 record, 질문, request ID를 stdout/stderr에 출력하지 않는다.
   실패 메시지는 고정된 검증 경계만 알리며, 성공 결과에는 one-way hash와 event 수만 남긴다.
 - 실제 traffic 전환과 NCP rollback은 별도의 배포 승인·load balancer 절차가 필요하다.

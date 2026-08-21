@@ -443,9 +443,11 @@ def test_hcx_client_rejects_non_hcx_schema_before_transport() -> None:
 )
 def test_hcx_query_plan_provider_rejects_invalid_model_output(content: str) -> None:
     transport = FakeHyperClovaXTransport(_response(content))
-    provider = HyperClovaXQueryPlanProvider(_settings(), transport)
+    records: list[HyperClovaXCallRecord] = []
+    provider = HyperClovaXQueryPlanProvider(_settings(), transport, on_call=records.append)
 
     with pytest.raises(HyperClovaXResponseError) as caught:
         provider.generate_query_plan("테스트 질문", "trusted-request-id")
 
     assert content not in str(caught.value)
+    assert [record.outcome for record in records] == ["response_error"]

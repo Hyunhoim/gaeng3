@@ -299,6 +299,14 @@ def test_public_agent_requires_exact_signed_knowledge_runtime(tmp_path: Path) ->
 
 def test_disabled_signed_relation_release_rejects_attached_agent(tmp_path: Path) -> None:
     _, _, resolved, _, _ = _write_release(tmp_path)
+    with pytest.raises(ValueError, match="disabled signed relation release"):
+        RoutedFinanceAgent(
+            {},
+            release_guard=resolved,
+            require_agent_release=True,
+            knowledge_router=DeterministicKnowledgeRouter(),
+        )
+
     internal_agent = KnowledgeAgent(
         release=KnowledgeRetrievalRelease(relation=_relation_artifact()),
         relation_index_path=tmp_path / "relations.sqlite3",

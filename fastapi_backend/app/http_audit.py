@@ -15,6 +15,11 @@ from finance_agent_core.observability import (
 from finance_agent_core.release import ResolvedAgentRelease
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
+from app.request_execution import (
+    RequestAuditWorkerBarrier,
+    bind_request_audit_worker_barrier,
+)
+
 _RECORDER_STATE_KEY = "finance_answer_transport_audit_recorder"
 _TERMINAL_STATE_KEY = "finance_answer_transport_audit_terminal"
 _SERIALIZATION_STARTED_STATE_KEY = "finance_answer_serialization_started"
@@ -147,10 +152,16 @@ class AnswerHttpAuditMiddleware:
             reason_code="received",
             duration_ms=0,
         )
+        worker_barrier = RequestAuditWorkerBarrier()
+        terminal_requested = False
         terminal_emitted = False
         response_status: int | None = None
 
-        def emit_terminal(terminal: HttpAuditTerminal) -> None:
+        def emit_terminal_now(
+            terminal: HttpAuditTerminal,
+            *,
+            requested_at: float,
+        ) -> None:
             nonlocal terminal_emitted
             if terminal_emitted:
                 return
@@ -166,7 +177,17 @@ class AnswerHttpAuditMiddleware:
                 stage=AuditStage.REQUEST,
                 outcome=terminal.outcome,
                 reason_code=terminal.reason_code,
-                duration_ms=(self._clock() - started) * 1000,
+                duration_ms=max(0.0, (requested_at - started) * 1000),
+            )
+
+        def request_terminal(terminal: HttpAuditTerminal) -> None:
+            nonlocal terminal_requested
+            if terminal_requested:
+                return
+            terminal_requested = True
+            requested_at = self._clock()
+            worker_barrier.defer_terminal(
+                lambda: emit_terminal_now(terminal, requested_at=requested_at)
             )
 
         async def audited_send(message: Message) -> None:
@@ -177,7 +198,7 @@ class AnswerHttpAuditMiddleware:
             try:
                 await send(message)
             except BaseException:
-                emit_terminal(
+                request_terminal(
                     HttpAuditTerminal(
                         outcome=AuditOutcome.FAILED,
                         reason_code="response_aborted",
@@ -224,26 +245,27 @@ class AnswerHttpAuditMiddleware:
                             outcome=AuditOutcome.FAILED,
                             reason_code="response_completed",
                         )
-                emit_terminal(terminal)
+                request_terminal(terminal)
 
-        try:
-            await self._app(scope, receive, audited_send)
-        except BaseException:
-            emit_terminal(
-                HttpAuditTerminal(
-                    outcome=AuditOutcome.FAILED,
-                    reason_code="response_aborted",
-                )
-            )
-            raise
-        finally:
-            if not terminal_emitted:
-                emit_terminal(
+        with bind_request_audit_worker_barrier(worker_barrier):
+            try:
+                await self._app(scope, receive, audited_send)
+            except BaseException:
+                request_terminal(
                     HttpAuditTerminal(
                         outcome=AuditOutcome.FAILED,
                         reason_code="response_aborted",
                     )
                 )
+                raise
+            finally:
+                if not terminal_requested:
+                    request_terminal(
+                        HttpAuditTerminal(
+                            outcome=AuditOutcome.FAILED,
+                            reason_code="response_aborted",
+                        )
+                    )
 
 
 __all__ = [

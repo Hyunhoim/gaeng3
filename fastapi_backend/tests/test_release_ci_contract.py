@@ -51,7 +51,7 @@ def _valid_input_arguments(output: Path) -> list[str]:
         "--previous-binding-sha256",
         "",
         "--answer-provider",
-        "deterministic",
+        "hyperclova",
         "--hcx-queryplan-enabled",
         "false",
         "--python-base-image",
@@ -134,7 +134,31 @@ def test_release_ci_accepts_only_normalized_protected_main_inputs(tmp_path: Path
     assert values["image_repository"] == "team.kr.ncr.ntruss.com/finance-agent/backend"
     assert values["release_tag"].endswith(":finance-agent-eval-001")
     assert values["rollback_mode"] == "initial_bootstrap"
-    assert values["model_id"] == "disabled"
+    assert values["answer_provider"] == "hyperclova"
+    assert values["hcx_queryplan_enabled"] == "false"
+    assert values["model_id"] == "HCX-007"
+
+
+@pytest.mark.parametrize(
+    ("answer_provider", "hcx_queryplan_enabled"),
+    [("deterministic", "false"), ("hyperclova", "true")],
+)
+def test_release_ci_rejects_profiles_outside_the_frozen_final_boundary(
+    tmp_path: Path,
+    answer_provider: str,
+    hcx_queryplan_enabled: str,
+) -> None:
+    output = tmp_path / "github-output"
+    output.touch()
+    arguments = _valid_input_arguments(output)
+    arguments[arguments.index("--answer-provider") + 1] = answer_provider
+    arguments[arguments.index("--hcx-queryplan-enabled") + 1] = hcx_queryplan_enabled
+
+    completed = _run(*arguments)
+
+    assert completed.returncode != 0
+    assert "HyperCLOVA answer-only" in completed.stderr
+    assert output.read_text(encoding="utf-8") == ""
 
 
 def test_release_ci_prevents_rebootstrap_and_requires_previous_anchor(
@@ -753,6 +777,12 @@ def test_release_workflow_has_a_commit_pinned_keyless_trust_boundary() -> None:
     dispatch_inputs = event_config["workflow_dispatch"]["inputs"]
     assert "registry" not in dispatch_inputs
     assert "repository" not in dispatch_inputs
+    assert "answer_provider" not in dispatch_inputs
+    assert "hcx_queryplan_enabled" not in dispatch_inputs
+    assert release["env"]["FINAL_ANSWER_PROVIDER"] == "hyperclova"
+    assert release["env"]["FINAL_HCX_QUERYPLAN_ENABLED"] == "false"
+    assert "check-submission-boundary.py" in text
+    assert "--profile development" in text
 
     for step in steps:
         shell = step.get("run", "")
@@ -772,6 +802,18 @@ def test_release_workflow_pushes_then_uses_only_exact_image_digests() -> None:
     assert 'docker pull --platform "$RUNTIME_PLATFORM" "$IMAGE_REFERENCE"' in text
     assert "release_ci.py inspect-image" in text
     assert "release_ci.py inspect-remote-manifest" in text
+    assert "Verify the exact image runtime boundary" in text
+    assert "fastapi_backend/scripts/image_runtime_boundary.py" in text
+    assert "--network none" in text
+    assert "--read-only" in text
+    assert "--cap-drop ALL" in text
+    assert "no-new-privileges:true" in text
+    assert '--env FINANCE_RUNTIME_IMAGE_REFERENCE="$IMAGE_REFERENCE"' in text
+    assert '--env FINANCE_RELEASE_ID="$RELEASE_ID"' in text
+    assert '--env FINANCE_SOURCE_COMMIT="$SOURCE_COMMIT"' in text
+    assert '--env FINANCE_RELEASE_MANIFEST_SHA256="$manifest_sha256"' in text
+    assert 'sha256sum "$RELEASE_OUTPUT_DIR/agent-release-manifest.json"' in text
+    assert "image-runtime-boundary.json" in text
     assert "BACKEND_BASE_IMAGE=${{ steps.base_image.outputs.image_reference }}" in text
     assert "image_reference: ${{ steps.release_image.outputs.image_reference }}" not in text
 

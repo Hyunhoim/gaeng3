@@ -40,11 +40,18 @@ if [ "$1" = "exec" ]; then
     binding=$(sed -n '3p' "$ROLLBACK_DRILL_STATE_FILE")
     audit_root=$(sed -n '4p' "$ROLLBACK_DRILL_STATE_FILE")
     binding_sha256=$(sed -n '5p' "$ROLLBACK_DRILL_STATE_FILE")
+    answer_provider=$(sed -n '6p' "$ROLLBACK_DRILL_STATE_FILE")
+    hcx_query_plan_enabled=$(sed -n '7p' "$ROLLBACK_DRILL_STATE_FILE")
+    hcx_model=$(sed -n '8p' "$ROLLBACK_DRILL_STATE_FILE")
+    hcx_secret_file=$(sed -n '9p' "$ROLLBACK_DRILL_STATE_FILE")
     release_id=$(sed -n 's/.*"release_id":"\([^"]*\)".*/\1/p' "$binding")
     manifest_sha256=$(sed -n 's/.*"release_manifest_sha256":"\([0-9a-f]*\)".*/\1/p' "$binding")
     if [ -z "$audit_root" ] || [ -z "$binding_sha256" ] || \
         [ -z "$release_id" ] || [ -z "$manifest_sha256" ]; then
         exit 11
+    fi
+    if [ "$answer_provider" = hyperclova ] && [ "$hcx_model" != HCX-007 ]; then
+        exit 12
     fi
     release_id_sha256=$(printf '%s' "$release_id" | sha256sum | awk '{print $1}')
     image_reference=$(sed -n '1p' "$ROLLBACK_DRILL_STATE_FILE")
@@ -104,25 +111,67 @@ if [ "$1" = "exec" ]; then
     empty_sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
     probe_request_sha256=12d536ead6ce31b8d5dfdb0d535fca1042c4a4fd45344a0dd0cbc1db89545729
     probe_question_sha256=26a624bfe2e3f97b2e7a908a8f70ef72becbde1843e2970149f23e143cee8491
-    append_event 1 request started received "$empty_sha256" "$empty_sha256" ''
-    append_event 2 safety succeeded guard_allowed "$probe_request_sha256" "$probe_question_sha256" ''
-    append_event 3 lexical succeeded lexical_completed "$probe_request_sha256" "$probe_question_sha256" ''
-    append_event 4 planning succeeded policy_completed "$probe_request_sha256" "$probe_question_sha256" ''
-    append_event 5 route succeeded routed_execute "$probe_request_sha256" "$probe_question_sha256" ''
-    append_event 6 compiler succeeded plan_compiled "$probe_request_sha256" "$probe_question_sha256" ''
-    append_event 7 authority succeeded authority_granted "$probe_request_sha256" "$probe_question_sha256" ''
-    append_event 8 sql succeeded parameterized_statement_completed "$probe_request_sha256" "$probe_question_sha256" ''
-    append_event 9 oracle succeeded oracle_completed "$probe_request_sha256" "$probe_question_sha256" ''
-    append_event 10 verifier succeeded verification_passed "$probe_request_sha256" "$probe_question_sha256" ''
-    append_event 11 renderer succeeded rendering_completed "$probe_request_sha256" "$probe_question_sha256" ''
-    append_event 12 answer succeeded execution_completed "$probe_request_sha256" "$probe_question_sha256" ''
-    append_event 13 serialization succeeded backend_dto_built "$probe_request_sha256" "$probe_question_sha256" ''
-    append_event 14 serialization succeeded http_response_serialized "$probe_request_sha256" "$probe_question_sha256" ''
-    append_event 15 request succeeded response_completed "$probe_request_sha256" "$probe_question_sha256" ''
+    sequence=1
+    append_next() {
+        append_event "$sequence" "$1" "$2" "$3" \
+            "$probe_request_sha256" "$probe_question_sha256" ''
+        sequence=$((sequence + 1))
+    }
+    append_event "$sequence" request started received "$empty_sha256" "$empty_sha256" ''
+    sequence=$((sequence + 1))
+    append_next safety succeeded guard_allowed
+    append_next lexical succeeded lexical_completed
+    append_next planning succeeded policy_completed
+    append_next route succeeded routed_execute
+    append_next compiler succeeded plan_compiled
+    if [ "$hcx_query_plan_enabled" = true ]; then
+        append_next hclx succeeded provider_completed
+    fi
+    append_next sql succeeded authority_connection_opened
+    append_next authority succeeded authority_granted
+    append_next sql succeeded oracle_connection_opened
+    append_next sql succeeded oracle_statements_completed
+    append_next sql succeeded parameterized_statement_completed
+    append_next oracle succeeded oracle_completed
+    append_next sql succeeded verifier_projection_connection_opened
+    append_next sql succeeded verifier_projection_fetched
+    append_next verifier succeeded verifier_rows_materialized
+    append_next verifier succeeded verifier_universe_loaded
+    append_next verifier succeeded pure_verification_passed
+    append_next verifier succeeded verification_passed
+    append_next renderer succeeded rendering_completed
+
+    answer_mode=deterministic
+    fallback_used=false
+    if [ "$answer_provider" = hyperclova ]; then
+        answer_mode=llm_grounded
+        if [ "${ROLLBACK_DRILL_FAKE_HCLX_FALLBACK:-0}" = "1" ]; then
+            answer_mode=deterministic_fallback
+            fallback_used=true
+            append_next hclx failed provider_failed
+            append_next verifier failed composition_rejected
+        else
+            append_next hclx succeeded generation_completed
+            append_next verifier succeeded composition_verified
+        fi
+    fi
+    terminal_reason=execution_completed
+    if [ "$fallback_used" = true ]; then
+        terminal_reason=execution_fallback
+    fi
+    append_next answer succeeded "$terminal_reason"
+    append_next serialization succeeded citations_built
+    append_next serialization succeeded backend_dto_built
+    append_next serialization succeeded official_dto_built
+    append_next serialization succeeded http_response_serialized
+    append_next request succeeded response_completed
 
     printf '%s\n' 'unrelated container diagnostic'
     printf '%s\n' \
-        'FINANCE_ROLLBACK_PROBE_RESULT={"audit_status":"ok","status":"success","intent":"search"}'
+        "FINANCE_ROLLBACK_PROBE_RESULT={\"answer_mode\":\"$answer_mode\",\"audit_status\":\"ok\",\"fallback_used\":$fallback_used,\"intent\":\"search\",\"status\":\"success\"}"
+    if [ "${ROLLBACK_DRILL_MUTATE_HCLX_SECRET:-0}" = "1" ] && [ -n "$hcx_secret_file" ]; then
+        chmod 0400 "$hcx_secret_file"
+    fi
     exit 0
 fi
 
@@ -145,8 +194,13 @@ if [ "$1" = "compose" ]; then
                 binding=$(sed -n 's/^FINANCE_DEPLOYMENT_BINDING_HOST_FILE=//p' "$env_file")
                 audit_root=$(sed -n 's/^FINANCE_AUDIT_HOST_DIR=//p' "$env_file")
                 binding_sha256=$(sed -n 's/^FINANCE_DEPLOYMENT_BINDING_SHA256=//p' "$env_file")
-                printf '%s\n%s\n%s\n%s\n%s\n' \
+                answer_provider=$(sed -n 's/^FINANCE_BACKEND_ANSWER_PROVIDER=//p' "$env_file")
+                hcx_query_plan_enabled=$(sed -n 's/^FINANCE_BACKEND_HCX_QUERY_PLAN_ENABLED=//p' "$env_file")
+                hcx_model=$(sed -n 's/^HCX_MODEL=//p' "$env_file")
+                hcx_secret_file=$(sed -n 's/^CLOVASTUDIO_API_KEY_HOST_FILE=//p' "$env_file")
+                printf '%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n' \
                     "$image" "$volume" "$binding" "$audit_root" "$binding_sha256" \
+                    "$answer_provider" "$hcx_query_plan_enabled" "$hcx_model" "$hcx_secret_file" \
                     > "$ROLLBACK_DRILL_STATE_FILE"
                 exit 0
                 ;;

@@ -368,20 +368,21 @@ gold를 완성했다. v1.2 Router·linker 사후 회귀는 모든 계약
 
 ## HyperCLOVA X provider 경계
 
-실제 API 없이 QueryPlan, 공모펀드 비교 초안, 근거 답변의 공통 요청·응답·오류
-계약을 테스트할 수 있다. 공식 경로 설정은 다음과 같이 fail-closed로 제한한다.
+QueryPlan, 공모펀드 비교 초안, 근거 답변의 공통 요청·응답·오류 계약과 공식 Direct
+Chat Completions v3 HTTP transport를 구현했다. 공식 경로 설정은 다음과 같이
+fail-closed로 제한한다.
 
 ```text
 FINANCE_AGENT_LLM_MODE=evaluation 또는 production
 LLM_PROVIDER=hyperclova
-HCX_MODEL=HCX-로 시작하는 공식 확인 모델 ID
-HCX_TIMEOUT_SECONDS=60
+HCX_MODEL=HCX-007
+HCX_TIMEOUT_SECONDS=45
 ```
 
-현재 구현은 주입형 transport와 fake transport 테스트까지다. 2026-08-06
-오프라인 설명회의 공식 안내 전에는 실제 연결을 시도하지 않는다. endpoint·credential·
-인증 header를 추측하지 않았고 실제 API 호출용 transport나 CLI 선택지는 아직
-없다. 자세한 범위와 남은 작업은
+fake transport 회귀와 함께 실제 credential의 answer-only DETAIL·SEARCH 호환성을
+확인했다. 최종 evaluation은 검증된 결과의 grounded answer만 HCLX로 표현하며,
+HCLX QueryPlan·grounded planning·Dense는 OFF, 공모펀드는 locked다. 자세한 범위와
+남은 NCP release 검증은
 [HyperCLOVA X provider 계약](../../docs/hyperclova-provider.md)을 따른다.
 
 SEARCH에서는 `RoutedFinanceAgent(query_plan_provider=...)`로 provider를

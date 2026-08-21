@@ -531,7 +531,9 @@ def main() -> int:
         case = EvaluationCase.model_validate(payload)
         if disposition == "execute":
             plan = case.expected_plan("fund")
-            validated_plan = authorize_internal_evaluation_plan(plan, arguments.database)
+            validated_plan = authorize_internal_evaluation_plan(
+                plan, arguments.database
+            )
             executed = oracle.execute(validated_plan)
             verified = verifier.verify(plan, executed, universe)
             payload["oracle"] = {

@@ -41,7 +41,9 @@ from finance_agent_core.contracts.knowledge import (
 from finance_agent_core.contracts.queryplan import ProductFamily
 from finance_agent_core.contracts.routing import InteractionIntent
 from finance_agent_core.deadline import RequestDeadline, bind_request_deadline
+from finance_agent_core.execution import SQLiteAggregateOracle, SQLiteOracle
 from finance_agent_core.observability import (
+    AuditEvent,
     AuditOutcome,
     AuditStage,
     BoundedAsyncAuditSink,
@@ -50,6 +52,8 @@ from finance_agent_core.observability import (
     bind_request_audit,
 )
 from finance_agent_core.release import (
+    AgentReleaseCode,
+    AgentReleaseError,
     DocumentRetrievalArtifactRelease,
     KnowledgeRetrievalRelease,
     PublicDocumentRetrievalRelease,
@@ -145,6 +149,39 @@ def _document_plan(query: str = "위험등급 손실 가능성") -> KnowledgeQue
             top_k=2,
         ),
     )
+
+
+def _write_private_audit_jsonl(path: Path, events: tuple[AuditEvent, ...]) -> None:
+    """Create a new owner-only Audit fixture without trusting process umask."""
+
+    payload = "".join(event.model_dump_json() + "\n" for event in events).encode("utf-8")
+    flags = (
+        os.O_WRONLY
+        | os.O_CREAT
+        | os.O_EXCL
+        | getattr(os, "O_CLOEXEC", 0)
+        | getattr(os, "O_NOFOLLOW", 0)
+    )
+    descriptor = os.open(path, flags, 0o600)
+    try:
+        os.fchmod(descriptor, 0o600)
+        with os.fdopen(descriptor, "wb") as stream:
+            descriptor = -1
+            stream.write(payload)
+    finally:
+        if descriptor >= 0:
+            os.close(descriptor)
+
+
+def test_private_audit_fixture_is_owner_only_under_standard_umask(tmp_path: Path) -> None:
+    path = tmp_path / "standard-umask-audit.jsonl"
+    previous_umask = os.umask(0o022)
+    try:
+        _write_private_audit_jsonl(path, ())
+    finally:
+        os.umask(previous_umask)
+
+    assert path.stat().st_mode & 0o777 == 0o600
 
 
 @pytest.fixture
@@ -362,6 +399,204 @@ def test_public_router_executes_relation_and_preserves_product_fallthrough(
     assert aggregate.response.query_plan.intent.value == "aggregate"
 
 
+@pytest.mark.parametrize("relation_enabled", [False, True])
+def test_relation_wiring_preserves_existing_product_intents(
+    relation_agent_factory,
+    relation_enabled: bool,
+) -> None:
+    create, _, _, product_database = relation_agent_factory
+    service = RoutedFinanceAgent(
+        {ProductFamily.DOMESTIC_ETP: product_database},
+        knowledge_router=(DeterministicKnowledgeRouter() if relation_enabled else None),
+        knowledge_agent=(create() if relation_enabled else None),
+    )
+    cases = (
+        (
+            "existing-search",
+            "미국에 투자하는 국내 ETF 3개를 보여줘",
+            InteractionIntent.SEARCH,
+        ),
+        (
+            "existing-detail",
+            "상품 ID KR7000000002인 국내 ETF의 운용사 상세 정보를 조회해줘",
+            InteractionIntent.DETAIL,
+        ),
+        (
+            "existing-compare",
+            "국내 ETF KR7000000003과 KR7000000002의 운용사를 비교해줘",
+            InteractionIntent.COMPARE,
+        ),
+        (
+            "existing-aggregate",
+            "국내 ETF의 운용사별 상품 개수를 집계해줘",
+            InteractionIntent.AGGREGATE,
+        ),
+    )
+
+    for request_id, question, intent in cases:
+        result = execute_answer_request(
+            service,
+            BackendAgentRequest(request_id=request_id, question=question),
+        )
+
+        assert result.http_status_code == 200
+        assert result.response.status is BackendStatus.SUCCESS
+        assert result.response.intent is intent
+        assert result.response.query_plan is not None
+        if intent is InteractionIntent.COMPARE:
+            assert result.response.comparisons
+            assert result.response.comparisons[0].canonical_field == "manager"
+        elif intent is InteractionIntent.AGGREGATE:
+            assert result.response.aggregates
+            assert result.response.query_plan.intent.value == "aggregate"
+        elif intent is InteractionIntent.DETAIL:
+            assert [item.product_id for item in result.response.products] == ["KR7000000002"]
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        "미국에 투자하는 국내 ETF 중 위험이 낮은 상품을 보여줘",
+        "미국에 투자하는 국내 ETF 중 위험등급 2등급 이하 상품을 보여줘",
+        "미국에 투자하는 국내 ETF 중 판매 가능한 상품을 보여줘",
+        "테스트운용이 운용하는 매수 가능한 국내 ETF를 보여줘",
+        "미국에 투자하는 국내 ETF 중 거래 정지 상품은 제외해줘",
+        "미국에 투자하는 국내 ETF 중 테스트운용 상품은 제외해줘",
+        "미국에 투자하는 국내 ETF 중 거래량 100만 이상을 보여줘",
+        "미국에 투자하는 국내 ETF를 거래대금 많은 순으로 보여줘",
+    ],
+)
+def test_relation_mixed_conditions_stop_before_any_execution(
+    relation_agent_factory,
+    monkeypatch: pytest.MonkeyPatch,
+    question: str,
+) -> None:
+    create, _, _, product_database = relation_agent_factory
+    service = RoutedFinanceAgent(
+        {ProductFamily.DOMESTIC_ETP: product_database},
+        knowledge_router=DeterministicKnowledgeRouter(),
+        knowledge_agent=create(),
+    )
+
+    def unexpected_execution(*args: object, **kwargs: object) -> None:
+        raise AssertionError("mixed relation conditions crossed the execution boundary")
+
+    monkeypatch.setattr(KnowledgeAgent, "execute", unexpected_execution)
+    monkeypatch.setattr(SQLiteOracle, "execute", unexpected_execution)
+    monkeypatch.setattr(SQLiteAggregateOracle, "execute", unexpected_execution)
+
+    result = execute_answer_request(
+        service,
+        BackendAgentRequest(request_id="mixed-relation-control", question=question),
+    )
+
+    assert result.http_status_code == 200
+    assert result.response.status in {
+        BackendStatus.CLARIFICATION,
+        BackendStatus.UNSUPPORTED,
+    }
+    assert result.response.query_plan is None
+    assert result.response.products == []
+    assert result.response.comparisons == []
+    assert result.response.aggregates == []
+    assert result.response.citations == []
+
+
+class _ReleaseGuardProbe:
+    def __init__(self, *, fail_on_call: int | None = None) -> None:
+        self.calls = 0
+        self.fail_on_call = fail_on_call
+
+    def assert_request_current(self) -> None:
+        self.calls += 1
+        if self.calls == self.fail_on_call:
+            raise AgentReleaseError(
+                AgentReleaseCode.STALE_RELEASE,
+                "synthetic immutable release drift",
+            )
+
+
+@pytest.mark.parametrize(
+    ("question", "expected_status"),
+    [
+        (
+            "테스트운용이 운용하는 국내 ETF 3개를 알려줘",
+            BackendStatus.SUCCESS,
+        ),
+        (
+            "없는운용사가 운용하는 국내 ETF를 알려줘",
+            BackendStatus.NOT_FOUND,
+        ),
+        (
+            "테스트운용이 운용하는 ETF를 보여줘",
+            BackendStatus.CLARIFICATION,
+        ),
+        (
+            "테스트운용이 운용하는 해외 ETF를 보여줘",
+            BackendStatus.UNSUPPORTED,
+        ),
+    ],
+)
+def test_every_relation_outcome_uses_common_release_guard(
+    relation_agent_factory,
+    question: str,
+    expected_status: BackendStatus,
+) -> None:
+    create, _, _, product_database = relation_agent_factory
+    service = RoutedFinanceAgent(
+        {ProductFamily.DOMESTIC_ETP: product_database},
+        knowledge_router=DeterministicKnowledgeRouter(),
+        knowledge_agent=create(),
+    )
+    guard = _ReleaseGuardProbe()
+    service.release_guard = guard  # type: ignore[assignment]
+
+    result = execute_answer_request(
+        service,
+        BackendAgentRequest(request_id="relation-release-guard", question=question),
+    )
+
+    assert result.http_status_code == 200
+    assert result.response.status is expected_status
+    assert guard.calls >= 2
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        "테스트운용이 운용하는 국내 ETF 3개를 알려줘",
+        "없는운용사가 운용하는 국내 ETF를 알려줘",
+        "테스트운용이 운용하는 ETF를 보여줘",
+        "테스트운용이 운용하는 해외 ETF를 보여줘",
+    ],
+)
+def test_every_relation_outcome_rejects_post_route_release_drift(
+    relation_agent_factory,
+    question: str,
+) -> None:
+    create, _, _, product_database = relation_agent_factory
+    service = RoutedFinanceAgent(
+        {ProductFamily.DOMESTIC_ETP: product_database},
+        knowledge_router=DeterministicKnowledgeRouter(),
+        knowledge_agent=create(),
+    )
+    guard = _ReleaseGuardProbe(fail_on_call=2)
+    service.release_guard = guard  # type: ignore[assignment]
+
+    result = execute_answer_request(
+        service,
+        BackendAgentRequest(request_id="relation-release-drift", question=question),
+    )
+
+    assert result.http_status_code == 503
+    assert result.response.status is BackendStatus.ERROR
+    assert result.response.error is not None
+    assert result.response.error.code is BackendErrorCode.INTERNAL_ERROR
+    assert result.response.products == []
+    assert result.response.citations == []
+    assert "synthetic immutable release drift" not in result.response.model_dump_json()
+
+
 def test_relation_timeout_preserves_trusted_backend_route_context(
     relation_agent_factory,
 ) -> None:
@@ -451,10 +686,7 @@ def test_public_relation_emits_ordered_release_linked_audit(
         if event.reason_code in release_linked_reasons
     )
     audit_path = tmp_path / "public-relation-audit.jsonl"
-    audit_path.write_text(
-        "".join(event.model_dump_json() + "\n" for event in events),
-        encoding="utf-8",
-    )
+    _write_private_audit_jsonl(audit_path, events)
     report = validate_audit_jsonl(
         audit_path,
         policy=AuditValidationPolicy(require_relation_linkage=True),
@@ -520,10 +752,7 @@ def test_public_relation_timeout_emits_valid_causal_audit(
         "deadline_exceeded",
     ]
     audit_path = tmp_path / "public-relation-timeout-audit.jsonl"
-    audit_path.write_text(
-        "".join(event.model_dump_json() + "\n" for event in events),
-        encoding="utf-8",
-    )
+    _write_private_audit_jsonl(audit_path, events)
     report = validate_audit_jsonl(
         audit_path,
         policy=AuditValidationPolicy(require_relation_linkage=True),
