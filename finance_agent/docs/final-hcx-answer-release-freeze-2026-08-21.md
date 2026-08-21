@@ -95,10 +95,10 @@ Dense가 정확도를 개선했다는 증거가 아니므로 final runtime에는
 
 | 검사 | 결과 | 해석 |
 | --- | --- | --- |
-| Agent Core 전체 pytest | 1,481 passed, 1 skipped | skip은 승인 DB 경로를 명시할 때만 실행하는 opt-in 재검증 |
-| FastAPI Backend 전체 pytest | 430 passed, 1 skipped | skip은 격리 Python image에 Docker Compose CLI가 없는 환경 항목 |
+| Agent Core 전체 pytest | 1,480 passed, 2 skipped | skip은 로컬 sealed key와 승인 DB 경로가 있을 때만 실행하는 opt-in 재검증 |
+| FastAPI Backend 전체 pytest | 432 passed | DeploymentBinding 영속 수명·충돌 차단 회귀 포함 |
 | 최종 answer-only 공식 GET 집중 E2E | 17 passed | 정상·인증·429·5xx·timeout·transport·schema 오류·fallback |
-| Ruff check·format | 통과, Core 281 + Backend 55 files | 각 package 경계의 정적 오류·포맷 불일치 없음 |
+| Ruff check·format | 통과, 전체 335 files | 각 package 경계의 정적 오류·포맷 불일치 없음 |
 | 실제 read-only 컨테이너 Manifest 경계 | 정상 SHA 통과, 변조 SHA exit 2 | image 내부 Manifest와 서명 대상의 바이트 불일치를 fail-closed |
 | Ontology 동기화 | 통과, Turtle 5개 | field registry와 exact-match |
 | submission boundary development profile | 통과, blocker 0 | 평가 runtime 경계 통과; 과거 연구 파일 자체를 제거했다는 뜻은 아님 |

@@ -284,8 +284,8 @@ launcher 단계에서 거부된다.
 - global option을 앞세운 `--build`, profile 오인식, 부분 service 실행과
   `--force-recreate=false` 우회 차단
 - rollback data volume·image를 지우는 `down --volumes`, `-v` 결합형, `--rmi` 차단
-- Agent Core 전체 회귀 `1,481 passed, 1 skipped`, FastAPI Backend 전체 회귀
-  `430 passed, 1 skipped`, P0-10 집중 회귀 `522/522`
+- Agent Core 전체 회귀 `1,480 passed, 2 skipped`, FastAPI Backend 전체 회귀
+  `432 passed`, P0-10 집중 회귀 `522/522`
 - P0-7 관계·문서 계획·검색·주장 검증 표적 회귀 `22/22`, 관련 회귀 `82/82`와 승인
   데이터 관계 검색 스모크 `4/4` 통과
 - P0-7의 내부 relation 후보를 공개 `AgentReleaseManifest` 1.2·Router·Backend에 연결하고,

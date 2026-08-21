@@ -225,8 +225,8 @@ manifest 생성 뒤 artifact만 바꾸면 Registry의 다음 변경 전에 중�
 index·세 상품 DB·관계 집합을 다시 대조한다. startup 이후 path/inode/size/mtime/ctime drift는 `/health`를
 `degraded` HTTP 503으로 바꾸며 관계 요청도 503으로 거부한다.
 
-현재 최종 동결 후보의 로컬 증거는 Agent Core `1,481 passed, 1 skipped`, Backend
-`430 passed, 1 skipped`, P0-10 집중 회귀 `522/522`다. fresh Docker smoke는
+현재 최종 동결 후보의 로컬 증거는 Agent Core `1,480 passed, 2 skipped`, Backend
+`432 passed`, P0-10 집중 회귀 `522/522`다. fresh Docker smoke는
 Backend 8/8와 공식 GET 8/8이고, relation index 1바이트 변조 뒤 health·관계 요청 503을
 확인했다. 이는 workflow의 계약과 로컬 runtime 동작 증거이지 보호된 GitHub Environment의
 실제 dispatch·NCP push·cosign 서명이나 서명된 두 release rollback 증거는 아니다.

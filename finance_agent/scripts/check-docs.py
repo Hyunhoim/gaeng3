@@ -177,7 +177,7 @@ HISTORICAL_BASELINE_SUITE_SUCCESSOR_SHA256 = {
 HISTORICAL_BASELINE_COMPONENT_ALLOWLIST = {
     "stage3-local-oci-rollback-2026-08-12.json": {
         "compose-release.sh": (
-            "2b2435fd261b476630cb423a8dd3e0ef9c2427e7c9a55acf3970e7487112eec0"
+            "6e92816c7cd6279537ac3c593defd0369d3b3b4845706524d2e7fdedf3916599"
         ),
         "fastapi_backend/Dockerfile": (
             "84c52ee0aac7e565d48242fef2a13c3bcde0b997b1d54ebd8e7f13998c07684d"
@@ -200,7 +200,7 @@ HISTORICAL_BASELINE_COMPONENT_ALLOWLIST = {
             "7aa29731e8820665ec15fa51c51ed770584d485b386465b066b2ab602d9d97df"
         ),
         "fastapi_backend/tests/test_release_deployment_contract.py": (
-            "1f0630497123985300f5f2e81dfe4802bdb0fadd262e390f73c1eea5e6df0a6f"
+            "abcb375125ca67df6bbb167b731ad665cd1d5a28e1d5cd7bc9fc81b8bcfbf131"
         ),
         "fastapi_backend/tests/test_release_rollback_drill.py": (
             "488fec38c6120726a0a4b29061506c4d6307d2810db781d45cfb3c2279681a76"
@@ -250,7 +250,7 @@ HISTORICAL_BASELINE_COMPONENT_ALLOWLIST = {
             "09aaf4af10db8de17a941c9b410808be9c9c2350558ceed0d2dec75fd8ca4906"
         ),
         "fastapi_backend/tests/test_release_deployment_contract.py": (
-            "1f0630497123985300f5f2e81dfe4802bdb0fadd262e390f73c1eea5e6df0a6f"
+            "abcb375125ca67df6bbb167b731ad665cd1d5a28e1d5cd7bc9fc81b8bcfbf131"
         ),
         "fastapi_backend/tests/test_release_rollback_drill.py": (
             "488fec38c6120726a0a4b29061506c4d6307d2810db781d45cfb3c2279681a76"
