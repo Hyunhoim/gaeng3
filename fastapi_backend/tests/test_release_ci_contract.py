@@ -778,6 +778,7 @@ def test_release_workflow_has_a_commit_pinned_keyless_trust_boundary() -> None:
     assert image_sign_step["env"]["COSIGN_DOCKER_MEDIA_TYPES"] == "1"
     assert image_sign_step["run"].count("--registry-referrers-mode=legacy") == 2
     assert image_sign_step["run"].count("--new-bundle-format=false") == 4
+    assert image_sign_step["run"].count("--use-signing-config=false") == 2
     assert "PREVIOUS_DEPLOYMENT_BINDING_SHA256" in text
     assert "TRUSTED_NCP_REGISTRY: ${{ vars.NCP_REGISTRY_HOST }}" in text
     assert "TRUSTED_NCP_REPOSITORY: ${{ vars.NCP_IMAGE_REPOSITORY }}" in text
