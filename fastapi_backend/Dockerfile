@@ -3,7 +3,26 @@
 # Default verified on 2026-08-12. Release CI passes the same immutable index
 # explicitly and records the selected platform manifest in its provenance.
 ARG PYTHON_BASE_IMAGE=docker.io/library/python@sha256:4766d8b510c428e595d74b9cc5bbb2fae8e26316fffb4adc89908d79aacd58a2
-FROM ${PYTHON_BASE_IMAGE}
+FROM ${PYTHON_BASE_IMAGE} AS dependency-builder
+
+ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_NO_CACHE_DIR=1
+
+WORKDIR /build
+
+# Build into a detached prefix.  The source tree and test files stay in this
+# disposable stage and therefore cannot be recovered from a runtime OCI layer.
+COPY finance_agent/packages/finance_agent_core /build/finance_agent_core
+COPY finance_agent/requirements/constraints.txt /build/core-constraints.txt
+COPY fastapi_backend/requirements.txt /build/backend-requirements.txt
+RUN python -m pip install \
+        --no-compile \
+        --prefix /install \
+        --constraint /build/core-constraints.txt \
+        --requirement /build/backend-requirements.txt \
+        /build/finance_agent_core
+
+FROM ${PYTHON_BASE_IMAGE} AS runtime
 
 ARG PYTHON_BASE_IMAGE
 ARG FINANCE_SOURCE_COMMIT=development
@@ -29,19 +48,10 @@ RUN groupadd --gid "${APP_GID}" app \
     && useradd --uid "${APP_UID}" --gid "${APP_GID}" --create-home \
         --shell /usr/sbin/nologin app
 
-# Install the local deterministic Agent core and HTTP dependencies in one resolver run.
-# The core is deliberately installed from this repository, not from an unrelated PyPI package.
-COPY finance_agent/packages/finance_agent_core /tmp/finance_agent_core
-COPY finance_agent/requirements/constraints.txt /tmp/core-constraints.txt
-COPY fastapi_backend/requirements.txt /tmp/backend-requirements.txt
-RUN python -m pip install \
-        --constraint /tmp/core-constraints.txt \
-        --requirement /tmp/backend-requirements.txt \
-        /tmp/finance_agent_core \
-    && rm -rf \
-        /tmp/finance_agent_core \
-        /tmp/core-constraints.txt \
-        /tmp/backend-requirements.txt
+# Copy only the installed runtime prefix.  Never copy the builder source and
+# remove it in a later layer: OCI whiteouts would leave those bytes recoverable.
+COPY --from=dependency-builder /install/ /usr/local/
+RUN python -m pip check
 
 # Copy only runtime files. Source worktrees may use a private umask (0700/0600),
 # so normalize image permissions explicitly for the host-UID runtime override.

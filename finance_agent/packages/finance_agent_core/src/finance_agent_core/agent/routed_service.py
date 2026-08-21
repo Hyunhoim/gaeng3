@@ -40,7 +40,11 @@ from finance_agent_core.agent.planning_policy import (
     PlanningPath,
     PlanningTrace,
 )
-from finance_agent_core.agent.providers import HyperClovaXTimeoutError, QueryPlanProvider
+from finance_agent_core.agent.providers import (
+    HyperClovaXTimeoutError,
+    QueryPlanProvider,
+    hyperclova_failure_reason,
+)
 from finance_agent_core.agent.router import IntentRouter
 from finance_agent_core.agent.safety import SafetyDisposition
 from finance_agent_core.agent.semantic_gate import SemanticCoverageDecision
@@ -1213,10 +1217,25 @@ class RoutedFinanceAgent:
         if audit is None or composition.mode == "deterministic":
             return
         provider_completed = composition.draft is not None
+        failure_reason = composition.provider_failure_reason
+        provider_timed_out = not provider_completed and failure_reason == "timed_out"
+        if provider_completed:
+            outcome = AuditOutcome.SUCCEEDED
+            reason_code = "generation_completed"
+        elif provider_timed_out:
+            outcome = AuditOutcome.TIMED_OUT
+            reason_code = "generation_timed_out"
+        else:
+            outcome = AuditOutcome.FAILED
+            reason_code = (
+                "provider_failed"
+                if failure_reason in {None, "provider_failed"}
+                else f"generation_{failure_reason}"
+            )
         audit.emit(
             stage=AuditStage.HCLX,
-            outcome=(AuditOutcome.SUCCEEDED if provider_completed else AuditOutcome.FAILED),
-            reason_code=("generation_completed" if provider_completed else "provider_failed"),
+            outcome=outcome,
+            reason_code=reason_code,
             duration_ms=composition.generation_latency_ms,
             candidate_count=candidate_count,
             result_count=result_count,
@@ -2010,13 +2029,20 @@ class RoutedFinanceAgent:
                         duration_ms=(perf_counter() - provider_started) * 1000,
                         **self._decision_audit_fields(decision),
                     )
-            except Exception:
+            except Exception as error:
                 if audit is not None:
+                    failure_reason = hyperclova_failure_reason(error)
                     audit.emit(
                         stage=(AuditStage.COMPILER if provider_observed else AuditStage.HCLX),
                         outcome=AuditOutcome.FAILED,
                         reason_code=(
-                            "grounded_plan_gate_failed" if provider_observed else "provider_failed"
+                            "grounded_plan_gate_failed"
+                            if provider_observed
+                            else (
+                                "provider_failed"
+                                if failure_reason == "provider_failed"
+                                else f"planning_{failure_reason}"
+                            )
                         ),
                         duration_ms=(perf_counter() - provider_started) * 1000,
                         **self._decision_audit_fields(decision),
@@ -2509,12 +2535,17 @@ class RoutedFinanceAgent:
                     **self._decision_audit_fields(decision),
                 )
             raise
-        except Exception:
+        except Exception as error:
             if audit is not None:
+                failure_reason = hyperclova_failure_reason(error)
                 audit.emit(
                     stage=AuditStage.HCLX,
                     outcome=AuditOutcome.FAILED,
-                    reason_code="provider_failed",
+                    reason_code=(
+                        "provider_failed"
+                        if failure_reason == "provider_failed"
+                        else f"planning_{failure_reason}"
+                    ),
                     duration_ms=(perf_counter() - started) * 1000,
                     plan_sha256=query_plan_authority_sha256(server_plan),
                     **self._decision_audit_fields(decision),

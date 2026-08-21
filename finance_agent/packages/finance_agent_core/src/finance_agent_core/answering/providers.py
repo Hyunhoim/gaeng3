@@ -420,19 +420,23 @@ class HyperClovaXGroundedAnswerProvider:
         context: GroundedAnswerContext,
     ) -> GroundedAnswerDraft:
         response_schema = _hcx_grounded_answer_schema(context)
-        content = self._client.complete(
+
+        def parse_response(content: str) -> GroundedAnswerDraft:
+            payload = parse_hcx_json_object(content, "grounded answer")
+            try:
+                validate_hcx_payload(response_schema, payload)
+                return GroundedAnswerDraft.model_validate(payload)
+            except ValueError:
+                raise HyperClovaXResponseError(
+                    "HyperCLOVA X returned an invalid grounded answer"
+                ) from None
+
+        return self._client.complete(
             operation="grounded_answer",
             system_prompt=build_grounded_answer_system_prompt(context),
             user_prompt="검증된 입력만 사용해 grounded answer JSON을 작성해줘.",
             schema_name="grounded_finance_answer",
             response_schema=response_schema,
             max_output_tokens=_grounded_answer_max_output_tokens(context),
+            response_parser=parse_response,
         )
-        payload = parse_hcx_json_object(content, "grounded answer")
-        try:
-            validate_hcx_payload(response_schema, payload)
-            return GroundedAnswerDraft.model_validate(payload)
-        except ValueError:
-            raise HyperClovaXResponseError(
-                "HyperCLOVA X returned an invalid grounded answer"
-            ) from None

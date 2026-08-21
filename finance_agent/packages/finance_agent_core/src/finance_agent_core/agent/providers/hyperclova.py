@@ -47,6 +47,16 @@ type HyperClovaXOutcome = Literal[
     "transport_error",
     "response_error",
 ]
+type HyperClovaXFailureReason = Literal[
+    "authentication_failed",
+    "configuration_failed",
+    "provider_failed",
+    "rate_limited",
+    "response_rejected",
+    "service_failed",
+    "timed_out",
+    "transport_failed",
+]
 
 
 class HyperClovaXProviderError(RuntimeError):
@@ -79,6 +89,26 @@ class HyperClovaXTransportError(HyperClovaXProviderError):
 
 class HyperClovaXResponseError(HyperClovaXProviderError):
     """Raised when a successful transport response violates the contract."""
+
+
+def hyperclova_failure_reason(error: BaseException) -> HyperClovaXFailureReason:
+    """Map provider failures to a stable code without retaining exception text."""
+
+    if isinstance(error, (HyperClovaXTimeoutError, RequestDeadlineExceeded, TimeoutError)):
+        return "timed_out"
+    if isinstance(error, HyperClovaXAuthenticationError):
+        return "authentication_failed"
+    if isinstance(error, HyperClovaXRateLimitError):
+        return "rate_limited"
+    if isinstance(error, HyperClovaXServiceError):
+        return "service_failed"
+    if isinstance(error, HyperClovaXTransportError):
+        return "transport_failed"
+    if isinstance(error, HyperClovaXResponseError):
+        return "response_rejected"
+    if isinstance(error, HyperClovaXConfigurationError):
+        return "configuration_failed"
+    return "provider_failed"
 
 
 @dataclass(frozen=True, slots=True)
@@ -223,7 +253,8 @@ class HyperClovaXClient:
         schema_name: str,
         response_schema: dict[str, Any],
         max_output_tokens: int,
-    ) -> str:
+        response_parser: Callable[[str], Any] | None = None,
+    ) -> Any:
         try:
             validate_hcx_schema(response_schema)
         except ValueError as error:
@@ -296,13 +327,25 @@ class HyperClovaXClient:
                 response=response,
             )
             raise HyperClovaXResponseError("HyperCLOVA X response content is missing")
+        try:
+            result = (
+                response.content if response_parser is None else response_parser(response.content)
+            )
+        except HyperClovaXResponseError:
+            self._emit(
+                operation=operation,
+                outcome="response_error",
+                started=started,
+                response=response,
+            )
+            raise
         self._emit(
             operation=operation,
             outcome="success",
             started=started,
             response=response,
         )
-        return response.content
+        return result
 
 
 def parse_hcx_json_object(content: str, label: str) -> dict[str, Any]:
@@ -364,24 +407,30 @@ class HyperClovaXQueryPlanProvider:
         if not question_id.strip():
             raise ValueError("question_id cannot be blank")
         response_schema = load_hcx_queryplan_schema()
-        content = self._client.complete(
+
+        def parse_response(content: str) -> QueryPlan:
+            payload = parse_hcx_json_object(content, "QueryPlan")
+            payload["question_id"] = question_id
+            try:
+                validate_hcx_payload(response_schema, payload)
+                payload = canonicalize_query_plan_payload(question, payload)
+                payload["question_id"] = question_id
+                plan = QueryPlan.model_validate(payload)
+                return canonicalize_linked_query_plan(question, plan)
+            except (KeyError, TypeError, ValueError):
+                raise HyperClovaXResponseError(
+                    "HyperCLOVA X returned an invalid QueryPlan"
+                ) from None
+
+        return self._client.complete(
             operation="query_plan",
             system_prompt=build_query_plan_system_prompt(question_id, question),
             user_prompt=question,
             schema_name="finance_query_plan",
             response_schema=response_schema,
             max_output_tokens=4096,
+            response_parser=parse_response,
         )
-        payload = parse_hcx_json_object(content, "QueryPlan")
-        payload["question_id"] = question_id
-        try:
-            validate_hcx_payload(response_schema, payload)
-            payload = canonicalize_query_plan_payload(question, payload)
-            payload["question_id"] = question_id
-            plan = QueryPlan.model_validate(payload)
-            return canonicalize_linked_query_plan(question, plan)
-        except (KeyError, TypeError, ValueError):
-            raise HyperClovaXResponseError("HyperCLOVA X returned an invalid QueryPlan") from None
 
 
 class HyperClovaXFundComparisonDraftProvider:
@@ -413,19 +462,23 @@ class HyperClovaXFundComparisonDraftProvider:
         if not question_id.strip():
             raise ValueError("question_id cannot be blank")
         response_schema = _fund_comparison_hcx_schema()
-        content = self._client.complete(
+
+        def parse_response(content: str) -> FundComparisonDraft:
+            payload = parse_hcx_json_object(content, "fund comparison draft")
+            try:
+                validate_hcx_payload(response_schema, payload)
+                return FundComparisonDraft.model_validate(payload)
+            except ValueError:
+                raise HyperClovaXResponseError(
+                    "HyperCLOVA X returned an invalid fund comparison draft"
+                ) from None
+
+        return self._client.complete(
             operation="fund_comparison_draft",
             system_prompt=build_fund_comparison_draft_system_prompt(question),
             user_prompt="질문에 실제로 적힌 비교 대상과 비교 항목만 추출해줘.",
             schema_name="fund_comparison_draft",
             response_schema=response_schema,
             max_output_tokens=1024,
+            response_parser=parse_response,
         )
-        payload = parse_hcx_json_object(content, "fund comparison draft")
-        try:
-            validate_hcx_payload(response_schema, payload)
-            return FundComparisonDraft.model_validate(payload)
-        except ValueError:
-            raise HyperClovaXResponseError(
-                "HyperCLOVA X returned an invalid fund comparison draft"
-            ) from None

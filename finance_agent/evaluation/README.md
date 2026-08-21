@@ -34,6 +34,7 @@ DB, 원천 XLSX, 전체 report, 모델 가중치는 계속 `artifacts/` 또는 �
 | [P0-6 제공 관계 검색](baselines/p0-6-provided-relation-retrieval-v1.json) | 승인 DB 3개의 제공 필드 관계 58,005개, 공식 상품 ID 재조회, 14개 fail-closed 계약과 실제 4종 smoke |
 | [P0-7 관계·문서 계획과 주장 검증](baselines/p0-7-knowledge-claim-contract-v1.json) | Typed Plan·서버 exact 권한·evidence Claim Verifier·전체 fallback 22/22와 승인 관계 전체 경로 smoke 4/4; 공개 Agent는 비활성 |
 | [P0-10 공개 관계 검색·릴리스 통합](baselines/p0-10-public-relation-release-integration-v1.json) | 공개 Router·Backend·Docker·manifest 해시 고정 릴리스 결합과 변조 차단 집중 회귀 522/522; 실제 NCP·HCX·서명 rollback은 미실행 |
+| [최종 HCLX answer-only Release 동결](baselines/final-hcx-answer-release-freeze-v1.json) | HCX-007 grounded answer만 ON, QueryPlan·Dense OFF, Audit·fallback·공식 GET·immutable CI·rollback 계약 1,911/1,911; 실제 HCLX 품질·NCP 서명 증거는 아님 |
 | [설명회 공개 예시 채권 개선](baselines/briefing-examples-v1-bond-improved.json) | 원화·판매 가능·AA- 이상 검색과 근거 검증을 연결한 회귀 |
 | [설명회 공개 예시 최초 관측](baselines/briefing-examples-v1-initial.json) | 답변 가능 5개·답변 불가 3개의 Router→Oracle→Verifier 현재 도달 범위 |
 | [설명회 공개 예시 안전 개선](baselines/briefing-examples-v1-safety-improved.json) | 잘못된 신용등급 차단과 요청 어미 오분류 수정 후 회귀 |

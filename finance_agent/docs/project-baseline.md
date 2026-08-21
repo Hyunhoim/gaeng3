@@ -121,8 +121,9 @@
   mode/provider gate, HCX schema subset, token·latency 관측, 인증·rate limit·
   timeout·서비스·응답 오류를 fake transport로 검증했다. 공식 Direct v3 endpoint,
   Bearer 인증, Structured Outputs HTTP transport와 FastAPI optional QueryPlan·grounded
-  answer 무호출 배선까지 구현했다. 실제 API Key 인증·HCX-007 권한·응답 호환성·latency는
-  아직 외부 게이트다. HCLX grounded planning provider의 production 배선은 아직 없다.
+  answer 배선까지 구현했다. 실제 API Key로 HCX-007 answer-only DETAIL·SEARCH 호환성을
+  확인했다. 최종 evaluation은 grounded answer만 ON이며 HCLX QueryPlan·grounded planning은
+  OFF로 동결한다.
 - SEARCH는 공통 Router와 서버 기준 QueryPlan을 먼저 통과한 뒤 HCX QueryPlan이
   완전히 일치할 때만 Oracle을 실행하도록 선택 주입했다. API 없는 전체 경로
   8개 시나리오에서 세 실행 상품군 Backend DTO, Answer Verifier fallback,
@@ -274,7 +275,7 @@
 
 | 구성요소 | 개발 단계 | 평가·제출 경로 | 현재 결정 |
 | --- | --- | --- | --- |
-| HyperCLOVA X | 요청·응답·오류 계약, Direct v3 HTTP transport와 FastAPI 무호출 배선 완료 | 허용·필수 | 실제 API Key·HCX-007 권한·응답 호환성 확인 전 호출 보류 |
+| HyperCLOVA X | 요청·응답·오류 계약, Direct v3 HTTP transport·FastAPI 배선·answer-only 실호출 완료 | 허용·필수 | 최종 evaluation은 HCX-007 grounded answer만 ON, QueryPlan OFF |
 | Mock/fixture provider | 기본 테스트와 CI | 실제 답변 생성에 사용하지 않음 | 항상 유지 |
 | `Qwen/Qwen3-30B-A3B-Instruct-2507-FP8` | 명시적으로 켠 로컬 실험만 | 금지 | 임시 개발 provider |
 | 다른 생성형 LLM/VLM | 사용하지 않음 | 금지 | 제외 |
@@ -296,9 +297,8 @@
 - 로컬 endpoint는 기본적으로 `http://127.0.0.1:18000/v1`에만 노출한다.
 - evaluation·production 설정은 provider가 HyperCLOVA X가 아니면 시작 단계에서
   실패한다. service adapter는 이 설정 오류를 안전한 비재시도 ERROR DTO로 변환한다.
-  실제 FastAPI route와 Direct v3 HTTP transport는 구현했지만, API Key 파일을 사용한
-  외부 호출은 아직 수행하지 않았다. QueryPlan과 grounded answer만 production 조립하며
-  HCLX grounded planning provider는 별도 평가 전까지 미배선이다.
+  실제 FastAPI route와 Direct v3 HTTP transport, API Key 파일 기반 answer-only 호출을
+  확인했다. 최종 release는 grounded answer만 조립하며 QueryPlan·grounded planning은 OFF다.
 - 로컬 모델의 응답·로그·캐시·가중치는 Git과 제출물에서 제외한다.
 - 공식 제출 범위를 서면으로 확인한 뒤 제출 후보의
   로컬 provider·설정·스크립트·의존성을 제거하고 자동 검사한다.
@@ -451,8 +451,9 @@ QueryPlan에는 최소한 intent, 상품군, 필수 조건, 완화 전 확인이
 - [x] P0-7 내부 relation 경로를 공개 Router·Backend adapter와
   `AgentReleaseManifest`에 연결하고 clean Docker HTTP로 재검증한다. 승인된 실제 문서
   corpus가 없어 document 경로는 계속 비활성이다.
-- [ ] 실제 API Key로 인증·HCX-007 권한·응답 호환성을 확인하고 NCP 실행 환경에서
-  최소 호출을 재현한다.
+- [x] 실제 API Key로 인증·HCX-007 권한·DETAIL·SEARCH answer-only 응답 호환성을 확인한다.
+- [ ] 같은 clean signed image를 NCP에서 기동해 공인 IP 공식 GET과 HCLX 장애·fallback을
+  최소 호출로 재현한다.
 
 ### P3 — 평가 확장
 
@@ -499,7 +500,9 @@ QueryPlan에는 최소한 intent, 상품군, 필수 조건, 완화 전 확인이
 현장 사진과 공식 PDF에서 확인한 내용:
 
 - 평가 배점은 소스코드 20%, 기술제안서 40%, 평가 API 40%
-- 예상 질문은 총 30개이며 답할 수 없는 질문 5개 포함, 질문당 60초 이내 권장
+- 예상 질문은 총 30개이며 답할 수 없는 질문 5개 포함
+- 2026-08-14 최종 호출 공지는 팀당 순차 1건, 문항당 timeout 300초, timeout·5xx 시
+  최대 2회 재시도로 확정
 - 공식 API는 `GET /answer`, 필수 query parameter는 `question_id`와 `question`
 - 응답은 `question_id`, `question`, `retrieved_context`, `think_trace`, `answer`의
   다섯 필수 문자열
@@ -509,10 +512,6 @@ QueryPlan에는 최소한 intent, 상품군, 필수 조건, 완화 전 확인이
 
 남은 공식 확인 항목:
 
-- 허용되는 HyperCLOVA X 정확한 모델명·버전과 Structured Outputs 지원 범위
-- 공식 endpoint·인증 header·실제 모델 요청·응답 body와 request ID 규칙
-- timeout, QPS, 동시 요청, 재시도, 최대 입력 길이
-- HyperCLOVA X가 지급 크레딧의 지원 서비스인지
 - 개발용 로컬 LLM 코드·문서·Git 이력과 synthetic 데이터의 제출 허용 범위
 - 임베딩, re-ranker, NER, OCR, 번역 모델의 허용 범위
 - `think_trace`의 구체적인 채점 기준과 구조화 실행 기록 인정 여부

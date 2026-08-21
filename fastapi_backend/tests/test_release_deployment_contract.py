@@ -23,17 +23,27 @@ def _write_test_release_launcher(target: Path, *, repository_dir: Path) -> None:
 
     canonical_launcher = (_repository_root() / "compose-release.sh").read_text(encoding="utf-8")
     uid_marker = "RELEASE_BACKEND_UID = 10001"
+    secret_uid_marker = "secret_stat.st_uid != 10001"
     repository_marker = 'REPOSITORY_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"'
     assert canonical_launcher.count(uid_marker) == 1
+    assert canonical_launcher.count(secret_uid_marker) == 1
     assert canonical_launcher.count(repository_marker) == 1
-    target.write_text(
+    rewritten_launcher = (
         canonical_launcher.replace(
             uid_marker,
             f"RELEASE_BACKEND_UID = {os.geteuid()}",
-        ).replace(
+        )
+        .replace(
+            secret_uid_marker,
+            f"secret_stat.st_uid != {os.geteuid()}",
+        )
+        .replace(
             repository_marker,
             f"REPOSITORY_DIR={shlex.quote(str(repository_dir))}",
-        ),
+        )
+    )
+    target.write_text(
+        rewritten_launcher,
         encoding="utf-8",
     )
     target.chmod(0o755)
@@ -135,6 +145,7 @@ def test_release_launcher_forbids_build_and_forces_no_build() -> None:
     assert "build|--build" in launcher
     assert "unset APP_ENV" in launcher
     assert "HyperCLOVA release provider profile is incomplete" in launcher
+    assert "not 0 < secret_stat.st_size <= 4096" in launcher
     assert "release_trust.py" in launcher
     assert "release_activation.py" in launcher
     assert "RELEASE_ENV_SNAPSHOT" in launcher
@@ -157,6 +168,21 @@ def test_base_compose_is_explicitly_the_development_path() -> None:
     assert "docker-compose.release.yml" in compose
 
 
+def test_final_release_env_example_pins_public_http_and_hcx_answer_only() -> None:
+    example = (_repository_root() / "fastapi_backend" / ".env.release.example").read_text(
+        encoding="utf-8"
+    )
+
+    assert "BACKEND_BIND_ADDRESS=0.0.0.0" in example
+    assert "BACKEND_PORT=80" in example
+    assert "FINANCE_BACKEND_ANSWER_PROVIDER=hyperclova" in example
+    assert "FINANCE_BACKEND_HCX_QUERY_PLAN_ENABLED=false" in example
+    assert "FINANCE_AGENT_LLM_MODE=evaluation" in example
+    assert "LLM_PROVIDER=hyperclova" in example
+    assert "HCX_MODEL=HCX-007" in example
+    assert "FINANCE_BACKEND_FUND_EXECUTION_POLICY=locked" in example
+
+
 def test_release_build_context_is_allowlisted_and_base_has_no_mutable_default() -> None:
     root = _repository_root()
     release_ignore = (root / "fastapi_backend" / "Dockerfile.release.dockerignore").read_text(
@@ -177,6 +203,18 @@ def test_release_build_context_is_allowlisted_and_base_has_no_mutable_default() 
     assert "**/.pytest_cache/" in base_ignore
     assert "**/.ruff_cache/" in base_ignore
     assert "ARG BACKEND_BASE_IMAGE=gaeng3-backend:local" not in dockerfile
+
+
+def test_backend_image_uses_a_source_discarding_multi_stage_build() -> None:
+    dockerfile = (_repository_root() / "fastapi_backend" / "Dockerfile").read_text(encoding="utf-8")
+
+    assert "AS dependency-builder" in dockerfile
+    assert "AS runtime" in dockerfile
+    assert "--prefix /install" in dockerfile
+    assert "COPY --from=dependency-builder /install/ /usr/local/" in dockerfile
+    assert "python -m pip check" in dockerfile
+    assert "/tmp/finance_agent_core" not in dockerfile
+    assert "rm -rf" not in dockerfile
 
 
 def _release_launcher_fixture(
@@ -235,6 +273,10 @@ def _release_launcher_fixture(
                 "FINANCE_RELATION_RETRIEVAL_ARTIFACT_SHA256=" + "9" * 64,
                 f"FINANCE_AUDIT_HOST_DIR={audit_root}",
                 "WEB_CONCURRENCY=1",
+                "FINANCE_BACKEND_FUND_EXECUTION_POLICY=locked",
+                "FINANCE_BACKEND_ANSWER_PROVIDER=deterministic",
+                "FINANCE_BACKEND_HCX_QUERY_PLAN_ENABLED=false",
+                "HCX_TIMEOUT_SECONDS=45",
             ]
         )
         + "\n",
@@ -418,6 +460,45 @@ def test_release_launcher_rejects_inline_hcx_credential(tmp_path: Path) -> None:
     assert not capture.exists()
 
 
+@pytest.mark.parametrize("secret_payload", [b"", b"x" * 4097], ids=["empty", "oversize"])
+def test_release_launcher_rejects_invalid_hcx_secret_size(
+    tmp_path: Path,
+    secret_payload: bytes,
+) -> None:
+    environment_path, environment, capture, test_launcher = _release_launcher_fixture(tmp_path)
+    secret_path = tmp_path / "clovastudio-api-key"
+    secret_path.write_bytes(secret_payload)
+    secret_path.chmod(0o600)
+    content = environment_path.read_text(encoding="utf-8")
+    content = content.replace(
+        "FINANCE_BACKEND_ANSWER_PROVIDER=deterministic\n",
+        "FINANCE_BACKEND_ANSWER_PROVIDER=hyperclova\n",
+    )
+    environment_path.write_text(
+        content
+        + "FINANCE_AGENT_LLM_MODE=evaluation\n"
+        + "LLM_PROVIDER=hyperclova\n"
+        + "HCX_MODEL=HCX-007\n"
+        + f"CLOVASTUDIO_API_KEY_HOST_FILE={secret_path}\n"
+        + "CLOVASTUDIO_API_KEY_FILE=/run/secrets/clovastudio_api_key\n",
+        encoding="utf-8",
+    )
+
+    completed = subprocess.run(
+        [str(test_launcher), "config", "--quiet"],
+        cwd=_repository_root(),
+        env=environment,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 1
+    assert "HyperCLOVA release secret must be an absolute regular file" in completed.stderr
+    assert str(secret_path) not in completed.stderr
+    assert not capture.exists()
+
+
 def test_release_launcher_rejects_missing_web_concurrency(tmp_path: Path) -> None:
     environment_path, environment, capture, test_launcher = _release_launcher_fixture(tmp_path)
     content = environment_path.read_text(encoding="utf-8")
@@ -438,6 +519,41 @@ def test_release_launcher_rejects_missing_web_concurrency(tmp_path: Path) -> Non
 
     assert completed.returncode == 1
     assert "missing release settings: WEB_CONCURRENCY" in completed.stderr
+    assert not capture.exists()
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "FINANCE_BACKEND_FUND_EXECUTION_POLICY",
+        "FINANCE_BACKEND_ANSWER_PROVIDER",
+        "FINANCE_BACKEND_HCX_QUERY_PLAN_ENABLED",
+        "HCX_TIMEOUT_SECONDS",
+    ],
+)
+def test_release_launcher_requires_explicit_signed_profile_identity(
+    tmp_path: Path,
+    name: str,
+) -> None:
+    environment_path, environment, capture, test_launcher = _release_launcher_fixture(tmp_path)
+    lines = environment_path.read_text(encoding="utf-8").splitlines()
+    assert sum(line.startswith(name + "=") for line in lines) == 1
+    environment_path.write_text(
+        "\n".join(line for line in lines if not line.startswith(name + "=")) + "\n",
+        encoding="utf-8",
+    )
+
+    completed = subprocess.run(
+        [str(test_launcher), "config", "--quiet"],
+        cwd=_repository_root(),
+        env=environment,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 1
+    assert f"missing release settings: {name}" in completed.stderr
     assert not capture.exists()
 
 

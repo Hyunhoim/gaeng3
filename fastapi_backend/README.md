@@ -375,6 +375,8 @@ benchmark·soak 실행법과 2026-08-14 검증 결과는 다음 문서를 따른
 
 개발 설정 예시는 `.env.example`, release 설정 예시는 `.env.release.example`을 사용한다.
 개인 값은 각각 Git에서 제외되는 `.env`, `.env.release`에서 관리한다.
+아래 기본값 열은 개발 Compose 기준이다. 최종 evaluation 템플릿은 심사팀의 공개 HTTP
+접근을 위해 `0.0.0.0:80`을 사용하며 NCP ACG에서 공지된 평가 발신 IP로 제한한다.
 
 ### 8.1 사용자가 host 환경 파일에 설정하는 변수
 
@@ -387,7 +389,7 @@ benchmark·soak 실행법과 2026-08-14 검증 결과는 다음 문서를 따른
 | `WEB_CONCURRENCY` | `1` | Uvicorn worker 수 |
 | `OFFICIAL_ANSWER_TIMEOUT_SECONDS` | `270` | 평가용 GET의 바깥쪽 응답 제한, 0초 초과 300초 미만만 허용 |
 | `OFFICIAL_ANSWER_MAX_INFLIGHT` | `2` | 프로세스당 동시 Agent 작업 상한(허용 1~8). timeout 뒤에도 실제 worker 종료까지 자리를 유지하며 초과 요청은 실행 전에 거절 |
-| `FINANCE_BACKEND_ANSWER_PROVIDER` | `deterministic` | 답변 provider, 기본은 모델 미사용 |
+| `FINANCE_BACKEND_ANSWER_PROVIDER` | `deterministic` | 개발 Compose 기본값. 최종 evaluation release는 `hyperclova`로 고정 |
 | `FINANCE_BACKEND_HCX_QUERY_PLAN_ENABLED` | `false` | HCLX QueryPlan 선택 기능. 독립 품질·지연 평가 전에는 비활성 유지 |
 | `FINANCE_AGENT_LLM_MODE` | `disabled` | HCLX 사용 시 `APP_ENV`와 같은 `evaluation` 또는 `production` |
 | `LLM_PROVIDER` | `disabled` | HCLX 사용 시에만 `hyperclova` |
@@ -477,8 +479,10 @@ RELEASE_ENV_FILE=fastapi_backend/.env.release \
 `.env.release`에는 credential 값이 아니라 `CLOVASTUDIO_API_KEY_HOST_FILE`의 절대
 경로와 컨테이너 경로 `/run/secrets/clovastudio_api_key`만 기록한다. 위 명령은 HCLX를
 호출하지 않는다. 애플리케이션 시작도 API healthcheck를 보내지 않지만, HCLX release로
-실제 `/answer`를 요청하면 과금 가능한 호출이 발생한다. 최초 실제 호출은 팀 승인 후
-한 건만 수행하고 인증·모델 사용 권한·응답 schema·latency를 별도 기록한다.
+실제 `/answer`를 요청하면 과금 가능한 호출이 발생한다. 2026-08-14 연구실 환경에서
+answer-only 실제 호출 3회(초기 2,048-token timeout 1회, 출력 예산 보완 뒤 DETAIL·SEARCH
+성공 2회)를 확인했다. 이는 clean NCP signed release 증거가 아니다. 최종 evaluation은
+HCLX answer-only, QueryPlan·Dense OFF, 공모펀드 locked로 고정한다.
 
 - [CLOVA Studio API 개요](https://api.ncloud-docs.com/docs/ai-naver-clovastudio-summary)
 - [Structured Outputs](https://api.ncloud-docs.com/docs/clovastudio-chatcompletionsv3-so)

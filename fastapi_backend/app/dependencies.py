@@ -12,6 +12,7 @@ from finance_agent_core.agent.grounded_planning import GroundedPlanGate
 from finance_agent_core.agent.knowledge_router import DeterministicKnowledgeRouter
 from finance_agent_core.agent.knowledge_service import KnowledgeAgent
 from finance_agent_core.agent.providers import (
+    HyperClovaXCallObserver,
     HyperClovaXHTTPTransport,
     HyperClovaXQueryPlanProvider,
     HyperClovaXSettings,
@@ -66,7 +67,11 @@ def get_request_coordinator(request: Request) -> IdempotentRequestCoordinator:
     return coordinator
 
 
-def _provider_assembly_matches(service: RoutedFinanceAgent, settings: Settings) -> bool:
+def _provider_assembly_matches(
+    service: RoutedFinanceAgent,
+    settings: Settings,
+    audit_sink: BoundedAsyncAuditSink | None,
+) -> bool:
     if service.grounded_plan_provider is not None:
         return False
     transports: list[object] = []
@@ -77,6 +82,8 @@ def _provider_assembly_matches(service: RoutedFinanceAgent, settings: Settings) 
         if (
             provider.model_name != settings.hcx_model
             or provider._client.settings.timeout_seconds != settings.hcx_timeout_seconds
+            or type(provider._client.on_call) is not HyperClovaXCallObserver
+            or provider._client.on_call.expected_audit_sink is not audit_sink
         ):
             return False
         transports.append(provider._client.transport)
@@ -90,6 +97,8 @@ def _provider_assembly_matches(service: RoutedFinanceAgent, settings: Settings) 
         if (
             answer_provider.model_name != settings.hcx_model
             or answer_provider._client.settings.timeout_seconds != settings.hcx_timeout_seconds
+            or type(answer_provider._client.on_call) is not HyperClovaXCallObserver
+            or answer_provider._client.on_call.expected_audit_sink is not audit_sink
         ):
             return False
         transports.append(answer_provider._client.transport)
@@ -189,7 +198,7 @@ def require_approval_guard(
                 or service.audit_sink is not audit_sink
             )
         )
-        or not _provider_assembly_matches(service, settings)
+        or not _provider_assembly_matches(service, settings, audit_sink)
         or not _knowledge_assembly_matches(service, settings, release_guard)
         or type(release_guard) is not ResolvedAgentRelease
         or service.release_guard is not release_guard
@@ -478,10 +487,19 @@ def build_agent(
             timeout_seconds=settings.hcx_timeout_seconds,
         )
         transport = HyperClovaXHTTPTransport(api_key=_load_hcx_api_key(settings))
+        call_observer = HyperClovaXCallObserver(audit_sink) if audit_sink is not None else None
         if settings.hcx_query_plan_enabled:
-            query_plan_provider = HyperClovaXQueryPlanProvider(hcx_settings, transport)
+            query_plan_provider = HyperClovaXQueryPlanProvider(
+                hcx_settings,
+                transport,
+                on_call=call_observer,
+            )
         if settings.answer_provider == "hyperclova":
-            answer_provider = HyperClovaXGroundedAnswerProvider(hcx_settings, transport)
+            answer_provider = HyperClovaXGroundedAnswerProvider(
+                hcx_settings,
+                transport,
+                on_call=call_observer,
+            )
     knowledge_agent = _build_knowledge_agent(settings, release_guard)
     knowledge_router = DeterministicKnowledgeRouter() if knowledge_agent is not None else None
     return RoutedFinanceAgent(

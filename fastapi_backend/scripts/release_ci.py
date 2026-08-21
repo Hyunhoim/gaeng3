@@ -24,6 +24,8 @@ _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _PLATFORMS = {"linux/amd64": ("linux", "amd64"), "linux/arm64": ("linux", "arm64")}
 _MAX_RELATION_ARTIFACT_BYTES = 4 * 1024
 _MAX_RELEASE_MANIFEST_BYTES = 2 * 1024 * 1024
+_FINAL_ANSWER_PROVIDER = "hyperclova"
+_FINAL_HCX_QUERYPLAN_ENABLED = "false"
 _RELATION_ARTIFACT_KEYS = frozenset(
     {
         "artifact_kind",
@@ -69,14 +71,14 @@ def validate_inputs(arguments: argparse.Namespace) -> None:
         raise ReleaseCIError("environment is invalid")
     if arguments.platform not in _PLATFORMS:
         raise ReleaseCIError("platform is invalid")
-    if arguments.answer_provider not in {"deterministic", "hyperclova"}:
-        raise ReleaseCIError("answer provider is invalid")
-    if arguments.hcx_queryplan_enabled not in {"true", "false"}:
-        raise ReleaseCIError("HCLX QueryPlan flag is invalid")
-    if arguments.answer_provider == "deterministic" and arguments.hcx_queryplan_enabled == "false":
-        model_id = "disabled"
-    else:
-        model_id = "HCX-007"
+    if (
+        arguments.answer_provider != _FINAL_ANSWER_PROVIDER
+        or arguments.hcx_queryplan_enabled != _FINAL_HCX_QUERYPLAN_ENABLED
+    ):
+        raise ReleaseCIError(
+            "final release profile requires HyperCLOVA answer-only and HCLX QueryPlan disabled"
+        )
+    model_id = "HCX-007"
     try:
         generation = int(arguments.activation_generation)
     except ValueError as error:

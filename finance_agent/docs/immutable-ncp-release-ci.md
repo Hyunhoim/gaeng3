@@ -1,6 +1,6 @@
 # NCP immutable release CI와 cosign 신뢰 경계
 
-상태: 저장소 계약·localhost 합성 Registry push 검증 완료 · 실제 NCP Registry 실행 대기
+상태: HCLX answer-only 최종 profile·저장소 계약·localhost 합성 Registry push 검증 완료 · 실제 NCP Registry 실행 대기
 
 ## 1. 현재 완료된 범위
 
@@ -24,10 +24,14 @@ workflow가 성공하면 다음 순서가 하나의 감사 가능한 실행 기�
 7. 원격 OCI index가 실행 가능한 image를 정확히 `linux/amd64` 하나만 포함하는지 확인한다.
    SBOM·provenance용 `unknown/unknown` attestation descriptor는 실행 image로 세지 않는다.
 8. exact digest를 pull한 뒤 source commit, release ID, Python base OCI label을 검증한다.
-9. 최초 배포 또는 신뢰된 직전 Binding을 이용해 `DeploymentBinding`을 생성한다.
-10. GitHub OIDC로 base image, release image, Manifest, Binding을 cosign keyless 서명하고,
+9. exact image를 network none·read-only·UID/GID 10001로 실행해 금지 model dependency·
+   executable·일반 weight 형식·DB·XLSX·inline credential 부재와 평가 Settings Guard를
+   확인한다. report에 exact digest·release ID·source commit을 넣고 증거 SHA 목록에 포함한다.
+10. 최초 배포 또는 신뢰된 직전 Binding을 이용해 `DeploymentBinding`을 생성한다.
+11. GitHub OIDC로 base image, release image, Manifest, Binding을 cosign keyless 서명하고,
    동일 workflow identity와 issuer로 즉시 검증한다.
-11. credential을 제외한 Manifest·Binding·digest·OCI inspect·Sigstore bundle·검증 결과를
+12. credential을 제외한 Manifest·Binding·digest·OCI inspect·image runtime boundary·
+    Sigstore bundle·검증 결과를
     GitHub Actions artifact로 90일간 보존한다.
 
 모든 외부 Action은 버전 tag가 아니라 정확한 commit SHA로 고정돼 있다. Docker build는
@@ -134,8 +138,10 @@ GitHub Actions의 `Immutable NCP release`에서 다음 값을 입력한다.
 | `release_id` | `finance-agent-eval-20260812-001` | 소문자·숫자·`.`·`_`·`-`, 8~100자 |
 | `environment` | `evaluation` | `evaluation` 또는 `production` |
 | `activation_generation` | `1` | 최초 1, 이후 직전 값+1 |
-| `answer_provider` | `deterministic` | Manifest의 실제 provider와 일치 |
-| `hcx_queryplan_enabled` | `false` | Manifest의 실제 operation과 일치 |
+
+`answer_provider`와 `hcx_queryplan_enabled`는 운영자 입력이 아니다. 최종 workflow가
+각각 `hyperclova`, `false`로 고정하며 `release_ci.py`는 다른 조합을 Registry 변경 전에
+거부한다. 최종 Manifest는 HCX-007 answer-only, Dense OFF, 공모펀드 locked를 기록한다.
 
 push 대상은 입력이 아니라 선택한 GitHub Environment의 보호 variable로 읽는다.
 
@@ -215,8 +221,8 @@ manifest 생성 뒤 artifact만 바꾸면 Registry의 다음 변경 전에 중�
 index·세 상품 DB·관계 집합을 다시 대조한다. startup 이후 path/inode/size/mtime/ctime drift는 `/health`를
 `degraded` HTTP 503으로 바꾸며 관계 요청도 503으로 거부한다.
 
-현재 로컬 증거는 Agent Core `1,443 passed, 2 skipped`, Backend
-`358 passed, 2 warnings`, P0-10 집중 회귀 `522/522`다. fresh Docker smoke는
+현재 최종 동결 후보의 로컬 증거는 Agent Core `1,481 passed, 1 skipped`, Backend
+`430 passed, 1 skipped`, P0-10 집중 회귀 `522/522`다. fresh Docker smoke는
 Backend 8/8와 공식 GET 8/8이고, relation index 1바이트 변조 뒤 health·관계 요청 503을
 확인했다. 이는 workflow의 계약과 로컬 runtime 동작 증거이지 보호된 GitHub Environment의
 실제 dispatch·NCP push·cosign 서명이나 서명된 두 release rollback 증거는 아니다.

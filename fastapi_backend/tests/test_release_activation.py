@@ -208,6 +208,40 @@ def test_activation_does_not_commit_state_before_compose_health_success(
     assert not release_activation.ACTIVE_STATE_FILE.exists()
 
 
+def test_activation_never_calls_compose_when_release_trust_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _configure_control_paths(monkeypatch, tmp_path)
+    binding = _binding(
+        release_id="finance-agent-eval-001",
+        generation=1,
+        image_character="a",
+        rollback=_bootstrap_rollback(),
+    )
+    env_file, _ = _write_candidate(tmp_path, "untrusted", binding)
+
+    def fail_trust(_path: Path) -> None:
+        raise release_activation.ReleaseActivationError("release profile mismatch")
+
+    monkeypatch.setattr(release_activation, "_run_trust_verification", fail_trust)
+    compose_calls: list[list[str]] = []
+    monkeypatch.setattr(
+        release_activation.subprocess,
+        "run",
+        lambda command, **_: compose_calls.append(command),
+    )
+
+    with pytest.raises(
+        release_activation.ReleaseActivationError,
+        match="release profile mismatch",
+    ):
+        release_activation.activate(env_file, _compose_arguments())
+
+    assert compose_calls == []
+    assert not release_activation.ACTIVE_STATE_FILE.exists()
+
+
 def test_activation_lock_serializes_parallel_attempts(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

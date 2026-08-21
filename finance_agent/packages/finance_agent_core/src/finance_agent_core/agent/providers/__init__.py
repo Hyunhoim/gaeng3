@@ -4,6 +4,7 @@ from finance_agent_core.agent.providers.hyperclova import (
     HyperClovaXCallRecord,
     HyperClovaXClient,
     HyperClovaXConfigurationError,
+    HyperClovaXFailureReason,
     HyperClovaXFundComparisonDraftProvider,
     HyperClovaXProviderError,
     HyperClovaXQueryPlanProvider,
@@ -17,8 +18,12 @@ from finance_agent_core.agent.providers.hyperclova import (
     HyperClovaXTransport,
     HyperClovaXTransportError,
     HyperClovaXTransportResponse,
+    hyperclova_failure_reason,
 )
 from finance_agent_core.agent.providers.hyperclova_http import HyperClovaXHTTPTransport
+from finance_agent_core.agent.providers.hyperclova_observability import (
+    HyperClovaXCallObserver,
+)
 from finance_agent_core.agent.providers.local_test import (
     LocalFundComparisonDraftProvider,
     LocalProviderError,
@@ -44,6 +49,7 @@ __all__ = [
     "HyperClovaXClient",
     "HyperClovaXConfigurationError",
     "HyperClovaXFundComparisonDraftProvider",
+    "HyperClovaXFailureReason",
     "HyperClovaXHTTPTransport",
     "HyperClovaXProviderError",
     "HyperClovaXQueryPlanProvider",
@@ -57,6 +63,7 @@ __all__ = [
     "HyperClovaXTransport",
     "HyperClovaXTransportError",
     "HyperClovaXTransportResponse",
+    "HyperClovaXCallObserver",
     "LocalFundComparisonDraftProvider",
     "LocalProviderError",
     "LocalTestProvider",
@@ -68,4 +75,5 @@ __all__ = [
     "first_vertical_slice_plan",
     "fund_comparison_plan",
     "fund_vertical_slice_plan",
+    "hyperclova_failure_reason",
 ]

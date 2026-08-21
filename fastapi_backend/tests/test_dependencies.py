@@ -5,16 +5,18 @@ from pathlib import Path
 
 import pytest
 from finance_agent_core.agent.providers import (
+    HyperClovaXCallObserver,
     HyperClovaXHTTPTransport,
     HyperClovaXQueryPlanProvider,
     HyperClovaXStructuredRequest,
     LocalProviderError,
 )
 from finance_agent_core.answering import HyperClovaXGroundedAnswerProvider
+from finance_agent_core.observability import BoundedAsyncAuditSink, InMemoryAuditSink
 from pydantic import ValidationError
 
 from app.config import Settings
-from app.dependencies import _load_hcx_api_key, build_agent
+from app.dependencies import _load_hcx_api_key, build_agent, require_approval_guard
 from tests.conftest import stub_resolved_release
 
 
@@ -150,10 +152,12 @@ def test_hcx_query_plan_is_a_separate_opt_in_and_shares_the_transport(
         FINANCE_BACKEND_HCX_QUERY_PLAN_ENABLED=True,
         CLOVASTUDIO_API_KEY_FILE=key_file,
     )
+    audit = BoundedAsyncAuditSink(InMemoryAuditSink(max_events=32), queue_capacity=32)
 
     agent = build_agent(
         settings,
         release_guard=stub_resolved_release(),
+        audit_sink=audit,
     )
 
     assert isinstance(agent.query_plan_provider, HyperClovaXQueryPlanProvider)
@@ -161,7 +165,45 @@ def test_hcx_query_plan_is_a_separate_opt_in_and_shares_the_transport(
     assert agent.hclx_planning_enabled is True
     assert agent.query_plan_provider._client.transport is transport
     assert agent.answer_provider._client.transport is transport
+    assert type(agent.query_plan_provider._client.on_call) is HyperClovaXCallObserver
+    assert agent.query_plan_provider._client.on_call is agent.answer_provider._client.on_call
+    assert agent.query_plan_provider._client.on_call.expected_audit_sink is audit
     assert transport.calls == 0
+    assert audit.close(timeout_seconds=2)
+
+
+def test_approval_guard_rejects_hcx_provider_without_the_bound_call_observer(
+    tmp_path: Path,
+) -> None:
+    key_file = tmp_path / "clovastudio_api_key"
+    key_file.write_text("nv-observer-guard-test-secret\n", encoding="utf-8")
+    key_file.chmod(0o600)
+    settings = _hcx_settings(CLOVASTUDIO_API_KEY_FILE=key_file)
+    release = stub_resolved_release()
+    audit = BoundedAsyncAuditSink(InMemoryAuditSink(max_events=32), queue_capacity=32)
+    agent = build_agent(settings, release_guard=release, audit_sink=audit)
+
+    assert (
+        require_approval_guard(
+            agent,
+            settings,
+            release_guard=release,
+            audit_sink=audit,
+        )
+        is agent
+    )
+    assert isinstance(agent.answer_provider, HyperClovaXGroundedAnswerProvider)
+    agent.answer_provider._client.on_call = None
+
+    with pytest.raises(RuntimeError, match="approved RoutedFinanceAgent"):
+        require_approval_guard(
+            agent,
+            settings,
+            release_guard=release,
+            audit_sink=audit,
+        )
+
+    assert audit.close(timeout_seconds=2)
 
 
 def test_hcx_query_plan_can_be_evaluated_without_hcx_answer_generation(

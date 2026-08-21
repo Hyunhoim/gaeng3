@@ -74,6 +74,7 @@ REQUIRED_INDEX_TARGETS = {
     "p0-6-provided-relation-retrieval-handover-2026-08-19.md",
     "p0-7-knowledge-claim-verifier-handover-2026-08-20.md",
     "p0-10-public-relation-release-integration-handover-2026-08-20.md",
+    "final-hcx-answer-release-freeze-2026-08-21.md",
     "submission-model-boundary.md",
     "hyperclova-provider.md",
     "evaluation-pre-hcx-diagnostic.md",
@@ -144,6 +145,7 @@ REQUIRED_BASELINES = {
     "schema-embedding-cpu-public-v1.json",
     "schema-embedding-docker-runtime-2026-08-13.json",
     "deterministic-api-stage4-final-2026-08-13.json",
+    "final-hcx-answer-release-freeze-v1.json",
 }
 REQUIRED_BASELINE_KEYS = {
     "schema_version",
@@ -166,39 +168,48 @@ REQUIRED_BASELINE_KEYS = {
 # migration here avoids rewriting historical evidence whose own SHA-256 is cited.
 HISTORICAL_BASELINE_SUITE_SUCCESSOR_SHA256 = {
     "docker-http-smoke-v2.json": (
-        "e21c2a409f740e291cca284d883896df46c6e54344737f9442a97e4aec163992"
+        "4060178049bf575e02b0d63853df4f7dfe1a456520a36498285474ab310773ee"
     ),
     "docker-http-smoke-qwen-v2.json": (
-        "e21c2a409f740e291cca284d883896df46c6e54344737f9442a97e4aec163992"
+        "4060178049bf575e02b0d63853df4f7dfe1a456520a36498285474ab310773ee"
     ),
 }
 HISTORICAL_BASELINE_COMPONENT_ALLOWLIST = {
     "stage3-local-oci-rollback-2026-08-12.json": {
         "compose-release.sh": (
-            "d41531f973fed6a7b748a85a6dda41c3286b7ffa727acce1205e870b635cc7b6"
+            "2b2435fd261b476630cb423a8dd3e0ef9c2427e7c9a55acf3970e7487112eec0"
+        ),
+        "fastapi_backend/Dockerfile": (
+            "84c52ee0aac7e565d48242fef2a13c3bcde0b997b1d54ebd8e7f13998c07684d"
         ),
         "fastapi_backend/docker-compose.release.yml": (
             "3c308f367b1fa6ff84d9c4f847831f40685d797b79b0b8bee0a4fb0a73012949"
         ),
         "fastapi_backend/scripts/rollback_drill.py": (
-            "c200715cb377290836d3e589030211b600ecab35d6a7db45beed27a9675ca433"
+            "91c23b2e93e6a342cfae03dc4e07b06b901e432017996dc64dae7e5407f5e4e5"
         ),
         "fastapi_backend/scripts/release_ci.py": (
-            "102324f87619ef5c6667e2bcc6dda38df076807af4ba814b76c5fef685d52b14"
+            "1086929554fa26ed9883e52c51608d9af22e2595bdb548aaef8c361b3bf57bd6"
+        ),
+        "fastapi_backend/scripts/release_trust.py": (
+            "0326cf1462a61d82abe539b7d84555a77e21f73f4a8444cad5e8d152f10552b1"
         ),
     },
     "stage3-release-contract-2026-08-12.json": {
+        "fastapi_backend/tests/test_release_activation.py": (
+            "7aa29731e8820665ec15fa51c51ed770584d485b386465b066b2ab602d9d97df"
+        ),
         "fastapi_backend/tests/test_release_deployment_contract.py": (
-            "2239e0df11a7677ec136924aebf2411d22dad50cb155502f8b766cc175b24104"
+            "1f0630497123985300f5f2e81dfe4802bdb0fadd262e390f73c1eea5e6df0a6f"
         ),
         "fastapi_backend/tests/test_release_rollback_drill.py": (
-            "b2857df27b76301ff6195f39ef21480c8b3fac832cbb3a0830b44fcb9409e64c"
+            "488fec38c6120726a0a4b29061506c4d6307d2810db781d45cfb3c2279681a76"
         ),
         "fastapi_backend/tests/test_release_startup.py": (
             "89c1282710d698a634878571846c230081bc0d26cefc6cfa6db9d15e7468196c"
         ),
         "finance_agent/packages/finance_agent_core/tests/test_agent_release.py": (
-            "86213e6adf151a145de06f7e3839ccff65486feaab002939e041124fdbdd0376"
+            "1858ae74ea07cc11002495dd07747669cfbdaf4261a8142fd863c07e0dbffdb8"
         ),
         "finance_agent/packages/finance_agent_core/tests/test_plan_authority.py": (
             "f33e0d47813d73e91a7e6778490d34ca2efd92e6cbbf97b58c0614c332ccd54f"
@@ -207,7 +218,42 @@ HISTORICAL_BASELINE_COMPONENT_ALLOWLIST = {
             "0116d25054ac2a4baf2fa2dcf7101b236517914457d70a164e3e19c0127f2c52"
         ),
         "fastapi_backend/tests/test_release_ci_contract.py": (
-            "443a5e668c62e833dbea757b50d3391ba6d93d49c0b600f491ef068642a50913"
+            "5f4303ef41286577040dad15c2e5581f940cb08310d35fa1809d177f344b559e"
+        ),
+        "fastapi_backend/tests/test_release_trust.py": (
+            "b9126c6d2d0e3e8f2418470a1d0d12cd91c9fe05e1046fd4746a2756f65a4a9a"
+        ),
+    },
+    "p0-10-public-relation-release-integration-v1.json": {
+        "finance_agent/packages/finance_agent_core/tests/test_knowledge_router.py": (
+            "6fdefadd174165a58018972654818617add618e0b1c811a12441610382965a5b"
+        ),
+        "finance_agent/packages/finance_agent_core/tests/test_knowledge_agent.py": (
+            "e031e5c5bbd476116345d0223120c9e88f99663d34807806e00ec4ac8505903c"
+        ),
+        "finance_agent/packages/finance_agent_core/tests/test_agent_release.py": (
+            "1858ae74ea07cc11002495dd07747669cfbdaf4261a8142fd863c07e0dbffdb8"
+        ),
+        "fastapi_backend/tests/test_relation_runtime_wiring.py": (
+            "4fac71fa83941887a58f52a08de29ca05cf561647a6917d0d365e98c1c3abc8e"
+        ),
+        "fastapi_backend/tests/test_smoke.py": (
+            "c37c4a2d263a8077598baa4af7bfbeacb8d5abf229493aafb7da56c03b851b66"
+        ),
+        "fastapi_backend/tests/test_dependencies.py": (
+            "49a49dbc45518d590582629cc20b7bf08b9a1a717a7464165417f69def123437"
+        ),
+        "fastapi_backend/tests/test_answer.py": (
+            "602163de21dfe45259fecbb83a3ed451fc6e624d9f5553a432a3a82c5e15481a"
+        ),
+        "fastapi_backend/tests/test_release_ci_contract.py": (
+            "5f4303ef41286577040dad15c2e5581f940cb08310d35fa1809d177f344b559e"
+        ),
+        "fastapi_backend/tests/test_release_deployment_contract.py": (
+            "1f0630497123985300f5f2e81dfe4802bdb0fadd262e390f73c1eea5e6df0a6f"
+        ),
+        "fastapi_backend/tests/test_release_rollback_drill.py": (
+            "488fec38c6120726a0a4b29061506c4d6307d2810db781d45cfb3c2279681a76"
         ),
     },
 }

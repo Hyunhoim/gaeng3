@@ -1,6 +1,6 @@
 # 개발 환경과 현재 구현 상태
 
-상태: 현재 정본
+상태: 개발 환경 안내. 최종 평가 상태는 `final-hcx-answer-release-freeze-2026-08-21.md`가 정본
 기준일: 2026-08-20
 
 ## 저장소 상태
@@ -280,16 +280,17 @@ identity와 지원 언어를 제외한 질문 전체의 미등록 잔여 표현,
 미종결·역방향·중첩·줄바꿈이 잘못된 따옴표도 차단한다. 이 통합 결과는 공개
 회귀 질문에 대한 배선 검증이다. 다른 작성자가 만든 독립 blind 질문의
 parser→답변 E2E와 사람 rubric은 아직 실행하지 않았다.
-HyperCLOVA X는 세 operation의 provider·주입형 transport·오류 계약과 API 없는
-fake 테스트까지 완료했다. 설명회에서 확인한 공식 `GET /answer` 다섯 문자열과
-질문당 60초 계약은 FastAPI route와 Docker에서 검증했지만, 실제 endpoint·인증
-header·credential은 크레딧 수령 전이라 아직 연결하지 않았다. 공모펀드는 기본
-`fund_execution_policy=locked`이며 명시적 개발 승인 경로만 별도로 검증했다.
+HyperCLOVA X는 세 operation의 provider·오류 계약·공식 Direct v3 transport와 fake
+테스트를 완료했고, answer-only DETAIL·SEARCH 실호출 호환성을 확인했다. 공식
+`GET /answer` 다섯 문자열과 300초 evaluator timeout 안의 270초 서버 deadline을
+FastAPI에서 검증했다. 최종 evaluation은 HCLX answer-only이며 QueryPlan·Dense는 OFF,
+공모펀드는 `fund_execution_policy=locked`다.
 
 이 수치는 자유 생성 LLM 점수가 아니라 제한된 hybrid system의 계약 준수율이다.
 네 상품군·일곱 intent Router, capability matrix, BM25/SQLite FTS 문서 검색,
-사람 rubric validator와 Backend DTO까지 구현했다. 다음 평가는 금융 도메인
-담당자의 external blind 100문항 parser→답변 E2E와 실제 사람 평가다. P0-7은
+사람 rubric validator와 Backend DTO까지 구현했다. external blind는 이번 최종 동결에서
+수행하지 않으며, 남은 필수 검증은 clean signed NCP image의 공식 GET·HCLX 장애·성능·
+rollback이다. P0-7은
 관계·문서 계획과 evidence 주장 검증을 내부 CLI까지 연결했으며, 이후 P0-10에서
 공개 Router·FastAPI adapter·Agent Release를 같은 clean image로 고정한다.
 
@@ -324,9 +325,8 @@ SEARCH·AGGREGATE 기본 경로도 전체 정규화 레코드를 verifier univer
 HyperCLOVA X 경계는 QueryPlan, 공모펀드 비교 초안, 근거 답변이 공유하는
 semantic structured request와 오류·token·latency 관측을 제공한다. fake
 transport로 정상 응답, 401·403·429·500, timeout, 연결 실패와 잘못된 응답을
-검증한다. 실제 API 호출 완료로 오해하지 않도록
-[HyperCLOVA X provider 계약](hyperclova-provider.md)에 완료 범위와 외부
-게이트를 분리해 기록한다.
+검증한다. 실제 answer-only 호출과 아직 남은 signed NCP 검증은
+[HyperCLOVA X provider 계약](hyperclova-provider.md)에 분리해 기록한다.
 
 API 없는 전체 경로는 다음 명령으로 재현한다.
 
