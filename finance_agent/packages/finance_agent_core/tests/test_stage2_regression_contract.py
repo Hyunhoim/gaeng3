@@ -104,11 +104,12 @@ def test_approved_four_family_databases_recompute_stage2_fingerprints() -> None:
     # Import after evaluation runners are initialized.  Importing answering first
     # can re-enter the evaluation package while its public modules are only partly
     # initialized when this test module is collected on its own.
+    from finance_agent_core.agent import RoutedFinanceAgent
     from finance_agent_core.answering import ExpectedGroundedAnswerProvider
 
     database_dir = Path(_STAGE2_DATABASE_DIR or "")
     contract_resource = files("finance_agent_core.evaluation.suites").joinpath(
-        "stage2_approved_db_contract_20260812.json"
+        "stage2_approved_db_contract_20260822_g5.json"
     )
     contract = json.loads(contract_resource.read_text(encoding="utf-8"))
     search_aggregate = load_search_aggregate_benchmark_suite()
@@ -178,3 +179,68 @@ def test_approved_four_family_databases_recompute_stage2_fingerprints() -> None:
     assert not fund_failures
 
     assert len(search_aggregate_results) + len(product_results) + len(fund_results) == 62
+
+    fund_agent = RoutedFinanceAgent(
+        {"fund": database_paths[ProductFamily.FUND]},
+        capability_execution_overrides={"fund"},
+    )
+    one_year_search = fund_agent.answer(
+        "1년 수익률이 높은 공모펀드를 3개 보여줘",
+        "approved-g5-fund-one-year-search",
+    )
+    assert one_year_search.status == "executed"
+    assert one_year_search.candidate_count == 7_017
+    assert [product.product_id for product in one_year_search.products] == [
+        "KR5129470010",
+        "KR5129470016",
+        "KR5129470012",
+    ]
+    assert [
+        next(
+            field.normalized_value
+            for field in product.fields
+            if field.canonical_field == "one_year_return_pct"
+        )
+        for product in one_year_search.products
+    ] == ["975.1", "972.7", "971.88"]
+    assert any("상한 처리하지 않았습니다" in warning for warning in one_year_search.warnings)
+    assert any("스냅샷 2026-07-11" in warning for warning in one_year_search.warnings)
+
+    one_year_detail = fund_agent.answer(
+        "공모펀드 상품 번호 KR5129470010의 1년 수익률 상세 정보를 알려줘",
+        "approved-g5-fund-one-year-detail",
+    )
+    assert one_year_detail.status == "executed"
+    detail_field = next(
+        field
+        for field in one_year_detail.products[0].fields
+        if field.canonical_field == "one_year_return_pct"
+    )
+    assert detail_field.normalized_value == "975.1"
+    assert detail_field.raw_values == {"fd_yr1_ern_r": "975.10"}
+    assert detail_field.as_of.isoformat() == "2026-07-11"
+
+    one_year_compare = fund_agent.answer(
+        "공모펀드 KR5129470010과 KR5129470016의 1년 수익률을 비교해줘",
+        "approved-g5-fund-one-year-compare",
+    )
+    assert one_year_compare.status == "executed"
+    assert one_year_compare.comparisons[0].canonical_field == "one_year_return_pct"
+    assert str(one_year_compare.comparisons[0].delta) == "-2.4"
+
+    one_year_aggregate = fund_agent.answer(
+        "공모펀드의 1년 수익률 평균을 집계해줘",
+        "approved-g5-fund-one-year-aggregate",
+    )
+    assert one_year_aggregate.status == "executed"
+    assert one_year_aggregate.candidate_count == 11_115
+    assert str(one_year_aggregate.aggregates[0].value) == "51.983682485393"
+    assert one_year_aggregate.aggregates[0].valid_count == 7_017
+    assert one_year_aggregate.aggregates[0].missing_count == 4_098
+
+    unsupported_long_return = fund_agent.answer(
+        "2년 수익률이 높은 공모펀드를 보여줘",
+        "approved-g5-fund-two-year-blocked",
+    )
+    assert unsupported_long_return.status in {"clarify", "unsupported"}
+    assert unsupported_long_return.products == []

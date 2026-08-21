@@ -320,13 +320,18 @@ class NormalizedPublicFundRecord(DomainModel):
                 raise ValueError(f"{field_name} does not match the short-return contract")
         for field_name in (
             "eighteen_month_return_pct",
-            "one_year_return_pct",
             "two_year_return_pct",
             "three_year_return_pct",
             "five_year_return_pct",
         ):
             if self.field_quality.get(field_name) is not QualityStatus.UNKNOWN:
                 raise ValueError(f"{field_name} must remain display-only UNKNOWN")
+        one_year_quality = self.field_quality.get("one_year_return_pct")
+        expected_one_year_quality = (
+            QualityStatus.UNKNOWN if self.one_year_return_pct is None else QualityStatus.PARTIAL
+        )
+        if one_year_quality is not expected_one_year_quality:
+            raise ValueError("one_year_return_pct does not match the raw-source contract")
         return self
 
     def canonical_value(self, field_name: str) -> object:

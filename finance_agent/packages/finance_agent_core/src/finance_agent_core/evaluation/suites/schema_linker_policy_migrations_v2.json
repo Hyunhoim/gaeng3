@@ -1,0 +1,35 @@
+{
+  "schema_version": "1.0",
+  "suite_id": "schema-linker-policy-migrations-v2",
+  "status": "developer_authored_pending_finance_domain_review",
+  "base_suite_sha256_by_family": {
+    "bond": "b2d19e3af43fb8d6d4be03895088380b263bb8aca2c53c29b32de622a29c4178",
+    "fund": "77d9be9ca86d9654fb61a52290ca08eadff6b618f861b985367b05d195c582b2"
+  },
+  "migrations": [
+    {
+      "case_id": "bond-049",
+      "product_family": "bond",
+      "question_sha256": "726c26e1abc66d6ea27bf14d91d959af18613168b729f1fecc477046d3078294",
+      "legacy_disposition": "block",
+      "current_disposition": "execute",
+      "gold_field_ids": [
+        "credit_rating"
+      ],
+      "reason_code": "ordered_credit_rating_deterministic_lowering",
+      "review_status": "pending_finance_domain_review"
+    },
+    {
+      "case_id": "fund-049",
+      "product_family": "fund",
+      "question_sha256": "d2977f166e98f49b2163641871847dafc2ab7b591af90b42f7b9b287c78348d5",
+      "legacy_disposition": "block",
+      "current_disposition": "execute",
+      "gold_field_ids": [
+        "one_year_return_pct"
+      ],
+      "reason_code": "fund_one_year_raw_source_execution_approved",
+      "review_status": "pending_finance_domain_review"
+    }
+  ]
+}

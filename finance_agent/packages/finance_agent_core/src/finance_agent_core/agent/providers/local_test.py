@@ -154,7 +154,7 @@ def build_query_plan_system_prompt(
 - fund의 AUM 조건·정렬에는 KRW 또는 USD trading_currency를 반드시 잠근다.
 """
         fund_safety = """
-- fund의 운용사 이름, 비용, 오늘 기준 최신값, 장기 수익률 순위와 대표 펀드
+- fund의 운용사 이름, 비용, 오늘 기준 최신값, 18개월·2년·3년·5년 수익률 순위와 대표 펀드
   클래스 합산은 unsupported_conditions로 처리한다.
 """
         fund_projection = """
@@ -478,7 +478,7 @@ comparison_fields 규칙:
 - 환헤지 여부=currency_hedged, 판매 여부=sellable,
   당사·미래에셋 판매 여부=company_sellable
 - 정식 상품명=product_name, 짧은 이름·단축 상품명=short_name
-- 총보수·판매수수료·장기 수익률·전망·추천처럼 목록에 없는 항목은 넣지 않는다.
+- 총보수·판매수수료·18개월·2년·3년·5년 수익률·전망·추천처럼 목록에 없는 항목은 넣지 않는다.
 - 항목이 없거나 모두 미지원이면 빈 배열로 둔다.
 
 질문:

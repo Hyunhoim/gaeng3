@@ -28,6 +28,7 @@ type FundComparisonField = Literal[
     "one_month_return_pct",
     "three_month_return_pct",
     "six_month_return_pct",
+    "one_year_return_pct",
     "fund_geography_scope",
     "fund_management_attribute",
     "investment_region",
@@ -47,6 +48,7 @@ SUPPORTED_FUND_COMPARISON_FIELDS: tuple[FundComparisonField, ...] = (
     "one_month_return_pct",
     "three_month_return_pct",
     "six_month_return_pct",
+    "one_year_return_pct",
     "fund_geography_scope",
     "fund_management_attribute",
     "investment_region",
@@ -83,6 +85,10 @@ _FIELD_PATTERNS: tuple[tuple[FundComparisonField, tuple[str, ...]], ...] = (
         "six_month_return_pct",
         (r"6\s*개월\s*(?:수익률|수익|성과)", r"반년\s*(?:수익률|수익|성과)", r"6M\s*수익률"),
     ),
+    (
+        "one_year_return_pct",
+        (r"1\s*년\s*(?:수익률|수익|성과)", r"1Y\s*수익률"),
+    ),
     ("company_sellable", (r"당사\s*판매\s*여부", r"미래에셋(?:증권)?\s*판매\s*여부")),
     (
         "fund_geography_scope",
@@ -103,7 +109,7 @@ _FIELD_PATTERNS: tuple[tuple[FundComparisonField, tuple[str, ...]], ...] = (
 _UNSUPPORTED_PATTERNS: tuple[tuple[str, str], ...] = (
     (r"총\s*보수", "총보수"),
     (r"판매\s*수수료", "판매수수료"),
-    (r"(?:18\s*개월|1\s*년|2\s*년|3\s*년|5\s*년)\s*(?:수익률|수익|성과)", "장기 수익률"),
+    (r"(?:18\s*개월|2\s*년|3\s*년|5\s*년)\s*(?:수익률|수익|성과)", "미지원 장기 수익률"),
     (r"수익률\s*(?:전망|예측)", "수익률 전망"),
     (r"환\s*노출\s*여부", "환 노출 여부"),
     (r"(?:추천|매수할|사야\s*할|가장\s*좋은)", "단정적 투자 추천"),

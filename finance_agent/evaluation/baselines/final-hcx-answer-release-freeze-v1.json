@@ -22,12 +22,12 @@
     "id": "final-hcx-answer-release-freeze-v1",
     "version": "1.0",
     "path": "evaluation/protocols/final-hcx-answer-release-freeze-v1.protocol.json",
-    "sha256": "07f488176984f6e87a3be1e647c840b3539fdcc2f04219daf22926c9a1d39c53",
-    "total_cases": 1912
+    "sha256": "dbd4866e76be30b6712e113655dcdfaf0e3bc7b1054902ebc9ce1d35672a79e6",
+    "total_cases": 1919
   },
   "data": {
     "fixture_kind": "pytest_fake_transport_and_release_contract",
-    "fixture_definition_sha256": "07f488176984f6e87a3be1e647c840b3539fdcc2f04219daf22926c9a1d39c53",
+    "fixture_definition_sha256": "dbd4866e76be30b6712e113655dcdfaf0e3bc7b1054902ebc9ce1d35672a79e6",
     "not_applicable_reason": "상품 정답 정확도가 아니라 HCLX answer-only 실행·오류·Audit·Release·rollback 시스템 계약"
   },
   "release_profile": {
@@ -39,14 +39,14 @@
     "product_dense_enabled": false
   },
   "metrics": {
-    "total": 1913,
-    "passed": 1913,
+    "total": 1919,
+    "passed": 1919,
     "skipped": 2,
     "strict_accuracy": 1.0,
     "strict_accuracy_scope": "고정된 시스템 계약 통과율이며 금융 질의 일반화 정확도나 공모전 예상 점수가 아님",
     "external_network_calls": 0,
     "live_hclx_calls": 0,
-    "core_passed": 1481,
+    "core_passed": 1487,
     "backend_passed": 432,
     "answer_only_official_get_focused_passed": 17
   },
@@ -54,7 +54,7 @@
     {
       "role": "final_hcx_answer_release_freeze_protocol",
       "artifact_name": "final-hcx-answer-release-freeze-v1.protocol.json",
-      "sha256": "07f488176984f6e87a3be1e647c840b3539fdcc2f04219daf22926c9a1d39c53"
+      "sha256": "dbd4866e76be30b6712e113655dcdfaf0e3bc7b1054902ebc9ce1d35672a79e6"
     }
   ],
   "reproduce": {

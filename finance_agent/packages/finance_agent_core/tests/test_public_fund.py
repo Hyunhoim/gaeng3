@@ -112,6 +112,7 @@ def fund_product(
     public_offering: str,
     aum: str,
     management_attribute: str | None = "주식형",
+    one_year_return: str | None = "10",
 ) -> dict[str, object]:
     return {
         "itm_no": product_id,
@@ -134,7 +135,7 @@ def fund_product(
         "fd_mm3_ern_r": "3.75",
         "fd_mm6_ern_r": "4.125",
         "fd_mm18_ern_r": "20",
-        "fd_yr1_ern_r": "10",
+        "fd_yr1_ern_r": one_year_return,
         "fd_yr2_ern_r": "30",
         "fd_yr3_ern_r": "40",
         "fd_yr5_ern_r": "50",
@@ -200,6 +201,7 @@ def write_comparison_fund_database(
     *,
     second_currency: str = "KRW",
     second_three_month_return: str | None = "5.25",
+    second_one_year_return: str | None = "600",
 ) -> tuple[Path, PublicFundNormalizationResult, DatabaseManifest]:
     first = fund_product(
         "KR0000000001",
@@ -216,6 +218,7 @@ def write_comparison_fund_database(
             "curr_cd": second_currency,
             "zrin_fd_ivst_risk_gcd": "4",
             "fd_mm3_ern_r": second_three_month_return,
+            "fd_yr1_ern_r": second_one_year_return,
         }
     )
     result = normalize_public_fund_rows(
@@ -244,6 +247,56 @@ def write_comparison_fund_database(
         quarantined_rows=0,
         logical_product_rows=2,
         attribute_rows=2,
+        scope_excluded_rows=0,
+    )
+    write_public_fund_database(path, result, manifest)
+    return path, result, manifest
+
+
+def write_one_year_return_fund_database(
+    tmp_path: Path,
+) -> tuple[Path, PublicFundNormalizationResult, DatabaseManifest]:
+    rows = [
+        fund_product(
+            "KR0000000001",
+            public_offering="공모",
+            aum="100",
+            one_year_return="975.10",
+        ),
+        fund_product(
+            "KR0000000002",
+            public_offering="공모",
+            aum="200",
+            one_year_return="10",
+        ),
+        fund_product(
+            "KR0000000003",
+            public_offering="공모",
+            aum="300",
+            one_year_return=None,
+        ),
+    ]
+    result = normalize_public_fund_rows(
+        [
+            (source_row, 25, {**row, "prfd_attr_cd": "A01"})
+            for source_row, row in enumerate(rows, start=2)
+        ],
+        source_snapshot_date=date(2026, 7, 11),
+    )
+    path = tmp_path / "fund-one-year-return.sqlite3"
+    manifest = DatabaseManifest(
+        schema_version="1.1",
+        dataset="fund",
+        registry_schema_version="1.3",
+        source_file_name="synthetic_public_fund_one_year.xlsx",
+        source_file_sha256="f" * 64,
+        source_file_size_bytes=3456,
+        source_snapshot_date=date(2026, 7, 11),
+        total_rows=3,
+        searchable_rows=3,
+        quarantined_rows=0,
+        logical_product_rows=3,
+        attribute_rows=3,
         scope_excluded_rows=0,
     )
     write_public_fund_database(path, result, manifest)
@@ -410,7 +463,8 @@ def test_public_fund_normalization_preserves_product_grain_and_quality() -> None
     assert public.risk_level == "높은위험(2등급)"
     assert public.one_month_return_pct == Decimal("2.5")
     assert public.field_quality["one_month_return_pct"] is QualityStatus.PARTIAL
-    assert public.field_quality["one_year_return_pct"] is QualityStatus.UNKNOWN
+    assert public.field_quality["one_year_return_pct"] is QualityStatus.PARTIAL
+    assert public.one_year_return_pct == Decimal("10")
 
     assert private.public_offering is False
     assert private.aum == 0
@@ -515,6 +569,117 @@ def test_public_fund_oracle_verifier_evidence_and_renderer_agree(
     assert "공모펀드 기본 범위" in answer
     assert "클래스 단위" in answer
     assert len(warnings) == 5
+
+
+def test_public_fund_one_year_return_search_preserves_outlier_and_excludes_missing(
+    tmp_path: Path,
+) -> None:
+    path, _, _ = write_one_year_return_fund_database(tmp_path)
+    result = RoutedFinanceAgent(
+        {"fund": path},
+        answer_provider=ExpectedGroundedAnswerProvider(),
+        allow_internal_disabled_dataset=True,
+    ).answer(
+        "1년 수익률이 높은 공모펀드를 5개 찾아줘",
+        "fund-one-year-search-001",
+    )
+
+    assert result.status == "executed"
+    assert result.answer_composition is not None
+    assert result.answer_composition.mode == "llm_grounded"
+    assert result.answer_composition.verification.passed
+    assert result.query_plan is not None
+    assert result.query_plan.ranking[0].field == "one_year_return_pct"
+    assert result.candidate_count == 2
+    assert [product.product_id for product in result.products] == [
+        "KR0000000001",
+        "KR0000000002",
+    ]
+    first_fields = {field.canonical_field: field for field in result.products[0].fields}
+    assert first_fields["one_year_return_pct"].raw_values == {"fd_yr1_ern_r": "975.10"}
+    assert first_fields["one_year_return_pct"].normalized_value == "975.1"
+    assert first_fields["one_year_return_pct"].source_columns == ["fd_yr1_ern_r"]
+    assert first_fields["one_year_return_pct"].as_of == date(2026, 7, 11)
+    assert any("상한 처리하지 않았습니다" in warning for warning in result.warnings)
+    assert any("스냅샷 2026-07-11" in warning for warning in result.warnings)
+
+
+def test_public_fund_one_year_return_detail_preserves_field_evidence(
+    tmp_path: Path,
+) -> None:
+    path, _, _ = write_one_year_return_fund_database(tmp_path)
+    result = RoutedFinanceAgent(
+        {"fund": path},
+        allow_internal_disabled_dataset=True,
+    ).answer(
+        "공모펀드 상품 번호 KR0000000001의 1년 수익률 상세 정보를 알려줘",
+        "fund-one-year-detail-001",
+    )
+
+    assert result.status == "executed"
+    assert result.query_plan is not None
+    assert result.query_plan.limit == 1
+    assert [product.product_id for product in result.products] == ["KR0000000001"]
+    fields = {field.canonical_field: field for field in result.products[0].fields}
+    assert fields["one_year_return_pct"].raw_values == {"fd_yr1_ern_r": "975.10"}
+    assert fields["one_year_return_pct"].quality is QualityStatus.PARTIAL
+    assert any("상한 처리하지 않았습니다" in warning for warning in result.warnings)
+
+
+def test_public_fund_one_year_return_aggregate_uses_raw_valid_values_only(
+    tmp_path: Path,
+) -> None:
+    path, _, _ = write_one_year_return_fund_database(tmp_path)
+    result = RoutedFinanceAgent(
+        {"fund": path},
+        allow_internal_disabled_dataset=True,
+    ).answer(
+        "공모펀드의 1년 수익률 평균을 집계해줘",
+        "fund-one-year-aggregate-001",
+    )
+
+    assert result.status == "executed"
+    assert result.query_plan is not None
+    assert result.query_plan.intent.value == "aggregate"
+    assert result.candidate_count == 3
+    assert result.aggregates[0].value == "492.55"
+    assert result.aggregates[0].valid_count == 2
+    assert result.aggregates[0].missing_count == 1
+    assert any("상한 처리하지 않았습니다" in warning for warning in result.warnings)
+
+
+def test_public_fund_one_year_return_comparison_uses_raw_delta_and_warning(
+    tmp_path: Path,
+) -> None:
+    path, _, _ = write_comparison_fund_database(tmp_path)
+    plan = fund_comparison_plan(
+        "fund-one-year-compare-001",
+        ["KR0000000001", "KR0000000002"],
+        ["one_year_return_pct"],
+    )
+    executed = SQLiteOracle(path).execute(_validated(plan, path))
+    with connect_read_only(path) as connection:
+        universe = load_all_records(connection)
+    verified = ResultVerifier().verify(plan, executed, universe)
+    evidence = build_product_evidence(plan, verified)
+    comparison = build_fund_comparison(plan, verified, evidence)
+    field = comparison.fields[0]
+
+    assert field.canonical_field == "one_year_return_pct"
+    assert field.status == "numeric_delta"
+    assert field.delta == Decimal("590")
+    second_fields = {
+        evidence_field.canonical_field: evidence_field
+        for evidence_field in comparison.products[1].fields
+    }
+    assert second_fields["one_year_return_pct"].source_columns == ["fd_yr1_ern_r"]
+    answer, warnings = render_verified_comparison(
+        plan,
+        comparison.verified,
+        list(comparison.products),
+    )
+    assert "차이(두 번째-첫 번째) 590%p" in answer
+    assert any("상한 처리하지 않았습니다" in warning for warning in warnings)
 
 
 def test_public_fund_grounded_answer_compiles_and_verifies_field_evidence(
@@ -1477,7 +1642,7 @@ def test_public_fund_internal_evaluation_accepts_local_test_provider(
     assert runner.product_family == "fund"
 
 
-def test_public_fund_long_return_cannot_drive_execution() -> None:
+def test_public_fund_one_year_return_can_drive_execution() -> None:
     payload = fund_vertical_slice_plan("fund-long-return-001").model_dump(mode="json")
     payload["ranking"] = [
         {
@@ -1487,7 +1652,22 @@ def test_public_fund_long_return_cannot_drive_execution() -> None:
         }
     ]
 
-    with pytest.raises(ValidationError, match="one_year_return_pct is not sortable"):
+    plan = QueryPlan.model_validate(payload)
+
+    assert plan.ranking[0].field == "one_year_return_pct"
+
+
+def test_public_fund_other_long_returns_cannot_drive_execution() -> None:
+    payload = fund_vertical_slice_plan("fund-long-return-002").model_dump(mode="json")
+    payload["ranking"] = [
+        {
+            "field": "two_year_return_pct",
+            "direction": "desc",
+            "nulls": "last",
+        }
+    ]
+
+    with pytest.raises(ValidationError, match="two_year_return_pct is not sortable"):
         QueryPlan.model_validate(payload)
 
 

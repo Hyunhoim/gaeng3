@@ -189,10 +189,15 @@ def test_public_bundle_is_fixed_balanced_and_contains_no_product_copy() -> None:
     assert "expected_product_ids" not in public_text
 
 
-def test_bundle_fingerprint_is_pinned_to_official_approved_manifest() -> None:
+def test_bundle_fingerprint_remains_pinned_to_historical_approved_manifest() -> None:
     bundle = SafetyBlindBundle.load(BUNDLE_ROOT)
 
-    assert bundle.universe.approved_manifest_sha256 == sha256_file(APPROVED_MANIFEST)
+    assert bundle.universe.approved_manifest_sha256 == (
+        "b78b8b0b93c36401b6356f271fc26807e37535d57e5d74d8827924c7a1413ec1"
+    )
+    assert sha256_file(APPROVED_MANIFEST) == (
+        "b60e638e9079f4c67276b6e2e18f7a9fd2813d6b68af53d7db91c47a311d1233"
+    )
     approved = json.loads(APPROVED_MANIFEST.read_text(encoding="utf-8"))
     assert approved["release_id"] == bundle.universe.release_id
     for family, fingerprint in bundle.universe.datasets.items():
@@ -200,7 +205,15 @@ def test_bundle_fingerprint_is_pinned_to_official_approved_manifest() -> None:
         assert source["source_id"] == fingerprint.source_id
         assert source["data_file_sha256"] == fingerprint.data_file_sha256
         assert source["schema_file_sha256"] == fingerprint.schema_file_sha256
-        assert source["database_sha256"] == fingerprint.database_sha256
+        if family == "fund":
+            assert fingerprint.database_sha256 == (
+                "299a70baee4123360d9f61040ed834cd06d72d4ce4dbaf7aa87e3d7bc0b96518"
+            )
+            assert source["database_sha256"] == (
+                "efab0bb0b6da6b2987363bb5920f6bf6f1a129c310e7089f11923628c7237076"
+            )
+        else:
+            assert source["database_sha256"] == fingerprint.database_sha256
 
 
 @pytest.mark.skipif(not LOCAL_KEY.is_file(), reason="local sealed key is intentionally unversioned")

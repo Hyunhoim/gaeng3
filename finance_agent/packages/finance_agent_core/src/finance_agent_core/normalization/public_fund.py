@@ -352,7 +352,21 @@ def _normalize_product(
                 QualityStatus.PARTIAL,
                 "field_level_dynamic_as_of_unavailable_uses_file_snapshot",
             )
+    one_year_return = long_returns["one_year_return_pct"]
+    quality_pairs["one_year_return_pct"] = (
+        (
+            QualityStatus.UNKNOWN,
+            "one_year_return_pct_missing",
+        )
+        if one_year_return is None
+        else (
+            QualityStatus.PARTIAL,
+            "raw_source_value_preserved_without_outlier_capping_uses_file_snapshot",
+        )
+    )
     for field_name, value in long_returns.items():
+        if field_name == "one_year_return_pct":
+            continue
         quality_pairs[field_name] = (
             QualityStatus.UNKNOWN,
             (

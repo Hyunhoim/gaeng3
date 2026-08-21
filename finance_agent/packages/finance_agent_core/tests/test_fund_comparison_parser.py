@@ -152,6 +152,9 @@ def test_fund_comparison_fields_preserve_question_order_and_specific_sale_scope(
         '"테스트 상품명 펀드"의 위험등급을 비교해줘',
         ["테스트상품명펀드"],
     ) == ["risk_level"]
+    assert extract_fund_comparison_fields(
+        '"테스트 공모펀드 A C클래스"와 "테스트 공모펀드 B C-e클래스"의 1년 수익률을 비교해줘'
+    ) == ["one_year_return_pct"]
 
 
 def test_fund_comparison_compiler_locks_resolved_targets_and_supported_fields() -> None:

@@ -755,6 +755,7 @@ def build_lexical_hints(
             ("one_month_return_pct", ("1개월 수익률", "한 달 수익률")),
             ("three_month_return_pct", ("3개월 수익률", "석 달 수익률")),
             ("six_month_return_pct", ("6개월 수익률", "반년 수익률")),
+            ("one_year_return_pct", ("1년 수익률", "1Y 수익률")),
         ]
     else:
         numeric_fields = [
@@ -819,7 +820,6 @@ def build_lexical_hints(
                 "오늘 기준 최신 수익률",
                 "총보수",
                 "판매수수료",
-                "1년 수익률",
                 "대표 펀드",
                 "클래스는 합쳐서",
             ]
@@ -954,6 +954,11 @@ def build_lexical_hints(
                     r"(?:6개월|반년)\s*(?:수익률|수익|성과).{0,80}"
                     r"(?:큰|작은|높은|낮은|좋은|성과순|순)",
                     "six_month_return_pct",
+                ),
+                (
+                    r"(?:1년|1Y)\s*(?:수익률|수익|성과).{0,80}"
+                    r"(?:큰|작은|높은|낮은|좋은|성과순|순)",
+                    "one_year_return_pct",
                 ),
                 (
                     r"(?:AUM|순자산|운용\s*규모).{0,30}"
@@ -1242,6 +1247,13 @@ def canonicalize_query_plan_payload(
         family,
     )
     rankings = hints["required_rankings"]
+    explicitly_requested_fields: list[str] = []
+    if family == "fund" and re.search(
+        r"(?:1\s*년|1Y)\s*(?:수익률|수익|성과)",
+        question,
+        flags=re.IGNORECASE,
+    ):
+        explicitly_requested_fields.append("one_year_return_pct")
     payload["constraints"] = constraints
     payload["ranking"] = rankings
     payload["projection"] = search_projection(
@@ -1252,6 +1264,7 @@ def canonicalize_query_plan_payload(
             if constraint["field"] != "public_offering"
         ),
         *(ranking["field"] for ranking in rankings),
+        *explicitly_requested_fields,
     )
     payload["limit"] = hints["limit"]
     payload["intent_payload"] = {

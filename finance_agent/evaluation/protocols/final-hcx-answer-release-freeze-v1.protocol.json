@@ -117,7 +117,7 @@
     "finance_agent/packages/finance_agent_core/src/finance_agent_core/release_cli.py": "ffc1a97863ca58328db446fd6b0cfb41ea5a661cccc530bafcda0780fc651d97",
     "finance_agent/packages/finance_agent_core/src/finance_agent_core/config/submission_boundary.py": "f1aaeee783bae261b1bc4fd9b60ed489bf81a02e451d1ef6ce99e4c0661d56bc",
     "finance_agent/packages/finance_agent_core/src/finance_agent_core/contracts/hcx_schema.py": "1a733a5d667df3b84e8f9f053d335efa2d4209d95e2065f4a179446f26b5ccbf",
-    "finance_agent/scripts/check-docs.py": "ab5b90a751537713af99de26f18bd626aaa2876dc4519f9da8707a3bdd74d3ef",
+    "finance_agent/scripts/check-docs.py": "ab91d90952fe1818271b5e9ab6e1cebf3a30f1e4f7dd2c5a979b18f9ccffab4e",
     "finance_agent/scripts/check-submission-boundary.py": "50543cd4537e1fea6141ab3375fd732022f3ec9de55ec70d662338f8b988d717"
   },
   "input_file_sha256": {

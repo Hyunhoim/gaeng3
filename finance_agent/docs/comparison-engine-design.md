@@ -102,10 +102,10 @@ LLM은 상품 식별자, 비교값, 수치 차이, 통화, 기준일과 근거�
 
 | 처리 | 필드 |
 | --- | --- |
-| 수치 차이 | `aum`, `one_week_return_pct`, `one_month_return_pct`, `three_month_return_pct`, `six_month_return_pct` |
+| 수치 차이 | `aum`, `one_week_return_pct`, `one_month_return_pct`, `three_month_return_pct`, `six_month_return_pct`, `one_year_return_pct` |
 | 값 비교 | `risk_level`, `trading_currency`, `fund_management_attribute`, `fund_geography_scope`, `investor_type`, `currency_hedged`, `sellable`, `company_sellable` |
 | 식별·표시 전용 | `product_id`, `product_name`, `short_name` |
-| 미지원 | 1년 이상 장기 수익률, 총보수, 판매수수료 — 현재 데이터 품질 또는 필드 부재 |
+| 미지원 | 18개월·2년·3년·5년 수익률, 총보수, 판매수수료 — 현재 데이터 품질 또는 필드 부재 |
 
 공모펀드는 클래스 grain이므로 서로 다른 클래스의 비교 결과를 대표 펀드 전체의
 차이로 확대 해석하지 않도록 경고한다.
