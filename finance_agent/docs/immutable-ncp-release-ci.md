@@ -179,6 +179,9 @@ workflow 성공은 artifact 발급까지의 기준이다. 실제 배포 호스�
 통과해야 한다.
 
 - `cosign verify`: exact `repository@sha256` image가 허용된 workflow identity로 서명됐는지
+- NCP Registry는 OCI 1.1 Referrers API를 제공하지 않으므로 image 서명과 검증은 Cosign
+  v3.1.3의 `--new-bundle-format=false` legacy tag 경로로 고정한다. Manifest와 Binding은
+  기존 Sigstore bundle 파일 경로를 유지한다.
 - `cosign verify-blob`: `AgentReleaseManifest`와 그 Sigstore bundle이 일치하는지
 - `cosign verify-blob`: `DeploymentBinding`과 그 Sigstore bundle이 일치하는지
 
