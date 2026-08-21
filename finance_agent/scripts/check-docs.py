@@ -192,7 +192,7 @@ HISTORICAL_BASELINE_COMPONENT_ALLOWLIST = {
             "1086929554fa26ed9883e52c51608d9af22e2595bdb548aaef8c361b3bf57bd6"
         ),
         "fastapi_backend/scripts/release_trust.py": (
-            "0326cf1462a61d82abe539b7d84555a77e21f73f4a8444cad5e8d152f10552b1"
+            "5310cf442c49732d468965a1cf020138359668e234668c9fb2cfc0a4f510221a"
         ),
     },
     "stage3-release-contract-2026-08-12.json": {
@@ -218,10 +218,10 @@ HISTORICAL_BASELINE_COMPONENT_ALLOWLIST = {
             "0116d25054ac2a4baf2fa2dcf7101b236517914457d70a164e3e19c0127f2c52"
         ),
         "fastapi_backend/tests/test_release_ci_contract.py": (
-            "cd4aef1166791d6b6002dcb15d33d0074a906ba11d62f57fdbcad6e04106e4a6"
+            "f88d04daa0bb9778e82f943bf3a6f1ce897261680ad1044c7d8475bf3662a031"
         ),
         "fastapi_backend/tests/test_release_trust.py": (
-            "b9126c6d2d0e3e8f2418470a1d0d12cd91c9fe05e1046fd4746a2756f65a4a9a"
+            "b21471c2ed4a684294370455d662307b94e7db1670bddfce585c983e793a01ac"
         ),
     },
     "p0-10-public-relation-release-integration-v1.json": {
@@ -247,7 +247,7 @@ HISTORICAL_BASELINE_COMPONENT_ALLOWLIST = {
             "602163de21dfe45259fecbb83a3ed451fc6e624d9f5553a432a3a82c5e15481a"
         ),
         "fastapi_backend/tests/test_release_ci_contract.py": (
-            "cd4aef1166791d6b6002dcb15d33d0074a906ba11d62f57fdbcad6e04106e4a6"
+            "f88d04daa0bb9778e82f943bf3a6f1ce897261680ad1044c7d8475bf3662a031"
         ),
         "fastapi_backend/tests/test_release_deployment_contract.py": (
             "1f0630497123985300f5f2e81dfe4802bdb0fadd262e390f73c1eea5e6df0a6f"

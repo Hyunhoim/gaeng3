@@ -212,11 +212,14 @@ def test_release_trust_verifies_image_manifest_and_binding(
         calls.append(arguments)
 
     monkeypatch.setattr(release_trust, "_run_verification", capture)
+    monkeypatch.setenv("COSIGN_DOCKER_MEDIA_TYPES", "untrusted")
+
+    assert release_trust._verification_environment()["COSIGN_DOCKER_MEDIA_TYPES"] == "1"
 
     release_trust.verify_release_trust(env_file)
 
     assert len(calls) == 3
-    assert calls[0][0] == "verify"
+    assert calls[0][0:2] == ["verify", "--new-bundle-format=false"]
     assert calls[1][0:2] == ["verify-blob", "--bundle"]
     assert calls[2][0:2] == ["verify-blob", "--bundle"]
     assert all(any("refs/heads/main" in value for value in call) for call in calls)

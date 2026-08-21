@@ -224,6 +224,7 @@ def _verification_environment() -> dict[str, str]:
         "PATH": "/usr/bin:/bin",
         "LANG": "C.UTF-8",
         "LC_ALL": "C.UTF-8",
+        "COSIGN_DOCKER_MEDIA_TYPES": "1",
     }
     for key in (
         "HOME",
@@ -573,7 +574,10 @@ def verify_release_trust(env_file: Path) -> None:
             "--certificate-oidc-issuer",
             OIDC_ISSUER,
         ]
-        _run_verification(binary, ["verify", *identity_arguments, image_reference])
+        _run_verification(
+            binary,
+            ["verify", "--new-bundle-format=false", *identity_arguments, image_reference],
+        )
         _run_verification(
             binary,
             [
