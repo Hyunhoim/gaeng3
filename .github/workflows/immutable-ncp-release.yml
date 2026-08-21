@@ -347,10 +347,13 @@ jobs:
         env:
           BASE_IMAGE_REFERENCE: ${{ steps.base_image.outputs.image_reference }}
           RELEASE_IMAGE_REFERENCE: ${{ steps.release_image.outputs.image_reference }}
+          # NCP Container Registry does not expose the OCI 1.1 Referrers API.
+          # Keep image signatures on cosign's deterministic legacy tag path.
+          COSIGN_DOCKER_MEDIA_TYPES: "1"
         run: |
           set -euo pipefail
-          cosign sign --yes "$BASE_IMAGE_REFERENCE"
-          cosign sign --yes "$RELEASE_IMAGE_REFERENCE"
+          cosign sign --yes --registry-referrers-mode=legacy "$BASE_IMAGE_REFERENCE"
+          cosign sign --yes --registry-referrers-mode=legacy "$RELEASE_IMAGE_REFERENCE"
           cosign verify \
             --certificate-identity "$WORKFLOW_IDENTITY" \
             --certificate-oidc-issuer "$OIDC_ISSUER" \
