@@ -31,6 +31,7 @@ import os
 import re
 import stat
 import sys
+import tempfile
 from pathlib import Path
 
 environment = {}
@@ -45,6 +46,10 @@ for raw_line in Path(sys.argv[1]).read_text(encoding="utf-8").splitlines():
     if re.fullmatch(r"[A-Z][A-Z0-9_]*", key) is None or key in environment:
         raise SystemExit("release environment contains an invalid or duplicate key")
     environment[key] = value.strip()
+
+PERSISTENT_BINDING_ROOT = Path(
+    "/var/lib/finance-agent-release/runtime-bindings"
+)
 
 if "CLOVASTUDIO_API_KEY" in environment:
     raise SystemExit(
@@ -303,7 +308,74 @@ def snapshot_file(source_name, target_name, mode=0o444):
         os.close(descriptor)
     environment[source_name] = str(target)
 
-snapshot_file("FINANCE_DEPLOYMENT_BINDING_HOST_FILE", "deployment-binding.json")
+def persistent_binding_snapshot(source_name):
+    payload = read_secure(Path(environment[source_name]), source_name)
+    expected_sha256 = environment["FINANCE_DEPLOYMENT_BINDING_SHA256"]
+    if hashlib.sha256(payload).hexdigest() != expected_sha256:
+        raise SystemExit("DeploymentBinding differs from its trusted SHA-256")
+    try:
+        PERSISTENT_BINDING_ROOT.mkdir(mode=0o700, parents=True, exist_ok=True)
+        root_stat = PERSISTENT_BINDING_ROOT.stat(follow_symlinks=False)
+    except OSError:
+        raise SystemExit("persistent DeploymentBinding root is unavailable") from None
+    if (
+        not PERSISTENT_BINDING_ROOT.is_absolute()
+        or not stat.S_ISDIR(root_stat.st_mode)
+        or PERSISTENT_BINDING_ROOT.is_symlink()
+        or root_stat.st_uid != os.geteuid()
+        or root_stat.st_mode & (stat.S_IRWXG | stat.S_IRWXO)
+    ):
+        raise SystemExit("persistent DeploymentBinding root is not owner-only")
+
+    target = PERSISTENT_BINDING_ROOT / f"{expected_sha256}.json"
+    descriptor, temporary_name = tempfile.mkstemp(
+        prefix=".deployment-binding.",
+        dir=PERSISTENT_BINDING_ROOT,
+    )
+    temporary = Path(temporary_name)
+    created = False
+    try:
+        view = memoryview(payload)
+        while view:
+            written = os.write(descriptor, view)
+            if written <= 0:
+                raise SystemExit("cannot create persistent DeploymentBinding snapshot")
+            view = view[written:]
+        os.fchmod(descriptor, 0o444)
+        os.fsync(descriptor)
+        os.close(descriptor)
+        descriptor = -1
+        try:
+            os.link(temporary, target, follow_symlinks=False)
+            created = True
+        except FileExistsError:
+            pass
+    finally:
+        if descriptor >= 0:
+            os.close(descriptor)
+        temporary.unlink(missing_ok=True)
+    if created:
+        directory = os.open(
+            PERSISTENT_BINDING_ROOT,
+            os.O_RDONLY | os.O_CLOEXEC | getattr(os, "O_DIRECTORY", 0),
+        )
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)
+
+    current = read_secure(target, "persistent DeploymentBinding snapshot")
+    target_stat = target.stat(follow_symlinks=False)
+    if (
+        current != payload
+        or target_stat.st_uid != os.geteuid()
+        or target_stat.st_nlink != 1
+        or stat.S_IMODE(target_stat.st_mode) != 0o444
+    ):
+        raise SystemExit("persistent DeploymentBinding snapshot is invalid")
+    environment[source_name] = str(target)
+
+persistent_binding_snapshot("FINANCE_DEPLOYMENT_BINDING_HOST_FILE")
 snapshot_file("FINANCE_RELEASE_MANIFEST_HOST_FILE", "agent-release-manifest.json")
 snapshot_file(
     "FINANCE_RELEASE_MANIFEST_SIGSTORE_BUNDLE_HOST_FILE",

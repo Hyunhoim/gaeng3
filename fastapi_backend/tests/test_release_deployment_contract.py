@@ -25,9 +25,15 @@ def _write_test_release_launcher(target: Path, *, repository_dir: Path) -> None:
     uid_marker = "RELEASE_BACKEND_UID = 10001"
     secret_uid_marker = "secret_stat.st_uid != 10001"
     repository_marker = 'REPOSITORY_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"'
+    persistent_binding_marker = (
+        'PERSISTENT_BINDING_ROOT = Path(\n'
+        '    "/var/lib/finance-agent-release/runtime-bindings"\n'
+        ')'
+    )
     assert canonical_launcher.count(uid_marker) == 1
     assert canonical_launcher.count(secret_uid_marker) == 1
     assert canonical_launcher.count(repository_marker) == 1
+    assert canonical_launcher.count(persistent_binding_marker) == 1
     rewritten_launcher = (
         canonical_launcher.replace(
             uid_marker,
@@ -40,6 +46,12 @@ def _write_test_release_launcher(target: Path, *, repository_dir: Path) -> None:
         .replace(
             repository_marker,
             f"REPOSITORY_DIR={shlex.quote(str(repository_dir))}",
+        )
+        .replace(
+            persistent_binding_marker,
+            "PERSISTENT_BINDING_ROOT = Path("
+            + repr(str(target.parent / "persistent-bindings"))
+            + ")",
         )
     )
     target.write_text(
@@ -149,6 +161,8 @@ def test_release_launcher_forbids_build_and_forces_no_build() -> None:
     assert "release_trust.py" in launcher
     assert "release_activation.py" in launcher
     assert "RELEASE_ENV_SNAPSHOT" in launcher
+    assert "/var/lib/finance-agent-release/runtime-bindings" in launcher
+    assert "persistent_binding_snapshot" in launcher
     assert '"FINANCE_AUDIT_HOST_DIR"' in launcher
     assert "RELEASE_BACKEND_UID = 10001" in launcher
     assert "audit_root_stat.st_uid != RELEASE_BACKEND_UID" in launcher
@@ -349,6 +363,7 @@ Path(os.environ["SNAPSHOT_MODE_CAPTURE"]).write_text(
         "root": stat.S_IMODE(env_file.parent.stat().st_mode),
         "environment": stat.S_IMODE(env_file.stat().st_mode),
         "binding": stat.S_IMODE(binding.stat().st_mode),
+        "binding_path": str(binding),
     }),
     encoding="utf-8",
 )
@@ -376,11 +391,17 @@ Path(os.environ["SNAPSHOT_MODE_CAPTURE"]).write_text(
         "--force-recreate",
         "--wait",
     ]
-    assert json.loads(snapshot_modes.read_text(encoding="utf-8")) == {
+    captured_modes = json.loads(snapshot_modes.read_text(encoding="utf-8"))
+    binding_path = Path(captured_modes.pop("binding_path"))
+    assert captured_modes == {
         "root": stat.S_IMODE(0o711),
         "environment": stat.S_IMODE(0o600),
         "binding": stat.S_IMODE(0o444),
     }
+    assert binding_path.parent == harness / "persistent-bindings"
+    assert binding_path.is_file()
+    assert binding_path.stat().st_nlink == 1
+    assert stat.S_IMODE(binding_path.stat().st_mode) == 0o444
 
 
 def test_release_launcher_rejects_unknown_global_option_before_trust(tmp_path: Path) -> None:
@@ -397,6 +418,32 @@ def test_release_launcher_rejects_unknown_global_option_before_trust(tmp_path: P
 
     assert completed.returncode == 2
     assert "forbids unknown global option" in completed.stderr
+    assert not capture.exists()
+
+
+def test_release_launcher_rejects_persistent_binding_collision(tmp_path: Path) -> None:
+    environment_path, environment, capture, test_launcher = _release_launcher_fixture(tmp_path)
+    values = dict(
+        line.split("=", 1)
+        for line in environment_path.read_text(encoding="utf-8").splitlines()
+    )
+    persistent_root = tmp_path / "persistent-bindings"
+    persistent_root.mkdir(mode=0o700)
+    collision = persistent_root / f'{values["FINANCE_DEPLOYMENT_BINDING_SHA256"]}.json'
+    collision.write_text("tampered\n", encoding="utf-8")
+    collision.chmod(0o444)
+
+    completed = subprocess.run(
+        [str(test_launcher), "config", "--quiet"],
+        cwd=_repository_root(),
+        env=environment,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 1
+    assert "persistent DeploymentBinding snapshot is invalid" in completed.stderr
     assert not capture.exists()
 
 
