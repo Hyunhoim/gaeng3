@@ -352,8 +352,8 @@ jobs:
           COSIGN_DOCKER_MEDIA_TYPES: "1"
         run: |
           set -euo pipefail
-          cosign sign --yes --new-bundle-format=false --registry-referrers-mode=legacy "$BASE_IMAGE_REFERENCE"
-          cosign sign --yes --new-bundle-format=false --registry-referrers-mode=legacy "$RELEASE_IMAGE_REFERENCE"
+          cosign sign --yes --use-signing-config=false --new-bundle-format=false --registry-referrers-mode=legacy "$BASE_IMAGE_REFERENCE"
+          cosign sign --yes --use-signing-config=false --new-bundle-format=false --registry-referrers-mode=legacy "$RELEASE_IMAGE_REFERENCE"
           cosign verify \
             --new-bundle-format=false \
             --certificate-identity "$WORKFLOW_IDENTITY" \

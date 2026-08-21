@@ -72,14 +72,14 @@
     "fastapi_backend/tests/test_relation_runtime_wiring.py": "4fac71fa83941887a58f52a08de29ca05cf561647a6917d0d365e98c1c3abc8e",
     "fastapi_backend/tests/test_smoke.py": "c37c4a2d263a8077598baa4af7bfbeacb8d5abf229493aafb7da56c03b851b66",
     "fastapi_backend/tests/test_release_activation.py": "7aa29731e8820665ec15fa51c51ed770584d485b386465b066b2ab602d9d97df",
-    "fastapi_backend/tests/test_release_ci_contract.py": "f88d04daa0bb9778e82f943bf3a6f1ce897261680ad1044c7d8475bf3662a031",
+    "fastapi_backend/tests/test_release_ci_contract.py": "09aaf4af10db8de17a941c9b410808be9c9c2350558ceed0d2dec75fd8ca4906",
     "fastapi_backend/tests/test_release_deployment_contract.py": "1f0630497123985300f5f2e81dfe4802bdb0fadd262e390f73c1eea5e6df0a6f",
     "fastapi_backend/tests/test_release_rollback_drill.py": "488fec38c6120726a0a4b29061506c4d6307d2810db781d45cfb3c2279681a76",
     "fastapi_backend/tests/test_release_startup.py": "89c1282710d698a634878571846c230081bc0d26cefc6cfa6db9d15e7468196c",
     "fastapi_backend/tests/test_release_trust.py": "b21471c2ed4a684294370455d662307b94e7db1670bddfce585c983e793a01ac"
   },
   "implementation_sha256": {
-    ".github/workflows/immutable-ncp-release.yml": "d616a508de7b1420abc4d32f95aed42d98b28d13f2fac6bfeaec3c60f5df9565",
+    ".github/workflows/immutable-ncp-release.yml": "cbbeff5d59f16cec7bdba0fc410b59f2d29c3c607719669518317b1cc449090c",
     "compose-release.sh": "2b2435fd261b476630cb423a8dd3e0ef9c2427e7c9a55acf3970e7487112eec0",
     "docker-compose.yml": "7e111aeffdf5fd174870550b983254b7908ac170b1554ccab82a4ae253fa0acd",
     "fastapi_backend/Dockerfile": "84c52ee0aac7e565d48242fef2a13c3bcde0b997b1d54ebd8e7f13998c07684d",
@@ -115,7 +115,7 @@
     "finance_agent/packages/finance_agent_core/src/finance_agent_core/release_cli.py": "ffc1a97863ca58328db446fd6b0cfb41ea5a661cccc530bafcda0780fc651d97",
     "finance_agent/packages/finance_agent_core/src/finance_agent_core/config/submission_boundary.py": "f1aaeee783bae261b1bc4fd9b60ed489bf81a02e451d1ef6ce99e4c0661d56bc",
     "finance_agent/packages/finance_agent_core/src/finance_agent_core/contracts/hcx_schema.py": "1a733a5d667df3b84e8f9f053d335efa2d4209d95e2065f4a179446f26b5ccbf",
-    "finance_agent/scripts/check-docs.py": "7241c30904812d871d17b7959be79e41f9550dcd3f0ce4b53af7407474783b07",
+    "finance_agent/scripts/check-docs.py": "91ead43592af22ec2ecd869cdef2bdce95d2305814417a0f07594fa32251953c",
     "finance_agent/scripts/check-submission-boundary.py": "50543cd4537e1fea6141ab3375fd732022f3ec9de55ec70d662338f8b988d717"
   },
   "input_file_sha256": {

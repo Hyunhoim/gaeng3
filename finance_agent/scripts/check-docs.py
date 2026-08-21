@@ -218,7 +218,7 @@ HISTORICAL_BASELINE_COMPONENT_ALLOWLIST = {
             "0116d25054ac2a4baf2fa2dcf7101b236517914457d70a164e3e19c0127f2c52"
         ),
         "fastapi_backend/tests/test_release_ci_contract.py": (
-            "f88d04daa0bb9778e82f943bf3a6f1ce897261680ad1044c7d8475bf3662a031"
+            "09aaf4af10db8de17a941c9b410808be9c9c2350558ceed0d2dec75fd8ca4906"
         ),
         "fastapi_backend/tests/test_release_trust.py": (
             "b21471c2ed4a684294370455d662307b94e7db1670bddfce585c983e793a01ac"
@@ -247,7 +247,7 @@ HISTORICAL_BASELINE_COMPONENT_ALLOWLIST = {
             "602163de21dfe45259fecbb83a3ed451fc6e624d9f5553a432a3a82c5e15481a"
         ),
         "fastapi_backend/tests/test_release_ci_contract.py": (
-            "f88d04daa0bb9778e82f943bf3a6f1ce897261680ad1044c7d8475bf3662a031"
+            "09aaf4af10db8de17a941c9b410808be9c9c2350558ceed0d2dec75fd8ca4906"
         ),
         "fastapi_backend/tests/test_release_deployment_contract.py": (
             "1f0630497123985300f5f2e81dfe4802bdb0fadd262e390f73c1eea5e6df0a6f"
