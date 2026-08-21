@@ -23,7 +23,6 @@ from finance_agent_core.contracts.official import OfficialAnswerResponse
 from finance_agent_core.observability import (
     AuditOutcome,
     AuditStage,
-    RequestAuditRecorder,
     bind_request_audit,
 )
 
@@ -74,21 +73,15 @@ def _cache_official_result(result: AnswerAdapterResult) -> bool:
     return result.http_status_code == 200 or error is None or not error.retryable
 
 
-def _emit_idempotency_audit(
-    audit: RequestAuditRecorder | None,
+def _idempotency_terminal_reason(
     disposition: RequestExecutionDisposition,
-) -> None:
-    if disposition is RequestExecutionDisposition.EXECUTED or audit is None:
-        return
-    audit.emit(
-        stage=AuditStage.REQUEST,
-        outcome=AuditOutcome.SUCCEEDED,
-        reason_code=(
-            "idempotent_request_joined"
-            if disposition is RequestExecutionDisposition.JOINED
-            else "idempotent_result_replayed"
-        ),
-        duration_ms=0,
+) -> str | None:
+    if disposition is RequestExecutionDisposition.EXECUTED:
+        return None
+    return (
+        "idempotent_request_joined"
+        if disposition is RequestExecutionDisposition.JOINED
+        else "idempotent_result_replayed"
     )
 
 
@@ -197,7 +190,7 @@ async def official_answer(
             question=question,
         )
     request = BackendAgentRequest(request_id=question_id, question=question)
-    transport_audit = request_agent_audit(
+    request_agent_audit(
         http_request,
         request_id=question_id,
         question=question,
@@ -220,7 +213,6 @@ async def official_answer(
                 cache_result=_cache_official_result,
             )
             result = execution.value
-            _emit_idempotency_audit(transport_audit, execution.disposition)
         except RequestIdentityConflictError:
             mark_request_audit_terminal(
                 http_request,
@@ -293,7 +285,11 @@ async def official_answer(
     mark_request_audit_terminal(
         http_request,
         outcome=(AuditOutcome.FAILED if retryable_error else AuditOutcome.SUCCEEDED),
-        reason_code=("retryable_adapter_failure" if retryable_error else "response_completed"),
+        reason_code=(
+            "retryable_adapter_failure"
+            if retryable_error
+            else (_idempotency_terminal_reason(execution.disposition) or "response_completed")
+        ),
     )
     if retryable_error:
         # The evaluator retries timeout or 5xx. Collapse retryable non-timeout

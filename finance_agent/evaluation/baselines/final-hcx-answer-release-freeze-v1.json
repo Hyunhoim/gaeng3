@@ -22,12 +22,12 @@
     "id": "final-hcx-answer-release-freeze-v1",
     "version": "1.0",
     "path": "evaluation/protocols/final-hcx-answer-release-freeze-v1.protocol.json",
-    "sha256": "74072edbec263c2ac87fb2d39a7680e3897594b014e063992d1d74e0e6ebd1f7",
+    "sha256": "3b5792c2d6ae376c3824efc53ba8f3aac91bf275049a221a05d938fd003a2361",
     "total_cases": 1912
   },
   "data": {
     "fixture_kind": "pytest_fake_transport_and_release_contract",
-    "fixture_definition_sha256": "74072edbec263c2ac87fb2d39a7680e3897594b014e063992d1d74e0e6ebd1f7",
+    "fixture_definition_sha256": "3b5792c2d6ae376c3824efc53ba8f3aac91bf275049a221a05d938fd003a2361",
     "not_applicable_reason": "상품 정답 정확도가 아니라 HCLX answer-only 실행·오류·Audit·Release·rollback 시스템 계약"
   },
   "release_profile": {
@@ -54,7 +54,7 @@
     {
       "role": "final_hcx_answer_release_freeze_protocol",
       "artifact_name": "final-hcx-answer-release-freeze-v1.protocol.json",
-      "sha256": "74072edbec263c2ac87fb2d39a7680e3897594b014e063992d1d74e0e6ebd1f7"
+      "sha256": "3b5792c2d6ae376c3824efc53ba8f3aac91bf275049a221a05d938fd003a2361"
     }
   ],
   "reproduce": {
