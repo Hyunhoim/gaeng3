@@ -79,7 +79,7 @@
     "fastapi_backend/tests/test_release_trust.py": "b9126c6d2d0e3e8f2418470a1d0d12cd91c9fe05e1046fd4746a2756f65a4a9a"
   },
   "implementation_sha256": {
-    ".github/workflows/immutable-ncp-release.yml": "2dd8a791ae9f876a24453d8ca2664b41f2906be7ab35f4f23e9f0f425a1029c8",
+    ".github/workflows/immutable-ncp-release.yml": "7ac5cb1a85b2bb4a5e5d0387a88768a63831250100fdd299b7fec435c2b36e08",
     "compose-release.sh": "2b2435fd261b476630cb423a8dd3e0ef9c2427e7c9a55acf3970e7487112eec0",
     "docker-compose.yml": "7e111aeffdf5fd174870550b983254b7908ac170b1554ccab82a4ae253fa0acd",
     "fastapi_backend/Dockerfile": "84c52ee0aac7e565d48242fef2a13c3bcde0b997b1d54ebd8e7f13998c07684d",
