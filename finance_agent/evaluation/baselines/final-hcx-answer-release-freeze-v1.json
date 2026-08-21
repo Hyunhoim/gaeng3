@@ -22,31 +22,31 @@
     "id": "final-hcx-answer-release-freeze-v1",
     "version": "1.0",
     "path": "evaluation/protocols/final-hcx-answer-release-freeze-v1.protocol.json",
-    "sha256": "3b5792c2d6ae376c3824efc53ba8f3aac91bf275049a221a05d938fd003a2361",
+    "sha256": "07f488176984f6e87a3be1e647c840b3539fdcc2f04219daf22926c9a1d39c53",
     "total_cases": 1912
   },
   "data": {
     "fixture_kind": "pytest_fake_transport_and_release_contract",
-    "fixture_definition_sha256": "3b5792c2d6ae376c3824efc53ba8f3aac91bf275049a221a05d938fd003a2361",
+    "fixture_definition_sha256": "07f488176984f6e87a3be1e647c840b3539fdcc2f04219daf22926c9a1d39c53",
     "not_applicable_reason": "상품 정답 정확도가 아니라 HCLX answer-only 실행·오류·Audit·Release·rollback 시스템 계약"
   },
   "release_profile": {
     "answer_provider": "hyperclova",
     "hcx_model": "HCX-007",
     "hcx_queryplan_enabled": false,
-    "fund_execution_policy": "locked",
+    "fund_execution_policy": "public_fund_v1_approved",
     "schema_dense_enabled": false,
     "product_dense_enabled": false
   },
   "metrics": {
-    "total": 1912,
-    "passed": 1912,
+    "total": 1913,
+    "passed": 1913,
     "skipped": 2,
     "strict_accuracy": 1.0,
     "strict_accuracy_scope": "고정된 시스템 계약 통과율이며 금융 질의 일반화 정확도나 공모전 예상 점수가 아님",
     "external_network_calls": 0,
     "live_hclx_calls": 0,
-    "core_passed": 1480,
+    "core_passed": 1481,
     "backend_passed": 432,
     "answer_only_official_get_focused_passed": 17
   },
@@ -54,7 +54,7 @@
     {
       "role": "final_hcx_answer_release_freeze_protocol",
       "artifact_name": "final-hcx-answer-release-freeze-v1.protocol.json",
-      "sha256": "3b5792c2d6ae376c3824efc53ba8f3aac91bf275049a221a05d938fd003a2361"
+      "sha256": "07f488176984f6e87a3be1e647c840b3539fdcc2f04219daf22926c9a1d39c53"
     }
   ],
   "reproduce": {
@@ -68,6 +68,6 @@
     "실제 HCLX credential·latency·token·비용은 별도의 sanitized smoke evidence로 관리",
     "External Blind를 수행하지 않았으므로 HCLX QueryPlan과 Dense는 최종 Release에서 비활성",
     "실제 NCP image digest·Cosign·공인 IP·signed rollback 완료 증거가 아님",
-    "공모펀드는 주최 측 데이터 정정 전까지 잠금"
+    "공모펀드 v1은 보호된 Release에서만 활성화하며 일반 개발 기본값은 locked로 유지"
   ]
 }

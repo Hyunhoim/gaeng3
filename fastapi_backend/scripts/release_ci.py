@@ -26,6 +26,7 @@ _MAX_RELATION_ARTIFACT_BYTES = 4 * 1024
 _MAX_RELEASE_MANIFEST_BYTES = 2 * 1024 * 1024
 _FINAL_ANSWER_PROVIDER = "hyperclova"
 _FINAL_HCX_QUERYPLAN_ENABLED = "false"
+_FINAL_FUND_EXECUTION_POLICY = "public_fund_v1_approved"
 _RELATION_ARTIFACT_KEYS = frozenset(
     {
         "artifact_kind",
@@ -74,9 +75,11 @@ def validate_inputs(arguments: argparse.Namespace) -> None:
     if (
         arguments.answer_provider != _FINAL_ANSWER_PROVIDER
         or arguments.hcx_queryplan_enabled != _FINAL_HCX_QUERYPLAN_ENABLED
+        or arguments.fund_execution_policy != _FINAL_FUND_EXECUTION_POLICY
     ):
         raise ReleaseCIError(
-            "final release profile requires HyperCLOVA answer-only and HCLX QueryPlan disabled"
+            "final release profile requires HyperCLOVA answer-only, HCLX QueryPlan disabled, "
+            "and the approved public-fund v1 execution contract"
         )
     model_id = "HCX-007"
     try:
@@ -115,6 +118,7 @@ def validate_inputs(arguments: argparse.Namespace) -> None:
             "platform": arguments.platform,
             "answer_provider": arguments.answer_provider,
             "hcx_queryplan_enabled": arguments.hcx_queryplan_enabled,
+            "fund_execution_policy": arguments.fund_execution_policy,
             "model_id": model_id,
             "activation_generation": str(generation),
             "rollback_mode": "initial_bootstrap" if generation == 1 else "pinned_previous_release",
@@ -513,6 +517,7 @@ def _parser() -> argparse.ArgumentParser:
     validate.add_argument("--previous-binding-sha256", required=True)
     validate.add_argument("--answer-provider", required=True)
     validate.add_argument("--hcx-queryplan-enabled", required=True)
+    validate.add_argument("--fund-execution-policy", required=True)
     validate.add_argument("--python-base-image", required=True)
     validate.add_argument("--source-commit", required=True)
     validate.add_argument("--github-ref", required=True)

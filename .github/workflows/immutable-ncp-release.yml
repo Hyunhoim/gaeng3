@@ -46,6 +46,7 @@ jobs:
       TRUSTED_NCP_REPOSITORY: ${{ vars.NCP_IMAGE_REPOSITORY }}
       FINAL_ANSWER_PROVIDER: hyperclova
       FINAL_HCX_QUERYPLAN_ENABLED: "false"
+      FINAL_FUND_EXECUTION_POLICY: public_fund_v1_approved
 
     steps:
       - name: Check out the exact source commit
@@ -63,6 +64,7 @@ jobs:
           TRUSTED_PREVIOUS_BINDING_SHA256: ${{ secrets.PREVIOUS_DEPLOYMENT_BINDING_SHA256 }}
           INPUT_ANSWER_PROVIDER: ${{ env.FINAL_ANSWER_PROVIDER }}
           INPUT_HCX_QUERYPLAN_ENABLED: ${{ env.FINAL_HCX_QUERYPLAN_ENABLED }}
+          INPUT_FUND_EXECUTION_POLICY: ${{ env.FINAL_FUND_EXECUTION_POLICY }}
           TRUSTED_SOURCE_COMMIT: ${{ github.sha }}
           TRUSTED_GITHUB_REF: ${{ github.ref }}
           TRUSTED_GITHUB_REF_PROTECTED: ${{ github.ref_protected }}
@@ -79,6 +81,7 @@ jobs:
             --previous-binding-sha256 "$TRUSTED_PREVIOUS_BINDING_SHA256" \
             --answer-provider "$INPUT_ANSWER_PROVIDER" \
             --hcx-queryplan-enabled "$INPUT_HCX_QUERYPLAN_ENABLED" \
+            --fund-execution-policy "$INPUT_FUND_EXECUTION_POLICY" \
             --source-commit "$TRUSTED_SOURCE_COMMIT" \
             --github-ref "$TRUSTED_GITHUB_REF" \
             --github-ref-protected "$TRUSTED_GITHUB_REF_PROTECTED" \
@@ -146,6 +149,7 @@ jobs:
           RUNTIME_PLATFORM: ${{ steps.release_inputs.outputs.platform }}
           ANSWER_PROVIDER: ${{ steps.release_inputs.outputs.answer_provider }}
           HCX_QUERYPLAN_ENABLED: ${{ steps.release_inputs.outputs.hcx_queryplan_enabled }}
+          FUND_EXECUTION_POLICY: ${{ steps.release_inputs.outputs.fund_execution_policy }}
           MODEL_ID: ${{ steps.release_inputs.outputs.model_id }}
           RELATION_RETRIEVAL_ARTIFACT_FILE: ${{ steps.relation_artifact.outputs.artifact_path }}
           RELATION_RETRIEVAL_ARTIFACT_SHA256: ${{ steps.relation_artifact.outputs.artifact_sha256 }}
@@ -164,6 +168,7 @@ jobs:
             --backend-root "$GITHUB_WORKSPACE/fastapi_backend/app"
             --platform "$RUNTIME_PLATFORM"
             --answer-provider "$ANSWER_PROVIDER"
+            --fund-execution-policy "$FUND_EXECUTION_POLICY"
             --relation-retrieval-artifact "$RELATION_RETRIEVAL_ARTIFACT_FILE"
             --relation-retrieval-artifact-sha256 "$RELATION_RETRIEVAL_ARTIFACT_SHA256"
             --output "$RELEASE_OUTPUT_DIR/agent-release-manifest.json"
