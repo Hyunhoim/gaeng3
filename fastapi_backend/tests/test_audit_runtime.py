@@ -225,9 +225,11 @@ def test_official_retry_replays_one_execution_and_audits_each_transport_attempt(
         (
             (AuditOutcome.STARTED, "received"),
             (AuditOutcome.SUCCEEDED, "idempotent_result_replayed"),
-            (AuditOutcome.SUCCEEDED, "response_completed"),
         ),
     }
+    report = validate_audit_jsonl(path)
+    assert report.status is AuditValidationStatus.PASSED
+    assert report.issue_count == 0
     serialized = path.read_text(encoding="utf-8")
     assert request_id not in serialized
     assert question not in serialized

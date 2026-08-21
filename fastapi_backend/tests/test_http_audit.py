@@ -23,6 +23,7 @@ from starlette.types import Message, Receive, Scope, Send
 from app import request_execution as execution_module
 from app.http_audit import (
     AnswerHttpAuditMiddleware,
+    mark_request_audit_terminal,
     mark_response_serialization_start,
     request_agent_audit,
 )
@@ -171,11 +172,10 @@ def test_cancelled_transport_defers_terminal_until_shared_worker_and_retry_finis
                 cache_result=lambda _result: True,
             )
         if execution.disposition is RequestExecutionDisposition.JOINED:
-            recorder.emit(
-                stage=AuditStage.REQUEST,
+            mark_request_audit_terminal(
+                request,
                 outcome=AuditOutcome.SUCCEEDED,
                 reason_code="idempotent_request_joined",
-                duration_ms=0,
             )
         await send({"type": "http.response.start", "status": 200, "headers": []})
         await send({"type": "http.response.body", "body": b"safe"})
@@ -228,10 +228,9 @@ def test_cancelled_transport_defers_terminal_until_shared_worker_and_retry_finis
     assert [(event.stage, event.outcome, event.reason_code) for event in retry_invocation] == [
         (AuditStage.REQUEST, AuditOutcome.STARTED, "received"),
         (AuditStage.REQUEST, AuditOutcome.SUCCEEDED, "idempotent_request_joined"),
-        (AuditStage.REQUEST, AuditOutcome.SUCCEEDED, "response_completed"),
     ]
     assert [event.event_sequence for event in worker_invocation] == [1, 2, 3, 4]
-    assert [event.event_sequence for event in retry_invocation] == [1, 2, 3]
+    assert [event.event_sequence for event in retry_invocation] == [1, 2]
 
 
 def test_shutdown_drain_includes_terminal_enqueue_after_worker_counter_release(
