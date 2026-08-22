@@ -179,16 +179,17 @@ manifest schema 1.1은 raw 행 수, 논리 상품 수, 속성 수, 격리 수와
 | `one_month_return_pct` | `fd_mm1_ern_r` | 67.9655% | PARTIAL | 검색·정렬·집계·표시 | -63.11~15.65 |
 | `three_month_return_pct` | `fd_mm3_ern_r` | 67.3101% | PARTIAL | 검색·정렬·집계·표시 | -88.46~144.21 |
 | `six_month_return_pct` | `fd_mm6_ern_r` | 65.9005% | PARTIAL | 검색·정렬·집계·표시 | -84.16~369.68 |
+| `one_year_return_pct` | `fd_yr1_ern_r` | 63.0005% | PARTIAL | 검색·정렬·집계·비교·표시 | 원천값 무수정, 500% 초과 15개 포함 가능 |
 
 수익률은 원천 퍼센트포인트를 그대로 보존. 공모펀드에는 필드별 갱신일이 없어
-파일 스냅샷일 2026-07-11만 함께 표시
+파일 스냅샷일 2026-07-11만 함께 표시. 1년 수익률은 이상치를 삭제하거나
+상한 처리하지 않으며, 결측만 순위·계산에서 제외하고 원천값 경고를 함께 표시
 
 ### 4.2 표시 전용 필드
 
 | Canonical field | 원천 필드 | coverage | 제한 이유 |
 |---|---|---:|---|
 | `base_index` | `bmrk_nm` | 100% | placeholder와 의미 품질 미검증 |
-| `one_year_return_pct` | `fd_yr1_ern_r` | 63.0005% | 500% 초과 15개 |
 | `eighteen_month_return_pct` | `fd_mm18_ern_r` | 61.7615% | -100% 미만 1개, 500% 초과 20개 |
 | `two_year_return_pct` | `fd_yr2_ern_r` | 57.1018% | 최솟값 -3675.44, 500% 초과 14개 |
 | `three_year_return_pct` | `fd_yr3_ern_r` | 54.7854% | 최솟값 -4381.56, 500% 초과 21개 |
@@ -218,7 +219,7 @@ manifest schema 1.1은 raw 행 수, 논리 상품 수, 속성 수, 격리 수와
 | 운용사 이름으로 검색 | 기관 코드만 있어 이름 검색 UNSUPPORTED |
 | 정확한 국가 코드 검색 | 공식 코드북 확인 전 UNSUPPORTED |
 | 대표 펀드 단위로 클래스 자동 합산 | 상위 그룹 키 의미 확인 전 UNSUPPORTED |
-| 장기 수익률 순위·평균 | 이상치 정책 확인 전 UNSUPPORTED |
+| 18개월·2년·3년·5년 수익률 순위·평균 | 이상치 정책 확인 전 UNSUPPORTED |
 | 오늘 기준 최신 수익률 | 필드별 기준일이 없어 UNSUPPORTED |
 
 지원하지 않는 조건은 무시하지 말고 `unsupported_conditions` 또는 사용자
@@ -239,8 +240,9 @@ manifest schema 1.1은 raw 행 수, 논리 상품 수, 속성 수, 격리 수와
 | FUND-SENT-002 | `or_attr_desc=06`은 UNKNOWN | 펀드 유형 필터 제외 |
 | FUND-BOOL-001 | `thco_sale_yn` 결측은 false가 아님 | UNKNOWN 유지 |
 | FUND-RISK-001 | 위험등급은 코드 1~6으로 정규화 | 이름 띄어쓰기 변형 무시 |
-| FUND-RET-001 | 1주·1·3·6개월만 실행 허용 | 결측은 UNKNOWN |
-| FUND-RET-002 | 18개월·1·2·3·5년은 표시 전용 | 조건·순위·집계 거절 |
+| FUND-RET-001 | 1주·1·3·6개월과 1년 수익률 실행 허용 | 결측은 UNKNOWN |
+| FUND-RET-002 | 1년 수익률은 원천값을 무수정 사용 | 이상치 포함 경고·결측 제외 |
+| FUND-RET-003 | 18개월·2·3·5년은 표시 전용 | 조건·순위·집계 거절 |
 | FUND-ASOF-001 | 동적 수치 기준일은 파일 스냅샷 수준 | 답변에 한계 경고 |
 | FUND-CUR-001 | AUM 직접 비교는 같은 통화 안에서만 수행 | 통화 혼합 순위 거절 |
 
@@ -265,7 +267,7 @@ manifest schema 1.1은 raw 행 수, 논리 상품 수, 속성 수, 격리 수와
 1. `prfd_attr_cd` 각 코드의 공식 명칭과 한 상품에 여러 코드가 붙는 이유
 2. `or_attr_desc = 06`의 실제 의미
 3. `fd_nast_suma = 0`이 실제 0인지 미제공 sentinel인지
-4. 장기 수익률의 공식 산식과 -100% 미만 값의 발생 원인
+4. 18개월·2년·3년·5년 수익률의 공식 산식과 -100% 미만 값의 발생 원인
 5. `rptt_ksd_itm_no`가 클래스 상위 펀드 그룹 식별자인지
 6. 기관 코드를 운용사·수탁사 이름으로 변환할 공식 매핑 제공 여부
 7. `bmrk_nm`의 placeholder 값과 유효 벤치마크 구분 규칙
@@ -308,7 +310,7 @@ manifest schema 1.1은 raw 행 수, 논리 상품 수, 속성 수, 격리 수와
 - [x] `fund_products`, `fund_attributes`, `fund_quarantine` 재현 가능 빌드
 - [x] 기본 공모 범위 잠금 조건 구현
 - [x] field registry 기반 parameterized oracle 구현
-- [x] AUM 0, 코드 06, 장기 수익률 제한 oracle 회귀 테스트
+- [x] AUM 0, 코드 06, 1년 원천값 보존과 나머지 장기 수익률 제한 oracle 회귀 테스트
 - [x] result verifier와 field-level evidence DTO 연결
 - [x] 핵심 평가 질문과 blind 표현 변형의 expected Oracle 회귀 세트 통과
 - [ ] HCX schema에 fund를 노출한 뒤 서버 QueryPlan 계약 테스트 통과

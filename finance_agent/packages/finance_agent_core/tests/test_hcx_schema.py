@@ -36,7 +36,7 @@ def test_internal_fund_schema_does_not_change_official_hcx_surface() -> None:
     ranking_fields = internal["properties"]["ranking"]["items"]["properties"]["field"]["enum"]
     assert "public_offering" in constraint_fields
     assert "three_month_return_pct" in ranking_fields
-    assert "one_year_return_pct" not in ranking_fields
+    assert "one_year_return_pct" in ranking_fields
     assert "fund" not in official["properties"]["product_families"]["items"]["enum"]
 
 

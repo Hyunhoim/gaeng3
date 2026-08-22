@@ -175,6 +175,17 @@ HISTORICAL_BASELINE_SUITE_SUCCESSOR_SHA256 = {
     ),
 }
 HISTORICAL_BASELINE_COMPONENT_ALLOWLIST = {
+    "schema-embedding-cpu-public-v1.json": {
+        "finance_agent/packages/finance_agent_core/src/finance_agent_core/config/field_registry.yaml": (
+            "529067724a57f3e571a1ee397a70640cef058b589d61299ab014adaf24855114"
+        ),
+        "finance_agent/packages/finance_agent_core/src/finance_agent_core/evaluation/dense_schema_linker.py": (
+            "518dba21270681607b1b69797856b751ee4e5063f9e8ef96341386761acd323e"
+        ),
+        "finance_agent/packages/finance_agent_core/tests/test_dense_schema_linker_evaluation.py": (
+            "4d84f5f5535d67b5cdd79db3b15fe3bfdfb7a16699b9c50a4a7cbcf885594b12"
+        ),
+    },
     "stage3-local-oci-rollback-2026-08-12.json": {
         "compose-release.sh": (
             "6e92816c7cd6279537ac3c593defd0369d3b3b4845706524d2e7fdedf3916599"

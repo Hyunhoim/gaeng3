@@ -501,6 +501,19 @@ def test_fund_aum_without_currency_requires_clarification() -> None:
     assert hints["ambiguity_spans"] == ["AUM 비교 통화"]
 
 
+def test_fund_one_year_return_is_linked_without_unsupported_blocker() -> None:
+    hints = build_lexical_hints("1년 수익률이 높은 공모펀드를 5개 찾아줘")
+
+    assert hints["product_family"] == "fund"
+    assert hints["required_eq_constraints"] == [
+        {"field": "public_offering", "operator": "eq", "value": True}
+    ]
+    assert hints["required_rankings"] == [
+        {"field": "one_year_return_pct", "direction": "desc", "nulls": "last"}
+    ]
+    assert "1년 수익률" not in hints["unsupported_spans"]
+
+
 def test_fund_model_family_handoff_blocks_unsupported_class_aggregation() -> None:
     suite = load_core_evaluation_suite("fund").suite
     case = next(case for case in suite.cases if case.id == "fund-050")

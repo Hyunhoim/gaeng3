@@ -72,7 +72,9 @@ def test_fund_grain_and_capabilities_match_product_grain_audit() -> None:
     assert aum.sentinel_values == {"0": "UNKNOWN"}
     assert risk.coverage_pct == pytest.approx(76.8989)
     assert one_week.queryable and one_week.sortable and one_week.aggregatable
-    assert not one_year.queryable and not one_year.sortable and not one_year.aggregatable
+    assert one_year.queryable and one_year.sortable and one_year.aggregatable
+    assert one_year.comparable
+    assert one_year.comparison_mode == "numeric_delta"
     assert fund_type.sentinel_values == {"06": "UNKNOWN"}
 
 

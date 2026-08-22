@@ -23,6 +23,20 @@ _IDENTITY_GROUP_FIELDS = {
     "isin",
 }
 _ADDITIVE_UNITS = {"source_currency_amount", "source_quantity"}
+_EXCLUDE_UNUSABLE_RANKING_FIELDS = {
+    ProductFamily.FUND: frozenset({"one_year_return_pct"}),
+}
+
+
+def ranking_requires_usable_value(plan: QueryPlan, field_name: str) -> bool:
+    """Return whether a ranked field must exclude missing/unusable rows entirely."""
+
+    if len(plan.product_families) != 1:
+        return False
+    return field_name in _EXCLUDE_UNUSABLE_RANKING_FIELDS.get(
+        plan.product_families[0],
+        frozenset(),
+    )
 
 
 def require_fund_public_scope(plan: QueryPlan) -> None:

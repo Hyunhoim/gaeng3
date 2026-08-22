@@ -22,6 +22,7 @@ from finance_agent_core.execution.authority import (
     require_candidate_budget,
 )
 from finance_agent_core.execution.policy import (
+    ranking_requires_usable_value,
     require_aggregate_contract,
     require_comparison_contract,
     require_fund_aum_currency_scope,
@@ -160,6 +161,13 @@ def compile_search_sql(
         clause, values = _constraint_sql(constraint, sql_fields)
         where_clauses.append(f"({clause})")
         parameters.extend(values)
+    for ranking in plan.ranking:
+        if not ranking_requires_usable_value(plan, ranking.field):
+            continue
+        quality_column = sql_fields[ranking.field].quality_column
+        if quality_column is None:
+            raise ValueError(f"ranked field {ranking.field!r} cannot enforce usable-value policy")
+        where_clauses.append(f"{quality_column} IN ('VALID', 'PARTIAL')")
     where_sql = " AND ".join(where_clauses)
 
     order_by: list[str] = []

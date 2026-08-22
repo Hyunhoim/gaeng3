@@ -57,6 +57,10 @@ WARNING_MESSAGES = {
         "공모펀드 수익률은 개별 갱신일이 없어 파일 스냅샷 2026-07-11을 "
         "기준일 한계와 함께 표시합니다."
     ),
+    "fund_one_year_raw_outliers_preserved": (
+        "공모펀드 1년 수익률은 제공 원천값을 수정·제거·상한 처리하지 않았습니다. "
+        "결측·UNKNOWN만 계산에서 제외하며, 500% 초과 값 15개가 포함될 수 있습니다."
+    ),
     "unknown_fund_management_attribute": (
         "펀드 운용 속성의 결측 및 의미 미확인 코드 06은 UNKNOWN으로 제외했습니다."
     ),
@@ -388,10 +392,13 @@ def warning_codes_for_search(
             "one_month_return_pct",
             "three_month_return_pct",
             "six_month_return_pct",
+            "one_year_return_pct",
         }
         & used_fields
     ):
         codes.append("fund_snapshot_level_returns")
+    if fund and "one_year_return_pct" in used_fields:
+        codes.append("fund_one_year_raw_outliers_preserved")
     if fund and "fund_management_attribute" in used_fields:
         codes.append("unknown_fund_management_attribute")
     return codes
@@ -436,6 +443,8 @@ def warning_codes_for_aggregation(
         codes.extend(["fund_public_scope_locked", "fund_class_level_results"])
         if return_fields & fields:
             codes.append("fund_snapshot_level_returns")
+        if "one_year_return_pct" in fields:
+            codes.append("fund_one_year_raw_outliers_preserved")
         if "fund_management_attribute" in fields:
             codes.append("unknown_fund_management_attribute")
         if any(

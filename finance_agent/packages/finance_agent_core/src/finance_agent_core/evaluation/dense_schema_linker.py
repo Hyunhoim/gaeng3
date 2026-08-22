@@ -79,7 +79,7 @@ class SchemaPolicyMigration(DenseEvaluationModel):
 
 class SchemaPolicyMigrationSuite(DenseEvaluationModel):
     schema_version: Literal["1.0"] = "1.0"
-    suite_id: Literal["schema-linker-policy-migrations-v1"] = "schema-linker-policy-migrations-v1"
+    suite_id: Literal["schema-linker-policy-migrations-v2"] = "schema-linker-policy-migrations-v2"
     status: Literal["developer_authored_pending_finance_domain_review"] = (
         "developer_authored_pending_finance_domain_review"
     )
@@ -326,7 +326,7 @@ def _sha256_text(value: str) -> str:
 
 def _load_policy_migration_suite() -> _LoadedPolicyMigrationSuite:
     resource = files("finance_agent_core.evaluation.suites").joinpath(
-        "schema_linker_policy_migrations_v1.json"
+        "schema_linker_policy_migrations_v2.json"
     )
     raw = resource.read_bytes()
     return _LoadedPolicyMigrationSuite(

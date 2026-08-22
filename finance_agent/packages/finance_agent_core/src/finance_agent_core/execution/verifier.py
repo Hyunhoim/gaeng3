@@ -27,6 +27,7 @@ from finance_agent_core.domain import (
 )
 from finance_agent_core.execution.policy import (
     comparison_product_ids,
+    ranking_requires_usable_value,
     require_aggregate_contract,
     require_comparison_contract,
     require_fund_public_scope,
@@ -200,8 +201,14 @@ class ResultVerifier:
         candidates: list[VerifierRecord] = []
         for index, record in enumerate(universe):
             _periodic_deadline_check(index)
-            if not record.is_quarantined and all(
-                _matches_constraint(record, item) for item in plan.constraints
+            if (
+                not record.is_quarantined
+                and all(_matches_constraint(record, item) for item in plan.constraints)
+                and all(
+                    not ranking_requires_usable_value(plan, ranking.field)
+                    or _comparable_value(record, ranking.field) is not None
+                    for ranking in plan.ranking
+                )
             ):
                 candidates.append(record)
         raise_if_request_stopped()
