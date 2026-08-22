@@ -101,6 +101,35 @@ def _compose_arguments() -> list[str]:
     return ["up", "--detach", "--no-build", "--force-recreate", "--wait"]
 
 
+def test_compose_command_adds_adaptive_overlay_only_for_explicit_activation(
+    tmp_path: Path,
+) -> None:
+    disabled = tmp_path / "disabled.env"
+    disabled.write_text("FINANCE_ADAPTIVE_SEMANTIC_ENABLED='false'\n", encoding="utf-8")
+    disabled.chmod(0o600)
+    enabled = tmp_path / "enabled.env"
+    enabled.write_text("FINANCE_ADAPTIVE_SEMANTIC_ENABLED='true'\n", encoding="utf-8")
+    enabled.chmod(0o600)
+
+    disabled_command = release_activation._compose_command(disabled, _compose_arguments())
+    enabled_command = release_activation._compose_command(enabled, _compose_arguments())
+
+    assert "fastapi_backend/docker-compose.adaptive.yml" not in disabled_command
+    assert enabled_command.count("fastapi_backend/docker-compose.adaptive.yml") == 1
+
+
+def test_compose_command_rejects_invalid_adaptive_flag(tmp_path: Path) -> None:
+    env_file = tmp_path / "invalid.env"
+    env_file.write_text("FINANCE_ADAPTIVE_SEMANTIC_ENABLED='yes'\n", encoding="utf-8")
+    env_file.chmod(0o600)
+
+    with pytest.raises(
+        release_activation.ReleaseActivationError,
+        match="must be true or false",
+    ):
+        release_activation._compose_command(env_file, _compose_arguments())
+
+
 def test_activation_rejects_signed_old_binding_and_allows_exact_idempotent_restart(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

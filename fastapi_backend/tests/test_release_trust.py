@@ -31,6 +31,8 @@ def _fixture(
     *,
     answer_provider: str = "deterministic",
     queryplan_enabled: bool = False,
+    semantic_resolver_enabled: bool = False,
+    adaptive_semantic_enabled: bool = False,
     fund_execution_policy: str = "locked",
     hcx_timeout_seconds: float = 45.0,
     environment_name: str = "evaluation",
@@ -39,7 +41,7 @@ def _fixture(
     source_commit = "b" * 40
     release_id = "finance-agent-test-v1"
     relation_artifact_sha256 = "c" * 64
-    uses_hcx = answer_provider == "hyperclova" or queryplan_enabled
+    uses_hcx = answer_provider == "hyperclova" or queryplan_enabled or semantic_resolver_enabled
     manifest = tmp_path / "agent-release-manifest.json"
     manifest_payload = {
         "schema_version": "1.2",
@@ -66,12 +68,23 @@ def _fixture(
                         "provider_revision_not_exposed" if uses_hcx else "not_used"
                     ),
                     "queryplan_operation_enabled": queryplan_enabled,
+                    "semantic_resolver_operation_enabled": semantic_resolver_enabled,
                     "grounded_answer_operation_enabled": answer_provider == "hyperclova",
                 },
                 "retrieval": {
-                    "schema_dense": "disabled_offline_only",
-                    "schema_dense_manifest_sha256": None,
-                    "embedding_model_revision": None,
+                    "schema_dense": (
+                        "activated_kure_candidate_only"
+                        if adaptive_semantic_enabled
+                        else "disabled_offline_only"
+                    ),
+                    "schema_dense_manifest_sha256": (
+                        "d" * 64 if adaptive_semantic_enabled else None
+                    ),
+                    "embedding_model_revision": (
+                        "d14c8a9423946e268a0c9952fecf3a7aabd73bd9"
+                        if adaptive_semantic_enabled
+                        else None
+                    ),
                     "product_dense": "disabled_not_implemented",
                     "reranker": "disabled_not_implemented",
                     "document_bm25": "disabled_no_approved_corpus",
@@ -131,6 +144,9 @@ def _fixture(
                 "FINANCE_RELATION_RETRIEVAL_ARTIFACT_SHA256=" + relation_artifact_sha256,
                 f"FINANCE_BACKEND_ANSWER_PROVIDER={answer_provider}",
                 "FINANCE_BACKEND_HCX_QUERY_PLAN_ENABLED=" + str(queryplan_enabled).lower(),
+                "FINANCE_BACKEND_HCX_SEMANTIC_RESOLVER_ENABLED="
+                + str(semantic_resolver_enabled).lower(),
+                "FINANCE_ADAPTIVE_SEMANTIC_ENABLED=" + str(adaptive_semantic_enabled).lower(),
                 f"FINANCE_BACKEND_FUND_EXECUTION_POLICY={fund_execution_policy}",
                 f"HCX_TIMEOUT_SECONDS={hcx_timeout_seconds:g}",
                 "WEB_CONCURRENCY=1",
@@ -141,6 +157,23 @@ def _fixture(
                         "HCX_MODEL=HCX-007",
                     ]
                     if uses_hcx
+                    else []
+                ),
+                *(
+                    [
+                        "FINANCE_SCHEMA_DENSE_INDEX_HOST_FILE=/models/schema-index.json",
+                        "FINANCE_SCHEMA_DENSE_INDEX_SHA256=" + "e" * 64,
+                        "FINANCE_SCHEMA_DENSE_CALIBRATION_REPORT_SHA256=" + "f" * 64,
+                        "FINANCE_SCHEMA_DENSE_MIN_SCORE=0.70",
+                        "FINANCE_SCHEMA_DENSE_HCLX_CANDIDATE_MIN_SCORE=0.40",
+                        "FINANCE_SCHEMA_DENSE_MINIMUM_MARGIN=0.08",
+                        "FINANCE_SCHEMA_DENSE_TOP_K=10",
+                        "FINANCE_KURE_CACHE_HOST_DIR=/models/kure-cache",
+                        "FINANCE_KURE_SNAPSHOT_MANIFEST_HOST_FILE=/models/kure-manifest.json",
+                        "FINANCE_KURE_CPU_THREADS=2",
+                        "FINANCE_KURE_BATCH_SIZE=16",
+                    ]
+                    if adaptive_semantic_enabled
                     else []
                 ),
             ]
@@ -246,6 +279,53 @@ def test_release_trust_accepts_final_hcx_answer_only_profile(
     release_trust.verify_release_trust(env_file)
 
     assert len(calls) == 3
+
+
+def test_release_trust_accepts_exact_adaptive_kure_and_semantic_resolver_profile(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    env_file, _, _ = _fixture(
+        tmp_path,
+        semantic_resolver_enabled=True,
+        adaptive_semantic_enabled=True,
+    )
+    calls: list[list[str]] = []
+    monkeypatch.setattr(
+        release_trust,
+        "_cosign_binary",
+        lambda: Path("/usr/local/bin/cosign"),
+    )
+    monkeypatch.setattr(
+        release_trust,
+        "_run_verification",
+        lambda _binary, arguments: calls.append(arguments),
+    )
+
+    release_trust.verify_release_trust(env_file)
+
+    assert len(calls) == 3
+
+
+def test_release_trust_rejects_incomplete_adaptive_environment(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    env_file, _, _ = _fixture(
+        tmp_path,
+        semantic_resolver_enabled=True,
+        adaptive_semantic_enabled=True,
+    )
+    _update_environment(env_file, FINANCE_SCHEMA_DENSE_MINIMUM_MARGIN=None)
+    monkeypatch.setattr(
+        release_trust,
+        "_cosign_binary",
+        lambda: Path("/usr/local/bin/cosign"),
+    )
+    monkeypatch.setattr(release_trust, "_run_verification", lambda *_: None)
+
+    with pytest.raises(release_trust.ReleaseTrustError, match="profile is invalid"):
+        release_trust.verify_release_trust(env_file)
 
 
 def test_release_trust_accepts_manifest_emitted_by_release_builder(

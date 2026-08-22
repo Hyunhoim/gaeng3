@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -19,8 +20,13 @@ from finance_agent_core.agent.product_comparison import (
     compile_product_comparison_plan,
     resolve_exact_product_ids,
 )
+from finance_agent_core.agent.semantic_resolution import (
+    HardFilterLock,
+    ResolutionOperation,
+    SemanticResolutionReceipt,
+)
 from finance_agent_core.contracts import QueryPlan
-from finance_agent_core.contracts.queryplan import Intent, ProductFamily
+from finance_agent_core.contracts.queryplan import Intent, ProductFamily, search_projection
 from finance_agent_core.contracts.routing import (
     InteractionIntent,
     RouteDecision,
@@ -124,6 +130,13 @@ class ServerQueryPlanCompiler:
 
     def _compile_search_lowering(self, decision: RouteDecision) -> QueryPlan:
         family = decision.draft.product_families[0]
+        if decision.draft.product_mentions and decision.draft.intent not in {
+            InteractionIntent.DETAIL,
+            InteractionIntent.EXPLAIN,
+        }:
+            raise PlanCompilationBlockedError(
+                "search contains product identities that were not bound to an exact lookup"
+            )
         payload = canonicalize_query_plan_payload(
             decision.draft.question,
             {
@@ -170,6 +183,116 @@ class ServerQueryPlanCompiler:
         plan = QueryPlan.model_validate(payload)
         if plan.product_families != [family]:
             raise PlanCompilationBlockedError("compiler changed the routed product family")
+        return plan
+
+    def compile_with_semantic_resolution(
+        self,
+        decision: RouteDecision,
+        *,
+        hard_filter_lock: HardFilterLock,
+        receipts: tuple[SemanticResolutionReceipt, ...],
+    ) -> QueryPlan:
+        """Compile only server-admitted semantic receipts on top of locked lexical facts."""
+
+        if type(hard_filter_lock) is not HardFilterLock or any(
+            type(receipt) is not SemanticResolutionReceipt for receipt in receipts
+        ):
+            raise PlanCompilationBlockedError(
+                "semantic compiler requires exact server authority contracts"
+            )
+        try:
+            hard_filter_lock = HardFilterLock.model_validate_json(
+                hard_filter_lock.model_dump_json()
+            )
+            receipts = tuple(
+                SemanticResolutionReceipt.model_validate_json(receipt.model_dump_json())
+                for receipt in receipts
+            )
+        except ValueError as error:
+            raise PlanCompilationBlockedError(
+                "semantic authority contract failed revalidation"
+            ) from error
+        if (
+            decision.disposition is not RouteDisposition.EXECUTE
+            or decision.query_plan_intent is not Intent.SEARCH
+            or len(decision.draft.product_families) != 1
+            or not receipts
+        ):
+            raise PlanCompilationBlockedError(
+                "semantic resolution compiler requires one executable SEARCH family"
+            )
+        family = decision.draft.product_families[0]
+        if any(
+            receipt.product_family is not family
+            or receipt.hard_filter_lock_sha256 != hard_filter_lock.payload_sha256
+            for receipt in receipts
+        ):
+            raise PlanCompilationBlockedError("semantic receipt differs from its hard-filter lock")
+        payload = canonicalize_query_plan_payload(
+            decision.draft.question,
+            {
+                "question_id": decision.draft.request_id,
+                "product_families": [family.value],
+            },
+            force_product_family_hint=True,
+        )
+        admitted_residual_hashes = {receipt.residual_span_sha256 for receipt in receipts}
+        payload["ambiguities"] = [
+            item
+            for item in payload["ambiguities"]
+            if hashlib.sha256(item["span"].encode("utf-8")).hexdigest()
+            not in admitted_residual_hashes
+        ]
+        if payload["ambiguities"] or payload["unsupported_conditions"]:
+            raise PlanCompilationBlockedError(
+                "semantic resolution cannot override another ambiguity or unsupported condition"
+            )
+        if decision.draft.requested_limit is not None:
+            payload["limit"] = decision.draft.requested_limit
+        try:
+            server_base_plan = QueryPlan.model_validate(payload)
+            reconstructed_lock = HardFilterLock.from_plan(
+                server_base_plan,
+                requested_limit=decision.draft.requested_limit,
+                product_mentions=tuple(decision.draft.product_mentions),
+            )
+        except ValueError as error:
+            raise PlanCompilationBlockedError(str(error)) from error
+        if reconstructed_lock != hard_filter_lock:
+            raise PlanCompilationBlockedError(
+                "semantic hard-filter lock differs from the server reconstruction"
+            )
+        ranking = list(payload["ranking"])
+        projection = list(payload["projection"])
+        for receipt in receipts:
+            if receipt.operation is ResolutionOperation.RANK:
+                existing_fields = {item["field"] for item in ranking}
+                if existing_fields and receipt.field_id not in existing_fields:
+                    raise PlanCompilationBlockedError(
+                        "semantic ranking conflicts with an already locked ranking"
+                    )
+                if receipt.field_id not in existing_fields:
+                    ranking.append(
+                        {
+                            "field": receipt.field_id,
+                            "direction": receipt.direction.value,
+                            "nulls": "last",
+                        }
+                    )
+                projection = search_projection(family, *projection, receipt.field_id)
+            elif receipt.operation is ResolutionOperation.PROJECT:
+                projection = search_projection(family, *projection, receipt.field_id)
+            else:
+                raise PlanCompilationBlockedError(
+                    "filter and aggregate semantic operations require explicit server values"
+                )
+        payload["ranking"] = ranking
+        payload["projection"] = projection
+        try:
+            plan = QueryPlan.model_validate(payload)
+            hard_filter_lock.require_preserved(plan)
+        except ValueError as error:
+            raise PlanCompilationBlockedError(str(error)) from error
         return plan
 
     def _compile_comparison(self, decision: RouteDecision) -> QueryPlan:

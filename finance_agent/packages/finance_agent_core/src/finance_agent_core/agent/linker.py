@@ -25,6 +25,21 @@ _NEGATED_LITERAL_SUFFIX = re.compile(
 _SEMANTIC_COVERAGE_GATE = SemanticCoverageGate()
 
 
+def _explicit_projection_fields(question: str, family: str) -> list[str]:
+    """Link field labels and aliases that the user explicitly asks to see."""
+
+    registry = load_field_registry()
+    normalized_question = question.casefold()
+    requested: list[str] = []
+    for field, definition in registry.fields.items():
+        if family not in definition.datasets or not definition.selectable:
+            continue
+        phrases = (definition.label, *definition.aliases)
+        if any(phrase.casefold() in normalized_question for phrase in phrases if phrase.strip()):
+            requested.append(field)
+    return requested
+
+
 def _negated_literal_span(question: str, literal: str) -> str | None:
     """Return local text when an identical literal is semantically negated.
 
@@ -1247,13 +1262,7 @@ def canonicalize_query_plan_payload(
         family,
     )
     rankings = hints["required_rankings"]
-    explicitly_requested_fields: list[str] = []
-    if family == "fund" and re.search(
-        r"(?:1\s*년|1Y)\s*(?:수익률|수익|성과)",
-        question,
-        flags=re.IGNORECASE,
-    ):
-        explicitly_requested_fields.append("one_year_return_pct")
+    explicitly_requested_fields = _explicit_projection_fields(question, family)
     payload["constraints"] = constraints
     payload["ranking"] = rankings
     payload["projection"] = search_projection(

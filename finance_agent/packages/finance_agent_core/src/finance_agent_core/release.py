@@ -21,6 +21,11 @@ from finance_agent_core.ontology import (
     ONTOLOGY_RENDERER_VERSION,
     ontology_bundle_sha256,
 )
+from finance_agent_core.retrieval.schema_dense import (
+    DenseSchemaIndexArtifact,
+    SchemaDenseActivationPolicy,
+    dense_schema_index_file_bytes,
+)
 from finance_agent_core.storage.approval import load_approved_dataset_manifest
 
 _SHA256_PATTERN = r"^[0-9a-f]{64}$"
@@ -116,11 +121,16 @@ class ModelRelease(ReleaseModel):
     model_id: str | None = Field(default=None, min_length=1, max_length=128)
     revision_status: Literal["not_used", "provider_revision_not_exposed"]
     queryplan_operation_enabled: StrictBool
+    semantic_resolver_operation_enabled: StrictBool = False
     grounded_answer_operation_enabled: StrictBool
 
     @model_validator(mode="after")
     def validate_provider_profile(self) -> ModelRelease:
-        enabled = self.queryplan_operation_enabled or self.grounded_answer_operation_enabled
+        enabled = (
+            self.queryplan_operation_enabled
+            or self.semantic_resolver_operation_enabled
+            or self.grounded_answer_operation_enabled
+        )
         if self.provider == "disabled":
             if enabled or self.model_id is not None or self.revision_status != "not_used":
                 raise ValueError("disabled model profile cannot expose model operations")
@@ -133,12 +143,32 @@ class ModelRelease(ReleaseModel):
 
 
 class RetrievalRelease(ReleaseModel):
-    schema_dense: Literal["disabled_offline_only"] = "disabled_offline_only"
-    schema_dense_manifest_sha256: None = None
-    embedding_model_revision: None = None
+    schema_dense: Literal[
+        "disabled_offline_only",
+        "activated_kure_candidate_only",
+    ] = "disabled_offline_only"
+    schema_dense_manifest_sha256: str | None = Field(default=None, pattern=_SHA256_PATTERN)
+    embedding_model_revision: str | None = Field(
+        default=None,
+        pattern=r"^[0-9a-f]{40}$",
+    )
     product_dense: Literal["disabled_not_implemented"] = "disabled_not_implemented"
     reranker: Literal["disabled_not_implemented"] = "disabled_not_implemented"
     document_bm25: Literal["disabled_no_approved_corpus"] = "disabled_no_approved_corpus"
+
+    @model_validator(mode="after")
+    def require_exact_schema_dense_profile(self) -> RetrievalRelease:
+        enabled = self.schema_dense == "activated_kure_candidate_only"
+        if enabled != (
+            self.schema_dense_manifest_sha256 is not None
+            and self.embedding_model_revision is not None
+        ):
+            raise ValueError("Schema Dense activation requires one exact release binding")
+        if enabled and self.embedding_model_revision != (
+            "d14c8a9423946e268a0c9952fecf3a7aabd73bd9"
+        ):
+            raise ValueError("Schema Dense activation requires the approved KURE revision")
+        return self
 
 
 class RelationRetrievalArtifactRelease(ReleaseModel):
@@ -215,7 +245,10 @@ class PublicKnowledgeRetrievalRelease(ReleaseModel):
 
 class ExecutionRelease(ReleaseModel):
     plan_authority_version: Literal["plan-authority-v1"] = "plan-authority-v1"
-    planning_policy_version: Literal["adaptive-shadow-v1"] = "adaptive-shadow-v1"
+    planning_policy_version: Literal[
+        "adaptive-shadow-v1",
+        "adaptive-semantic-v2",
+    ] = "adaptive-shadow-v1"
     compiler_versions: dict[
         Literal[
             "server_queryplan_compiler",
@@ -251,6 +284,13 @@ class RuntimeFeatureRelease(ReleaseModel):
     fund_execution_policy: Literal["locked", "public_fund_v1_approved"]
     model: ModelRelease
     retrieval: RetrievalRelease = Field(default_factory=RetrievalRelease)
+
+    @model_validator(mode="after")
+    def align_semantic_model_and_retrieval(self) -> RuntimeFeatureRelease:
+        adaptive = self.retrieval.schema_dense == "activated_kure_candidate_only"
+        if self.model.semantic_resolver_operation_enabled and not adaptive:
+            raise ValueError("HCLX Semantic Resolver requires activated Schema Dense")
+        return self
 
 
 class RuntimeControlRelease(ReleaseModel):
@@ -380,7 +420,11 @@ class RuntimeReleaseInputs:
     hcx_queryplan_enabled: bool
     hcx_model: str | None
     fund_execution_policy: Literal["locked", "public_fund_v1_approved"]
+    hcx_semantic_resolver_enabled: bool = False
     schema_dense_enabled: bool = False
+    schema_dense_artifact: DenseSchemaIndexArtifact | None = None
+    schema_dense_artifact_file_sha256: str | None = None
+    schema_dense_policy: SchemaDenseActivationPolicy | None = None
     product_dense_enabled: bool = False
     relation_retrieval_artifact: RelationRetrievalArtifactRelease | None = None
     relation_retrieval_artifact_file_sha256: str | None = None
@@ -502,13 +546,15 @@ def sha256_runtime_tree(root: str | Path) -> str:
 
 def _runtime_model(inputs: RuntimeReleaseInputs) -> ModelRelease:
     queryplan_enabled = bool(inputs.hcx_queryplan_enabled)
+    semantic_resolver_enabled = bool(inputs.hcx_semantic_resolver_enabled)
     answer_enabled = inputs.answer_provider == "hyperclova"
-    if not queryplan_enabled and not answer_enabled:
+    if not queryplan_enabled and not semantic_resolver_enabled and not answer_enabled:
         return ModelRelease(
             provider="disabled",
             model_id=None,
             revision_status="not_used",
             queryplan_operation_enabled=False,
+            semantic_resolver_operation_enabled=False,
             grounded_answer_operation_enabled=False,
         )
     return ModelRelease(
@@ -516,7 +562,70 @@ def _runtime_model(inputs: RuntimeReleaseInputs) -> ModelRelease:
         model_id=inputs.hcx_model,
         revision_status="provider_revision_not_exposed",
         queryplan_operation_enabled=queryplan_enabled,
+        semantic_resolver_operation_enabled=semantic_resolver_enabled,
         grounded_answer_operation_enabled=answer_enabled,
+    )
+
+
+def _runtime_retrieval(inputs: RuntimeReleaseInputs) -> RetrievalRelease:
+    values = (
+        inputs.schema_dense_artifact,
+        inputs.schema_dense_artifact_file_sha256,
+        inputs.schema_dense_policy,
+    )
+    if not inputs.schema_dense_enabled:
+        if any(value is not None for value in values):
+            raise AgentReleaseError(
+                AgentReleaseCode.RUNTIME_MISMATCH,
+                "disabled Schema Dense cannot bind runtime artifacts",
+            )
+        return RetrievalRelease()
+    if any(value is None for value in values):
+        raise AgentReleaseError(
+            AgentReleaseCode.RUNTIME_MISMATCH,
+            "activated Schema Dense requires index, file hash, and policy",
+        )
+    artifact = inputs.schema_dense_artifact
+    artifact_file_sha256 = inputs.schema_dense_artifact_file_sha256
+    policy = inputs.schema_dense_policy
+    assert artifact is not None
+    assert artifact_file_sha256 is not None
+    assert policy is not None
+    if not re.fullmatch(_SHA256_PATTERN, artifact_file_sha256):
+        raise AgentReleaseError(
+            AgentReleaseCode.ARTIFACT_HASH_MISMATCH,
+            "Schema Dense artifact file SHA-256 is invalid",
+        )
+    if _raw_sha256(dense_schema_index_file_bytes(artifact)) != artifact_file_sha256:
+        raise AgentReleaseError(
+            AgentReleaseCode.ARTIFACT_HASH_MISMATCH,
+            "Schema Dense artifact differs from its trusted file SHA-256",
+        )
+    manifest = artifact.manifest
+    if (
+        not manifest.production_enabled
+        or manifest.scope != "production_candidate"
+        or manifest.activation_policy_sha256 != policy.policy_sha256
+        or manifest.provider.model_id != policy.model_id
+        or manifest.provider.model_revision != policy.model_revision
+        or manifest.provider.dimension != policy.dimension
+        or manifest.provider.pooling != policy.pooling
+    ):
+        raise AgentReleaseError(
+            AgentReleaseCode.RUNTIME_MISMATCH,
+            "Schema Dense index and KURE activation policy differ",
+        )
+    release_binding_sha256 = canonical_sha256(
+        {
+            "artifact_file_sha256": artifact_file_sha256,
+            "index_manifest": manifest.model_dump(mode="json"),
+            "activation_policy": policy.model_dump(mode="json"),
+        }
+    )
+    return RetrievalRelease(
+        schema_dense="activated_kure_candidate_only",
+        schema_dense_manifest_sha256=release_binding_sha256,
+        embedding_model_revision=policy.model_revision,
     )
 
 
@@ -601,10 +710,20 @@ def _approved_dataset_release() -> ApprovedDatasetRelease:
 
 
 def build_release_components(inputs: RuntimeReleaseInputs) -> AgentReleaseComponents:
-    if inputs.schema_dense_enabled or inputs.product_dense_enabled:
+    if inputs.product_dense_enabled:
         raise AgentReleaseError(
             AgentReleaseCode.RUNTIME_MISMATCH,
-            "Stage 3 v1 forbids production Dense indexes until their runtime is approved",
+            "Product Dense remains outside the approved evaluation runtime",
+        )
+    if inputs.hcx_semantic_resolver_enabled and not inputs.schema_dense_enabled:
+        raise AgentReleaseError(
+            AgentReleaseCode.RUNTIME_MISMATCH,
+            "HCLX Semantic Resolver requires activated Schema Dense",
+        )
+    if inputs.hcx_semantic_resolver_enabled and inputs.hcx_model != "HCX-007":
+        raise AgentReleaseError(
+            AgentReleaseCode.RUNTIME_MISMATCH,
+            "adaptive semantic activation requires HCX-007",
         )
     if not Path(inputs.backend_root).is_absolute():
         raise AgentReleaseError(
@@ -632,10 +751,13 @@ def build_release_components(inputs: RuntimeReleaseInputs) -> AgentReleaseCompon
     capability = load_capability_matrix()
 
     queryplan_prompt_files = (
+        "agent/adaptive_semantic.py",
         "agent/grounded_planning.py",
         "agent/linker.py",
         "agent/providers/local_test.py",
         "agent/providers/hyperclova.py",
+        "agent/semantic_ledger.py",
+        "agent/semantic_resolution.py",
         "contracts/hcx_schema.py",
     )
     answer_prompt_files = (
@@ -678,6 +800,9 @@ def build_release_components(inputs: RuntimeReleaseInputs) -> AgentReleaseCompon
             generation_contract_sha256=_hash_named_files(core_root, generation_files),
         ),
         execution=ExecutionRelease(
+            planning_policy_version=(
+                "adaptive-semantic-v2" if inputs.schema_dense_enabled else "adaptive-shadow-v1"
+            ),
             compiler_versions={
                 "server_queryplan_compiler": SERVER_COMPILER_VERSION,
                 "grounded_plan_gate": GROUNDED_PLAN_GATE_VERSION,
@@ -692,6 +817,7 @@ def build_release_components(inputs: RuntimeReleaseInputs) -> AgentReleaseCompon
         runtime_features=RuntimeFeatureRelease(
             fund_execution_policy=inputs.fund_execution_policy,
             model=_runtime_model(inputs),
+            retrieval=_runtime_retrieval(inputs),
         ),
         runtime_controls=RuntimeControlRelease(
             hcx_timeout_seconds=inputs.hcx_timeout_seconds,

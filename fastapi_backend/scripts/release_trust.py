@@ -317,8 +317,12 @@ def _signed_manifest_profile(
     document = _object_member(knowledge, "document")
 
     queryplan_enabled = model.get("queryplan_operation_enabled")
+    semantic_resolver_enabled = model.get("semantic_resolver_operation_enabled", False)
     answer_enabled = model.get("grounded_answer_operation_enabled")
-    if type(queryplan_enabled) is not bool or type(answer_enabled) is not bool:
+    if any(
+        type(value) is not bool
+        for value in (queryplan_enabled, semantic_resolver_enabled, answer_enabled)
+    ):
         raise ReleaseTrustError("signed release profile is invalid")
     provider = model.get("provider")
     model_id = model.get("model_id")
@@ -326,6 +330,7 @@ def _signed_manifest_profile(
     if provider == "disabled":
         if (
             queryplan_enabled
+            or semantic_resolver_enabled
             or answer_enabled
             or model_id is not None
             or revision_status != "not_used"
@@ -334,7 +339,7 @@ def _signed_manifest_profile(
         answer_provider = "deterministic"
     elif provider == "hyperclova":
         if (
-            not (queryplan_enabled or answer_enabled)
+            not (queryplan_enabled or semantic_resolver_enabled or answer_enabled)
             or model_id != "HCX-007"
             or revision_status != "provider_revision_not_exposed"
         ):
@@ -343,14 +348,29 @@ def _signed_manifest_profile(
     else:
         raise ReleaseTrustError("signed release profile is invalid")
 
-    if retrieval != {
-        "schema_dense": "disabled_offline_only",
-        "schema_dense_manifest_sha256": None,
-        "embedding_model_revision": None,
+    common_retrieval = {
         "product_dense": "disabled_not_implemented",
         "reranker": "disabled_not_implemented",
         "document_bm25": "disabled_no_approved_corpus",
-    }:
+    }
+    if any(retrieval.get(name) != value for name, value in common_retrieval.items()):
+        raise ReleaseTrustError("signed release profile is invalid")
+    if (
+        retrieval.get("schema_dense") == "disabled_offline_only"
+        and retrieval.get("schema_dense_manifest_sha256") is None
+        and retrieval.get("embedding_model_revision") is None
+    ):
+        adaptive_semantic_enabled = False
+    elif (
+        retrieval.get("schema_dense") == "activated_kure_candidate_only"
+        and isinstance(retrieval.get("schema_dense_manifest_sha256"), str)
+        and _SHA256.fullmatch(retrieval["schema_dense_manifest_sha256"]) is not None
+        and retrieval.get("embedding_model_revision") == "d14c8a9423946e268a0c9952fecf3a7aabd73bd9"
+    ):
+        adaptive_semantic_enabled = True
+    else:
+        raise ReleaseTrustError("signed release profile is invalid")
+    if semantic_resolver_enabled and not adaptive_semantic_enabled:
         raise ReleaseTrustError("signed release profile is invalid")
     if relation.get("status") != "activated" or not isinstance(
         relation.get("artifact_file_sha256"), str
@@ -400,7 +420,10 @@ def _signed_manifest_profile(
         "platform": binding.get("platform"),
         "answer_provider": answer_provider,
         "hcx_queryplan_enabled": queryplan_enabled,
+        "hcx_semantic_resolver_enabled": semantic_resolver_enabled,
         "hcx_model": model_id,
+        "adaptive_semantic_enabled": adaptive_semantic_enabled,
+        "embedding_model_revision": retrieval.get("embedding_model_revision"),
         "fund_execution_policy": fund_policy,
         "relation_artifact_sha256": relation["artifact_file_sha256"],
         "hcx_timeout_seconds": float(controls["hcx_timeout_seconds"]),
@@ -422,7 +445,75 @@ def _release_environment_profile(values: dict[str, str]) -> dict[str, Any]:
         "FINANCE_BACKEND_HCX_QUERY_PLAN_ENABLED",
         default="false",
     )
-    uses_hcx = answer_provider == "hyperclova" or queryplan_enabled
+    semantic_resolver_enabled = _boolean_environment(
+        values,
+        "FINANCE_BACKEND_HCX_SEMANTIC_RESOLVER_ENABLED",
+        default="false",
+    )
+    adaptive_semantic_enabled = _boolean_environment(
+        values,
+        "FINANCE_ADAPTIVE_SEMANTIC_ENABLED",
+        default="false",
+    )
+    if semantic_resolver_enabled and not adaptive_semantic_enabled:
+        raise ReleaseTrustError("release environment profile is invalid")
+    adaptive_required = {
+        "FINANCE_SCHEMA_DENSE_INDEX_HOST_FILE",
+        "FINANCE_SCHEMA_DENSE_INDEX_SHA256",
+        "FINANCE_SCHEMA_DENSE_CALIBRATION_REPORT_SHA256",
+        "FINANCE_SCHEMA_DENSE_MIN_SCORE",
+        "FINANCE_SCHEMA_DENSE_HCLX_CANDIDATE_MIN_SCORE",
+        "FINANCE_SCHEMA_DENSE_MINIMUM_MARGIN",
+        "FINANCE_KURE_CACHE_HOST_DIR",
+        "FINANCE_KURE_SNAPSHOT_MANIFEST_HOST_FILE",
+    }
+    adaptive_optional = {
+        "FINANCE_SCHEMA_DENSE_TOP_K",
+        "FINANCE_KURE_CPU_THREADS",
+        "FINANCE_KURE_BATCH_SIZE",
+    }
+    if adaptive_semantic_enabled:
+        if any(not values.get(name) for name in adaptive_required):
+            raise ReleaseTrustError("release environment profile is invalid")
+        for name in (
+            "FINANCE_SCHEMA_DENSE_INDEX_SHA256",
+            "FINANCE_SCHEMA_DENSE_CALIBRATION_REPORT_SHA256",
+        ):
+            if _SHA256.fullmatch(values[name]) is None:
+                raise ReleaseTrustError("release environment profile is invalid")
+        dense_min_score = _float_environment(
+            values,
+            "FINANCE_SCHEMA_DENSE_MIN_SCORE",
+            default="nan",
+        )
+        hclx_candidate_floor = _float_environment(
+            values,
+            "FINANCE_SCHEMA_DENSE_HCLX_CANDIDATE_MIN_SCORE",
+            default="nan",
+        )
+        minimum_margin = _float_environment(
+            values,
+            "FINANCE_SCHEMA_DENSE_MINIMUM_MARGIN",
+            default="nan",
+        )
+        if not (-1 <= hclx_candidate_floor <= dense_min_score <= 1 and 0 <= minimum_margin <= 2):
+            raise ReleaseTrustError("release environment profile is invalid")
+        if not 2 <= _integer_environment(values, "FINANCE_SCHEMA_DENSE_TOP_K", default="10") <= 10:
+            raise ReleaseTrustError("release environment profile is invalid")
+        if not 1 <= _integer_environment(values, "FINANCE_KURE_CPU_THREADS", default="2") <= 8:
+            raise ReleaseTrustError("release environment profile is invalid")
+        if not 1 <= _integer_environment(values, "FINANCE_KURE_BATCH_SIZE", default="16") <= 64:
+            raise ReleaseTrustError("release environment profile is invalid")
+        for name in (
+            "FINANCE_SCHEMA_DENSE_INDEX_HOST_FILE",
+            "FINANCE_KURE_CACHE_HOST_DIR",
+            "FINANCE_KURE_SNAPSHOT_MANIFEST_HOST_FILE",
+        ):
+            if not Path(values[name]).is_absolute():
+                raise ReleaseTrustError("release environment profile is invalid")
+    elif any(values.get(name) for name in adaptive_required | adaptive_optional):
+        raise ReleaseTrustError("release environment profile is invalid")
+    uses_hcx = answer_provider == "hyperclova" or queryplan_enabled or semantic_resolver_enabled
     if uses_hcx:
         if (
             values.get("FINANCE_AGENT_LLM_MODE") != values["APP_ENV"]
@@ -451,7 +542,12 @@ def _release_environment_profile(values: dict[str, str]) -> dict[str, Any]:
         "platform": platform,
         "answer_provider": answer_provider,
         "hcx_queryplan_enabled": queryplan_enabled,
+        "hcx_semantic_resolver_enabled": semantic_resolver_enabled,
         "hcx_model": model_id,
+        "adaptive_semantic_enabled": adaptive_semantic_enabled,
+        "embedding_model_revision": (
+            "d14c8a9423946e268a0c9952fecf3a7aabd73bd9" if adaptive_semantic_enabled else None
+        ),
         "fund_execution_policy": fund_policy,
         "relation_artifact_sha256": values["FINANCE_RELATION_RETRIEVAL_ARTIFACT_SHA256"],
         "hcx_timeout_seconds": _float_environment(values, "HCX_TIMEOUT_SECONDS", default="45"),

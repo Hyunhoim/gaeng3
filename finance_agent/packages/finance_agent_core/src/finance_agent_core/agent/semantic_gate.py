@@ -112,6 +112,11 @@ _DIRECTION_TERM = re.compile(
     r"ascending|descending",
     re.IGNORECASE,
 )
+_POTENTIAL_SCHEMA_GAP = re.compile(
+    r"(?P<span>[A-Za-z가-힣][A-Za-z0-9가-힣._/-]{1,30}?)"
+    r"(?:이|가|은|는|을|를)?\s*(?:높은|낮은|큰|작은|많은|적은)",
+    re.IGNORECASE,
+)
 _DIRECTION_METRIC_PATTERN = (
     r"(?:AUM|순자산|운용\s*(?:자산|규모)|발행\s*(?:잔액|금액)|매수\s*가능\s*수량|"
     r"거래대금|종가|마감\s*가격|총\s*보수(?:율)?|보수율|"
@@ -249,6 +254,39 @@ def _direction_has_metric(question: str, match: re.Match[str]) -> bool:
     return len(list(_DIRECTION_METRIC.finditer(question))) == 1
 
 
+def _known_field_surface(value: str) -> bool:
+    """Return whether a directional metric is already mapped by the frozen registry."""
+
+    normalized = re.sub(r"\s+", "", value).casefold()
+    if not normalized:
+        return False
+    from finance_agent_core.config import load_field_registry
+
+    for definition in load_field_registry().fields.values():
+        for phrase in (definition.label, *definition.aliases):
+            candidate = re.sub(r"\s+", "", phrase).casefold()
+            if len(candidate) >= 2 and (normalized == candidate or normalized in candidate):
+                return True
+    return False
+
+
+def _schema_link_gap_matches(question: str) -> list[re.Match[str]]:
+    matches = []
+    blocked_tokens = {"상품", "etf", "etn", "etp", "채권", "펀드", "국내", "해외"}
+    exact_risk_ranges = [match.span() for match in _EXACT_RISK.finditer(question)]
+    for match in _POTENTIAL_SCHEMA_GAP.finditer(question):
+        span = match.group("span").strip()
+        if (
+            any(match.start() < right and match.end() > left for left, right in exact_risk_ranges)
+            or span.casefold() in blocked_tokens
+            or _DIRECTION_METRIC.fullmatch(span) is not None
+            or _known_field_surface(span)
+        ):
+            continue
+        matches.append(match)
+    return matches
+
+
 class SemanticCoverageGate:
     """Reject semantic downgrades from a constrained request to a generic search.
 
@@ -256,6 +294,11 @@ class SemanticCoverageGate:
     field mapping: when a phrase can name more than one metric or requires an
     action outside the read-only Oracle, it returns a control issue instead.
     """
+
+    def __init__(self, *, schema_link_gaps_enabled: bool = False) -> None:
+        if type(schema_link_gaps_enabled) is not bool:
+            raise TypeError("schema_link_gaps_enabled must be a boolean")
+        self.schema_link_gaps_enabled = schema_link_gaps_enabled
 
     def evaluate(
         self,
@@ -271,6 +314,7 @@ class SemanticCoverageGate:
 
         unsupported: list[str] = []
         ambiguities: list[str] = []
+        schema_link_gaps: list[str] = []
 
         if match := _TRANSACTIONAL_ACTION.search(normalized):
             unsupported.append(match.group(0))
@@ -332,7 +376,19 @@ class SemanticCoverageGate:
             if not _metric_has_explicit_mapping(normalized, match):
                 ambiguities.append(match.group(0))
 
+        schema_gap_matches = _schema_link_gap_matches(normalized)
+        detected_schema_gaps = [match.group("span") for match in schema_gap_matches]
+        if self.schema_link_gaps_enabled:
+            schema_link_gaps.extend(detected_schema_gaps)
+        else:
+            ambiguities.extend(detected_schema_gaps)
+
         for match in _DIRECTION_TERM.finditer(normalized):
+            if any(
+                candidate.start() <= match.start() <= candidate.end() + 8
+                for candidate in schema_gap_matches
+            ):
+                continue
             if not _direction_has_metric(normalized, match):
                 ambiguities.append(match.group(0))
 
@@ -364,4 +420,5 @@ class SemanticCoverageGate:
         return SemanticCoverageDecision(
             ambiguity_spans=_unique(ambiguities),
             unsupported_spans=_unique(unsupported),
+            schema_link_gap_spans=_unique(schema_link_gaps),
         )

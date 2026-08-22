@@ -5,6 +5,7 @@ REPOSITORY_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 RELEASE_ENV_FILE="${RELEASE_ENV_FILE:-fastapi_backend/.env.release}"
 RELEASE_SNAPSHOT_DIR="$(mktemp -d "${TMPDIR:-/tmp}/finance-agent-release.XXXXXXXX")"
 RELEASE_ENV_SNAPSHOT="$RELEASE_SNAPSHOT_DIR/release.env"
+RELEASE_ADAPTIVE_MARKER="$RELEASE_SNAPSHOT_DIR/adaptive.enabled"
 
 cleanup_release_snapshot() {
     chmod -R u+rwX -- "$RELEASE_SNAPSHOT_DIR" 2>/dev/null || true
@@ -81,6 +82,19 @@ allowed = {
     "FINANCE_BACKEND_FUND_EXECUTION_POLICY",
     "FINANCE_BACKEND_ANSWER_PROVIDER",
     "FINANCE_BACKEND_HCX_QUERY_PLAN_ENABLED",
+    "FINANCE_BACKEND_HCX_SEMANTIC_RESOLVER_ENABLED",
+    "FINANCE_ADAPTIVE_SEMANTIC_ENABLED",
+    "FINANCE_SCHEMA_DENSE_INDEX_HOST_FILE",
+    "FINANCE_SCHEMA_DENSE_INDEX_SHA256",
+    "FINANCE_SCHEMA_DENSE_CALIBRATION_REPORT_SHA256",
+    "FINANCE_SCHEMA_DENSE_MIN_SCORE",
+    "FINANCE_SCHEMA_DENSE_HCLX_CANDIDATE_MIN_SCORE",
+    "FINANCE_SCHEMA_DENSE_MINIMUM_MARGIN",
+    "FINANCE_SCHEMA_DENSE_TOP_K",
+    "FINANCE_KURE_CACHE_HOST_DIR",
+    "FINANCE_KURE_SNAPSHOT_MANIFEST_HOST_FILE",
+    "FINANCE_KURE_CPU_THREADS",
+    "FINANCE_KURE_BATCH_SIZE",
     "FINANCE_AGENT_LLM_MODE",
     "LLM_PROVIDER",
     "HCX_MODEL",
@@ -166,7 +180,21 @@ answer_provider = environment["FINANCE_BACKEND_ANSWER_PROVIDER"]
 hcx_query_plan = environment["FINANCE_BACKEND_HCX_QUERY_PLAN_ENABLED"].lower()
 if hcx_query_plan not in {"true", "false"}:
     raise SystemExit("FINANCE_BACKEND_HCX_QUERY_PLAN_ENABLED must be true or false")
-uses_hcx = answer_provider == "hyperclova" or hcx_query_plan == "true"
+hcx_semantic_resolver = environment.get(
+    "FINANCE_BACKEND_HCX_SEMANTIC_RESOLVER_ENABLED", "false"
+).lower()
+adaptive_semantic = environment.get("FINANCE_ADAPTIVE_SEMANTIC_ENABLED", "false").lower()
+if hcx_semantic_resolver not in {"true", "false"}:
+    raise SystemExit("FINANCE_BACKEND_HCX_SEMANTIC_RESOLVER_ENABLED must be true or false")
+if adaptive_semantic not in {"true", "false"}:
+    raise SystemExit("FINANCE_ADAPTIVE_SEMANTIC_ENABLED must be true or false")
+if hcx_semantic_resolver == "true" and adaptive_semantic != "true":
+    raise SystemExit("HCLX Semantic Resolver requires adaptive semantic mode")
+uses_hcx = (
+    answer_provider == "hyperclova"
+    or hcx_query_plan == "true"
+    or hcx_semantic_resolver == "true"
+)
 if answer_provider not in {"deterministic", "hyperclova"}:
     raise SystemExit("release answer provider must be deterministic or hyperclova")
 if uses_hcx:
@@ -198,6 +226,96 @@ elif any(
     for name in ("CLOVASTUDIO_API_KEY_HOST_FILE", "CLOVASTUDIO_API_KEY_FILE", "HCX_MODEL")
 ):
     raise SystemExit("deterministic release must not configure HyperCLOVA credentials")
+
+adaptive_required = {
+    "FINANCE_SCHEMA_DENSE_INDEX_HOST_FILE",
+    "FINANCE_SCHEMA_DENSE_INDEX_SHA256",
+    "FINANCE_SCHEMA_DENSE_CALIBRATION_REPORT_SHA256",
+    "FINANCE_SCHEMA_DENSE_MIN_SCORE",
+    "FINANCE_SCHEMA_DENSE_HCLX_CANDIDATE_MIN_SCORE",
+    "FINANCE_SCHEMA_DENSE_MINIMUM_MARGIN",
+    "FINANCE_KURE_CACHE_HOST_DIR",
+    "FINANCE_KURE_SNAPSHOT_MANIFEST_HOST_FILE",
+}
+adaptive_optional = {
+    "FINANCE_SCHEMA_DENSE_TOP_K",
+    "FINANCE_KURE_CPU_THREADS",
+    "FINANCE_KURE_BATCH_SIZE",
+}
+if adaptive_semantic == "true":
+    missing_adaptive = sorted(name for name in adaptive_required if not environment.get(name))
+    if missing_adaptive:
+        raise SystemExit("missing adaptive release settings: " + ", ".join(missing_adaptive))
+    for name in (
+        "FINANCE_SCHEMA_DENSE_INDEX_SHA256",
+        "FINANCE_SCHEMA_DENSE_CALIBRATION_REPORT_SHA256",
+    ):
+        if re.fullmatch(r"[0-9a-f]{64}", environment[name]) is None:
+            raise SystemExit(name + " is invalid")
+    try:
+        dense_min_score = float(environment["FINANCE_SCHEMA_DENSE_MIN_SCORE"])
+        hclx_candidate_floor = float(
+            environment["FINANCE_SCHEMA_DENSE_HCLX_CANDIDATE_MIN_SCORE"]
+        )
+        minimum_margin = float(environment["FINANCE_SCHEMA_DENSE_MINIMUM_MARGIN"])
+    except ValueError:
+        raise SystemExit("adaptive semantic thresholds must be numeric") from None
+    if not (
+        -1 <= hclx_candidate_floor <= dense_min_score <= 1
+        and 0 <= minimum_margin <= 2
+    ):
+        raise SystemExit("adaptive semantic thresholds are outside the allowed range")
+    bounded_integer("FINANCE_SCHEMA_DENSE_TOP_K", 10, 2, 10)
+    bounded_integer("FINANCE_KURE_CPU_THREADS", 2, 1, 8)
+    bounded_integer("FINANCE_KURE_BATCH_SIZE", 16, 1, 64)
+
+    def require_adaptive_file(name, *, immutable):
+        path = Path(environment[name])
+        try:
+            info = path.stat(follow_symlinks=False)
+        except OSError:
+            raise SystemExit(name + " is unavailable") from None
+        if (
+            not path.is_absolute()
+            or not stat.S_ISREG(info.st_mode)
+            or path.is_symlink()
+            or info.st_nlink != 1
+            or info.st_mode & (stat.S_IWGRP | stat.S_IWOTH)
+            or (immutable and info.st_mode & stat.S_IWUSR)
+        ):
+            raise SystemExit(name + " is not a secure immutable artifact")
+
+    require_adaptive_file("FINANCE_SCHEMA_DENSE_INDEX_HOST_FILE", immutable=True)
+    require_adaptive_file(
+        "FINANCE_KURE_SNAPSHOT_MANIFEST_HOST_FILE",
+        immutable=False,
+    )
+    cache_root = Path(environment["FINANCE_KURE_CACHE_HOST_DIR"])
+    try:
+        cache_info = cache_root.stat(follow_symlinks=False)
+    except OSError:
+        raise SystemExit("FINANCE_KURE_CACHE_HOST_DIR is unavailable") from None
+    snapshot = (
+        cache_root
+        / "models--nlpai-lab--KURE-v1/snapshots"
+        / "d14c8a9423946e268a0c9952fecf3a7aabd73bd9"
+    )
+    if (
+        not cache_root.is_absolute()
+        or not stat.S_ISDIR(cache_info.st_mode)
+        or cache_root.is_symlink()
+        or cache_info.st_mode & (stat.S_IWGRP | stat.S_IWOTH)
+        or not snapshot.is_dir()
+    ):
+        raise SystemExit("FINANCE_KURE_CACHE_HOST_DIR is not a trusted KURE cache")
+else:
+    unexpected_adaptive = sorted(
+        name for name in adaptive_required | adaptive_optional if environment.get(name)
+    )
+    if unexpected_adaptive:
+        raise SystemExit(
+            "disabled adaptive mode cannot configure: " + ", ".join(unexpected_adaptive)
+        )
 
 image = environment["FINANCE_IMAGE_REFERENCE"]
 if re.fullmatch(r"[a-z0-9][a-z0-9._:/-]{2,255}@sha256:[0-9a-f]{64}", image) is None:
@@ -283,6 +401,15 @@ if environment["FINANCE_DATA_VOLUME_NAME"] != expected_volume:
     raise SystemExit("FINANCE_DATA_VOLUME_NAME must be release-specific: " + expected_volume)
 
 snapshot_root = Path(sys.argv[2]).parent
+
+if adaptive_semantic == "true":
+    marker = snapshot_root / "adaptive.enabled"
+    descriptor = os.open(
+        marker,
+        os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+        0o400,
+    )
+    os.close(descriptor)
 
 def snapshot_file(source_name, target_name, mode=0o444):
     source = Path(environment[source_name])
@@ -435,6 +562,8 @@ unset APP_ENV \
     FINANCE_BACKEND_FUND_EXECUTION_POLICY \
     FINANCE_BACKEND_ANSWER_PROVIDER \
     FINANCE_BACKEND_HCX_QUERY_PLAN_ENABLED \
+    FINANCE_BACKEND_HCX_SEMANTIC_RESOLVER_ENABLED \
+    FINANCE_ADAPTIVE_SEMANTIC_ENABLED \
     FINANCE_AGENT_LLM_MODE \
     LLM_PROVIDER \
     HCX_MODEL \
@@ -577,9 +706,16 @@ if [ "$up_index" -ne -1 ]; then
     exit $?
 fi
 
+compose_files=(
+    -f docker-compose.yml
+    -f fastapi_backend/docker-compose.release.yml
+)
+if [ -f "$RELEASE_ADAPTIVE_MARKER" ]; then
+    compose_files+=( -f fastapi_backend/docker-compose.adaptive.yml )
+fi
+
 docker compose \
     -p hyunholim-finance-agent \
     --env-file "$RELEASE_ENV_SNAPSHOT" \
-    -f docker-compose.yml \
-    -f fastapi_backend/docker-compose.release.yml \
+    "${compose_files[@]}" \
     "$@"

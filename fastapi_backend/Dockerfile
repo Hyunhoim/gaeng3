@@ -67,3 +67,23 @@ USER app
 EXPOSE 8000
 
 CMD ["./start.sh"]
+
+# Explicit opt-in target for the release-bound KURE Schema Dense runtime.
+# Model weights and index artifacts are still mounted read-only at deploy time;
+# they never enter an OCI layer. The default final target below remains the
+# lightweight HCX/deterministic image.
+FROM dependency-builder AS adaptive-dependency-builder
+COPY fastapi_backend/requirements.embedding.txt /build/embedding-requirements.txt
+RUN python -m pip install \
+        --no-compile \
+        --prefix /adaptive-install \
+        --constraint /build/core-constraints.txt \
+        --requirement /build/embedding-requirements.txt
+
+FROM runtime AS adaptive-runtime
+USER root
+COPY --from=adaptive-dependency-builder /adaptive-install/ /usr/local/
+RUN python -m pip check
+USER app
+
+FROM runtime AS final

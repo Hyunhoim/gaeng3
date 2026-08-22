@@ -47,6 +47,24 @@ _FORBIDDEN_EXECUTABLES = (
     "transformers-cli",
     "vllm",
 )
+_ADAPTIVE_DISTRIBUTIONS = {
+    "einops": "0.8.2",
+    "filelock": "3.32.2",
+    "fsspec": "2026.7.0",
+    "huggingface-hub": "1.27.0",
+    "joblib": "1.5.3",
+    "numpy": "2.5.2",
+    "regex": "2026.7.19",
+    "safetensors": "0.8.0",
+    "scikit-learn": "1.9.0",
+    "scipy": "1.18.0",
+    "sentence-transformers": "5.7.0",
+    "tokenizers": "0.22.2",
+    "torch": "2.13.0+cpu",
+    "tqdm": "4.70.0",
+    "transformers": "5.15.0",
+}
+_ADAPTIVE_EXECUTABLES = {"torchrun", "transformers-cli"}
 _FORBIDDEN_ENVIRONMENT_NAMES = (
     "CLOVASTUDIO_API_KEY",
     "ENABLE_NON_HCX_TEST_LLM",
@@ -163,6 +181,7 @@ def _embedded_manifest_binding(
 ) -> dict[str, object]:
     result: dict[str, object] = {
         "verified": False,
+        "adaptive_semantic_enabled": False,
         "expected_sha256": expected_sha256,
         "observed_sha256": None,
         "failure_code": None,
@@ -228,24 +247,24 @@ def _embedded_manifest_binding(
     ):
         result["failure_code"] = "manifest_identity_mismatch"
         return result
+    try:
+        schema_dense = manifest["components"]["runtime_features"]["retrieval"]["schema_dense"]
+    except (KeyError, TypeError):
+        result["failure_code"] = "manifest_runtime_profile_missing"
+        return result
+    if schema_dense not in {
+        "disabled_offline_only",
+        "activated_kure_candidate_only",
+    }:
+        result["failure_code"] = "manifest_runtime_profile_invalid"
+        return result
+    result["adaptive_semantic_enabled"] = schema_dense == "activated_kure_candidate_only"
     result["verified"] = True
     return result
 
 
 def build_report() -> dict[str, object]:
     distributions = _installed_distributions()
-    forbidden_distributions = sorted(
-        name
-        for name in distributions
-        if name in _FORBIDDEN_DISTRIBUTIONS
-        or any(
-            name == prefix or name.startswith(prefix + "-")
-            for prefix in _FORBIDDEN_DISTRIBUTION_PREFIXES
-        )
-    )
-    forbidden_executables = sorted(
-        executable for executable in _FORBIDDEN_EXECUTABLES if shutil.which(executable)
-    )
     forbidden_environment = sorted(
         name for name in _FORBIDDEN_ENVIRONMENT_NAMES if os.environ.get(name)
     )
@@ -264,6 +283,35 @@ def build_report() -> dict[str, object]:
         release_id=release_id,
         source_commit=source_commit,
     )
+    adaptive = embedded_manifest.get("adaptive_semantic_enabled") is True
+    allowed_distributions = set(_ADAPTIVE_DISTRIBUTIONS) if adaptive else set()
+    forbidden_distributions = sorted(
+        name
+        for name in distributions
+        if name not in allowed_distributions
+        and (
+            name in _FORBIDDEN_DISTRIBUTIONS
+            or any(
+                name == prefix or name.startswith(prefix + "-")
+                for prefix in _FORBIDDEN_DISTRIBUTION_PREFIXES
+            )
+        )
+    )
+    adaptive_dependency_mismatches = (
+        sorted(
+            f"{name}:{distributions.get(name, 'missing')}!={expected}"
+            for name, expected in _ADAPTIVE_DISTRIBUTIONS.items()
+            if distributions.get(name) != expected
+        )
+        if adaptive
+        else []
+    )
+    allowed_executables = _ADAPTIVE_EXECUTABLES if adaptive else set()
+    forbidden_executables = sorted(
+        executable
+        for executable in _FORBIDDEN_EXECUTABLES
+        if executable not in allowed_executables and shutil.which(executable)
+    )
     guards = {
         "evaluation_rejects_inline_hcx_key": _settings_reject(
             "inline HyperCLOVA credential is forbidden",
@@ -276,12 +324,12 @@ def build_report() -> dict[str, object]:
             FINANCE_BACKEND_ANSWER_PROVIDER="local_test",
         ),
         "evaluation_rejects_product_dense": _settings_reject(
-            "production Dense retrieval remains disabled in release schema v1",
+            "Product Dense remains disabled in the evaluation runtime",
             APP_ENV="evaluation",
             FINANCE_PRODUCT_DENSE_ENABLED=True,
         ),
-        "evaluation_rejects_schema_dense": _settings_reject(
-            "production Dense retrieval remains disabled in release schema v1",
+        "evaluation_rejects_partial_schema_dense": _settings_reject(
+            "Schema Dense artifacts cannot be configured while adaptive semantics is off",
             APP_ENV="evaluation",
             FINANCE_DENSE_SCHEMA_LINKER_ENABLED=True,
         ),
@@ -293,6 +341,7 @@ def build_report() -> dict[str, object]:
         and os.getgid() == 10001
         and not forbidden_distributions
         and not forbidden_executables
+        and not adaptive_dependency_mismatches
         and not forbidden_environment
         and not forbidden_files
         and release_identity_valid
@@ -313,6 +362,7 @@ def build_report() -> dict[str, object]:
         "installed_distributions": distributions,
         "forbidden_distributions": forbidden_distributions,
         "forbidden_executables": forbidden_executables,
+        "adaptive_dependency_mismatches": adaptive_dependency_mismatches,
         "forbidden_environment_names": forbidden_environment,
         "forbidden_files": forbidden_files,
         "runtime_guards": guards,
@@ -320,9 +370,13 @@ def build_report() -> dict[str, object]:
             importlib.util.find_spec("finance_agent_core.agent.providers.local_test") is not None
         ),
         "interpretation": (
-            "Dormant development source may remain, but evaluation runtime rejects it and the "
-            "image contains no detected local-model dependency, executable, common weight format, "
-            "database or inline credential."
+            (
+                "The release contains only the exact approved KURE CPU dependencies; model and "
+                "index artifacts remain external read-only mounts."
+                if adaptive
+                else "The lightweight release contains no detected local-model dependency."
+            )
+            + " No image profile may contain a database, model weight, or inline credential."
         ),
     }
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from datetime import date
 from pathlib import Path
 from typing import Literal
@@ -9,9 +10,11 @@ import pytest
 from fastapi.testclient import TestClient
 from fastapi_backend.scripts import rollback_drill
 from finance_agent_core.agent import IntentRouter, RoutedFinanceAgent, ServerQueryPlanCompiler
+from finance_agent_core.agent.adaptive_semantic import AdaptiveSemanticResolver
 from finance_agent_core.agent.providers import (
     HyperClovaXCallObserver,
     HyperClovaXQueryPlanProvider,
+    HyperClovaXSemanticResolverProvider,
     HyperClovaXSettings,
     HyperClovaXStructuredRequest,
 )
@@ -19,12 +22,26 @@ from finance_agent_core.answering import HyperClovaXGroundedAnswerProvider
 from finance_agent_core.contracts.official import OfficialAnswerResponse
 from finance_agent_core.contracts.queryplan import ProductFamily, QueryPlan
 from finance_agent_core.domain import DatabaseManifest
+from finance_agent_core.evaluation.schema_embedding_artifacts import (
+    SchemaEmbeddingArtifactGateEvidence,
+    load_schema_embedding_candidate_link,
+)
 from finance_agent_core.normalization import normalize_bond_row
 from finance_agent_core.observability import AuditEvent, AuditOutcome, AuditStage, MetricCounter
+from finance_agent_core.retrieval.schema_adaptive import ProductionHybridSchemaLinker
+from finance_agent_core.retrieval.schema_dense import (
+    DenseSchemaIndex,
+    EmbeddingProviderMetadata,
+    SchemaDenseActivationPolicy,
+    approve_schema_index_for_production,
+    build_schema_field_entries,
+)
 from finance_agent_core.storage import write_bond_database
 
 from app.config import Settings
+from app.dependencies import build_agent
 from app.main import create_app
+from tests.conftest import stub_resolved_release
 
 type FailureMode = Literal[
     "authentication_error",
@@ -40,6 +57,110 @@ type FailureMode = Literal[
 _QUESTION = "매수 가능한 국내채권을 매수수익률 높은 순으로 2개 보여줘"
 _HCX_SETTINGS = HyperClovaXSettings(model="HCX-007", timeout_seconds=10)
 _PRIVATE_FAILURE = "PRIVATE-HCX-FAILURE-MUST-NOT-ENTER-AUDIT"
+
+
+class _AdaptiveKureContractProvider:
+    def __init__(self) -> None:
+        candidate = load_schema_embedding_candidate_link("kure-v1")
+        self._metadata = EmbeddingProviderMetadata(
+            provider_kind="frozen_model",
+            provider_id="kure-official-get-contract-test",
+            model_id=candidate.model_id,
+            model_revision=candidate.revision,
+            license_id="mit",
+            dimension=1024,
+            pooling="cls",
+        )
+        self._artifact_gate_evidence = SchemaEmbeddingArtifactGateEvidence(
+            mode="production",
+            candidate=candidate,
+            snapshot_file_manifest_sha256=(
+                "b0b6229e5d2593371b7ac31519da186ccac3fcdfa8fb4e98fa6a430cc92bd597"
+            ),
+            manifest_file_sha256="d" * 64,
+        )
+        self._vectors: dict[str, list[float]] = {}
+
+    @property
+    def metadata(self) -> EmbeddingProviderMetadata:
+        return self._metadata
+
+    @property
+    def artifact_gate_evidence(self) -> SchemaEmbeddingArtifactGateEvidence:
+        return self._artifact_gate_evidence
+
+    def embed_documents(self, texts: Sequence[str]) -> list[list[float]]:
+        vectors = []
+        for position, text in enumerate(texts):
+            vector = [0.0] * 1024
+            vector[position] = 1.0
+            field_id = text.split(" | ", maxsplit=1)[0]
+            self._vectors[field_id] = vector
+            vectors.append(vector)
+        return vectors
+
+    def embed_query(self, text: str) -> list[float]:
+        del text
+        return [
+            left + right
+            for left, right in zip(
+                self._vectors["issue_amount"],
+                self._vectors["duration_years"],
+                strict=True,
+            )
+        ]
+
+
+class _SemanticResolverTransport:
+    def __init__(self) -> None:
+        self.operations: list[str] = []
+
+    def complete(self, request: HyperClovaXStructuredRequest) -> object:
+        self.operations.append(request.operation)
+        assert request.operation == "semantic_resolver"
+        return {
+            "status_code": 200,
+            "content": json.dumps(
+                {
+                    "decision": "resolve",
+                    "selected_field_id": "issue_amount",
+                    "operation": "rank",
+                    "direction": "desc",
+                    "reason_code": "candidate_context_match",
+                }
+            ),
+            "request_id": "fake-semantic-official-get",
+            "usage": {"input_tokens": 20, "output_tokens": 8, "total_tokens": 28},
+        }
+
+
+def _adaptive_bond_agent(database: Path) -> tuple[RoutedFinanceAgent, _SemanticResolverTransport]:
+    provider = _AdaptiveKureContractProvider()
+    policy = SchemaDenseActivationPolicy(
+        dense_min_score=0.5,
+        hclx_candidate_min_score=0.35,
+        minimum_margin=0.1,
+        top_k=5,
+        calibration_report_sha256="e" * 64,
+    )
+    offline = DenseSchemaIndex.build(build_schema_field_entries(), provider)
+    artifact = approve_schema_index_for_production(offline, policy)
+    linker = ProductionHybridSchemaLinker(DenseSchemaIndex(artifact, provider), policy)
+    transport = _SemanticResolverTransport()
+    semantic_provider = HyperClovaXSemanticResolverProvider(
+        _HCX_SETTINGS,
+        transport,
+    )
+    return (
+        RoutedFinanceAgent(
+            {ProductFamily.BOND: database},
+            adaptive_semantic_resolver=AdaptiveSemanticResolver(
+                linker,
+                hclx_provider=semantic_provider,
+            ),
+        ),
+        transport,
+    )
 
 
 class _OfficialFakeHyperClovaXTransport:
@@ -250,6 +371,80 @@ def _assert_official_contract(response, *, question_id: str) -> dict[str, object
     }
     assert all(isinstance(value, str) for value in response.json().values())
     return json.loads(body.think_trace)
+
+
+def test_official_get_admits_hclx_semantics_only_after_dense_ambiguity(
+    tmp_path: Path,
+) -> None:
+    database = _make_bond_database(tmp_path)
+    agent, transport = _adaptive_bond_agent(database)
+    application = create_app(
+        settings=Settings(OFFICIAL_ANSWER_TIMEOUT_SECONDS=5),
+        agent=agent,
+    )
+
+    with TestClient(application) as client:
+        response = client.get(
+            "/answer",
+            params={
+                "question_id": "adaptive-official-get",
+                "question": "체급이 큰 국내채권을 2개 보여줘",
+            },
+        )
+
+    body = OfficialAnswerResponse.model_validate(response.json())
+    assert response.status_code == 200
+    assert transport.operations == ["semantic_resolver"]
+    assert body.question_id == "adaptive-official-get"
+    assert "issue_amount" in body.retrieved_context
+    assert "제공 데이터" in body.answer
+
+
+def test_build_agent_wires_release_bound_kure_without_eager_inference(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    provider = _AdaptiveKureContractProvider()
+    policy = SchemaDenseActivationPolicy(
+        dense_min_score=0.5,
+        hclx_candidate_min_score=0.35,
+        minimum_margin=0.1,
+        top_k=5,
+        calibration_report_sha256="e" * 64,
+    )
+    artifact = approve_schema_index_for_production(
+        DenseSchemaIndex.build(build_schema_field_entries(), provider),
+        policy,
+    )
+    monkeypatch.setattr(
+        "app.dependencies._load_schema_dense_release",
+        lambda settings: (artifact, policy),
+    )
+    monkeypatch.setattr(
+        "app.dependencies.load_verified_schema_embedding_cpu_provider",
+        lambda *args, **kwargs: provider,
+    )
+    settings = Settings(
+        APP_ENV="evaluation",
+        FINANCE_ADAPTIVE_SEMANTIC_ENABLED=True,
+        FINANCE_DENSE_SCHEMA_LINKER_ENABLED=True,
+        FINANCE_SCHEMA_DENSE_INDEX_FILE=tmp_path / "schema-index.json",
+        FINANCE_SCHEMA_DENSE_INDEX_SHA256="a" * 64,
+        FINANCE_SCHEMA_DENSE_CALIBRATION_REPORT_SHA256="e" * 64,
+        FINANCE_SCHEMA_DENSE_MIN_SCORE=0.5,
+        FINANCE_SCHEMA_DENSE_HCLX_CANDIDATE_MIN_SCORE=0.35,
+        FINANCE_SCHEMA_DENSE_MINIMUM_MARGIN=0.1,
+        FINANCE_SCHEMA_DENSE_TOP_K=5,
+        FINANCE_KURE_SNAPSHOT_DIR=tmp_path / "kure-cache/snapshot",
+        FINANCE_KURE_SNAPSHOT_MANIFEST_FILE=tmp_path / "kure-manifest.json",
+        FINANCE_KURE_TRUSTED_CACHE_ROOT=tmp_path / "kure-cache",
+    )
+
+    agent = build_agent(settings, release_guard=stub_resolved_release())
+
+    assert type(agent.adaptive_semantic_resolver) is AdaptiveSemanticResolver
+    assert type(agent.adaptive_semantic_resolver.schema_linker) is (ProductionHybridSchemaLinker)
+    assert agent.router.adaptive_semantic_enabled is True
 
 
 @pytest.mark.parametrize(

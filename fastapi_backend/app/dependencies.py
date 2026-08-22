@@ -7,6 +7,7 @@ from typing import Protocol, cast
 
 from fastapi import Request
 from finance_agent_core.agent import IntentRouter, RoutedAgentResult, RoutedFinanceAgent
+from finance_agent_core.agent.adaptive_semantic import AdaptiveSemanticResolver
 from finance_agent_core.agent.compiler import ServerQueryPlanCompiler
 from finance_agent_core.agent.grounded_planning import GroundedPlanGate
 from finance_agent_core.agent.knowledge_router import DeterministicKnowledgeRouter
@@ -15,6 +16,7 @@ from finance_agent_core.agent.providers import (
     HyperClovaXCallObserver,
     HyperClovaXHTTPTransport,
     HyperClovaXQueryPlanProvider,
+    HyperClovaXSemanticResolverProvider,
     HyperClovaXSettings,
     HyperClovaXTransport,
     LocalTestSettings,
@@ -24,6 +26,9 @@ from finance_agent_core.answering import (
     LocalGroundedAnswerProvider,
 )
 from finance_agent_core.contracts.queryplan import ProductFamily
+from finance_agent_core.evaluation.schema_embedding_artifacts import (
+    load_verified_schema_embedding_cpu_provider,
+)
 from finance_agent_core.execution import PlanAuthorityGate
 from finance_agent_core.observability import (
     AppendOnlyJsonlAuditSink,
@@ -39,6 +44,13 @@ from finance_agent_core.release import (
     RuntimeReleaseInputs,
     load_relation_retrieval_artifact_release,
     resolve_agent_release,
+)
+from finance_agent_core.retrieval.schema_adaptive import ProductionHybridSchemaLinker
+from finance_agent_core.retrieval.schema_dense import (
+    DenseSchemaIndex,
+    DenseSchemaIndexArtifact,
+    SchemaDenseActivationPolicy,
+    load_dense_schema_index_artifact,
 )
 from finance_agent_core.storage import ProductIdentitySnapshotCache, RecordSnapshotCache
 
@@ -56,6 +68,39 @@ class AgentService(Protocol):
     router: IntentRouter
 
     def answer(self, question: str, request_id: str) -> RoutedAgentResult: ...
+
+
+def _schema_dense_policy(settings: Settings) -> SchemaDenseActivationPolicy | None:
+    if not settings.adaptive_semantic_enabled:
+        return None
+    assert settings.schema_dense_calibration_report_sha256 is not None
+    assert settings.schema_dense_min_score is not None
+    assert settings.schema_dense_hclx_candidate_min_score is not None
+    assert settings.schema_dense_minimum_margin is not None
+    return SchemaDenseActivationPolicy(
+        dense_min_score=settings.schema_dense_min_score,
+        hclx_candidate_min_score=settings.schema_dense_hclx_candidate_min_score,
+        minimum_margin=settings.schema_dense_minimum_margin,
+        top_k=settings.schema_dense_top_k,
+        calibration_report_sha256=(settings.schema_dense_calibration_report_sha256),
+    )
+
+
+def _load_schema_dense_release(
+    settings: Settings,
+) -> tuple[DenseSchemaIndexArtifact, SchemaDenseActivationPolicy] | None:
+    policy = _schema_dense_policy(settings)
+    if policy is None:
+        return None
+    assert settings.schema_dense_index_file is not None
+    assert settings.schema_dense_index_sha256 is not None
+    artifact = load_dense_schema_index_artifact(
+        settings.schema_dense_index_file,
+        expected_file_sha256=settings.schema_dense_index_sha256,
+    )
+    if artifact.manifest.activation_policy_sha256 != policy.policy_sha256:
+        raise RuntimeError("Schema Dense index differs from the runtime activation policy")
+    return artifact, policy
 
 
 def get_request_coordinator(request: Request) -> IdempotentRequestCoordinator:
@@ -90,6 +135,25 @@ def _provider_assembly_matches(
     elif service.query_plan_provider is not None:
         return False
 
+    semantic_provider = (
+        None
+        if service.adaptive_semantic_resolver is None
+        else service.adaptive_semantic_resolver.hclx_provider
+    )
+    if settings.hcx_semantic_resolver_enabled:
+        if type(semantic_provider) is not HyperClovaXSemanticResolverProvider:
+            return False
+        if (
+            semantic_provider.model_name != settings.hcx_model
+            or semantic_provider._client.settings.timeout_seconds != settings.hcx_timeout_seconds
+            or type(semantic_provider._client.on_call) is not HyperClovaXCallObserver
+            or semantic_provider._client.on_call.expected_audit_sink is not audit_sink
+        ):
+            return False
+        transports.append(semantic_provider._client.transport)
+    elif semantic_provider is not None:
+        return False
+
     if settings.answer_provider == "hyperclova":
         answer_provider = service.answer_provider
         if type(answer_provider) is not HyperClovaXGroundedAnswerProvider:
@@ -106,7 +170,38 @@ def _provider_assembly_matches(
         return False
     if any(type(transport) is not HyperClovaXHTTPTransport for transport in transports):
         return False
-    return len(transports) < 2 or transports[0] is transports[1]
+    return len(transports) < 2 or all(item is transports[0] for item in transports[1:])
+
+
+def _adaptive_assembly_matches(
+    service: RoutedFinanceAgent,
+    settings: Settings,
+    release_guard: ResolvedAgentRelease | None,
+) -> bool:
+    resolver = service.adaptive_semantic_resolver
+    if not settings.adaptive_semantic_enabled:
+        return resolver is None and not service.router.adaptive_semantic_enabled
+    if (
+        type(resolver) is not AdaptiveSemanticResolver
+        or not service.router.adaptive_semantic_enabled
+        or type(resolver.schema_linker) is not ProductionHybridSchemaLinker
+        or type(release_guard) is not ResolvedAgentRelease
+    ):
+        return False
+    policy = _schema_dense_policy(settings)
+    if policy is None or resolver.schema_linker.policy != policy:
+        return False
+    manifest = resolver.schema_linker.index.manifest
+    release_retrieval = release_guard.manifest.components.runtime_features.retrieval
+    return (
+        manifest.production_enabled
+        and manifest.scope == "production_candidate"
+        and manifest.activation_policy_sha256 == policy.policy_sha256
+        and manifest.provider.model_id == policy.model_id
+        and manifest.provider.model_revision == policy.model_revision
+        and release_retrieval.schema_dense == "activated_kure_candidate_only"
+        and release_retrieval.embedding_model_revision == policy.model_revision
+    )
 
 
 def _knowledge_assembly_matches(
@@ -186,10 +281,9 @@ def require_approval_guard(
         or service.capability_execution_overrides
         != frozenset(settings.capability_execution_overrides)
         or service.hclx_planning_enabled != settings.hcx_query_plan_enabled
-        # Stage 5 is intentionally not part of the approved evaluation or
-        # production assembly yet.  An arbitrary observer receives a detached
-        # trace containing the raw question, so accepting an injected observer
-        # here would bypass both the release profile and the audit boundary.
+        # An arbitrary Shadow observer receives a detached trace containing the
+        # raw question, so it remains forbidden even when the release-bound
+        # adaptive resolver is activated.
         or service.schema_link_shadow_observer is not None
         or (
             settings.has_release_configuration
@@ -199,6 +293,7 @@ def require_approval_guard(
             )
         )
         or not _provider_assembly_matches(service, settings, audit_sink)
+        or not _adaptive_assembly_matches(service, settings, release_guard)
         or not _knowledge_assembly_matches(service, settings, release_guard)
         or type(release_guard) is not ResolvedAgentRelease
         or service.release_guard is not release_guard
@@ -231,6 +326,9 @@ def resolve_runtime_release(settings: Settings) -> ResolvedAgentRelease | None:
     relation_binding = _load_relation_retrieval_artifact(settings)
     relation_artifact = relation_binding[0] if relation_binding is not None else None
     relation_artifact_sha256 = relation_binding[1] if relation_binding is not None else None
+    schema_dense_binding = _load_schema_dense_release(settings)
+    schema_dense_artifact = schema_dense_binding[0] if schema_dense_binding is not None else None
+    schema_dense_policy = schema_dense_binding[1] if schema_dense_binding is not None else None
     inputs = RuntimeReleaseInputs(
         environment=settings.app_env,
         source_commit=settings.source_commit,
@@ -239,9 +337,13 @@ def resolve_runtime_release(settings: Settings) -> ResolvedAgentRelease | None:
         backend_root=Path(__file__).resolve().parent,
         answer_provider=settings.answer_provider,
         hcx_queryplan_enabled=settings.hcx_query_plan_enabled,
+        hcx_semantic_resolver_enabled=settings.hcx_semantic_resolver_enabled,
         hcx_model=settings.hcx_model,
         fund_execution_policy=settings.fund_execution_policy,
         schema_dense_enabled=settings.dense_schema_linker_enabled,
+        schema_dense_artifact=schema_dense_artifact,
+        schema_dense_artifact_file_sha256=settings.schema_dense_index_sha256,
+        schema_dense_policy=schema_dense_policy,
         product_dense_enabled=settings.product_dense_enabled,
         relation_retrieval_artifact=relation_artifact,
         relation_retrieval_artifact_file_sha256=relation_artifact_sha256,
@@ -455,6 +557,41 @@ def _load_hcx_api_key(settings: Settings) -> str:
     return value
 
 
+def _build_adaptive_semantic_resolver(
+    settings: Settings,
+    *,
+    hclx_provider: HyperClovaXSemanticResolverProvider | None,
+) -> AdaptiveSemanticResolver | None:
+    binding = _load_schema_dense_release(settings)
+    if binding is None:
+        return None
+    artifact, policy = binding
+    assert settings.kure_snapshot_dir is not None
+    assert settings.kure_snapshot_manifest_file is not None
+    assert settings.kure_trusted_cache_root is not None
+    provider = load_verified_schema_embedding_cpu_provider(
+        alias="kure-v1",
+        snapshot_dir=settings.kure_snapshot_dir,
+        manifest_path=settings.kure_snapshot_manifest_file,
+        trusted_cache_root=settings.kure_trusted_cache_root,
+        mode="production",
+        batch_size=settings.kure_batch_size,
+        cpu_threads=settings.kure_cpu_threads,
+    )
+    evidence = provider.artifact_gate_evidence
+    if (
+        evidence.snapshot_file_manifest_sha256 != policy.snapshot_file_manifest_sha256
+        or provider.metadata.model_id != policy.model_id
+        or provider.metadata.model_revision != policy.model_revision
+        or provider.metadata.dimension != policy.dimension
+        or provider.metadata.pooling != policy.pooling
+    ):
+        raise RuntimeError("loaded KURE provider differs from the activation policy")
+    index = DenseSchemaIndex(artifact, provider)
+    linker = ProductionHybridSchemaLinker(index, policy)
+    return AdaptiveSemanticResolver(linker, hclx_provider=hclx_provider)
+
+
 def build_agent(
     settings: Settings,
     *,
@@ -478,6 +615,7 @@ def build_agent(
         raise RuntimeError("evaluation/production Agent assembly requires a resolved release")
     answer_provider = None
     query_plan_provider = None
+    semantic_resolver_provider = None
     if settings.answer_provider == "local_test":
         answer_provider = LocalGroundedAnswerProvider(LocalTestSettings.from_environment())
         answer_provider.healthcheck()
@@ -494,12 +632,22 @@ def build_agent(
                 transport,
                 on_call=call_observer,
             )
+        if settings.hcx_semantic_resolver_enabled:
+            semantic_resolver_provider = HyperClovaXSemanticResolverProvider(
+                hcx_settings,
+                transport,
+                on_call=call_observer,
+            )
         if settings.answer_provider == "hyperclova":
             answer_provider = HyperClovaXGroundedAnswerProvider(
                 hcx_settings,
                 transport,
                 on_call=call_observer,
             )
+    adaptive_semantic_resolver = _build_adaptive_semantic_resolver(
+        settings,
+        hclx_provider=semantic_resolver_provider,
+    )
     knowledge_agent = _build_knowledge_agent(settings, release_guard)
     knowledge_router = DeterministicKnowledgeRouter() if knowledge_agent is not None else None
     return RoutedFinanceAgent(
@@ -514,6 +662,7 @@ def build_agent(
         audit_sink=audit_sink,
         knowledge_router=knowledge_router,
         knowledge_agent=knowledge_agent,
+        adaptive_semantic_resolver=adaptive_semantic_resolver,
     )
 
 
