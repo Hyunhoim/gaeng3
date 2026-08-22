@@ -26,7 +26,19 @@ _MAX_RELATION_ARTIFACT_BYTES = 4 * 1024
 _MAX_RELEASE_MANIFEST_BYTES = 2 * 1024 * 1024
 _FINAL_ANSWER_PROVIDER = "hyperclova"
 _FINAL_HCX_QUERYPLAN_ENABLED = "false"
+_FINAL_HCX_SEMANTIC_RESOLVER_ENABLED = "true"
+_FINAL_ADAPTIVE_SEMANTIC_ENABLED = "true"
 _FINAL_FUND_EXECUTION_POLICY = "public_fund_v1_approved"
+_FINAL_SCHEMA_DENSE_INDEX_SHA256 = (
+    "9463ce21d14341e3dca0e44bc5ca3e2e085309ef81513a3802e175fa198de306"
+)
+_FINAL_SCHEMA_DENSE_CALIBRATION_REPORT_SHA256 = (
+    "b6cd6e1c4c371929306499ec4efaba8b9a29934ec40d6d300ad8a9d2d93c4d60"
+)
+_FINAL_SCHEMA_DENSE_MIN_SCORE = "1.0"
+_FINAL_SCHEMA_DENSE_HCLX_CANDIDATE_MIN_SCORE = "0.361907478"
+_FINAL_SCHEMA_DENSE_MINIMUM_MARGIN = "2.0"
+_FINAL_SCHEMA_DENSE_TOP_K = "10"
 _RELATION_ARTIFACT_KEYS = frozenset(
     {
         "artifact_kind",
@@ -72,14 +84,38 @@ def validate_inputs(arguments: argparse.Namespace) -> None:
         raise ReleaseCIError("environment is invalid")
     if arguments.platform not in _PLATFORMS:
         raise ReleaseCIError("platform is invalid")
-    if (
-        arguments.answer_provider != _FINAL_ANSWER_PROVIDER
-        or arguments.hcx_queryplan_enabled != _FINAL_HCX_QUERYPLAN_ENABLED
-        or arguments.fund_execution_policy != _FINAL_FUND_EXECUTION_POLICY
-    ):
+    profile = {
+        "answer_provider": arguments.answer_provider,
+        "hcx_queryplan_enabled": arguments.hcx_queryplan_enabled,
+        "hcx_semantic_resolver_enabled": arguments.hcx_semantic_resolver_enabled,
+        "adaptive_semantic_enabled": arguments.adaptive_semantic_enabled,
+        "fund_execution_policy": arguments.fund_execution_policy,
+        "schema_dense_index_sha256": arguments.schema_dense_index_sha256,
+        "schema_dense_calibration_report_sha256": (
+            arguments.schema_dense_calibration_report_sha256
+        ),
+        "schema_dense_min_score": arguments.schema_dense_min_score,
+        "schema_dense_hclx_candidate_min_score": (arguments.schema_dense_hclx_candidate_min_score),
+        "schema_dense_minimum_margin": arguments.schema_dense_minimum_margin,
+        "schema_dense_top_k": arguments.schema_dense_top_k,
+    }
+    expected_profile = {
+        "answer_provider": _FINAL_ANSWER_PROVIDER,
+        "hcx_queryplan_enabled": _FINAL_HCX_QUERYPLAN_ENABLED,
+        "hcx_semantic_resolver_enabled": _FINAL_HCX_SEMANTIC_RESOLVER_ENABLED,
+        "adaptive_semantic_enabled": _FINAL_ADAPTIVE_SEMANTIC_ENABLED,
+        "fund_execution_policy": _FINAL_FUND_EXECUTION_POLICY,
+        "schema_dense_index_sha256": _FINAL_SCHEMA_DENSE_INDEX_SHA256,
+        "schema_dense_calibration_report_sha256": (_FINAL_SCHEMA_DENSE_CALIBRATION_REPORT_SHA256),
+        "schema_dense_min_score": _FINAL_SCHEMA_DENSE_MIN_SCORE,
+        "schema_dense_hclx_candidate_min_score": (_FINAL_SCHEMA_DENSE_HCLX_CANDIDATE_MIN_SCORE),
+        "schema_dense_minimum_margin": _FINAL_SCHEMA_DENSE_MINIMUM_MARGIN,
+        "schema_dense_top_k": _FINAL_SCHEMA_DENSE_TOP_K,
+    }
+    if profile != expected_profile:
         raise ReleaseCIError(
             "final release profile requires HyperCLOVA answer-only, HCLX QueryPlan disabled, "
-            "and the approved public-fund v1 execution contract"
+            "the approved public-fund v1 contract, and the exact KURE candidate-only policy"
         )
     model_id = "HCX-007"
     try:
@@ -118,7 +154,19 @@ def validate_inputs(arguments: argparse.Namespace) -> None:
             "platform": arguments.platform,
             "answer_provider": arguments.answer_provider,
             "hcx_queryplan_enabled": arguments.hcx_queryplan_enabled,
+            "hcx_semantic_resolver_enabled": arguments.hcx_semantic_resolver_enabled,
+            "adaptive_semantic_enabled": arguments.adaptive_semantic_enabled,
             "fund_execution_policy": arguments.fund_execution_policy,
+            "schema_dense_index_sha256": arguments.schema_dense_index_sha256,
+            "schema_dense_calibration_report_sha256": (
+                arguments.schema_dense_calibration_report_sha256
+            ),
+            "schema_dense_min_score": arguments.schema_dense_min_score,
+            "schema_dense_hclx_candidate_min_score": (
+                arguments.schema_dense_hclx_candidate_min_score
+            ),
+            "schema_dense_minimum_margin": arguments.schema_dense_minimum_margin,
+            "schema_dense_top_k": arguments.schema_dense_top_k,
             "model_id": model_id,
             "activation_generation": str(generation),
             "rollback_mode": "initial_bootstrap" if generation == 1 else "pinned_previous_release",
@@ -517,7 +565,15 @@ def _parser() -> argparse.ArgumentParser:
     validate.add_argument("--previous-binding-sha256", required=True)
     validate.add_argument("--answer-provider", required=True)
     validate.add_argument("--hcx-queryplan-enabled", required=True)
+    validate.add_argument("--hcx-semantic-resolver-enabled", required=True)
+    validate.add_argument("--adaptive-semantic-enabled", required=True)
     validate.add_argument("--fund-execution-policy", required=True)
+    validate.add_argument("--schema-dense-index-sha256", required=True)
+    validate.add_argument("--schema-dense-calibration-report-sha256", required=True)
+    validate.add_argument("--schema-dense-min-score", required=True)
+    validate.add_argument("--schema-dense-hclx-candidate-min-score", required=True)
+    validate.add_argument("--schema-dense-minimum-margin", required=True)
+    validate.add_argument("--schema-dense-top-k", required=True)
     validate.add_argument("--python-base-image", required=True)
     validate.add_argument("--source-commit", required=True)
     validate.add_argument("--github-ref", required=True)

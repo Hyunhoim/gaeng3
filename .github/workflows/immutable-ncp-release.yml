@@ -46,7 +46,19 @@ jobs:
       TRUSTED_NCP_REPOSITORY: ${{ vars.NCP_IMAGE_REPOSITORY }}
       FINAL_ANSWER_PROVIDER: hyperclova
       FINAL_HCX_QUERYPLAN_ENABLED: "false"
+      FINAL_HCX_SEMANTIC_RESOLVER_ENABLED: "true"
+      FINAL_ADAPTIVE_SEMANTIC_ENABLED: "true"
       FINAL_FUND_EXECUTION_POLICY: public_fund_v1_approved
+      FINAL_SCHEMA_DENSE_INDEX_SHA256: 9463ce21d14341e3dca0e44bc5ca3e2e085309ef81513a3802e175fa198de306
+      FINAL_SCHEMA_DENSE_CALIBRATION_REPORT_SHA256: b6cd6e1c4c371929306499ec4efaba8b9a29934ec40d6d300ad8a9d2d93c4d60
+      FINAL_SCHEMA_DENSE_MIN_SCORE: "1.0"
+      FINAL_SCHEMA_DENSE_HCLX_CANDIDATE_MIN_SCORE: "0.361907478"
+      FINAL_SCHEMA_DENSE_MINIMUM_MARGIN: "2.0"
+      FINAL_SCHEMA_DENSE_TOP_K: "10"
+      TRACKED_SCHEMA_DENSE_INDEX: ${{ github.workspace }}/finance_agent/artifacts/runtime/schema-dense/kure-schema-dense-production-v1.json
+      TRACKED_SCHEMA_DENSE_CALIBRATION_REPORT: ${{ github.workspace }}/finance_agent/artifacts/evaluation/kure-internal-codex-calibration-v1.summary.json
+      TRACKED_KURE_SNAPSHOT_MANIFEST: ${{ github.workspace }}/finance_agent/artifacts/evaluation/schema-embedding/snapshot-manifests/kure-v1-d14c8a9423946e268a0c9952fecf3a7aabd73bd9-snapshot-v2.json
+      FINAL_KURE_SNAPSHOT_MANIFEST_SHA256: caa502227d3ed92bb1b5290fc7bced2202c99b70f6846e448c4608551498004c
 
     steps:
       - name: Check out the exact source commit
@@ -64,7 +76,15 @@ jobs:
           TRUSTED_PREVIOUS_BINDING_SHA256: ${{ secrets.PREVIOUS_DEPLOYMENT_BINDING_SHA256 }}
           INPUT_ANSWER_PROVIDER: ${{ env.FINAL_ANSWER_PROVIDER }}
           INPUT_HCX_QUERYPLAN_ENABLED: ${{ env.FINAL_HCX_QUERYPLAN_ENABLED }}
+          INPUT_HCX_SEMANTIC_RESOLVER_ENABLED: ${{ env.FINAL_HCX_SEMANTIC_RESOLVER_ENABLED }}
+          INPUT_ADAPTIVE_SEMANTIC_ENABLED: ${{ env.FINAL_ADAPTIVE_SEMANTIC_ENABLED }}
           INPUT_FUND_EXECUTION_POLICY: ${{ env.FINAL_FUND_EXECUTION_POLICY }}
+          INPUT_SCHEMA_DENSE_INDEX_SHA256: ${{ env.FINAL_SCHEMA_DENSE_INDEX_SHA256 }}
+          INPUT_SCHEMA_DENSE_CALIBRATION_REPORT_SHA256: ${{ env.FINAL_SCHEMA_DENSE_CALIBRATION_REPORT_SHA256 }}
+          INPUT_SCHEMA_DENSE_MIN_SCORE: ${{ env.FINAL_SCHEMA_DENSE_MIN_SCORE }}
+          INPUT_SCHEMA_DENSE_HCLX_CANDIDATE_MIN_SCORE: ${{ env.FINAL_SCHEMA_DENSE_HCLX_CANDIDATE_MIN_SCORE }}
+          INPUT_SCHEMA_DENSE_MINIMUM_MARGIN: ${{ env.FINAL_SCHEMA_DENSE_MINIMUM_MARGIN }}
+          INPUT_SCHEMA_DENSE_TOP_K: ${{ env.FINAL_SCHEMA_DENSE_TOP_K }}
           TRUSTED_SOURCE_COMMIT: ${{ github.sha }}
           TRUSTED_GITHUB_REF: ${{ github.ref }}
           TRUSTED_GITHUB_REF_PROTECTED: ${{ github.ref_protected }}
@@ -81,7 +101,15 @@ jobs:
             --previous-binding-sha256 "$TRUSTED_PREVIOUS_BINDING_SHA256" \
             --answer-provider "$INPUT_ANSWER_PROVIDER" \
             --hcx-queryplan-enabled "$INPUT_HCX_QUERYPLAN_ENABLED" \
+            --hcx-semantic-resolver-enabled "$INPUT_HCX_SEMANTIC_RESOLVER_ENABLED" \
+            --adaptive-semantic-enabled "$INPUT_ADAPTIVE_SEMANTIC_ENABLED" \
             --fund-execution-policy "$INPUT_FUND_EXECUTION_POLICY" \
+            --schema-dense-index-sha256 "$INPUT_SCHEMA_DENSE_INDEX_SHA256" \
+            --schema-dense-calibration-report-sha256 "$INPUT_SCHEMA_DENSE_CALIBRATION_REPORT_SHA256" \
+            --schema-dense-min-score "$INPUT_SCHEMA_DENSE_MIN_SCORE" \
+            --schema-dense-hclx-candidate-min-score "$INPUT_SCHEMA_DENSE_HCLX_CANDIDATE_MIN_SCORE" \
+            --schema-dense-minimum-margin "$INPUT_SCHEMA_DENSE_MINIMUM_MARGIN" \
+            --schema-dense-top-k "$INPUT_SCHEMA_DENSE_TOP_K" \
             --source-commit "$TRUSTED_SOURCE_COMMIT" \
             --github-ref "$TRUSTED_GITHUB_REF" \
             --github-ref-protected "$TRUSTED_GITHUB_REF_PROTECTED" \
@@ -134,12 +162,35 @@ jobs:
           (
             cd finance_agent
             "$QA_VENV/bin/python" scripts/sync-ontology.py --check
-            "$QA_VENV/bin/python" scripts/check-docs.py
+            "$QA_VENV/bin/python" scripts/check-current-release-docs.py
             PYTHONPATH="$GITHUB_WORKSPACE/finance_agent/packages/finance_agent_core/src" \
               "$QA_VENV/bin/python" scripts/check-submission-boundary.py \
               --profile development
           )
           test -z "$(git status --porcelain=v1 --untracked-files=all)"
+
+      - name: Materialize exact Adaptive runtime artifacts
+        id: adaptive_artifacts
+        run: |
+          set -euo pipefail
+          test "$(sha256sum "$TRACKED_SCHEMA_DENSE_INDEX" | cut -d ' ' -f 1)" = \
+            "$FINAL_SCHEMA_DENSE_INDEX_SHA256"
+          test "$(sha256sum "$TRACKED_SCHEMA_DENSE_CALIBRATION_REPORT" | cut -d ' ' -f 1)" = \
+            "$FINAL_SCHEMA_DENSE_CALIBRATION_REPORT_SHA256"
+          test "$(sha256sum "$TRACKED_KURE_SNAPSHOT_MANIFEST" | cut -d ' ' -f 1)" = \
+            "$FINAL_KURE_SNAPSHOT_MANIFEST_SHA256"
+          install -m 0444 "$TRACKED_SCHEMA_DENSE_INDEX" \
+            "$RELEASE_OUTPUT_DIR/schema-dense-index.json"
+          install -m 0444 "$TRACKED_SCHEMA_DENSE_CALIBRATION_REPORT" \
+            "$RELEASE_OUTPUT_DIR/schema-dense-calibration-report.json"
+          install -m 0444 "$TRACKED_KURE_SNAPSHOT_MANIFEST" \
+            "$RELEASE_OUTPUT_DIR/kure-snapshot-manifest.json"
+          {
+            echo "schema_dense_index=$RELEASE_OUTPUT_DIR/schema-dense-index.json"
+            echo "schema_dense_index_sha256=$FINAL_SCHEMA_DENSE_INDEX_SHA256"
+            echo "calibration_report_sha256=$FINAL_SCHEMA_DENSE_CALIBRATION_REPORT_SHA256"
+            echo "kure_snapshot_manifest_sha256=$FINAL_KURE_SNAPSHOT_MANIFEST_SHA256"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Create AgentReleaseManifest from the clean checkout
         env:
@@ -149,7 +200,16 @@ jobs:
           RUNTIME_PLATFORM: ${{ steps.release_inputs.outputs.platform }}
           ANSWER_PROVIDER: ${{ steps.release_inputs.outputs.answer_provider }}
           HCX_QUERYPLAN_ENABLED: ${{ steps.release_inputs.outputs.hcx_queryplan_enabled }}
+          HCX_SEMANTIC_RESOLVER_ENABLED: ${{ steps.release_inputs.outputs.hcx_semantic_resolver_enabled }}
+          ADAPTIVE_SEMANTIC_ENABLED: ${{ steps.release_inputs.outputs.adaptive_semantic_enabled }}
           FUND_EXECUTION_POLICY: ${{ steps.release_inputs.outputs.fund_execution_policy }}
+          SCHEMA_DENSE_INDEX: ${{ steps.adaptive_artifacts.outputs.schema_dense_index }}
+          SCHEMA_DENSE_INDEX_SHA256: ${{ steps.adaptive_artifacts.outputs.schema_dense_index_sha256 }}
+          SCHEMA_DENSE_CALIBRATION_REPORT_SHA256: ${{ steps.adaptive_artifacts.outputs.calibration_report_sha256 }}
+          SCHEMA_DENSE_MIN_SCORE: ${{ steps.release_inputs.outputs.schema_dense_min_score }}
+          SCHEMA_DENSE_HCLX_CANDIDATE_MIN_SCORE: ${{ steps.release_inputs.outputs.schema_dense_hclx_candidate_min_score }}
+          SCHEMA_DENSE_MINIMUM_MARGIN: ${{ steps.release_inputs.outputs.schema_dense_minimum_margin }}
+          SCHEMA_DENSE_TOP_K: ${{ steps.release_inputs.outputs.schema_dense_top_k }}
           MODEL_ID: ${{ steps.release_inputs.outputs.model_id }}
           RELATION_RETRIEVAL_ARTIFACT_FILE: ${{ steps.relation_artifact.outputs.artifact_path }}
           RELATION_RETRIEVAL_ARTIFACT_SHA256: ${{ steps.relation_artifact.outputs.artifact_sha256 }}
@@ -179,6 +239,21 @@ jobs:
           if [ "$HCX_QUERYPLAN_ENABLED" = "true" ]; then
             manifest_arguments+=(--hcx-queryplan-enabled)
           fi
+          if [ "$HCX_SEMANTIC_RESOLVER_ENABLED" = "true" ]; then
+            manifest_arguments+=(--hcx-semantic-resolver-enabled)
+          fi
+          if [ "$ADAPTIVE_SEMANTIC_ENABLED" = "true" ]; then
+            manifest_arguments+=(
+              --adaptive-semantic-enabled
+              --schema-dense-index "$SCHEMA_DENSE_INDEX"
+              --schema-dense-index-sha256 "$SCHEMA_DENSE_INDEX_SHA256"
+              --schema-dense-calibration-report-sha256 "$SCHEMA_DENSE_CALIBRATION_REPORT_SHA256"
+              --schema-dense-min-score "$SCHEMA_DENSE_MIN_SCORE"
+              --schema-dense-hclx-candidate-min-score "$SCHEMA_DENSE_HCLX_CANDIDATE_MIN_SCORE"
+              --schema-dense-minimum-margin "$SCHEMA_DENSE_MINIMUM_MARGIN"
+              --schema-dense-top-k "$SCHEMA_DENSE_TOP_K"
+            )
+          fi
           PYTHONPATH="$GITHUB_WORKSPACE/finance_agent/packages/finance_agent_core/src" \
             "$RUNNER_TEMP/release-venv/bin/python" \
             -m finance_agent_core.release_cli manifest "${manifest_arguments[@]}"
@@ -203,6 +278,7 @@ jobs:
         with:
           context: .
           file: fastapi_backend/Dockerfile
+          target: adaptive-runtime
           platforms: ${{ steps.release_inputs.outputs.platform }}
           push: true
           provenance: mode=max
@@ -428,6 +504,9 @@ jobs:
             "$RELEASE_OUTPUT_DIR/deployment-binding.json" \
             "$RELEASE_OUTPUT_DIR/image-runtime-boundary.json" \
             "$RELEASE_OUTPUT_DIR/release-metadata.json" \
+            "$RELEASE_OUTPUT_DIR/schema-dense-index.json" \
+            "$RELEASE_OUTPUT_DIR/schema-dense-calibration-report.json" \
+            "$RELEASE_OUTPUT_DIR/kure-snapshot-manifest.json" \
             > "$RELEASE_OUTPUT_DIR/release-artifacts.sha256"
 
       - name: Upload non-secret immutable release evidence
@@ -442,6 +521,9 @@ jobs:
             fastapi_backend/release/release-image-inspect.json
             fastapi_backend/release/release-image-manifest.json
             fastapi_backend/release/image-runtime-boundary.json
+            fastapi_backend/release/schema-dense-index.json
+            fastapi_backend/release/schema-dense-calibration-report.json
+            fastapi_backend/release/kure-snapshot-manifest.json
             fastapi_backend/release/base-image-cosign-verification.json
             fastapi_backend/release/release-image-cosign-verification.json
             fastapi_backend/release/agent-release-manifest.sigstore.json
