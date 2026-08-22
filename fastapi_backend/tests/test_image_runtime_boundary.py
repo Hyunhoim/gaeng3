@@ -171,6 +171,60 @@ def test_runtime_boundary_allows_only_exact_adaptive_dependencies(monkeypatch) -
     assert report["adaptive_dependency_mismatches"] == []
 
 
+def test_runtime_boundary_allows_only_exact_runtime_support_files(monkeypatch) -> None:
+    _safe_runtime(monkeypatch)
+    monkeypatch.setattr(
+        image_runtime_boundary,
+        "_forbidden_files",
+        lambda: ["site-packages:distutils-precedence.pth"],
+    )
+
+    report = image_runtime_boundary.build_report()
+
+    assert report["passed"] is True
+    assert report["forbidden_files"] == []
+
+
+def test_adaptive_runtime_allows_torch_support_binary_but_not_other_weights(
+    monkeypatch,
+) -> None:
+    _safe_runtime(monkeypatch)
+    monkeypatch.setattr(
+        image_runtime_boundary,
+        "_embedded_manifest_binding",
+        lambda **values: {
+            "verified": True,
+            "adaptive_semantic_enabled": True,
+            "expected_sha256": values["expected_sha256"],
+            "observed_sha256": values["expected_sha256"],
+            "failure_code": None,
+        },
+    )
+    monkeypatch.setattr(
+        image_runtime_boundary,
+        "_installed_distributions",
+        lambda: {
+            "fastapi": "0.116.1",
+            "finance-agent-core": "0.1.0",
+            **image_runtime_boundary._ADAPTIVE_DISTRIBUTIONS,
+        },
+    )
+    monkeypatch.setattr(
+        image_runtime_boundary,
+        "_forbidden_files",
+        lambda: [
+            "site-packages:distutils-precedence.pth",
+            "site-packages:torch/bin/test_interpreter_async.pt",
+            "site-packages:torch/unexpected-model.pt",
+        ],
+    )
+
+    report = image_runtime_boundary.build_report()
+
+    assert report["passed"] is False
+    assert report["forbidden_files"] == ["site-packages:torch/unexpected-model.pt"]
+
+
 def test_runtime_boundary_settings_guards_reject_non_hcx_release_paths() -> None:
     assert image_runtime_boundary._settings_reject(
         "FINANCE_BACKEND_ANSWER_PROVIDER=local_test is allowed only in development",

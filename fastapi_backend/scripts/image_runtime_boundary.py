@@ -65,6 +65,8 @@ _ADAPTIVE_DISTRIBUTIONS = {
     "transformers": "5.15.0",
 }
 _ADAPTIVE_EXECUTABLES = {"torchrun", "transformers-cli"}
+_ALLOWED_RUNTIME_SUPPORT_FILES = {"site-packages:distutils-precedence.pth"}
+_ADAPTIVE_ALLOWED_RUNTIME_SUPPORT_FILES = {"site-packages:torch/bin/test_interpreter_async.pt"}
 _FORBIDDEN_ENVIRONMENT_NAMES = (
     "CLOVASTUDIO_API_KEY",
     "ENABLE_NON_HCX_TEST_LLM",
@@ -268,7 +270,7 @@ def build_report() -> dict[str, object]:
     forbidden_environment = sorted(
         name for name in _FORBIDDEN_ENVIRONMENT_NAMES if os.environ.get(name)
     )
-    forbidden_files = _forbidden_files()
+    detected_model_like_files = _forbidden_files()
     image_reference = os.environ.get("FINANCE_RUNTIME_IMAGE_REFERENCE", "")
     release_id = os.environ.get("FINANCE_RELEASE_ID", "")
     source_commit = os.environ.get("FINANCE_SOURCE_COMMIT", "")
@@ -284,6 +286,12 @@ def build_report() -> dict[str, object]:
         source_commit=source_commit,
     )
     adaptive = embedded_manifest.get("adaptive_semantic_enabled") is True
+    allowed_runtime_support_files = set(_ALLOWED_RUNTIME_SUPPORT_FILES)
+    if adaptive:
+        allowed_runtime_support_files.update(_ADAPTIVE_ALLOWED_RUNTIME_SUPPORT_FILES)
+    forbidden_files = sorted(
+        path for path in detected_model_like_files if path not in allowed_runtime_support_files
+    )
     allowed_distributions = set(_ADAPTIVE_DISTRIBUTIONS) if adaptive else set()
     forbidden_distributions = sorted(
         name
