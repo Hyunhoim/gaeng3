@@ -356,10 +356,7 @@ class ReleaseTarget:
 
     @property
     def adaptive_semantic_enabled(self) -> bool:
-        return (
-            self.environment.get("FINANCE_ADAPTIVE_SEMANTIC_ENABLED", "false").lower()
-            == "true"
-        )
+        return self.environment.get("FINANCE_ADAPTIVE_SEMANTIC_ENABLED", "false").lower() == "true"
 
     @property
     def uses_hclx(self) -> bool:
@@ -731,9 +728,7 @@ def _validate_provider_profile(
             "rollback audit drill does not support the QueryPlan-only HCLX profile"
         )
     uses_hclx = (
-        answer_provider == "hyperclova"
-        or hcx_query_plan == "true"
-        or semantic_resolver == "true"
+        answer_provider == "hyperclova" or hcx_query_plan == "true" or semantic_resolver == "true"
     )
     if uses_hclx:
         if (
