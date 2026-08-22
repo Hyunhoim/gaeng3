@@ -284,6 +284,19 @@ _ALLOWED_RELEASE_KEYS = {
     "FINANCE_BACKEND_FUND_EXECUTION_POLICY",
     "FINANCE_BACKEND_ANSWER_PROVIDER",
     "FINANCE_BACKEND_HCX_QUERY_PLAN_ENABLED",
+    "FINANCE_BACKEND_HCX_SEMANTIC_RESOLVER_ENABLED",
+    "FINANCE_ADAPTIVE_SEMANTIC_ENABLED",
+    "FINANCE_SCHEMA_DENSE_INDEX_HOST_FILE",
+    "FINANCE_SCHEMA_DENSE_INDEX_SHA256",
+    "FINANCE_SCHEMA_DENSE_CALIBRATION_REPORT_SHA256",
+    "FINANCE_SCHEMA_DENSE_MIN_SCORE",
+    "FINANCE_SCHEMA_DENSE_HCLX_CANDIDATE_MIN_SCORE",
+    "FINANCE_SCHEMA_DENSE_MINIMUM_MARGIN",
+    "FINANCE_SCHEMA_DENSE_TOP_K",
+    "FINANCE_KURE_CACHE_HOST_DIR",
+    "FINANCE_KURE_SNAPSHOT_MANIFEST_HOST_FILE",
+    "FINANCE_KURE_CPU_THREADS",
+    "FINANCE_KURE_BATCH_SIZE",
     "FINANCE_AGENT_LLM_MODE",
     "LLM_PROVIDER",
     "HCX_MODEL",
@@ -335,8 +348,26 @@ class ReleaseTarget:
         )
 
     @property
+    def hclx_semantic_resolver_enabled(self) -> bool:
+        return (
+            self.environment.get("FINANCE_BACKEND_HCX_SEMANTIC_RESOLVER_ENABLED", "false").lower()
+            == "true"
+        )
+
+    @property
+    def adaptive_semantic_enabled(self) -> bool:
+        return (
+            self.environment.get("FINANCE_ADAPTIVE_SEMANTIC_ENABLED", "false").lower()
+            == "true"
+        )
+
+    @property
     def uses_hclx(self) -> bool:
-        return self.answer_provider == "hyperclova"
+        return (
+            self.answer_provider == "hyperclova"
+            or self.hclx_query_plan_enabled
+            or self.hclx_semantic_resolver_enabled
+        )
 
     @property
     def expected_answer_mode(self) -> str:
@@ -682,15 +713,29 @@ def _validate_provider_profile(
 ) -> tuple[Path | None, tuple[int, ...] | None]:
     answer_provider = environment.get("FINANCE_BACKEND_ANSWER_PROVIDER", "deterministic")
     hcx_query_plan = environment.get("FINANCE_BACKEND_HCX_QUERY_PLAN_ENABLED", "false").lower()
+    semantic_resolver = environment.get(
+        "FINANCE_BACKEND_HCX_SEMANTIC_RESOLVER_ENABLED", "false"
+    ).lower()
     if answer_provider not in {"deterministic", "hyperclova"}:
         raise RollbackDrillError("release answer provider is invalid")
     if hcx_query_plan not in {"true", "false"}:
         raise RollbackDrillError("release HCLX QueryPlan flag is invalid")
-    if answer_provider == "deterministic" and hcx_query_plan == "true":
+    if semantic_resolver not in {"true", "false"}:
+        raise RollbackDrillError("release HCLX semantic resolver flag is invalid")
+    if (
+        answer_provider == "deterministic"
+        and hcx_query_plan == "true"
+        and semantic_resolver == "false"
+    ):
         raise RollbackDrillError(
             "rollback audit drill does not support the QueryPlan-only HCLX profile"
         )
-    if answer_provider == "hyperclova":
+    uses_hclx = (
+        answer_provider == "hyperclova"
+        or hcx_query_plan == "true"
+        or semantic_resolver == "true"
+    )
+    if uses_hclx:
         if (
             environment.get("FINANCE_AGENT_LLM_MODE") != environment.get("APP_ENV")
             or environment.get("LLM_PROVIDER") != "hyperclova"
@@ -715,6 +760,114 @@ def _validate_provider_profile(
     ):
         raise RollbackDrillError("deterministic release must not configure HCLX credentials")
     return None, None
+
+
+def _parse_profile_boolean(environment: dict[str, str], name: str) -> bool:
+    value = environment.get(name, "false").lower()
+    if value not in {"true", "false"}:
+        raise RollbackDrillError(f"{name} is invalid")
+    return value == "true"
+
+
+def _parse_profile_integer(
+    environment: dict[str, str],
+    name: str,
+    *,
+    default: int,
+    minimum: int,
+    maximum: int,
+) -> int:
+    value = environment.get(name, str(default))
+    if re.fullmatch(r"[0-9]+", value) is None or not minimum <= int(value) <= maximum:
+        raise RollbackDrillError(f"{name} is invalid")
+    return int(value)
+
+
+def _parse_profile_float(
+    environment: dict[str, str],
+    name: str,
+) -> float:
+    try:
+        value = float(environment[name])
+    except (KeyError, ValueError) as error:
+        raise RollbackDrillError(f"{name} is invalid") from error
+    if not math.isfinite(value):
+        raise RollbackDrillError(f"{name} is invalid")
+    return value
+
+
+def _validate_adaptive_profile(environment: dict[str, str]) -> None:
+    adaptive = _parse_profile_boolean(environment, "FINANCE_ADAPTIVE_SEMANTIC_ENABLED")
+    semantic_resolver = _parse_profile_boolean(
+        environment,
+        "FINANCE_BACKEND_HCX_SEMANTIC_RESOLVER_ENABLED",
+    )
+    required = {
+        "FINANCE_SCHEMA_DENSE_INDEX_HOST_FILE",
+        "FINANCE_SCHEMA_DENSE_INDEX_SHA256",
+        "FINANCE_SCHEMA_DENSE_CALIBRATION_REPORT_SHA256",
+        "FINANCE_SCHEMA_DENSE_MIN_SCORE",
+        "FINANCE_SCHEMA_DENSE_HCLX_CANDIDATE_MIN_SCORE",
+        "FINANCE_SCHEMA_DENSE_MINIMUM_MARGIN",
+        "FINANCE_KURE_CACHE_HOST_DIR",
+        "FINANCE_KURE_SNAPSHOT_MANIFEST_HOST_FILE",
+    }
+    optional = {
+        "FINANCE_SCHEMA_DENSE_TOP_K",
+        "FINANCE_KURE_CPU_THREADS",
+        "FINANCE_KURE_BATCH_SIZE",
+    }
+    if not adaptive:
+        if semantic_resolver or any(environment.get(name) for name in required | optional):
+            raise RollbackDrillError("adaptive rollback profile is incomplete")
+        return
+    if any(not environment.get(name) for name in required):
+        raise RollbackDrillError("adaptive rollback profile is incomplete")
+    for name in (
+        "FINANCE_SCHEMA_DENSE_INDEX_SHA256",
+        "FINANCE_SCHEMA_DENSE_CALIBRATION_REPORT_SHA256",
+    ):
+        _require_pattern(environment[name], _SHA256, name)
+    for name in (
+        "FINANCE_SCHEMA_DENSE_INDEX_HOST_FILE",
+        "FINANCE_KURE_CACHE_HOST_DIR",
+        "FINANCE_KURE_SNAPSHOT_MANIFEST_HOST_FILE",
+    ):
+        path = Path(environment[name])
+        if not path.is_absolute() or path != Path(os.path.abspath(path)):
+            raise RollbackDrillError(f"{name} is invalid")
+    dense_min_score = _parse_profile_float(environment, "FINANCE_SCHEMA_DENSE_MIN_SCORE")
+    hclx_floor = _parse_profile_float(
+        environment,
+        "FINANCE_SCHEMA_DENSE_HCLX_CANDIDATE_MIN_SCORE",
+    )
+    minimum_margin = _parse_profile_float(
+        environment,
+        "FINANCE_SCHEMA_DENSE_MINIMUM_MARGIN",
+    )
+    if not (-1 <= hclx_floor <= dense_min_score <= 1 and 0 <= minimum_margin <= 2):
+        raise RollbackDrillError("adaptive rollback thresholds are invalid")
+    _parse_profile_integer(
+        environment,
+        "FINANCE_SCHEMA_DENSE_TOP_K",
+        default=10,
+        minimum=2,
+        maximum=10,
+    )
+    _parse_profile_integer(
+        environment,
+        "FINANCE_KURE_CPU_THREADS",
+        default=2,
+        minimum=1,
+        maximum=8,
+    )
+    _parse_profile_integer(
+        environment,
+        "FINANCE_KURE_BATCH_SIZE",
+        default=16,
+        minimum=1,
+        maximum=64,
+    )
 
 
 def _require_hclx_secret_current(target: ReleaseTarget) -> None:
@@ -806,6 +959,7 @@ def _load_target(path: Path) -> ReleaseTarget:
     if environment["FINANCE_RUNTIME_PLATFORM"] != "linux/amd64":
         raise RollbackDrillError("official rollback platform must be linux/amd64")
     hclx_secret_file, hclx_secret_fingerprint = _validate_provider_profile(environment)
+    _validate_adaptive_profile(environment)
     _validate_timeout(
         environment,
         "OFFICIAL_ANSWER_TIMEOUT_SECONDS",
@@ -1074,6 +1228,14 @@ class DockerClient:
         *,
         allow_failure: bool = False,
     ) -> subprocess.CompletedProcess[str]:
+        compose_files = [
+            "-f",
+            "docker-compose.yml",
+            "-f",
+            "fastapi_backend/docker-compose.release.yml",
+        ]
+        if target.adaptive_semantic_enabled:
+            compose_files.extend(["-f", "fastapi_backend/docker-compose.adaptive.yml"])
         return self.run(
             [
                 "compose",
@@ -1081,10 +1243,7 @@ class DockerClient:
                 self.project,
                 "--env-file",
                 str(target.env_file),
-                "-f",
-                "docker-compose.yml",
-                "-f",
-                "fastapi_backend/docker-compose.release.yml",
+                *compose_files,
                 *arguments,
             ],
             allow_failure=allow_failure,

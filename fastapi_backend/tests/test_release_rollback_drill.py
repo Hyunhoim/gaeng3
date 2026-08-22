@@ -210,6 +210,36 @@ def _configure_hclx_pair(
     return secret
 
 
+def _configure_adaptive_target(tmp_path: Path, environment_file: Path) -> None:
+    index_file = tmp_path / "schema-dense-index.json"
+    snapshot_manifest = tmp_path / "kure-snapshot-manifest.json"
+    cache_root = tmp_path / "kure-cache"
+    index_file.write_text("{}\n", encoding="utf-8")
+    snapshot_manifest.write_text("{}\n", encoding="utf-8")
+    cache_root.mkdir(exist_ok=True)
+    with environment_file.open("a", encoding="utf-8") as stream:
+        stream.write(
+            "\n".join(
+                [
+                    "FINANCE_ADAPTIVE_SEMANTIC_ENABLED=true",
+                    "FINANCE_BACKEND_HCX_SEMANTIC_RESOLVER_ENABLED=true",
+                    f"FINANCE_SCHEMA_DENSE_INDEX_HOST_FILE={index_file}",
+                    "FINANCE_SCHEMA_DENSE_INDEX_SHA256=" + "a" * 64,
+                    "FINANCE_SCHEMA_DENSE_CALIBRATION_REPORT_SHA256=" + "b" * 64,
+                    "FINANCE_SCHEMA_DENSE_MIN_SCORE=1.0",
+                    "FINANCE_SCHEMA_DENSE_HCLX_CANDIDATE_MIN_SCORE=0.36",
+                    "FINANCE_SCHEMA_DENSE_MINIMUM_MARGIN=2.0",
+                    "FINANCE_SCHEMA_DENSE_TOP_K=10",
+                    f"FINANCE_KURE_CACHE_HOST_DIR={cache_root}",
+                    f"FINANCE_KURE_SNAPSHOT_MANIFEST_HOST_FILE={snapshot_manifest}",
+                    "FINANCE_KURE_CPU_THREADS=2",
+                    "FINANCE_KURE_BATCH_SIZE=16",
+                ]
+            )
+            + "\n"
+        )
+
+
 def _command(previous_env: Path, current_env: Path, *extra: str) -> list[str]:
     test_script = _copy_test_rollback_script(previous_env.parent / "rollback_drill-test.py")
     return [
@@ -253,6 +283,54 @@ def test_rollback_drill_dry_run_validates_exact_chain_without_docker(tmp_path: P
     assert result["artifacts_preserved"] is False
     assert result["audit_chain_verified"] is False
     assert result["audit_observations"] == []
+
+
+def test_rollback_drill_selects_adaptive_overlay_only_for_adaptive_target(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    previous_env, current_env, _, _ = _release_pair(tmp_path)
+    _configure_hclx_pair(
+        tmp_path,
+        previous_env,
+        current_env,
+        query_plan_enabled=False,
+    )
+    _configure_adaptive_target(tmp_path, current_env)
+    previous = _load_test_target(monkeypatch, previous_env)
+    current = _load_test_target(monkeypatch, current_env)
+    commands: list[list[str]] = []
+
+    def fake_run(arguments: list[str], **_: object) -> subprocess.CompletedProcess[str]:
+        commands.append(arguments)
+        return subprocess.CompletedProcess(arguments, 0, "", "")
+
+    client = rollback_drill.DockerClient(
+        root=_repository_root(),
+        project="finance-agent-rollback-drill-test01",
+        port=19081,
+    )
+    monkeypatch.setattr(client, "run", fake_run)
+
+    client.compose(previous, ["config", "--quiet"])
+    client.compose(current, ["config", "--quiet"])
+
+    assert previous.adaptive_semantic_enabled is False
+    assert current.adaptive_semantic_enabled is True
+    assert "fastapi_backend/docker-compose.adaptive.yml" not in commands[0]
+    assert commands[1].count("fastapi_backend/docker-compose.adaptive.yml") == 1
+
+
+def test_rollback_drill_rejects_partial_adaptive_profile(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _, current_env, _, _ = _release_pair(tmp_path)
+    with current_env.open("a", encoding="utf-8") as stream:
+        stream.write("FINANCE_ADAPTIVE_SEMANTIC_ENABLED=true\n")
+
+    with pytest.raises(rollback_drill.RollbackDrillError, match="adaptive rollback profile"):
+        _load_test_target(monkeypatch, current_env)
 
 
 def test_rollback_snapshot_is_traversable_and_binding_readable_under_private_umask(
