@@ -491,6 +491,19 @@ def _validate_compose_arguments(arguments: list[str]) -> None:
 
 
 def _compose_command(env_file: Path, arguments: list[str]) -> list[str]:
+    compose_files = [
+        "-f",
+        "docker-compose.yml",
+        "-f",
+        "fastapi_backend/docker-compose.release.yml",
+    ]
+    adaptive = (
+        _load_environment(env_file).get("FINANCE_ADAPTIVE_SEMANTIC_ENABLED", "false").casefold()
+    )
+    if adaptive not in {"true", "false"}:
+        raise ReleaseActivationError("FINANCE_ADAPTIVE_SEMANTIC_ENABLED must be true or false")
+    if adaptive == "true":
+        compose_files.extend(["-f", "fastapi_backend/docker-compose.adaptive.yml"])
     return [
         "docker",
         "compose",
@@ -498,10 +511,7 @@ def _compose_command(env_file: Path, arguments: list[str]) -> list[str]:
         "hyunholim-finance-agent",
         "--env-file",
         str(env_file),
-        "-f",
-        "docker-compose.yml",
-        "-f",
-        "fastapi_backend/docker-compose.release.yml",
+        *compose_files,
         *arguments,
     ]
 

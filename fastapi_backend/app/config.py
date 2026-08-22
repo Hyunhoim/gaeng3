@@ -44,6 +44,10 @@ class Settings(BaseSettings):
         default=False,
         validation_alias="FINANCE_BACKEND_HCX_QUERY_PLAN_ENABLED",
     )
+    hcx_semantic_resolver_enabled: bool = Field(
+        default=False,
+        validation_alias="FINANCE_BACKEND_HCX_SEMANTIC_RESOLVER_ENABLED",
+    )
     llm_mode: Literal["disabled", "local_test", "evaluation", "production"] = Field(
         default="disabled",
         validation_alias="FINANCE_AGENT_LLM_MODE",
@@ -143,6 +147,72 @@ class Settings(BaseSettings):
         default=False,
         validation_alias="FINANCE_DENSE_SCHEMA_LINKER_ENABLED",
     )
+    adaptive_semantic_enabled: bool = Field(
+        default=False,
+        validation_alias="FINANCE_ADAPTIVE_SEMANTIC_ENABLED",
+    )
+    schema_dense_index_file: Path | None = Field(
+        default=None,
+        validation_alias="FINANCE_SCHEMA_DENSE_INDEX_FILE",
+    )
+    schema_dense_index_sha256: str | None = Field(
+        default=None,
+        pattern=r"^[0-9a-f]{64}$",
+        validation_alias="FINANCE_SCHEMA_DENSE_INDEX_SHA256",
+    )
+    schema_dense_calibration_report_sha256: str | None = Field(
+        default=None,
+        pattern=r"^[0-9a-f]{64}$",
+        validation_alias="FINANCE_SCHEMA_DENSE_CALIBRATION_REPORT_SHA256",
+    )
+    schema_dense_min_score: float | None = Field(
+        default=None,
+        ge=-1,
+        le=1,
+        validation_alias="FINANCE_SCHEMA_DENSE_MIN_SCORE",
+    )
+    schema_dense_hclx_candidate_min_score: float | None = Field(
+        default=None,
+        ge=-1,
+        le=1,
+        validation_alias="FINANCE_SCHEMA_DENSE_HCLX_CANDIDATE_MIN_SCORE",
+    )
+    schema_dense_minimum_margin: float | None = Field(
+        default=None,
+        ge=0,
+        le=2,
+        validation_alias="FINANCE_SCHEMA_DENSE_MINIMUM_MARGIN",
+    )
+    schema_dense_top_k: int = Field(
+        default=10,
+        ge=2,
+        le=10,
+        validation_alias="FINANCE_SCHEMA_DENSE_TOP_K",
+    )
+    kure_snapshot_dir: Path | None = Field(
+        default=None,
+        validation_alias="FINANCE_KURE_SNAPSHOT_DIR",
+    )
+    kure_snapshot_manifest_file: Path | None = Field(
+        default=None,
+        validation_alias="FINANCE_KURE_SNAPSHOT_MANIFEST_FILE",
+    )
+    kure_trusted_cache_root: Path | None = Field(
+        default=None,
+        validation_alias="FINANCE_KURE_TRUSTED_CACHE_ROOT",
+    )
+    kure_cpu_threads: int = Field(
+        default=2,
+        ge=1,
+        le=8,
+        validation_alias="FINANCE_KURE_CPU_THREADS",
+    )
+    kure_batch_size: int = Field(
+        default=16,
+        ge=1,
+        le=64,
+        validation_alias="FINANCE_KURE_BATCH_SIZE",
+    )
     product_dense_enabled: bool = Field(
         default=False,
         validation_alias="FINANCE_PRODUCT_DENSE_ENABLED",
@@ -233,10 +303,42 @@ class Settings(BaseSettings):
                 "evaluation/production requires WEB_CONCURRENCY=1 "
                 "until cross-process audit aggregation exists"
             )
-        if self.app_env in {"evaluation", "production"} and (
-            self.dense_schema_linker_enabled or self.product_dense_enabled
+        adaptive_artifacts = (
+            self.schema_dense_index_file,
+            self.schema_dense_index_sha256,
+            self.schema_dense_calibration_report_sha256,
+            self.schema_dense_min_score,
+            self.schema_dense_hclx_candidate_min_score,
+            self.schema_dense_minimum_margin,
+            self.kure_snapshot_dir,
+            self.kure_snapshot_manifest_file,
+            self.kure_trusted_cache_root,
+        )
+        if self.adaptive_semantic_enabled:
+            if not self.dense_schema_linker_enabled:
+                raise ValueError("adaptive semantic mode requires Schema Dense")
+            if any(value is None for value in adaptive_artifacts):
+                raise ValueError(
+                    "adaptive semantic mode requires the complete KURE index and policy set"
+                )
+        elif self.dense_schema_linker_enabled or any(
+            value is not None for value in adaptive_artifacts
         ):
-            raise ValueError("production Dense retrieval remains disabled in release schema v1")
+            raise ValueError(
+                "Schema Dense artifacts cannot be configured while adaptive semantics is off"
+            )
+        if self.hcx_semantic_resolver_enabled and not self.adaptive_semantic_enabled:
+            raise ValueError("HCLX Semantic Resolver requires adaptive semantic mode")
+        if self.product_dense_enabled:
+            raise ValueError("Product Dense remains disabled in the evaluation runtime")
+        adaptive_paths = (
+            self.schema_dense_index_file,
+            self.kure_snapshot_dir,
+            self.kure_snapshot_manifest_file,
+            self.kure_trusted_cache_root,
+        )
+        if any(path is not None and not path.is_absolute() for path in adaptive_paths):
+            raise ValueError("KURE and Schema Dense files must use absolute paths")
         relation_artifacts = (
             self.relation_retrieval_artifact_file,
             self.relation_index_file,
@@ -303,7 +405,11 @@ class Settings(BaseSettings):
     def uses_hyperclova(self) -> bool:
         """Return whether any request path needs the official HCLX transport."""
 
-        return self.answer_provider == "hyperclova" or self.hcx_query_plan_enabled
+        return (
+            self.answer_provider == "hyperclova"
+            or self.hcx_query_plan_enabled
+            or self.hcx_semantic_resolver_enabled
+        )
 
     @property
     def relation_retrieval_configured(self) -> bool:

@@ -22,6 +22,10 @@ from finance_agent_core.release import (
     load_relation_retrieval_artifact_release,
     manifest_file_bytes,
 )
+from finance_agent_core.retrieval.schema_dense import (
+    SchemaDenseActivationPolicy,
+    load_dense_schema_index_artifact,
+)
 
 
 def _require_clean_source(root: Path, expected_commit: str) -> None:
@@ -128,6 +132,35 @@ def _runtime_inputs(arguments: argparse.Namespace) -> RuntimeReleaseInputs:
             )
         except AgentReleaseError as error:
             raise SystemExit(f"relation retrieval artifact is invalid: {error}") from error
+    schema_dense_artifact = None
+    schema_dense_policy = None
+    schema_dense_path = arguments.schema_dense_index
+    schema_dense_sha256 = arguments.schema_dense_index_sha256
+    adaptive = bool(arguments.adaptive_semantic_enabled)
+    dense_values = (
+        schema_dense_path,
+        schema_dense_sha256,
+        arguments.schema_dense_calibration_report_sha256,
+        arguments.schema_dense_min_score,
+        arguments.schema_dense_hclx_candidate_min_score,
+        arguments.schema_dense_minimum_margin,
+    )
+    if adaptive != all(value is not None for value in dense_values):
+        raise SystemExit(
+            "adaptive semantic release requires the complete Schema Dense index and policy set"
+        )
+    if adaptive:
+        schema_dense_policy = SchemaDenseActivationPolicy(
+            dense_min_score=arguments.schema_dense_min_score,
+            hclx_candidate_min_score=arguments.schema_dense_hclx_candidate_min_score,
+            minimum_margin=arguments.schema_dense_minimum_margin,
+            top_k=arguments.schema_dense_top_k,
+            calibration_report_sha256=(arguments.schema_dense_calibration_report_sha256),
+        )
+        schema_dense_artifact = load_dense_schema_index_artifact(
+            schema_dense_path,
+            expected_file_sha256=schema_dense_sha256,
+        )
     return RuntimeReleaseInputs(
         environment=arguments.environment,
         source_commit=arguments.source_commit,
@@ -140,8 +173,13 @@ def _runtime_inputs(arguments: argparse.Namespace) -> RuntimeReleaseInputs:
         backend_root=arguments.backend_root.resolve(strict=True),
         answer_provider=arguments.answer_provider,
         hcx_queryplan_enabled=arguments.hcx_queryplan_enabled,
+        hcx_semantic_resolver_enabled=arguments.hcx_semantic_resolver_enabled,
         hcx_model=model,
         fund_execution_policy=arguments.fund_execution_policy,
+        schema_dense_enabled=adaptive,
+        schema_dense_artifact=schema_dense_artifact,
+        schema_dense_artifact_file_sha256=schema_dense_sha256,
+        schema_dense_policy=schema_dense_policy,
         relation_retrieval_artifact=relation_retrieval_artifact,
         relation_retrieval_artifact_file_sha256=artifact_file_sha256,
         platform=arguments.platform,
@@ -249,7 +287,16 @@ def _parser() -> argparse.ArgumentParser:
         default="deterministic",
     )
     manifest.add_argument("--hcx-queryplan-enabled", action="store_true")
+    manifest.add_argument("--hcx-semantic-resolver-enabled", action="store_true")
     manifest.add_argument("--hcx-model")
+    manifest.add_argument("--adaptive-semantic-enabled", action="store_true")
+    manifest.add_argument("--schema-dense-index", type=Path)
+    manifest.add_argument("--schema-dense-index-sha256")
+    manifest.add_argument("--schema-dense-calibration-report-sha256")
+    manifest.add_argument("--schema-dense-min-score", type=float)
+    manifest.add_argument("--schema-dense-hclx-candidate-min-score", type=float)
+    manifest.add_argument("--schema-dense-minimum-margin", type=float)
+    manifest.add_argument("--schema-dense-top-k", type=int, default=10)
     manifest.add_argument("--hcx-timeout-seconds", type=float, default=45.0)
     manifest.add_argument("--official-answer-timeout-seconds", type=float, default=270.0)
     manifest.add_argument("--official-answer-max-inflight", type=int, default=2)

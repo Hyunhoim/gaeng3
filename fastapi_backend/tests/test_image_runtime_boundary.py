@@ -21,6 +21,7 @@ def _safe_runtime(monkeypatch) -> None:
         "_embedded_manifest_binding",
         lambda **values: {
             "verified": True,
+            "adaptive_semantic_enabled": False,
             "expected_sha256": values["expected_sha256"],
             "observed_sha256": values["expected_sha256"],
             "failure_code": None,
@@ -105,6 +106,9 @@ def test_embedded_manifest_binding_requires_exact_bytes_and_release_identity(tmp
                 "schema_version": "1.2",
                 "release_id": release_id,
                 "source_commit": source_commit,
+                "components": {
+                    "runtime_features": {"retrieval": {"schema_dense": "disabled_offline_only"}}
+                },
             },
             sort_keys=True,
             separators=(",", ":"),
@@ -137,6 +141,36 @@ def test_embedded_manifest_binding_requires_exact_bytes_and_release_identity(tmp
     assert wrong_identity["failure_code"] == "manifest_identity_mismatch"
 
 
+def test_runtime_boundary_allows_only_exact_adaptive_dependencies(monkeypatch) -> None:
+    _safe_runtime(monkeypatch)
+    monkeypatch.setattr(
+        image_runtime_boundary,
+        "_embedded_manifest_binding",
+        lambda **values: {
+            "verified": True,
+            "adaptive_semantic_enabled": True,
+            "expected_sha256": values["expected_sha256"],
+            "observed_sha256": values["expected_sha256"],
+            "failure_code": None,
+        },
+    )
+    monkeypatch.setattr(
+        image_runtime_boundary,
+        "_installed_distributions",
+        lambda: {
+            "fastapi": "0.116.1",
+            "finance-agent-core": "0.1.0",
+            **image_runtime_boundary._ADAPTIVE_DISTRIBUTIONS,
+        },
+    )
+
+    report = image_runtime_boundary.build_report()
+
+    assert report["passed"] is True
+    assert report["forbidden_distributions"] == []
+    assert report["adaptive_dependency_mismatches"] == []
+
+
 def test_runtime_boundary_settings_guards_reject_non_hcx_release_paths() -> None:
     assert image_runtime_boundary._settings_reject(
         "FINANCE_BACKEND_ANSWER_PROVIDER=local_test is allowed only in development",
@@ -144,12 +178,12 @@ def test_runtime_boundary_settings_guards_reject_non_hcx_release_paths() -> None
         FINANCE_BACKEND_ANSWER_PROVIDER="local_test",
     )
     assert image_runtime_boundary._settings_reject(
-        "production Dense retrieval remains disabled in release schema v1",
+        "Schema Dense artifacts cannot be configured while adaptive semantics is off",
         APP_ENV="evaluation",
         FINANCE_DENSE_SCHEMA_LINKER_ENABLED=True,
     )
     assert image_runtime_boundary._settings_reject(
-        "production Dense retrieval remains disabled in release schema v1",
+        "Product Dense remains disabled in the evaluation runtime",
         APP_ENV="evaluation",
         FINANCE_PRODUCT_DENSE_ENABLED=True,
     )

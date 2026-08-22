@@ -23,6 +23,12 @@ from finance_agent_core.agent.providers.local_test import (
     build_fund_comparison_draft_system_prompt,
     build_query_plan_system_prompt,
 )
+from finance_agent_core.agent.semantic_resolution import (
+    ResolutionDecision,
+    SemanticResolutionDraft,
+    SemanticResolutionRequest,
+)
+from finance_agent_core.config import load_field_registry
 from finance_agent_core.contracts import QueryPlan, load_hcx_queryplan_schema
 from finance_agent_core.contracts.hcx_schema import (
     validate_hcx_payload,
@@ -36,6 +42,7 @@ from finance_agent_core.deadline import (
 type HyperClovaXOperation = Literal[
     "query_plan",
     "fund_comparison_draft",
+    "semantic_resolver",
     "grounded_answer",
 ]
 type HyperClovaXOutcome = Literal[
@@ -480,5 +487,135 @@ class HyperClovaXFundComparisonDraftProvider:
             schema_name="fund_comparison_draft",
             response_schema=response_schema,
             max_output_tokens=1024,
+            response_parser=parse_response,
+        )
+
+
+def _semantic_resolver_schema(request: SemanticResolutionRequest) -> dict[str, Any]:
+    candidate_ids = [item.field_id for item in request.candidates]
+    directions = (
+        [request.expected_direction.value]
+        if request.expected_direction is not None
+        else ["asc", "desc"]
+    )
+    return {
+        "type": "object",
+        "properties": {
+            "decision": {
+                "type": "string",
+                "enum": ["resolve", "clarify", "unsupported"],
+            },
+            "selected_field_id": {
+                "type": "string",
+                "enum": ["__none__", *candidate_ids],
+            },
+            "operation": {
+                "type": "string",
+                "enum": [item.value for item in request.allowed_operations],
+            },
+            "direction": {"type": "string", "enum": directions},
+            "reason_code": {
+                "type": "string",
+                "enum": [
+                    "candidate_context_match",
+                    "multiple_interpretations",
+                    "unsupported_meaning",
+                ],
+            },
+        },
+        "required": [
+            "decision",
+            "selected_field_id",
+            "operation",
+            "direction",
+            "reason_code",
+        ],
+    }
+
+
+def _semantic_resolver_system_prompt(request: SemanticResolutionRequest) -> str:
+    registry = load_field_registry()
+    candidates = []
+    for candidate in request.candidates:
+        definition = registry.require_field(candidate.field_id, [request.product_family.value])
+        candidates.append(
+            {
+                "field_id": candidate.field_id,
+                "label": definition.label,
+                "aliases": list(definition.aliases),
+                "unit": definition.unit,
+                "notes": definition.notes,
+            }
+        )
+    context = {
+        "residual_span": request.residual_span,
+        "product_family": request.product_family.value,
+        "interaction_intent": request.interaction_intent.value,
+        "allowed_operations": [item.value for item in request.allowed_operations],
+        "expected_direction": (
+            None if request.expected_direction is None else request.expected_direction.value
+        ),
+        "candidate_fields": candidates,
+    }
+    return (
+        "너는 금융상품 QueryPlan 전체를 만드는 모델이 아니라, 서버가 제시한 schema field "
+        "후보 사이에서 미해결 표현 하나만 판별하는 Semantic Resolver다. "
+        "candidate_fields 밖의 필드, 숫자, 임계값, 상품군, 필터를 생성하거나 변경하지 마라. "
+        "하나로 확정할 수 없으면 clarify, 지원 의미가 아니면 unsupported를 반환하라. "
+        "resolve일 때만 selected_field_id를 후보 중 하나로 선택하고, 그 외에는 __none__을 "
+        "반환하라. 다음 JSON은 서버가 제한한 해석 문맥이다:\n"
+        + json.dumps(context, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    )
+
+
+class HyperClovaXSemanticResolverProvider:
+    """Minimum-privilege HCX operation that can select only a supplied field candidate."""
+
+    def __init__(
+        self,
+        settings: HyperClovaXSettings,
+        transport: HyperClovaXTransport,
+        *,
+        on_call: Callable[[HyperClovaXCallRecord], None] | None = None,
+    ) -> None:
+        self.settings = settings
+        self._client = HyperClovaXClient(settings, transport, on_call=on_call)
+
+    @property
+    def provider_name(self) -> Literal["hyperclova"]:
+        return "hyperclova"
+
+    @property
+    def model_name(self) -> str:
+        return self.settings.model
+
+    def resolve_semantics(self, request: SemanticResolutionRequest) -> SemanticResolutionDraft:
+        response_schema = _semantic_resolver_schema(request)
+
+        def parse_response(content: str) -> SemanticResolutionDraft:
+            payload = parse_hcx_json_object(content, "semantic resolution")
+            try:
+                validate_hcx_payload(response_schema, payload)
+                draft = SemanticResolutionDraft.model_validate(payload)
+            except ValueError:
+                raise HyperClovaXResponseError(
+                    "HyperCLOVA X returned an invalid semantic resolution"
+                ) from None
+            expected_reason = {
+                ResolutionDecision.RESOLVE: "candidate_context_match",
+                ResolutionDecision.CLARIFY: "multiple_interpretations",
+                ResolutionDecision.UNSUPPORTED: "unsupported_meaning",
+            }[draft.decision]
+            if draft.reason_code != expected_reason:
+                raise HyperClovaXResponseError("HyperCLOVA X semantic decision and reason disagree")
+            return draft
+
+        return self._client.complete(
+            operation="semantic_resolver",
+            system_prompt=_semantic_resolver_system_prompt(request),
+            user_prompt="미해결 표현을 허용된 field 후보 안에서만 판별해줘.",
+            schema_name="finance_semantic_resolution",
+            response_schema=response_schema,
+            max_output_tokens=256,
             response_parser=parse_response,
         )

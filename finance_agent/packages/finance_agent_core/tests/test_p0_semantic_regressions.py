@@ -1,12 +1,157 @@
 import pytest
 
-from finance_agent_core.agent.compiler import ServerQueryPlanCompiler
+from finance_agent_core.agent.compiler import (
+    PlanCompilationBlockedError,
+    ServerQueryPlanCompiler,
+)
 from finance_agent_core.agent.linker import (
     build_lexical_hints,
     canonicalize_query_plan_payload,
 )
 from finance_agent_core.agent.router import IntentRouter
 from finance_agent_core.contracts import QueryPlan
+
+
+@pytest.mark.parametrize(
+    ("question", "family", "product_id"),
+    [
+        (
+            "공모펀드 KR5129470010의 상품명과 1년 수익률을 알려줘.",
+            "fund",
+            "KR5129470010",
+        ),
+        (
+            "국내채권 KR1234567890의 상품명과 표면금리를 알려줘.",
+            "bond",
+            "KR1234567890",
+        ),
+        (
+            "국내 ETF KR7123456789의 상품명과 1년 수익률을 알려줘.",
+            "domestic_etp",
+            "KR7123456789",
+        ),
+        (
+            "해외 ETF 상품코드 AMX:SOXL의 상품명과 총보수율을 알려줘.",
+            "overseas_etp",
+            "AMX:SOXL",
+        ),
+    ],
+)
+def test_product_identity_with_korean_postposition_routes_to_exact_detail(
+    question: str,
+    family: str,
+    product_id: str,
+) -> None:
+    decision = IntentRouter().route(question, f"p0-postposition-{family}")
+
+    assert decision.disposition.value == "execute"
+    assert decision.draft.intent.value == "detail"
+    assert [item.value for item in decision.draft.product_families] == [family]
+    assert decision.draft.product_mentions == [product_id]
+
+
+def test_quoted_identifier_with_korean_postposition_is_normalized_once() -> None:
+    decision = IntentRouter().route(
+        '공모펀드 "KR5129470010의" 상품명과 1년 수익률을 알려줘.',
+        "p0-quoted-postposition",
+    )
+
+    assert decision.disposition.value == "execute"
+    assert decision.draft.intent.value == "detail"
+    assert decision.draft.product_mentions == ["KR5129470010"]
+
+
+def test_unresolved_identifier_shaped_span_cannot_fall_through_to_search() -> None:
+    decision = IntentRouter().route(
+        "공모펀드 KR5129470010XYZ의 상품명을 알려줘.",
+        "p0-identifier-residual",
+    )
+
+    assert decision.disposition.value == "clarify"
+    assert decision.reason_code == "unresolved_product_identity_span"
+    assert decision.query_plan_intent is None
+
+
+@pytest.mark.parametrize(
+    ("question", "family", "expected_field"),
+    [
+        (
+            "국내채권 KR6169374E75의 상품명과 표면금리를 알려줘.",
+            "bond",
+            "coupon_rate_pct",
+        ),
+        (
+            "국내 ETF KR7091160002의 상품명과 1년 수익률을 알려줘.",
+            "domestic_etp",
+            "one_year_return_pct",
+        ),
+        (
+            "해외 ETF 상품코드 AMX:SURI.K의 상품명과 ISIN을 알려줘.",
+            "overseas_etp",
+            "isin",
+        ),
+        (
+            "공모펀드 KR5129470010의 상품명과 1년 수익률을 알려줘.",
+            "fund",
+            "one_year_return_pct",
+        ),
+    ],
+)
+def test_exact_detail_projection_keeps_the_explicit_requested_field(
+    question: str,
+    family: str,
+    expected_field: str,
+) -> None:
+    payload = canonicalize_query_plan_payload(
+        question,
+        {
+            "question_id": f"p0-detail-field-{expected_field}",
+            "product_families": [family],
+        },
+        force_product_family_hint=True,
+    )
+    plan = QueryPlan.model_validate(payload)
+
+    assert expected_field in plan.projection
+
+
+@pytest.mark.parametrize(
+    ("question", "reason_code"),
+    [
+        (
+            "공모펀드 KR5129470010와 KR5129470016의 상품명을 알려줘.",
+            "multiple_product_identities_unbound",
+        ),
+        (
+            "공모펀드 KR5129470010의 1년 수익률 평균을 알려줘.",
+            "aggregate_product_identity_unbound",
+        ),
+    ],
+)
+def test_unbound_product_identity_residuals_are_not_executed(
+    question: str,
+    reason_code: str,
+) -> None:
+    decision = IntentRouter().route(question, f"p0-identity-residual-{abs(hash(question))}")
+
+    assert decision.disposition.value == "clarify"
+    assert decision.reason_code == reason_code
+    assert decision.query_plan_intent is None
+
+
+def test_compiler_rejects_a_search_that_still_contains_an_unbound_identity() -> None:
+    routed = IntentRouter().route(
+        "공모펀드를 상품명 가나다순으로 3개 보여줘.",
+        "p0-unbound-compiler",
+    )
+    unsafe_draft = routed.draft.model_copy(update={"product_mentions": ["KR5129470010"]})
+    unsafe_decision = routed.model_copy(update={"draft": unsafe_draft})
+
+    with pytest.raises(
+        PlanCompilationBlockedError,
+        match="product identities that were not bound",
+    ):
+        ServerQueryPlanCompiler({}).compile(unsafe_decision)
 
 
 @pytest.mark.parametrize(

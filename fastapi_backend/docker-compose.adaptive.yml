@@ -1,0 +1,46 @@
+# Explicit third overlay for an already approved adaptive-semantic Release:
+# docker compose -f docker-compose.yml \
+#   -f fastapi_backend/docker-compose.release.yml \
+#   -f fastapi_backend/docker-compose.adaptive.yml ...
+#
+# The ordinary development and release profiles remain Schema Dense OFF.
+# Startup fails closed unless the signed AgentReleaseManifest, exact adaptive
+# image, immutable index, KURE snapshot and policy environment all agree.
+services:
+  backend:
+    environment:
+      FINANCE_ADAPTIVE_SEMANTIC_ENABLED: "true"
+      FINANCE_DENSE_SCHEMA_LINKER_ENABLED: "true"
+      FINANCE_PRODUCT_DENSE_ENABLED: "false"
+      FINANCE_BACKEND_HCX_SEMANTIC_RESOLVER_ENABLED: ${FINANCE_BACKEND_HCX_SEMANTIC_RESOLVER_ENABLED:-false}
+      FINANCE_SCHEMA_DENSE_INDEX_FILE: /models/schema-dense-index.json
+      FINANCE_SCHEMA_DENSE_INDEX_SHA256: ${FINANCE_SCHEMA_DENSE_INDEX_SHA256:?required}
+      FINANCE_SCHEMA_DENSE_CALIBRATION_REPORT_SHA256: ${FINANCE_SCHEMA_DENSE_CALIBRATION_REPORT_SHA256:?required}
+      FINANCE_SCHEMA_DENSE_MIN_SCORE: ${FINANCE_SCHEMA_DENSE_MIN_SCORE:?required}
+      FINANCE_SCHEMA_DENSE_HCLX_CANDIDATE_MIN_SCORE: ${FINANCE_SCHEMA_DENSE_HCLX_CANDIDATE_MIN_SCORE:?required}
+      FINANCE_SCHEMA_DENSE_MINIMUM_MARGIN: ${FINANCE_SCHEMA_DENSE_MINIMUM_MARGIN:?required}
+      FINANCE_SCHEMA_DENSE_TOP_K: ${FINANCE_SCHEMA_DENSE_TOP_K:-10}
+      FINANCE_KURE_TRUSTED_CACHE_ROOT: /models/kure-cache
+      FINANCE_KURE_SNAPSHOT_DIR: /models/kure-cache/models--nlpai-lab--KURE-v1/snapshots/d14c8a9423946e268a0c9952fecf3a7aabd73bd9
+      FINANCE_KURE_SNAPSHOT_MANIFEST_FILE: /models/kure-snapshot-manifest.json
+      FINANCE_KURE_CPU_THREADS: ${FINANCE_KURE_CPU_THREADS:-2}
+      FINANCE_KURE_BATCH_SIZE: ${FINANCE_KURE_BATCH_SIZE:-16}
+    volumes:
+      - type: bind
+        source: ${FINANCE_SCHEMA_DENSE_INDEX_HOST_FILE:?required}
+        target: /models/schema-dense-index.json
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${FINANCE_KURE_CACHE_HOST_DIR:?required}
+        target: /models/kure-cache
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${FINANCE_KURE_SNAPSHOT_MANIFEST_HOST_FILE:?required}
+        target: /models/kure-snapshot-manifest.json
+        read_only: true
+        bind:
+          create_host_path: false

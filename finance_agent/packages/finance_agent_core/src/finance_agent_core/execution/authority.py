@@ -69,6 +69,7 @@ RESULT_VERIFIER_VERSION = "result-verifier-v1"
 INTERNAL_EVALUATION_POLICY_VERSION = "internal-evaluation-v1"
 LEGACY_PROVIDER_POLICY_VERSION = "legacy-provider-safety-v1"
 ADAPTIVE_SHADOW_POLICY_VERSION = "adaptive-shadow-v1"
+ADAPTIVE_SEMANTIC_POLICY_VERSION = "adaptive-semantic-v2"
 
 
 class PlanAuthorityCode(StrEnum):
@@ -488,6 +489,7 @@ class PlanAuthorityGate:
         route_decision: RouteDecision,
         *,
         planning_decision: BaseModel,
+        semantic_receipts: tuple[BaseModel, ...] = (),
         compiler_kind: PlanCompilerKind = PlanCompilerKind.SERVER_QUERY_PLAN,
         proposal_provider_name: str | None = None,
         proposal_model_name: str | None = None,
@@ -496,10 +498,11 @@ class PlanAuthorityGate:
     ) -> ValidatedPlan:
         route = self._canonical_route(route_decision)
         plan = self._canonical_plan(proposal)
-        planning = self._canonical_planning_decision(
+        planning, admitted_semantic_receipts = self._canonical_planning_decision(
             planning_decision,
             route,
             compiler_kind=compiler_kind,
+            semantic_receipts=semantic_receipts,
         )
         if compiler_kind not in {
             PlanCompilerKind.SERVER_QUERY_PLAN,
@@ -514,6 +517,12 @@ class PlanAuthorityGate:
             route,
             cross_family_index=cross_family_index,
             cross_family_total=cross_family_total,
+        )
+        self._require_semantic_authority_alignment(
+            plan,
+            route,
+            planning,
+            admitted_semantic_receipts,
         )
         return self._issue(
             plan,
@@ -612,7 +621,8 @@ class PlanAuthorityGate:
         route: RouteDecision,
         *,
         compiler_kind: PlanCompilerKind,
-    ):
+        semantic_receipts: tuple[BaseModel, ...],
+    ) -> tuple[BaseModel, tuple[BaseModel, ...]]:
         # Local import keeps the execution boundary independent from the
         # agent package at module import time while still validating the exact
         # nominal Stage 1 contract and its route alignment.
@@ -621,11 +631,60 @@ class PlanAuthorityGate:
             PlanningDecisionStatus,
             PlanningTrace,
         )
+        from finance_agent_core.agent.semantic_resolution import (
+            AdaptivePlanningDecisionV2,
+            ResolutionPath,
+            SemanticResolutionReceipt,
+            SpanSource,
+        )
+
+        if type(planning_decision) is AdaptivePlanningDecisionV2:
+            if compiler_kind is not PlanCompilerKind.SERVER_QUERY_PLAN:
+                raise PlanAuthorityError(
+                    PlanAuthorityCode.STALE_AUTHORITY_CONTEXT,
+                    "adaptive semantic authority requires the server compiler",
+                )
+            if len(semantic_receipts) != 1 or type(semantic_receipts[0]) is not (
+                SemanticResolutionReceipt
+            ):
+                raise PlanAuthorityError(
+                    PlanAuthorityCode.STALE_AUTHORITY_CONTEXT,
+                    "adaptive semantic authority requires one exact receipt",
+                )
+            try:
+                planning_payload = _canonical_json(planning_decision.model_dump(mode="json"))
+                planning = AdaptivePlanningDecisionV2.model_validate_json(planning_payload)
+                receipt_payload = _canonical_json(semantic_receipts[0].model_dump(mode="json"))
+                receipt = SemanticResolutionReceipt.model_validate_json(receipt_payload)
+            except Exception as error:  # noqa: BLE001 - stable authority boundary
+                raise PlanAuthorityError(
+                    PlanAuthorityCode.ROUTE_MISMATCH,
+                    "adaptive semantic authority failed canonical validation",
+                ) from error
+            expected_path = {
+                SpanSource.SCHEMA_DENSE: ResolutionPath.SCHEMA_DENSE,
+                SpanSource.HCLX: ResolutionPath.HCLX,
+            }[receipt.source]
+            if (
+                planning.policy_version != ADAPTIVE_SEMANTIC_POLICY_VERSION
+                or planning.path is not expected_path
+                or planning.receipt_sha256 != receipt.receipt_sha256
+            ):
+                raise PlanAuthorityError(
+                    PlanAuthorityCode.STALE_AUTHORITY_CONTEXT,
+                    "adaptive planning decision differs from its semantic receipt",
+                )
+            return planning, (receipt,)
 
         if type(planning_decision) is not PlanningDecision:
             raise PlanAuthorityError(
                 PlanAuthorityCode.ROUTE_MISMATCH,
                 "routed authority requires the server PlanningDecision contract",
+            )
+        if semantic_receipts:
+            raise PlanAuthorityError(
+                PlanAuthorityCode.STALE_AUTHORITY_CONTEXT,
+                "legacy planning authority cannot carry semantic receipts",
             )
         try:
             payload = _canonical_json(planning_decision.model_dump(mode="json"))
@@ -652,7 +711,65 @@ class PlanAuthorityGate:
                 PlanAuthorityCode.STALE_AUTHORITY_CONTEXT,
                 "grounded model planning lacks explicit PlanningDecision authority",
             )
-        return planning
+        return planning, ()
+
+    @staticmethod
+    def _require_semantic_authority_alignment(
+        plan: QueryPlan,
+        route: RouteDecision,
+        planning_decision: BaseModel,
+        semantic_receipts: tuple[BaseModel, ...],
+    ) -> None:
+        """Bind v2 authority to this request and its compiler-admitted field."""
+
+        from finance_agent_core.agent.semantic_resolution import (
+            AdaptivePlanningDecisionV2,
+            ResolutionOperation,
+            SemanticResolutionReceipt,
+        )
+
+        if type(planning_decision) is not AdaptivePlanningDecisionV2:
+            if semantic_receipts:
+                raise PlanAuthorityError(
+                    PlanAuthorityCode.STALE_AUTHORITY_CONTEXT,
+                    "non-adaptive planning cannot carry semantic authority",
+                )
+            return
+        if len(semantic_receipts) != 1 or type(semantic_receipts[0]) is not (
+            SemanticResolutionReceipt
+        ):
+            raise PlanAuthorityError(
+                PlanAuthorityCode.STALE_AUTHORITY_CONTEXT,
+                "adaptive semantic receipt is unavailable",
+            )
+        receipt = semantic_receipts[0]
+        if (
+            route.disposition is not RouteDisposition.EXECUTE
+            or route.query_plan_intent is not Intent.SEARCH
+            or len(route.draft.product_families) != 1
+            or receipt.request_id_sha256
+            != hashlib.sha256(route.draft.request_id.encode("utf-8")).hexdigest()
+            or receipt.product_family is not route.draft.product_families[0]
+            or plan.product_families != [receipt.product_family]
+        ):
+            raise PlanAuthorityError(
+                PlanAuthorityCode.ROUTE_MISMATCH,
+                "semantic receipt is outside this routed request",
+            )
+        if receipt.operation is ResolutionOperation.RANK:
+            admitted = any(
+                ranking.field == receipt.field_id and ranking.direction is receipt.direction
+                for ranking in plan.ranking
+            )
+        elif receipt.operation is ResolutionOperation.PROJECT:
+            admitted = receipt.field_id in plan.projection
+        else:
+            admitted = False
+        if not admitted:
+            raise PlanAuthorityError(
+                PlanAuthorityCode.ROUTE_MISMATCH,
+                "compiled plan does not contain the admitted semantic field",
+            )
 
     @staticmethod
     def _require_route_alignment(

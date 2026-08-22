@@ -690,6 +690,7 @@ def load_verified_schema_embedding_cpu_provider(
     snapshot_dir: Path,
     manifest_path: Path,
     trusted_cache_root: Path,
+    mode: ApprovalMode = "shadow",
     batch_size: int = 16,
     cpu_threads: int = 12,
 ) -> VerifiedSentenceTransformerCpuProvider:
@@ -701,7 +702,7 @@ def load_verified_schema_embedding_cpu_provider(
     """
 
     before = require_schema_embedding_artifact_gate(
-        mode="shadow",
+        mode=mode,
         alias=alias,
         snapshot_dir=snapshot_dir,
         manifest_path=manifest_path,
@@ -717,7 +718,7 @@ def load_verified_schema_embedding_cpu_provider(
         cache_dir=trusted_cache_root,
     )
     after = require_schema_embedding_artifact_gate(
-        mode="shadow",
+        mode=mode,
         alias=alias,
         snapshot_dir=snapshot_dir,
         manifest_path=manifest_path,

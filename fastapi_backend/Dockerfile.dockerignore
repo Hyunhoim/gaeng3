@@ -14,6 +14,7 @@ fastapi_backend/*
 !fastapi_backend/app/**
 !fastapi_backend/Dockerfile
 !fastapi_backend/requirements.txt
+!fastapi_backend/requirements.embedding.txt
 !fastapi_backend/start.sh
 **/__pycache__/
 **/*.py[cod]

@@ -20,6 +20,7 @@ from finance_agent_core.agent.semantic_gate import (
     SemanticCoverageDecision,
     SemanticCoverageGate,
 )
+from finance_agent_core.agent.semantic_ledger import build_resolved_span_ledger
 from finance_agent_core.config.capability import CapabilityMatrix, load_capability_matrix
 from finance_agent_core.contracts.queryplan import Intent, ProductFamily
 from finance_agent_core.contracts.routing import (
@@ -137,6 +138,37 @@ _LABELED_ID = re.compile(
     r"([A-Z0-9._:-]{2,30})",
     re.IGNORECASE,
 )
+_IDENTIFIER_LIKE = re.compile(
+    r"(?<![A-Z0-9])(?:KR[A-Z0-9]{4,30}|"
+    r"(?:[A-Z]{2,5}|[0-9]{3}):[A-Z0-9._-]{1,24}|"
+    r"[A-Z][A-Z0-9]{0,9}\.[A-Z0-9]{1,5})(?![A-Z0-9])",
+    re.IGNORECASE,
+)
+_IDENTIFIER_POSTPOSITIONS = (
+    "으로부터",
+    "에게서",
+    "으로는",
+    "에서는",
+    "으로",
+    "에서",
+    "에게",
+    "까지",
+    "부터",
+    "처럼",
+    "보다",
+    "의",
+    "은",
+    "는",
+    "이",
+    "가",
+    "을",
+    "를",
+    "와",
+    "과",
+    "에",
+    "로",
+    "도",
+)
 _CONTROL_FAMILY_PRIORITY = {
     ProductFamily.FUND: 0,
     ProductFamily.BOND: 1,
@@ -149,13 +181,64 @@ def _ordered_unique(values: Iterable[str]) -> list[str]:
     return list(dict.fromkeys(value.strip() for value in values if value.strip()))
 
 
+def _normalize_product_mention(value: str) -> str:
+    """Detach a Korean postposition only when the remaining token is a known ID form."""
+
+    stripped = value.strip()
+    for suffix in _IDENTIFIER_POSTPOSITIONS:
+        if stripped.endswith(suffix):
+            candidate = stripped[: -len(suffix)].strip()
+            if _KNOWN_ID.fullmatch(candidate) is not None:
+                return candidate
+    return stripped
+
+
 def _product_mentions(question: str) -> list[str]:
     mentions: list[tuple[int, str]] = []
     for pattern in _QUOTED:
         mentions.extend((match.start(), match.group(1)) for match in pattern.finditer(question))
     mentions.extend((match.start(), match.group(0)) for match in _KNOWN_ID.finditer(question))
     mentions.extend((match.start(), match.group(1)) for match in _LABELED_ID.finditer(question))
-    return _ordered_unique(value for _, value in sorted(mentions))
+    return _ordered_unique(_normalize_product_mention(value) for _, value in sorted(mentions))
+
+
+def _unresolved_identifier_spans(question: str, mentions: list[str]) -> list[str]:
+    """Find identifier-shaped spans that were not normalized into an exact identity."""
+
+    normalized_mentions = {mention.casefold() for mention in mentions}
+    residuals = []
+    for match in _IDENTIFIER_LIKE.finditer(question):
+        normalized = _normalize_product_mention(match.group(0))
+        if normalized.casefold() not in normalized_mentions:
+            residuals.append(match.group(0))
+    return _ordered_unique(residuals)
+
+
+def _bind_product_identity_intent(
+    intent: InteractionIntent,
+    mentions: list[str],
+) -> tuple[InteractionIntent, str | None]:
+    """Prevent an explicit product identity from being dropped by a broad route.
+
+    Korean postpositions are deliberately outside the identifier patterns, so
+    ``KR...의`` is already captured as the exact ``KR...`` identity.  A single
+    identity in an otherwise generic SEARCH is therefore an exact DETAIL, not
+    a request to search the whole family.  Multiple identities without an
+    explicit comparison, or an identity mixed into an aggregate, remain
+    ambiguous and cannot acquire SQL authority.
+    """
+
+    if not mentions:
+        return intent, None
+    if intent is InteractionIntent.SEARCH:
+        if len(mentions) == 1:
+            return InteractionIntent.DETAIL, None
+        return InteractionIntent.CLARIFY, "multiple_product_identities_unbound"
+    if intent is InteractionIntent.AGGREGATE:
+        return InteractionIntent.CLARIFY, "aggregate_product_identity_unbound"
+    if intent in {InteractionIntent.DETAIL, InteractionIntent.EXPLAIN} and len(mentions) != 1:
+        return InteractionIntent.CLARIFY, "multiple_product_identities_unbound"
+    return intent, None
 
 
 def _product_families(question: str) -> list[ProductFamily]:
@@ -328,12 +411,18 @@ class IntentRouter:
         semantic_coverage_gate: SemanticCoverageGate | None = None,
         planning_policy: PlanningPolicy | None = None,
         hclx_planning_enabled: bool = False,
+        adaptive_semantic_enabled: bool = False,
     ) -> None:
         if type(hclx_planning_enabled) is not bool:
             raise TypeError("hclx_planning_enabled must be a boolean")
+        if type(adaptive_semantic_enabled) is not bool:
+            raise TypeError("adaptive_semantic_enabled must be a boolean")
         self.matrix = matrix or load_capability_matrix()
         self.safety_envelope = safety_envelope or SafetyEnvelope()
-        self.semantic_coverage_gate = semantic_coverage_gate or SemanticCoverageGate()
+        self.semantic_coverage_gate = semantic_coverage_gate or SemanticCoverageGate(
+            schema_link_gaps_enabled=adaptive_semantic_enabled
+        )
+        self.adaptive_semantic_enabled = adaptive_semantic_enabled
         self._authority_planning_policy = AdaptiveShadowPlanningPolicy(
             hclx_planning_enabled=hclx_planning_enabled
         )
@@ -407,9 +496,16 @@ class IntentRouter:
             planning_decision = PlanningDecision.model_validate(candidate.model_dump(mode="python"))
             if planning_decision != authoritative:
                 raise ValueError("planning policy differs from adaptive-shadow-v1 authority")
+            semantic_ledger = build_resolved_span_ledger(
+                question=trusted_route.draft.question,
+                interaction_intent=trusted_route.draft.intent,
+                product_families=tuple(trusted_route.draft.product_families),
+                coverage=planning_coverage,
+            )
             trace = PlanningTrace(
                 route_decision=trusted_route,
                 planning_decision=planning_decision,
+                semantic_ledger=semantic_ledger,
             )
         except Exception:
             # A malformed or escalating policy result must not reach Compiler,
@@ -433,6 +529,7 @@ class IntentRouter:
             trace = PlanningTrace(
                 route_decision=trusted_route,
                 planning_decision=planning_decision,
+                semantic_ledger=None,
             )
         audit = current_request_audit()
         if audit is not None:
@@ -511,8 +608,18 @@ class IntentRouter:
                 # A broken metrics backend must not change the route decision.
                 pass
         families = _product_families(stripped)
-        intent = _intent(stripped, families)
         mentions = _product_mentions(stripped)
+        identifier_residuals = _unresolved_identifier_spans(stripped, mentions)
+        lexical_intent = _intent(stripped, families)
+        intent, identity_control = _bind_product_identity_intent(
+            lexical_intent,
+            mentions,
+        )
+        coverage_intent = (
+            intent
+            if mentions and all(_KNOWN_ID.fullmatch(mention) is not None for mention in mentions)
+            else lexical_intent
+        )
         requested_limit = _requested_limit(stripped)
         if audit is not None:
             audit.emit(
@@ -525,7 +632,7 @@ class IntentRouter:
         cross_family_control = len(families) > 1 and intent is not InteractionIntent.SEARCH
         coverage = self.semantic_coverage_gate.evaluate(
             stripped,
-            interaction_intent=intent.value,
+            interaction_intent=coverage_intent.value,
             check_exclusions=False,
         )
         if safety.disposition is SafetyDisposition.UNSUPPORTED or coverage.unsupported_spans:
@@ -586,6 +693,16 @@ class IntentRouter:
                 ),
                 coverage,
             )
+        if identifier_residuals:
+            return self._planning_trace(
+                self._control(
+                    draft.model_copy(update={"intent": InteractionIntent.CLARIFY}),
+                    RouteDisposition.CLARIFY,
+                    "unresolved_product_identity_span",
+                    "상품 식별자처럼 보이는 표현을 정확한 상품코드로 확정할 수 없음",
+                ),
+                coverage,
+            )
         if not families and _FINANCE_SCOPE_SIGNAL.search(stripped) is None:
             return self._planning_trace(
                 self._control(
@@ -607,6 +724,19 @@ class IntentRouter:
                 coverage,
             )
         if intent is InteractionIntent.CLARIFY:
+            if identity_control is not None:
+                return self._planning_trace(
+                    self._control(
+                        draft,
+                        RouteDisposition.CLARIFY,
+                        identity_control,
+                        (
+                            "상품 식별자가 다른 조건과 함께 남아 있어 실행 범위를 "
+                            "하나로 확정할 수 없음"
+                        ),
+                    ),
+                    coverage,
+                )
             return self._planning_trace(
                 self._control(
                     draft,
@@ -670,7 +800,7 @@ class IntentRouter:
                 ),
                 coverage,
             )
-        if intent in {InteractionIntent.DETAIL, InteractionIntent.EXPLAIN} and not mentions:
+        if intent in {InteractionIntent.DETAIL, InteractionIntent.EXPLAIN} and len(mentions) != 1:
             return self._planning_trace(
                 self._control(
                     draft,

@@ -50,6 +50,7 @@ finance-run-coverage-campaign = "finance_agent_core.evaluation.coverage_campaign
 finance-render-coverage-report = "finance_agent_core.evaluation.coverage_report_cli:main"
 finance-evaluate-safety-blind = "finance_agent_core.evaluation.safety_blind_cli:main"
 finance-evaluate-dense-schema-linker = "finance_agent_core.evaluation.dense_schema_linker_cli:main"
+finance-build-schema-dense-index = "finance_agent_core.retrieval.schema_dense_cli:main"
 finance-benchmark-schema-embeddings = "finance_agent_core.evaluation.schema_embedding_benchmark_cli:main"
 finance-analyze-schema-embeddings = "finance_agent_core.evaluation.schema_embedding_analysis_cli:main"
 finance-evaluate-schema-embedding-external-v2 = "finance_agent_core.evaluation.schema_embedding_external_v2_cli:main"

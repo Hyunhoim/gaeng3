@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from enum import StrEnum
 from typing import Annotated, Literal, Protocol
 
@@ -13,6 +14,7 @@ from pydantic import (
 )
 
 from finance_agent_core.agent.semantic_gate import SemanticCoverageDecision
+from finance_agent_core.agent.semantic_resolution import ResolvedSpanLedger
 from finance_agent_core.contracts.queryplan import ProductFamily
 from finance_agent_core.contracts.routing import RouteDecision, RouteDisposition
 
@@ -189,11 +191,23 @@ class PlanningTrace(PlanningModel):
 
     route_decision: RouteDecision
     planning_decision: PlanningDecision
+    semantic_ledger: ResolvedSpanLedger | None = None
 
     @model_validator(mode="after")
     def validate_route_alignment(self) -> PlanningTrace:
         planning = self.planning_decision
         route = self.route_decision
+        if self.semantic_ledger is not None:
+            ledger = self.semantic_ledger
+            if ledger.product_families != tuple(route.draft.product_families):
+                raise ValueError("semantic ledger and route product families differ")
+            if ledger.interaction_intent is not route.draft.intent:
+                raise ValueError("semantic ledger and route interaction intents differ")
+            expected_question_sha256 = hashlib.sha256(
+                route.draft.question.encode("utf-8")
+            ).hexdigest()
+            if ledger.question_sha256 != expected_question_sha256:
+                raise ValueError("semantic ledger and route questions differ")
         if planning.route_reason_code != route.reason_code:
             raise ValueError("planning and route reason codes differ")
         if planning.product_families != tuple(route.draft.product_families):

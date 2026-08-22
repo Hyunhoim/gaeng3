@@ -284,6 +284,7 @@ class AuditEvent(ObservabilityModel):
         plan_bundle_sha256: str | None = None,
         dataset_bundle_sha256: str | None = None,
         model_revision: str | None = None,
+        model_revision_sha256: str | None = None,
         model_snapshot_manifest_sha256: str | None = None,
         index_manifest_sha256: str | None = None,
         relation_set_sha256: str | None = None,
@@ -301,6 +302,17 @@ class AuditEvent(ObservabilityModel):
             raise ValueError(
                 "invocation_id must be a non-empty server identifier up to 128 characters"
             )
+        if model_revision is not None and model_revision_sha256 is not None:
+            raise ValueError("model revision must use either raw or pre-hashed linkage")
+        if (
+            model_revision_sha256 is not None
+            and re.fullmatch(
+                _SHA256_PATTERN,
+                model_revision_sha256,
+            )
+            is None
+        ):
+            raise ValueError("pre-hashed model revision linkage must be SHA-256")
         return cls(
             observed_at_utc=observed_at_utc or datetime.now(UTC),
             stage=stage,
@@ -331,7 +343,9 @@ class AuditEvent(ObservabilityModel):
             plan_bundle_sha256=plan_bundle_sha256,
             dataset_bundle_sha256=dataset_bundle_sha256,
             model_revision_sha256=(
-                sha256_text(model_revision) if model_revision is not None else None
+                model_revision_sha256
+                if model_revision_sha256 is not None
+                else (sha256_text(model_revision) if model_revision is not None else None)
             ),
             model_snapshot_manifest_sha256=model_snapshot_manifest_sha256,
             index_manifest_sha256=index_manifest_sha256,

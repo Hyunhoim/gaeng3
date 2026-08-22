@@ -99,6 +99,24 @@ def test_release_compose_requires_digest_binding_and_disabled_dense() -> None:
     assert "target: /raw" not in compose
 
 
+def test_adaptive_release_overlay_is_explicit_and_read_only() -> None:
+    overlay = (_repository_root() / "fastapi_backend" / "docker-compose.adaptive.yml").read_text(
+        encoding="utf-8"
+    )
+
+    assert 'FINANCE_ADAPTIVE_SEMANTIC_ENABLED: "true"' in overlay
+    assert 'FINANCE_DENSE_SCHEMA_LINKER_ENABLED: "true"' in overlay
+    assert 'FINANCE_PRODUCT_DENSE_ENABLED: "false"' in overlay
+    assert (
+        "FINANCE_SCHEMA_DENSE_INDEX_SHA256: ${FINANCE_SCHEMA_DENSE_INDEX_SHA256:?required}"
+    ) in overlay
+    assert "FINANCE_SCHEMA_DENSE_CALIBRATION_REPORT_SHA256:" in overlay
+    assert "d14c8a9423946e268a0c9952fecf3a7aabd73bd9" in overlay
+    assert overlay.count("read_only: true") == 3
+    assert overlay.count("create_host_path: false") == 3
+    assert 'FINANCE_PRODUCT_DENSE_ENABLED: "true"' not in overlay
+
+
 @pytest.mark.skipif(shutil.which("docker") is None, reason="Docker Compose CLI is unavailable")
 def test_release_compose_renders_only_explicit_relation_trust_source() -> None:
     root = _repository_root()

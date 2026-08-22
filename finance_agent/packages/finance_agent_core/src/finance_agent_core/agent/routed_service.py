@@ -12,6 +12,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from finance_agent_core.agent.adaptive_semantic import AdaptiveSemanticResolver
 from finance_agent_core.agent.compiler import (
     CompiledFamilySearch,
     PlanCompilationBlockedError,
@@ -356,6 +357,7 @@ class RoutedFinanceAgent:
         require_agent_release: bool = False,
         record_cache: RecordSnapshotCache | None = None,
         identity_cache: ProductIdentitySnapshotCache | None = None,
+        adaptive_semantic_resolver: AdaptiveSemanticResolver | None = None,
         schema_link_shadow_observer: SchemaLinkShadowObserver | None = None,
         audit_sink: BoundedAsyncAuditSink | None = None,
         knowledge_router: DeterministicKnowledgeRouter | None = None,
@@ -374,7 +376,10 @@ class RoutedFinanceAgent:
             max_entries=max(1, len(self.database_paths))
         )
         self.hclx_planning_enabled = hclx_planning_enabled
-        self.router = router or IntentRouter(hclx_planning_enabled=hclx_planning_enabled)
+        self.router = router or IntentRouter(
+            hclx_planning_enabled=hclx_planning_enabled,
+            adaptive_semantic_enabled=adaptive_semantic_resolver is not None,
+        )
         self.query_plan_provider = query_plan_provider
         self.grounded_plan_provider = grounded_plan_provider
         self.compiler = ServerQueryPlanCompiler(
@@ -387,6 +392,14 @@ class RoutedFinanceAgent:
             identity_cache=self.identity_cache,
         )
         self.answer_provider = answer_provider
+        if (
+            adaptive_semantic_resolver is not None
+            and type(adaptive_semantic_resolver) is not AdaptiveSemanticResolver
+        ):
+            raise TypeError("adaptive_semantic_resolver must be the approved server resolver")
+        self.adaptive_semantic_resolver = adaptive_semantic_resolver
+        if adaptive_semantic_resolver is not None and not self.router.adaptive_semantic_enabled:
+            raise ValueError("adaptive semantic resolver requires an explicitly enabled router")
         if (
             knowledge_router is not None
             and type(knowledge_router) is not DeterministicKnowledgeRouter
@@ -1332,7 +1345,7 @@ class RoutedFinanceAgent:
                     **self._decision_audit_fields(decision),
                 )
                 route_emitted = True
-            return self._answer_from_decision(decision, planning_decision)
+            return self._answer_from_decision(decision, planning_decision, trace)
         except Exception as error:  # noqa: BLE001 - private atomic error transport
             if audit is not None and not route_emitted:
                 audit.emit(
@@ -1350,9 +1363,73 @@ class RoutedFinanceAgent:
         self,
         decision: RouteDecision,
         planning_decision: PlanningDecision,
+        trace: PlanningTrace,
     ) -> RoutedAgentResult:
         question = decision.draft.question
         request_id = decision.draft.request_id
+        semantic_plan: QueryPlan | None = None
+        semantic_planning_decision: BaseModel | None = None
+        semantic_authority_receipts: tuple[BaseModel, ...] = ()
+        if (
+            planning_decision.path is PlanningPath.SCHEMA_LINK_SHADOW
+            and self.adaptive_semantic_resolver is not None
+        ):
+            semantic_started = perf_counter()
+            outcome = self.adaptive_semantic_resolver.resolve(trace)
+            if outcome.dense_attempted:
+                self._increment_audit_metric(MetricCounter.DENSE_CALLS)
+            if outcome.hclx_attempted:
+                self._increment_audit_metric(MetricCounter.HCLX_CALLS)
+            semantic_audit = current_request_audit()
+            if semantic_audit is not None and outcome.dense_attempted:
+                semantic_audit.emit(
+                    stage=AuditStage.DENSE,
+                    outcome={
+                        "resolved": AuditOutcome.SUCCEEDED,
+                        "clarify": AuditOutcome.CLARIFIED,
+                        "unsupported": AuditOutcome.UNSUPPORTED,
+                    }[outcome.status],
+                    reason_code=outcome.reason_code,
+                    duration_ms=(perf_counter() - semantic_started) * 1000,
+                    route_disposition=decision.disposition,
+                    interaction_intent=decision.draft.intent,
+                    product_families=decision.draft.product_families,
+                    candidate_count=outcome.candidate_count,
+                    index_manifest_sha256=outcome.index_manifest_sha256,
+                    model_revision_sha256=outcome.model_revision_sha256,
+                    model_snapshot_manifest_sha256=(outcome.model_snapshot_manifest_sha256),
+                )
+            if outcome.status != "resolved":
+                disposition = (
+                    RouteDisposition.UNSUPPORTED
+                    if outcome.status == "unsupported"
+                    else RouteDisposition.CLARIFY
+                )
+                return self._control_result(
+                    decision,
+                    disposition=disposition,
+                    reason=(
+                        "제공 데이터의 필드로 지원할 수 없는 의미입니다."
+                        if disposition is RouteDisposition.UNSUPPORTED
+                        else "의미가 모호한 조건의 데이터 필드를 하나로 확정해 주세요."
+                    ),
+                )
+            assert outcome.hard_filter_lock is not None
+            assert outcome.receipt is not None
+            try:
+                semantic_plan = self.compiler.compile_with_semantic_resolution(
+                    decision,
+                    hard_filter_lock=outcome.hard_filter_lock,
+                    receipts=(outcome.receipt,),
+                )
+                semantic_planning_decision = outcome.planning_decision
+                semantic_authority_receipts = (outcome.receipt,)
+            except PlanCompilationBlockedError as error:
+                return self._control_result(
+                    decision,
+                    disposition=RouteDisposition.CLARIFY,
+                    reason=str(error),
+                )
         if (
             decision.disposition is RouteDisposition.EXECUTE
             and ProductFamily.FUND in decision.draft.product_families
@@ -1373,10 +1450,14 @@ class RoutedFinanceAgent:
         audit = current_request_audit()
         compiler_started = perf_counter()
         try:
-            compiled = self._compile_with_optional_grounded_plan(
-                question,
-                decision,
-                planning_decision,
+            compiled = (
+                (decision, semantic_plan, False)
+                if semantic_plan is not None
+                else self._compile_with_optional_grounded_plan(
+                    question,
+                    decision,
+                    planning_decision,
+                )
             )
         except PlanCompilationBlockedError as error:
             if audit is not None and decision.disposition is RouteDisposition.EXECUTE:
@@ -1518,7 +1599,8 @@ class RoutedFinanceAgent:
             validated_plan = self.plan_authority_gate.validate_routed(
                 plan,
                 decision,
-                planning_decision=planning_decision,
+                planning_decision=(semantic_planning_decision or planning_decision),
+                semantic_receipts=semantic_authority_receipts,
                 compiler_kind=(
                     PlanCompilerKind.GROUNDED_PLAN_GATE
                     if used_grounded_plan

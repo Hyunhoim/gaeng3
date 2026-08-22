@@ -293,9 +293,48 @@ def test_development_settings_still_allow_multiple_web_workers() -> None:
 
 
 @pytest.mark.parametrize(
-    "flag",
-    ["FINANCE_DENSE_SCHEMA_LINKER_ENABLED", "FINANCE_PRODUCT_DENSE_ENABLED"],
+    ("flag", "message"),
+    [
+        (
+            "FINANCE_DENSE_SCHEMA_LINKER_ENABLED",
+            "Schema Dense artifacts cannot be configured while adaptive semantics is off",
+        ),
+        (
+            "FINANCE_PRODUCT_DENSE_ENABLED",
+            "Product Dense remains disabled in the evaluation runtime",
+        ),
+    ],
 )
-def test_deployment_settings_keep_unapproved_dense_modules_off(flag: str) -> None:
-    with pytest.raises(ValidationError, match="Dense retrieval remains disabled"):
+def test_deployment_settings_reject_partial_or_product_dense(
+    flag: str,
+    message: str,
+) -> None:
+    with pytest.raises(ValidationError, match=message):
         Settings(APP_ENV="production", **{flag: True})
+
+
+def test_deployment_settings_accept_only_complete_adaptive_semantic_profile() -> None:
+    settings = Settings(
+        _env_file=None,
+        APP_ENV="evaluation",
+        FINANCE_BACKEND_ANSWER_PROVIDER="hyperclova",
+        FINANCE_BACKEND_HCX_SEMANTIC_RESOLVER_ENABLED=True,
+        FINANCE_AGENT_LLM_MODE="evaluation",
+        LLM_PROVIDER="hyperclova",
+        HCX_MODEL="HCX-007",
+        CLOVASTUDIO_API_KEY_FILE="/run/secrets/hcx-key",
+        FINANCE_ADAPTIVE_SEMANTIC_ENABLED=True,
+        FINANCE_DENSE_SCHEMA_LINKER_ENABLED=True,
+        FINANCE_SCHEMA_DENSE_INDEX_FILE="/models/schema-index.json",
+        FINANCE_SCHEMA_DENSE_INDEX_SHA256="a" * 64,
+        FINANCE_SCHEMA_DENSE_CALIBRATION_REPORT_SHA256="b" * 64,
+        FINANCE_SCHEMA_DENSE_MIN_SCORE=0.7,
+        FINANCE_SCHEMA_DENSE_HCLX_CANDIDATE_MIN_SCORE=0.4,
+        FINANCE_SCHEMA_DENSE_MINIMUM_MARGIN=0.08,
+        FINANCE_KURE_SNAPSHOT_DIR="/models/kure/snapshot",
+        FINANCE_KURE_SNAPSHOT_MANIFEST_FILE="/models/kure-manifest.json",
+        FINANCE_KURE_TRUSTED_CACHE_ROOT="/models/kure",
+    )
+
+    assert settings.adaptive_semantic_enabled is True
+    assert settings.uses_hyperclova is True
