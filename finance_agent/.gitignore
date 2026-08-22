@@ -5,6 +5,21 @@
 data/raw/
 data/processed/
 artifacts/
+!artifacts/
+artifacts/*
+!artifacts/evaluation/
+artifacts/evaluation/*
+!artifacts/evaluation/kure-internal-codex-calibration-v1.summary.json
+!artifacts/evaluation/schema-embedding/
+artifacts/evaluation/schema-embedding/*
+!artifacts/evaluation/schema-embedding/snapshot-manifests/
+artifacts/evaluation/schema-embedding/snapshot-manifests/*
+!artifacts/evaluation/schema-embedding/snapshot-manifests/kure-v1-d14c8a9423946e268a0c9952fecf3a7aabd73bd9-snapshot-v2.json
+!artifacts/runtime/
+artifacts/runtime/*
+!artifacts/runtime/schema-dense/
+artifacts/runtime/schema-dense/*
+!artifacts/runtime/schema-dense/kure-schema-dense-production-v1.json
 
 # Local research material pending redistribution review
 docs/research/**/audit-bundle/

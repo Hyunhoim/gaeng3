@@ -54,8 +54,24 @@ def _valid_input_arguments(output: Path) -> list[str]:
         "hyperclova",
         "--hcx-queryplan-enabled",
         "false",
+        "--hcx-semantic-resolver-enabled",
+        "true",
+        "--adaptive-semantic-enabled",
+        "true",
         "--fund-execution-policy",
         "public_fund_v1_approved",
+        "--schema-dense-index-sha256",
+        "9463ce21d14341e3dca0e44bc5ca3e2e085309ef81513a3802e175fa198de306",
+        "--schema-dense-calibration-report-sha256",
+        "b6cd6e1c4c371929306499ec4efaba8b9a29934ec40d6d300ad8a9d2d93c4d60",
+        "--schema-dense-min-score",
+        "1.0",
+        "--schema-dense-hclx-candidate-min-score",
+        "0.361907478",
+        "--schema-dense-minimum-margin",
+        "2.0",
+        "--schema-dense-top-k",
+        "10",
         "--python-base-image",
         "docker.io/library/python@sha256:" + "a" * 64,
         "--source-commit",
@@ -138,35 +154,52 @@ def test_release_ci_accepts_only_normalized_protected_main_inputs(tmp_path: Path
     assert values["rollback_mode"] == "initial_bootstrap"
     assert values["answer_provider"] == "hyperclova"
     assert values["hcx_queryplan_enabled"] == "false"
+    assert values["hcx_semantic_resolver_enabled"] == "true"
+    assert values["adaptive_semantic_enabled"] == "true"
     assert values["fund_execution_policy"] == "public_fund_v1_approved"
+    assert values["schema_dense_index_sha256"] == (
+        "9463ce21d14341e3dca0e44bc5ca3e2e085309ef81513a3802e175fa198de306"
+    )
+    assert values["schema_dense_calibration_report_sha256"] == (
+        "b6cd6e1c4c371929306499ec4efaba8b9a29934ec40d6d300ad8a9d2d93c4d60"
+    )
+    assert values["schema_dense_min_score"] == "1.0"
+    assert values["schema_dense_hclx_candidate_min_score"] == "0.361907478"
+    assert values["schema_dense_minimum_margin"] == "2.0"
+    assert values["schema_dense_top_k"] == "10"
     assert values["model_id"] == "HCX-007"
 
 
 @pytest.mark.parametrize(
-    ("answer_provider", "hcx_queryplan_enabled", "fund_execution_policy"),
+    ("option", "value"),
     [
-        ("deterministic", "false", "public_fund_v1_approved"),
-        ("hyperclova", "true", "public_fund_v1_approved"),
-        ("hyperclova", "false", "locked"),
+        ("--answer-provider", "deterministic"),
+        ("--hcx-queryplan-enabled", "true"),
+        ("--hcx-semantic-resolver-enabled", "false"),
+        ("--adaptive-semantic-enabled", "false"),
+        ("--fund-execution-policy", "locked"),
+        ("--schema-dense-index-sha256", "a" * 64),
+        ("--schema-dense-calibration-report-sha256", "b" * 64),
+        ("--schema-dense-min-score", "0.9"),
+        ("--schema-dense-hclx-candidate-min-score", "0.3"),
+        ("--schema-dense-minimum-margin", "0.1"),
+        ("--schema-dense-top-k", "5"),
     ],
 )
 def test_release_ci_rejects_profiles_outside_the_frozen_final_boundary(
     tmp_path: Path,
-    answer_provider: str,
-    hcx_queryplan_enabled: str,
-    fund_execution_policy: str,
+    option: str,
+    value: str,
 ) -> None:
     output = tmp_path / "github-output"
     output.touch()
     arguments = _valid_input_arguments(output)
-    arguments[arguments.index("--answer-provider") + 1] = answer_provider
-    arguments[arguments.index("--hcx-queryplan-enabled") + 1] = hcx_queryplan_enabled
-    arguments[arguments.index("--fund-execution-policy") + 1] = fund_execution_policy
+    arguments[arguments.index(option) + 1] = value
 
     completed = _run(*arguments)
 
     assert completed.returncode != 0
-    assert "approved public-fund v1" in completed.stderr
+    assert "exact KURE candidate-only policy" in completed.stderr
     assert output.read_text(encoding="utf-8") == ""
 
 
@@ -757,6 +790,44 @@ def test_release_workflow_materializes_and_binds_the_approved_relation_artifact(
     )
 
 
+def test_release_workflow_binds_exact_adaptive_runtime_artifacts() -> None:
+    workflow_path = _repository_root() / ".github" / "workflows" / "immutable-ncp-release.yml"
+    workflow = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
+    release = workflow["jobs"]["release"]
+    steps = release["steps"]
+    adaptive_step = next(step for step in steps if step.get("id") == "adaptive_artifacts")
+    manifest_step = next(
+        step
+        for step in steps
+        if step.get("name") == "Create AgentReleaseManifest from the clean checkout"
+    )
+    base_build = next(step for step in steps if step.get("id") == "base_build")
+    evidence_step = next(
+        step for step in steps if step.get("name") == "Record non-secret release evidence"
+    )
+    upload_step = next(
+        step for step in steps if step.get("name") == "Upload non-secret immutable release evidence"
+    )
+
+    assert release["env"]["FINAL_HCX_SEMANTIC_RESOLVER_ENABLED"] == "true"
+    assert release["env"]["FINAL_ADAPTIVE_SEMANTIC_ENABLED"] == "true"
+    assert release["env"]["FINAL_SCHEMA_DENSE_MIN_SCORE"] == "1.0"
+    assert release["env"]["FINAL_SCHEMA_DENSE_MINIMUM_MARGIN"] == "2.0"
+    assert base_build["with"]["target"] == "adaptive-runtime"
+    assert steps.index(adaptive_step) < steps.index(base_build)
+    assert "sha256sum" in adaptive_step["run"]
+    assert "install -m 0444" in adaptive_step["run"]
+    assert '--schema-dense-index "$SCHEMA_DENSE_INDEX"' in manifest_step["run"]
+    assert "--schema-dense-calibration-report-sha256" in manifest_step["run"]
+    for artifact_name in (
+        "schema-dense-index.json",
+        "schema-dense-calibration-report.json",
+        "kure-snapshot-manifest.json",
+    ):
+        assert artifact_name in evidence_step["run"]
+        assert artifact_name in upload_step["with"]["path"]
+
+
 def test_release_workflow_has_a_commit_pinned_keyless_trust_boundary() -> None:
     workflow_path = _repository_root() / ".github" / "workflows" / "immutable-ncp-release.yml"
     text = workflow_path.read_text(encoding="utf-8")
@@ -801,6 +872,8 @@ def test_release_workflow_has_a_commit_pinned_keyless_trust_boundary() -> None:
     assert "fund_execution_policy" not in dispatch_inputs
     assert release["env"]["FINAL_ANSWER_PROVIDER"] == "hyperclova"
     assert release["env"]["FINAL_HCX_QUERYPLAN_ENABLED"] == "false"
+    assert release["env"]["FINAL_HCX_SEMANTIC_RESOLVER_ENABLED"] == "true"
+    assert release["env"]["FINAL_ADAPTIVE_SEMANTIC_ENABLED"] == "true"
     assert release["env"]["FINAL_FUND_EXECUTION_POLICY"] == "public_fund_v1_approved"
     assert "check-submission-boundary.py" in text
     assert "--profile development" in text
