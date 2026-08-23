@@ -460,10 +460,8 @@ def test_relation_wiring_preserves_existing_product_intents(
         "미국에 투자하는 국내 ETF 중 위험등급 2등급 이하 상품을 보여줘",
         "미국에 투자하는 국내 ETF 중 판매 가능한 상품을 보여줘",
         "테스트운용이 운용하는 매수 가능한 국내 ETF를 보여줘",
-        "미국에 투자하는 국내 ETF 중 거래 정지 상품은 제외해줘",
         "미국에 투자하는 국내 ETF 중 테스트운용 상품은 제외해줘",
         "미국에 투자하는 국내 ETF 중 거래량 100만 이상을 보여줘",
-        "미국에 투자하는 국내 ETF를 거래대금 많은 순으로 보여줘",
     ],
 )
 def test_relation_mixed_conditions_stop_before_any_execution(
@@ -500,6 +498,63 @@ def test_relation_mixed_conditions_stop_before_any_execution(
     assert result.response.comparisons == []
     assert result.response.aggregates == []
     assert result.response.citations == []
+
+
+@pytest.mark.parametrize(
+    ("question", "field", "expected_value"),
+    [
+        (
+            "미국에 투자하는 국내 ETF 중 거래 정지 상품은 제외해줘",
+            "trading_suspended",
+            False,
+        ),
+        (
+            "미국에 투자하는 국내 ETF를 거래대금 많은 순으로 보여줘",
+            "daily_trading_value",
+            "desc",
+        ),
+    ],
+)
+def test_relation_surface_with_supported_product_conditions_uses_product_sql(
+    relation_agent_factory,
+    monkeypatch: pytest.MonkeyPatch,
+    question: str,
+    field: str,
+    expected_value: object,
+) -> None:
+    create, _, _, product_database = relation_agent_factory
+    service = RoutedFinanceAgent(
+        {ProductFamily.DOMESTIC_ETP: product_database},
+        knowledge_router=DeterministicKnowledgeRouter(),
+        knowledge_agent=create(),
+    )
+
+    def unexpected_relation_execution(*args: object, **kwargs: object) -> None:
+        raise AssertionError("supported product conditions entered the relation executor")
+
+    monkeypatch.setattr(KnowledgeAgent, "execute", unexpected_relation_execution)
+    result = execute_answer_request(
+        service,
+        BackendAgentRequest(request_id="mixed-product-search", question=question),
+    )
+
+    assert result.http_status_code == 200
+    assert result.response.status is BackendStatus.SUCCESS
+    assert result.response.query_plan is not None
+    assert any(
+        item.field == "investment_region" and item.value == "미국"
+        for item in result.response.query_plan.constraints
+    )
+    if field == "trading_suspended":
+        assert any(
+            item.field == field and item.value is expected_value
+            for item in result.response.query_plan.constraints
+        )
+    else:
+        assert any(
+            item.field == field and item.direction.value == expected_value
+            for item in result.response.query_plan.ranking
+        )
 
 
 class _ReleaseGuardProbe:

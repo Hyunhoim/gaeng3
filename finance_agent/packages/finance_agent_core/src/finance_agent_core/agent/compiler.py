@@ -20,6 +20,10 @@ from finance_agent_core.agent.product_comparison import (
     compile_product_comparison_plan,
     resolve_exact_product_ids,
 )
+from finance_agent_core.agent.semantic_aliases import (
+    explicit_product_name_order,
+    ranking_intent_present,
+)
 from finance_agent_core.agent.semantic_resolution import (
     HardFilterLock,
     ResolutionOperation,
@@ -183,6 +187,19 @@ class ServerQueryPlanCompiler:
         plan = QueryPlan.model_validate(payload)
         if plan.product_families != [family]:
             raise PlanCompilationBlockedError("compiler changed the routed product family")
+        if decision.draft.intent is InteractionIntent.SEARCH and ranking_intent_present(
+            decision.draft.question
+        ):
+            if not plan.ranking:
+                raise PlanCompilationBlockedError(
+                    "ranking 표현이 있지만 정렬 기준 field를 하나로 확정하지 못했습니다."
+                )
+            if all(
+                item.field in {"product_name", "short_name", "ticker"} for item in plan.ranking
+            ) and not explicit_product_name_order(decision.draft.question):
+                raise PlanCompilationBlockedError(
+                    "ranking 표현을 상품명 정렬로 대체할 수 없습니다."
+                )
         return plan
 
     def compile_with_semantic_resolution(

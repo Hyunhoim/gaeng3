@@ -39,6 +39,7 @@ def test_lexical_hints_preserve_explicit_status_and_sort() -> None:
         },
         {"field": "trading_suspended", "operator": "eq", "value": False},
         {"field": "sellable", "operator": "eq", "value": True},
+        {"field": "trading_currency", "operator": "eq", "value": "USD"},
     ]
     assert hints["required_rankings"] == [{"field": "aum", "direction": "desc", "nulls": "last"}]
 
@@ -473,7 +474,7 @@ def test_bond_invalid_credit_rating_is_blocked_instead_of_silently_dropped() -> 
     assert not any(item["field"] == "credit_rating" for item in linked["constraints"])
 
 
-def test_fund_development_linker_matches_all_frozen_plans() -> None:
+def test_fund_development_linker_matches_frozen_plans_or_documented_migration() -> None:
     suite = load_core_evaluation_suite("fund").suite
     development = [case for case in suite.cases if case.split.value == "development"]
 
@@ -483,6 +484,21 @@ def test_fund_development_linker_matches_all_frozen_plans() -> None:
             first_vertical_slice_plan(case.id).model_dump(mode="json"),
         )
         plan = QueryPlan.model_validate(payload)
+        if case.id == "fund-007":
+            # Policy migration: "국내에 투자" describes the investment-region
+            # source field, not the broader domestic/overseas fund scope.
+            assert {(item.field, item.operator.value, item.value) for item in plan.constraints} == {
+                ("public_offering", "eq", True),
+                ("investment_region", "eq", "국내"),
+                ("trading_currency", "eq", "KRW"),
+            }
+            assert [(item.field, item.direction.value) for item in plan.ranking] == [
+                ("aum", "desc")
+            ]
+            assert plan.limit == 5
+            assert not plan.ambiguities
+            assert not plan.unsupported_conditions
+            continue
         checks = semantic_checks(case, plan, "fund")
         assert checks["plan_exact"], (
             case.id,

@@ -6,6 +6,12 @@ from decimal import Decimal
 from typing import Any
 
 from finance_agent_core.agent.safety import normalize_user_question
+from finance_agent_core.agent.semantic_aliases import (
+    explicit_product_name_order,
+    rank_alias_matches,
+    ranking_cue_spans,
+    ranking_intent_present,
+)
 from finance_agent_core.agent.semantic_gate import SemanticCoverageGate
 from finance_agent_core.config import load_field_registry
 from finance_agent_core.contracts import QueryPlan
@@ -392,6 +398,13 @@ def build_lexical_hints(
         if re.search(r"^국내\s+(?:채권형|혼합자산형)", question):
             add("investment_region", "국내")
     elif family == "fund":
+        domestic_investment = re.search(
+            r"국내(?:에|로)?\s*투자",
+            question,
+            flags=re.IGNORECASE,
+        )
+        if domestic_investment is not None:
+            add("investment_region", "국내")
         phrase_mappings = [
             ("국내외 혼합", "fund_geography_scope", "국내외혼합"),
             ("국내외혼합", "fund_geography_scope", "국내외혼합"),
@@ -456,12 +469,16 @@ def build_lexical_hints(
             ("달러", "trading_currency", "USD"),
             ("USD", "trading_currency", "USD"),
         ]
+        if re.search(r"글로벌\s*투자", question, flags=re.IGNORECASE):
+            add("investment_region", "Global")
     for phrase, field, value in phrase_mappings:
         if phrase not in question:
             continue
         if phrase == "미국" and "미국 제외 글로벌" in question:
             continue
         if family == "fund" and phrase == "국내" and "국내외" in question:
+            continue
+        if family == "fund" and phrase == "국내" and domestic_investment is not None:
             continue
         if negated_phrase := _negated_literal_span(question, phrase):
             semantic_ambiguity_spans.append(negated_phrase)
@@ -480,10 +497,11 @@ def build_lexical_hints(
         add("sellable", True)
         add("trading_suspended", False)
     negated_trading_suspension = re.search(
-        r"거래\s*(?:중지|정지)(?:가|는|이)?\s*"
+        r"거래(?:가|는|이)?\s*(?:중지|정지)(?:가|는|이)?\s*"
         r"(?:되지\s*않|아니|아닌|아님)|"
         r"거래\s*(?:중지|정지)(?:된|인)?\s*(?:상품|것)?"
-        r"(?:은|는|을|를)?\s*(?:제외(?:하고|한|해)?|빼고|말고)",
+        r"(?:은|는|을|를)?\s*(?:제외(?:하고|한|해)?|빼고|말고)|"
+        r"거래(?:가|는|이)?\s*멈추지\s*않",
         question,
     )
     if etp_family and negated_trading_suspension is not None:
@@ -503,7 +521,8 @@ def build_lexical_hints(
         and negated_trading_suspension is None
         and re.search(
             r"거래(?:가)?\s*(?:중지|정지)"
-            r"(?!\s*(?:가\s*)?(?:아니|아닌|아님))(?:된|됨| 상태)?",
+            r"(?!\s*(?:(?:가\s*)?(?:아니|아닌|아님)|되지\s*않))"
+            r"(?:된|됨| 상태)?",
             question,
         )
     ):
@@ -701,8 +720,11 @@ def build_lexical_hints(
                 "eq",
             ),
             (
-                r"신용등급(?:이|은)?\s*(AAA|AA\+|AA0|AA-|A\+|A0|A-|BBB\+|BBB0|BBB-|"
-                r"BB\+|BB0|BB-|B\+|B0|B-|CCC|CC0|C0|C)(?:인|$|\s)",
+                r"(?:신용\s*등급(?:이|은)?\s*"
+                r"(AAA|AA\+|AA0|AA-|A\+|A0|A-|BBB\+|BBB0|BBB-|"
+                r"BB\+|BB0|BB-|B\+|B0|B-|CCC|CC0|C0|C)(?:인|$|\s)|"
+                r"(?<![A-Z])(AAA|AA\+|AA0|AA-|A\+|A0|A-|BBB\+|BBB0|BBB-|"
+                r"BB\+|BB0|BB-|B\+|B0|B-|CCC|CC0|C0|C)\s*등급)",
                 "credit_rating",
                 "eq",
             ),
@@ -710,7 +732,7 @@ def build_lexical_hints(
         for pattern, field, operator in lookup_patterns:
             match = re.search(pattern, question)
             if match:
-                value = match.group(1).strip()
+                value = next(group for group in match.groups() if group is not None).strip()
                 if negated_value := _negated_literal_span(question, value):
                     semantic_ambiguity_spans.append(negated_value)
                 else:
@@ -1039,6 +1061,12 @@ def build_lexical_hints(
                 ),
             ]
         )
+    alias_matches = rank_alias_matches(question, family)
+    alias_keys = {(item.field_id, item.direction.value) for item in alias_matches}
+    alias_resolution = alias_matches[0] if len(alias_keys) == 1 else None
+    if len(alias_keys) > 1:
+        semantic_ambiguity_spans.extend(item.text for item in alias_matches)
+
     ranking_field: str | None = None
     ranking_match: re.Match[str] | None = None
     for pattern, field in explicit_rank_patterns:
@@ -1061,6 +1089,16 @@ def build_lexical_hints(
             sortable = False
         if not sortable:
             ranking_field = None
+    if (
+        ranking_field is not None
+        and alias_resolution is not None
+        and ranking_field != alias_resolution.field_id
+    ):
+        semantic_ambiguity_spans.extend(
+            (ranking_match.group(0), alias_resolution.text)
+            if ranking_match is not None
+            else (alias_resolution.text,)
+        )
     if ranking_field is not None:
         assert ranking_match is not None
         ranking_surface = ranking_match.group(0)
@@ -1089,6 +1127,24 @@ def build_lexical_hints(
         else:
             direction = "asc" if ascending else "desc"
         rankings.append({"field": ranking_field, "direction": direction, "nulls": "last"})
+    elif alias_resolution is not None:
+        rankings.append(
+            {
+                "field": alias_resolution.field_id,
+                "direction": alias_resolution.direction.value,
+                "nulls": "last",
+            }
+        )
+
+    # Every row in the frozen overseas ETP snapshot is USD.  Amount rankings
+    # therefore acquire an explicit same-currency lock instead of relying on a
+    # hidden dataset invariant.  Other ratio/date rankings remain unaffected.
+    if (
+        family == "overseas_etp"
+        and any(item["field"] == "aum" for item in rankings)
+        and not any(item["field"] == "trading_currency" for item in required)
+    ):
+        add("trading_currency", "USD")
 
     coverage = _SEMANTIC_COVERAGE_GATE.evaluate(
         question,
@@ -1100,6 +1156,18 @@ def build_lexical_hints(
     )
     semantic_unsupported_spans.extend(coverage.unsupported_spans)
 
+    if ranking_intent_present(question) and not rankings:
+        semantic_ambiguity_spans.extend(
+            coverage.ambiguity_spans or ranking_cue_spans(question) or ("ranking_metric",)
+        )
+    if (
+        ranking_intent_present(question)
+        and rankings
+        and all(item["field"] in {"product_name", "short_name", "ticker"} for item in rankings)
+        and not explicit_product_name_order(question)
+    ):
+        semantic_ambiguity_spans.extend(ranking_cue_spans(question) or ("ranking_metric",))
+
     exact_lookup = any(item["field"] in {"ticker", "product_id", "isin"} for item in required)
     if (
         family == "fund"
@@ -1109,6 +1177,7 @@ def build_lexical_hints(
         and not any(phrase in question for phrase in ambiguity_patterns)
         and not semantic_unsupported_spans
         and not semantic_ambiguity_spans
+        and not ranking_intent_present(question)
     ):
         rankings.append({"field": "product_name", "direction": "asc", "nulls": "last"})
 

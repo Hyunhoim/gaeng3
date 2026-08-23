@@ -4,6 +4,8 @@ import re
 from dataclasses import dataclass
 
 from finance_agent_core.agent.safety import data_scope_policy_surface, normalize_user_question
+from finance_agent_core.agent.semantic_aliases import SemanticAliasMatch, rank_alias_matches
+from finance_agent_core.contracts.queryplan import ProductFamily
 
 
 @dataclass(frozen=True)
@@ -99,6 +101,11 @@ _EXACT_RISK = re.compile(
     re.IGNORECASE,
 )
 _RISK_GROUP = re.compile(r"위험\s*등급\s*(?:별|분포|비중)", re.IGNORECASE)
+_VAGUE_STABILITY = re.compile(
+    r"(?:안정적(?:인|으로)?|안정성이\s*(?:높|좋)|안전한).{0,16}?"
+    r"(?:국내\s*|해외\s*)?(?:ETF|ETN|ETP|공모\s*펀드|펀드|채권|상품)",
+    re.IGNORECASE,
+)
 _UNMAPPED_METRIC = re.compile(
     r"(?P<metric>가격|비용|변동성|테마|섹터|산업|ESG|친환경|금리|이율|기간|수량)"
     r".{0,16}?(?:높|낮|크|작|많|적|길|짧|저렴|비싸)",
@@ -217,6 +224,12 @@ _UNSUPPORTED_INVERSE_EXCLUSION = re.compile(
     r"회사채(?:가|이|는|은)?\s*아닌",
     re.IGNORECASE,
 )
+_ALIAS_FAMILY_PATTERNS: dict[ProductFamily, re.Pattern[str]] = {
+    ProductFamily.BOND: re.compile(r"국내\s*채권|채권"),
+    ProductFamily.DOMESTIC_ETP: re.compile(r"국내\s*(?:ETF|ETN|ETP)", re.IGNORECASE),
+    ProductFamily.OVERSEAS_ETP: re.compile(r"해외\s*(?:ETF|ETN|ETP)", re.IGNORECASE),
+    ProductFamily.FUND: re.compile(r"공모\s*펀드|펀드"),
+}
 
 
 def _unique(values: list[str]) -> tuple[str, ...]:
@@ -270,15 +283,75 @@ def _known_field_surface(value: str) -> bool:
     return False
 
 
-def _schema_link_gap_matches(question: str) -> list[re.Match[str]]:
+def _overlaps_any(start: int, end: int, ranges: tuple[tuple[int, int], ...]) -> bool:
+    return any(start < right and left < end for left, right in ranges)
+
+
+def _covered_by_resolved_alias(
+    start: int,
+    end: int,
+    ranges: tuple[tuple[int, int], ...],
+) -> bool:
+    return _overlaps_any(start, end, ranges) or any(0 <= start - right <= 8 for _, right in ranges)
+
+
+def _compatible_trailing_alias_direction(
+    question: str,
+    match: re.Match[str],
+    alias_matches: tuple[SemanticAliasMatch, ...],
+) -> bool:
+    """Accept a redundant trailing sort cue only for one resolved alias field."""
+
+    fields = {item.field_id for item in alias_matches}
+    if len(fields) != 1 or re.match(r"\s*순", question[match.end() :]) is None:
+        return False
+    nearby = [item for item in alias_matches if 0 <= match.start() - item.end <= 48]
+    if not nearby:
+        return False
+    surface = match.group(0)
+    ascending = re.search(r"낮|작|적|짧|빠른|하위|오름차순", surface) is not None
+    descending = re.search(r"높|크|많|긴|상위|내림차순", surface) is not None
+    if ascending == descending:
+        return False
+    expected = "asc" if ascending else "desc"
+    return all(item.direction.value == expected for item in nearby)
+
+
+def _schema_link_gap_matches(
+    question: str,
+    *,
+    resolved_ranges: tuple[tuple[int, int], ...] = (),
+) -> list[re.Match[str]]:
     matches = []
-    blocked_tokens = {"상품", "etf", "etn", "etp", "채권", "펀드", "국내", "해외"}
+    blocked_tokens = {
+        "상품",
+        "종목",
+        "것",
+        "개",
+        "건",
+        "etf",
+        "etn",
+        "etp",
+        "채권",
+        "펀드",
+        "국내",
+        "해외",
+    }
     exact_risk_ranges = [match.span() for match in _EXACT_RISK.finditer(question)]
     for match in _POTENTIAL_SCHEMA_GAP.finditer(question):
         span = match.group("span").strip()
         if (
-            any(match.start() < right and match.end() > left for left, right in exact_risk_ranges)
+            _overlaps_any(match.start(), match.end(), resolved_ranges)
+            or any(
+                match.start() < right and match.end() > left for left, right in exact_risk_ranges
+            )
             or span.casefold() in blocked_tokens
+            or re.fullmatch(
+                r"(?:상품|종목|것|개|건)(?:을|를|은|는|이|가)?",
+                span,
+                flags=re.IGNORECASE,
+            )
+            is not None
             or _DIRECTION_METRIC.fullmatch(span) is not None
             or _known_field_surface(span)
         ):
@@ -315,6 +388,22 @@ class SemanticCoverageGate:
         unsupported: list[str] = []
         ambiguities: list[str] = []
         schema_link_gaps: list[str] = []
+        alias_families = tuple(
+            family
+            for family, pattern in _ALIAS_FAMILY_PATTERNS.items()
+            if pattern.search(normalized)
+        )
+        if not alias_families:
+            alias_matches = rank_alias_matches(normalized)
+        else:
+            alias_matches = tuple(
+                {
+                    (item.rule_id, item.start, item.end): item
+                    for family in alias_families
+                    for item in rank_alias_matches(normalized, family)
+                }.values()
+            )
+        alias_ranges = tuple((item.start, item.end) for item in alias_matches)
 
         if match := _TRANSACTIONAL_ACTION.search(normalized):
             unsupported.append(match.group(0))
@@ -353,30 +442,41 @@ class SemanticCoverageGate:
 
         return_surface = _EXPLICIT_RETURN.sub(" ", normalized)
         if match := _BARE_RETURN.search(return_surface):
-            ambiguities.append(match.group(0))
+            if not _overlaps_any(match.start(), match.end(), alias_ranges):
+                ambiguities.append(match.group(0))
 
         if (match := _CHEAP.search(normalized)) and _EXPLICIT_CHEAP_METRIC.search(
             normalized
         ) is None:
-            ambiguities.append(match.group(0))
+            if not _overlaps_any(match.start(), match.end(), alias_ranges):
+                ambiguities.append(match.group(0))
         if (match := _LIQUIDITY.search(normalized)) and _EXPLICIT_LIQUIDITY_METRIC.search(
             normalized
         ) is None:
-            ambiguities.append(match.group(0))
+            if not _overlaps_any(match.start(), match.end(), alias_ranges):
+                ambiguities.append(match.group(0))
         if (match := _SIZE.search(normalized)) and _EXPLICIT_SIZE_METRIC.search(normalized) is None:
-            ambiguities.append(match.group(0))
+            if not _overlaps_any(match.start(), match.end(), alias_ranges):
+                ambiguities.append(match.group(0))
         if (
             (match := _RISK.search(normalized))
             and _EXACT_RISK.search(normalized) is None
             and _RISK_GROUP.search(normalized) is None
         ):
             ambiguities.append(match.group(0))
+        if match := _VAGUE_STABILITY.search(normalized):
+            ambiguities.append(match.group(0))
 
         for match in _UNMAPPED_METRIC.finditer(normalized):
-            if not _metric_has_explicit_mapping(normalized, match):
+            if not _metric_has_explicit_mapping(normalized, match) and not _overlaps_any(
+                match.start(), match.end(), alias_ranges
+            ):
                 ambiguities.append(match.group(0))
 
-        schema_gap_matches = _schema_link_gap_matches(normalized)
+        schema_gap_matches = _schema_link_gap_matches(
+            normalized,
+            resolved_ranges=alias_ranges,
+        )
         detected_schema_gaps = [match.group("span") for match in schema_gap_matches]
         if self.schema_link_gaps_enabled:
             schema_link_gaps.extend(detected_schema_gaps)
@@ -384,6 +484,10 @@ class SemanticCoverageGate:
             ambiguities.extend(detected_schema_gaps)
 
         for match in _DIRECTION_TERM.finditer(normalized):
+            if _covered_by_resolved_alias(match.start(), match.end(), alias_ranges):
+                continue
+            if _compatible_trailing_alias_direction(normalized, match, alias_matches):
+                continue
             if any(
                 candidate.start() <= match.start() <= candidate.end() + 8
                 for candidate in schema_gap_matches

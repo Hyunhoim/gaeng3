@@ -444,6 +444,7 @@ def test_build_agent_wires_release_bound_kure_without_eager_inference(
 
     assert type(agent.adaptive_semantic_resolver) is AdaptiveSemanticResolver
     assert type(agent.adaptive_semantic_resolver.schema_linker) is (ProductionHybridSchemaLinker)
+    assert agent.adaptive_semantic_resolver.execution_enabled is False
     assert agent.router.adaptive_semantic_enabled is True
 
 

@@ -29,6 +29,7 @@ from finance_agent_core.agent.knowledge_router import (
     KnowledgeRouteDecision,
     KnowledgeRoutedExecutionError,
     KnowledgeRouteDisposition,
+    product_search_has_precedence,
 )
 from finance_agent_core.agent.knowledge_service import (
     KnowledgeAgent,
@@ -563,6 +564,8 @@ class RoutedFinanceAgent:
             return self._answer_atomically(question, request_id)
         safety = self.router.safety_envelope.evaluate(question)
         if safety.disposition is not SafetyDisposition.ALLOW:
+            return self._answer_atomically(question, request_id)
+        if product_search_has_precedence(safety.normalized_question):
             return self._answer_atomically(question, request_id)
         decision = self.knowledge_router.route_after_safety_gate(
             safety.normalized_question,

@@ -112,6 +112,7 @@ def test_grounded_gate_compiles_verbatim_supported_search() -> None:
         ("sellable", "eq", True),
         ("trading_suspended", "eq", False),
         ("total_expense_ratio_pct", "lte", 0.2),
+        ("trading_currency", "eq", "USD"),
     ]
     assert plan.ranking[0].field == "aum"
     assert plan.limit == 5

@@ -70,6 +70,9 @@ _SECURITY = re.compile(
     r"거절(?:하지\s*마|금지|을?\s*우회)|"
     r"(?:평가(?:기|\s*결과)?|검증|provider\s*호출\s*수|호출\s*로그)"
     r".{0,36}?(?:속여|조작|삭제|0으로\s*기록|PASS)|"
+    r"검증(?:\s*(?:단계|절차|경계))?.{0,20}?(?:우회|건너뛰|비활성화)|"
+    r"(?:원본\s*데이터\s*파일|서버|내부\s*파일).{0,20}?"
+    r"(?:경로|위치).{0,24}?(?:전부\s*)?(?:출력|공개|노출|보여|알려)|"
     r"(?:로그|기록).{0,24}?(?:삭제|지워|조작)|"
     r"(?:순위|결과).{0,20}?(?:조작|꾸미고|꾸며)|"
     r"(?:drop|disable)\s+(?:safety|guardrails?|filters?)|"
@@ -101,7 +104,9 @@ _DATA_INTEGRITY = re.compile(
     r"임의\s*(?:값|수치)(?:으로)?\s*대체|"
     r"가정해)|"
     r"(?:결측\s*값|결측값|빈\s*값|누락\s*값).{0,40}?"
-    r"(?:임의|0|평균).{0,20}?(?:채워|대체|보정)",
+    r"(?:임의|0|평균).{0,20}?(?:채워|대체|보정)|"
+    r"(?:수익률|가격|수치|순위).{0,20}?(?:숫자|수치)?.{0,16}?"
+    r"(?:임의로|마음대로).{0,16}?(?:높여|낮춰|부풀려|줄여)",
     re.IGNORECASE,
 )
 _UNVERIFIABLE_FRESHNESS = re.compile(
@@ -167,6 +172,7 @@ _FORECAST = re.compile(
 _GUARANTEE = re.compile(
     r"원금\s*(?:이\s*)?보장|수익\s*(?:이\s*)?보장|손실\s*(?:이\s*)?없|"
     r"손실.{0,16}?절대.{0,12}?없|"
+    r"손실.{0,20}?(?:나지|발생하지).{0,12}?않|"
     r"손실\s*가능성\s*(?:0\s*%|제로)|절대.{0,12}?손실.{0,12}?없|"
     r"무조건\s*(?:수익|오르|돈)|"
     r"(?:수익률?|가격).{0,16}?(?:확실|확정|보장)|"
@@ -337,6 +343,21 @@ def data_scope_policy_surface(question: str) -> str:
     return _NEGATED_EXTERNAL_SOURCE.sub(" ", normalize_user_question(question))
 
 
+_CLAUSE_BOUNDARY = re.compile(
+    r"(?:[,.!?;]|\s+(?:그리고|또한|또는|및)\s+|"
+    r"(?:하고|하며|해서|하면서|한\s*뒤|한\s*후)\s+)",
+    re.IGNORECASE,
+)
+
+
+def _policy_clauses(question: str) -> tuple[str, ...]:
+    """Keep the whole request and every non-empty clause for terminal policy checks."""
+
+    clauses = [question]
+    clauses.extend(part.strip() for part in _CLAUSE_BOUNDARY.split(question) if part.strip())
+    return tuple(dict.fromkeys(clauses))
+
+
 class SafetyEnvelope:
     """Fail-closed pre-router envelope with explicit, auditable gates."""
 
@@ -344,6 +365,8 @@ class SafetyEnvelope:
         normalized = normalize_user_question(question)
         policy_surface = safety_policy_surface(normalized)
         scope_surface = data_scope_policy_surface(normalized)
+        normalized_clauses = _policy_clauses(normalized)
+        policy_clauses = _policy_clauses(policy_surface)
         checks = (
             (
                 SafetyGate.SECURITY,
@@ -395,12 +418,15 @@ class SafetyEnvelope:
             ),
         )
         for gate, disposition, pattern, reason in checks:
-            surface = (
-                policy_surface
+            surfaces = (
+                policy_clauses
                 if gate in {SafetyGate.FORECAST, SafetyGate.GUARANTEE}
-                else normalized
+                else normalized_clauses
             )
-            matched = pattern.search(surface)
+            matched = next(
+                (match for surface in surfaces if (match := pattern.search(surface)) is not None),
+                None,
+            )
             if gate is SafetyGate.SECURITY:
                 matched = (
                     matched

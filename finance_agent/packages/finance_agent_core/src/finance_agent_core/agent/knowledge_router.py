@@ -7,6 +7,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from finance_agent_core.agent.router import classify_interaction_intent
+from finance_agent_core.agent.semantic_aliases import ranking_intent_present
 from finance_agent_core.agent.semantic_gate import SemanticCoverageGate
 from finance_agent_core.contracts.knowledge import (
     KnowledgeQueryPlan,
@@ -182,6 +183,14 @@ _ADDITIONAL_PRODUCT_CONDITION = re.compile(
     r"높은\s*순|낮은\s*순|큰\s*순|작은\s*순|많은\s*순|적은\s*순",
     re.IGNORECASE,
 )
+_PRODUCT_SEARCH_PRECEDENCE_CONDITION = re.compile(
+    r"AUM|총\s*보수|보수율|(?:1\s*주|1\s*개월|3\s*개월|6\s*개월|1\s*년|YTD)"
+    r"\s*(?:수익률|수익|성과)|이율|금리|만기|신용\s*등급|거래\s*통화|"
+    r"가격|듀레이션|잔존\s*일수|위험|리스크|거래\s*(?:가능|중지|정지|량|대금)|"
+    r"연금|환\s*헤지|제외|말고|빼고|오름차순|내림차순|정렬|상위|하위|"
+    r"높은\s*순|낮은\s*순|큰\s*순|작은\s*순|많은\s*순|적은\s*순",
+    re.IGNORECASE,
+)
 _COORDINATED_ENTITY = re.compile(r"(?:또는|혹은|및|와|과)\s+|[,/;]", re.IGNORECASE)
 _INVALID_ENTITY = re.compile(
     r"(?:ETF|ETN|ETP|펀드|상품|어떤|어느|해당|모든|전체|추천|전망)",
@@ -200,6 +209,18 @@ _STANDALONE_REQUEST_PARTICLE = re.compile(
 )
 _REQUEST_PUNCTUATION = re.compile(r"[\s.,!?~:;·'\"“”‘’()\[\]{}]+")
 _RESIDUAL_TOKEN = re.compile(r"[0-9A-Za-z가-힣]+")
+
+
+def product_search_has_precedence(question: str) -> bool:
+    """Keep filter/ranking product searches out of the single-relation endpoint."""
+
+    return bool(
+        _relation_signals(question)
+        and (
+            _PRODUCT_SEARCH_PRECEDENCE_CONDITION.search(question)
+            or ranking_intent_present(question)
+        )
+    )
 
 
 def _decision(
@@ -467,4 +488,5 @@ __all__ = [
     "KnowledgeRouteDecision",
     "KnowledgeRouteDisposition",
     "KnowledgeRoutedExecutionError",
+    "product_search_has_precedence",
 ]

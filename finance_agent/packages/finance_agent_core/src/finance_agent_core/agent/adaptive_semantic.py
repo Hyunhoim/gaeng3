@@ -117,11 +117,15 @@ class AdaptiveSemanticResolver:
         hclx_provider: SemanticResolverProvider | None = None,
         gate: SemanticResolutionGate | None = None,
         planning_policy: AdaptivePlanningPolicyV2 | None = None,
+        execution_enabled: bool = True,
     ) -> None:
         if type(schema_linker) is not ProductionHybridSchemaLinker:
             raise TypeError("adaptive semantic resolver requires the production schema linker")
+        if type(execution_enabled) is not bool:
+            raise TypeError("execution_enabled must be a boolean")
         self.schema_linker = schema_linker
         self.hclx_provider = hclx_provider
+        self.execution_enabled = execution_enabled
         self.gate = gate or SemanticResolutionGate()
         if planning_policy is not None and type(planning_policy) is not AdaptivePlanningPolicyV2:
             raise TypeError("adaptive semantic resolver requires the server planning policy v2")
@@ -210,6 +214,8 @@ class AdaptiveSemanticResolver:
         observation = dense_observation | {"candidate_count": len(linked.candidates)}
         if not linked.candidates:
             return _control("clarify", linked.reason_code, **observation)
+        if not self.execution_enabled:
+            return _control("clarify", "semantic_resolution_shadow_only", **observation)
         request = SemanticResolutionRequest(
             request_id=route.draft.request_id,
             residual_span=residual.text,

@@ -13,7 +13,7 @@ def test_fake_dense_schema_evaluation_is_safe_but_never_adoption_evidence() -> N
     assert report.evaluation_scope == "schema_field_linking_with_gold_product_family"
     assert not report.routing_quality_included
     assert report.safety.legacy_suite_blocked_cases == 20
-    assert report.safety.versioned_policy_migration_count == 2
+    assert report.safety.versioned_policy_migration_count == 3
     assert (
         report.safety.policy_migration_review_status
         == "developer_authored_pending_finance_domain_review"

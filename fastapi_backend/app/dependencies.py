@@ -184,6 +184,7 @@ def _adaptive_assembly_matches(
     if (
         type(resolver) is not AdaptiveSemanticResolver
         or not service.router.adaptive_semantic_enabled
+        or resolver.execution_enabled is not settings.hcx_semantic_resolver_enabled
         or type(resolver.schema_linker) is not ProductionHybridSchemaLinker
         or type(release_guard) is not ResolvedAgentRelease
     ):
@@ -589,7 +590,11 @@ def _build_adaptive_semantic_resolver(
         raise RuntimeError("loaded KURE provider differs from the activation policy")
     index = DenseSchemaIndex(artifact, provider)
     linker = ProductionHybridSchemaLinker(index, policy)
-    return AdaptiveSemanticResolver(linker, hclx_provider=hclx_provider)
+    return AdaptiveSemanticResolver(
+        linker,
+        hclx_provider=hclx_provider,
+        execution_enabled=settings.hcx_semantic_resolver_enabled,
+    )
 
 
 def build_agent(

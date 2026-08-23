@@ -55,7 +55,7 @@ def _valid_input_arguments(output: Path) -> list[str]:
         "--hcx-queryplan-enabled",
         "false",
         "--hcx-semantic-resolver-enabled",
-        "true",
+        "false",
         "--adaptive-semantic-enabled",
         "true",
         "--fund-execution-policy",
@@ -154,7 +154,7 @@ def test_release_ci_accepts_only_normalized_protected_main_inputs(tmp_path: Path
     assert values["rollback_mode"] == "initial_bootstrap"
     assert values["answer_provider"] == "hyperclova"
     assert values["hcx_queryplan_enabled"] == "false"
-    assert values["hcx_semantic_resolver_enabled"] == "true"
+    assert values["hcx_semantic_resolver_enabled"] == "false"
     assert values["adaptive_semantic_enabled"] == "true"
     assert values["fund_execution_policy"] == "public_fund_v1_approved"
     assert values["schema_dense_index_sha256"] == (
@@ -175,7 +175,7 @@ def test_release_ci_accepts_only_normalized_protected_main_inputs(tmp_path: Path
     [
         ("--answer-provider", "deterministic"),
         ("--hcx-queryplan-enabled", "true"),
-        ("--hcx-semantic-resolver-enabled", "false"),
+        ("--hcx-semantic-resolver-enabled", "true"),
         ("--adaptive-semantic-enabled", "false"),
         ("--fund-execution-policy", "locked"),
         ("--schema-dense-index-sha256", "a" * 64),
@@ -809,7 +809,7 @@ def test_release_workflow_binds_exact_adaptive_runtime_artifacts() -> None:
         step for step in steps if step.get("name") == "Upload non-secret immutable release evidence"
     )
 
-    assert release["env"]["FINAL_HCX_SEMANTIC_RESOLVER_ENABLED"] == "true"
+    assert release["env"]["FINAL_HCX_SEMANTIC_RESOLVER_ENABLED"] == "false"
     assert release["env"]["FINAL_ADAPTIVE_SEMANTIC_ENABLED"] == "true"
     assert release["env"]["FINAL_SCHEMA_DENSE_MIN_SCORE"] == "1.0"
     assert release["env"]["FINAL_SCHEMA_DENSE_MINIMUM_MARGIN"] == "2.0"
@@ -872,7 +872,7 @@ def test_release_workflow_has_a_commit_pinned_keyless_trust_boundary() -> None:
     assert "fund_execution_policy" not in dispatch_inputs
     assert release["env"]["FINAL_ANSWER_PROVIDER"] == "hyperclova"
     assert release["env"]["FINAL_HCX_QUERYPLAN_ENABLED"] == "false"
-    assert release["env"]["FINAL_HCX_SEMANTIC_RESOLVER_ENABLED"] == "true"
+    assert release["env"]["FINAL_HCX_SEMANTIC_RESOLVER_ENABLED"] == "false"
     assert release["env"]["FINAL_ADAPTIVE_SEMANTIC_ENABLED"] == "true"
     assert release["env"]["FINAL_FUND_EXECUTION_POLICY"] == "public_fund_v1_approved"
     assert "check-submission-boundary.py" in text

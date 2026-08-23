@@ -16,6 +16,7 @@ from finance_agent_core.agent.safety import (
     SafetyEnvelope,
     safety_policy_surface,
 )
+from finance_agent_core.agent.semantic_aliases import rank_alias_matches
 from finance_agent_core.agent.semantic_gate import (
     SemanticCoverageDecision,
     SemanticCoverageGate,
@@ -347,9 +348,14 @@ def _requested_limit(question: str) -> int | None:
 
 def _intent(question: str, families: list[ProductFamily]) -> InteractionIntent:
     policy_surface = safety_policy_surface(question)
+    after_tax_yield_alias = any(
+        item.field_id == "after_tax_yield_pct"
+        for family in families
+        for item in rank_alias_matches(question, family)
+    )
     if (
         _UNSUPPORTED.search(policy_surface)
-        or _EXTERNAL_POLICY.search(question)
+        or (_EXTERNAL_POLICY.search(question) and not after_tax_yield_alias)
         or _UNAVAILABLE_MARKET_DATA.search(question)
         or (
             families == [ProductFamily.OVERSEAS_ETP]

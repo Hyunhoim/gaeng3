@@ -30,6 +30,21 @@
       ],
       "reason_code": "fund_one_year_raw_source_execution_approved",
       "review_status": "pending_finance_domain_review"
+    },
+    {
+      "case_id": "fund-007",
+      "product_family": "fund",
+      "question_sha256": "dbc95427508865892035e8516fa1656b20756a6c82b856d452c336a238d9afaa",
+      "legacy_disposition": "execute",
+      "current_disposition": "execute",
+      "gold_field_ids": [
+        "public_offering",
+        "investment_region",
+        "trading_currency",
+        "aum"
+      ],
+      "reason_code": "fund_domestic_investment_region_field_correction",
+      "review_status": "pending_finance_domain_review"
     }
   ]
 }
