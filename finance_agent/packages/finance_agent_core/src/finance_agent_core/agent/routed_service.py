@@ -808,6 +808,17 @@ class RoutedFinanceAgent:
             if knowledge_draft is not None and has_server_authorized_knowledge_requirements(
                 question, knowledge_draft
             ):
+                knowledge_identity_surfaces = tuple(
+                    dict.fromkeys(
+                        (
+                            *lexical_product_mentions,
+                            *(
+                                item.subject_span
+                                for item in knowledge_draft.knowledge_requirements
+                            ),
+                        )
+                    )
+                )
                 if self.external_knowledge_router is None:
                     self._assert_public_knowledge_boundary_current()
                     return ExternalKnowledgeRouteDecision(
@@ -826,7 +837,7 @@ class RoutedFinanceAgent:
                                 )
                             ),
                             question=question,
-                            identity_surfaces=lexical_product_mentions,
+                            identity_surfaces=knowledge_identity_surfaces,
                         )
                     )
                 external_decision = self.external_knowledge_router.route(
@@ -856,7 +867,7 @@ class RoutedFinanceAgent:
                         )
                         universe = self.external_universe_builder.build(
                             families=families,
-                            identity_surfaces=lexical_product_mentions,
+                            identity_surfaces=knowledge_identity_surfaces,
                         )
                         search_plan = self.external_search_plan_compiler.compile(
                             external_decision.plan,

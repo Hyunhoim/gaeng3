@@ -197,7 +197,7 @@ def test_bundle_fingerprint_remains_pinned_to_historical_approved_manifest() -> 
         "b78b8b0b93c36401b6356f271fc26807e37535d57e5d74d8827924c7a1413ec1"
     )
     approved = load_approved_dataset_manifest()
-    assert approved.release_id == "miraeasset-ai-festival-2026-20260824-v2"
+    assert approved.release_id == "miraeasset-ai-festival-2026-20260824-v3"
     assert approved.release_id != bundle.universe.release_id
     assert approved.canonical_sha256 != bundle.universe.approved_manifest_sha256
     for family, fingerprint in bundle.universe.datasets.items():

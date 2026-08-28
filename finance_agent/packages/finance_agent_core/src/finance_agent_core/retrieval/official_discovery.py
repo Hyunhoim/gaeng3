@@ -17,6 +17,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from finance_agent_core.config.knowledge_coverage import KnowledgeCapability
 from finance_agent_core.config.source_registry import (
+    OfficialSourceEntry,
     OfficialSourceRegistry,
     OfficialSourceRegistryError,
     load_official_source_registry,
@@ -25,7 +26,53 @@ from finance_agent_core.retrieval.official_connector import OfficialDiscoveryCan
 
 _MAX_SECRET_BYTES = 4096
 _API_URL = "https://naverapihub.apigw.ntruss.com/search/v1/webkr"
-_URL_DATE = re.compile(r"(?<!\d)(20\d{2})(0[1-9]|1[0-2])([0-2]\d|3[01])(?!\d)")
+_URL_DATE = re.compile(
+    r"(?<!\d)(20\d{2})[_-]?(0[1-9]|1[0-2])[_-]?([0-2]\d|3[01])"
+)
+
+
+def _canonical_candidate_url(url: str) -> str:
+    """Upgrade an HTTP search result to the same host/path HTTPS candidate."""
+
+    parsed = urllib.parse.urlsplit(url)
+    if parsed.scheme != "http" or parsed.hostname is None:
+        return url
+    return urllib.parse.urlunsplit(
+        ("https", parsed.netloc, parsed.path, parsed.query, "")
+    )
+
+
+def _candidate_specificity(url: str) -> int:
+    """Prefer concrete official documents/products over listing and home pages."""
+
+    parsed = urllib.parse.urlsplit(url)
+    path = parsed.path.casefold()
+    score = min(3, path.count("/"))
+    if path.endswith(".pdf"):
+        score += 8
+    if any(token in path for token in ("/view", "/detail", "/download", "/file")):
+        score += 5
+    if parsed.query and any(token in parsed.query.casefold() for token in ("id=", "fund", "fid=")):
+        score += 3
+    if path in {"", "/"} or any(token in path for token in ("/index", "/list")):
+        score -= 5
+    return score
+
+
+def _bounded_registry_terms(entry: OfficialSourceEntry, query: str) -> tuple[str, ...]:
+    values = (entry.publisher, *entry.selection_aliases)
+    seen: set[str] = set()
+    selected: list[str] = []
+    folded_query = query.casefold()
+    for value in values:
+        folded = value.casefold()
+        if folded in seen or folded in folded_query:
+            continue
+        selected.append(value)
+        seen.add(folded)
+        if len(selected) == 2:
+            break
+    return tuple(selected)
 
 
 class OfficialDiscoveryError(RuntimeError):
@@ -158,15 +205,6 @@ class NaverApiHubWebSearchTransport:
             raise OfficialDiscoveryError("official search provider response is invalid") from error
 
 
-_RELATION_QUERY_TERMS: dict[KnowledgeCapability, str] = {
-    KnowledgeCapability.PORTFOLIO_HOLDINGS: "편입 보유 구성종목 holdings",
-    KnowledgeCapability.CORPORATE_SUBSIDIARY: "자회사 계열사 가족사 subsidiary",
-    KnowledgeCapability.SECTOR_THEME_HISTORY: "테마 섹터 산업 동향",
-    KnowledgeCapability.FUND_STRUCTURE_STRATEGY_TREND: "펀드 구조 투자전략 운용 동향",
-    KnowledgeCapability.PRODUCT_RISK_FACTORS: "상품 위험요인 투자위험 risk",
-}
-
-
 class BoundedOfficialDiscoveryProvider:
     """Search only approved domains, with server-owned query and result budgets.
 
@@ -204,26 +242,50 @@ class BoundedOfficialDiscoveryProvider:
         query_budget = len(entries) if max_queries is None else max_queries
         if query_budget < 1:
             raise ValueError("max_queries must be positive")
-        candidates: list[OfficialDiscoveryCandidate] = []
+        candidate_buckets: dict[str, list[tuple[int, int, OfficialDiscoveryCandidate]]] = {
+            entry.source_id: [] for entry in entries
+        }
         queried: list[str] = []
         failures: list[DiscoveryFailureCode] = []
         seen: set[str] = set()
+        requested_source_ids = {entry.source_id for entry in entries}
         for entry in entries[:query_budget]:
             queried.append(entry.source_id)
-            search_query = (
-                f"site:{entry.hostname} {query.strip()} {_RELATION_QUERY_TERMS[capability]}"
+            # ``query`` already contains the server-validated subject and at
+            # most three bounded aliases. Appending every relation synonym at
+            # once caused NAVER Web Search to return no result for valid
+            # official documents. Relation semantics remain locked by the
+            # Typed QueryPlan and exact-span extractor, not by search keywords.
+            path_scope = entry.path_prefixes[0] if len(entry.path_prefixes) == 1 else ""
+            registry_terms = _bounded_registry_terms(entry, query)
+            # Source metadata only ranks discovery candidates; it is never
+            # admitted as answer evidence. Limit expansion to two bounded
+            # registry terms so a long AND-like web query does not erase recall.
+            search_query = " ".join(
+                (
+                    f"site:{entry.hostname}{path_scope}",
+                    query.strip(),
+                    *registry_terms[:2],
+                )
             )
             try:
-                page = self.transport.search(query=search_query, display=top_k, start=1)
+                page = self.transport.search(
+                    query=search_query,
+                    display=min(100, max(20, top_k * 4)),
+                    start=1,
+                )
             except OfficialDiscoveryError:
                 failures.append(DiscoveryFailureCode.PROVIDER_ERROR)
                 continue
-            for candidate in page.items:
+            for rank, raw_candidate in enumerate(page.items):
+                candidate = raw_candidate.model_copy(
+                    update={"url": _canonical_candidate_url(raw_candidate.url)}
+                )
                 try:
                     authorized = self.registry.authorize_url(candidate.url, capability)
                 except OfficialSourceRegistryError:
                     continue
-                if authorized.source_id != entry.source_id or candidate.url in seen:
+                if authorized.source_id not in requested_source_ids or candidate.url in seen:
                     continue
                 published_at = candidate.published_at
                 if published_at is None:
@@ -237,17 +299,45 @@ class BoundedOfficialDiscoveryProvider:
                             )
                         except ValueError:
                             published_at = None
-                candidates.append(
-                    candidate.model_copy(
-                        update={
-                            "published_at": published_at,
-                            "as_of": published_at,
-                        }
-                    )
+                admitted = candidate.model_copy(
+                    update={
+                        "published_at": published_at,
+                        # A date encoded in a URL is publication metadata, not
+                        # necessarily the evidence date printed inside the
+                        # document. The connector independently extracts and
+                        # verifies ``as_of`` from the fetched official bytes.
+                        "as_of": candidate.as_of,
+                    }
+                )
+                candidate_buckets[authorized.source_id].append(
+                    (-_candidate_specificity(candidate.url), rank, admitted)
                 )
                 seen.add(candidate.url)
-                if len(candidates) >= 40:
-                    break
+        ordered_buckets = []
+        for entry in entries:
+            bucket = candidate_buckets[entry.source_id]
+            bucket.sort(
+                key=lambda item: (
+                    item[0],
+                    -(
+                        item[2].published_at.toordinal()
+                        if item[2].published_at is not None
+                        else 0
+                    ),
+                    item[1],
+                    item[2].url,
+                )
+            )
+            ordered_buckets.append([item[2] for item in bucket])
+        candidates: list[OfficialDiscoveryCandidate] = []
+        depth = 0
+        while len(candidates) < 40 and any(depth < len(bucket) for bucket in ordered_buckets):
+            for bucket in ordered_buckets:
+                if depth < len(bucket):
+                    candidates.append(bucket[depth])
+                    if len(candidates) == 40:
+                        break
+            depth += 1
         if len(entries) > query_budget:
             failures.append(DiscoveryFailureCode.SOURCE_SCOPE_INCOMPLETE)
         return OfficialDiscoveryReport(

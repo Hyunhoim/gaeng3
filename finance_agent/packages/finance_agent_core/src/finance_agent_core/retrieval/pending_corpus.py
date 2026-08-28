@@ -14,6 +14,10 @@ from typing import Literal, Protocol
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from finance_agent_core.config.knowledge_coverage import KnowledgeCapability
+from finance_agent_core.config.source_registry import (
+    OfficialSourceRegistry,
+    OfficialSourceRegistryError,
+)
 from finance_agent_core.retrieval.corpus import DocumentLanguage, DocumentPurpose
 from finance_agent_core.retrieval.official_connector import (
     OfficialConnectorError,
@@ -270,6 +274,41 @@ def load_pending_corpus_manifest(path: str | Path) -> PendingCorpusManifest:
         raise PendingCorpusError("pending corpus manifest is invalid") from error
 
 
+def rebind_pending_corpus_registry(
+    manifest: PendingCorpusManifest,
+    registry: OfficialSourceRegistry,
+) -> PendingCorpusManifest:
+    """Rebind unchanged snapshots after a Source Registry metadata-only revision.
+
+    This never approves a pending corpus and never changes source bytes, dates,
+    capabilities or document identities. Every URL/capability must still map to
+    the same source ID and publisher under the new registry; otherwise a fresh
+    collection and independent review are required.
+    """
+
+    if manifest.evidence_cutoff != registry.evidence_cutoff:
+        raise PendingCorpusError("pending corpus and Source Registry cutoffs differ")
+    for snapshot in manifest.documents:
+        try:
+            entries = tuple(
+                registry.authorize_url(snapshot.source_uri, capability)
+                for capability in snapshot.capabilities
+            )
+        except OfficialSourceRegistryError as error:
+            raise PendingCorpusError(
+                "pending corpus source is no longer authorized"
+            ) from error
+        if (
+            len({entry.source_id for entry in entries}) != 1
+            or entries[0].source_id != snapshot.source_registry_id
+            or entries[0].publisher != snapshot.publisher
+        ):
+            raise PendingCorpusError("pending corpus source authority changed")
+    return manifest.model_copy(
+        update={"source_registry_sha256": registry.canonical_sha256}
+    )
+
+
 def _extract_text(
     media_type: str,
     content: bytes,
@@ -435,4 +474,5 @@ __all__ = [
     "load_pending_corpus_catalog",
     "load_pending_corpus_manifest",
     "pending_corpus_manifest_bytes",
+    "rebind_pending_corpus_registry",
 ]

@@ -88,13 +88,18 @@ _KNOWLEDGE_CAPABILITY_CUES: dict[KnowledgeCapability, re.Pattern[str]] = {
     ),
 }
 _EXTERNAL_CORPORATE_PAIR = re.compile(
-    r"(?P<parent>[0-9A-Za-z가-힣&·+._/-]{2,80})\s*"
-    r"(?:의\s*)?(?:자회사|계열사|가족사)(?:인|인\s*)?\s*"
+    r"(?P<parent>[0-9A-Za-z가-힣&·+._/-]{2,80}?)\s*"
+    r"(?:의\s*)?(?:자회사|계열사|가족사)인\s*"
     r"(?P<child>[0-9A-Za-z가-힣&·+._/-]{2,80})",
     re.IGNORECASE,
 )
+_EXTERNAL_CORPORATE_PARENT = re.compile(
+    r"(?P<parent>[0-9A-Za-z가-힣&·+._/-]{2,80}?)\s*의\s*"
+    r"(?P<relation>자회사|계열사|가족사)(?=[을를이가은는\s])",
+    re.IGNORECASE,
+)
 _EXTERNAL_HOLDING_SUBJECT = re.compile(
-    r"(?P<subject>[0-9A-Za-z가-힣&·+._/-]{2,80})\s*"
+    r"(?P<subject>[0-9A-Za-z가-힣&·+._/-]{2,80}?)\s*"
     r"(?:이|가|을|를)?\s*(?P<relation>편입(?:이\s*확인되는|된|한|되어|하고)?|"
     r"보유(?:가\s*확인되는|된|한|하고)?)",
     re.IGNORECASE,
@@ -122,7 +127,26 @@ _PRODUCT_LIKE_EXTERNAL_SUBJECT = re.compile(
     re.IGNORECASE,
 )
 _PORTFOLIO_ELIGIBILITY = re.compile(r"편입\s*가능", re.IGNORECASE)
-_NON_ENTITY_HOLDING_SUBJECTS = frozenset({"공식", "자료", "내역", "공식자료", "공식내역"})
+_NON_ENTITY_HOLDING_SUBJECTS = frozenset(
+    {
+        "공식",
+        "자료",
+        "내역",
+        "공식자료",
+        "공식내역",
+        "자회사",
+        "계열사",
+        "가족사",
+        "상품",
+    }
+)
+
+
+def _entity_surface_key(value: str) -> str:
+    surface = value.strip().casefold()
+    if len(surface) >= 3 and surface[-1:] in {"은", "는", "이", "가", "을", "를", "와", "과"}:
+        return surface[:-1]
+    return surface
 
 
 def _explicit_industry_relation(question: str, subject: str) -> bool:
@@ -198,31 +222,63 @@ def sanitize_server_authorized_knowledge_draft(
             and requirement.relation_span in question
             and _KNOWLEDGE_CAPABILITY_CUES[requirement.capability].search(question) is not None
         ):
-            key = (requirement.capability, requirement.subject_span.strip().casefold())
+            key = (requirement.capability, _entity_surface_key(requirement.subject_span))
             proposed_aliases.setdefault(key, set()).update(requirement.search_aliases)
 
     def aliases_for(capability: KnowledgeCapability, subject: str) -> tuple[str, ...]:
-        return tuple(sorted(proposed_aliases.get((capability, subject.strip().casefold()), set())))
+        # HCX may copy aliases that the user explicitly supplied, but it cannot
+        # establish a cross-language company identity from pretrained memory.
+        # Official-document alias verification belongs to the evidence path.
+        return tuple(
+            sorted(
+                alias
+                for alias in proposed_aliases.get(
+                    (capability, _entity_surface_key(subject)), set()
+                )
+                if alias in question
+            )
+        )
 
     corporate_pair = _EXTERNAL_CORPORATE_PAIR.search(question)
+    corporate_parent = None
     if corporate_pair is not None:
+        corporate_parent = corporate_pair.group("parent")
         append(
             KnowledgeIntentRequirement(
                 capability=KnowledgeCapability.CORPORATE_SUBSIDIARY,
-                subject_span=corporate_pair.group("parent"),
+                subject_span=corporate_parent,
                 relation_span=corporate_pair.group(0),
                 search_aliases=aliases_for(
                     KnowledgeCapability.CORPORATE_SUBSIDIARY,
-                    corporate_pair.group("parent"),
+                    corporate_parent,
                 ),
             )
         )
+    else:
+        corporate_parent_match = _EXTERNAL_CORPORATE_PARENT.search(question)
+        if corporate_parent_match is not None:
+            corporate_parent = corporate_parent_match.group("parent")
+            append(
+                KnowledgeIntentRequirement(
+                    capability=KnowledgeCapability.CORPORATE_SUBSIDIARY,
+                    subject_span=corporate_parent,
+                    relation_span=corporate_parent_match.group(0),
+                    search_aliases=aliases_for(
+                        KnowledgeCapability.CORPORATE_SUBSIDIARY,
+                        corporate_parent,
+                    ),
+                )
+            )
     if _PORTFOLIO_ELIGIBILITY.search(question) is None:
         for match in _EXTERNAL_HOLDING_SUBJECT.finditer(question):
             subject = match.group("subject")
+            normalized_subject = subject.replace(" ", "").casefold()
+            if normalized_subject in _NON_ENTITY_HOLDING_SUBJECTS and corporate_parent is not None:
+                subject = corporate_parent
+                normalized_subject = subject.replace(" ", "").casefold()
             if (
                 _PRODUCT_LIKE_EXTERNAL_SUBJECT.search(subject) is None
-                and subject.replace(" ", "").casefold() not in _NON_ENTITY_HOLDING_SUBJECTS
+                and normalized_subject not in _NON_ENTITY_HOLDING_SUBJECTS
             ):
                 append(
                     KnowledgeIntentRequirement(
@@ -285,6 +341,8 @@ def sanitize_server_authorized_knowledge_draft(
             if value.strip("‘’'\" ,은는이가을를와과중")
         }
         risk_subjects = branded_subjects or mention_subjects
+        if not risk_subjects and corporate_parent is not None and "상품" in question:
+            risk_subjects = {"상품"}
         for subject in sorted(risk_subjects):
             if subject in question:
                 append(

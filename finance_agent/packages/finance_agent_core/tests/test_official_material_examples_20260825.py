@@ -131,7 +131,7 @@ def test_exact_product_name_alias_resolves_its_family_and_canonical_id(
 def test_external_knowledge_capabilities_use_live_official_authority_without_fake_corpus() -> None:
     manifest = load_approved_knowledge_coverage_manifest()
 
-    assert manifest.dataset_release_id == "miraeasset-ai-festival-2026-20260824-v2"
+    assert manifest.dataset_release_id == "miraeasset-ai-festival-2026-20260824-v3"
     assert {entry.capability for entry in manifest.capabilities} == set(KnowledgeCapability)
     assert all(entry.status == "approved_live_official" for entry in manifest.capabilities)
     assert all(entry.runtime_execution_enabled for entry in manifest.capabilities)

@@ -72,8 +72,8 @@ _REQUESTED_PRODUCT_FIELD_PATTERNS: dict[str, re.Pattern[str]] = {
     "ticker": re.compile(r"티커|ticker", re.IGNORECASE),
 }
 _CORPORATE_PAIR = re.compile(
-    r"(?P<parent>[0-9A-Za-z가-힣&·+._/-]{2,80})\s*"
-    r"(?:의\s*)?(?:자회사|계열사|가족사)(?:인|인\s*)?\s*"
+    r"(?P<parent>[0-9A-Za-z가-힣&·+._/-]{2,80}?)\s*"
+    r"(?:의\s*)?(?:자회사|계열사|가족사)인\s*"
     r"(?P<child>[0-9A-Za-z가-힣&·+._/-]{2,80})",
     re.IGNORECASE,
 )

@@ -54,6 +54,34 @@ def normalize_product_identity(value: str) -> str:
     )
 
 
+_GENERIC_PRODUCT_SUFFIXES = (
+    "상장지수투자신탁",
+    "상장지수펀드",
+    "etf",
+    "etp",
+    "펀드",
+    "채권",
+    "상품",
+)
+
+
+def normalized_product_surface_core(value: str) -> str | None:
+    """Return a bounded DB-linking core only for an explicit product surface.
+
+    This is intentionally not a general substring matcher. A company or theme
+    name such as ``에코프로`` cannot narrow the DB universe merely because it
+    appears in a product label. Only a question surface that explicitly ends
+    in a generic product type may expose its sufficiently long core.
+    """
+
+    normalized = normalize_product_identity(value)
+    for suffix in _GENERIC_PRODUCT_SUFFIXES:
+        if normalized.endswith(suffix):
+            core = normalized[: -len(suffix)]
+            return core if len(core) >= 4 else None
+    return None
+
+
 def _candidate_from_record(record: ProductIdentityRecord) -> ProvidedProductCandidate:
     aliases = tuple(
         sorted(
@@ -90,6 +118,11 @@ def resolve_explicit_candidate_ids(
     }
     if not normalized_surfaces:
         return {}
+    product_surface_cores = {
+        core
+        for value in identity_surfaces
+        if (core := normalized_product_surface_core(value)) is not None
+    }
     resolved: dict[ProductFamily, set[str]] = {}
     for family, records in records_by_family.items():
         for record in records:
@@ -109,7 +142,13 @@ def resolve_explicit_candidate_ids(
                 )
                 for value in name_identities
             )
-            if exact_match or contained_name_match:
+            product_core_match = any(
+                core in normalize_product_identity(value)
+                for core in product_surface_cores
+                for value in name_identities
+                if value is not None
+            )
+            if exact_match or contained_name_match or product_core_match:
                 resolved.setdefault(family, set()).add(record.product_id)
     return resolved
 
@@ -357,5 +396,6 @@ __all__ = [
     "build_provided_candidate_universe",
     "intersect_evidence_with_provided_products",
     "normalize_product_identity",
+    "normalized_product_surface_core",
     "resolve_explicit_candidate_ids",
 ]

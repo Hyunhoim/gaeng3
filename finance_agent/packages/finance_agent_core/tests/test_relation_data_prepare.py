@@ -108,6 +108,21 @@ def _write_relation_source_database(output_dir: Path, dataset: str) -> None:
                     "VALID",
                 ),
             )
+            connection.execute(
+                "INSERT INTO bond_products VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    dataset,
+                    "bond-duplicate-market-row",
+                    "Synthetic Bond",
+                    "BOND1",
+                    "Bond",
+                    0,
+                    3,
+                    "2026-07-11",
+                    "Synthetic Issuer",
+                    "VALID",
+                ),
+            )
         elif dataset == "domestic_etp":
             connection.execute(
                 """

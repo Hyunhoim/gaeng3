@@ -487,6 +487,8 @@ def build_intent_analysis_system_prompt() -> str:
   search, 특정 상품 하나의 정보면 detail, 둘 이상 비교면 compare, 금융 개념·정책 설명만
   요청하면 explain으로 두고 knowledge_requirements에 필요한 capability를 모두 기록한다.
 - subject_span과 relation_span은 반드시 질문 원문의 연속 부분 문자열을 그대로 복사한다.
+- subject_span은 관계의 대상인 고유명사만 복사하고 뒤의 조사(은·는·이·가·을·를)는
+  제외한다. "자회사를", "상품을", "자료에서" 같은 관계어·일반명사를 subject로 두지 않는다.
 - 예: "캠브리콘이 편입된 ETF"는 subject_span="캠브리콘",
   relation_span="편입된", capability="portfolio_holdings"다.
 - 공식 자료가 다른 언어·철자를 쓸 수 있으면 search_aliases에 같은 고유명사의 표기 변형만

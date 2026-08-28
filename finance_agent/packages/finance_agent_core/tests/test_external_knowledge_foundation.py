@@ -116,6 +116,22 @@ class _FakeTransport:
         return self.response
 
 
+class _AlwaysFailTransport:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def fetch(
+        self,
+        url: str,
+        *,
+        timeout_seconds: float,
+        max_bytes: int,
+    ) -> OfficialHttpResponse:
+        assert url and timeout_seconds > 0 and max_bytes > 0
+        self.calls += 1
+        raise OfficialConnectorError("simulated official fetch failure")
+
+
 class _FakeDiscoveryProvider:
     def __init__(self, candidates: tuple[OfficialDiscoveryCandidate, ...]) -> None:
         self.candidates = candidates
@@ -626,6 +642,51 @@ def test_cache_miss_fetches_only_official_snapshot_into_pending_intake() -> None
     assert result.snapshots[0].source_uri == source_url
     assert result.rejected_candidate_count == 1
     assert discovery.calls == 1
+
+
+def test_failed_official_fetches_consume_the_bounded_attempt_budget() -> None:
+    store = TemporalRelationStore(
+        seal_temporal_relation_bundle((), corpus_manifest_sha256=_SHA_B)
+    )
+    candidates = tuple(
+        OfficialDiscoveryCandidate(
+            url=f"https://www.fsc.go.kr/po010103/{identifier}",
+            title=f"공식 자료 {identifier}",
+            published_at=date(2026, 5, 21),
+            as_of=date(2026, 5, 21),
+        )
+        for identifier in ("86950", "87009")
+    )
+    transport = _AlwaysFailTransport()
+    coordinator = OfficialEvidenceAcquisitionCoordinator(
+        relation_store=store,
+        discovery_provider=_FakeDiscoveryProvider(candidates),
+        connector=OfficialSourceConnector(transport),
+    )
+    question = "국민성장펀드의 구조와 투자 전략 및 운용 동향을 알려줘."
+    requirement = CompositeKnowledgePlanCompiler().compile(
+        question,
+        "bounded-failed-fetches",
+        _intent(
+            question,
+            [
+                (
+                    KnowledgeCapability.FUND_STRUCTURE_STRATEGY_TREND,
+                    "국민성장펀드",
+                    "구조와 투자 전략 및 운용 동향",
+                )
+            ],
+            [ProductFamily.FUND],
+            interaction_intent=InteractionIntent.EXPLAIN,
+        ),
+    ).requirements[0]
+
+    result = coordinator.acquire(requirement, top_k=2, max_fetches=2)
+
+    assert result.status is OfficialEvidenceAcquisitionStatus.CANNOT_VERIFY
+    assert result.fetch_count == 2
+    assert transport.calls == 2
+    assert result.snapshots == ()
 
 
 def test_evidence_verifier_requires_complete_multihop_chain_and_provided_aum() -> None:

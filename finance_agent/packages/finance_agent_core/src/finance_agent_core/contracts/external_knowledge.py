@@ -196,10 +196,10 @@ class ExternalSearchBudget(ExternalKnowledgeContractModel):
     """Hard limits owned by the server, never by HCX."""
 
     deadline_ms: int = Field(default=60_000, ge=100, le=60_000)
-    max_search_queries: int = Field(default=8, ge=1, le=40)
+    max_search_queries: int = Field(default=40, ge=1, le=40)
     max_candidates_per_requirement: int = Field(default=8, ge=1, le=20)
-    max_fetches: int = Field(default=12, ge=1, le=40)
-    max_total_bytes: int = Field(default=16 * 1024 * 1024, ge=1, le=64 * 1024 * 1024)
+    max_fetches: int = Field(default=32, ge=1, le=40)
+    max_total_bytes: int = Field(default=32 * 1024 * 1024, ge=1, le=64 * 1024 * 1024)
 
 
 class ProvidedProductCandidate(ExternalKnowledgeContractModel):

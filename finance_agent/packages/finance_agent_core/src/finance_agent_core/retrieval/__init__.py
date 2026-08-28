@@ -28,6 +28,10 @@ from finance_agent_core.retrieval.document_dense import (
     load_document_dense_artifact,
     write_document_dense_artifact,
 )
+from finance_agent_core.retrieval.document_discovery import (
+    CacheFirstOfficialDiscoveryProvider,
+    DocumentDiscoveryError,
+)
 from finance_agent_core.retrieval.models import (
     DocumentEvidence,
     DocumentFilters,
@@ -64,6 +68,7 @@ from finance_agent_core.retrieval.pending_corpus import (
     collect_pending_corpus,
     load_pending_corpus_catalog,
     load_pending_corpus_manifest,
+    rebind_pending_corpus_registry,
 )
 from finance_agent_core.retrieval.pending_relations import (
     PendingRelationError,
@@ -136,6 +141,8 @@ __all__ = [
     "DocumentDenseArtifact",
     "DocumentDenseError",
     "DocumentDenseManifest",
+    "CacheFirstOfficialDiscoveryProvider",
+    "DocumentDiscoveryError",
     "DocumentEvidence",
     "DocumentFilters",
     "DocumentIngestionResult",
@@ -216,6 +223,7 @@ __all__ = [
     "load_pending_corpus_catalog",
     "load_pending_corpus_manifest",
     "normalize_document_text",
+    "rebind_pending_corpus_registry",
     "packaged_field_registry_sha256",
     "sha256_document_text",
     "seal_approved_corpus_manifest",

@@ -432,7 +432,22 @@ def evaluate_residual_holdout(provider: EmbeddingProvider) -> dict[str, object]:
     """Evaluate v1/v2/v3 retrieval without granting any corpus execution authority."""
 
     suite, suite_sha256 = load_residual_holdout()
-    cases: list[ResidualCase] = suite["cases"]  # type: ignore[assignment]
+    # Preserve the historical suite bytes, but apply the organizer's later
+    # 2026-08-24 rules and the rebuilt official-data availability contract at
+    # evaluation time. BUYABLE_QUANTITY is invalid, while the new public-fund
+    # snapshot contains no usable one-week return values. Neither expression
+    # may acquire ranking execution authority in the current release.
+    historical_cases: list[ResidualCase] = suite["cases"]  # type: ignore[assignment]
+    cases: list[ResidualCase] = [
+        {
+            **case,
+            "expected": "clarify",
+            "gold_field_id": None,
+        }
+        if case["gold_field_id"] in {"buyable_quantity", "one_week_return_pct"}
+        else dict(case)  # type: ignore[misc]
+        for case in historical_cases
+    ]  # type: ignore[assignment]
     registry = load_field_registry()
     indexes: dict[str, DenseSchemaIndex] = {}
     for version in (
@@ -511,6 +526,19 @@ def evaluate_residual_holdout(provider: EmbeddingProvider) -> dict[str, object]:
         "status": "developer_authored_not_independent_blind",
         "scope": "single_residual_ranking_field_linking_only",
         "suite_sha256": suite_sha256,
+        "organizer_rule_overrides": {
+            "buyable_quantity": {
+                "effective_notice": "2026-08-24",
+                "case_ids": ["R013", "R014", "R015"],
+                "runtime_expectation": "clarify",
+            },
+            "fund_one_week_return_pct": {
+                "effective_snapshot": "2026-08-24",
+                "case_ids": ["R060", "R061"],
+                "reason": "all official logical products are missing this numeric value",
+                "runtime_expectation": "clarify",
+            },
+        },
         "case_count": len(cases),
         "provider": provider.metadata.model_dump(mode="json"),
         "corpora": {

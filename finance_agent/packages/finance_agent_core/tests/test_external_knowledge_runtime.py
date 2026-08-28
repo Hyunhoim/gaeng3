@@ -265,7 +265,7 @@ def test_external_outcome_states_cannot_be_mislabeled() -> None:
 
 def test_live_source_scopes_and_coverage_activate_external_execution_together() -> None:
     registry = load_official_source_registry()
-    assert registry.registry_id == "official-external-sources-20260824-v4"
+    assert registry.registry_id == "official-external-sources-20260824-v5"
     assert {entry.status for entry in registry.entries} == {"approved_for_live_evidence"}
     coverage = load_approved_knowledge_coverage_manifest()
     assert all(

@@ -273,10 +273,12 @@ def test_server_builds_explicit_subsidiary_holding_and_risk_chain() -> None:
     assert plan.requirements[1].source_registry_ids == (
         "samsungfund-kodex-newsroom",
         "samsungfund-kodex-product",
+        "samsungfund-kodex-product-mobile",
     )
     assert plan.requirements[2].source_registry_ids == (
         "samsungfund-kodex-newsroom",
         "samsungfund-kodex-product",
+        "samsungfund-kodex-product-mobile",
     )
     assert plan.product_selection is not None
     assert plan.product_selection.rank_field == "aum"
@@ -323,7 +325,7 @@ def test_source_selection_uses_registry_and_db_signals_without_entity_policy() -
     )
 
 
-def test_hclx_cannot_invent_an_extra_holding_subject() -> None:
+def test_hclx_cannot_invent_an_extra_holding_subject_or_cross_language_alias() -> None:
     question = (
         "2026년 6월 말 KraneShares 공식 보유내역에서 캠브리콘 편입이 확인되는 "
         "중국 반도체 해외 ETF를 찾아 주세요."
@@ -352,7 +354,7 @@ def test_hclx_cannot_invent_an_extra_holding_subject() -> None:
 
     assert len(sanitized.knowledge_requirements) == 1
     assert sanitized.knowledge_requirements[0].subject_span == "캠브리콘"
-    assert sanitized.knowledge_requirements[0].search_aliases == ("Cambricon",)
+    assert sanitized.knowledge_requirements[0].search_aliases == ()
 
 
 def test_live_official_coverage_authorizes_external_execution_without_fake_index() -> None:
@@ -485,7 +487,67 @@ def test_two_exact_short_names_are_resolved_inside_one_conjoined_surface() -> No
     assert resolved == {ProductFamily.DOMESTIC_ETP: {"KR7305720005", "KR7461950008"}}
 
 
-def test_exact_fund_identity_can_bind_official_policy_excerpt_without_label_repeat() -> None:
+def test_generic_fund_surface_binds_only_db_names_with_the_same_long_core() -> None:
+    records = (
+        ProductIdentityRecord(
+            product_family="fund",
+            product_id="FUND-C",
+            product_name="미래에셋국민참여형국민성장혼합자산투자신탁 종류C",
+            ticker=None,
+            isin=None,
+            short_name="미래에셋국민성장혼합자산C",
+            public_offering=True,
+            is_quarantined=False,
+        ),
+        ProductIdentityRecord(
+            product_family="fund",
+            product_id="FUND-CE",
+            product_name="미래에셋국민참여형국민성장혼합자산투자신탁 종류C-e",
+            ticker=None,
+            isin=None,
+            short_name="미래에셋국민성장혼합자산Ce",
+            public_offering=True,
+            is_quarantined=False,
+        ),
+        ProductIdentityRecord(
+            product_family="fund",
+            product_id="OTHER",
+            product_name="미래에셋다른성장혼합자산투자신탁",
+            ticker=None,
+            isin=None,
+            short_name="미래에셋다른성장",
+            public_offering=True,
+            is_quarantined=False,
+        ),
+    )
+
+    resolved = resolve_explicit_candidate_ids(
+        {ProductFamily.FUND: records},
+        ("국민성장펀드",),
+    )
+
+    assert resolved == {ProductFamily.FUND: {"FUND-C", "FUND-CE"}}
+
+
+def test_company_surface_does_not_narrow_products_by_reverse_substring() -> None:
+    record = ProductIdentityRecord(
+        product_family="domestic_etp",
+        product_id="ETF-001",
+        product_name="KODEX 에코프로밸류체인",
+        ticker="000001",
+        isin="KR7000000001",
+        short_name="KODEX 에코프로밸류체인",
+        public_offering=None,
+        is_quarantined=False,
+    )
+
+    assert resolve_explicit_candidate_ids(
+        {ProductFamily.DOMESTIC_ETP: (record,)},
+        ("에코프로",),
+    ) == {}
+
+
+def test_explicit_fund_core_can_bind_multiple_official_sale_classes() -> None:
     body = (
         "<html><body><article>국민성장펀드는 민간 자금과 정책 자금을 "
         "결합하는 구조이며 단계적으로 투자를 집행합니다.</article></body></html>"
@@ -532,7 +594,17 @@ def test_exact_fund_identity_can_bind_official_policy_excerpt_without_label_repe
             ProvidedProductCandidate(
                 product_family=ProductFamily.FUND,
                 product_id="FUND-001",
-                product_name="국민성장펀드 일반형",
+                product_name="미래에셋국민성장혼합자산 일반형",
+            ),
+            ProvidedProductCandidate(
+                product_family=ProductFamily.FUND,
+                product_id="FUND-002",
+                product_name="미래에셋국민성장혼합자산 서민형",
+            ),
+            ProvidedProductCandidate(
+                product_family=ProductFamily.FUND,
+                product_id="FUND-OTHER",
+                product_name="미래에셋다른성장혼합자산 일반형",
             ),
         ),
         database_sha256s={ProductFamily.FUND: "a" * 64},
@@ -542,8 +614,7 @@ def test_exact_fund_identity_can_bind_official_policy_excerpt_without_label_repe
 
     relations = VerifiedLiveRelationExtractor().extract(snapshot, requirement, universe)
 
-    assert len(relations) == 1
-    assert relations[0].product_id == "FUND-001"
+    assert {item.product_id for item in relations} == {"FUND-001", "FUND-002"}
 
 
 def test_live_subsidiary_relation_requires_exact_parent_and_child_in_source() -> None:
@@ -612,3 +683,100 @@ def test_live_subsidiary_relation_requires_exact_parent_and_child_in_source() ->
     assert relations[0].subject.canonical_name == "에코프로"
     assert relations[0].object.canonical_name == "에코프로비엠"
     assert relations[0].product_id is None
+
+
+def test_server_normalizes_particles_and_builds_parent_only_multihop_chain() -> None:
+    question = (
+        "에코프로의 자회사를 편입한 ETF 중 순자산이 큰 상품의 위험요인을 알려줘."
+    )
+    draft = IntentAnalysisDraft(
+        intent=InteractionIntent.SEARCH,
+        product_families=[ProductFamily.DOMESTIC_ETP],
+        evidence_spans=[],
+        needs_clarification=False,
+        knowledge_requirements=[
+            KnowledgeIntentRequirement(
+                capability=KnowledgeCapability.CORPORATE_SUBSIDIARY,
+                subject_span="자회사를",
+                relation_span="자회사",
+            ),
+            KnowledgeIntentRequirement(
+                capability=KnowledgeCapability.PORTFOLIO_HOLDINGS,
+                subject_span="자회사를",
+                relation_span="편입한",
+            ),
+        ],
+    )
+
+    sanitized = sanitize_server_authorized_knowledge_draft(question, draft)
+    plan = CompositeKnowledgePlanCompiler().compile(
+        question,
+        "parent-only-chain",
+        sanitized,
+    )
+
+    assert [item.capability for item in plan.requirements] == [
+        KnowledgeCapability.CORPORATE_SUBSIDIARY,
+        KnowledgeCapability.PORTFOLIO_HOLDINGS,
+        KnowledgeCapability.PRODUCT_RISK_FACTORS,
+    ]
+    assert [item.subject for item in plan.requirements] == ["에코프로", "에코프로", "상품"]
+    assert plan.requirements[1].depends_on == ("need_1",)
+    assert plan.requirements[2].depends_on == ("need_2",)
+
+
+def test_live_parent_only_subsidiary_extracts_exact_official_company_spans() -> None:
+    question = "에코프로의 자회사를 편입한 국내 ETF를 알려줘."
+    draft = sanitize_server_authorized_knowledge_draft(
+        question,
+        IntentAnalysisDraft(
+            intent=InteractionIntent.SEARCH,
+            product_families=[ProductFamily.DOMESTIC_ETP],
+            evidence_spans=[],
+            needs_clarification=False,
+            knowledge_requirements=[],
+        ),
+    )
+    requirement = CompositeKnowledgePlanCompiler().compile(
+        question,
+        "parent-only-extract",
+        draft,
+    ).requirements[0]
+    body = (
+        "<html><body><article>2016년 에코프로비엠, 2021년 에코프로에이치엔을 "
+        "각각 분할 설립하며 지주회사 체제로 전환한 에코프로입니다.</article></body></html>"
+    ).encode()
+    registry = load_official_source_registry()
+    source = registry.authorize_url(
+        "https://www.ecopro.co.kr/sub010101/view",
+        KnowledgeCapability.CORPORATE_SUBSIDIARY,
+    )
+    snapshot = OfficialSourceSnapshot(
+        source=source,
+        capability=KnowledgeCapability.CORPORATE_SUBSIDIARY,
+        source_uri="https://www.ecopro.co.kr/sub010101/view",
+        title="에코프로 기업개요",
+        content_type="text/html",
+        content=body,
+        content_sha256=hashlib.sha256(body).hexdigest(),
+        published_at=None,
+        as_of=date(2026, 8, 24),
+    )
+    universe = ProvidedProductCandidateUniverse(
+        candidates=(
+            ProvidedProductCandidate(
+                product_family=ProductFamily.DOMESTIC_ETP,
+                product_id="KR7123456789",
+                product_name="KODEX 예시산업",
+            ),
+        ),
+        database_sha256s={ProductFamily.DOMESTIC_ETP: "a" * 64},
+        candidate_filter_sha256="b" * 64,
+    )
+
+    relations = VerifiedLiveRelationExtractor().extract(snapshot, requirement, universe)
+
+    assert {item.object.canonical_name for item in relations} == {
+        "에코프로비엠",
+        "에코프로에이치엔",
+    }

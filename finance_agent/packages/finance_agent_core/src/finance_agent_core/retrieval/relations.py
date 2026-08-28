@@ -43,6 +43,15 @@ _SUPPORTED_FAMILIES = frozenset(
 )
 
 
+def _relation_product_scope(family: ProductFamily) -> str:
+    if family is ProductFamily.BOND:
+        return (
+            "source_row IN (SELECT MIN(source_row) FROM bond_products "
+            "WHERE is_quarantined = 0 GROUP BY ticker)"
+        )
+    return "1 = 1"
+
+
 class RelationIndexError(RuntimeError):
     """Raised when a relation index cannot cross a trust boundary."""
 
@@ -481,6 +490,7 @@ def _extract_relation_rows(
             FROM {source.table}
             WHERE
                 is_quarantined = 0
+                AND {_relation_product_scope(source.product_family)}
                 AND {source.canonical_field} IS NOT NULL
                 AND TRIM({source.canonical_field}) != ''
             ORDER BY product_id

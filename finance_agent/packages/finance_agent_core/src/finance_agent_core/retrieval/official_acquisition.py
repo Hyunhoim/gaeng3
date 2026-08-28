@@ -172,17 +172,17 @@ class OfficialEvidenceAcquisitionCoordinator:
                 )
                 if type(report) is not OfficialDiscoveryReport:
                     raise TypeError("discovery report provider returned an invalid contract")
-                discovered = report.candidates[:top_k]
+                discovered_pool = report.candidates[:20]
             else:
-                discovered = self.discovery_provider.discover(
+                discovered_pool = self.discovery_provider.discover(
                     query=" ".join((requirement.subject, *requirement.search_aliases)),
                     capability=requirement.capability,
                     source_registry_ids=requirement.source_registry_ids,
                     evidence_cutoff=self.connector.registry.evidence_cutoff,
                     top_k=top_k,
-                )[:top_k]
+                )[:20]
                 report = OfficialDiscoveryReport(
-                    candidates=discovered,
+                    candidates=discovered_pool,
                     queried_source_registry_ids=(),
                     exhaustive=False,
                     failure_codes=(DiscoveryFailureCode.SOURCE_SCOPE_INCOMPLETE,),
@@ -196,42 +196,70 @@ class OfficialEvidenceAcquisitionCoordinator:
                 failure_codes=("official_discovery_failed",),
                 search_query_count=1,
             )
+        time_filtered = tuple(
+            candidate
+            for candidate in discovered_pool
+            if requirement.time_range is None
+            or candidate.published_at is None
+            or (
+                candidate.published_at <= requirement.time_range.end
+                and (
+                    requirement.time_range.start is None
+                    or candidate.published_at >= requirement.time_range.start
+                )
+            )
+        )
+        if requirement.time_range is not None:
+            time_filtered = tuple(
+                sorted(
+                    time_filtered,
+                    key=lambda candidate: (
+                        candidate.published_at is None,
+                        -(
+                            candidate.published_at.toordinal()
+                            if candidate.published_at is not None
+                            else 0
+                        ),
+                    ),
+                )
+            )
         authorized = self.discovery_gate.authorize_candidates(
-            discovered,
+            time_filtered,
             requirement.capability,
             max_candidates=top_k,
         )
         snapshots: list[OfficialSourceSnapshot] = []
-        rejected = len(discovered) - len(authorized)
+        rejected = len(discovered_pool) - len(authorized)
         fetched_bytes = 0
+        fetch_attempt_count = 0
         fetch_failure_codes: set[str] = set()
         seen_snapshot_urls: set[str] = set()
         for candidate in authorized:
-            if len(snapshots) >= max_fetches:
+            if fetch_attempt_count >= max_fetches:
                 rejected += 1
                 continue
             remaining_seconds = deadline - perf_counter()
             if remaining_seconds <= 0:
                 return OfficialEvidenceAcquisitionResult(
                     status=OfficialEvidenceAcquisitionStatus.CANNOT_VERIFY,
-                    discovered_candidate_count=len(discovered),
+                    discovered_candidate_count=len(discovered_pool),
                     rejected_candidate_count=rejected + len(authorized) - len(snapshots),
                     search_complete=False,
                     failure_codes=("acquisition_deadline_exceeded",),
                     search_query_count=len(report.queried_source_registry_ids),
-                    fetch_count=len(snapshots),
+                    fetch_count=fetch_attempt_count,
                     fetched_bytes=fetched_bytes,
                 )
             remaining_bytes = max_total_bytes - fetched_bytes
             if remaining_bytes <= 0:
                 return OfficialEvidenceAcquisitionResult(
                     status=OfficialEvidenceAcquisitionStatus.CANNOT_VERIFY,
-                    discovered_candidate_count=len(discovered),
+                    discovered_candidate_count=len(discovered_pool),
                     rejected_candidate_count=rejected + len(authorized) - len(snapshots),
                     search_complete=False,
                     failure_codes=("acquisition_byte_budget_exceeded",),
                     search_query_count=len(report.queried_source_registry_ids),
-                    fetch_count=len(snapshots),
+                    fetch_count=fetch_attempt_count,
                     fetched_bytes=fetched_bytes,
                 )
             try:
@@ -242,6 +270,7 @@ class OfficialEvidenceAcquisitionCoordinator:
                 if source.source_id not in requirement.source_registry_ids:
                     rejected += 1
                     continue
+                fetch_attempt_count += 1
                 snapshot = self.connector.fetch(
                     candidate,
                     OfficialFetchRequest(
@@ -256,7 +285,7 @@ class OfficialEvidenceAcquisitionCoordinator:
                 snapshots.append(snapshot)
                 seen_snapshot_urls.add(snapshot.source_uri)
                 fetched_bytes += len(snapshot.content)
-                remaining_link_fetches = max_fetches - len(snapshots)
+                remaining_link_fetches = max_fetches - fetch_attempt_count
                 if remaining_link_fetches <= 0:
                     continue
                 linked = self.link_resolver.resolve(
@@ -269,13 +298,14 @@ class OfficialEvidenceAcquisitionCoordinator:
                     remaining_seconds = deadline - perf_counter()
                     remaining_bytes = max_total_bytes - fetched_bytes
                     if (
-                        len(snapshots) >= max_fetches
+                        fetch_attempt_count >= max_fetches
                         or remaining_seconds <= 0
                         or remaining_bytes <= 0
                     ):
                         fetch_failure_codes.add("linked_document_budget_exhausted")
                         break
                     try:
+                        fetch_attempt_count += 1
                         linked_snapshot = self.connector.fetch(
                             linked_candidate,
                             OfficialFetchRequest(
@@ -306,7 +336,7 @@ class OfficialEvidenceAcquisitionCoordinator:
                     else OfficialEvidenceAcquisitionStatus.INTAKE_PENDING
                 ),
                 snapshots=tuple(snapshots),
-                discovered_candidate_count=len(discovered),
+                discovered_candidate_count=len(discovered_pool),
                 rejected_candidate_count=rejected,
                 search_complete=False,
                 failure_codes=(
@@ -322,7 +352,7 @@ class OfficialEvidenceAcquisitionCoordinator:
                     else tuple(sorted({"evidence_intake_pending", *fetch_failure_codes}))
                 ),
                 search_query_count=len(report.queried_source_registry_ids),
-                fetch_count=len(snapshots),
+                fetch_count=fetch_attempt_count,
                 fetched_bytes=fetched_bytes,
             )
         status = (
@@ -335,18 +365,18 @@ class OfficialEvidenceAcquisitionCoordinator:
                 {
                     *(item.value for item in report.failure_codes),
                     *(() if report.exhaustive else ("search_not_exhaustive",)),
-                    *(("all_candidates_rejected",) if discovered and rejected else ()),
+                    *(("all_candidates_rejected",) if discovered_pool and rejected else ()),
                 }
             )
         )
         return OfficialEvidenceAcquisitionResult(
             status=status,
-            discovered_candidate_count=len(discovered),
+            discovered_candidate_count=len(discovered_pool),
             rejected_candidate_count=rejected,
             search_complete=report.exhaustive,
             failure_codes=failure_codes,
             search_query_count=len(report.queried_source_registry_ids),
-            fetch_count=len(snapshots),
+            fetch_count=fetch_attempt_count,
             fetched_bytes=fetched_bytes,
         )
 

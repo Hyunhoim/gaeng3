@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "registry_id": "official-external-sources-20260824-v4",
+  "registry_id": "official-external-sources-20260824-v5",
   "evidence_cutoff": "2026-08-24",
   "entries": [
     {
@@ -43,6 +43,19 @@
       "publication_date_required": true
     },
     {
+      "source_id": "fsc-policy-other",
+      "publisher": "금융위원회",
+      "authority": "regulator",
+      "hostname": "www.fsc.go.kr",
+      "path_prefixes": ["/comm/getFile", "/no010101/"],
+      "connector_kind": "html_or_pdf",
+      "capabilities": ["fund_structure_strategy_trend"],
+      "selection_aliases": ["금융위원회"],
+      "product_families": ["fund"],
+      "status": "approved_for_live_evidence",
+      "publication_date_required": false
+    },
+    {
       "source_id": "kbam-official-reports",
       "publisher": "KB자산운용",
       "authority": "asset_manager",
@@ -67,6 +80,19 @@
       "product_families": [],
       "status": "approved_for_live_evidence",
       "publication_date_required": true
+    },
+    {
+      "source_id": "kraneshares-main-product",
+      "publisher": "KraneShares",
+      "authority": "product_issuer",
+      "hostname": "kraneshares.com",
+      "path_prefixes": ["/category/products/", "/etf/", "/resources/"],
+      "connector_kind": "html_or_pdf",
+      "capabilities": ["portfolio_holdings", "product_risk_factors", "sector_theme_history"],
+      "selection_aliases": ["KraneShares", "KSTR"],
+      "product_families": ["overseas_etp"],
+      "status": "approved_for_live_evidence",
+      "publication_date_required": false
     },
     {
       "source_id": "kraneshares-product",
@@ -125,6 +151,19 @@
       "publisher": "삼성자산운용",
       "authority": "asset_manager",
       "hostname": "www.samsungfund.com",
+      "path_prefixes": ["/etf/product/"],
+      "connector_kind": "html",
+      "capabilities": ["portfolio_holdings", "product_risk_factors", "sector_theme_history"],
+      "selection_aliases": ["KODEX", "삼성자산운용"],
+      "product_families": ["domestic_etp"],
+      "status": "approved_for_live_evidence",
+      "publication_date_required": false
+    },
+    {
+      "source_id": "samsungfund-kodex-product-mobile",
+      "publisher": "삼성자산운용",
+      "authority": "asset_manager",
+      "hostname": "m.samsungfund.com",
       "path_prefixes": ["/etf/product/"],
       "connector_kind": "html",
       "capabilities": ["portfolio_holdings", "product_risk_factors", "sector_theme_history"],

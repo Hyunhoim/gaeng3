@@ -5,22 +5,22 @@
   "status": "public_performance_regression_not_blind",
   "data": {
     "overseas_etp": {
-      "database_sha256": "59a4757fd5e7306143267053f0799bad0e0cc62ade2adbd0a79b1beda107318a",
+      "database_sha256": "0c36a48f6555d0d09b8d1f5f6026bec68d9cac100ea393987f082d4e890f6371",
       "manifest_sha256": "3830b94be468c59adb97cc3ca9da89d1a5531e20934f0526c7762167311982dc",
       "source_file_sha256": "ca6a274aeaf3f884f2f7635d7802558bc6dabf408871ecb1f71e5a50d9d34067"
     },
     "domestic_etp": {
-      "database_sha256": "73c709a92a673106f6fb0797ee0d229c4c6dd06383ab79657601dd9f5b7fe0a7",
+      "database_sha256": "ece8f990703434baaac4ab305dc10f94b954b307e0f170bc46816f477178061b",
       "manifest_sha256": "35691ee234d5fb748df848dabb930a221f53f1780a1f5d0e430cf68aee2ac082",
       "source_file_sha256": "18c4329d8fc8768d030316816f3e6e48226a3c217db3354245b766a2c6f6c592"
     },
     "bond": {
-      "database_sha256": "db528783fb9b28c43ea77933209271d4a1f1421ee26af78caa9a071dc975c9a3",
+      "database_sha256": "7c128f4ae1096255cae2533e92627768384e97c91feb1457c44f0f524c28bf64",
       "manifest_sha256": "0fa6ee3ecee5ab517f97effb70d3c76950136a833b4fb121609dcc082c0d61ce",
       "source_file_sha256": "574ae5d6c1d98704712c256ed5352cbaed065ea9c3a6eb7b2a52adb305fa9001"
     },
     "fund": {
-      "database_sha256": "b33c9606adca1b2808bb04cde5f65041d466a3cd02b7f0b182fe7c9dd66f1adc",
+      "database_sha256": "a7acd0503a645bf25176fdcfc75dd33c47c4c86f6edb8fc15aa61ac699de6838",
       "manifest_sha256": "99f25c69238fd6676861f2c31e524affdc603ff11352a273c791f40c956651e9",
       "source_file_sha256": "81b3ce3f1d5042b32fd52a76acff094fc5b8dd9fa36289af2fb54c195eb5d94c"
     }
@@ -33,7 +33,7 @@
       "executor": "routed",
       "question": "미국 채권형 해외 ETF 중 현재 거래 가능한 상품에서 총보수 0.20% 이하인 상품을 AUM 순으로 5개 보여줘.",
       "expected": {
-        "candidate_count": 441,
+        "candidate_count": 427,
         "top_product_ids": ["NAS:BND.O", "AMX:AGG", "NYS:SGOV.K", "AMX:BIL", "NAS:TLT.O"],
         "aggregates": []
       }
@@ -45,7 +45,7 @@
       "executor": "domestic_mock",
       "question": "미국 주식형 국내 ETF 중 연금 거래 가능한 상품을 1개월 수익률 순으로 보여줘",
       "expected": {
-        "candidate_count": 216,
+        "candidate_count": 211,
         "top_product_ids": ["KR7457990000", "KR70000J0003", "KR70083S0002", "KR70102A0009", "KR7301400008"],
         "aggregates": []
       }
@@ -57,8 +57,8 @@
       "executor": "routed",
       "question": "원화 매수 가능한 국내채권을 매수수익률 높은 순으로 5개 보여줘",
       "expected": {
-        "candidate_count": 21881,
-        "top_product_ids": ["KR6000036DA8:장외:20260821:1", "KR6166263D50:장외:20260821:1", "KR6214341G28:장외:20260821:2", "KR6105561D24:장외:20260821:1", "KR6169375G49:장외:20260821:2"],
+        "candidate_count": 98,
+        "top_product_ids": ["KR6003342G73", "KR6169372G67", "KR6169372G18", "KR103502GA34", "KR6185452FA9"],
         "aggregates": []
       }
     },
@@ -69,7 +69,7 @@
       "executor": "routed",
       "question": "현재 판매 중인 공모펀드를 3개월 수익률 높은 순으로 5개 보여줘",
       "expected": {
-        "candidate_count": 8859,
+        "candidate_count": 7182,
         "top_product_ids": ["KR5152420027", "KR5152420030", "KR5152420029", "KR5152420024", "KR5152420028"],
         "aggregates": []
       }
@@ -143,26 +143,26 @@
       "executor": "routed",
       "question": "현재 매수 가능한 국내채권의 매수수익률 평균과 최댓값을 집계해줘",
       "expected": {
-        "candidate_count": 21882,
+        "candidate_count": 20497,
         "top_product_ids": [],
         "aggregates": [
           {
             "function": "avg",
             "field": "buy_yield_pct",
             "group_values": {},
-            "value": "3.994600946372",
-            "row_count": 21882,
-            "valid_count": 634,
-            "missing_count": 21248
+            "value": "4.01243877551",
+            "row_count": 20497,
+            "valid_count": 98,
+            "missing_count": 20399
           },
           {
             "function": "max",
             "field": "buy_yield_pct",
             "group_values": {},
-            "value": "5.29",
-            "row_count": 21882,
-            "valid_count": 634,
-            "missing_count": 21248
+            "value": "4.85",
+            "row_count": 20497,
+            "valid_count": 98,
+            "missing_count": 20399
           }
         ]
       }
