@@ -63,7 +63,7 @@ def _valid_input_arguments(output: Path) -> list[str]:
         "--fund-execution-policy",
         "public_fund_v1_approved",
         "--schema-dense-index-sha256",
-        "9463ce21d14341e3dca0e44bc5ca3e2e085309ef81513a3802e175fa198de306",
+        "1b0dd3668daee501ef8f24457b2bbf6b4acc074c4b1fc8bbafebe56c1d3594f5",
         "--schema-dense-calibration-report-sha256",
         "b6cd6e1c4c371929306499ec4efaba8b9a29934ec40d6d300ad8a9d2d93c4d60",
         "--schema-dense-min-score",
@@ -161,7 +161,7 @@ def test_release_ci_accepts_only_normalized_protected_main_inputs(tmp_path: Path
     assert values["adaptive_semantic_enabled"] == "true"
     assert values["fund_execution_policy"] == "public_fund_v1_approved"
     assert values["schema_dense_index_sha256"] == (
-        "9463ce21d14341e3dca0e44bc5ca3e2e085309ef81513a3802e175fa198de306"
+        "1b0dd3668daee501ef8f24457b2bbf6b4acc074c4b1fc8bbafebe56c1d3594f5"
     )
     assert values["schema_dense_calibration_report_sha256"] == (
         "b6cd6e1c4c371929306499ec4efaba8b9a29934ec40d6d300ad8a9d2d93c4d60"
