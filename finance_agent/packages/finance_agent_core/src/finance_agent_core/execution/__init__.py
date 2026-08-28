@@ -27,6 +27,12 @@ from finance_agent_core.execution.comparison import (
     build_product_comparison,
 )
 from finance_agent_core.execution.evidence import build_product_evidence
+from finance_agent_core.execution.external_knowledge_executor import (
+    ExternalKnowledgeExecution,
+    ExternalKnowledgeExecutionError,
+    ExternalKnowledgeExecutor,
+    OfficialProductFactProvider,
+)
 from finance_agent_core.execution.oracle import SQLiteAggregateOracle, SQLiteOracle
 from finance_agent_core.execution.policy import (
     PlanExecutionBlockedError,
@@ -65,10 +71,14 @@ __all__ = [
     "ComparisonResultVerifier",
     "DatasetAuthorityStatus",
     "ExecutionProfile",
+    "ExternalKnowledgeExecution",
+    "ExternalKnowledgeExecutionError",
+    "ExternalKnowledgeExecutor",
     "FieldComparison",
     "FundComparison",
     "ProductComparison",
     "PlanExecutionBlockedError",
+    "OfficialProductFactProvider",
     "PlanAuthorityCode",
     "PlanAuthorityError",
     "PlanAuthorityGate",

@@ -7,6 +7,7 @@ from finance_agent_core.config import QualityStatus
 
 
 class VerifierRecord(Protocol):
+    source_row: int
     product_id: str
     product_family: str
     is_quarantined: bool

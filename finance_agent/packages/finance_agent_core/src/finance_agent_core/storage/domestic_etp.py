@@ -25,6 +25,10 @@ from finance_agent_core.storage.sqlite import (
 MONEY_SCALE = Decimal("100")
 RETURN_SCALE = FEE_SCALE
 FACTOR_SCALE = FEE_SCALE
+EIGHT_DECIMAL_SCALE = Decimal("100000000")
+HUNDREDTH_SCALE = Decimal("100")
+QUANTITY_SCALE = Decimal("100")
+COUNT_SCALE = Decimal("1")
 
 SCHEMA_SQL = """
 CREATE TABLE metadata (
@@ -89,6 +93,24 @@ CREATE TABLE domestic_etp_products (
     ytd_return_quality TEXT NOT NULL,
     daily_trading_value_minor_units INTEGER,
     daily_trading_value_quality TEXT NOT NULL,
+    daily_volume_hundredth_units INTEGER,
+    daily_volume_quality TEXT NOT NULL,
+    tracking_error_hundredth_pct INTEGER,
+    tracking_error_quality TEXT NOT NULL,
+    discrepancy_hundredth_pct INTEGER,
+    discrepancy_quality TEXT NOT NULL,
+    twenty_day_volatility_eight_decimal_pct INTEGER,
+    twenty_day_volatility_quality TEXT NOT NULL,
+    sixty_day_volatility_eight_decimal_pct INTEGER,
+    sixty_day_volatility_quality TEXT NOT NULL,
+    one_hundred_twenty_day_volatility_eight_decimal_pct INTEGER,
+    one_hundred_twenty_day_volatility_quality TEXT NOT NULL,
+    two_hundred_fifty_two_day_volatility_eight_decimal_pct INTEGER,
+    two_hundred_fifty_two_day_volatility_quality TEXT NOT NULL,
+    distribution_yield_eight_decimal_pct INTEGER,
+    distribution_yield_quality TEXT NOT NULL,
+    distribution_payments_per_year_units INTEGER,
+    distribution_payments_per_year_quality TEXT NOT NULL,
     static_as_of TEXT NOT NULL,
     static_as_of_quality TEXT NOT NULL,
     dynamic_as_of TEXT NOT NULL,
@@ -133,12 +155,24 @@ INSERT INTO domestic_etp_products (
     six_month_return_micro_pct, six_month_return_quality,
     one_year_return_micro_pct, one_year_return_quality, ytd_return_micro_pct,
     ytd_return_quality, daily_trading_value_minor_units,
-    daily_trading_value_quality, static_as_of, static_as_of_quality,
+    daily_trading_value_quality, daily_volume_hundredth_units,
+    daily_volume_quality, tracking_error_hundredth_pct, tracking_error_quality,
+    discrepancy_hundredth_pct, discrepancy_quality,
+    twenty_day_volatility_eight_decimal_pct, twenty_day_volatility_quality,
+    sixty_day_volatility_eight_decimal_pct, sixty_day_volatility_quality,
+    one_hundred_twenty_day_volatility_eight_decimal_pct,
+    one_hundred_twenty_day_volatility_quality,
+    two_hundred_fifty_two_day_volatility_eight_decimal_pct,
+    two_hundred_fifty_two_day_volatility_quality,
+    distribution_yield_eight_decimal_pct, distribution_yield_quality,
+    distribution_payments_per_year_units, distribution_payments_per_year_quality,
+    static_as_of, static_as_of_quality,
     dynamic_as_of, dynamic_as_of_quality
 ) VALUES (
     ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
     ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+    ?, ?, ?, ?, ?, ?, ?, ?
 )
 """
 
@@ -148,7 +182,7 @@ def _json(value: object) -> str:
 
 
 def _quality(record: NormalizedDomesticEtpRecord, field: str) -> str:
-    return record.field_quality[field].value
+    return record.field_quality.get(field, QualityStatus.UNKNOWN).value
 
 
 def _database_values(record: NormalizedDomesticEtpRecord) -> tuple[object, ...]:
@@ -232,6 +266,56 @@ def _database_values(record: NormalizedDomesticEtpRecord) -> tuple[object, ...]:
             "daily_trading_value",
         ),
         _quality(record, "daily_trading_value"),
+        _scaled_integer(record.daily_volume, QUANTITY_SCALE, "daily_volume"),
+        _quality(record, "daily_volume"),
+        _scaled_integer(
+            record.tracking_error_pct,
+            HUNDREDTH_SCALE,
+            "tracking_error_pct",
+        ),
+        _quality(record, "tracking_error_pct"),
+        _scaled_integer(
+            record.discrepancy_pct,
+            HUNDREDTH_SCALE,
+            "discrepancy_pct",
+        ),
+        _quality(record, "discrepancy_pct"),
+        _scaled_integer(
+            record.twenty_day_volatility_pct,
+            EIGHT_DECIMAL_SCALE,
+            "twenty_day_volatility_pct",
+        ),
+        _quality(record, "twenty_day_volatility_pct"),
+        _scaled_integer(
+            record.sixty_day_volatility_pct,
+            EIGHT_DECIMAL_SCALE,
+            "sixty_day_volatility_pct",
+        ),
+        _quality(record, "sixty_day_volatility_pct"),
+        _scaled_integer(
+            record.one_hundred_twenty_day_volatility_pct,
+            EIGHT_DECIMAL_SCALE,
+            "one_hundred_twenty_day_volatility_pct",
+        ),
+        _quality(record, "one_hundred_twenty_day_volatility_pct"),
+        _scaled_integer(
+            record.two_hundred_fifty_two_day_volatility_pct,
+            EIGHT_DECIMAL_SCALE,
+            "two_hundred_fifty_two_day_volatility_pct",
+        ),
+        _quality(record, "two_hundred_fifty_two_day_volatility_pct"),
+        _scaled_integer(
+            record.distribution_yield_pct,
+            EIGHT_DECIMAL_SCALE,
+            "distribution_yield_pct",
+        ),
+        _quality(record, "distribution_yield_pct"),
+        _scaled_integer(
+            record.distribution_payments_per_year,
+            COUNT_SCALE,
+            "distribution_payments_per_year",
+        ),
+        _quality(record, "distribution_payments_per_year"),
         record.static_as_of.isoformat(),
         _quality(record, "static_as_of"),
         record.dynamic_as_of.isoformat(),
@@ -412,6 +496,53 @@ def row_to_domestic_etp_record(
             None
             if row["daily_trading_value_minor_units"] is None
             else Decimal(row["daily_trading_value_minor_units"]) / MONEY_SCALE
+        ),
+        daily_volume=(
+            None
+            if row["daily_volume_hundredth_units"] is None
+            else Decimal(row["daily_volume_hundredth_units"]) / QUANTITY_SCALE
+        ),
+        tracking_error_pct=(
+            None
+            if row["tracking_error_hundredth_pct"] is None
+            else Decimal(row["tracking_error_hundredth_pct"]) / HUNDREDTH_SCALE
+        ),
+        discrepancy_pct=(
+            None
+            if row["discrepancy_hundredth_pct"] is None
+            else Decimal(row["discrepancy_hundredth_pct"]) / HUNDREDTH_SCALE
+        ),
+        twenty_day_volatility_pct=(
+            None
+            if row["twenty_day_volatility_eight_decimal_pct"] is None
+            else Decimal(row["twenty_day_volatility_eight_decimal_pct"]) / EIGHT_DECIMAL_SCALE
+        ),
+        sixty_day_volatility_pct=(
+            None
+            if row["sixty_day_volatility_eight_decimal_pct"] is None
+            else Decimal(row["sixty_day_volatility_eight_decimal_pct"]) / EIGHT_DECIMAL_SCALE
+        ),
+        one_hundred_twenty_day_volatility_pct=(
+            None
+            if row["one_hundred_twenty_day_volatility_eight_decimal_pct"] is None
+            else Decimal(row["one_hundred_twenty_day_volatility_eight_decimal_pct"])
+            / EIGHT_DECIMAL_SCALE
+        ),
+        two_hundred_fifty_two_day_volatility_pct=(
+            None
+            if row["two_hundred_fifty_two_day_volatility_eight_decimal_pct"] is None
+            else Decimal(row["two_hundred_fifty_two_day_volatility_eight_decimal_pct"])
+            / EIGHT_DECIMAL_SCALE
+        ),
+        distribution_yield_pct=(
+            None
+            if row["distribution_yield_eight_decimal_pct"] is None
+            else Decimal(row["distribution_yield_eight_decimal_pct"]) / EIGHT_DECIMAL_SCALE
+        ),
+        distribution_payments_per_year=(
+            None
+            if row["distribution_payments_per_year_units"] is None
+            else Decimal(row["distribution_payments_per_year_units"]) / COUNT_SCALE
         ),
         static_as_of=row["static_as_of"],
         dynamic_as_of=row["dynamic_as_of"],

@@ -317,11 +317,19 @@ def _signed_manifest_profile(
     document = _object_member(knowledge, "document")
 
     queryplan_enabled = model.get("queryplan_operation_enabled")
+    intent_analysis_enabled = model.get("intent_analysis_operation_enabled", False)
     semantic_resolver_enabled = model.get("semantic_resolver_operation_enabled", False)
-    answer_enabled = model.get("grounded_answer_operation_enabled")
+    grounded_answer_enabled = model.get("grounded_answer_operation_enabled")
+    final_answer_enabled = model.get("final_answer_operation_enabled", False)
     if any(
         type(value) is not bool
-        for value in (queryplan_enabled, semantic_resolver_enabled, answer_enabled)
+        for value in (
+            queryplan_enabled,
+            intent_analysis_enabled,
+            semantic_resolver_enabled,
+            grounded_answer_enabled,
+            final_answer_enabled,
+        )
     ):
         raise ReleaseTrustError("signed release profile is invalid")
     provider = model.get("provider")
@@ -330,8 +338,10 @@ def _signed_manifest_profile(
     if provider == "disabled":
         if (
             queryplan_enabled
+            or intent_analysis_enabled
             or semantic_resolver_enabled
-            or answer_enabled
+            or grounded_answer_enabled
+            or final_answer_enabled
             or model_id is not None
             or revision_status != "not_used"
         ):
@@ -339,12 +349,20 @@ def _signed_manifest_profile(
         answer_provider = "deterministic"
     elif provider == "hyperclova":
         if (
-            not (queryplan_enabled or semantic_resolver_enabled or answer_enabled)
+            not (
+                queryplan_enabled
+                or intent_analysis_enabled
+                or semantic_resolver_enabled
+                or grounded_answer_enabled
+                or final_answer_enabled
+            )
             or model_id != "HCX-007"
             or revision_status != "provider_revision_not_exposed"
         ):
             raise ReleaseTrustError("signed release profile is invalid")
-        answer_provider = "hyperclova" if answer_enabled else "deterministic"
+        answer_provider = (
+            "hyperclova" if grounded_answer_enabled or final_answer_enabled else "deterministic"
+        )
     else:
         raise ReleaseTrustError("signed release profile is invalid")
 
@@ -419,7 +437,10 @@ def _signed_manifest_profile(
         "source_commit": source_commit,
         "platform": binding.get("platform"),
         "answer_provider": answer_provider,
+        "hcx_grounded_answer_enabled": grounded_answer_enabled,
+        "hcx_final_answer_enabled": final_answer_enabled,
         "hcx_queryplan_enabled": queryplan_enabled,
+        "hcx_intent_analysis_enabled": intent_analysis_enabled,
         "hcx_semantic_resolver_enabled": semantic_resolver_enabled,
         "hcx_model": model_id,
         "adaptive_semantic_enabled": adaptive_semantic_enabled,
@@ -443,6 +464,11 @@ def _release_environment_profile(values: dict[str, str]) -> dict[str, Any]:
     queryplan_enabled = _boolean_environment(
         values,
         "FINANCE_BACKEND_HCX_QUERY_PLAN_ENABLED",
+        default="false",
+    )
+    intent_analysis_enabled = _boolean_environment(
+        values,
+        "FINANCE_BACKEND_HCX_INTENT_ANALYSIS_ENABLED",
         default="false",
     )
     semantic_resolver_enabled = _boolean_environment(
@@ -513,7 +539,11 @@ def _release_environment_profile(values: dict[str, str]) -> dict[str, Any]:
                 raise ReleaseTrustError("release environment profile is invalid")
     elif any(values.get(name) for name in adaptive_required | adaptive_optional):
         raise ReleaseTrustError("release environment profile is invalid")
-    uses_hcx = answer_provider == "hyperclova" or queryplan_enabled or semantic_resolver_enabled
+    if queryplan_enabled or not intent_analysis_enabled or answer_provider != "hyperclova":
+        raise ReleaseTrustError("release environment profile is invalid")
+    uses_hcx = (
+        answer_provider == "hyperclova" or intent_analysis_enabled or semantic_resolver_enabled
+    )
     if uses_hcx:
         if (
             values.get("FINANCE_AGENT_LLM_MODE") != values["APP_ENV"]
@@ -541,7 +571,10 @@ def _release_environment_profile(values: dict[str, str]) -> dict[str, Any]:
         "source_commit": values["FINANCE_SOURCE_COMMIT"],
         "platform": platform,
         "answer_provider": answer_provider,
+        "hcx_grounded_answer_enabled": False,
+        "hcx_final_answer_enabled": answer_provider == "hyperclova",
         "hcx_queryplan_enabled": queryplan_enabled,
+        "hcx_intent_analysis_enabled": intent_analysis_enabled,
         "hcx_semantic_resolver_enabled": semantic_resolver_enabled,
         "hcx_model": model_id,
         "adaptive_semantic_enabled": adaptive_semantic_enabled,
@@ -600,6 +633,7 @@ def verify_release_trust(env_file: Path) -> None:
         "FINANCE_RELATION_RETRIEVAL_ARTIFACT_SHA256",
         "FINANCE_BACKEND_ANSWER_PROVIDER",
         "FINANCE_BACKEND_HCX_QUERY_PLAN_ENABLED",
+        "FINANCE_BACKEND_HCX_INTENT_ANALYSIS_ENABLED",
         "FINANCE_BACKEND_FUND_EXECUTION_POLICY",
         "HCX_TIMEOUT_SECONDS",
         "WEB_CONCURRENCY",

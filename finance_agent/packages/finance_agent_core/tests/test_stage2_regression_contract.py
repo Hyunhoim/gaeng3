@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 from importlib.resources import files
@@ -21,11 +22,36 @@ from finance_agent_core.evaluation.product_comparison_runner import (
 )
 from finance_agent_core.evaluation.runner import sha256_file
 from finance_agent_core.evaluation.search_aggregate_benchmark import (
+    LoadedSearchAggregateBenchmarkSuite,
+    SearchAggregateBenchmarkSuite,
     execute_benchmark_case,
     load_search_aggregate_benchmark_suite,
 )
 
 _STAGE2_DATABASE_DIR = os.environ.get("FINANCE_STAGE2_DATABASE_DIR")
+
+
+def _load_historical_g5_search_aggregate_suite() -> LoadedSearchAggregateBenchmarkSuite:
+    resource = files("finance_agent_core.evaluation.suites").joinpath(
+        "search_aggregate_performance_8_20260822_g5.json"
+    )
+    raw = resource.read_bytes()
+    return LoadedSearchAggregateBenchmarkSuite(
+        suite=SearchAggregateBenchmarkSuite.model_validate(json.loads(raw)),
+        suite_sha256=hashlib.sha256(raw).hexdigest(),
+    )
+
+
+def test_historical_g5_search_aggregate_suite_matches_approved_contract() -> None:
+    """Keep the retired Generation 5 suite reproducible without making it current."""
+
+    contract_resource = files("finance_agent_core.evaluation.suites").joinpath(
+        "stage2_approved_db_contract_20260822_g5.json"
+    )
+    contract = json.loads(contract_resource.read_text(encoding="utf-8"))
+    historical = _load_historical_g5_search_aggregate_suite()
+
+    assert contract["source_suites"]["search_aggregate"]["sha256"] == (historical.suite_sha256)
 
 
 def test_frozen_public_fingerprints_cover_every_stage2_execution_cell() -> None:
@@ -112,7 +138,7 @@ def test_approved_four_family_databases_recompute_stage2_fingerprints() -> None:
         "stage2_approved_db_contract_20260822_g5.json"
     )
     contract = json.loads(contract_resource.read_text(encoding="utf-8"))
-    search_aggregate = load_search_aggregate_benchmark_suite()
+    search_aggregate = _load_historical_g5_search_aggregate_suite()
     product_comparison = load_product_comparison_suite()
     fund_comparison = load_fund_comparison_e2e_suite()
     source_suites = contract["source_suites"]

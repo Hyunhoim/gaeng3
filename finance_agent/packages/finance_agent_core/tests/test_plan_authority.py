@@ -127,7 +127,7 @@ def test_gate_issues_nominal_validated_plan_with_complete_receipt(
     assert receipt.planning_policy_version == "adaptive-shadow-v1"
     assert receipt.capability_matrix_version == "2026-07-30.3"
     assert len(receipt.capability_matrix_sha256) == 64
-    assert receipt.registry_schema_version == "1.3"
+    assert receipt.registry_schema_version == "1.4"
     assert len(receipt.registry_sha256) == 64
     assert len(receipt.ontology_bundle_sha256) == 64
     assert receipt.dataset is ProductFamily.OVERSEAS_ETP

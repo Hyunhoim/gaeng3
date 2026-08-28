@@ -207,10 +207,13 @@ def test_final_release_env_example_pins_public_http_and_hcx_answer_only() -> Non
     assert "BACKEND_PORT=80" in example
     assert "FINANCE_BACKEND_ANSWER_PROVIDER=hyperclova" in example
     assert "FINANCE_BACKEND_HCX_QUERY_PLAN_ENABLED=false" in example
+    assert "FINANCE_BACKEND_HCX_INTENT_ANALYSIS_ENABLED=true" in example
     assert "FINANCE_AGENT_LLM_MODE=evaluation" in example
     assert "LLM_PROVIDER=hyperclova" in example
     assert "HCX_MODEL=HCX-007" in example
-    assert "FINANCE_BACKEND_FUND_EXECUTION_POLICY=locked" in example
+    assert "FINANCE_BACKEND_FUND_EXECUTION_POLICY=public_fund_v1_approved" in example
+    assert "FINANCE_ADAPTIVE_SEMANTIC_ENABLED=true" in example
+    assert "FINANCE_EXTERNAL_KNOWLEDGE_ENABLED=true" in example
 
 
 def test_release_build_context_is_allowlisted_and_base_has_no_mutable_default() -> None:
@@ -287,6 +290,9 @@ def _release_launcher_fixture(
     environment_path = tmp_path / ".env.release"
     audit_root = tmp_path / "audit"
     audit_root.mkdir(mode=0o700)
+    hclx_secret = tmp_path / "clovastudio-api-key"
+    hclx_secret.write_text("test-release-key-never-log\n", encoding="utf-8")
+    hclx_secret.chmod(0o600)
     environment_path.write_text(
         "\n".join(
             [
@@ -304,8 +310,14 @@ def _release_launcher_fixture(
                 f"FINANCE_AUDIT_HOST_DIR={audit_root}",
                 "WEB_CONCURRENCY=1",
                 "FINANCE_BACKEND_FUND_EXECUTION_POLICY=locked",
-                "FINANCE_BACKEND_ANSWER_PROVIDER=deterministic",
+                "FINANCE_BACKEND_ANSWER_PROVIDER=hyperclova",
                 "FINANCE_BACKEND_HCX_QUERY_PLAN_ENABLED=false",
+                "FINANCE_BACKEND_HCX_INTENT_ANALYSIS_ENABLED=true",
+                "FINANCE_AGENT_LLM_MODE=evaluation",
+                "LLM_PROVIDER=hyperclova",
+                "HCX_MODEL=HCX-007",
+                f"CLOVASTUDIO_API_KEY_HOST_FILE={hclx_secret}",
+                "CLOVASTUDIO_API_KEY_FILE=/run/secrets/clovastudio_api_key",
                 "HCX_TIMEOUT_SECONDS=45",
             ]
         )
@@ -528,21 +540,20 @@ def test_release_launcher_rejects_invalid_hcx_secret_size(
     secret_payload: bytes,
 ) -> None:
     environment_path, environment, capture, test_launcher = _release_launcher_fixture(tmp_path)
-    secret_path = tmp_path / "clovastudio-api-key"
+    secret_path = tmp_path / "invalid-clovastudio-api-key"
     secret_path.write_bytes(secret_payload)
     secret_path.chmod(0o600)
     content = environment_path.read_text(encoding="utf-8")
-    content = content.replace(
-        "FINANCE_BACKEND_ANSWER_PROVIDER=deterministic\n",
-        "FINANCE_BACKEND_ANSWER_PROVIDER=hyperclova\n",
+    content = (
+        "\n".join(
+            line
+            for line in content.splitlines()
+            if not line.startswith("CLOVASTUDIO_API_KEY_HOST_FILE=")
+        )
+        + "\n"
     )
     environment_path.write_text(
-        content
-        + "FINANCE_AGENT_LLM_MODE=evaluation\n"
-        + "LLM_PROVIDER=hyperclova\n"
-        + "HCX_MODEL=HCX-007\n"
-        + f"CLOVASTUDIO_API_KEY_HOST_FILE={secret_path}\n"
-        + "CLOVASTUDIO_API_KEY_FILE=/run/secrets/clovastudio_api_key\n",
+        content + f"CLOVASTUDIO_API_KEY_HOST_FILE={secret_path}\n",
         encoding="utf-8",
     )
 
@@ -590,6 +601,7 @@ def test_release_launcher_rejects_missing_web_concurrency(tmp_path: Path) -> Non
         "FINANCE_BACKEND_FUND_EXECUTION_POLICY",
         "FINANCE_BACKEND_ANSWER_PROVIDER",
         "FINANCE_BACKEND_HCX_QUERY_PLAN_ENABLED",
+        "FINANCE_BACKEND_HCX_INTENT_ANALYSIS_ENABLED",
         "HCX_TIMEOUT_SECONDS",
     ],
 )

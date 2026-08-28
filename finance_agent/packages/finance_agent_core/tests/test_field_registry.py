@@ -8,9 +8,9 @@ def test_overseas_etp_dataset_contract_matches_audit() -> None:
     dataset = registry.datasets["overseas_etp"]
 
     assert dataset.primary_key == ["pd_exg_mkt_cd", "pd_itm_no"]
-    assert dataset.row_count == 5_646
-    assert dataset.quarantined_rows == 10
-    assert dataset.snapshot_date.isoformat() == "2026-07-11"
+    assert dataset.row_count == 6_037
+    assert dataset.quarantined_rows == 14
+    assert dataset.snapshot_date.isoformat() == "2026-08-24"
 
 
 def test_risky_fields_are_encoded_fail_closed() -> None:
@@ -22,12 +22,12 @@ def test_risky_fields_are_encoded_fail_closed() -> None:
     assert fee.quality is QualityStatus.PARTIAL
     assert fee.sentinel_values == {"0": "UNKNOWN"}
     assert registry.fields["aum"].as_of_basis is AsOfBasis.DYNAMIC
-    assert one_day_return.quality is QualityStatus.INVALID
-    assert not one_day_return.queryable
-    assert not one_day_return.selectable
-    assert not one_day_return.sortable
+    assert one_day_return.quality is QualityStatus.PARTIAL
+    assert one_day_return.queryable
+    assert one_day_return.selectable
+    assert one_day_return.sortable
     assert isin.quality is QualityStatus.PARTIAL
-    assert isin.coverage_pct == pytest.approx(99.8406)
+    assert isin.coverage_pct == pytest.approx(99.8012)
 
 
 def test_registry_exposes_only_frozen_capabilities() -> None:
@@ -38,10 +38,12 @@ def test_registry_exposes_only_frozen_capabilities() -> None:
         "overseas_etp",
         "domestic_etp",
         "bond",
+        "fund",
     ]
     overseas_return = registry.require_field("one_day_return_pct", ["overseas_etp"])
     domestic_return = registry.require_field("one_day_return_pct", ["domestic_etp"])
-    assert not overseas_return.selectable
+    assert overseas_return.selectable
+    assert overseas_return.queryable
     assert domestic_return.selectable
     assert domestic_return.queryable
     assert "one_month_return_pct" in registry.aggregatable_fields()
@@ -53,11 +55,11 @@ def test_fund_grain_and_capabilities_match_product_grain_audit() -> None:
     dataset = registry.require_dataset("fund")
 
     assert dataset.primary_key == ["itm_no"]
-    assert dataset.raw_primary_key == ["itm_no", "prfd_attr_cd"]
-    assert dataset.row_count == 95_619
-    assert dataset.logical_row_count == 11_138
-    assert dataset.quarantined_rows == 1
-    assert not dataset.execution_enabled
+    assert dataset.raw_primary_key == ["itm_no"]
+    assert dataset.row_count == 23_676
+    assert dataset.logical_row_count == 23_560
+    assert dataset.quarantined_rows == 116
+    assert dataset.execution_enabled
 
     public = registry.require_field("public_offering", ["fund"])
     aum = registry.require_field("aum", ["fund"])
@@ -66,24 +68,25 @@ def test_fund_grain_and_capabilities_match_product_grain_audit() -> None:
     one_year = registry.require_field("one_year_return_pct", ["fund"])
     fund_type = registry.require_field("fund_management_attribute", ["fund"])
 
-    assert public.coverage_pct == pytest.approx(99.9282)
+    assert public.coverage_pct == pytest.approx(100.0)
     assert public.source.value_map == {"공모": True, "사모": False}
-    assert aum.coverage_pct == pytest.approx(83.4082)
+    assert aum.coverage_pct == pytest.approx(39.9533)
     assert aum.sentinel_values == {"0": "UNKNOWN"}
-    assert risk.coverage_pct == pytest.approx(76.8989)
-    assert one_week.queryable and one_week.sortable and one_week.aggregatable
+    assert risk.coverage_pct == pytest.approx(36.8803)
+    assert not one_week.queryable
+    assert not one_week.sortable
+    assert not one_week.aggregatable
     assert one_year.queryable and one_year.sortable and one_year.aggregatable
     assert one_year.comparable
     assert one_year.comparison_mode == "numeric_delta"
     assert fund_type.sentinel_values == {"06": "UNKNOWN"}
 
 
-def test_fund_contract_is_frozen_but_execution_fails_closed() -> None:
+def test_fund_contract_is_frozen_and_execution_is_enabled() -> None:
     registry = load_field_registry()
 
     assert registry.require_dataset("fund").source_id == "PRFD01N001"
-    with pytest.raises(ValueError, match="execution is not enabled"):
-        registry.require_executable_dataset("fund")
+    assert registry.require_executable_dataset("fund").execution_enabled
 
 
 def test_domestic_etp_dataset_contract_matches_audit() -> None:
@@ -91,11 +94,11 @@ def test_domestic_etp_dataset_contract_matches_audit() -> None:
     dataset = registry.datasets["domestic_etp"]
 
     assert dataset.primary_key == ["pd_itm_no"]
-    assert dataset.row_count == 1_734
-    assert dataset.quarantined_rows == 1
-    assert dataset.snapshot_date.isoformat() == "2026-07-11"
+    assert dataset.row_count == 1_780
+    assert dataset.quarantined_rows == 3
+    assert dataset.snapshot_date.isoformat() == "2026-08-24"
     fee = registry.require_field("total_expense_ratio_pct", ["domestic_etp"])
-    assert fee.coverage_pct == pytest.approx(12.5216)
+    assert fee.coverage_pct == pytest.approx(12.191)
     assert fee.sentinel_values == {"0": "UNKNOWN"}
 
 
@@ -103,15 +106,16 @@ def test_bond_dataset_contract_matches_audit_and_fails_closed() -> None:
     registry = load_field_registry()
     dataset = registry.datasets["bond"]
 
-    assert dataset.primary_key == ["PD_NO"]
-    assert dataset.row_count == 42_394
+    assert dataset.primary_key == ["pd_no", "pd_exg_mkt", "info_base_dt", "info_seq"]
+    assert dataset.row_count == 21_882
     assert dataset.quarantined_rows == 0
-    assert dataset.snapshot_date.isoformat() == "2026-07-11"
+    assert dataset.snapshot_date.isoformat() == "2026-08-24"
     availability = registry.require_field("currently_buyable", ["bond"])
     rating = registry.require_field("credit_rating", ["bond"])
     remaining = registry.require_field("remaining_days", ["bond"])
-    assert availability.coverage_pct == pytest.approx(2.0781)
-    assert availability.source.columns == ["BUYABLE_QUANTITY", "MAT_DT"]
+    assert availability.coverage_pct == pytest.approx(100.0)
+    assert availability.source.columns == []
+    assert availability.source.constant_value == "true"
     assert rating.allowed_operators == ["eq", "in"]
     assert remaining.source.transform.value == "days_from_snapshot"
 

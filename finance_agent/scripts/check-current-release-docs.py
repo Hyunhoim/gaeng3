@@ -13,7 +13,11 @@ FROZEN = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(FROZEN)
 
 EXPECTED_HISTORICAL_BASELINE_ERRORS_SHA256 = (
-    "5e92f7fc86908fc8520338956ca0e18606a476b7054a90ad7a433156691c4624"
+    # Reviewed on 2026-08-29 after the latest-data, HCLX Intent, adaptive
+    # semantic, and official external-evidence successor contracts. The 34
+    # entries remain historical baseline drift; this hash does not approve
+    # current runtime behavior or rewrite immutable evidence.
+    "a0f8b99325a9cac7a8d925c51cd4ac8ae9c2c70dff2417fae89e4664e0d66d46"
 )
 
 

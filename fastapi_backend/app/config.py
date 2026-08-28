@@ -19,6 +19,7 @@ class Settings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         extra="ignore",
+        env_ignore_empty=True,
         hide_input_in_errors=True,
         populate_by_name=True,
         frozen=True,
@@ -43,6 +44,10 @@ class Settings(BaseSettings):
     hcx_query_plan_enabled: bool = Field(
         default=False,
         validation_alias="FINANCE_BACKEND_HCX_QUERY_PLAN_ENABLED",
+    )
+    hcx_intent_analysis_enabled: bool = Field(
+        default=False,
+        validation_alias="FINANCE_BACKEND_HCX_INTENT_ANALYSIS_ENABLED",
     )
     hcx_semantic_resolver_enabled: bool = Field(
         default=False,
@@ -234,6 +239,36 @@ class Settings(BaseSettings):
         default=None,
         validation_alias="FINANCE_RELATION_INDEX_FILE",
     )
+    external_knowledge_enabled: bool = Field(
+        default=False,
+        validation_alias="FINANCE_EXTERNAL_KNOWLEDGE_ENABLED",
+    )
+    external_knowledge_artifact_file: Path | None = Field(
+        default=None,
+        validation_alias="FINANCE_EXTERNAL_KNOWLEDGE_ARTIFACT_FILE",
+    )
+    external_knowledge_artifact_sha256: str | None = Field(
+        default=None,
+        pattern=r"^[0-9a-f]{64}$",
+        validation_alias="FINANCE_EXTERNAL_KNOWLEDGE_ARTIFACT_SHA256",
+    )
+    external_temporal_relation_file: Path | None = Field(
+        default=None,
+        validation_alias="FINANCE_EXTERNAL_TEMPORAL_RELATION_FILE",
+    )
+    external_temporal_relation_sha256: str | None = Field(
+        default=None,
+        pattern=r"^[0-9a-f]{64}$",
+        validation_alias="FINANCE_EXTERNAL_TEMPORAL_RELATION_SHA256",
+    )
+    naver_api_hub_client_id_file: Path | None = Field(
+        default=None,
+        validation_alias="NAVER_API_HUB_CLIENT_ID_FILE",
+    )
+    naver_api_hub_client_secret_file: Path | None = Field(
+        default=None,
+        validation_alias="NAVER_API_HUB_CLIENT_SECRET_FILE",
+    )
     overseas_etp_db: Path | None = Field(
         default=None,
         validation_alias="FINANCE_DB_OVERSEAS_ETP",
@@ -263,6 +298,18 @@ class Settings(BaseSettings):
             raise ValueError(
                 "inline HyperCLOVA credential is forbidden; use CLOVASTUDIO_API_KEY_FILE"
             )
+        naver_environment = {
+            "NAVER_API_HUB_CLIENT_ID",
+            "NAVER_API_HUB_CLIENT_SECRET",
+        }
+        naver_explicit = {
+            "naver_api_hub_client_id",
+            "naver_api_hub_client_secret",
+        }
+        if naver_environment.intersection(os.environ) or naver_explicit.intersection(
+            explicit_names
+        ):
+            raise ValueError("inline NAVER API HUB credential is forbidden; use credential files")
         return values
 
     @model_validator(mode="after")
@@ -272,6 +319,10 @@ class Settings(BaseSettings):
         if self.answer_provider == "local_test" and self.app_env != "development":
             raise ValueError(
                 "FINANCE_BACKEND_ANSWER_PROVIDER=local_test is allowed only in development"
+            )
+        if self.hcx_query_plan_enabled:
+            raise ValueError(
+                "full HCLX QueryPlan generation is retired; enable HCLX Intent analysis instead"
             )
         if self.uses_hyperclova:
             if self.app_env not in {"evaluation", "production"}:
@@ -368,6 +419,33 @@ class Settings(BaseSettings):
             raise ValueError(
                 "evaluation/production requires the explicit relation artifact SHA-256"
             )
+        external_values = (
+            self.external_knowledge_artifact_file,
+            self.external_knowledge_artifact_sha256,
+            self.external_temporal_relation_file,
+            self.external_temporal_relation_sha256,
+            self.naver_api_hub_client_id_file,
+            self.naver_api_hub_client_secret_file,
+        )
+        if self.external_knowledge_enabled:
+            if any(value is None for value in external_values):
+                raise ValueError(
+                    "external knowledge requires artifact, relation and API HUB key files"
+                )
+            if not self.has_release_configuration:
+                raise ValueError("external knowledge requires an immutable Agent release")
+        elif any(value is not None for value in external_values):
+            raise ValueError(
+                "external knowledge files cannot be configured while the feature is disabled"
+            )
+        external_paths = (
+            self.external_knowledge_artifact_file,
+            self.external_temporal_relation_file,
+            self.naver_api_hub_client_id_file,
+            self.naver_api_hub_client_secret_file,
+        )
+        if any(path is not None and not path.is_absolute() for path in external_paths):
+            raise ValueError("external knowledge files must use absolute paths")
         if self.audit_mode == "disabled" and self.audit_file is not None:
             raise ValueError("disabled audit mode cannot configure FINANCE_AUDIT_FILE")
         if self.audit_mode == "jsonl" and (
@@ -386,6 +464,17 @@ class Settings(BaseSettings):
             and not self.audit_fsync_each_event
         ):
             raise ValueError("evaluation/production requires durable audit fsync")
+        if self.app_env in {"evaluation", "production"} and all(
+            value is not None for value in release_values
+        ):
+            if not self.hcx_intent_analysis_enabled:
+                raise ValueError(
+                    "evaluation/production release requires HyperCLOVA X Intent analysis"
+                )
+            if self.answer_provider != "hyperclova":
+                raise ValueError(
+                    "evaluation/production release requires HyperCLOVA X answer generation"
+                )
         return self
 
     @property
@@ -407,7 +496,7 @@ class Settings(BaseSettings):
 
         return (
             self.answer_provider == "hyperclova"
-            or self.hcx_query_plan_enabled
+            or self.hcx_intent_analysis_enabled
             or self.hcx_semantic_resolver_enabled
         )
 

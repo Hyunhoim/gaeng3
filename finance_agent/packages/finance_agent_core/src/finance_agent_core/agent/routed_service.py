@@ -6,6 +6,7 @@ import json
 import sqlite3
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from time import perf_counter
 from typing import Literal
@@ -15,8 +16,19 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from finance_agent_core.agent.adaptive_semantic import AdaptiveSemanticResolver
 from finance_agent_core.agent.compiler import (
     CompiledFamilySearch,
+    CrossFamilyGlobalRanking,
     PlanCompilationBlockedError,
     ServerQueryPlanCompiler,
+    resolve_cross_family_global_ranking,
+)
+from finance_agent_core.agent.external_knowledge_router import (
+    ExternalKnowledgeRouteDecision,
+    ExternalKnowledgeRouteDisposition,
+    ExternalKnowledgeRouter,
+)
+from finance_agent_core.agent.external_search_planning import (
+    ExternalSearchPlanCompiler,
+    ProvidedProductUniverseBuilder,
 )
 from finance_agent_core.agent.grounded_planning import (
     GroundedPlanGate,
@@ -24,11 +36,19 @@ from finance_agent_core.agent.grounded_planning import (
     GroundedPlanRejectedError,
     grounded_plan_is_eligible,
 )
+from finance_agent_core.agent.intent_analysis import (
+    IntentAnalysisDraft,
+    IntentAnalysisProvider,
+    has_server_authorized_knowledge_requirements,
+    sanitize_server_authorized_knowledge_draft,
+    verify_intent_analysis,
+)
 from finance_agent_core.agent.knowledge_router import (
     DeterministicKnowledgeRouter,
     KnowledgeRouteDecision,
     KnowledgeRoutedExecutionError,
     KnowledgeRouteDisposition,
+    product_search_has_precedence,
 )
 from finance_agent_core.agent.knowledge_service import (
     KnowledgeAgent,
@@ -41,12 +61,14 @@ from finance_agent_core.agent.planning_policy import (
     PlanningPath,
     PlanningTrace,
 )
+from finance_agent_core.agent.product_comparison import normalize_product_mention
 from finance_agent_core.agent.providers import (
+    HyperClovaXConfigurationError,
     HyperClovaXTimeoutError,
     QueryPlanProvider,
     hyperclova_failure_reason,
 )
-from finance_agent_core.agent.router import IntentRouter
+from finance_agent_core.agent.router import IntentRouter, extract_product_routing_hints
 from finance_agent_core.agent.safety import SafetyDisposition
 from finance_agent_core.agent.semantic_gate import SemanticCoverageDecision
 from finance_agent_core.answering import (
@@ -55,9 +77,12 @@ from finance_agent_core.answering import (
     GroundedAnswerProvider,
     compose_grounded_answer,
 )
+from finance_agent_core.answering.final_generation import FinalAnswerProvider
+from finance_agent_core.config import QualityStatus, load_field_registry
 from finance_agent_core.contracts import QueryPlan, RouteDecision, RouteDisposition
 from finance_agent_core.contracts.knowledge import (
     KnowledgePlanAuthorityError,
+    RelationKnowledgeOperation,
     canonical_knowledge_plan_sha256,
 )
 from finance_agent_core.contracts.queryplan import Intent, ProductFamily
@@ -105,6 +130,10 @@ from finance_agent_core.execution.authority import (
     require_validated_plan,
     require_verifier_budget,
 )
+from finance_agent_core.execution.external_knowledge_runtime import (
+    ExternalKnowledgeRuntime,
+    ExternalKnowledgeRuntimeResult,
+)
 from finance_agent_core.execution.verifier_projection import (
     load_projected_verifier_records,
 )
@@ -133,6 +162,10 @@ from finance_agent_core.storage import (
     RecordSnapshotCache,
     load_approved_dataset_manifest,
     require_approved_database_paths,
+)
+
+_PUBLIC_INTENT_ANALYSIS: contextvars.ContextVar[IntentAnalysisDraft | None] = (
+    contextvars.ContextVar("finance_public_intent_analysis", default=None)
 )
 
 
@@ -263,6 +296,119 @@ _CROSS_FAMILY_SAFETY_NOTICE = (
     "상품군별로 독립 검색했으며, 상품군 간 수치의 직접 비교·합산·우열 판단은 수행하지 않았습니다."
 )
 
+
+@dataclass(frozen=True)
+class _GlobalRankedProduct:
+    product_family: ProductFamily
+    product: ProductEvidence
+    value: Decimal
+
+
+def _ranking_value(product: ProductEvidence, field_name: str) -> Decimal | None:
+    matches = [field for field in product.fields if field.canonical_field == field_name]
+    if len(matches) != 1:
+        return None
+    evidence = matches[0]
+    if (
+        evidence.normalized_value is None
+        or evidence.quality not in {QualityStatus.VALID, QualityStatus.PARTIAL}
+        or isinstance(evidence.normalized_value, bool)
+    ):
+        return None
+    try:
+        return Decimal(str(evidence.normalized_value))
+    except InvalidOperation:
+        return None
+
+
+def _rank_global_products(
+    family_searches: list[FamilySearchResult],
+    ranking: CrossFamilyGlobalRanking,
+) -> tuple[list[FamilySearchResult], list[_GlobalRankedProduct]]:
+    family_order = {result.product_family: index for index, result in enumerate(family_searches)}
+    candidates = [
+        _GlobalRankedProduct(result.product_family, product, value)
+        for result in family_searches
+        for product in result.products
+        if (value := _ranking_value(product, ranking.field)) is not None
+    ]
+    direction_factor = Decimal("-1") if ranking.direction.value == "desc" else Decimal("1")
+    ordered = sorted(
+        candidates,
+        key=lambda item: (
+            direction_factor * item.value,
+            family_order[item.product_family],
+            item.product.product_id,
+        ),
+    )[: ranking.limit]
+    selected = {
+        (item.product_family, item.product.product_id): position
+        for position, item in enumerate(ordered)
+    }
+    filtered: list[FamilySearchResult] = []
+    for result in family_searches:
+        products = sorted(
+            (
+                product
+                for product in result.products
+                if (result.product_family, product.product_id) in selected
+            ),
+            key=lambda product: selected[(result.product_family, product.product_id)],
+        )
+        filtered.append(
+            result.model_copy(
+                update={
+                    "products": products,
+                    "answer": (
+                        f"전체 순위 {ranking.limit}개 중 "
+                        f"{_FAMILY_LABELS[result.product_family]} {len(products)}개가 포함됐습니다."
+                    ),
+                }
+            )
+        )
+    return filtered, ordered
+
+
+def _compile_global_cross_family_answer(
+    ranked: list[_GlobalRankedProduct],
+    ranking: CrossFamilyGlobalRanking,
+    *,
+    candidate_count: int,
+) -> str:
+    registry = load_field_registry()
+    first_family = ranked[0].product_family.value if ranked else None
+    label = (
+        registry.require_field(ranking.field, [first_family]).label
+        if first_family is not None
+        else ranking.field
+    )
+    direction = "높은 순" if ranking.direction.value == "desc" else "낮은 순"
+    lines = [
+        f"동일 canonical field(공통 표준 필드)인 {label}을 {direction}으로 "
+        f"통합 정렬했습니다. 검증된 후보는 총 {candidate_count:,}개입니다."
+    ]
+    for position, item in enumerate(ranked, start=1):
+        evidence = next(
+            field for field in item.product.fields if field.canonical_field == ranking.field
+        )
+        suffix = "%" if evidence.unit == "pct_point" else ""
+        identifier = item.product.ticker or item.product.product_id
+        columns = "/".join(evidence.source_columns) or "constant"
+        lines.append(
+            f"{position}. [{_FAMILY_LABELS[item.product_family]}] "
+            f"{item.product.product_name} ({identifier}) — {label} {item.value}{suffix} "
+            f"[근거: {evidence.source_id} 원본 행 {evidence.source_row}, "
+            f"{columns}, 기준일 {evidence.as_of.isoformat()}]"
+        )
+    if not ranked:
+        lines.append("요청한 공통 지표에 사용 가능한 원천값이 없어 결과를 표시하지 않습니다.")
+    lines.append(
+        "상품군별 Oracle(결정론적 검색기) 결과를 같은 필드·단위에서만 합쳤으며, "
+        "결측·UNKNOWN 값은 순위에서 제외했습니다."
+    )
+    return "\n".join(lines)
+
+
 # AuditEvent's owner-only O_APPEND JSONL boundary is 64 KiB. A serialized SHA-256
 # linkage entry costs 67 bytes (quotes, 64 hex characters, and a separator),
 # so retaining at most 768 hashes leaves more than 12 KiB for the fixed event,
@@ -349,6 +495,9 @@ class RoutedFinanceAgent:
         query_plan_provider: QueryPlanProvider | None = None,
         grounded_plan_provider: GroundedPlanProvider | None = None,
         answer_provider: GroundedAnswerProvider | None = None,
+        intent_analysis_provider: IntentAnalysisProvider | None = None,
+        official_answer_provider: FinalAnswerProvider | None = None,
+        require_official_hclx: bool = False,
         hclx_planning_enabled: bool = False,
         allow_internal_disabled_dataset: bool = False,
         capability_execution_overrides: set[ProductFamily | str] | None = None,
@@ -362,6 +511,10 @@ class RoutedFinanceAgent:
         audit_sink: BoundedAsyncAuditSink | None = None,
         knowledge_router: DeterministicKnowledgeRouter | None = None,
         knowledge_agent: KnowledgeAgent | None = None,
+        external_knowledge_router: ExternalKnowledgeRouter | None = None,
+        external_knowledge_runtime: ExternalKnowledgeRuntime | None = None,
+        external_universe_builder: ProvidedProductUniverseBuilder | None = None,
+        external_search_plan_compiler: ExternalSearchPlanCompiler | None = None,
     ) -> None:
         if type(hclx_planning_enabled) is not bool:
             raise TypeError("hclx_planning_enabled must be a boolean")
@@ -392,6 +545,15 @@ class RoutedFinanceAgent:
             identity_cache=self.identity_cache,
         )
         self.answer_provider = answer_provider
+        self.intent_analysis_provider = intent_analysis_provider
+        self.official_answer_provider = official_answer_provider
+        self.require_official_hclx = require_official_hclx
+        if require_official_hclx and (
+            intent_analysis_provider is None or official_answer_provider is None
+        ):
+            raise ValueError(
+                "official HCLX mode requires Intent analysis and final answer providers"
+            )
         if (
             adaptive_semantic_resolver is not None
             and type(adaptive_semantic_resolver) is not AdaptiveSemanticResolver
@@ -411,19 +573,65 @@ class RoutedFinanceAgent:
             raise ValueError("knowledge execution requires the public knowledge router")
         self.knowledge_router = knowledge_router
         self.knowledge_agent = knowledge_agent
+        if (
+            external_knowledge_router is not None
+            and type(external_knowledge_router) is not ExternalKnowledgeRouter
+        ):
+            raise TypeError("external_knowledge_router must be the approved server router")
+        self.external_knowledge_router = external_knowledge_router
+        external_parts = (
+            external_knowledge_runtime,
+            external_universe_builder,
+            external_search_plan_compiler,
+        )
+        if any(item is not None for item in external_parts) and not all(
+            item is not None for item in external_parts
+        ):
+            raise ValueError("external search runtime requires runtime, universe and compiler")
+        if (
+            external_knowledge_runtime is not None
+            and type(external_knowledge_runtime) is not ExternalKnowledgeRuntime
+        ):
+            raise TypeError("external knowledge runtime has an invalid type")
+        if (
+            external_universe_builder is not None
+            and type(external_universe_builder) is not ProvidedProductUniverseBuilder
+        ):
+            raise TypeError("external universe builder has an invalid type")
+        if (
+            external_search_plan_compiler is not None
+            and type(external_search_plan_compiler) is not ExternalSearchPlanCompiler
+        ):
+            raise TypeError("external search plan compiler has an invalid type")
+        if require_agent_release and release_guard is None:
+            raise ValueError("public RoutedFinanceAgent requires a resolved Agent release")
+        if release_guard is not None and type(release_guard) is not ResolvedAgentRelease:
+            raise TypeError("release_guard must be a ResolvedAgentRelease")
+        if require_agent_release and schema_link_shadow_observer is not None:
+            raise ValueError(
+                "the current public Agent release profile keeps Schema Dense shadow disabled"
+            )
+        if require_agent_release:
+            assert release_guard is not None
+            signed_external = release_guard.manifest.components.knowledge_retrieval.external
+            if external_knowledge_runtime is None:
+                if signed_external.status == "activated":
+                    raise ValueError("signed external knowledge release requires its runtime")
+            elif (
+                signed_external.status != "activated"
+                or external_knowledge_runtime.release_artifact != signed_external.artifact
+                or external_knowledge_runtime.release_artifact_file_sha256
+                != signed_external.artifact_file_sha256
+            ):
+                raise ValueError("external knowledge runtime differs from signed release")
+        self.external_knowledge_runtime = external_knowledge_runtime
+        self.external_universe_builder = external_universe_builder
+        self.external_search_plan_compiler = external_search_plan_compiler
         self.allow_internal_disabled_dataset = allow_internal_disabled_dataset
         self.capability_execution_overrides = frozenset(
             ProductFamily(family) for family in capability_execution_overrides or set()
         )
         self.require_approved_databases = require_approved_databases
-        if release_guard is not None and type(release_guard) is not ResolvedAgentRelease:
-            raise TypeError("release_guard must be a ResolvedAgentRelease")
-        if require_agent_release and release_guard is None:
-            raise ValueError("public RoutedFinanceAgent requires a resolved Agent release")
-        if require_agent_release and schema_link_shadow_observer is not None:
-            raise ValueError(
-                "the current public Agent release profile keeps Schema Dense shadow disabled"
-            )
         if require_agent_release:
             assert release_guard is not None
             signed_knowledge = release_guard.manifest.components.knowledge_retrieval
@@ -497,6 +705,16 @@ class RoutedFinanceAgent:
             )
         else:
             matches = self.knowledge_router is None and agent is None
+        signed_external = signed.external
+        if signed_external.status == "activated":
+            matches = matches and (
+                type(self.external_knowledge_runtime) is ExternalKnowledgeRuntime
+                and self.external_knowledge_runtime.release_artifact == signed_external.artifact
+                and self.external_knowledge_runtime.release_artifact_file_sha256
+                == signed_external.artifact_file_sha256
+            )
+        else:
+            matches = matches and self.external_knowledge_runtime is None
         if not matches:
             raise AgentReleaseError(
                 AgentReleaseCode.RUNTIME_MISMATCH,
@@ -555,33 +773,208 @@ class RoutedFinanceAgent:
         self,
         question: str,
         request_id: str,
-    ) -> RoutedAgentResult | KnowledgeAgentResult | KnowledgeRouteDecision:
+    ) -> (
+        RoutedAgentResult
+        | KnowledgeAgentResult
+        | KnowledgeRouteDecision
+        | ExternalKnowledgeRouteDecision
+        | ExternalKnowledgeRuntimeResult
+    ):
         """Route one public request without bypassing the established atomic boundary."""
 
         self._assert_public_knowledge_boundary_current()
-        if self.knowledge_router is None:
-            return self._answer_atomically(question, request_id)
         safety = self.router.safety_envelope.evaluate(question)
-        if safety.disposition is not SafetyDisposition.ALLOW:
-            return self._answer_atomically(question, request_id)
-        decision = self.knowledge_router.route_after_safety_gate(
-            safety.normalized_question,
-            request_id,
-            safety_gate_passed=True,
-        )
-        if decision.disposition is KnowledgeRouteDisposition.NOT_APPLICABLE:
-            return self._answer_atomically(question, request_id)
+        # The official contract still requires HCLX Intent analysis. Safety is
+        # evaluated first, and its terminal disposition remains authoritative:
+        # an HCLX draft can never downgrade a blocked request to execution.
+        intent_draft = self._analyze_public_intent(question, request_id)
+        token = _PUBLIC_INTENT_ANALYSIS.set(intent_draft)
         try:
-            # A control decision performs no retrieval, so this is its post-route
-            # release check. Executable found/not-found paths additionally guard
-            # both sides of KnowledgeAgent execution below.
-            if decision.disposition is not KnowledgeRouteDisposition.EXECUTE:
-                self._assert_public_knowledge_boundary_current()
-            return self._execute_knowledge_audited(decision, question, request_id)
-        except KnowledgeRoutedExecutionError:
-            raise
+            if safety.disposition is not SafetyDisposition.ALLOW:
+                return self._answer_atomically(question, request_id)
+            lexical_families, lexical_product_mentions = extract_product_routing_hints(
+                safety.normalized_question
+            )
+            knowledge_draft = (
+                None
+                if intent_draft is None
+                else sanitize_server_authorized_knowledge_draft(
+                    question,
+                    intent_draft,
+                    fallback_families=lexical_families,
+                    product_mentions=lexical_product_mentions,
+                )
+            )
+            if knowledge_draft is not None and has_server_authorized_knowledge_requirements(
+                question, knowledge_draft
+            ):
+                if self.external_knowledge_router is None:
+                    self._assert_public_knowledge_boundary_current()
+                    return ExternalKnowledgeRouteDecision(
+                        disposition=ExternalKnowledgeRouteDisposition.UNSUPPORTED,
+                        reason_code="external_knowledge_runtime_not_configured",
+                        reason="공식 외부 근거 검색 경로가 현재 공개 런타임에 조립되지 않음",
+                    )
+                source_selection_signals = None
+                if self.external_universe_builder is not None:
+                    source_selection_signals = (
+                        self.external_universe_builder.source_selection_signals(
+                            families=tuple(
+                                sorted(
+                                    set(knowledge_draft.product_families),
+                                    key=lambda item: item.value,
+                                )
+                            ),
+                            question=question,
+                            identity_surfaces=lexical_product_mentions,
+                        )
+                    )
+                external_decision = self.external_knowledge_router.route(
+                    question,
+                    request_id,
+                    knowledge_draft,
+                    source_selection_signals=source_selection_signals,
+                )
+                if external_decision.disposition is not (
+                    ExternalKnowledgeRouteDisposition.NOT_APPLICABLE
+                ):
+                    if (
+                        external_decision.plan is not None
+                        and self.external_knowledge_runtime is not None
+                    ):
+                        assert self.external_universe_builder is not None
+                        assert self.external_search_plan_compiler is not None
+                        families = tuple(
+                            sorted(
+                                {
+                                    family
+                                    for requirement in external_decision.plan.requirements
+                                    for family in requirement.product_families
+                                },
+                                key=lambda item: item.value,
+                            )
+                        )
+                        universe = self.external_universe_builder.build(
+                            families=families,
+                            identity_surfaces=lexical_product_mentions,
+                        )
+                        search_plan = self.external_search_plan_compiler.compile(
+                            external_decision.plan,
+                            universe,
+                        )
+                        result = self.external_knowledge_runtime.execute(
+                            search_plan,
+                            universe,
+                            evidence_execution_authorized=(
+                                external_decision.disposition
+                                is ExternalKnowledgeRouteDisposition.EXECUTE
+                            ),
+                        )
+                        self._assert_public_knowledge_boundary_current()
+                        return result
+                    if external_decision.disposition is ExternalKnowledgeRouteDisposition.EXECUTE:
+                        raise AgentReleaseError(
+                            AgentReleaseCode.RUNTIME_MISMATCH,
+                            "external knowledge execution has no signed public executor",
+                        )
+                    self._assert_public_knowledge_boundary_current()
+                    return external_decision
+            if self.knowledge_router is None:
+                return self._answer_atomically(question, request_id)
+            if product_search_has_precedence(safety.normalized_question):
+                return self._answer_atomically(question, request_id)
+            decision = self.knowledge_router.route_after_safety_gate(
+                safety.normalized_question,
+                request_id,
+                safety_gate_passed=True,
+            )
+            if decision.disposition is KnowledgeRouteDisposition.NOT_APPLICABLE:
+                return self._answer_atomically(question, request_id)
+            if not self._knowledge_intent_is_verified(decision, intent_draft):
+                decision = KnowledgeRouteDecision(
+                    disposition=KnowledgeRouteDisposition.CLARIFY,
+                    reason_code="hclx_intent_conflict",
+                    reason="HCLX Intent 분석과 서버 해석이 일치하지 않아 조건 확인이 필요함",
+                )
+            try:
+                # A control decision performs no retrieval, so this is its post-route
+                # release check. Executable found/not-found paths additionally guard
+                # both sides of KnowledgeAgent execution below.
+                if decision.disposition is not KnowledgeRouteDisposition.EXECUTE:
+                    self._assert_public_knowledge_boundary_current()
+                return self._execute_knowledge_audited(decision, question, request_id)
+            except KnowledgeRoutedExecutionError:
+                raise
+            except Exception as error:
+                raise KnowledgeRoutedExecutionError(decision, error) from error
+        finally:
+            _PUBLIC_INTENT_ANALYSIS.reset(token)
+
+    def _analyze_public_intent(
+        self,
+        question: str,
+        request_id: str,
+    ) -> IntentAnalysisDraft | None:
+        provider = self.intent_analysis_provider
+        if provider is None:
+            if self.require_official_hclx:
+                raise HyperClovaXConfigurationError(
+                    "official request requires HyperCLOVA X Intent analysis"
+                )
+            return None
+        audit = current_request_audit()
+        started = perf_counter()
+        self._increment_audit_metric(MetricCounter.HCLX_CALLS)
+        try:
+            draft = provider.analyze_intent(question, request_id)
         except Exception as error:
-            raise KnowledgeRoutedExecutionError(decision, error) from error
+            if audit is not None:
+                failure_reason = hyperclova_failure_reason(error)
+                audit.emit(
+                    stage=AuditStage.HCLX,
+                    outcome=(
+                        AuditOutcome.TIMED_OUT
+                        if failure_reason == "timed_out"
+                        else AuditOutcome.FAILED
+                    ),
+                    reason_code=f"intent_{failure_reason}",
+                    duration_ms=(perf_counter() - started) * 1000,
+                )
+            raise
+        if audit is not None:
+            audit.emit(
+                stage=AuditStage.HCLX,
+                outcome=AuditOutcome.SUCCEEDED,
+                reason_code="intent_analysis_completed",
+                duration_ms=(perf_counter() - started) * 1000,
+            )
+        return draft
+
+    @staticmethod
+    def _knowledge_intent_is_verified(
+        decision: KnowledgeRouteDecision,
+        draft: IntentAnalysisDraft | None,
+    ) -> bool:
+        if draft is None or decision.disposition is not KnowledgeRouteDisposition.EXECUTE:
+            return True
+        assert decision.plan is not None
+        operation = decision.plan.operation
+        expected_intent = (
+            InteractionIntent.SEARCH
+            if isinstance(operation, RelationKnowledgeOperation)
+            else InteractionIntent.EXPLAIN
+        )
+        expected_families = (
+            list(operation.product_families)
+            if isinstance(operation, RelationKnowledgeOperation)
+            else []
+        )
+        return (
+            not draft.needs_clarification
+            and draft.intent is expected_intent
+            and draft.product_families == expected_families
+            and all(span in decision.plan.question for span in draft.evidence_spans)
+        )
 
     def _execute_knowledge_audited(
         self,
@@ -828,7 +1221,7 @@ class RoutedFinanceAgent:
         if result is None:
             timed_out = isinstance(
                 error,
-                (HyperClovaXTimeoutError, RequestDeadlineExceeded, TimeoutError),
+                HyperClovaXTimeoutError | RequestDeadlineExceeded | TimeoutError,
             )
             recorder.emit(
                 stage=AuditStage.ANSWER,
@@ -1136,7 +1529,7 @@ class RoutedFinanceAgent:
             audit_error = error.cause if isinstance(error, RoutedExecutionError) else error
             timed_out = isinstance(
                 audit_error,
-                (HyperClovaXTimeoutError, RequestDeadlineExceeded, TimeoutError),
+                HyperClovaXTimeoutError | RequestDeadlineExceeded | TimeoutError,
             )
             recorder.emit(
                 stage=AuditStage.ANSWER,
@@ -1327,6 +1720,41 @@ class RoutedFinanceAgent:
                         reason_code="policy_recomputed",
                         duration_ms=(perf_counter() - planning_started) * 1000,
                         **self._decision_audit_fields(decision),
+                    )
+            intent_draft = _PUBLIC_INTENT_ANALYSIS.get()
+            if self.require_official_hclx and intent_draft is None:
+                raise HyperClovaXConfigurationError(
+                    "official request lost its HyperCLOVA X Intent analysis receipt"
+                )
+            # A server-owned SafetyEnvelope terminal decision has the highest
+            # precedence. HCLX still supplies the required Intent receipt, but
+            # disagreement can never downgrade UNSUPPORTED to CLARIFY/EXECUTE.
+            if intent_draft is not None and not decision.reason_code.startswith("safety_"):
+                intent_verification = verify_intent_analysis(
+                    decision.draft.question,
+                    decision,
+                    intent_draft,
+                )
+                if audit is not None:
+                    audit.emit(
+                        stage=AuditStage.VERIFIER,
+                        outcome=(
+                            AuditOutcome.SUCCEEDED
+                            if intent_verification.passed
+                            else AuditOutcome.BLOCKED
+                        ),
+                        reason_code=intent_verification.reason_code,
+                        duration_ms=0,
+                        **self._decision_audit_fields(decision),
+                    )
+                if not intent_verification.passed:
+                    return self._control_result(
+                        decision,
+                        disposition=RouteDisposition.CLARIFY,
+                        reason=(
+                            "HCLX Intent 분석과 서버의 안전한 해석이 일치하지 않아 "
+                            "상품군과 요청 기준을 다시 확인해야 합니다."
+                        ),
                     )
             if audit is not None:
                 audit.emit(
@@ -2008,11 +2436,18 @@ class RoutedFinanceAgent:
         resolved_families: set[ProductFamily] = set()
         for mention in decision.draft.product_mentions:
             matches: set[ProductFamily] = set()
+            normalized_mention = normalize_product_mention(mention)
             for family, path in self.database_paths.items():
                 for record in self.identity_cache.get(path).records:
-                    identities = (record.product_id, record.ticker, record.isin)
+                    identities = (
+                        record.product_id,
+                        record.product_name,
+                        record.short_name,
+                        record.ticker,
+                        record.isin,
+                    )
                     if any(
-                        value is not None and value.casefold() == mention.casefold()
+                        value is not None and normalize_product_mention(value) == normalized_mention
                         for value in identities
                     ):
                         matches.add(family)
@@ -2203,6 +2638,10 @@ class RoutedFinanceAgent:
                 reason=str(error),
             )
         plans = [search.plan for search in searches]
+        global_ranking = resolve_cross_family_global_ranking(
+            decision.draft.question,
+            searches,
+        )
         if audit is not None:
             elapsed_ms = (perf_counter() - compiler_started) * 1000
             for plan in plans:
@@ -2301,7 +2740,13 @@ class RoutedFinanceAgent:
         deterministic_searches = [execution.result for execution in executions]
         family_searches = deterministic_searches
         answer_composition: AnswerComposition | None = None
-        if self.answer_provider is not None:
+        global_ranked: list[_GlobalRankedProduct] = []
+        if global_ranking is not None:
+            family_searches, global_ranked = _rank_global_products(
+                deterministic_searches,
+                global_ranking,
+            )
+        elif self.answer_provider is not None:
             family_searches, answer_composition = self._compose_cross_family_grounded_answer(
                 executions
             )
@@ -2310,8 +2755,13 @@ class RoutedFinanceAgent:
             product for family_search in family_searches for product in family_search.products
         ]
         candidate_count = sum(family_search.candidate_count for family_search in family_searches)
+        cross_family_notice = (
+            "동일 canonical field와 단위가 검증된 상품군만 global TOP-K에 포함했습니다."
+            if global_ranking is not None
+            else _CROSS_FAMILY_SAFETY_NOTICE
+        )
         warnings = [
-            _CROSS_FAMILY_SAFETY_NOTICE,
+            cross_family_notice,
             *(
                 f"{item.product_family.value}: {warning}"
                 for item in family_searches
@@ -2332,7 +2782,15 @@ class RoutedFinanceAgent:
             request_id=decision.draft.request_id,
             status="executed",
             decision=decision,
-            answer=_compile_cross_family_answer(family_searches),
+            answer=(
+                _compile_global_cross_family_answer(
+                    global_ranked,
+                    global_ranking,
+                    candidate_count=candidate_count,
+                )
+                if global_ranking is not None
+                else _compile_cross_family_answer(family_searches)
+            ),
             query_plan=None,
             candidate_count=candidate_count,
             products=products,

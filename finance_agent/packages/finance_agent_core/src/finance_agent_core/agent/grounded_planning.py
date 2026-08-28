@@ -980,6 +980,24 @@ class GroundedPlanGate:
                     strength=ConstraintStrength.LOCKED,
                 ),
             )
+        if (
+            family is ProductFamily.OVERSEAS_ETP
+            and any(item.field == "aum" for item in proposal.ranking)
+            and not any(item.field == "trading_currency" for item in constraints)
+        ):
+            # The approved overseas ETP snapshot is entirely USD.  This is a
+            # server-owned execution invariant rather than a meaning the model
+            # must invent from user text, so add it after grounding the model's
+            # verbatim constraints.
+            constraints.append(
+                Constraint(
+                    field="trading_currency",
+                    operator=ConstraintOperator.EQ,
+                    value="USD",
+                    unit=Unit.CODE,
+                    strength=ConstraintStrength.LOCKED,
+                )
+            )
         return self._dedupe_constraints(constraints)
 
     @staticmethod

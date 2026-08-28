@@ -9,7 +9,7 @@
     a owl:Ontology ;
     owl:imports <https://gaeng3.ai/ontology/common> ;
     rdfs:label "국내채권 Ontology"@ko ;
-    ga:registryVersion "1.3" .
+    ga:registryVersion "1.4" .
 
 bond:KoreanBondProduct
     a owl:Class ;
@@ -41,6 +41,10 @@ bond:Family
     ga:hasCanonicalField bond:field_credit_rating ;
     ga:hasCanonicalField bond:field_bond_risk_code ;
     ga:hasCanonicalField bond:field_buy_yield_pct ;
+    ga:hasCanonicalField bond:field_applied_yield_pct ;
+    ga:hasCanonicalField bond:field_evaluation_price ;
+    ga:hasCanonicalField bond:field_dirty_price ;
+    ga:hasCanonicalField bond:field_convexity ;
     ga:hasCanonicalField bond:field_after_tax_yield_pct ;
     ga:hasCanonicalField bond:field_buyable_quantity ;
     ga:hasCanonicalField bond:field_currently_buyable ;
@@ -52,16 +56,19 @@ bond:Dataset
     ga:registryName "bond" ;
     ga:sourceId "PRBD01N001" ;
     ga:sourceLabel "국내채권 마스터"@ko ;
-    ga:logicalGrain "PD_NO로 식별되는 국내채권 한 종목"@ko ;
-    ga:snapshotDate "2026-07-11"^^xsd:date ;
-    ga:rowCount 42394 ;
+    ga:logicalGrain "pd_no·pd_exg_mkt·info_base_dt·info_seq로 식별되는 국내채권 한 행"@ko ;
+    ga:snapshotDate "2026-08-24"^^xsd:date ;
+    ga:rowCount 21882 ;
     ga:quarantinedRows 0 ;
     ga:executionEnabled true ;
-    ga:primaryKey "PD_NO" ;
+    ga:primaryKey "pd_no" ;
+    ga:primaryKey "pd_exg_mkt" ;
+    ga:primaryKey "info_base_dt" ;
+    ga:primaryKey "info_seq" ;
     ga:rawFilePattern "PRBD01N001*_datarows*.xlsx" ;
     ga:schemaFilePattern "PRBD01N001*_schema*.xlsx" ;
-    ga:staticAsOfColumn "__file_snapshot__" ;
-    ga:dynamicAsOfColumn "PD_STD_INFO_UPDATE" ;
+    ga:staticAsOfColumn "info_base_dt" ;
+    ga:dynamicAsOfColumn "pd_std_info_update" ;
     ga:notes ""@ko .
 
 bond:field_product_id
@@ -86,9 +93,12 @@ bond:field_product_id
     ga:allowedOperator "in" ;
     ga:asOfBasis "static" ;
     ga:sourceDataset "bond" ;
-    ga:sourceColumn "PD_NO" ;
-    ga:sourceTransform "identity" ;
-    ga:notes "42,394행에서 결측과 중복이 없는 원천 기본키다."@ko .
+    ga:sourceColumn "pd_no" ;
+    ga:sourceColumn "pd_exg_mkt" ;
+    ga:sourceColumn "info_base_dt" ;
+    ga:sourceColumn "info_seq" ;
+    ga:sourceTransform "composite_key" ;
+    ga:notes "새 공식본의 복합키이며 pd_no 단독 중복을 안전하게 구분한다."@ko .
 
 bond:field_product_family
     a ga:CanonicalField ;
@@ -143,9 +153,9 @@ bond:field_product_name
     ga:allowedOperator "contains" ;
     ga:asOfBasis "static" ;
     ga:sourceDataset "bond" ;
-    ga:sourceColumn "PD_NM" ;
+    ga:sourceColumn "pd_nm" ;
     ga:sourceTransform "identity" ;
-    ga:notes "42,394행에서 모두 존재하며 상품 식별에는 PD_NO를 사용한다."@ko .
+    ga:notes "새 공식본 21,882행에서 모두 존재하며 상품 식별에는 복합키를 사용한다."@ko .
 
 bond:field_ticker
     a ga:CanonicalField ;
@@ -169,9 +179,9 @@ bond:field_ticker
     ga:allowedOperator "in" ;
     ga:asOfBasis "static" ;
     ga:sourceDataset "bond" ;
-    ga:sourceColumn "PD_NO" ;
+    ga:sourceColumn "pd_no" ;
     ga:sourceTransform "identity" ;
-    ga:notes "별도 티커 필드가 없어 PD_NO를 사용자 표시용 채권 종목 코드로 사용한다."@ko .
+    ga:notes "별도 티커 필드가 없어 pd_no를 사용자 표시용 채권 종목 코드로 사용한다."@ko .
 
 bond:field_trading_currency
     a ga:CanonicalField ;
@@ -197,12 +207,15 @@ bond:field_trading_currency
     ga:enumValue "KRW" ;
     ga:enumValue "EUR" ;
     ga:enumValue "JPY" ;
+    ga:enumValue "AUD" ;
+    ga:enumValue "GBP" ;
+    ga:enumValue "SEK" ;
     ga:enumValue "000" ;
     ga:asOfBasis "static" ;
     ga:sourceDataset "bond" ;
-    ga:sourceColumn "CURR_CD" ;
+    ga:sourceColumn "curr_cd" ;
     ga:sourceTransform "identity" ;
-    ga:notes "KRW 42,372행 외 USD 19행, EUR·JPY·000 각 1행을 원문 그대로 보존한다. 통화 간 금액 비교는 하지 않는다."@ko .
+    ga:notes "통화 코드를 원문 그대로 보존하며 통화 간 금액 비교는 하지 않는다."@ko .
 
 bond:field_static_as_of
     a ga:CanonicalField ;
@@ -228,11 +241,11 @@ bond:field_static_as_of
     ga:allowedOperator "gt" ;
     ga:allowedOperator "gte" ;
     ga:allowedOperator "between" ;
-    ga:asOfBasis "snapshot" ;
+    ga:asOfBasis "static" ;
     ga:sourceDataset "bond" ;
-    ga:sourceTransform "constant" ;
-    ga:constantValue "2026-07-11" ;
-    ga:notes "정적 속성에는 독립 갱신일이 없어 파일 최종 추출일 2026-07-11을 사용한다."@ko .
+    ga:sourceColumn "info_base_dt" ;
+    ga:sourceTransform "identity" ;
+    ga:notes "공식본의 행별 info_base_dt를 사용한다."@ko .
 
 bond:field_dynamic_as_of
     a ga:CanonicalField ;
@@ -243,8 +256,8 @@ bond:field_dynamic_as_of
     skos:altLabel "dynamic as of"@ko ;
     ga:valueType "date" ;
     ga:unit "date" ;
-    ga:quality "PARTIAL" ;
-    ga:coveragePct "75.0649"^^xsd:decimal ;
+    ga:quality "VALID" ;
+    ga:coveragePct "100"^^xsd:decimal ;
     ga:queryable true ;
     ga:selectable true ;
     ga:sortable true ;
@@ -260,9 +273,9 @@ bond:field_dynamic_as_of
     ga:allowedOperator "between" ;
     ga:asOfBasis "dynamic" ;
     ga:sourceDataset "bond" ;
-    ga:sourceColumn "PD_STD_INFO_UPDATE" ;
+    ga:sourceColumn "pd_std_info_update" ;
     ga:sourceTransform "identity" ;
-    ga:notes "동적 매수·수익률 값이 있는 881행은 모두 2026-02-24 기준으로 파일 추출일보다 137일 오래되었다."@ko .
+    ga:notes "새 공식본의 pd_std_info_update를 사용한다."@ko .
 
 bond:field_short_name
     a ga:CanonicalField ;
@@ -275,7 +288,7 @@ bond:field_short_name
     ga:valueType "string" ;
     ga:unit "none" ;
     ga:quality "PARTIAL" ;
-    ga:coveragePct "99.139"^^xsd:decimal ;
+    ga:coveragePct "99.936"^^xsd:decimal ;
     ga:queryable true ;
     ga:selectable true ;
     ga:sortable true ;
@@ -287,9 +300,9 @@ bond:field_short_name
     ga:allowedOperator "contains" ;
     ga:asOfBasis "static" ;
     ga:sourceDataset "bond" ;
-    ga:sourceColumn "PD_ABRV_NM" ;
+    ga:sourceColumn "pd_abrv_nm" ;
     ga:sourceTransform "identity" ;
-    ga:notes "365행이 결측이며 식별자로 사용하지 않는다."@ko .
+    ga:notes "14행이 결측이며 식별자로 사용하지 않는다."@ko .
 
 bond:field_bond_market
     a ga:CanonicalField ;
@@ -316,7 +329,7 @@ bond:field_bond_market
     ga:enumValue "장외" ;
     ga:asOfBasis "static" ;
     ga:sourceDataset "bond" ;
-    ga:sourceColumn "PD_EXG_MKT" ;
+    ga:sourceColumn "pd_exg_mkt" ;
     ga:sourceTransform "identity" ;
     ga:notes "원천의 장내·장외 구분을 그대로 보존한다."@ko .
 
@@ -331,7 +344,7 @@ bond:field_issuer
     ga:valueType "string" ;
     ga:unit "none" ;
     ga:quality "PARTIAL" ;
-    ga:coveragePct "97.8346"^^xsd:decimal ;
+    ga:coveragePct "99.3191"^^xsd:decimal ;
     ga:queryable true ;
     ga:selectable true ;
     ga:sortable true ;
@@ -343,9 +356,9 @@ bond:field_issuer
     ga:allowedOperator "contains" ;
     ga:asOfBasis "static" ;
     ga:sourceDataset "bond" ;
-    ga:sourceColumn "PD_PBCM" ;
+    ga:sourceColumn "pd_pbcm" ;
     ga:sourceTransform "identity" ;
-    ga:notes "918행이 결측이며 원천 표기를 그대로 보존한다."@ko .
+    ga:notes "149행이 결측이며 원천 표기를 그대로 보존한다."@ko .
 
 bond:field_bond_major_class
     a ga:CanonicalField ;
@@ -375,9 +388,9 @@ bond:field_bond_major_class
     ga:enumValue "외화채권-금융채" ;
     ga:asOfBasis "static" ;
     ga:sourceDataset "bond" ;
-    ga:sourceColumn "STD_PD_MCLS_NM" ;
+    ga:sourceColumn "std_pd_mcls_nm" ;
     ga:sourceTransform "identity" ;
-    ga:notes "42,394행에서 모두 존재하는 원천 표준상품 대분류다."@ko .
+    ga:notes "새 공식본에서 제공하는 원천 표준상품 대분류다."@ko .
 
 bond:field_bond_subclass
     a ga:CanonicalField ;
@@ -388,8 +401,8 @@ bond:field_bond_subclass
     skos:altLabel "bond subclass"@ko ;
     ga:valueType "enum" ;
     ga:unit "code" ;
-    ga:quality "PARTIAL" ;
-    ga:coveragePct "99.9693"^^xsd:decimal ;
+    ga:quality "VALID" ;
+    ga:coveragePct "100"^^xsd:decimal ;
     ga:queryable true ;
     ga:selectable true ;
     ga:sortable false ;
@@ -417,9 +430,9 @@ bond:field_bond_subclass
     ga:enumValue "물가채" ;
     ga:asOfBasis "static" ;
     ga:sourceDataset "bond" ;
-    ga:sourceColumn "STD_PD_SCLS_NM" ;
+    ga:sourceColumn "std_pd_scls_nm" ;
     ga:sourceTransform "identity" ;
-    ga:notes "13행이 결측이며 원천 표준상품 소분류를 그대로 보존한다."@ko .
+    ga:notes "새 공식본 21,882행의 원천 표준상품 소분류를 그대로 보존한다."@ko .
 
 bond:field_bond_type
     a ga:CanonicalField ;
@@ -432,7 +445,7 @@ bond:field_bond_type
     ga:valueType "string" ;
     ga:unit "code" ;
     ga:quality "PARTIAL" ;
-    ga:coveragePct "97.8204"^^xsd:decimal ;
+    ga:coveragePct "99.3054"^^xsd:decimal ;
     ga:queryable true ;
     ga:selectable true ;
     ga:sortable true ;
@@ -444,9 +457,9 @@ bond:field_bond_type
     ga:allowedOperator "contains" ;
     ga:asOfBasis "static" ;
     ga:sourceDataset "bond" ;
-    ga:sourceColumn "BD_KND" ;
+    ga:sourceColumn "bd_knd" ;
     ga:sourceTransform "identity" ;
-    ga:notes "924행이 결측이고 39개 원천 유형이 있어 문자열 원문으로 보존한다."@ko .
+    ga:notes "152행이 결측이고 32개 원천 유형이 있어 문자열 원문으로 보존한다."@ko .
 
 bond:field_issue_amount
     a ga:CanonicalField ;
@@ -475,7 +488,7 @@ bond:field_issue_amount
     ga:allowedOperator "between" ;
     ga:asOfBasis "static" ;
     ga:sourceDataset "bond" ;
-    ga:sourceColumn "ISU_BAL_AMT" ;
+    ga:sourceColumn "isu_bal_amt" ;
     ga:sourceTransform "identity" ;
     ga:notes "원천 금액을 거래통화 단위로 보존하며 통화가 같은 채권끼리만 직접 비교한다."@ko .
 
@@ -489,7 +502,7 @@ bond:field_issue_date
     ga:valueType "date" ;
     ga:unit "date" ;
     ga:quality "PARTIAL" ;
-    ga:coveragePct "99.2004"^^xsd:decimal ;
+    ga:coveragePct "99.8812"^^xsd:decimal ;
     ga:queryable true ;
     ga:selectable true ;
     ga:sortable true ;
@@ -505,9 +518,9 @@ bond:field_issue_date
     ga:allowedOperator "between" ;
     ga:asOfBasis "static" ;
     ga:sourceDataset "bond" ;
-    ga:sourceColumn "ISU_DT" ;
+    ga:sourceColumn "isu_dt" ;
     ga:sourceTransform "identity" ;
-    ga:notes "결측과 0 날짜 sentinel을 제외한 42,055행을 YYYYMMDD 원천값에서 ISO 날짜로 정규화한다."@ko .
+    ga:notes "결측 26행을 제외한 21,856행을 YYYYMMDD 원천값에서 ISO 날짜로 정규화한다."@ko .
 
 bond:field_maturity_date
     a ga:CanonicalField ;
@@ -519,7 +532,7 @@ bond:field_maturity_date
     ga:valueType "date" ;
     ga:unit "date" ;
     ga:quality "PARTIAL" ;
-    ga:coveragePct "99.2475"^^xsd:decimal ;
+    ga:coveragePct "99.9772"^^xsd:decimal ;
     ga:queryable true ;
     ga:selectable true ;
     ga:sortable true ;
@@ -535,9 +548,9 @@ bond:field_maturity_date
     ga:allowedOperator "between" ;
     ga:asOfBasis "static" ;
     ga:sourceDataset "bond" ;
-    ga:sourceColumn "MAT_DT" ;
+    ga:sourceColumn "mat_dt" ;
     ga:sourceTransform "identity" ;
-    ga:notes "결측과 0 날짜 sentinel을 제외한 42,075행이 유효하다. 현재 매수 가능 검색은 파일 스냅샷보다 이른 만기 상품을 제외한다."@ko .
+    ga:notes "결측 5행을 제외한 원천 만기일을 보존한다. 영구채의 mat_dt는 중도상환 개시일일 수 있어 상장 종료 판단에 사용하지 않는다."@ko .
 
 bond:field_coupon_rate_pct
     a ga:CanonicalField ;
@@ -550,7 +563,7 @@ bond:field_coupon_rate_pct
     ga:valueType "number" ;
     ga:unit "pct_point" ;
     ga:quality "PARTIAL" ;
-    ga:coveragePct "99.9953"^^xsd:decimal ;
+    ga:coveragePct "99.9954"^^xsd:decimal ;
     ga:queryable true ;
     ga:selectable true ;
     ga:sortable true ;
@@ -566,9 +579,9 @@ bond:field_coupon_rate_pct
     ga:allowedOperator "between" ;
     ga:asOfBasis "static" ;
     ga:sourceDataset "bond" ;
-    ga:sourceColumn "SRFC_IRT" ;
+    ga:sourceColumn "srfc_irt" ;
     ga:sourceTransform "identity" ;
-    ga:notes "2행이 결측이며 원천 퍼센트포인트를 그대로 보존한다."@ko .
+    ga:notes "1행이 결측이며 579행의 0을 포함한 원천 퍼센트포인트를 그대로 보존한다."@ko .
 
 bond:field_credit_rating
     a ga:CanonicalField ;
@@ -580,7 +593,7 @@ bond:field_credit_rating
     ga:valueType "enum" ;
     ga:unit "code" ;
     ga:quality "PARTIAL" ;
-    ga:coveragePct "58.3809"^^xsd:decimal ;
+    ga:coveragePct "81.6287"^^xsd:decimal ;
     ga:queryable true ;
     ga:selectable true ;
     ga:sortable false ;
@@ -612,7 +625,7 @@ bond:field_credit_rating
     ga:enumValue "C" ;
     ga:asOfBasis "static" ;
     ga:sourceDataset "bond" ;
-    ga:sourceColumn "CRD_GRD" ;
+    ga:sourceColumn "crd_grd" ;
     ga:sourceTransform "identity" ;
     ga:notes "결측이 많고 원천 등급 표기가 AA0·A0처럼 혼재한다. QueryPlan은 정확값·목록 일치만 사용하며, 명시적인 'AA- 이상' 같은 표현은 registry의 최고→최저 enum 순서를 기준으로 허용 목록(in)으로 확장한다. 임계 등급이 없는 '등급이 높은' 표현은 추정하지 않는다."@ko .
 
@@ -645,7 +658,7 @@ bond:field_bond_risk_code
     ga:enumValue "6" ;
     ga:asOfBasis "static" ;
     ga:sourceDataset "bond" ;
-    ga:sourceColumn "PD_RISK_GCD" ;
+    ga:sourceColumn "pd_risk_gcd" ;
     ga:sourceTransform "identity" ;
     ga:notes "코드값은 모두 존재하지만 공식 코드북이 없어 숫자의 위험 순서를 추정하지 않고 정확값 조회만 허용한다."@ko .
 
@@ -659,8 +672,8 @@ bond:field_buy_yield_pct
     skos:altLabel "buy yield"@ko ;
     ga:valueType "number" ;
     ga:unit "pct_point" ;
-    ga:quality "PARTIAL" ;
-    ga:coveragePct "2.0781"^^xsd:decimal ;
+    ga:quality "VALID" ;
+    ga:coveragePct "2.8974"^^xsd:decimal ;
     ga:queryable true ;
     ga:selectable true ;
     ga:sortable true ;
@@ -676,9 +689,141 @@ bond:field_buy_yield_pct
     ga:allowedOperator "between" ;
     ga:asOfBasis "dynamic" ;
     ga:sourceDataset "bond" ;
-    ga:sourceColumn "BUY_YIELD" ;
+    ga:sourceColumn "buy_yield" ;
     ga:sourceTransform "identity" ;
-    ga:notes "881행에만 있고 모두 2026-02-24 기준이다. 과거 관측값이며 미래 수익을 뜻하지 않는다."@ko .
+    ga:notes "원천값이 있는 행에서만 정렬·비교하며 결측은 제외한다. 미래 수익을 뜻하지 않는다."@ko .
+
+bond:field_applied_yield_pct
+    a ga:CanonicalField ;
+    ga:forFamily bond:Family ;
+    ga:canonicalName "applied_yield_pct" ;
+    rdfs:label "민평수익률"@ko ;
+    skos:altLabel "민평 수익률"@ko ;
+    skos:altLabel "민평금리"@ko ;
+    skos:altLabel "민평 기준 수익률"@ko ;
+    skos:altLabel "민간평가 금리"@ko ;
+    skos:altLabel "평가기관 수익률"@ko ;
+    skos:altLabel "민평 산출 수익률"@ko ;
+    ga:valueType "number" ;
+    ga:unit "pct_point" ;
+    ga:quality "VALID" ;
+    ga:coveragePct "99.0814"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable true ;
+    ga:aggregatable true ;
+    ga:comparable true ;
+    ga:comparisonMode "numeric_delta" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "lt" ;
+    ga:allowedOperator "lte" ;
+    ga:allowedOperator "gt" ;
+    ga:allowedOperator "gte" ;
+    ga:allowedOperator "between" ;
+    ga:asOfBasis "dynamic" ;
+    ga:sourceDataset "bond" ;
+    ga:sourceColumn "applied_yield" ;
+    ga:sourceTransform "identity" ;
+    ga:sentinelValuesJson "{\"0\":\"UNKNOWN\"}" ;
+    ga:notes "공식 민평수익률/민평금리 원천값을 사용하며 결측·0은 수치 실행에서 제외한다."@ko .
+
+bond:field_evaluation_price
+    a ga:CanonicalField ;
+    ga:forFamily bond:Family ;
+    ga:canonicalName "evaluation_price" ;
+    rdfs:label "평가일단가"@ko ;
+    skos:altLabel "평가 단가"@ko ;
+    skos:altLabel "클린 프라이스"@ko ;
+    skos:altLabel "clean price"@ko ;
+    skos:altLabel "이자 제외 평가가격"@ko ;
+    ga:valueType "number" ;
+    ga:unit "source_currency_amount" ;
+    ga:quality "VALID" ;
+    ga:coveragePct "100"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable true ;
+    ga:aggregatable true ;
+    ga:comparable true ;
+    ga:comparisonMode "numeric_delta" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "lt" ;
+    ga:allowedOperator "lte" ;
+    ga:allowedOperator "gt" ;
+    ga:allowedOperator "gte" ;
+    ga:allowedOperator "between" ;
+    ga:asOfBasis "dynamic" ;
+    ga:sourceDataset "bond" ;
+    ga:sourceColumn "eval_price" ;
+    ga:sourceTransform "identity" ;
+    ga:sentinelValuesJson "{\"0\":\"UNKNOWN\"}" ;
+    ga:notes "Clean Price 성격의 공식 평가일단가를 사용하며 0은 수치 실행에서 제외한다."@ko .
+
+bond:field_dirty_price
+    a ga:CanonicalField ;
+    ga:forFamily bond:Family ;
+    ga:canonicalName "dirty_price" ;
+    rdfs:label "이자부단가"@ko ;
+    skos:altLabel "경과이자 포함 단가"@ko ;
+    skos:altLabel "경과이자 포함 가격"@ko ;
+    skos:altLabel "dirty price"@ko ;
+    ga:valueType "number" ;
+    ga:unit "source_currency_amount" ;
+    ga:quality "VALID" ;
+    ga:coveragePct "99.9269"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable true ;
+    ga:aggregatable true ;
+    ga:comparable true ;
+    ga:comparisonMode "numeric_delta" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "lt" ;
+    ga:allowedOperator "lte" ;
+    ga:allowedOperator "gt" ;
+    ga:allowedOperator "gte" ;
+    ga:allowedOperator "between" ;
+    ga:asOfBasis "dynamic" ;
+    ga:sourceDataset "bond" ;
+    ga:sourceColumn "dirty" ;
+    ga:sourceTransform "identity" ;
+    ga:sentinelValuesJson "{\"0\":\"UNKNOWN\"}" ;
+    ga:notes "경과이자를 포함한 공식 이자부단가를 사용하며 결측·0은 수치 실행에서 제외한다."@ko .
+
+bond:field_convexity
+    a ga:CanonicalField ;
+    ga:forFamily bond:Family ;
+    ga:canonicalName "convexity" ;
+    rdfs:label "컨벡시티"@ko ;
+    skos:altLabel "금리 변화에 따른 가격 굴곡"@ko ;
+    skos:altLabel "가격 굴곡"@ko ;
+    skos:altLabel "convexity"@ko ;
+    ga:valueType "number" ;
+    ga:unit "none" ;
+    ga:quality "VALID" ;
+    ga:coveragePct "99.9269"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable true ;
+    ga:aggregatable true ;
+    ga:comparable true ;
+    ga:comparisonMode "numeric_delta" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "lt" ;
+    ga:allowedOperator "lte" ;
+    ga:allowedOperator "gt" ;
+    ga:allowedOperator "gte" ;
+    ga:allowedOperator "between" ;
+    ga:asOfBasis "dynamic" ;
+    ga:sourceDataset "bond" ;
+    ga:sourceColumn "cov" ;
+    ga:sourceTransform "identity" ;
+    ga:sentinelValuesJson "{\"0\":\"UNKNOWN\"}" ;
+    ga:notes "공식 컨벡시티 원천값을 사용하며 결측·0은 수치 실행에서 제외한다."@ko .
 
 bond:field_after_tax_yield_pct
     a ga:CanonicalField ;
@@ -689,8 +834,8 @@ bond:field_after_tax_yield_pct
     skos:altLabel "after-tax yield"@ko ;
     ga:valueType "number" ;
     ga:unit "pct_point" ;
-    ga:quality "PARTIAL" ;
-    ga:coveragePct "2.0781"^^xsd:decimal ;
+    ga:quality "VALID" ;
+    ga:coveragePct "2.8974"^^xsd:decimal ;
     ga:queryable true ;
     ga:selectable true ;
     ga:sortable true ;
@@ -706,9 +851,9 @@ bond:field_after_tax_yield_pct
     ga:allowedOperator "between" ;
     ga:asOfBasis "dynamic" ;
     ga:sourceDataset "bond" ;
-    ga:sourceColumn "AFTER_TAX_YIELD" ;
+    ga:sourceColumn "after_tax_yield" ;
     ga:sourceTransform "identity" ;
-    ga:notes "881행에만 있고 세제 적용 조건을 확정할 수 없으므로 원천값 비교만 지원한다."@ko .
+    ga:notes "634행에만 있고 세제 적용 조건을 확정할 수 없으므로 원천값 비교만 지원한다."@ko .
 
 bond:field_buyable_quantity
     a ga:CanonicalField ;
@@ -720,26 +865,20 @@ bond:field_buyable_quantity
     skos:altLabel "buyable quantity"@ko ;
     ga:valueType "number" ;
     ga:unit "source_quantity" ;
-    ga:quality "PARTIAL" ;
-    ga:coveragePct "2.0781"^^xsd:decimal ;
-    ga:queryable true ;
+    ga:quality "UNKNOWN" ;
+    ga:coveragePct "2.8974"^^xsd:decimal ;
+    ga:queryable false ;
     ga:selectable true ;
-    ga:sortable true ;
-    ga:aggregatable true ;
+    ga:sortable false ;
+    ga:aggregatable false ;
     ga:comparable true ;
     ga:comparisonMode "numeric_delta" ;
     ga:comparisonScope "same_dataset" ;
-    ga:allowedOperator "eq" ;
-    ga:allowedOperator "lt" ;
-    ga:allowedOperator "lte" ;
-    ga:allowedOperator "gt" ;
-    ga:allowedOperator "gte" ;
-    ga:allowedOperator "between" ;
     ga:asOfBasis "dynamic" ;
     ga:sourceDataset "bond" ;
-    ga:sourceColumn "BUYABLE_QUANTITY" ;
+    ga:sourceColumn "buyable_quantity" ;
     ga:sourceTransform "identity" ;
-    ga:notes "881행에만 있고 모두 2026-02-24 기준이다. 결측은 0으로 대체하지 않는다."@ko .
+    ga:notes "2026-08-24 주최측 공지에 따라 값이 무효이므로 검색·정렬·집계에 사용하지 않는다."@ko .
 
 bond:field_currently_buyable
     a ga:CanonicalField ;
@@ -751,8 +890,8 @@ bond:field_currently_buyable
     skos:altLabel "available to buy"@ko ;
     ga:valueType "boolean" ;
     ga:unit "boolean" ;
-    ga:quality "PARTIAL" ;
-    ga:coveragePct "2.0781"^^xsd:decimal ;
+    ga:quality "VALID" ;
+    ga:coveragePct "100"^^xsd:decimal ;
     ga:queryable true ;
     ga:selectable true ;
     ga:sortable false ;
@@ -763,10 +902,9 @@ bond:field_currently_buyable
     ga:allowedOperator "eq" ;
     ga:asOfBasis "snapshot" ;
     ga:sourceDataset "bond" ;
-    ga:sourceColumn "BUYABLE_QUANTITY" ;
-    ga:sourceColumn "MAT_DT" ;
-    ga:sourceTransform "available_on_snapshot" ;
-    ga:notes "수량이 제공되고 0보다 크며 만기일이 2026-07-11 이후인 경우만 true다. 254행이 true이고 결측 수량은 UNKNOWN이다."@ko .
+    ga:sourceTransform "constant" ;
+    ga:constantValue "true" ;
+    ga:notes "주최측 공지에 따라 BUYABLE_QUANTITY는 무시하고 공식 파일에 포함된 채권을 모두 구매가능으로 간주한다."@ko .
 
 bond:field_remaining_days
     a ga:CanonicalField ;
@@ -779,7 +917,7 @@ bond:field_remaining_days
     ga:valueType "number" ;
     ga:unit "day" ;
     ga:quality "PARTIAL" ;
-    ga:coveragePct "99.2475"^^xsd:decimal ;
+    ga:coveragePct "99.9772"^^xsd:decimal ;
     ga:queryable true ;
     ga:selectable true ;
     ga:sortable true ;
@@ -795,9 +933,9 @@ bond:field_remaining_days
     ga:allowedOperator "between" ;
     ga:asOfBasis "snapshot" ;
     ga:sourceDataset "bond" ;
-    ga:sourceColumn "MAT_DT" ;
+    ga:sourceColumn "mat_dt" ;
     ga:sourceTransform "days_from_snapshot" ;
-    ga:notes "유효한 MAT_DT 42,075행에 대해 원천 REMAINING_DAYS를 사용하지 않고 MAT_DT와 2026-07-11의 차이로 재계산한다."@ko .
+    ga:notes "유효한 mat_dt와 공식 스냅샷일 2026-08-24의 차이를 재계산한다. 영구채 해석에는 사용하지 않는다."@ko .
 
 bond:field_duration_years
     a ga:CanonicalField ;
@@ -805,11 +943,12 @@ bond:field_duration_years
     ga:canonicalName "duration_years" ;
     rdfs:label "듀레이션"@ko ;
     skos:altLabel "수정 듀레이션"@ko ;
+    skos:altLabel "금리 민감도"@ko ;
     skos:altLabel "duration"@ko ;
     ga:valueType "number" ;
     ga:unit "year" ;
     ga:quality "PARTIAL" ;
-    ga:coveragePct "68.4484"^^xsd:decimal ;
+    ga:coveragePct "99.9269"^^xsd:decimal ;
     ga:queryable true ;
     ga:selectable true ;
     ga:sortable true ;
@@ -825,6 +964,6 @@ bond:field_duration_years
     ga:allowedOperator "between" ;
     ga:asOfBasis "dynamic" ;
     ga:sourceDataset "bond" ;
-    ga:sourceColumn "DUR" ;
+    ga:sourceColumn "dur" ;
     ga:sourceTransform "identity" ;
-    ga:notes "원천 DUR을 연 단위 수치로 보존한다. 현재 매수 가능 254행에서는 모두 존재하지만 2026-02-24 기준이다."@ko .
+    ga:notes "원천 dur을 연 단위 수치로 보존하고 결측은 정렬·집계에서 제외한다."@ko .

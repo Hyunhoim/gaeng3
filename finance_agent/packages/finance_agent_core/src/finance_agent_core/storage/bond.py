@@ -24,6 +24,8 @@ RATE_SCALE = Decimal("1000000")
 MONEY_SCALE = Decimal("100")
 QUANTITY_SCALE = Decimal("1")
 DURATION_SCALE = Decimal("1000000")
+PRICE_SCALE = Decimal("1000000")
+CONVEXITY_SCALE = Decimal("1000000")
 
 SCHEMA_SQL = """
 CREATE TABLE metadata (
@@ -72,6 +74,14 @@ CREATE TABLE bond_products (
     buy_yield_quality TEXT NOT NULL,
     after_tax_yield_micro_pct INTEGER,
     after_tax_yield_quality TEXT NOT NULL,
+    applied_yield_micro_pct INTEGER,
+    applied_yield_quality TEXT NOT NULL,
+    evaluation_price_micro_units INTEGER,
+    evaluation_price_quality TEXT NOT NULL,
+    dirty_price_micro_units INTEGER,
+    dirty_price_quality TEXT NOT NULL,
+    convexity_micro INTEGER,
+    convexity_quality TEXT NOT NULL,
     buyable_quantity_units INTEGER,
     buyable_quantity_quality TEXT NOT NULL,
     currently_buyable INTEGER
@@ -118,14 +128,17 @@ INSERT INTO bond_products (
     maturity_date_quality, coupon_rate_micro_pct, coupon_rate_quality,
     credit_rating, credit_rating_quality, bond_risk_code, bond_risk_code_quality,
     buy_yield_micro_pct, buy_yield_quality, after_tax_yield_micro_pct,
-    after_tax_yield_quality, buyable_quantity_units, buyable_quantity_quality,
+    after_tax_yield_quality, applied_yield_micro_pct, applied_yield_quality,
+    evaluation_price_micro_units, evaluation_price_quality,
+    dirty_price_micro_units, dirty_price_quality, convexity_micro,
+    convexity_quality, buyable_quantity_units, buyable_quantity_quality,
     currently_buyable, currently_buyable_quality, remaining_days,
     remaining_days_quality, duration_micro_years, duration_quality, static_as_of,
     static_as_of_quality, dynamic_as_of, dynamic_as_of_quality
 ) VALUES (
     ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
     ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-    ?, ?, ?
+    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
 )
 """
 
@@ -135,7 +148,7 @@ def _json(value: object) -> str:
 
 
 def _quality(record: NormalizedBondRecord, field: str) -> str:
-    return record.field_quality[field].value
+    return record.field_quality.get(field, QualityStatus.UNKNOWN).value
 
 
 def _database_values(record: NormalizedBondRecord) -> tuple[object, ...]:
@@ -180,6 +193,14 @@ def _database_values(record: NormalizedBondRecord) -> tuple[object, ...]:
         _quality(record, "buy_yield_pct"),
         _scaled_integer(record.after_tax_yield_pct, RATE_SCALE, "after_tax_yield_pct"),
         _quality(record, "after_tax_yield_pct"),
+        _scaled_integer(record.applied_yield_pct, RATE_SCALE, "applied_yield_pct"),
+        _quality(record, "applied_yield_pct"),
+        _scaled_integer(record.evaluation_price, PRICE_SCALE, "evaluation_price"),
+        _quality(record, "evaluation_price"),
+        _scaled_integer(record.dirty_price, PRICE_SCALE, "dirty_price"),
+        _quality(record, "dirty_price"),
+        _scaled_integer(record.convexity, CONVEXITY_SCALE, "convexity"),
+        _quality(record, "convexity"),
         _scaled_integer(record.buyable_quantity, QUANTITY_SCALE, "buyable_quantity"),
         _quality(record, "buyable_quantity"),
         None if record.currently_buyable is None else int(record.currently_buyable),
@@ -314,6 +335,26 @@ def row_to_bond_record(
             None
             if row["after_tax_yield_micro_pct"] is None
             else Decimal(row["after_tax_yield_micro_pct"]) / RATE_SCALE
+        ),
+        applied_yield_pct=(
+            None
+            if row["applied_yield_micro_pct"] is None
+            else Decimal(row["applied_yield_micro_pct"]) / RATE_SCALE
+        ),
+        evaluation_price=(
+            None
+            if row["evaluation_price_micro_units"] is None
+            else Decimal(row["evaluation_price_micro_units"]) / PRICE_SCALE
+        ),
+        dirty_price=(
+            None
+            if row["dirty_price_micro_units"] is None
+            else Decimal(row["dirty_price_micro_units"]) / PRICE_SCALE
+        ),
+        convexity=(
+            None
+            if row["convexity_micro"] is None
+            else Decimal(row["convexity_micro"]) / CONVEXITY_SCALE
         ),
         buyable_quantity=(
             None

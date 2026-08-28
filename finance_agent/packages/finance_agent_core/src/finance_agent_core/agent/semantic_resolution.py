@@ -7,6 +7,10 @@ from typing import Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from finance_agent_core.agent.semantic_admission import (
+    evidence_spans_are_grounded,
+    semantic_field_evidence,
+)
 from finance_agent_core.config import load_field_registry
 from finance_agent_core.contracts.queryplan import (
     Constraint,
@@ -277,6 +281,8 @@ class SemanticResolutionRequest(SemanticModel):
     schema_version: Literal["1.0"] = "1.0"
     request_id: str = Field(min_length=1, max_length=128)
     residual_span: str = Field(min_length=1, max_length=200)
+    context_before: str = Field(default="", max_length=120)
+    context_after: str = Field(default="", max_length=120)
     product_family: ProductFamily
     interaction_intent: InteractionIntent
     allowed_operations: tuple[ResolutionOperation, ...] = Field(min_length=1, max_length=4)
@@ -296,6 +302,12 @@ class SemanticResolutionRequest(SemanticModel):
             raise ValueError("semantic operations must be unique")
         return self
 
+    @property
+    def evidence_context(self) -> str:
+        """Return only the bounded request-local text available to the resolver."""
+
+        return f"{self.context_before}{self.residual_span}{self.context_after}"
+
 
 class SemanticResolutionDraft(SemanticModel):
     """Untrusted Dense/HCLX proposal; it is never directly compilable."""
@@ -309,11 +321,25 @@ class SemanticResolutionDraft(SemanticModel):
         "multiple_interpretations",
         "unsupported_meaning",
     ]
+    evidence_spans: tuple[str, ...] = Field(default=(), max_length=3)
+    ambiguity_reason: str = Field(default="", max_length=200)
 
     @model_validator(mode="after")
     def validate_control_field(self) -> SemanticResolutionDraft:
         if (self.decision is ResolutionDecision.RESOLVE) == (self.selected_field_id == _NONE_FIELD):
             raise ValueError("resolved drafts require one field; control drafts require __none__")
+        if self.decision is ResolutionDecision.RESOLVE:
+            if not self.evidence_spans:
+                raise ValueError("resolved drafts require grounded evidence spans")
+            if self.ambiguity_reason:
+                raise ValueError("resolved drafts cannot include an ambiguity reason")
+        else:
+            if self.evidence_spans:
+                raise ValueError("control drafts cannot include evidence spans")
+            if not self.ambiguity_reason.strip():
+                raise ValueError("control drafts require an ambiguity reason")
+        if any(not 1 <= len(item) <= 120 for item in self.evidence_spans):
+            raise ValueError("semantic evidence span length differs")
         return self
 
 
@@ -425,6 +451,21 @@ class SemanticResolutionGate:
             and draft.direction is not request.expected_direction
         ):
             raise SemanticResolutionError("semantic resolver changed the requested direction")
+
+        server_evidence = semantic_field_evidence(
+            request.evidence_context,
+            field_id=draft.selected_field_id,
+            product_family=request.product_family,
+            operation=draft.operation.value,
+        )
+        if not server_evidence.supported:
+            raise SemanticResolutionError("semantic resolver lacks server-grounded field evidence")
+        if not evidence_spans_are_grounded(
+            draft.evidence_spans,
+            residual_span=request.evidence_context,
+            server_evidence=server_evidence.evidence_spans,
+        ):
+            raise SemanticResolutionError("semantic resolver evidence is not grounded")
 
         definition = load_field_registry().require_field(
             draft.selected_field_id,

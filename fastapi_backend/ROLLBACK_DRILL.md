@@ -24,12 +24,12 @@ release는 `answer_mode=deterministic`, HCLX release는 `answer_mode=llm_grounde
 `fallback_used=false`여야 한다. HCLX 오류가 결정론적 fallback으로 가려져도 drill 성공으로
 인정하지 않는다.
 각 probe 뒤에는 owner-only append-only JSONL에서 같은 invocation의
-Request→Safety→Lexical→Planning→Route→Compiler→Authority→SQL→Oracle→Verifier→
-Renderer→Answer→Serialization(citation·Backend DTO·Official DTO·HTTP 응답)→Request 순서의
-deterministic **25개 event**를 확인한다. HCLX grounded answer profile은 같은 실행·검증
-경로 뒤에 HCLX generation과 Answer Verifier를 포함한 **27개 event**, HCLX QueryPlan과
-grounded answer를 모두 켠 profile은 Compiler 뒤 QueryPlan HCLX까지 포함한 **28개 event**를
-확인한다. 모든 profile은 연속 sequence, release·manifest·Binding hash,
+과거 deterministic rollback 대상은 Request→Safety→Lexical→Planning→Route→Compiler→
+Authority→SQL→Oracle→Verifier→Renderer→Answer→Serialization→Request 순서의 **25개
+event**를 확인한다. 현재 공식 HCLX profile은 Request 직후 Intent 분석, Planning 뒤 Intent
+교차검증, Backend DTO 뒤 최종 생성과 Final Answer Verifier를 포함한 **29개 event**를
+확인한다. 전체 HCLX QueryPlan profile은 폐기되어 대상 release로 허용하지 않는다.
+모든 profile은 연속 sequence, release·manifest·Binding hash,
 승인 dataset·QueryPlan hash를 다시 확인한다. N-1과 N은 하나의 감사 디렉터리를 보존해야
 하며 파일 교체·부분 JSON·중복 key·2 MiB 초과 신규 구간은 모두 차단한다.
 이는 질문 전체의 품질 평가가 아니라 rollback 뒤 실제 Agent 경로가 동작하는지 확인하는
@@ -107,9 +107,9 @@ volume이 없거나, cosign image/blob 검증이 실패하거나, 기존 drill p
 container/network가 발견되거나, 어느 generation 하나라도 healthy·대표 `/answer`·감사
 연결 계약을 통과하지 못하면 fail-closed로 종료한다.
 
-HCLX release는 세 번의 activation마다 실제 공식 GET probe를 수행하므로 grounded answer만
-켠 profile은 최소 3회, QueryPlan도 켠 profile은 최대 6회의 과금 가능한 HCLX 호출이
-발생한다. 따라서 `--execute`만으로는 HCLX release를 시작하지 않으며, 승인한 경우에만 다음
+현재 공식 HCLX release는 세 번의 activation마다 Intent와 최종 생성 두 호출을 수행하므로
+총 6회의 과금 가능한 HCLX 호출이 발생한다. 전체 QueryPlan 호출은 허용하지 않는다. 따라서
+`--execute`만으로는 HCLX release를 시작하지 않으며, 승인한 경우에만 다음
 플래그를 함께 사용한다.
 
 ```bash
@@ -122,8 +122,9 @@ sudo -- python3 fastapi_backend/scripts/rollback_drill.py \
   --allow-billable-hclx
 ```
 
-HCLX release라도 startup은 네트워크 호출을 하지 않는다. 실제 GET에서 HCX-007 응답이 로컬
-Answer Verifier를 통과해 `llm_grounded`가 되고, profile별 HCLX Audit event가 정확히 남아야
+HCLX release라도 startup은 네트워크 호출을 하지 않는다. 실제 GET에서 HCX-007 Intent와
+최종 생성 응답이 서버 교차검증과 Final Answer Verifier를 통과해 `llm_grounded`가 되고,
+profile별 HCLX Audit event가 정확히 남아야
 성공한다. timeout·인증 실패·429·5xx·schema 불일치·fallback은 모두 drill 실패다.
 
 `--leave-running`은 immutable snapshot(실행 중 교체되지 않게 복사한 배포 파일)과 자동
@@ -142,8 +143,8 @@ N-1→N→N-1 복귀 가능성을 별도 project에서 확인하기 위해 같�
 - project override용 Compose 환경변수와 release identity shell 변수를 제거한다.
 - `127.0.0.1:<명시한 포트>`로만 bind한다.
 - 전역 prune, image 삭제, volume 삭제, 다른 project 조작을 수행하지 않는다.
-- deterministic 25-event, HCLX answer-only 27-event, HCLX QueryPlan+answer 28-event의
-  정적 감사 경로만 허용한다. QueryPlan-only HCLX profile은 아직 drill 대상이 아니므로 거부한다.
+- 과거 deterministic 25-event 또는 현재 공식 HCLX Intent+최종 생성 29-event의 정적 감사
+  경로만 허용한다. 전체/QueryPlan-only HCLX profile은 폐기되어 거부한다.
 - deterministic profile은 HCLX model·provider·credential 설정이 있으면 거부한다.
 - HCLX profile은 HCX-007과 고정된 Docker secret 경로만 허용한다. host secret은 값·hash·경로를
   성공 결과나 오류에 남기지 않고, 시작 전과 각 activation 뒤 metadata fingerprint 불변을 확인한다.

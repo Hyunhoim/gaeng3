@@ -121,15 +121,19 @@ class ModelRelease(ReleaseModel):
     model_id: str | None = Field(default=None, min_length=1, max_length=128)
     revision_status: Literal["not_used", "provider_revision_not_exposed"]
     queryplan_operation_enabled: StrictBool
+    intent_analysis_operation_enabled: StrictBool = False
     semantic_resolver_operation_enabled: StrictBool = False
     grounded_answer_operation_enabled: StrictBool
+    final_answer_operation_enabled: StrictBool = False
 
     @model_validator(mode="after")
     def validate_provider_profile(self) -> ModelRelease:
         enabled = (
             self.queryplan_operation_enabled
+            or self.intent_analysis_operation_enabled
             or self.semantic_resolver_operation_enabled
             or self.grounded_answer_operation_enabled
+            or self.final_answer_operation_enabled
         )
         if self.provider == "disabled":
             if enabled or self.model_id is not None or self.revision_status != "not_used":
@@ -231,12 +235,69 @@ class PublicDocumentRetrievalRelease(ReleaseModel):
     artifact: None = None
 
 
+class ExternalKnowledgeArtifactRelease(ReleaseModel):
+    artifact_kind: Literal["official_external_knowledge"] = "official_external_knowledge"
+    retrieval_mode: Literal[
+        "approved_corpus_cache_first",
+        "verified_live_official",
+    ] = "approved_corpus_cache_first"
+    source_registry_sha256: str = Field(pattern=_SHA256_PATTERN)
+    coverage_manifest_sha256: str = Field(pattern=_SHA256_PATTERN)
+    corpus_manifest_sha256: str = Field(pattern=_SHA256_PATTERN)
+    document_bm25_sha256: str | None = Field(default=None, pattern=_SHA256_PATTERN)
+    document_dense_sha256: str | None = Field(default=None, pattern=_SHA256_PATTERN)
+    temporal_relation_sha256: str = Field(pattern=_SHA256_PATTERN)
+    verifier_contract_sha256: str = Field(pattern=_SHA256_PATTERN)
+    embedding_model_revision: Literal["d14c8a9423946e268a0c9952fecf3a7aabd73bd9"] | None = (
+        "d14c8a9423946e268a0c9952fecf3a7aabd73bd9"
+    )
+
+    @model_validator(mode="after")
+    def validate_retrieval_mode(self) -> ExternalKnowledgeArtifactRelease:
+        if self.retrieval_mode == "approved_corpus_cache_first":
+            if (
+                self.document_bm25_sha256 is None
+                or self.document_dense_sha256 is None
+                or self.embedding_model_revision is None
+            ):
+                raise ValueError(
+                    "approved corpus external knowledge requires BM25, Dense, and KURE revision"
+                )
+        elif any(
+            value is not None
+            for value in (
+                self.document_bm25_sha256,
+                self.document_dense_sha256,
+                self.embedding_model_revision,
+            )
+        ):
+            raise ValueError("live-only external knowledge cannot claim document indexes")
+        return self
+
+
+class PublicExternalKnowledgeRelease(ReleaseModel):
+    status: Literal["disabled_not_activated", "activated"] = "disabled_not_activated"
+    artifact: ExternalKnowledgeArtifactRelease | None = None
+    artifact_file_sha256: str | None = Field(default=None, pattern=_SHA256_PATTERN)
+
+    @model_validator(mode="after")
+    def require_exact_external_activation(self) -> PublicExternalKnowledgeRelease:
+        if self.status == "disabled_not_activated":
+            if self.artifact is not None or self.artifact_file_sha256 is not None:
+                raise ValueError("disabled external knowledge cannot bind an artifact")
+            return self
+        if self.artifact is None or self.artifact_file_sha256 is None:
+            raise ValueError("activated external knowledge requires a validated artifact")
+        return self
+
+
 class PublicKnowledgeRetrievalRelease(ReleaseModel):
     """Required knowledge-retrieval state in the public Agent release."""
 
     schema_version: Literal["1.0"] = "1.0"
     relation: PublicRelationRetrievalRelease
     document: PublicDocumentRetrievalRelease
+    external: PublicExternalKnowledgeRelease = Field(default_factory=PublicExternalKnowledgeRelease)
 
     @property
     def contract_sha256(self) -> str:
@@ -420,6 +481,7 @@ class RuntimeReleaseInputs:
     hcx_queryplan_enabled: bool
     hcx_model: str | None
     fund_execution_policy: Literal["locked", "public_fund_v1_approved"]
+    hcx_intent_analysis_enabled: bool = False
     hcx_semantic_resolver_enabled: bool = False
     schema_dense_enabled: bool = False
     schema_dense_artifact: DenseSchemaIndexArtifact | None = None
@@ -428,6 +490,8 @@ class RuntimeReleaseInputs:
     product_dense_enabled: bool = False
     relation_retrieval_artifact: RelationRetrievalArtifactRelease | None = None
     relation_retrieval_artifact_file_sha256: str | None = None
+    external_knowledge_artifact: ExternalKnowledgeArtifactRelease | None = None
+    external_knowledge_artifact_file_sha256: str | None = None
     platform: Literal["linux/amd64", "linux/arm64"] = "linux/amd64"
     hcx_timeout_seconds: float = 45.0
     official_answer_timeout_seconds: float = 270.0
@@ -454,6 +518,24 @@ def canonical_sha256(value: object) -> str:
     return hashlib.sha256(_canonical_json(value).encode("utf-8")).hexdigest()
 
 
+def external_knowledge_verifier_contract_sha256() -> str:
+    """Bind the exact public evidence DTOs and verifier implementation name."""
+
+    from finance_agent_core.execution.external_knowledge_verifier import (
+        ExternalKnowledgeEvidenceBundle,
+        ExternalKnowledgeEvidenceVerifier,
+        ExternalKnowledgeVerification,
+    )
+
+    return canonical_sha256(
+        {
+            "bundle": ExternalKnowledgeEvidenceBundle.model_json_schema(),
+            "verification": ExternalKnowledgeVerification.model_json_schema(),
+            "verifier": ExternalKnowledgeEvidenceVerifier.__name__,
+        }
+    )
+
+
 def relation_retrieval_artifact_file_bytes(
     artifact: RelationRetrievalArtifactRelease,
 ) -> bytes:
@@ -463,6 +545,17 @@ def relation_retrieval_artifact_file_bytes(
         raise AgentReleaseError(
             AgentReleaseCode.RUNTIME_MISMATCH,
             "relation retrieval activation requires the public artifact contract",
+        )
+    return (_canonical_json(artifact.model_dump(mode="json")) + "\n").encode("utf-8")
+
+
+def external_knowledge_artifact_file_bytes(
+    artifact: ExternalKnowledgeArtifactRelease,
+) -> bytes:
+    if type(artifact) is not ExternalKnowledgeArtifactRelease:
+        raise AgentReleaseError(
+            AgentReleaseCode.RUNTIME_MISMATCH,
+            "external knowledge activation requires the public artifact contract",
         )
     return (_canonical_json(artifact.model_dump(mode="json")) + "\n").encode("utf-8")
 
@@ -546,24 +639,34 @@ def sha256_runtime_tree(root: str | Path) -> str:
 
 def _runtime_model(inputs: RuntimeReleaseInputs) -> ModelRelease:
     queryplan_enabled = bool(inputs.hcx_queryplan_enabled)
+    intent_analysis_enabled = bool(inputs.hcx_intent_analysis_enabled)
     semantic_resolver_enabled = bool(inputs.hcx_semantic_resolver_enabled)
     answer_enabled = inputs.answer_provider == "hyperclova"
-    if not queryplan_enabled and not semantic_resolver_enabled and not answer_enabled:
+    if (
+        not queryplan_enabled
+        and not intent_analysis_enabled
+        and not semantic_resolver_enabled
+        and not answer_enabled
+    ):
         return ModelRelease(
             provider="disabled",
             model_id=None,
             revision_status="not_used",
             queryplan_operation_enabled=False,
+            intent_analysis_operation_enabled=False,
             semantic_resolver_operation_enabled=False,
             grounded_answer_operation_enabled=False,
+            final_answer_operation_enabled=False,
         )
     return ModelRelease(
         provider="hyperclova",
         model_id=inputs.hcx_model,
         revision_status="provider_revision_not_exposed",
         queryplan_operation_enabled=queryplan_enabled,
+        intent_analysis_operation_enabled=intent_analysis_enabled,
         semantic_resolver_operation_enabled=semantic_resolver_enabled,
-        grounded_answer_operation_enabled=answer_enabled,
+        grounded_answer_operation_enabled=False,
+        final_answer_operation_enabled=answer_enabled,
     )
 
 
@@ -675,9 +778,41 @@ def _public_knowledge_retrieval(
             artifact=artifact,
             artifact_file_sha256=artifact_file_sha256,
         )
+    external_artifact = inputs.external_knowledge_artifact
+    external_file_sha256 = inputs.external_knowledge_artifact_file_sha256
+    if external_artifact is None:
+        if external_file_sha256 is not None:
+            raise AgentReleaseError(
+                AgentReleaseCode.RUNTIME_MISMATCH,
+                "external artifact hash cannot be set while retrieval is disabled",
+            )
+        external = PublicExternalKnowledgeRelease()
+    else:
+        if not isinstance(external_file_sha256, str) or not re.fullmatch(
+            _SHA256_PATTERN,
+            external_file_sha256,
+        ):
+            raise AgentReleaseError(
+                AgentReleaseCode.ARTIFACT_HASH_MISMATCH,
+                "external activation requires a trusted artifact file SHA-256",
+            )
+        canonical_file_sha256 = _raw_sha256(
+            external_knowledge_artifact_file_bytes(external_artifact)
+        )
+        if canonical_file_sha256 != external_file_sha256:
+            raise AgentReleaseError(
+                AgentReleaseCode.ARTIFACT_HASH_MISMATCH,
+                "external artifact differs from its trusted SHA-256",
+            )
+        external = PublicExternalKnowledgeRelease(
+            status="activated",
+            artifact=external_artifact,
+            artifact_file_sha256=external_file_sha256,
+        )
     return PublicKnowledgeRetrievalRelease(
         relation=relation,
         document=PublicDocumentRetrievalRelease(),
+        external=external,
     )
 
 
@@ -753,6 +888,7 @@ def build_release_components(inputs: RuntimeReleaseInputs) -> AgentReleaseCompon
     queryplan_prompt_files = (
         "agent/adaptive_semantic.py",
         "agent/grounded_planning.py",
+        "agent/intent_analysis.py",
         "agent/linker.py",
         "agent/providers/local_test.py",
         "agent/providers/hyperclova.py",
@@ -762,12 +898,14 @@ def build_release_components(inputs: RuntimeReleaseInputs) -> AgentReleaseCompon
     )
     answer_prompt_files = (
         "answering/context.py",
+        "answering/final_generation.py",
         "answering/providers.py",
         "answering/verifier.py",
     )
     generation_files = (
         "agent/providers/hyperclova.py",
         "agent/providers/hyperclova_http.py",
+        "answering/final_generation.py",
         "answering/providers.py",
     )
     return AgentReleaseComponents(
@@ -1018,6 +1156,44 @@ def load_relation_retrieval_artifact_release(
     return artifact
 
 
+def load_external_knowledge_artifact_release(
+    *,
+    artifact_path: str | Path,
+    expected_file_sha256: str,
+) -> ExternalKnowledgeArtifactRelease:
+    if not isinstance(expected_file_sha256, str) or not re.fullmatch(
+        _SHA256_PATTERN,
+        expected_file_sha256,
+    ):
+        raise AgentReleaseError(
+            AgentReleaseCode.ARTIFACT_HASH_MISMATCH,
+            "external knowledge artifact trust anchor is invalid",
+        )
+    _, data, actual_file_sha256 = _read_release_file(artifact_path)
+    if actual_file_sha256 != expected_file_sha256:
+        raise AgentReleaseError(
+            AgentReleaseCode.ARTIFACT_HASH_MISMATCH,
+            "external knowledge artifact differs from the trusted SHA-256",
+        )
+    try:
+        artifact = ExternalKnowledgeArtifactRelease.model_validate(
+            _strict_json_object(data, "ExternalKnowledgeArtifactRelease")
+        )
+    except AgentReleaseError:
+        raise
+    except ValueError as error:
+        raise AgentReleaseError(
+            AgentReleaseCode.INVALID_JSON,
+            "external knowledge artifact violates the strict public schema",
+        ) from error
+    if data != external_knowledge_artifact_file_bytes(artifact):
+        raise AgentReleaseError(
+            AgentReleaseCode.INVALID_JSON,
+            "external knowledge artifact is not in canonical file form",
+        )
+    return artifact
+
+
 @dataclass(frozen=True, slots=True)
 class ResolvedAgentRelease:
     manifest: AgentReleaseManifest
@@ -1201,8 +1377,10 @@ __all__ = [
     "AgentReleaseManifest",
     "DeploymentBinding",
     "DocumentRetrievalArtifactRelease",
+    "ExternalKnowledgeArtifactRelease",
     "KnowledgeRetrievalRelease",
     "PublicDocumentRetrievalRelease",
+    "PublicExternalKnowledgeRelease",
     "PublicKnowledgeRetrievalRelease",
     "PublicRelationRetrievalRelease",
     "RelationRetrievalArtifactRelease",
@@ -1214,8 +1392,11 @@ __all__ = [
     "build_release_components",
     "canonical_sha256",
     "deployment_binding_file_bytes",
+    "external_knowledge_artifact_file_bytes",
+    "external_knowledge_verifier_contract_sha256",
     "manifest_file_bytes",
     "load_relation_retrieval_artifact_release",
+    "load_external_knowledge_artifact_release",
     "relation_retrieval_artifact_file_bytes",
     "resolve_agent_release",
     "sha256_runtime_tree",

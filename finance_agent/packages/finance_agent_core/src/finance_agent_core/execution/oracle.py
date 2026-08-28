@@ -32,6 +32,7 @@ from finance_agent_core.execution.sql_schema import (
     SQL_FIELDS_BY_FAMILY,
     TABLE_BY_FAMILY,
     SqlField,
+    logical_product_scope,
 )
 from finance_agent_core.execution.verifier_projection import (
     project_verifier_rows,
@@ -94,15 +95,28 @@ def _constraint_sql(
     parameters: list[str | int | bool] = []
     if spec.quality_column is not None:
         clauses.append(f"{spec.quality_column} IN ('VALID', 'PARTIAL')")
+    if spec.scale is not None:
+        # Official 2026-08-26 evaluation rule: a numeric 0 or missing value is
+        # not a usable filter/ranking basis.  Keep the source value intact in
+        # storage, but exclude it at deterministic query time.
+        clauses.extend((f"{column} IS NOT NULL", f"{column} <> 0"))
 
     operator = constraint.operator
     value = constraint.value
+
+    def canonical_parameter(item: object) -> object:
+        if constraint.field == "product_id" and spec.column == "ticker" and isinstance(item, str):
+            return item.split(":", 1)[0]
+        return item
+
     if operator in {ConstraintOperator.IN, ConstraintOperator.NOT_IN}:
         assert isinstance(value, list)
         placeholders = ", ".join("?" for _ in value)
         sql_operator = "IN" if operator is ConstraintOperator.IN else "NOT IN"
         clauses.append(f"{column} {sql_operator} ({placeholders})")
-        parameters.extend(_scaled_parameter(item, spec.scale) for item in value)
+        parameters.extend(
+            _scaled_parameter(canonical_parameter(item), spec.scale) for item in value
+        )
     elif operator is ConstraintOperator.BETWEEN:
         assert isinstance(value, list)
         clauses.append(f"{column} BETWEEN ? AND ?")
@@ -122,7 +136,7 @@ def _constraint_sql(
             ConstraintOperator.GTE: ">=",
         }
         clauses.append(f"{column} {sql_operators[operator]} ?")
-        parameters.append(_scaled_parameter(value, spec.scale))
+        parameters.append(_scaled_parameter(canonical_parameter(value), spec.scale))
     return " AND ".join(clauses), parameters
 
 
@@ -155,7 +169,7 @@ def compile_search_sql(
         table = TABLE_BY_FAMILY[family]
     except KeyError as error:
         raise ValueError(f"no deterministic SQL oracle for product family: {family}") from error
-    where_clauses = ["is_quarantined = 0"]
+    where_clauses = ["is_quarantined = 0", logical_product_scope(family)]
     parameters: list[str | int | bool] = []
     for constraint in plan.constraints:
         clause, values = _constraint_sql(constraint, sql_fields)
@@ -164,10 +178,10 @@ def compile_search_sql(
     for ranking in plan.ranking:
         if not ranking_requires_usable_value(plan, ranking.field):
             continue
-        quality_column = sql_fields[ranking.field].quality_column
-        if quality_column is None:
-            raise ValueError(f"ranked field {ranking.field!r} cannot enforce usable-value policy")
-        where_clauses.append(f"{quality_column} IN ('VALID', 'PARTIAL')")
+        spec = sql_fields[ranking.field]
+        if spec.quality_column is not None:
+            where_clauses.append(f"{spec.quality_column} IN ('VALID', 'PARTIAL')")
+        where_clauses.extend((f"{spec.column} IS NOT NULL", f"{spec.column} <> 0"))
     where_sql = " AND ".join(where_clauses)
 
     order_by: list[str] = []
@@ -204,7 +218,7 @@ def compile_aggregate_sql(
         raise ValueError(
             f"no deterministic aggregate Oracle for product family: {family}"
         ) from error
-    where_clauses = ["is_quarantined = 0"]
+    where_clauses = ["is_quarantined = 0", logical_product_scope(family)]
     parameters: list[str | int | bool] = []
     for constraint in plan.constraints:
         clause, values = _constraint_sql(constraint, sql_fields)

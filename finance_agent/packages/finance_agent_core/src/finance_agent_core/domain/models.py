@@ -45,6 +45,21 @@ class NormalizedOverseasEtpRecord(DomainModel):
     aum: Decimal | None = Field(default=None, ge=0)
     aum_quality: QualityStatus
     aum_quality_reason: str | None
+    one_day_return_pct: Decimal | None
+    one_day_return_quality: QualityStatus
+    one_day_return_quality_reason: str | None
+    close_price: Decimal | None = Field(default=None, ge=0)
+    close_price_quality: QualityStatus = QualityStatus.UNKNOWN
+    close_price_quality_reason: str | None = "close_price_missing"
+    daily_trading_value: Decimal | None = Field(default=None, ge=0)
+    daily_trading_value_quality: QualityStatus = QualityStatus.UNKNOWN
+    daily_trading_value_quality_reason: str | None = "daily_trading_value_missing"
+    daily_volume: Decimal | None = Field(default=None, ge=0)
+    daily_volume_quality: QualityStatus = QualityStatus.UNKNOWN
+    daily_volume_quality_reason: str | None = "daily_volume_missing"
+    discrepancy_pct: Decimal | None = None
+    discrepancy_quality: QualityStatus = QualityStatus.UNKNOWN
+    discrepancy_quality_reason: str | None = "discrepancy_missing"
     trading_currency: str
     static_as_of: date
     dynamic_as_of: date
@@ -68,6 +83,24 @@ class NormalizedOverseasEtpRecord(DomainModel):
                 raise ValueError("missing or zero AUM must remain UNKNOWN")
         elif self.aum_quality is not QualityStatus.VALID:
             raise ValueError("positive AUM must be VALID")
+        if self.one_day_return_pct is None:
+            if self.one_day_return_quality is not QualityStatus.UNKNOWN:
+                raise ValueError("missing one-day return must remain UNKNOWN")
+        elif self.one_day_return_quality is not QualityStatus.VALID:
+            raise ValueError("present one-day return, including zero, must be VALID")
+        for field_name in (
+            "close_price",
+            "daily_trading_value",
+            "daily_volume",
+            "discrepancy_pct",
+        ):
+            value = getattr(self, field_name)
+            quality = getattr(self, f"{field_name.removesuffix('_pct')}_quality")
+            if value is None or value == 0:
+                if quality is not QualityStatus.UNKNOWN:
+                    raise ValueError(f"missing or zero {field_name} must remain UNKNOWN")
+            elif quality is not QualityStatus.VALID:
+                raise ValueError(f"positive {field_name} must be VALID")
         return self
 
     def canonical_value(self, field_name: str) -> object:
@@ -83,6 +116,13 @@ class NormalizedOverseasEtpRecord(DomainModel):
             )
         if field_name == "aum":
             return self.aum_quality, self.aum_quality_reason
+        if field_name == "one_day_return_pct":
+            return self.one_day_return_quality, self.one_day_return_quality_reason
+        quality_prefix = field_name.removesuffix("_pct")
+        quality = getattr(self, f"{quality_prefix}_quality", None)
+        reason = getattr(self, f"{quality_prefix}_quality_reason", None)
+        if quality is not None:
+            return quality, reason
         return None, None
 
 
@@ -131,6 +171,15 @@ class NormalizedDomesticEtpRecord(DomainModel):
     one_year_return_pct: Decimal | None
     ytd_return_pct: Decimal | None
     daily_trading_value: Decimal | None = Field(default=None, ge=0)
+    daily_volume: Decimal | None = Field(default=None, ge=0)
+    tracking_error_pct: Decimal | None = None
+    discrepancy_pct: Decimal | None = None
+    twenty_day_volatility_pct: Decimal | None = None
+    sixty_day_volatility_pct: Decimal | None = None
+    one_hundred_twenty_day_volatility_pct: Decimal | None = None
+    two_hundred_fifty_two_day_volatility_pct: Decimal | None = None
+    distribution_yield_pct: Decimal | None = None
+    distribution_payments_per_year: Decimal | None = Field(default=None, ge=0)
     static_as_of: date
     dynamic_as_of: date
     field_quality: dict[str, QualityStatus]
@@ -207,6 +256,10 @@ class NormalizedBondRecord(DomainModel):
     bond_risk_code: str
     buy_yield_pct: Decimal | None
     after_tax_yield_pct: Decimal | None
+    applied_yield_pct: Decimal | None = None
+    evaluation_price: Decimal | None = Field(default=None, ge=0)
+    dirty_price: Decimal | None = Field(default=None, ge=0)
+    convexity: Decimal | None = None
     buyable_quantity: Decimal | None = Field(default=None, ge=0)
     currently_buyable: bool | None
     remaining_days: int | None
@@ -218,8 +271,8 @@ class NormalizedBondRecord(DomainModel):
 
     @model_validator(mode="after")
     def validate_identity_and_derived_fields(self) -> NormalizedBondRecord:
-        if self.product_id != self.ticker:
-            raise ValueError("bond product_id and ticker must both equal PD_NO")
+        if not self.product_id.startswith(f"{self.ticker}:"):
+            raise ValueError("bond product_id must preserve PD_NO as its composite-key prefix")
         if self.is_quarantined != (self.quarantine_reason is not None):
             raise ValueError("quarantine flag and reason must agree")
         if self.is_quarantined and self.row_quality is QualityStatus.VALID:
@@ -234,13 +287,10 @@ class NormalizedBondRecord(DomainModel):
         )
         if self.remaining_days != expected_remaining:
             raise ValueError("remaining_days must be recomputed from maturity and snapshot")
-        expected_buyable = (
-            None
-            if self.buyable_quantity is None or self.maturity_date is None
-            else self.buyable_quantity > 0 and self.maturity_date >= self.source_snapshot_date
-        )
-        if self.currently_buyable != expected_buyable:
-            raise ValueError("currently_buyable must be derived fail-closed")
+        if self.currently_buyable is not True:
+            raise ValueError(
+                "the 2026-08-24 official bond release must treat supplied rows as buyable"
+            )
         return self
 
     def canonical_value(self, field_name: str) -> object:
@@ -281,6 +331,16 @@ class NormalizedPublicFundRecord(DomainModel):
     risk_level: str | None
     aum: Decimal | None = Field(default=None, ge=0)
     base_index: str | None
+    sales_channel: str | None = None
+    interest_dividend_type: str | None = None
+    sale_company_fee_pct: Decimal | None = None
+    trustee_fee_pct: Decimal | None = None
+    domestic_stock_ratio_pct: Decimal | None = None
+    domestic_bond_ratio_pct: Decimal | None = None
+    overseas_stock_ratio_pct: Decimal | None = None
+    overseas_bond_ratio_pct: Decimal | None = None
+    latest_distribution_pct: Decimal | None = None
+    preservation_ratio_pct: Decimal | None = None
     one_week_return_pct: Decimal | None
     one_month_return_pct: Decimal | None
     three_month_return_pct: Decimal | None
@@ -312,26 +372,17 @@ class NormalizedPublicFundRecord(DomainModel):
             "one_month_return_pct",
             "three_month_return_pct",
             "six_month_return_pct",
+            "eighteen_month_return_pct",
+            "one_year_return_pct",
+            "two_year_return_pct",
+            "three_year_return_pct",
+            "five_year_return_pct",
         ):
             value = getattr(self, field_name)
             quality = self.field_quality.get(field_name)
             expected = QualityStatus.UNKNOWN if value is None else QualityStatus.PARTIAL
             if quality is not expected:
-                raise ValueError(f"{field_name} does not match the short-return contract")
-        for field_name in (
-            "eighteen_month_return_pct",
-            "two_year_return_pct",
-            "three_year_return_pct",
-            "five_year_return_pct",
-        ):
-            if self.field_quality.get(field_name) is not QualityStatus.UNKNOWN:
-                raise ValueError(f"{field_name} must remain display-only UNKNOWN")
-        one_year_quality = self.field_quality.get("one_year_return_pct")
-        expected_one_year_quality = (
-            QualityStatus.UNKNOWN if self.one_year_return_pct is None else QualityStatus.PARTIAL
-        )
-        if one_year_quality is not expected_one_year_quality:
-            raise ValueError("one_year_return_pct does not match the raw-source contract")
+                raise ValueError(f"{field_name} does not match the raw-source return contract")
         return self
 
     def canonical_value(self, field_name: str) -> object:

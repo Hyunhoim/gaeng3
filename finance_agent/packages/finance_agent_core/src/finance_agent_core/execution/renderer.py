@@ -34,15 +34,11 @@ WARNING_MESSAGES = {
     "historical_return_not_forecast": (
         "수익률은 원천 제공 기준일의 과거 성과이며 미래 수익을 의미하지 않습니다."
     ),
-    "stale_bond_dynamic_values": (
-        "채권 매수수량·수익률·듀레이션은 2026-02-24 기준으로 "
-        "파일 스냅샷 2026-07-11보다 137일 오래되었습니다."
-    ),
     "bond_yield_not_forecast": (
         "채권 수익률은 원천 기준일의 조회값이며 미래 수익이나 실현 수익을 보장하지 않습니다."
     ),
     "partial_credit_rating": (
-        "채권 신용등급은 전체 마스터의 58.3809%에만 제공되며 결측을 무등급으로 해석하지 않습니다."
+        "채권 신용등급 결측은 무등급으로 해석하지 않고 정렬·필터에서 제외합니다."
     ),
     "unconfirmed_bond_risk_code": (
         "채권 원천 위험코드는 공식 코드북 확인 전 숫자의 위험 순서를 해석하지 않습니다."
@@ -54,12 +50,12 @@ WARNING_MESSAGES = {
         "공모펀드 기본 범위를 적용해 사모 및 공·사모 구분 미확인 상품을 제외했습니다."
     ),
     "fund_snapshot_level_returns": (
-        "공모펀드 수익률은 개별 갱신일이 없어 파일 스냅샷 2026-07-11을 "
-        "기준일 한계와 함께 표시합니다."
+        "공모펀드 수익률은 원천의 행별 가격·일별 기준일을 사용하고, 기준일이 없으면 "
+        "공식 스냅샷 2026-08-24를 표시합니다."
     ),
     "fund_one_year_raw_outliers_preserved": (
         "공모펀드 1년 수익률은 제공 원천값을 수정·제거·상한 처리하지 않았습니다. "
-        "결측·UNKNOWN만 계산에서 제외하며, 500% 초과 값 15개가 포함될 수 있습니다."
+        "결측·UNKNOWN만 계산에서 제외합니다."
     ),
     "unknown_fund_management_attribute": (
         "펀드 운용 속성의 결측 및 의미 미확인 코드 06은 UNKNOWN으로 제외했습니다."
@@ -365,16 +361,6 @@ def warning_codes_for_search(
     ):
         codes.append("historical_return_not_forecast")
     used_fields = constrained_fields | ranked_fields | compared_fields | set(plan.projection)
-    bond_dynamic_fields = {
-        "currently_buyable",
-        "buyable_quantity",
-        "buy_yield_pct",
-        "after_tax_yield_pct",
-        "duration_years",
-        "dynamic_as_of",
-    }
-    if bond and bond_dynamic_fields & used_fields:
-        codes.append("stale_bond_dynamic_values")
     if bond and {"buy_yield_pct", "after_tax_yield_pct"} & used_fields:
         codes.append("bond_yield_not_forecast")
     if bond and "credit_rating" in used_fields:
@@ -428,13 +414,6 @@ def warning_codes_for_aggregation(
     if return_fields & fields:
         codes.append("historical_return_not_forecast")
     if verified.manifest.dataset == "bond":
-        if {
-            "buyable_quantity",
-            "buy_yield_pct",
-            "after_tax_yield_pct",
-            "duration_years",
-        } & fields:
-            codes.append("stale_bond_dynamic_values")
         if {"buy_yield_pct", "after_tax_yield_pct"} & fields:
             codes.append("bond_yield_not_forecast")
         if "after_tax_yield_pct" in fields:

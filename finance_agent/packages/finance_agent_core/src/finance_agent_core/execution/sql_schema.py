@@ -4,18 +4,33 @@ from dataclasses import dataclass
 from decimal import Decimal
 
 from finance_agent_core.storage.bond import (
+    CONVEXITY_SCALE,
     DURATION_SCALE,
-    QUANTITY_SCALE,
+    PRICE_SCALE,
     RATE_SCALE,
 )
 from finance_agent_core.storage.bond import MONEY_SCALE as BOND_MONEY_SCALE
+from finance_agent_core.storage.bond import QUANTITY_SCALE as BOND_QUANTITY_SCALE
+from finance_agent_core.storage.domestic_etp import (
+    EIGHT_DECIMAL_SCALE as DOMESTIC_EIGHT_DECIMAL_SCALE,
+)
 from finance_agent_core.storage.domestic_etp import (
     FACTOR_SCALE,
+    HUNDREDTH_SCALE,
     MONEY_SCALE,
     RETURN_SCALE,
 )
+from finance_agent_core.storage.domestic_etp import (
+    QUANTITY_SCALE as DOMESTIC_QUANTITY_SCALE,
+)
 from finance_agent_core.storage.public_fund import FUND_AUM_SCALE, FUND_RETURN_SCALE
-from finance_agent_core.storage.sqlite import AUM_SCALE, FEE_SCALE
+from finance_agent_core.storage.sqlite import (
+    AUM_SCALE,
+    FEE_SCALE,
+)
+from finance_agent_core.storage.sqlite import (
+    EIGHT_DECIMAL_SCALE as OVERSEAS_EIGHT_DECIMAL_SCALE,
+)
 
 
 @dataclass(frozen=True)
@@ -47,6 +62,31 @@ OVERSEAS_SQL_FIELDS = {
         scale=AUM_SCALE,
         quality_column="aum_quality",
     ),
+    "one_day_return_pct": SqlField(
+        "one_day_return_micro_pct",
+        scale=FEE_SCALE,
+        quality_column="one_day_return_quality",
+    ),
+    "close_price": SqlField(
+        "close_price_eight_decimals",
+        scale=OVERSEAS_EIGHT_DECIMAL_SCALE,
+        quality_column="close_price_quality",
+    ),
+    "daily_trading_value": SqlField(
+        "daily_trading_value_eight_decimals",
+        scale=OVERSEAS_EIGHT_DECIMAL_SCALE,
+        quality_column="daily_trading_value_quality",
+    ),
+    "daily_volume": SqlField(
+        "daily_volume_eight_decimals",
+        scale=OVERSEAS_EIGHT_DECIMAL_SCALE,
+        quality_column="daily_volume_quality",
+    ),
+    "discrepancy_pct": SqlField(
+        "discrepancy_micro_pct",
+        scale=FEE_SCALE,
+        quality_column="discrepancy_quality",
+    ),
     "trading_currency": SqlField("trading_currency"),
     "static_as_of": SqlField("static_as_of"),
     "dynamic_as_of": SqlField("dynamic_as_of"),
@@ -57,6 +97,51 @@ DOMESTIC_SQL_FIELDS = {
     "short_name": SqlField("short_name"),
     "manager": SqlField("manager"),
     "base_index": SqlField("base_index", quality_column="base_index_quality"),
+    "sales_channel": SqlField("sales_channel", quality_column="sales_channel_quality"),
+    "interest_dividend_type": SqlField(
+        "interest_dividend_type",
+        quality_column="interest_dividend_type_quality",
+    ),
+    "sale_company_fee_pct": SqlField(
+        "sale_company_fee_micro_pct",
+        scale=FUND_RETURN_SCALE,
+        quality_column="sale_company_fee_quality",
+    ),
+    "trustee_fee_pct": SqlField(
+        "trustee_fee_micro_pct",
+        scale=FUND_RETURN_SCALE,
+        quality_column="trustee_fee_quality",
+    ),
+    "domestic_stock_ratio_pct": SqlField(
+        "domestic_stock_ratio_micro_pct",
+        scale=FUND_RETURN_SCALE,
+        quality_column="domestic_stock_ratio_quality",
+    ),
+    "domestic_bond_ratio_pct": SqlField(
+        "domestic_bond_ratio_micro_pct",
+        scale=FUND_RETURN_SCALE,
+        quality_column="domestic_bond_ratio_quality",
+    ),
+    "overseas_stock_ratio_pct": SqlField(
+        "overseas_stock_ratio_micro_pct",
+        scale=FUND_RETURN_SCALE,
+        quality_column="overseas_stock_ratio_quality",
+    ),
+    "overseas_bond_ratio_pct": SqlField(
+        "overseas_bond_ratio_micro_pct",
+        scale=FUND_RETURN_SCALE,
+        quality_column="overseas_bond_ratio_quality",
+    ),
+    "latest_distribution_pct": SqlField(
+        "latest_distribution_micro_pct",
+        scale=FUND_RETURN_SCALE,
+        quality_column="latest_distribution_quality",
+    ),
+    "preservation_ratio_pct": SqlField(
+        "preservation_ratio_micro_pct",
+        scale=FUND_RETURN_SCALE,
+        quality_column="preservation_ratio_quality",
+    ),
     "strategy": SqlField("strategy", quality_column="strategy_quality"),
     "leverage_factor": SqlField(
         "leverage_factor_micro",
@@ -110,12 +195,58 @@ DOMESTIC_SQL_FIELDS = {
         scale=MONEY_SCALE,
         quality_column="daily_trading_value_quality",
     ),
+    "daily_volume": SqlField(
+        "daily_volume_hundredth_units",
+        scale=DOMESTIC_QUANTITY_SCALE,
+        quality_column="daily_volume_quality",
+    ),
+    "tracking_error_pct": SqlField(
+        "tracking_error_hundredth_pct",
+        scale=HUNDREDTH_SCALE,
+        quality_column="tracking_error_quality",
+    ),
+    "discrepancy_pct": SqlField(
+        "discrepancy_hundredth_pct",
+        scale=HUNDREDTH_SCALE,
+        quality_column="discrepancy_quality",
+    ),
+    "twenty_day_volatility_pct": SqlField(
+        "twenty_day_volatility_eight_decimal_pct",
+        scale=DOMESTIC_EIGHT_DECIMAL_SCALE,
+        quality_column="twenty_day_volatility_quality",
+    ),
+    "sixty_day_volatility_pct": SqlField(
+        "sixty_day_volatility_eight_decimal_pct",
+        scale=DOMESTIC_EIGHT_DECIMAL_SCALE,
+        quality_column="sixty_day_volatility_quality",
+    ),
+    "one_hundred_twenty_day_volatility_pct": SqlField(
+        "one_hundred_twenty_day_volatility_eight_decimal_pct",
+        scale=DOMESTIC_EIGHT_DECIMAL_SCALE,
+        quality_column="one_hundred_twenty_day_volatility_quality",
+    ),
+    "two_hundred_fifty_two_day_volatility_pct": SqlField(
+        "two_hundred_fifty_two_day_volatility_eight_decimal_pct",
+        scale=DOMESTIC_EIGHT_DECIMAL_SCALE,
+        quality_column="two_hundred_fifty_two_day_volatility_quality",
+    ),
+    "distribution_yield_pct": SqlField(
+        "distribution_yield_eight_decimal_pct",
+        scale=DOMESTIC_EIGHT_DECIMAL_SCALE,
+        quality_column="distribution_yield_quality",
+    ),
+    "distribution_payments_per_year": SqlField(
+        "distribution_payments_per_year_units",
+        quality_column="distribution_payments_per_year_quality",
+    ),
     "static_as_of": SqlField("static_as_of", quality_column="static_as_of_quality"),
     "dynamic_as_of": SqlField("dynamic_as_of", quality_column="dynamic_as_of_quality"),
 }
 
 BOND_SQL_FIELDS = {
-    "product_id": SqlField("product_id"),
+    # The database keeps a physical LOT-level composite key, while the
+    # organizer's PD_NO (ticker) is the public, logical bond identity.
+    "product_id": SqlField("ticker"),
     "product_family": SqlField("product_family"),
     "product_name": SqlField("product_name"),
     "ticker": SqlField("ticker"),
@@ -161,9 +292,29 @@ BOND_SQL_FIELDS = {
         scale=RATE_SCALE,
         quality_column="after_tax_yield_quality",
     ),
+    "applied_yield_pct": SqlField(
+        "applied_yield_micro_pct",
+        scale=RATE_SCALE,
+        quality_column="applied_yield_quality",
+    ),
+    "evaluation_price": SqlField(
+        "evaluation_price_micro_units",
+        scale=PRICE_SCALE,
+        quality_column="evaluation_price_quality",
+    ),
+    "dirty_price": SqlField(
+        "dirty_price_micro_units",
+        scale=PRICE_SCALE,
+        quality_column="dirty_price_quality",
+    ),
+    "convexity": SqlField(
+        "convexity_micro",
+        scale=CONVEXITY_SCALE,
+        quality_column="convexity_quality",
+    ),
     "buyable_quantity": SqlField(
         "buyable_quantity_units",
-        scale=QUANTITY_SCALE,
+        scale=BOND_QUANTITY_SCALE,
         quality_column="buyable_quantity_quality",
     ),
     "currently_buyable": SqlField(
@@ -291,3 +442,14 @@ TABLE_BY_FAMILY = {
     "bond": "bond_products",
     "fund": "fund_products",
 }
+
+
+def logical_product_scope(family: str) -> str:
+    """Restrict SQL execution to one stable row per organizer product ID."""
+
+    if family == "bond":
+        return (
+            "source_row IN (SELECT MIN(source_row) FROM bond_products "
+            "WHERE is_quarantined = 0 GROUP BY ticker)"
+        )
+    return "1 = 1"

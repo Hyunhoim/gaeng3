@@ -4,6 +4,7 @@ import re
 from collections.abc import Iterable
 from time import perf_counter
 
+from finance_agent_core.agent.numeric_language import requested_result_limit
 from finance_agent_core.agent.planning_policy import (
     AdaptiveShadowPlanningPolicy,
     PlanningDecision,
@@ -11,11 +12,16 @@ from finance_agent_core.agent.planning_policy import (
     PlanningPolicy,
     PlanningTrace,
 )
+from finance_agent_core.agent.product_identity import (
+    extract_named_product_mentions,
+    is_domestic_etp_brand_question,
+)
 from finance_agent_core.agent.safety import (
     SafetyDisposition,
     SafetyEnvelope,
     safety_policy_surface,
 )
+from finance_agent_core.agent.semantic_aliases import rank_alias_matches, ranking_intent_present
 from finance_agent_core.agent.semantic_gate import (
     SemanticCoverageDecision,
     SemanticCoverageGate,
@@ -40,7 +46,15 @@ _COMPARE = re.compile(
     r"비교|대조|차이|나란히|versus|\bvs\b|"
     r"(?:둘|두\s*(?:개(?:의)?|상품|공모\s*펀드|펀드|채권|ETF|ETN))"
     r".{0,40}?중(?:에서)?|"
-    r"어느\s*(?:게|것이).{0,40}?(?:높|낮|크|작|많|적)",
+    r"어느\s*(?:게|것이).{0,40}?(?:높|낮|크|작|많|적|길|짧)",
+    re.IGNORECASE,
+)
+_TWO_ID_COMPARATIVE = re.compile(
+    r"(?:가운데|중(?:에서)?).{0,64}?(?:더\s*)?"
+    r"(?:높|낮|크|큰|작|작은|많|적|긴|길|짧)|"
+    r"더\s*(?:높|높은|낮|낮은|크|큰|작|작은|많|많은|적|적은|긴|길|짧)|"
+    r"먼저\s*(?:오|돌아오)|"
+    r"어느\s*(?:쪽|상품|종목)",
     re.IGNORECASE,
 )
 _AGGREGATE = re.compile(
@@ -48,6 +62,10 @@ _AGGREGATE = re.compile(
     r"(?:상품|ETF|ETN|ETP|채권|펀드)(?:의)?\s*수(?:를|가|는)?\s*(?:계산|집계|총합|알려)|"
     r"최댓값|최대값|최솟값|최소값|최고값|최저값|"
     r"(?:AUM|보수율|수익률|이율|잔존일수|듀레이션)\s*(?:최대|최소)",
+    re.IGNORECASE,
+)
+_PORTFOLIO_RATIO_FIELD = re.compile(
+    r"(?:국내|해외)\s*(?:주식|채권)\s*(?:구성\s*비율|비중)",
     re.IGNORECASE,
 )
 _EXPLAIN = re.compile(r"설명|무슨\s*뜻|뭐(?:야|고)|의미|장점|요소|왜\s")
@@ -58,9 +76,11 @@ _DETAIL = re.compile(
     re.IGNORECASE,
 )
 _AMBIGUOUS = re.compile(
-    r"적당한|괜찮은|안전한|좋은\s*상품|추천(?:해|하|받|할\s*만한)|"
+    r"적당한|적당히|괜찮은|안전한|좋은\s*상품|추천(?:해|하|받|할\s*만한)|"
     r"좀\s*낮아도|많이\s*주는|제일\s*수익률|리스크.*신경\s*안|"
-    r"뭐가\s*더\s*좋|어느.*더\s*좋|"
+    r"뭐가\s*더\s*좋|어느.*더\s*좋|(?:두\s*종목|둘)\s*중.{0,20}?나은|"
+    r"오래\s*들고.{0,20}?부담\s*없|잘\s*나가|거래가?\s*활발|"
+    r"분배(?:를|가)?\s*(?:많이|잘)|"
     r"(?:가격.*왜|왜.*가격)",
     re.IGNORECASE,
 )
@@ -77,10 +97,9 @@ _UNSUPPORTED = re.compile(
 )
 _EXTERNAL_POLICY = re.compile(r"세율|세금|과세|거래\s*수수료", re.IGNORECASE)
 _UNAVAILABLE_MARKET_DATA = re.compile(
-    r"거래량|괴리율|배당.*(?:가장|최대)|"
-    r"최근\s*[2-9]\s*년.*수익률|[2-9]\s*년간.*수익률|"
+    r"배당.*(?:가장|최대)|"
     r"우주항공.*수익률|하락장.*잘\s*버티|"
-    r"변동성.*(?:낮|높|제일|가장)",
+    r"시장\s*전망",
     re.IGNORECASE,
 )
 _MIXED_ETP_COST = re.compile(
@@ -106,19 +125,20 @@ _EXPLICIT_ETP_TYPE = re.compile(
     re.IGNORECASE,
 )
 _OVERSEAS_UNAVAILABLE_METRIC = re.compile(
-    r"수익률|변동성|하락장|오른|S&P\s*500",
+    r"(?:(?:1\s*주|일주일|1\s*개월|한\s*달|3\s*개월|6\s*개월|1\s*년|YTD|"
+    r"연초\s*이후)\s*(?:수익률|수익|성과))|변동성|하락장|오른|S&P\s*500",
     re.IGNORECASE,
 )
 _FINANCE_SCOPE_SIGNAL = re.compile(
     r"(?<![A-Z])(?:ETF|ETN|ETP)(?![A-Z])|공모\s*펀드|국내\s*채권|"
     r"(?:금융|투자)\s*상품|"
-    r"상품(?:군|유형|목록|조회|검색|추천|을|를|이|가|은|는|중|\s*있(?:어|나|나요))|"
+    r"상품\s*(?:군|유형|목록|정보|조회|검색|추천|을|를|이|가|은|는|중|있(?:어|나|나요))|"
     r"AUM|수익률|총\s*보수|보수율|매수\s*수익률|잔존\s*일수|듀레이션|"
     r"종목\s*코드|티커|만기|채권|펀드",
     re.IGNORECASE,
 )
 _FUND_UNAVAILABLE_DETAIL = re.compile(
-    r"최근\s*3\s*년.*수익률|언제든.*(?:꺼내|환매)",
+    r"언제든.*(?:꺼내|환매)",
     re.IGNORECASE,
 )
 _QUOTED = (
@@ -131,6 +151,26 @@ _KNOWN_ID = re.compile(
     r"(?<![A-Z0-9])(?:KR[A-Z0-9]{10}|(?:[A-Z]{2,5}|[0-9]{3}):[A-Z0-9._-]+|"
     r"[A-Z][A-Z0-9]{0,9}\.[A-Z0-9]{1,5})(?![A-Z0-9])",
     re.IGNORECASE,
+)
+_BARE_OVERSEAS_TICKER = re.compile(r"(?<![A-Z0-9.])([A-Z]{2,5})(?![A-Z0-9.])")
+_RESERVED_OVERSEAS_TICKER_TOKENS = frozenset(
+    {
+        "AUM",
+        "ID",
+        "RIC",
+        "ETF",
+        "ETN",
+        "ETP",
+        "TOP",
+        "USD",
+        "KRW",
+        "EUR",
+        "JPY",
+        "YTD",
+        "NYSE",
+        "NASDAQ",
+        "AMEX",
+    }
 )
 _LABELED_ID = re.compile(
     r"(?:상품\s*(?:번호|ID|아이디)|종목\s*(?:코드|번호)|티커)"
@@ -197,8 +237,25 @@ def _product_mentions(question: str) -> list[str]:
     mentions: list[tuple[int, str]] = []
     for pattern in _QUOTED:
         mentions.extend((match.start(), match.group(1)) for match in pattern.finditer(question))
-    mentions.extend((match.start(), match.group(0)) for match in _KNOWN_ID.finditer(question))
+    known_id_matches = list(_KNOWN_ID.finditer(question))
+    mentions.extend((match.start(), match.group(0)) for match in known_id_matches)
     mentions.extend((match.start(), match.group(1)) for match in _LABELED_ID.finditer(question))
+    named_mentions = extract_named_product_mentions(question)
+    mentions.extend((question.find(value), value) for value in named_mentions)
+    if re.search(r"해외\s*(?:ETF|ETN|ETP)", question, re.IGNORECASE):
+        bare_ticker_matches = [
+            match
+            for match in _BARE_OVERSEAS_TICKER.finditer(question)
+            if match.group(1).upper() not in _RESERVED_OVERSEAS_TICKER_TOKENS
+            and not any(
+                match.start() < known.end() and known.start() < match.end()
+                for known in known_id_matches
+            )
+        ]
+        if known_id_matches or (
+            len(bare_ticker_matches) == 2 and _COMPARE.search(question) is not None
+        ):
+            mentions.extend((match.start(), match.group(1)) for match in bare_ticker_matches)
     return _ordered_unique(_normalize_product_mention(value) for _, value in sorted(mentions))
 
 
@@ -217,6 +274,7 @@ def _unresolved_identifier_spans(question: str, mentions: list[str]) -> list[str
 def _bind_product_identity_intent(
     intent: InteractionIntent,
     mentions: list[str],
+    question: str,
 ) -> tuple[InteractionIntent, str | None]:
     """Prevent an explicit product identity from being dropped by a broad route.
 
@@ -233,6 +291,8 @@ def _bind_product_identity_intent(
     if intent is InteractionIntent.SEARCH:
         if len(mentions) == 1:
             return InteractionIntent.DETAIL, None
+        if 2 <= len(mentions) <= 20 and ranking_intent_present(question):
+            return InteractionIntent.SEARCH, None
         return InteractionIntent.CLARIFY, "multiple_product_identities_unbound"
     if intent is InteractionIntent.AGGREGATE:
         return InteractionIntent.CLARIFY, "aggregate_product_identity_unbound"
@@ -250,11 +310,13 @@ def _product_families(question: str) -> list[ProductFamily]:
     add_matches(r"공모\s*펀드|공모펀드", ProductFamily.FUND, flags=re.IGNORECASE)
     add_matches(
         r"국내\s*채권(?!\s*형[^와과,\n]{0,12}?(?:ETF|ETN|ETP))|"
-        r"회사채|국채|국공채|국고채|특수채|금융채|"
+        r"회사채|일반사채|국채|국공채|국고채|특수채|특수은행채|금융채|신용카드채|"
+        r"MBS|시설대여채|"
         r"지역개발채|도시철도공채|채권\s*상품|채권(?!형)",
         ProductFamily.BOND,
         flags=re.IGNORECASE,
     )
+    add_matches(r"(?:국내\s*)?상장\s*지수\s*펀드", ProductFamily.DOMESTIC_ETP)
 
     etp_token = r"(?<![A-Z])(?:ETF|ETN|ETP)(?![A-Z])"
     domestic_pattern = (
@@ -291,6 +353,46 @@ def _product_families(question: str) -> list[ProductFamily]:
                 match = re.search(r"국내|한국", question, re.IGNORECASE)
                 assert match is not None
                 mentions.append((match.start(), ProductFamily.DOMESTIC_ETP))
+            elif match := re.search(
+                r"KR\d{10}|"
+                r"(?:1\s*개월|한\s*달|3\s*개월|석\s*달|6\s*개월|반년|"
+                r"1\s*년|연초\s*이후|YTD)\s*(?:수익률|수익|성과)|"
+                r"(?:20|60|120|252)\s*거래일\s*연환산\s*변동성|"
+                r"(?:연환산\s*)?분배\s*수익률|연\s*\d+\s*회\s*분배|"
+                r"\d[\d,]*\s*만?\s*원(?:화)?|"
+                r"(?:매우높은|높은|다소높은|보통|낮은|매우낮은)"
+                r"위험\s*\([1-6]등급\)|연금\s*(?:편입|거래)",
+                question,
+                re.IGNORECASE,
+            ):
+                # The official overseas ETP table exposes only 1-day return
+                # and no domestic risk/pension fields. These cues therefore
+                # identify the domestic ETP schema without model inference.
+                mentions.append((match.start(), ProductFamily.DOMESTIC_ETP))
+            elif match := re.search(
+                r"(?:하루|일간?)\s*거래대금|"
+                r"(?:(?:투자\s*)?자산군(?:이|은|가)?\s*"
+                r"(?:Commodity|Alternatives|Equity|Money\s*Market|Mixed\s*Assets)|"
+                r"(?:Commodity|Alternatives|Equity|Money\s*Market|Mixed\s*Assets)\s*자산군)|"
+                r"(?:China|Japan|India|Europe|Global\s*Emerging\s*Markets)\s*투자\s*지역|"
+                r"거래소\s*코드(?:가|는|은|이)?\s*(?:NAS|NYS|AMX)|"
+                r"(?:NAS|NYS|AMX)에서\s*거래",
+                question,
+                re.IGNORECASE,
+            ):
+                if re.search(r"(?:하루|일간?)\s*거래대금", match.group(0), re.IGNORECASE):
+                    mentions.append((match.start(), ProductFamily.DOMESTIC_ETP))
+                else:
+                    mentions.append((match.start(), ProductFamily.OVERSEAS_ETP))
+            elif match := re.search(r"외화\s*거래대금", question, re.IGNORECASE):
+                mentions.append((match.start(), ProductFamily.OVERSEAS_ETP))
+            elif match := re.search(
+                r"합성\s*복제|실물\s*복제|추적\s*오차(?:율)?|괴리율|"
+                r"(?:20|60|120|252)\s*(?:거래일|일).{0,12}(?:변동성|흔들림)",
+                question,
+                re.IGNORECASE,
+            ):
+                mentions.append((match.start(), ProductFamily.DOMESTIC_ETP))
             elif re.search(r"NYSE|NASDAQ|AMEX", question, re.IGNORECASE):
                 match = re.search(r"NYSE|NASDAQ|AMEX", question, re.IGNORECASE)
                 assert match is not None
@@ -300,8 +402,13 @@ def _product_families(question: str) -> list[ProductFamily]:
                 assert match is not None
                 mentions.append((match.start(), ProductFamily.OVERSEAS_ETP))
 
-    domestic_brand = re.search(r"\b(?:TIGER|ACE)\b", question, re.IGNORECASE)
-    if domestic_brand is not None:
+    if is_domestic_etp_brand_question(question):
+        domestic_brand = re.search(
+            r"\b(?:TIGER|KODEX|ACE|RISE|SOL|HANARO|TIMEFOLIO|ARIRANG|KBSTAR)\b",
+            question,
+            re.IGNORECASE,
+        )
+        assert domestic_brand is not None
         mentions.append((domestic_brand.start(), ProductFamily.DOMESTIC_ETP))
     domestic_underlying = re.search(
         r"(?:삼성전자.*하이닉스|하이닉스.*삼성전자).*레버리지",
@@ -314,42 +421,59 @@ def _product_families(question: str) -> list[ProductFamily]:
     if overseas_ticker is not None:
         mentions.append((overseas_ticker.start(), ProductFamily.OVERSEAS_ETP))
 
-    fund = re.search(r"(?<!사모)\s*펀드", question, re.IGNORECASE)
+    fund_surface = re.sub(r"상장\s*지수\s*펀드", " ", question, flags=re.IGNORECASE)
+    fund_surface = re.sub(r"펀드\s*통화\s*코드", " ", fund_surface, flags=re.IGNORECASE)
+    fund = re.search(r"(?<!사모)\s*펀드", fund_surface, re.IGNORECASE)
     if fund is not None:
         mentions.append((fund.start(), ProductFamily.FUND))
+
+    if ProductFamily.FUND in {family for _, family in mentions} and re.search(
+        r"(?:국내|해외)\s*채권\s*(?:구성비율|비중)",
+        question,
+        re.IGNORECASE,
+    ):
+        mentions = [item for item in mentions if item[1] is not ProductFamily.BOND]
+    if ProductFamily.DOMESTIC_ETP in {family for _, family in mentions} and re.search(
+        r"채권(?:에|을)\s*투자(?:하는|한).{0,30}?(?:ETF|ETN|ETP)",
+        question,
+        re.IGNORECASE,
+    ):
+        mentions = [item for item in mentions if item[1] is not ProductFamily.BOND]
+
+    if not mentions:
+        if match := re.search(
+            r"(?:경과이자(?:를)?\s*포함(?:한)?\s*(?:단가|가격)|이자부단가|"
+            r"평가일단가|민평(?:에서)?\s*(?:산출|계산)?\s*(?:수익률|금리)|"
+            r"표면\s*(?:금리|이율)|컨벡시티|듀레이션)",
+            question,
+            re.IGNORECASE,
+        ):
+            mentions.append((match.start(), ProductFamily.BOND))
+        elif match := re.search(
+            r"(?<![A-Z0-9])[A-Z][A-Z0-9]{0,9}\.[A-Z0-9]{1,5}(?![A-Z0-9])",
+            question,
+            re.IGNORECASE,
+        ):
+            mentions.append((match.start(), ProductFamily.OVERSEAS_ETP))
 
     ordered = [family for _, family in sorted(mentions, key=lambda item: item[0])]
     return list(dict.fromkeys(ordered))
 
 
 def _requested_limit(question: str) -> int | None:
-    labeled_matches = re.findall(
-        r"(?:개수|제한)\s*[:：]\s*(\d+)",
-        question,
-        flags=re.IGNORECASE,
-    )
-    if labeled_matches:
-        value = int(labeled_matches[-1])
-        return value if 1 <= value <= 100 else None
-    if re.search(
-        r"(?:^|\s)(?:하나|한\s*개)(?:만)?\s*"
-        r"(?:보여|알려|찾아|골라|선정|추천|조회)",
-        question,
-        flags=re.IGNORECASE,
-    ):
-        return 1
-    matches = re.findall(r"(\d+)\s*(?:개|건)(?!월)", question)
-    if not matches:
-        return None
-    value = int(matches[-1])
-    return value if 1 <= value <= 100 else None
+    return requested_result_limit(question)
 
 
 def _intent(question: str, families: list[ProductFamily]) -> InteractionIntent:
     policy_surface = safety_policy_surface(question)
+    after_tax_yield_alias = any(
+        item.field_id == "after_tax_yield_pct"
+        for family in families
+        for item in rank_alias_matches(question, family)
+    )
     if (
         _UNSUPPORTED.search(policy_surface)
-        or _EXTERNAL_POLICY.search(question)
+        or (_EXTERNAL_POLICY.search(question) and not after_tax_yield_alias)
         or _UNAVAILABLE_MARKET_DATA.search(question)
         or (
             families == [ProductFamily.OVERSEAS_ETP]
@@ -359,10 +483,13 @@ def _intent(question: str, families: list[ProductFamily]) -> InteractionIntent:
         or (ProductFamily.FUND in families and _FUND_UNAVAILABLE_DETAIL.search(question))
     ):
         return InteractionIntent.UNSUPPORTED
+    product_mentions = _product_mentions(question)
     exact_two_product_comparison = bool(
-        _COMPARE.search(question) and len(_product_mentions(question)) == 2
+        len(product_mentions) == 2
+        and (_COMPARE.search(question) or _TWO_ID_COMPARATIVE.search(question))
     )
-    if _AMBIGUOUS.search(policy_surface) or (
+    resolved_rank_alias = any(rank_alias_matches(question, family) for family in families)
+    if (_AMBIGUOUS.search(policy_surface) and not resolved_rank_alias) or (
         _MIXED_ETP_COST.search(question)
         and _EXPLICIT_ETP_TYPE.search(question) is None
         and _EXPLICIT_TOTAL_EXPENSE_RATIO.search(question) is None
@@ -373,13 +500,27 @@ def _intent(question: str, families: list[ProductFamily]) -> InteractionIntent:
         return InteractionIntent.EXPLAIN
     if _RANKED_SET_SEARCH.search(question) and len(_product_mentions(question)) != 2:
         return InteractionIntent.SEARCH
-    if _COMPARE.search(question):
+    if _COMPARE.search(question) or (
+        len(product_mentions) == 2 and _TWO_ID_COMPARATIVE.search(question)
+    ):
         return InteractionIntent.COMPARE
+    # In the official fund schema, "해외채권 비중" is a row-level numeric
+    # field.  The bare word "비중" must not turn a filtered/ranked product
+    # search into a distribution aggregate.
+    if _PORTFOLIO_RATIO_FIELD.search(question) and (
+        ranking_intent_present(question)
+        or re.search(r"(?:이상|이하|초과|미만|넘|보다\s*(?:크|작))", question)
+    ):
+        return InteractionIntent.SEARCH
     if _AGGREGATE.search(question):
         return InteractionIntent.AGGREGATE
     if _TICKER_ORDERING.search(question):
         return InteractionIntent.SEARCH
-    if _EXPLAIN.search(question):
+    if (
+        _EXPLAIN.search(question)
+        and not resolved_rank_alias
+        and not ranking_intent_present(question)
+    ):
         return InteractionIntent.EXPLAIN
     if _DETAIL.search(question):
         return InteractionIntent.DETAIL
@@ -398,6 +539,22 @@ def classify_interaction_intent(question: str) -> InteractionIntent:
     if not stripped:
         raise ValueError("question cannot be blank")
     return _intent(stripped, _product_families(stripped))
+
+
+def extract_product_routing_hints(
+    question: str,
+) -> tuple[tuple[ProductFamily, ...], tuple[str, ...]]:
+    """Return lexical family/identity hints without routing side effects.
+
+    External evidence planning needs the main Router's product surfaces, but a
+    second Router invocation would repeat Safety, PlanningPolicy and Audit.
+    These hints therefore carry no execution authority.
+    """
+
+    stripped = question.strip()
+    if not stripped:
+        return (), ()
+    return tuple(_product_families(stripped)), tuple(_product_mentions(stripped))
 
 
 class IntentRouter:
@@ -614,12 +771,12 @@ class IntentRouter:
         intent, identity_control = _bind_product_identity_intent(
             lexical_intent,
             mentions,
+            stripped,
         )
-        coverage_intent = (
-            intent
-            if mentions and all(_KNOWN_ID.fullmatch(mention) is not None for mention in mentions)
-            else lexical_intent
-        )
+        # Server-recognized names are identity-bearing just like product codes.
+        # Unsupported knowledge requirements are still checked before the
+        # coverage gate applies this DETAIL-specific branch.
+        coverage_intent = intent if mentions else lexical_intent
         requested_limit = _requested_limit(stripped)
         if audit is not None:
             audit.emit(

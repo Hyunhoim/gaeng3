@@ -6,7 +6,6 @@ from decimal import Decimal
 from pathlib import Path
 
 import pytest
-from pydantic import ValidationError
 
 from finance_agent_core.agent import (
     FundComparisonDraft,
@@ -156,19 +155,18 @@ def sample_fund_result() -> PublicFundNormalizationResult:
     )
     return normalize_public_fund_rows(
         [
-            (2, 25, {**public, "prfd_attr_cd": "A01"}),
-            (3, 25, {**public, "prfd_attr_cd": "A02"}),
-            (4, 25, {**private, "prfd_attr_cd": "A01"}),
+            (2, 25, {**public, "prfd_attr_cds": "A01,A02"}),
+            (3, 25, {**private, "prfd_attr_cds": "A01"}),
             (
-                5,
+                4,
                 2,
                 {
                     "itm_no": '"',
-                    "prfd_attr_cd": None,
+                    "prfd_attr_cds": None,
                 },
             ),
         ],
-        source_snapshot_date=date(2026, 7, 11),
+        source_snapshot_date=date(2026, 8, 24),
     )
 
 
@@ -180,16 +178,16 @@ def write_sample_fund_database(
     manifest = DatabaseManifest(
         schema_version="1.1",
         dataset="fund",
-        registry_schema_version="1.3",
+        registry_schema_version="1.4",
         source_file_name="synthetic_public_fund.xlsx",
         source_file_sha256="d" * 64,
         source_file_size_bytes=1234,
-        source_snapshot_date=date(2026, 7, 11),
-        total_rows=4,
+        source_snapshot_date=date(2026, 8, 24),
+        total_rows=3,
         searchable_rows=1,
         quarantined_rows=1,
         logical_product_rows=2,
-        attribute_rows=3,
+        attribute_rows=2,
         scope_excluded_rows=1,
     )
     write_public_fund_database(path, result, manifest)
@@ -223,10 +221,10 @@ def write_comparison_fund_database(
     )
     result = normalize_public_fund_rows(
         [
-            (2, 25, {**first, "prfd_attr_cd": "A01"}),
-            (3, 25, {**second, "prfd_attr_cd": "A01"}),
+            (2, 25, {**first, "prfd_attr_cds": "A01"}),
+            (3, 25, {**second, "prfd_attr_cds": "A01"}),
         ],
-        source_snapshot_date=date(2026, 7, 11),
+        source_snapshot_date=date(2026, 8, 24),
     )
     return_label = (
         "missing"
@@ -237,11 +235,11 @@ def write_comparison_fund_database(
     manifest = DatabaseManifest(
         schema_version="1.1",
         dataset="fund",
-        registry_schema_version="1.3",
+        registry_schema_version="1.4",
         source_file_name="synthetic_public_fund_comparison.xlsx",
         source_file_sha256="e" * 64,
         source_file_size_bytes=2345,
-        source_snapshot_date=date(2026, 7, 11),
+        source_snapshot_date=date(2026, 8, 24),
         total_rows=2,
         searchable_rows=2,
         quarantined_rows=0,
@@ -278,20 +276,20 @@ def write_one_year_return_fund_database(
     ]
     result = normalize_public_fund_rows(
         [
-            (source_row, 25, {**row, "prfd_attr_cd": "A01"})
+            (source_row, 25, {**row, "prfd_attr_cds": "A01"})
             for source_row, row in enumerate(rows, start=2)
         ],
-        source_snapshot_date=date(2026, 7, 11),
+        source_snapshot_date=date(2026, 8, 24),
     )
     path = tmp_path / "fund-one-year-return.sqlite3"
     manifest = DatabaseManifest(
         schema_version="1.1",
         dataset="fund",
-        registry_schema_version="1.3",
+        registry_schema_version="1.4",
         source_file_name="synthetic_public_fund_one_year.xlsx",
         source_file_sha256="f" * 64,
         source_file_size_bytes=3456,
-        source_snapshot_date=date(2026, 7, 11),
+        source_snapshot_date=date(2026, 8, 24),
         total_rows=3,
         searchable_rows=3,
         quarantined_rows=0,
@@ -451,14 +449,14 @@ def test_routed_agent_executes_internal_fund_comparison(
 def test_public_fund_normalization_preserves_product_grain_and_quality() -> None:
     result = sample_fund_result()
 
-    assert result.raw_rows == 4
+    assert result.raw_rows == 3
     assert len(result.products) == 2
-    assert len(result.attributes) == 3
+    assert len(result.attributes) == 2
     assert len(result.quarantine) == 1
 
     public, private = result.products
     assert public.product_id == "KR0000000001"
-    assert public.attribute_count == 2
+    assert public.attribute_count == 1
     assert public.public_offering is True
     assert public.risk_level == "높은위험(2등급)"
     assert public.one_month_return_pct == Decimal("2.5")
@@ -471,10 +469,10 @@ def test_public_fund_normalization_preserves_product_grain_and_quality() -> None
     assert private.field_quality["aum"] is QualityStatus.UNKNOWN
     assert private.fund_management_attribute is None
     assert private.field_quality["fund_management_attribute"] is QualityStatus.UNKNOWN
-    assert result.quarantine[0].source_row == 5
+    assert result.quarantine[0].source_row == 4
 
 
-def test_public_fund_normalization_quarantines_conflicting_product() -> None:
+def test_public_fund_normalization_rejects_duplicate_product_key() -> None:
     first = fund_product(
         "KR0000000001",
         public_offering="공모",
@@ -482,20 +480,13 @@ def test_public_fund_normalization_quarantines_conflicting_product() -> None:
     )
     second = {**first, "itm_nm": "서로 다른 상품명"}
 
-    result = normalize_public_fund_rows(
-        [
-            (2, 25, {**first, "prfd_attr_cd": "A01"}),
-            (3, 25, {**second, "prfd_attr_cd": "A02"}),
-        ]
-    )
-
-    assert result.products == ()
-    assert result.attributes == ()
-    assert len(result.quarantine) == 2
-    assert all(
-        row.quarantine_reason.startswith("conflicting_product_common_fields:")
-        for row in result.quarantine
-    )
+    with pytest.raises(PublicFundNormalizationError, match="duplicate product key"):
+        normalize_public_fund_rows(
+            [
+                (2, 25, {**first, "prfd_attr_cds": "A01"}),
+                (3, 25, {**second, "prfd_attr_cds": "A02"}),
+            ]
+        )
 
 
 def test_public_fund_normalization_rejects_duplicate_raw_key() -> None:
@@ -505,11 +496,11 @@ def test_public_fund_normalization_rejects_duplicate_raw_key() -> None:
         aum="100",
     )
 
-    with pytest.raises(PublicFundNormalizationError, match="duplicate raw key"):
+    with pytest.raises(PublicFundNormalizationError, match="duplicate product key"):
         normalize_public_fund_rows(
             [
-                (2, 25, {**product, "prfd_attr_cd": "A01"}),
-                (3, 25, {**product, "prfd_attr_cd": "A01"}),
+                (2, 25, {**product, "prfd_attr_cds": "A01"}),
+                (3, 25, {**product, "prfd_attr_cds": "A01"}),
             ]
         )
 
@@ -529,10 +520,9 @@ def test_public_fund_sqlite_round_trip_preserves_all_three_grains(
     assert loaded_manifest == manifest
     assert len(products) == 2
     assert products[0].aum == Decimal("123456.7891")
-    assert products[0].attribute_count == 2
+    assert products[0].attribute_count == 1
     assert [attribute.attribute_code for attribute in attributes] == [
-        "A01",
-        "A02",
+        "A01,A02",
         "A01",
     ]
     assert attributes[0].quality is QualityStatus.UNKNOWN
@@ -564,7 +554,7 @@ def test_public_fund_oracle_verifier_evidence_and_renderer_agree(
     assert evidence["public_offering"].source_key == {"itm_no": "KR0000000001"}
     assert evidence["three_month_return_pct"].source_columns == ["fd_mm3_ern_r"]
     assert evidence["three_month_return_pct"].quality is QualityStatus.PARTIAL
-    assert evidence["three_month_return_pct"].as_of == date(2026, 7, 11)
+    assert evidence["three_month_return_pct"].as_of == date(2026, 8, 24)
     assert "KR0000000001" in answer
     assert "공모펀드 기본 범위" in answer
     assert "클래스 단위" in answer
@@ -599,9 +589,9 @@ def test_public_fund_one_year_return_search_preserves_outlier_and_excludes_missi
     assert first_fields["one_year_return_pct"].raw_values == {"fd_yr1_ern_r": "975.10"}
     assert first_fields["one_year_return_pct"].normalized_value == "975.1"
     assert first_fields["one_year_return_pct"].source_columns == ["fd_yr1_ern_r"]
-    assert first_fields["one_year_return_pct"].as_of == date(2026, 7, 11)
+    assert first_fields["one_year_return_pct"].as_of == date(2026, 8, 24)
     assert any("상한 처리하지 않았습니다" in warning for warning in result.warnings)
-    assert any("스냅샷 2026-07-11" in warning for warning in result.warnings)
+    assert any("스냅샷 2026-08-24" in warning for warning in result.warnings)
 
 
 def test_public_fund_one_year_return_detail_preserves_field_evidence(
@@ -714,8 +704,8 @@ def test_public_fund_grounded_answer_compiles_and_verifies_field_evidence(
     assert composition.verification.checks["compiled_source_date_present"]
     assert "테스트 공모펀드 KR0000000001" in composition.answer
     assert "3개월 수익률 3.75%" in composition.answer
-    assert "PRFD01N001 원본 행 2, fd_mm3_ern_r, 기준일 2026-07-11" in composition.answer
-    assert "스냅샷 2026-07-11" in composition.answer
+    assert "PRFD01N001 원본 행 2, fd_mm3_ern_r, 기준일 2026-08-24" in composition.answer
+    assert "스냅샷 2026-08-24" in composition.answer
     assert "공모펀드 기본 범위" in composition.answer
     assert "클래스 단위" in composition.answer
 
@@ -855,7 +845,7 @@ def test_public_fund_answer_runner_preserves_safe_fallback_metrics(
     assert report.summary.fallback_rate == 1.0
 
 
-def test_public_fund_scope_is_mandatory_while_agent_execution_stays_disabled() -> None:
+def test_public_fund_scope_is_mandatory_while_agent_execution_is_approved() -> None:
     plan = fund_vertical_slice_plan("fund-policy-001")
     payload = plan.model_dump(mode="json")
     payload["constraints"] = [
@@ -867,12 +857,11 @@ def test_public_fund_scope_is_mandatory_while_agent_execution_stays_disabled() -
 
     with pytest.raises(PlanExecutionBlockedError, match="public_offering = true"):
         compile_search_sql(unscoped)
-    with pytest.raises(PlanExecutionBlockedError, match="not enabled for execution"):
-        require_executable_search(plan)
+    require_executable_search(plan)
     require_internal_evaluation_search(plan)
 
 
-def test_public_fund_aum_comparison_requires_locked_currency_scope() -> None:
+def test_public_fund_aum_uses_official_source_basis_without_currency_scope() -> None:
     payload = fund_vertical_slice_plan("fund-aum-policy-001").model_dump(mode="json")
     payload["ranking"] = [
         {
@@ -883,8 +872,8 @@ def test_public_fund_aum_comparison_requires_locked_currency_scope() -> None:
     ]
     without_currency = QueryPlan.model_validate(payload)
 
-    with pytest.raises(PlanExecutionBlockedError, match="trading_currency = KRW or USD"):
-        compile_search_sql(without_currency)
+    compile_search_sql(without_currency)
+    require_internal_evaluation_search(without_currency)
 
     payload["constraints"].append(
         {
@@ -901,7 +890,7 @@ def test_public_fund_aum_comparison_requires_locked_currency_scope() -> None:
     require_internal_evaluation_search(scoped)
 
 
-def test_public_fund_compare_contract_is_exact_and_internal_only() -> None:
+def test_public_fund_compare_contract_is_exact_and_approved() -> None:
     plan = fund_comparison_plan(
         "fund-compare-contract-001",
         ["KR0000000002", "KR0000000001"],
@@ -909,8 +898,7 @@ def test_public_fund_compare_contract_is_exact_and_internal_only() -> None:
     )
 
     require_internal_evaluation_comparison(plan)
-    with pytest.raises(PlanExecutionBlockedError, match="not enabled"):
-        require_executable_comparison(plan)
+    require_executable_comparison(plan)
     assert plan.intent.value == "compare"
     assert plan.limit == 2
     assert plan.ranking == []
@@ -974,7 +962,7 @@ def test_public_fund_compare_engine_preserves_requested_order_and_deltas(
     )
     assert "차이(두 번째-첫 번째) -1.5%p" in answer
     assert "차이(두 번째-첫 번째) -100,000.00 KRW" in answer
-    assert "PRFD01N001 원본 행 2, fd_mm3_ern_r, 기준일 2026-07-11" in answer
+    assert "PRFD01N001 원본 행 2, fd_mm3_ern_r, 기준일 2026-08-24" in answer
     assert "historical_return_not_forecast" not in warnings
     assert any("과거 성과" in warning for warning in warnings)
 
@@ -1104,7 +1092,7 @@ def test_public_fund_compare_grounded_answer_and_missing_product_fallback(
     assert composition.mode == "llm_grounded"
     assert composition.verification.passed
     assert "차이(두 번째-첫 번째) -1.5%p" in composition.answer
-    assert "fd_mm3_ern_r, 기준일 2026-07-11" in composition.answer
+    assert "fd_mm3_ern_r, 기준일 2026-08-24" in composition.answer
 
     missing_plan = fund_comparison_plan(
         "fund-compare-missing-001",
@@ -1657,7 +1645,7 @@ def test_public_fund_one_year_return_can_drive_execution() -> None:
     assert plan.ranking[0].field == "one_year_return_pct"
 
 
-def test_public_fund_other_long_returns_cannot_drive_execution() -> None:
+def test_public_fund_two_year_return_can_drive_execution() -> None:
     payload = fund_vertical_slice_plan("fund-long-return-002").model_dump(mode="json")
     payload["ranking"] = [
         {
@@ -1667,8 +1655,9 @@ def test_public_fund_other_long_returns_cannot_drive_execution() -> None:
         }
     ]
 
-    with pytest.raises(ValidationError, match="two_year_return_pct is not sortable"):
-        QueryPlan.model_validate(payload)
+    plan = QueryPlan.model_validate(payload)
+
+    assert plan.ranking[0].field == "two_year_return_pct"
 
 
 def test_public_fund_unknown_sentinels_cannot_match_oracle_filters(
@@ -1681,18 +1670,18 @@ def test_public_fund_unknown_sentinels_cannot_match_oracle_filters(
         management_attribute="06",
     )
     result = normalize_public_fund_rows(
-        [(2, 25, {**product, "prfd_attr_cd": "A01"})],
-        source_snapshot_date=date(2026, 7, 11),
+        [(2, 25, {**product, "prfd_attr_cds": "A01"})],
+        source_snapshot_date=date(2026, 8, 24),
     )
     path = tmp_path / "fund-unknown.sqlite3"
     manifest = DatabaseManifest(
         schema_version="1.1",
         dataset="fund",
-        registry_schema_version="1.3",
+        registry_schema_version="1.4",
         source_file_name="synthetic_public_fund_unknown.xlsx",
         source_file_sha256="e" * 64,
         source_file_size_bytes=1234,
-        source_snapshot_date=date(2026, 7, 11),
+        source_snapshot_date=date(2026, 8, 24),
         total_rows=1,
         searchable_rows=1,
         quarantined_rows=0,

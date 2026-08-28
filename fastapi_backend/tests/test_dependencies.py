@@ -6,12 +6,12 @@ from pathlib import Path
 import pytest
 from finance_agent_core.agent.providers import (
     HyperClovaXCallObserver,
+    HyperClovaXFinalAnswerProvider,
     HyperClovaXHTTPTransport,
-    HyperClovaXQueryPlanProvider,
+    HyperClovaXIntentAnalysisProvider,
     HyperClovaXStructuredRequest,
     LocalProviderError,
 )
-from finance_agent_core.answering import HyperClovaXGroundedAnswerProvider
 from finance_agent_core.observability import BoundedAsyncAuditSink, InMemoryAuditSink
 from pydantic import ValidationError
 
@@ -43,6 +43,7 @@ def _hcx_settings(**overrides: object) -> Settings:
     values: dict[str, object] = {
         "APP_ENV": "evaluation",
         "FINANCE_BACKEND_ANSWER_PROVIDER": "hyperclova",
+        "FINANCE_BACKEND_HCX_INTENT_ANALYSIS_ENABLED": True,
         "FINANCE_AGENT_LLM_MODE": "evaluation",
         "LLM_PROVIDER": "hyperclova",
         "HCX_MODEL": "HCX-007",
@@ -124,7 +125,7 @@ def test_build_agent_healthchecks_opted_in_local_provider(monkeypatch) -> None:
     assert agent.answer_provider.healthcheck_calls == 1
 
 
-def test_build_agent_wires_hcx_answer_without_an_eager_network_call(
+def test_build_agent_wires_hcx_intent_and_final_answer_without_eager_network_call(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -136,22 +137,23 @@ def test_build_agent_wires_hcx_answer_without_an_eager_network_call(
         release_guard=stub_resolved_release(),
     )
 
-    assert isinstance(agent.answer_provider, HyperClovaXGroundedAnswerProvider)
+    assert agent.answer_provider is None
     assert agent.query_plan_provider is None
-    assert agent.answer_provider.model_name == "HCX-007"
+    assert isinstance(agent.intent_analysis_provider, HyperClovaXIntentAnalysisProvider)
+    assert isinstance(agent.official_answer_provider, HyperClovaXFinalAnswerProvider)
+    assert agent.intent_analysis_provider.model_name == "HCX-007"
+    assert agent.official_answer_provider.model_name == "HCX-007"
+    assert agent.require_official_hclx
     assert transport.calls == 0
     assert "nv-test-secret" not in repr(settings)
 
 
-def test_hcx_query_plan_is_a_separate_opt_in_and_shares_the_transport(
+def test_hcx_intent_and_final_answer_share_transport_and_observer(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     key_file, transport = _install_no_call_hcx_transport(tmp_path, monkeypatch)
-    settings = _hcx_settings(
-        FINANCE_BACKEND_HCX_QUERY_PLAN_ENABLED=True,
-        CLOVASTUDIO_API_KEY_FILE=key_file,
-    )
+    settings = _hcx_settings(CLOVASTUDIO_API_KEY_FILE=key_file)
     audit = BoundedAsyncAuditSink(InMemoryAuditSink(max_events=32), queue_capacity=32)
 
     agent = build_agent(
@@ -160,14 +162,19 @@ def test_hcx_query_plan_is_a_separate_opt_in_and_shares_the_transport(
         audit_sink=audit,
     )
 
-    assert isinstance(agent.query_plan_provider, HyperClovaXQueryPlanProvider)
-    assert isinstance(agent.answer_provider, HyperClovaXGroundedAnswerProvider)
-    assert agent.hclx_planning_enabled is True
-    assert agent.query_plan_provider._client.transport is transport
-    assert agent.answer_provider._client.transport is transport
-    assert type(agent.query_plan_provider._client.on_call) is HyperClovaXCallObserver
-    assert agent.query_plan_provider._client.on_call is agent.answer_provider._client.on_call
-    assert agent.query_plan_provider._client.on_call.expected_audit_sink is audit
+    assert isinstance(agent.intent_analysis_provider, HyperClovaXIntentAnalysisProvider)
+    assert isinstance(agent.official_answer_provider, HyperClovaXFinalAnswerProvider)
+    assert agent.query_plan_provider is None
+    assert agent.answer_provider is None
+    assert agent.hclx_planning_enabled is False
+    assert agent.intent_analysis_provider._client.transport is transport
+    assert agent.official_answer_provider._client.transport is transport
+    assert type(agent.intent_analysis_provider._client.on_call) is HyperClovaXCallObserver
+    assert (
+        agent.intent_analysis_provider._client.on_call
+        is agent.official_answer_provider._client.on_call
+    )
+    assert agent.intent_analysis_provider._client.on_call.expected_audit_sink is audit
     assert transport.calls == 0
     assert audit.close(timeout_seconds=2)
 
@@ -192,8 +199,8 @@ def test_approval_guard_rejects_hcx_provider_without_the_bound_call_observer(
         )
         is agent
     )
-    assert isinstance(agent.answer_provider, HyperClovaXGroundedAnswerProvider)
-    agent.answer_provider._client.on_call = None
+    assert isinstance(agent.official_answer_provider, HyperClovaXFinalAnswerProvider)
+    agent.official_answer_provider._client.on_call = None
 
     with pytest.raises(RuntimeError, match="approved RoutedFinanceAgent"):
         require_approval_guard(
@@ -206,26 +213,16 @@ def test_approval_guard_rejects_hcx_provider_without_the_bound_call_observer(
     assert audit.close(timeout_seconds=2)
 
 
-def test_hcx_query_plan_can_be_evaluated_without_hcx_answer_generation(
+def test_retired_hcx_query_plan_flag_is_rejected(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    key_file, transport = _install_no_call_hcx_transport(tmp_path, monkeypatch)
-    settings = _hcx_settings(
-        FINANCE_BACKEND_ANSWER_PROVIDER="deterministic",
-        FINANCE_BACKEND_HCX_QUERY_PLAN_ENABLED=True,
-        CLOVASTUDIO_API_KEY_FILE=key_file,
-    )
-
-    agent = build_agent(
-        settings,
-        release_guard=stub_resolved_release(),
-    )
-
-    assert isinstance(agent.query_plan_provider, HyperClovaXQueryPlanProvider)
-    assert agent.answer_provider is None
-    assert agent.hclx_planning_enabled is True
-    assert transport.calls == 0
+    key_file, _ = _install_no_call_hcx_transport(tmp_path, monkeypatch)
+    with pytest.raises(ValidationError, match="QueryPlan generation is retired"):
+        _hcx_settings(
+            FINANCE_BACKEND_HCX_QUERY_PLAN_ENABLED=True,
+            CLOVASTUDIO_API_KEY_FILE=key_file,
+        )
 
 
 @pytest.mark.parametrize("app_env", ["evaluation", "production"])
@@ -270,7 +267,8 @@ def test_build_agent_loads_docker_secret_file_without_network(
 
     agent = build_agent(settings, release_guard=stub_resolved_release())
 
-    assert isinstance(agent.answer_provider, HyperClovaXGroundedAnswerProvider)
+    assert isinstance(agent.intent_analysis_provider, HyperClovaXIntentAnalysisProvider)
+    assert isinstance(agent.official_answer_provider, HyperClovaXFinalAnswerProvider)
     assert captured == [secret]
     assert secret not in repr(settings)
 
@@ -399,6 +397,26 @@ def test_settings_reject_inline_hcx_environment_by_name_without_exposing_value(
     with pytest.raises(
         ValidationError,
         match="inline HyperCLOVA credential is forbidden",
+    ) as caught:
+        Settings(APP_ENV="evaluation")
+
+    assert secret not in str(caught.value)
+
+
+@pytest.mark.parametrize(
+    "variable",
+    ["NAVER_API_HUB_CLIENT_ID", "NAVER_API_HUB_CLIENT_SECRET"],
+)
+def test_settings_reject_inline_naver_api_hub_environment_without_exposing_value(
+    monkeypatch: pytest.MonkeyPatch,
+    variable: str,
+) -> None:
+    secret = "naver-inline-secret-must-not-be-loaded"
+    monkeypatch.setenv(variable, secret)
+
+    with pytest.raises(
+        ValidationError,
+        match="inline NAVER API HUB credential is forbidden",
     ) as caught:
         Settings(APP_ENV="evaluation")
 

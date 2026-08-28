@@ -47,11 +47,19 @@ services:
       FINANCE_PRODUCT_DENSE_ENABLED: "false"
       FINANCE_BACKEND_ANSWER_PROVIDER: ${FINANCE_BACKEND_ANSWER_PROVIDER:-deterministic}
       FINANCE_BACKEND_HCX_QUERY_PLAN_ENABLED: ${FINANCE_BACKEND_HCX_QUERY_PLAN_ENABLED:-false}
+      FINANCE_BACKEND_HCX_INTENT_ANALYSIS_ENABLED: ${FINANCE_BACKEND_HCX_INTENT_ANALYSIS_ENABLED:-true}
       FINANCE_AGENT_LLM_MODE: ${FINANCE_AGENT_LLM_MODE:-disabled}
       LLM_PROVIDER: ${LLM_PROVIDER:-disabled}
       HCX_MODEL: ${HCX_MODEL:-}
       HCX_TIMEOUT_SECONDS: ${HCX_TIMEOUT_SECONDS:-45}
       CLOVASTUDIO_API_KEY_FILE: ${CLOVASTUDIO_API_KEY_FILE:-}
+      FINANCE_EXTERNAL_KNOWLEDGE_ENABLED: ${FINANCE_EXTERNAL_KNOWLEDGE_ENABLED:-false}
+      FINANCE_EXTERNAL_KNOWLEDGE_ARTIFACT_FILE: ${FINANCE_EXTERNAL_KNOWLEDGE_ARTIFACT_FILE:-}
+      FINANCE_EXTERNAL_KNOWLEDGE_ARTIFACT_SHA256: ${FINANCE_EXTERNAL_KNOWLEDGE_ARTIFACT_SHA256:-}
+      FINANCE_EXTERNAL_TEMPORAL_RELATION_FILE: ${FINANCE_EXTERNAL_TEMPORAL_RELATION_FILE:-}
+      FINANCE_EXTERNAL_TEMPORAL_RELATION_SHA256: ${FINANCE_EXTERNAL_TEMPORAL_RELATION_SHA256:-}
+      NAVER_API_HUB_CLIENT_ID_FILE: ${NAVER_API_HUB_CLIENT_ID_FILE:-}
+      NAVER_API_HUB_CLIENT_SECRET_FILE: ${NAVER_API_HUB_CLIENT_SECRET_FILE:-}
       FINANCE_AUDIT_MODE: jsonl
       FINANCE_AUDIT_FILE: /audit/events.jsonl
       FINANCE_AUDIT_QUEUE_CAPACITY: ${FINANCE_AUDIT_QUEUE_CAPACITY:-2048}
@@ -70,13 +78,33 @@ services:
         read_only: false
         bind:
           create_host_path: false
+      - type: bind
+        source: ${FINANCE_EXTERNAL_KNOWLEDGE_ARTIFACT_HOST_FILE:-/dev/null}
+        target: /run/finance-release/external-knowledge-artifact.json
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${FINANCE_EXTERNAL_TEMPORAL_RELATION_HOST_FILE:-/dev/null}
+        target: /run/finance-release/external-temporal-relations.json
+        read_only: true
+        bind:
+          create_host_path: false
     secrets:
       - source: clovastudio_api_key
         target: clovastudio_api_key
+      - source: naver_api_hub_client_id
+        target: naver_api_hub_client_id
+      - source: naver_api_hub_client_secret
+        target: naver_api_hub_client_secret
 
 secrets:
   clovastudio_api_key:
     file: ${CLOVASTUDIO_API_KEY_HOST_FILE:-/dev/null}
+  naver_api_hub_client_id:
+    file: ${NAVER_API_HUB_CLIENT_ID_HOST_FILE:-/dev/null}
+  naver_api_hub_client_secret:
+    file: ${NAVER_API_HUB_CLIENT_SECRET_HOST_FILE:-/dev/null}
 
 volumes:
   finance-data:

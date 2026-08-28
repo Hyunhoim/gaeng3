@@ -1,4 +1,5 @@
 import pytest
+from pydantic import ValidationError
 
 from finance_agent_core.agent.linker import (
     build_lexical_hints,
@@ -39,6 +40,7 @@ def test_lexical_hints_preserve_explicit_status_and_sort() -> None:
         },
         {"field": "trading_suspended", "operator": "eq", "value": False},
         {"field": "sellable", "operator": "eq", "value": True},
+        {"field": "trading_currency", "operator": "eq", "value": "USD"},
     ]
     assert hints["required_rankings"] == [{"field": "aum", "direction": "desc", "nulls": "last"}]
 
@@ -294,7 +296,6 @@ def test_bond_hints_lock_availability_remaining_days_and_yield_ranking() -> None
         (item["field"], item["operator"], item["value"]) for item in hints["required_constraints"]
     } == {
         ("bond_major_class", "eq", "회사채"),
-        ("currently_buyable", "eq", True),
         ("remaining_days", "lte", 365),
     }
     assert hints["required_rankings"] == [
@@ -316,7 +317,7 @@ def test_bond_plain_maturity_years_are_normalized_to_remaining_days() -> None:
 def test_bond_purchase_synonym_and_short_remaining_term_sort_are_normalized() -> None:
     hints = build_lexical_hints("현재 구매 가능한 국내 채권을 잔존 기일이 짧은 순서로 3건 검색해줘")
 
-    assert ("currently_buyable", "eq", True) in {
+    assert ("currently_buyable", "eq", True) not in {
         (item["field"], item["operator"], item["value"]) for item in hints["required_constraints"]
     }
     assert hints["required_rankings"] == [
@@ -437,9 +438,7 @@ def test_explicit_negative_boolean_filters_keep_their_polarity() -> None:
     assert ("pension_eligible", False) in {
         (item["field"], item["value"]) for item in domestic["required_constraints"]
     }
-    assert ("currently_buyable", False) in {
-        (item["field"], item["value"]) for item in bond["required_constraints"]
-    }
+    assert "매수가 가능하지 않" in bond["unsupported_spans"]
 
 
 def test_bond_ordered_credit_rating_expands_from_registry_scale() -> None:
@@ -473,7 +472,7 @@ def test_bond_invalid_credit_rating_is_blocked_instead_of_silently_dropped() -> 
     assert not any(item["field"] == "credit_rating" for item in linked["constraints"])
 
 
-def test_fund_development_linker_matches_all_frozen_plans() -> None:
+def test_fund_development_linker_matches_frozen_plans_or_documented_migration() -> None:
     suite = load_core_evaluation_suite("fund").suite
     development = [case for case in suite.cases if case.split.value == "development"]
 
@@ -482,7 +481,30 @@ def test_fund_development_linker_matches_all_frozen_plans() -> None:
             case.question,
             first_vertical_slice_plan(case.id).model_dump(mode="json"),
         )
+        if case.id in {"fund-023", "fund-026", "fund-027"}:
+            try:
+                blocked_plan = QueryPlan.model_validate(payload)
+            except ValidationError as error:
+                assert "one_week_return_pct is not queryable" in str(error)
+            else:
+                assert blocked_plan.ambiguities or blocked_plan.unsupported_conditions
+            continue
         plan = QueryPlan.model_validate(payload)
+        if case.id == "fund-007":
+            # Policy migration: "국내에 투자" describes the investment-region
+            # source field, not the broader domestic/overseas fund scope.
+            assert {(item.field, item.operator.value, item.value) for item in plan.constraints} == {
+                ("public_offering", "eq", True),
+                ("investment_region", "eq", "국내"),
+                ("trading_currency", "eq", "KRW"),
+            }
+            assert [(item.field, item.direction.value) for item in plan.ranking] == [
+                ("aum", "desc")
+            ]
+            assert plan.limit == 5
+            assert not plan.ambiguities
+            assert not plan.unsupported_conditions
+            continue
         checks = semantic_checks(case, plan, "fund")
         assert checks["plan_exact"], (
             case.id,
@@ -490,7 +512,7 @@ def test_fund_development_linker_matches_all_frozen_plans() -> None:
         )
 
 
-def test_fund_aum_without_currency_requires_clarification() -> None:
+def test_fund_aum_uses_official_source_basis_without_currency_clarification() -> None:
     hints = build_lexical_hints("AUM이 큰 공모펀드 5개를 보여줘")
 
     assert hints["product_family"] == "fund"
@@ -498,7 +520,7 @@ def test_fund_aum_without_currency_requires_clarification() -> None:
         {"field": "public_offering", "operator": "eq", "value": True}
     ]
     assert hints["required_rankings"] == [{"field": "aum", "direction": "desc", "nulls": "last"}]
-    assert hints["ambiguity_spans"] == ["AUM 비교 통화"]
+    assert hints["ambiguity_spans"] == []
 
 
 def test_fund_one_year_return_is_linked_without_unsupported_blocker() -> None:

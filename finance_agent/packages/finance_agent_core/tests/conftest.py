@@ -26,6 +26,7 @@ def make_overseas_etp_record(
     trading_suspended: bool | None = False,
     asset_type: str | None = "Bond",
     region: str | None = "United States of America",
+    one_day_return: str | None = "1.000000",
     quarantined: bool = False,
 ) -> NormalizedOverseasEtpRecord:
     fee_decimal = Decimal(fee)
@@ -49,6 +50,7 @@ def make_overseas_etp_record(
             "wu_inv_rgn": region,
             "cu_charge_rt": fee,
             "du_last_aum": aum,
+            "du_er_1d": one_day_return,
             "pd_trd_ccy": "USD",
             "cu_upt_dt": "20260614",
             "du_upt_dt": "20260616",
@@ -82,6 +84,13 @@ def make_overseas_etp_record(
             else "aum_zero_semantics_unconfirmed"
             if aum_decimal == 0
             else None
+        ),
+        one_day_return_pct=(None if one_day_return is None else Decimal(one_day_return)),
+        one_day_return_quality=(
+            QualityStatus.UNKNOWN if one_day_return is None else QualityStatus.VALID
+        ),
+        one_day_return_quality_reason=(
+            "one_day_return_missing" if one_day_return is None else None
         ),
         trading_currency="USD",
         static_as_of=date(2026, 6, 14),

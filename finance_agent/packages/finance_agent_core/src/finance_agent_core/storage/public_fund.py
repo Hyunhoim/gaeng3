@@ -58,7 +58,7 @@ CREATE TABLE fund_products (
     company_sellable INTEGER
         CHECK (company_sellable IN (0, 1) OR company_sellable IS NULL),
     company_sellable_quality TEXT NOT NULL,
-    trading_currency TEXT NOT NULL CHECK (trading_currency IN ('KRW', 'USD')),
+    trading_currency TEXT NOT NULL,
     trading_currency_quality TEXT NOT NULL,
     investment_region TEXT,
     investment_region_quality TEXT NOT NULL,
@@ -77,6 +77,26 @@ CREATE TABLE fund_products (
     aum_quality TEXT NOT NULL,
     base_index TEXT,
     base_index_quality TEXT NOT NULL,
+    sales_channel TEXT,
+    sales_channel_quality TEXT NOT NULL,
+    interest_dividend_type TEXT,
+    interest_dividend_type_quality TEXT NOT NULL,
+    sale_company_fee_micro_pct INTEGER,
+    sale_company_fee_quality TEXT NOT NULL,
+    trustee_fee_micro_pct INTEGER,
+    trustee_fee_quality TEXT NOT NULL,
+    domestic_stock_ratio_micro_pct INTEGER,
+    domestic_stock_ratio_quality TEXT NOT NULL,
+    domestic_bond_ratio_micro_pct INTEGER,
+    domestic_bond_ratio_quality TEXT NOT NULL,
+    overseas_stock_ratio_micro_pct INTEGER,
+    overseas_stock_ratio_quality TEXT NOT NULL,
+    overseas_bond_ratio_micro_pct INTEGER,
+    overseas_bond_ratio_quality TEXT NOT NULL,
+    latest_distribution_micro_pct INTEGER,
+    latest_distribution_quality TEXT NOT NULL,
+    preservation_ratio_micro_pct INTEGER,
+    preservation_ratio_quality TEXT NOT NULL,
     one_week_return_micro_pct INTEGER,
     one_week_return_quality TEXT NOT NULL,
     one_month_return_micro_pct INTEGER,
@@ -162,6 +182,15 @@ INSERT INTO fund_products (
     fund_management_attribute_quality, investor_type, investor_type_quality,
     currency_hedged, currency_hedged_quality, risk_level, risk_level_quality,
     aum_ten_thousandth_units, aum_quality, base_index, base_index_quality,
+    sales_channel, sales_channel_quality, interest_dividend_type,
+    interest_dividend_type_quality, sale_company_fee_micro_pct,
+    sale_company_fee_quality, trustee_fee_micro_pct, trustee_fee_quality,
+    domestic_stock_ratio_micro_pct, domestic_stock_ratio_quality,
+    domestic_bond_ratio_micro_pct, domestic_bond_ratio_quality,
+    overseas_stock_ratio_micro_pct, overseas_stock_ratio_quality,
+    overseas_bond_ratio_micro_pct, overseas_bond_ratio_quality,
+    latest_distribution_micro_pct, latest_distribution_quality,
+    preservation_ratio_micro_pct, preservation_ratio_quality,
     one_week_return_micro_pct, one_week_return_quality,
     one_month_return_micro_pct, one_month_return_quality,
     three_month_return_micro_pct, three_month_return_quality,
@@ -173,9 +202,10 @@ INSERT INTO fund_products (
     five_year_return_micro_pct, five_year_return_quality,
     static_as_of, static_as_of_quality, dynamic_as_of, dynamic_as_of_quality
 ) VALUES (
-    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
 )
 """
 
@@ -198,7 +228,7 @@ def _json(value: object) -> str:
 
 
 def _quality(record: NormalizedPublicFundRecord, field: str) -> str:
-    return record.field_quality[field].value
+    return record.field_quality.get(field, QualityStatus.UNKNOWN).value
 
 
 def _optional_bool(value: bool | None) -> int | None:
@@ -245,6 +275,54 @@ def _product_values(record: NormalizedPublicFundRecord) -> tuple[object, ...]:
         _quality(record, "aum"),
         record.base_index,
         _quality(record, "base_index"),
+        record.sales_channel,
+        _quality(record, "sales_channel"),
+        record.interest_dividend_type,
+        _quality(record, "interest_dividend_type"),
+        _scaled_integer(
+            record.sale_company_fee_pct,
+            FUND_RETURN_SCALE,
+            "sale_company_fee_pct",
+        ),
+        _quality(record, "sale_company_fee_pct"),
+        _scaled_integer(record.trustee_fee_pct, FUND_RETURN_SCALE, "trustee_fee_pct"),
+        _quality(record, "trustee_fee_pct"),
+        _scaled_integer(
+            record.domestic_stock_ratio_pct,
+            FUND_RETURN_SCALE,
+            "domestic_stock_ratio_pct",
+        ),
+        _quality(record, "domestic_stock_ratio_pct"),
+        _scaled_integer(
+            record.domestic_bond_ratio_pct,
+            FUND_RETURN_SCALE,
+            "domestic_bond_ratio_pct",
+        ),
+        _quality(record, "domestic_bond_ratio_pct"),
+        _scaled_integer(
+            record.overseas_stock_ratio_pct,
+            FUND_RETURN_SCALE,
+            "overseas_stock_ratio_pct",
+        ),
+        _quality(record, "overseas_stock_ratio_pct"),
+        _scaled_integer(
+            record.overseas_bond_ratio_pct,
+            FUND_RETURN_SCALE,
+            "overseas_bond_ratio_pct",
+        ),
+        _quality(record, "overseas_bond_ratio_pct"),
+        _scaled_integer(
+            record.latest_distribution_pct,
+            FUND_RETURN_SCALE,
+            "latest_distribution_pct",
+        ),
+        _quality(record, "latest_distribution_pct"),
+        _scaled_integer(
+            record.preservation_ratio_pct,
+            FUND_RETURN_SCALE,
+            "preservation_ratio_pct",
+        ),
+        _quality(record, "preservation_ratio_pct"),
         _scaled_integer(
             record.one_week_return_pct,
             FUND_RETURN_SCALE,
@@ -492,6 +570,37 @@ def row_to_public_fund_record(
         risk_level=row["risk_level"],
         aum=decimal_value("aum_ten_thousandth_units", FUND_AUM_SCALE),
         base_index=row["base_index"],
+        sales_channel=row["sales_channel"],
+        interest_dividend_type=row["interest_dividend_type"],
+        sale_company_fee_pct=decimal_value(
+            "sale_company_fee_micro_pct",
+            FUND_RETURN_SCALE,
+        ),
+        trustee_fee_pct=decimal_value("trustee_fee_micro_pct", FUND_RETURN_SCALE),
+        domestic_stock_ratio_pct=decimal_value(
+            "domestic_stock_ratio_micro_pct",
+            FUND_RETURN_SCALE,
+        ),
+        domestic_bond_ratio_pct=decimal_value(
+            "domestic_bond_ratio_micro_pct",
+            FUND_RETURN_SCALE,
+        ),
+        overseas_stock_ratio_pct=decimal_value(
+            "overseas_stock_ratio_micro_pct",
+            FUND_RETURN_SCALE,
+        ),
+        overseas_bond_ratio_pct=decimal_value(
+            "overseas_bond_ratio_micro_pct",
+            FUND_RETURN_SCALE,
+        ),
+        latest_distribution_pct=decimal_value(
+            "latest_distribution_micro_pct",
+            FUND_RETURN_SCALE,
+        ),
+        preservation_ratio_pct=decimal_value(
+            "preservation_ratio_micro_pct",
+            FUND_RETURN_SCALE,
+        ),
         one_week_return_pct=decimal_value(
             "one_week_return_micro_pct",
             FUND_RETURN_SCALE,

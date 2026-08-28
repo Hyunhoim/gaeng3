@@ -21,10 +21,11 @@ def test_packaged_hcx_schema_uses_documented_subset() -> None:
         "overseas_etp",
         "domestic_etp",
         "bond",
+        "fund",
     ]
 
 
-def test_internal_fund_schema_does_not_change_official_hcx_surface() -> None:
+def test_internal_fund_schema_matches_the_approved_official_hcx_surface() -> None:
     internal = load_internal_evaluation_queryplan_schema("fund")
     official = load_hcx_queryplan_schema()
 
@@ -37,7 +38,7 @@ def test_internal_fund_schema_does_not_change_official_hcx_surface() -> None:
     assert "public_offering" in constraint_fields
     assert "three_month_return_pct" in ranking_fields
     assert "one_year_return_pct" in ranking_fields
-    assert "fund" not in official["properties"]["product_families"]["items"]["enum"]
+    assert "fund" in official["properties"]["product_families"]["items"]["enum"]
 
 
 def test_server_only_keyword_is_rejected() -> None:

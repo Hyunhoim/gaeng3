@@ -1,6 +1,7 @@
 from collections import Counter
 
 import pytest
+from pydantic import ValidationError
 
 from finance_agent_core.agent import FinanceAgent
 from finance_agent_core.agent.providers import first_vertical_slice_plan
@@ -123,12 +124,20 @@ def test_bond_core_suite_is_frozen_balanced_and_valid() -> None:
         "execute": 47,
         "block": 3,
     }
+    deprecated = {"bond-002", "bond-020"}
+    for case in suite.cases:
+        if case.id in deprecated:
+            with pytest.raises(
+                ValidationError,
+                match="buyable_quantity is not (?:queryable|sortable)",
+            ):
+                case.expected_plan("bond")
     plans = [
         case.expected_plan("bond")
         for case in suite.cases
-        if case.disposition is ExpectedDisposition.EXECUTE
+        if case.disposition is ExpectedDisposition.EXECUTE and case.id not in deprecated
     ]
-    assert len(plans) == 47
+    assert len(plans) == 45
     assert all(plan.product_families[0].value == "bond" for plan in plans)
 
 
@@ -145,7 +154,15 @@ def test_fund_core_suite_is_frozen_balanced_scoped_and_valid() -> None:
         "execute": 44,
         "block": 6,
     }
-    plans = [case.expected_plan("fund") for case in suite.cases]
+    deprecated = {"fund-023", "fund-026", "fund-027"}
+    for case in suite.cases:
+        if case.id in deprecated:
+            with pytest.raises(
+                ValidationError,
+                match="one_week_return_pct is not (?:queryable|sortable)",
+            ):
+                case.expected_plan("fund")
+    plans = [case.expected_plan("fund") for case in suite.cases if case.id not in deprecated]
     assert all(plan.product_families[0].value == "fund" for plan in plans)
     for plan in plans:
         public_scope = [

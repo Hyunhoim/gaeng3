@@ -1,6 +1,6 @@
 # NCP immutable release CI와 cosign 신뢰 경계
 
-상태: HCLX answer-only 최종 profile·저장소 계약·localhost 합성 Registry push 검증 완료 · 실제 NCP Registry 실행 대기
+상태: HCLX Intent+최종 생성 최종 profile·저장소 계약·localhost 합성 Registry push 검증 완료 · 새 profile의 실제 NCP Registry 실행 대기
 
 ## 1. 현재 완료된 범위
 
@@ -139,9 +139,10 @@ GitHub Actions의 `Immutable NCP release`에서 다음 값을 입력한다.
 | `environment` | `evaluation` | `evaluation` 또는 `production` |
 | `activation_generation` | `1` | 최초 1, 이후 직전 값+1 |
 
-`answer_provider`와 `hcx_queryplan_enabled`는 운영자 입력이 아니다. 최종 workflow가
-각각 `hyperclova`, `false`로 고정하며 `release_ci.py`는 다른 조합을 Registry 변경 전에
-거부한다. 최종 Manifest는 HCX-007 answer-only, Dense OFF, 공모펀드 locked를 기록한다.
+`answer_provider`, `hcx_queryplan_enabled`, `hcx_intent_analysis_enabled`는 운영자 입력이
+아니다. 최종 workflow가 각각 `hyperclova`, `false`, `true`로 고정하며 `release_ci.py`는
+다른 조합을 Registry 변경 전에 거부한다. 최종 Manifest는 HCX-007 Intent+최종 생성,
+전체 QueryPlan OFF와 승인된 adaptive candidate 정책을 기록한다.
 
 push 대상은 입력이 아니라 선택한 GitHub Environment의 보호 variable로 읽는다.
 

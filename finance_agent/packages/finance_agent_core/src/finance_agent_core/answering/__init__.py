@@ -4,6 +4,13 @@ from finance_agent_core.answering.context import (
     render_query_contract,
     required_evidence_fields,
 )
+from finance_agent_core.answering.final_generation import (
+    FinalAnswerComposition,
+    FinalAnswerContext,
+    FinalAnswerDraft,
+    FinalAnswerProvider,
+    compose_final_answer,
+)
 from finance_agent_core.answering.models import (
     AnswerComposition,
     AnswerVerification,
@@ -34,6 +41,10 @@ __all__ = [
     "AnswerWarning",
     "CrossFamilyAnswerVerifier",
     "ExpectedGroundedAnswerProvider",
+    "FinalAnswerComposition",
+    "FinalAnswerContext",
+    "FinalAnswerDraft",
+    "FinalAnswerProvider",
     "GroundedAnswerContext",
     "GroundedAnswerDraft",
     "GroundedAnswerProvider",
@@ -42,6 +53,7 @@ __all__ = [
     "ProductAnswerDraft",
     "build_grounded_answer_context",
     "compose_grounded_answer",
+    "compose_final_answer",
     "render_query_contract",
     "required_evidence_fields",
 ]

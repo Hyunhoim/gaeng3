@@ -91,8 +91,10 @@ def test_vertical_slice_queryplan_round_trips(vertical_slice_plan: dict) -> None
     ("mutation", "message"),
     [
         (
-            lambda plan: plan["constraints"][0].update(field="one_day_return_pct"),
-            "is not queryable",
+            lambda plan: plan["constraints"][0].update(
+                field="one_week_return_pct", unit="pct_point", value=1
+            ),
+            "is unavailable for product families",
         ),
         (
             lambda plan: plan["constraints"][0].update(value="Mutual Fund"),
@@ -107,8 +109,8 @@ def test_vertical_slice_queryplan_round_trips(vertical_slice_plan: dict) -> None
             "requires unit pct_point",
         ),
         (
-            lambda plan: plan["projection"].append("one_day_return_pct"),
-            "is not selectable",
+            lambda plan: plan["projection"].append("one_week_return_pct"),
+            "is unavailable for product families",
         ),
     ],
 )

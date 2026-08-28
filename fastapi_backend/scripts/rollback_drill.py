@@ -148,7 +148,8 @@ _DETERMINISTIC_PROBE_PREFIX = (
     ("route", "succeeded", "routed_execute"),
 )
 _COMPILER_PROBE_PATH = (("compiler", "succeeded", "plan_compiled"),)
-_QUERYPLAN_HCLX_PROBE_PATH = (("hclx", "succeeded", "provider_completed"),)
+_INTENT_ANALYSIS_HCLX_PROBE_PATH = (("hclx", "succeeded", "intent_analysis_completed"),)
+_INTENT_ANALYSIS_VERIFIER_PROBE_PATH = (("verifier", "succeeded", "intent_analysis_verified"),)
 _EXECUTION_PROBE_PATH = (
     ("sql", "succeeded", "authority_connection_opened"),
     ("authority", "succeeded", "authority_granted"),
@@ -164,9 +165,9 @@ _EXECUTION_PROBE_PATH = (
     ("verifier", "succeeded", "verification_passed"),
 )
 _RENDERER_PROBE_PATH = (("renderer", "succeeded", "rendering_completed"),)
-_GROUNDED_ANSWER_HCLX_PROBE_PATH = (
-    ("hclx", "succeeded", "generation_completed"),
-    ("verifier", "succeeded", "composition_verified"),
+_FINAL_ANSWER_HCLX_PROBE_PATH = (
+    ("hclx", "succeeded", "final_generation_completed"),
+    ("verifier", "succeeded", "final_generation_verified"),
 )
 _PROBE_SUFFIX = (
     ("answer", "succeeded", "execution_completed"),
@@ -184,21 +185,17 @@ _EXPECTED_PROBE_AUDIT_PATH = (
     + _PROBE_SUFFIX
 )
 _EXPECTED_HCLX_ANSWER_PROBE_AUDIT_PATH = (
-    _DETERMINISTIC_PROBE_PREFIX
+    (("request", "started", "received"),)
+    + _INTENT_ANALYSIS_HCLX_PROBE_PATH
+    + _DETERMINISTIC_PROBE_PREFIX[1:4]
+    + _INTENT_ANALYSIS_VERIFIER_PROBE_PATH
+    + _DETERMINISTIC_PROBE_PREFIX[4:]
     + _COMPILER_PROBE_PATH
     + _EXECUTION_PROBE_PATH
     + _RENDERER_PROBE_PATH
-    + _GROUNDED_ANSWER_HCLX_PROBE_PATH
-    + _PROBE_SUFFIX
-)
-_EXPECTED_HCLX_QUERYPLAN_ANSWER_PROBE_AUDIT_PATH = (
-    _DETERMINISTIC_PROBE_PREFIX
-    + _COMPILER_PROBE_PATH
-    + _QUERYPLAN_HCLX_PROBE_PATH
-    + _EXECUTION_PROBE_PATH
-    + _RENDERER_PROBE_PATH
-    + _GROUNDED_ANSWER_HCLX_PROBE_PATH
-    + _PROBE_SUFFIX
+    + _PROBE_SUFFIX[:3]
+    + _FINAL_ANSWER_HCLX_PROBE_PATH
+    + _PROBE_SUFFIX[3:]
 )
 _ANSWER_PROBE_MARKER = "FINANCE_ROLLBACK_PROBE_RESULT="
 _ANSWER_PROBE = """
@@ -284,6 +281,7 @@ _ALLOWED_RELEASE_KEYS = {
     "FINANCE_BACKEND_FUND_EXECUTION_POLICY",
     "FINANCE_BACKEND_ANSWER_PROVIDER",
     "FINANCE_BACKEND_HCX_QUERY_PLAN_ENABLED",
+    "FINANCE_BACKEND_HCX_INTENT_ANALYSIS_ENABLED",
     "FINANCE_BACKEND_HCX_SEMANTIC_RESOLVER_ENABLED",
     "FINANCE_ADAPTIVE_SEMANTIC_ENABLED",
     "FINANCE_SCHEMA_DENSE_INDEX_HOST_FILE",
@@ -348,6 +346,13 @@ class ReleaseTarget:
         )
 
     @property
+    def hclx_intent_analysis_enabled(self) -> bool:
+        return (
+            self.environment.get("FINANCE_BACKEND_HCX_INTENT_ANALYSIS_ENABLED", "false").lower()
+            == "true"
+        )
+
+    @property
     def hclx_semantic_resolver_enabled(self) -> bool:
         return (
             self.environment.get("FINANCE_BACKEND_HCX_SEMANTIC_RESOLVER_ENABLED", "false").lower()
@@ -363,6 +368,7 @@ class ReleaseTarget:
         return (
             self.answer_provider == "hyperclova"
             or self.hclx_query_plan_enabled
+            or self.hclx_intent_analysis_enabled
             or self.hclx_semantic_resolver_enabled
         )
 
@@ -710,6 +716,9 @@ def _validate_provider_profile(
 ) -> tuple[Path | None, tuple[int, ...] | None]:
     answer_provider = environment.get("FINANCE_BACKEND_ANSWER_PROVIDER", "deterministic")
     hcx_query_plan = environment.get("FINANCE_BACKEND_HCX_QUERY_PLAN_ENABLED", "false").lower()
+    hcx_intent_analysis = environment.get(
+        "FINANCE_BACKEND_HCX_INTENT_ANALYSIS_ENABLED", "false"
+    ).lower()
     semantic_resolver = environment.get(
         "FINANCE_BACKEND_HCX_SEMANTIC_RESOLVER_ENABLED", "false"
     ).lower()
@@ -717,20 +726,22 @@ def _validate_provider_profile(
         raise RollbackDrillError("release answer provider is invalid")
     if hcx_query_plan not in {"true", "false"}:
         raise RollbackDrillError("release HCLX QueryPlan flag is invalid")
+    if hcx_intent_analysis not in {"true", "false"}:
+        raise RollbackDrillError("release HCLX Intent analysis flag is invalid")
+    if hcx_query_plan != "false":
+        raise RollbackDrillError("full HCLX QueryPlan generation is retired")
     if semantic_resolver not in {"true", "false"}:
         raise RollbackDrillError("release HCLX semantic resolver flag is invalid")
-    if (
-        answer_provider == "deterministic"
-        and hcx_query_plan == "true"
-        and semantic_resolver == "false"
-    ):
-        raise RollbackDrillError(
-            "rollback audit drill does not support the QueryPlan-only HCLX profile"
-        )
     uses_hclx = (
-        answer_provider == "hyperclova" or hcx_query_plan == "true" or semantic_resolver == "true"
+        answer_provider == "hyperclova"
+        or hcx_intent_analysis == "true"
+        or semantic_resolver == "true"
     )
     if uses_hclx:
+        if answer_provider != "hyperclova" or hcx_intent_analysis != "true":
+            raise RollbackDrillError(
+                "HCLX release requires Intent analysis and answer generation together"
+            )
         if (
             environment.get("FINANCE_AGENT_LLM_MODE") != environment.get("APP_ENV")
             or environment.get("LLM_PROVIDER") != "hyperclova"
@@ -1089,8 +1100,6 @@ def _verify_chain(previous: ReleaseTarget, current: ReleaseTarget) -> None:
 def _expected_probe_audit_path(target: ReleaseTarget) -> tuple[tuple[str, str, str], ...]:
     if not target.uses_hclx:
         return _EXPECTED_PROBE_AUDIT_PATH
-    if target.hclx_query_plan_enabled:
-        return _EXPECTED_HCLX_QUERYPLAN_ANSWER_PROBE_AUDIT_PATH
     return _EXPECTED_HCLX_ANSWER_PROBE_AUDIT_PATH
 
 

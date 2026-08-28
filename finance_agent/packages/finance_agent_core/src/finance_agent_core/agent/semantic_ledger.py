@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import re
 
+from finance_agent_core.agent.semantic_aliases import rank_alias_matches
 from finance_agent_core.agent.semantic_gate import SemanticCoverageDecision
 from finance_agent_core.agent.semantic_resolution import (
     ResidualSpan,
@@ -70,6 +71,25 @@ def build_resolved_span_ledger(
                 start=match.start(),
                 end=match.end(),
                 role=SpanRole.PRODUCT_FAMILY,
+            )
+        )
+
+    alias_matches = {
+        (item.start, item.end, item.field_id): item
+        for family in product_families
+        for item in rank_alias_matches(question, family)
+    }
+    for alias in alias_matches.values():
+        if any(start < alias.end and alias.start < end for start, end in occupied):
+            continue
+        occupied.add((alias.start, alias.end))
+        resolved.append(
+            ResolvedSpan(
+                text=alias.text,
+                start=alias.start,
+                end=alias.end,
+                role=SpanRole.RANKING,
+                field_id=alias.field_id,
             )
         )
 

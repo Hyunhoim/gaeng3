@@ -6,6 +6,9 @@ from typing import Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, model_validator
 
+from finance_agent_core.agent.external_knowledge_router import (
+    ExternalKnowledgeRouteDecision,
+)
 from finance_agent_core.agent.knowledge_router import (
     KnowledgeRouteDecision,
     KnowledgeRoutedExecutionError,
@@ -20,8 +23,13 @@ from finance_agent_core.agent.providers import (
     HyperClovaXServiceError,
     HyperClovaXTimeoutError,
     HyperClovaXTransportError,
+    hyperclova_failure_reason,
 )
 from finance_agent_core.agent.router import IntentRouter
+from finance_agent_core.answering.final_generation import (
+    FinalAnswerContext,
+    compose_final_answer,
+)
 from finance_agent_core.contracts.backend import (
     BackendAgentRequest,
     BackendAgentResponse,
@@ -48,6 +56,12 @@ from finance_agent_core.execution.authority import (
     PlanAuthorityCode,
     PlanAuthorityError,
 )
+from finance_agent_core.observability import (
+    AuditOutcome,
+    AuditStage,
+    MetricCounter,
+    current_request_audit,
+)
 from finance_agent_core.release import AgentReleaseError
 from finance_agent_core.retrieval.relations import RelationIndexError
 from finance_agent_core.storage import DatasetApprovalError
@@ -73,6 +87,92 @@ class AnswerAdapterResult(BaseModel):
         if is_error == (self.http_status_code == 200):
             raise ValueError("HTTP status and Backend error status differ")
         return self
+
+
+def _finalize_with_official_hclx(
+    service: RoutedAnswerService,
+    question: str,
+    response: BackendAgentResponse,
+) -> BackendAgentResponse:
+    provider = getattr(service, "official_answer_provider", None)
+    required = bool(getattr(service, "require_official_hclx", False))
+    if provider is None:
+        if required:
+            raise HyperClovaXConfigurationError(
+                "official response requires HyperCLOVA X answer generation"
+            )
+        return response
+    # Runtime-checkable Protocol is intentionally avoided; check the small
+    # approved seam without invoking arbitrary provider methods.
+    if not callable(getattr(provider, "generate_final_answer", None)):
+        raise HyperClovaXConfigurationError("invalid official answer provider")
+    if response.status is BackendStatus.ERROR:
+        return response
+    context = FinalAnswerContext(
+        question=question,
+        status=response.status.value,
+        intent=response.intent.value,
+        product_families=[family.value for family in response.product_families],
+        candidate_count=response.candidate_count,
+        evidence_count=(
+            sum(len(product.fields) for product in response.products)
+            + sum(len(comparison.cells) for comparison in response.comparisons)
+            + len(response.aggregates)
+            + len(response.documents)
+        ),
+        citation_count=len(response.citations),
+        as_of_dates=[value.isoformat() for value in response.as_of_dates],
+        deterministic_answer=response.answer,
+    )
+    audit = current_request_audit()
+    if audit is not None:
+        try:
+            audit.sink.metrics.increment(MetricCounter.HCLX_CALLS)
+        except Exception:
+            pass
+    try:
+        composition = compose_final_answer(context, provider)
+    except Exception as error:
+        if audit is not None:
+            reason = hyperclova_failure_reason(error)
+            audit.emit(
+                stage=AuditStage.HCLX,
+                outcome=(AuditOutcome.TIMED_OUT if reason == "timed_out" else AuditOutcome.FAILED),
+                reason_code=f"final_generation_{reason}",
+                duration_ms=0,
+            )
+        raise
+    if audit is not None:
+        audit.emit(
+            stage=AuditStage.HCLX,
+            outcome=AuditOutcome.SUCCEEDED,
+            reason_code="final_generation_completed",
+            duration_ms=composition.generation_latency_ms,
+            candidate_count=response.candidate_count or 0,
+            result_count=len(response.products) + len(response.documents),
+            evidence_count=context.evidence_count,
+        )
+        audit.emit(
+            stage=AuditStage.VERIFIER,
+            outcome=AuditOutcome.SUCCEEDED,
+            reason_code="final_generation_verified",
+            duration_ms=0,
+            candidate_count=response.candidate_count or 0,
+            result_count=len(response.products) + len(response.documents),
+            evidence_count=context.evidence_count,
+        )
+    updates: dict[str, object] = {"answer": composition.answer}
+    if response.status in {
+        BackendStatus.SUCCESS,
+        BackendStatus.NOT_FOUND,
+        BackendStatus.CANNOT_VERIFY,
+    }:
+        updates.update(
+            answer_mode=BackendAnswerMode.LLM_GROUNDED,
+            fallback_used=False,
+            provider_model=composition.model_name,
+        )
+    return BackendAgentResponse.model_validate({**response.model_dump(mode="python"), **updates})
 
 
 @dataclass(frozen=True, slots=True)
@@ -220,7 +320,7 @@ def _map_error(error: Exception) -> _ErrorMapping:
 
 def _error_response(
     request: BackendAgentRequest,
-    decision: RouteDecision | KnowledgeRouteDecision | None,
+    decision: RouteDecision | KnowledgeRouteDecision | ExternalKnowledgeRouteDecision | None,
     mapping: _ErrorMapping,
 ) -> BackendAgentResponse:
     if isinstance(decision, RouteDecision):
@@ -237,6 +337,16 @@ def _error_response(
             list(operation.product_families)
             if isinstance(operation, RelationKnowledgeOperation)
             else []
+        )
+    elif isinstance(decision, ExternalKnowledgeRouteDecision) and decision.plan is not None:
+        intent = decision.plan.interaction_intent
+        product_families = sorted(
+            {
+                family
+                for requirement in decision.plan.requirements
+                for family in requirement.product_families
+            },
+            key=lambda family: family.value,
         )
     else:
         intent = InteractionIntent.UNSUPPORTED
@@ -279,12 +389,24 @@ def execute_answer_request(
     if callable(answer_public_atomically):
         try:
             public_result = answer_public_atomically(request.question, request.request_id)
+            from finance_agent_core.agent.external_knowledge_backend_adapter import (
+                external_knowledge_route_to_backend,
+            )
+            from finance_agent_core.agent.external_knowledge_result_adapter import (
+                external_knowledge_result_to_backend,
+            )
+            from finance_agent_core.agent.external_knowledge_router import (
+                ExternalKnowledgeRouteDecision,
+            )
             from finance_agent_core.agent.knowledge_backend_adapter import (
                 knowledge_result_to_backend,
                 knowledge_route_control_to_backend,
             )
             from finance_agent_core.agent.knowledge_service import KnowledgeAgentResult
             from finance_agent_core.agent.routed_service import RoutedAgentResult
+            from finance_agent_core.execution.external_knowledge_runtime import (
+                ExternalKnowledgeRuntimeResult,
+            )
 
             if type(public_result) is RoutedAgentResult:
                 response = routed_result_to_backend(public_result)
@@ -295,8 +417,16 @@ def execute_answer_request(
                     public_result,
                     request_id=request.request_id,
                 )
+            elif type(public_result) is ExternalKnowledgeRouteDecision:
+                response = external_knowledge_route_to_backend(
+                    public_result,
+                    request_id=request.request_id,
+                )
+            elif type(public_result) is ExternalKnowledgeRuntimeResult:
+                response = external_knowledge_result_to_backend(public_result)
             else:
                 raise TypeError("public Agent returned an unsupported result contract")
+            response = _finalize_with_official_hclx(service, request.question, response)
             return AnswerAdapterResult(http_status_code=200, response=response)
         except Exception as error:  # noqa: BLE001 - outer application boundary
             trusted_decision = None
@@ -318,6 +448,7 @@ def execute_answer_request(
         try:
             routed = answer_atomically(request.question, request.request_id)
             response = routed_result_to_backend(routed)
+            response = _finalize_with_official_hclx(service, request.question, response)
             return AnswerAdapterResult(http_status_code=200, response=response)
         except Exception as error:  # noqa: BLE001 - outer application boundary
             trusted_decision = None
@@ -342,6 +473,7 @@ def execute_answer_request(
     try:
         routed = service.answer(request.question, request.request_id)
         response = routed_result_to_backend(routed)
+        response = _finalize_with_official_hclx(service, request.question, response)
         return AnswerAdapterResult(http_status_code=200, response=response)
     except Exception as error:  # noqa: BLE001 - this is the outer application boundary
         mapping = _map_error(error)

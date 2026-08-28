@@ -20,6 +20,7 @@ class ProductIdentityRecord:
     short_name: str | None
     public_offering: bool | None
     is_quarantined: bool
+    source_owner: str | None = None
 
 
 @dataclass(frozen=True)
@@ -53,24 +54,28 @@ _OPTIONAL_COLUMNS_BY_DATASET = {
         "ticker": "ticker",
         "isin": "isin",
         "short_name": "NULL",
+        "source_owner": "NULL",
         "public_offering": "NULL",
     },
     "domestic_etp": {
         "ticker": "ticker",
         "isin": "isin",
         "short_name": "short_name",
+        "source_owner": "manager",
         "public_offering": "NULL",
     },
     "bond": {
         "ticker": "ticker",
         "isin": "NULL",
         "short_name": "short_name",
+        "source_owner": "issuer",
         "public_offering": "NULL",
     },
     "fund": {
         "ticker": "NULL",
         "isin": "NULL",
         "short_name": "short_name",
+        "source_owner": "NULL",
         "public_offering": "public_offering",
     },
 }
@@ -98,6 +103,13 @@ def load_product_identities(
             optional = _OPTIONAL_COLUMNS_BY_DATASET[manifest.dataset]
         except KeyError as error:
             raise ValueError(f"unsupported identity dataset: {manifest.dataset}") from error
+        canonical_scope = (
+            "WHERE is_quarantined = 0 AND source_row IN "
+            "(SELECT MIN(source_row) FROM bond_products "
+            "WHERE is_quarantined = 0 GROUP BY ticker)"
+            if manifest.dataset == "bond"
+            else ""
+        )
         rows = connection.execute(
             f"""
             SELECT
@@ -107,9 +119,11 @@ def load_product_identities(
                 {optional["ticker"]} AS ticker,
                 {optional["isin"]} AS isin,
                 {optional["short_name"]} AS short_name,
+                {optional["source_owner"]} AS source_owner,
                 {optional["public_offering"]} AS public_offering,
                 is_quarantined
             FROM {table}
+            {canonical_scope}
             ORDER BY product_id
             """
         ).fetchall()
@@ -121,6 +135,7 @@ def load_product_identities(
             ticker=None if row["ticker"] is None else str(row["ticker"]),
             isin=None if row["isin"] is None else str(row["isin"]),
             short_name=None if row["short_name"] is None else str(row["short_name"]),
+            source_owner=(None if row["source_owner"] is None else str(row["source_owner"])),
             public_offering=(
                 None if row["public_offering"] is None else bool(row["public_offering"])
             ),

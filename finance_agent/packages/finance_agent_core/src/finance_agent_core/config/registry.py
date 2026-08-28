@@ -136,6 +136,7 @@ class FieldDatasetOverride(BaseModel):
     comparable: bool | None = None
     comparison_mode: ComparisonMode | None = None
     allowed_operators: list[str] | None = None
+    enum_values: list[str] | None = None
     comparison_scope: str | None = None
     as_of_basis: AsOfBasis | None = None
     sentinel_values: dict[str, str] | None = None

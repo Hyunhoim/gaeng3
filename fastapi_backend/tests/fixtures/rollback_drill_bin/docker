@@ -119,14 +119,17 @@ if [ "$1" = "exec" ]; then
     }
     append_event "$sequence" request started received "$empty_sha256" "$empty_sha256" ''
     sequence=$((sequence + 1))
+    if [ "$answer_provider" = hyperclova ]; then
+        append_next hclx succeeded intent_analysis_completed
+    fi
     append_next safety succeeded guard_allowed
     append_next lexical succeeded lexical_completed
     append_next planning succeeded policy_completed
+    if [ "$answer_provider" = hyperclova ]; then
+        append_next verifier succeeded intent_analysis_verified
+    fi
     append_next route succeeded routed_execute
     append_next compiler succeeded plan_compiled
-    if [ "$hcx_query_plan_enabled" = true ]; then
-        append_next hclx succeeded provider_completed
-    fi
     append_next sql succeeded authority_connection_opened
     append_next authority succeeded authority_granted
     append_next sql succeeded oracle_connection_opened
@@ -143,25 +146,20 @@ if [ "$1" = "exec" ]; then
 
     answer_mode=deterministic
     fallback_used=false
+    append_next answer succeeded execution_completed
+    append_next serialization succeeded citations_built
+    append_next serialization succeeded backend_dto_built
     if [ "$answer_provider" = hyperclova ]; then
         answer_mode=llm_grounded
         if [ "${ROLLBACK_DRILL_FAKE_HCLX_FALLBACK:-0}" = "1" ]; then
             answer_mode=deterministic_fallback
             fallback_used=true
-            append_next hclx failed provider_failed
-            append_next verifier failed composition_rejected
+            append_next hclx failed final_generation_provider_failed
         else
-            append_next hclx succeeded generation_completed
-            append_next verifier succeeded composition_verified
+            append_next hclx succeeded final_generation_completed
+            append_next verifier succeeded final_generation_verified
         fi
     fi
-    terminal_reason=execution_completed
-    if [ "$fallback_used" = true ]; then
-        terminal_reason=execution_fallback
-    fi
-    append_next answer succeeded "$terminal_reason"
-    append_next serialization succeeded citations_built
-    append_next serialization succeeded backend_dto_built
     append_next serialization succeeded official_dto_built
     append_next serialization succeeded http_response_serialized
     append_next request succeeded response_completed

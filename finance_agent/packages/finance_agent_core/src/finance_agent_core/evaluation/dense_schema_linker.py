@@ -70,7 +70,7 @@ class SchemaPolicyMigration(DenseEvaluationModel):
     case_id: str = Field(min_length=1, max_length=128)
     product_family: ProductFamily
     question_sha256: str = Field(pattern=_SHA256_PATTERN)
-    legacy_disposition: Literal["block"] = "block"
+    legacy_disposition: Literal["block", "execute"] = "block"
     current_disposition: Literal["execute"] = "execute"
     gold_field_ids: tuple[str, ...] = Field(min_length=1)
     reason_code: str = Field(min_length=3, max_length=128)
@@ -348,6 +348,15 @@ def _lexical_result(
         *(item["field"] for item in hints["required_constraints"]),
         *(item["field"] for item in hints["required_rankings"]),
     ]
+    if (
+        family is ProductFamily.OVERSEAS_ETP
+        and any(item["field"] == "aum" for item in hints["required_rankings"])
+        and not re.search(r"(?:USD|달러|거래\s*통화)", question, flags=re.IGNORECASE)
+    ):
+        # The runtime adds USD as an approved-snapshot execution invariant.
+        # It is not a user-expression-to-schema candidate and must not inflate
+        # or penalize Schema Dense field-linking metrics.
+        values = [value for value in values if value != "trading_currency"]
     registry = load_field_registry()
     fields = _ordered_unique(
         [
@@ -556,8 +565,8 @@ def _load_cases() -> tuple[
             migration = migration_by_key.get((family, case.id))
             current_disposition = case.disposition
             if migration is not None:
-                if case.disposition is not ExpectedDisposition.BLOCK:
-                    raise RuntimeError("current policy migration must start from a blocked case")
+                if migration.legacy_disposition != case.disposition.value:
+                    raise RuntimeError("schema policy migration legacy disposition differs")
                 if _sha256_text(case.question) != migration.question_sha256:
                     raise RuntimeError("schema policy migration question SHA-256 differs")
                 invalid_fields = [

@@ -42,7 +42,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--snapshot-date",
         type=_date,
-        default=dt.date(2026, 7, 11),
+        default=dt.date(2026, 8, 24),
     )
     parser.add_argument(
         "--dataset",

@@ -2,7 +2,7 @@
 
 상태: 활성
 
-기준일: 2026-08-21
+기준일: 2026-08-25
 
 공식 과제 소개자료 7페이지의 예선 제출 항목과 변경 금지 조건을 기준으로 한다.
 
@@ -11,7 +11,8 @@
 - [x] 2026-08-06 설명회 질문 목록 확정
 - [x] 참석 팀원의 설명회 기록 전달 및 현장 사진·공식 PDF 교차 검토
 - [x] 확정사항·구두 메모·후속 확인 항목을 설명회 반영 기록에 분리
-- [x] HCX-007·Direct v3·Bearer 인증·Structured Outputs 확인 및 answer-only 실제 호출 완료
+- [x] HCX-007·Direct v3·Bearer 인증·Structured Outputs와 과거 answer-only 실제 호출 확인
+- [ ] 필수 Intent+최종 생성 두-operation 배선의 실제 HCLX 호출·NCP 검증
 - [ ] 2026-09-06 이전 최종 source commit·제안서·API 문서 동결
 - [ ] 평가 기간 동안 공지된 기간 내 API 활성 상태 유지
 - [ ] 마감 이후 금지되는 commit·push·서버 변경 범위 재확인
@@ -39,13 +40,13 @@
 - [x] P0-7 관계·문서 Typed Plan·Claim Verifier·결정론적 fallback 내부 계약
 - [x] P0-10 공개 Router·Backend adapter와 manifest에 해시로 고정된 Agent Release 계약 연결을 로컬에서 검증
 - [x] 관계 검색의 exact FTS 후보·canonical full match·공식 DB identity 재검증·field evidence·인과적 Audit 계약
-- [x] 최종 계약 회귀 Agent Core 1,481 passed·1 skipped, Backend 430 passed·1 skipped
+- [x] 2026-08-25 계약 회귀 Agent Core 1,612 passed·1 skipped, Backend 453 passed·1 skipped
 - [x] multi-stage runtime image와 exact-image boundary 검사로 builder 원본·local-model
   dependency·weight·inline credential의 평가 image 혼입 차단
 - [x] 서명 Manifest와 실제 release 환경의 exact-match를 Docker 교체 전에 검증
 - [x] 빈 Docker volume에서 Backend smoke 8/8·공식 형식 GET 호환 smoke 8/8, 관계 3 products/3 citations, 부분 표현 `not_found` 확인
 - [x] 관계 색인·DB 변조 시 health·API가 HTTP 503으로 fail-closed되는 로컬 계약 확인
-- [x] External Blind는 수행하지 않으며 그 결과에 의존하는 HCLX QueryPlan·Dense를 최종 평가 Release에서 OFF로 동결
+- [x] 전체 HCLX QueryPlan은 폐기하고, Schema Dense는 승인된 candidate-only adaptive 정책으로 제한
 
 현재 상태: Conda·pip와 Agent Core wheel, 공식 XLSX 준비와 FastAPI, P0-10
 공개 관계 검색을 잇는 통합 Docker 경로는 로컬에서 재현 완료. 이 표시는
@@ -133,12 +134,13 @@
 - [ ] 데이터·suite·baseline·제안서 PDF SHA-256 기록
 - [x] 공식 provider 외 모델이 evaluation/production mode에서 fail-closed인지 확인
 - [x] 최종 image의 실행 경로·설정·의존성에서 Qwen/vLLM이 선택될 수 없음을 확인; 개발 이력의 소스 파일 잔존 여부와 구분
-- [x] External Blind 미수행을 명시하고 HCLX QueryPlan·Schema/Product Dense를 최종 Release에서 OFF로 동결
+- [x] External Blind 미수행을 명시하고 전체 HCLX QueryPlan·Product Dense를 최종 Release에서 OFF로 동결
 - [ ] 최소 2명 사람 평가 완료
 - [ ] API smoke·contract·load·장애 복구 테스트 완료
 - [ ] NCP에 서명된 release를 실제 배포하고 공인 IP `GET /answer`·`/health` smoke 완료
 - [ ] 서명된 두 release를 사용한 forward·rollback drill과 Audit receipt 보존
-- [x] 관계 결과도 공통 검증·Release Guard·HCLX answer-only 또는 결정론적 fallback 경계를 사용하도록 동결
+- [x] 관계 결과도 공통 검증·Release Guard와 필수 HCLX Intent+최종 생성 경계를 사용하도록 동결
 - [x] 실제 승인 문서 corpus가 없으므로 문서 RAG를 최종 평가 범위에서 제외
-- [x] 최종 HCLX answer-only 로컬 계약 기준선 1,911/1,911과 Audit·장애 fallback·공식 GET 회귀 동결
+- [x] HCLX Intent+최종 생성 fake/no-network 공식 GET·Audit·no-fallback 회귀 동결
+- [ ] 새 HCLX 경계의 실제 최소 호출과 clean signed NCP Release 기준선 동결
 - [ ] 제출 후 변경 금지 절차를 팀 전원이 확인

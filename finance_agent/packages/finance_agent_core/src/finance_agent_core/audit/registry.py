@@ -33,17 +33,17 @@ DATASET_SPECS: tuple[DatasetSpec, ...] = (
     DatasetSpec(
         name="bond",
         prefix="PRBD01N001",
-        primary_key_fields=("PD_NO",),
-        validation_key_field="PD_NO",
+        primary_key_fields=("pd_no", "pd_exg_mkt", "info_base_dt", "info_seq"),
+        validation_key_field="pd_no",
         validation_key_pattern=re.compile(r"[A-Z0-9]{8,20}"),
         metric_fields=(
-            "BUYABLE_QUANTITY",
-            "BUY_YIELD",
-            "AVG_ANNUAL_TAX_YIELD",
-            "MAT_DT",
-            "PD_STD_INFO_UPDATE",
+            "buyable_quantity",
+            "buy_yield",
+            "avg_annual_tax_yield",
+            "mat_dt",
+            "pd_std_info_update",
         ),
-        numeric_fields=frozenset({"BUYABLE_QUANTITY", "BUY_YIELD", "AVG_ANNUAL_TAX_YIELD"}),
+        numeric_fields=frozenset({"buyable_quantity", "buy_yield", "avg_annual_tax_yield"}),
         categorical_fields=frozenset(),
     ),
     DatasetSpec(
@@ -94,14 +94,16 @@ DATASET_SPECS: tuple[DatasetSpec, ...] = (
     DatasetSpec(
         name="fund",
         prefix="PRFD01N001",
-        primary_key_fields=("itm_no", "prfd_attr_cd"),
+        primary_key_fields=("itm_no",),
         validation_key_field="itm_no",
         validation_key_pattern=re.compile(r"KR[A-Z0-9]{10}"),
         metric_fields=(
             "itm_no",
             "itm_nm",
             "itm_abrv_nm",
-            "prfd_attr_cd",
+            "prfd_attr_cds",
+            "prfd_attr_cnt",
+            "prfd_attr_search_text",
             "prvo_pbff_desc",
             "sale_yn",
             "thco_sale_yn",
@@ -141,7 +143,7 @@ DATASET_SPECS: tuple[DatasetSpec, ...] = (
         ),
         categorical_fields=frozenset(
             {
-                "prfd_attr_cd",
+                "prfd_attr_cds",
                 "prvo_pbff_desc",
                 "sale_yn",
                 "thco_sale_yn",
