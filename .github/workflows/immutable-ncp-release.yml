@@ -223,7 +223,9 @@ jobs:
           python3 -m venv "$RUNNER_TEMP/release-venv"
           "$RUNNER_TEMP/release-venv/bin/python" -m pip install \
             --disable-pip-version-check \
-            --requirement fastapi_backend/requirements.txt
+            --constraint finance_agent/requirements/constraints.txt \
+            --requirement fastapi_backend/requirements.txt \
+            ./finance_agent/packages/finance_agent_core
           PYTHONPATH="$GITHUB_WORKSPACE/finance_agent/packages/finance_agent_core/src" \
             "$RUNNER_TEMP/release-venv/bin/python" \
             -m finance_agent_core.retrieval.external_knowledge_release_cli \

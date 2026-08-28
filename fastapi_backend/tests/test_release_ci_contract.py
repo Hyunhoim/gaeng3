@@ -780,6 +780,8 @@ def test_release_workflow_materializes_and_binds_the_approved_relation_artifact(
         in manifest_step["run"]
     )
     assert '--fund-execution-policy "$FUND_EXECUTION_POLICY"' in manifest_step["run"]
+    assert "--constraint finance_agent/requirements/constraints.txt" in manifest_step["run"]
+    assert "./finance_agent/packages/finance_agent_core" in manifest_step["run"]
     assert "release_ci.py verify-relation-manifest-binding" in manifest_step["run"]
     assert '--manifest "$RELEASE_OUTPUT_DIR/agent-release-manifest.json"' in manifest_step["run"]
     assert '--relation-artifact "$RELATION_RETRIEVAL_ARTIFACT_FILE"' in manifest_step["run"]
