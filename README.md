@@ -34,7 +34,7 @@ ETF·ETN, 공모펀드를 조회·비교·계산한 뒤 근거와 기준일을 �
 | Release | `AgentReleaseManifest 1.2`가 코드·Prompt·Model·index·공식 데이터·관계 artifact·Docker digest를 결합. 로컬 fail-closed 검증 완료, 실제 NCP 서명 배포 대기 |
 | Frontend | 동료의 `nextjs-frontend/` 코드 합류 후 연결 예정 |
 | LLM | 최종 평가는 모든 유효 요청에 HCX-007 Intent 분석과 검증 근거 기반 최종 답변 생성을 필수화. HCLX 전체 QueryPlan 생성은 운영 배선에서 제거했으며 SQLite/Python·Verifier가 field·filter·정렬·계산·근거를 계속 확정 |
-| 자동 검증 | pre-HCX 기준선은 역사 기록으로 보존. 2026-08-25 현재 Core 1,612개·Backend 453개 통과, 승인 DB·Docker Compose 환경이 필요한 opt-in 테스트 각 1개 skip |
+| 자동 검증 | pre-HCX 동결 pytest 507개는 역사 기록으로 보존. 2026-08-29 현재 Core 1,750개·Backend 456개 통과, 과거 Stage 2 DB·Docker Compose 환경이 필요한 opt-in 테스트 각 1개 skip |
 
 세부 기능과 평가 결과는 [AI Agent 작업공간](finance_agent/README.md)에서 관리
 배포 버전 고정과 평가·운영 실행은

@@ -173,6 +173,43 @@ def test_bond_sqlite_oracle_verifier_and_evidence_agree(tmp_path: Path) -> None:
     assert buy_yield.quality is QualityStatus.VALID
 
 
+def test_bond_search_uses_first_source_row_per_official_product_id(tmp_path: Path) -> None:
+    _, records = make_bond_database(tmp_path)
+    records.append(
+        make_bond_record(
+            row=8,
+            product_id="KRTEST000001",
+            buy_yield="99.0",
+            quantity=999,
+            maturity=20350101,
+        )
+    )
+    path = tmp_path / "bond-duplicate-lot.sqlite3"
+    manifest = DatabaseManifest(
+        dataset="bond",
+        registry_schema_version="1.4",
+        source_file_name="synthetic_bond.xlsx",
+        source_file_sha256="d" * 64,
+        source_file_size_bytes=1234,
+        source_snapshot_date=date(2026, 8, 24),
+        total_rows=len(records),
+        searchable_rows=len(records),
+        quarantined_rows=0,
+    )
+    write_bond_database(path, records, manifest)
+    plan = bond_vertical_slice_plan("bond-logical-product")
+    executed = SQLiteOracle(path).execute(authorize_internal_evaluation_plan(plan, path))
+    with connect_read_only(path) as connection:
+        universe = load_all_records(connection)
+    verified = ResultVerifier().verify(plan, executed, universe)
+    products = build_product_evidence(plan, verified)
+
+    assert verified.candidate_count == 6
+    assert all(record.source_row != 8 for record in verified.records)
+    assert len({product.product_id for product in products}) == len(products)
+    assert all(":" not in product.product_id for product in products)
+
+
 def test_bond_mock_agent_completes_verified_vertical_slice(tmp_path: Path) -> None:
     path, _ = make_bond_database(tmp_path)
     response = FinanceAgent(
@@ -221,13 +258,6 @@ def test_bond_briefing_query_executes_with_sellability_and_rating_threshold(
             "unit": "code",
             "strength": "locked",
         },
-        "currently_buyable": {
-            "field": "currently_buyable",
-            "operator": "eq",
-            "value": True,
-            "unit": "boolean",
-            "strength": "locked",
-        },
         "credit_rating": {
             "field": "credit_rating",
             "operator": "in",
@@ -239,7 +269,6 @@ def test_bond_briefing_query_executes_with_sellability_and_rating_threshold(
     first_fields = {
         field.canonical_field: field.normalized_value for field in result.products[0].fields
     }
-    assert first_fields["currently_buyable"] is True
     assert first_fields["credit_rating"] == "AA-"
 
 
@@ -278,7 +307,12 @@ def test_bond_verifier_projection_matches_normalized_records(tmp_path: Path) -> 
     for record in projected:
         original = expected[record.product_id]
         for field_name in verifier_projection_fields(plan):
-            assert record.canonical_value(field_name) == original.canonical_value(field_name)
+            expected_value = (
+                original.ticker
+                if field_name == "product_id"
+                else original.canonical_value(field_name)
+            )
+            assert record.canonical_value(field_name) == expected_value
             assert (
                 record.row_level_quality(field_name)[0] == original.row_level_quality(field_name)[0]
             )

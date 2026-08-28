@@ -35,8 +35,7 @@ class DocumentDenseModel(BaseModel):
 
 def _canonical_json_bytes(payload: object) -> bytes:
     return (
-        json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-        + "\n"
+        json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n"
     ).encode("utf-8")
 
 
@@ -74,9 +73,7 @@ class DocumentDenseVector(DocumentDenseModel):
 
 class DocumentDenseManifest(DocumentDenseModel):
     schema_version: Literal["1.0"] = "1.0"
-    index_kind: Literal["document_dense_pending_review"] = (
-        "document_dense_pending_review"
-    )
+    index_kind: Literal["document_dense_pending_review"] = "document_dense_pending_review"
     scope: Literal["offline_evaluation_only"] = "offline_evaluation_only"
     production_enabled: StrictBool = False
     activation_status: Literal["blocked_until_corpus_approval_and_calibration"] = (
@@ -260,9 +257,7 @@ class OfflineHybridDocumentIndex:
         self._document_frequency = Counter(
             token for tokens in self._document_tokens for token in set(tokens)
         )
-        self._average_length = sum(map(len, self._document_tokens)) / len(
-            self._document_tokens
-        )
+        self._average_length = sum(map(len, self._document_tokens)) / len(self._document_tokens)
 
     def _hits(
         self,
@@ -306,9 +301,7 @@ class OfflineHybridDocumentIndex:
                     continue
                 document_frequency = self._document_frequency[token]
                 inverse = math.log(
-                    1
-                    + (total - document_frequency + 0.5)
-                    / (document_frequency + 0.5)
+                    1 + (total - document_frequency + 0.5) / (document_frequency + 0.5)
                 )
                 denominator = frequency + 1.5 * (
                     1 - 0.75 + 0.75 * length / max(self._average_length, 1)

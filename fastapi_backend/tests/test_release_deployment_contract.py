@@ -211,7 +211,9 @@ def test_final_release_env_example_pins_public_http_and_hcx_answer_only() -> Non
     assert "FINANCE_AGENT_LLM_MODE=evaluation" in example
     assert "LLM_PROVIDER=hyperclova" in example
     assert "HCX_MODEL=HCX-007" in example
-    assert "FINANCE_BACKEND_FUND_EXECUTION_POLICY=locked" in example
+    assert "FINANCE_BACKEND_FUND_EXECUTION_POLICY=public_fund_v1_approved" in example
+    assert "FINANCE_ADAPTIVE_SEMANTIC_ENABLED=true" in example
+    assert "FINANCE_EXTERNAL_KNOWLEDGE_ENABLED=true" in example
 
 
 def test_release_build_context_is_allowlisted_and_base_has_no_mutable_default() -> None:
@@ -542,11 +544,14 @@ def test_release_launcher_rejects_invalid_hcx_secret_size(
     secret_path.write_bytes(secret_payload)
     secret_path.chmod(0o600)
     content = environment_path.read_text(encoding="utf-8")
-    content = "\n".join(
-        line
-        for line in content.splitlines()
-        if not line.startswith("CLOVASTUDIO_API_KEY_HOST_FILE=")
-    ) + "\n"
+    content = (
+        "\n".join(
+            line
+            for line in content.splitlines()
+            if not line.startswith("CLOVASTUDIO_API_KEY_HOST_FILE=")
+        )
+        + "\n"
+    )
     environment_path.write_text(
         content + f"CLOVASTUDIO_API_KEY_HOST_FILE={secret_path}\n",
         encoding="utf-8",

@@ -51,9 +51,7 @@ def test_historical_g5_search_aggregate_suite_matches_approved_contract() -> Non
     contract = json.loads(contract_resource.read_text(encoding="utf-8"))
     historical = _load_historical_g5_search_aggregate_suite()
 
-    assert contract["source_suites"]["search_aggregate"]["sha256"] == (
-        historical.suite_sha256
-    )
+    assert contract["source_suites"]["search_aggregate"]["sha256"] == (historical.suite_sha256)
 
 
 def test_frozen_public_fingerprints_cover_every_stage2_execution_cell() -> None:

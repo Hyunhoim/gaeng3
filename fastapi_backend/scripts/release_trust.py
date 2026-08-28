@@ -361,9 +361,7 @@ def _signed_manifest_profile(
         ):
             raise ReleaseTrustError("signed release profile is invalid")
         answer_provider = (
-            "hyperclova"
-            if grounded_answer_enabled or final_answer_enabled
-            else "deterministic"
+            "hyperclova" if grounded_answer_enabled or final_answer_enabled else "deterministic"
         )
     else:
         raise ReleaseTrustError("signed release profile is invalid")
@@ -544,9 +542,7 @@ def _release_environment_profile(values: dict[str, str]) -> dict[str, Any]:
     if queryplan_enabled or not intent_analysis_enabled or answer_provider != "hyperclova":
         raise ReleaseTrustError("release environment profile is invalid")
     uses_hcx = (
-        answer_provider == "hyperclova"
-        or intent_analysis_enabled
-        or semantic_resolver_enabled
+        answer_provider == "hyperclova" or intent_analysis_enabled or semantic_resolver_enabled
     )
     if uses_hcx:
         if (

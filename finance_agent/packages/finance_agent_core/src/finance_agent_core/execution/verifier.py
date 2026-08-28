@@ -48,6 +48,25 @@ def _periodic_deadline_check(index: int) -> None:
         raise_if_request_stopped()
 
 
+def _logical_product_universe(
+    plan: QueryPlan,
+    universe: list[VerifierRecord],
+) -> list[VerifierRecord]:
+    """Rebuild the SQL logical-product scope independently in Python."""
+
+    if plan.product_families[0].value != "bond":
+        return universe
+    canonical: dict[str, VerifierRecord] = {}
+    for record in universe:
+        if record.is_quarantined:
+            continue
+        logical_id = record.product_id.split(":", 1)[0]
+        previous = canonical.get(logical_id)
+        if previous is None or record.source_row < previous.source_row:
+            canonical[logical_id] = record
+    return list(canonical.values())
+
+
 def _comparable_value(record: VerifierRecord, field_name: str) -> object | None:
     quality, _ = record.row_level_quality(field_name)
     if quality in {
@@ -57,6 +76,18 @@ def _comparable_value(record: VerifierRecord, field_name: str) -> object | None:
     }:
         return None
     return record.canonical_value(field_name)
+
+
+def _query_metric_value(record: VerifierRecord, field_name: str) -> object | None:
+    """Mirror the official numeric 0/missing exclusion independently of SQL."""
+
+    value = _comparable_value(record, field_name)
+    if value is None:
+        return None
+    definition = load_field_registry().require_field(field_name, [record.product_family])
+    if definition.value_type.value == "number" and not isinstance(value, bool) and value == 0:
+        return None
+    return value
 
 
 def _expected_value(record_value: object, query_value: object) -> object:
@@ -75,15 +106,28 @@ def _matches_constraint(
     record: VerifierRecord,
     constraint: Constraint,
 ) -> bool:
-    actual = _comparable_value(record, constraint.field)
+    actual = (
+        record.product_id.split(":", 1)[0]
+        if constraint.field == "product_id" and record.product_family == "bond"
+        else _query_metric_value(record, constraint.field)
+    )
     if actual is None:
         return False
     operator = constraint.operator
     expected = constraint.value
 
+    def canonical_expected(value: object) -> object:
+        if (
+            constraint.field == "product_id"
+            and record.product_family == "bond"
+            and isinstance(value, str)
+        ):
+            return value.split(":", 1)[0]
+        return value
+
     if operator in {ConstraintOperator.IN, ConstraintOperator.NOT_IN}:
         assert isinstance(expected, list)
-        converted = [_expected_value(actual, value) for value in expected]
+        converted = [_expected_value(actual, canonical_expected(value)) for value in expected]
         is_member = actual in converted
         return is_member if operator is ConstraintOperator.IN else not is_member
     if operator is ConstraintOperator.BETWEEN:
@@ -96,7 +140,7 @@ def _matches_constraint(
         return expected.casefold() in actual.casefold()
 
     assert not isinstance(expected, list)
-    converted = _expected_value(actual, expected)
+    converted = _expected_value(actual, canonical_expected(expected))
     if operator is ConstraintOperator.EQ:
         return actual == converted
     if operator is ConstraintOperator.NEQ:
@@ -139,8 +183,8 @@ def _record_comparator(plan: QueryPlan):
         _periodic_deadline_check(comparison_count)
         for ranking in plan.ranking:
             comparison = _compare_values(
-                _comparable_value(left, ranking.field),
-                _comparable_value(right, ranking.field),
+                _query_metric_value(left, ranking.field),
+                _query_metric_value(right, ranking.field),
                 ranking,
             )
             if comparison:
@@ -198,6 +242,7 @@ class ResultVerifier:
         require_fund_public_scope(plan)
         if universe is None:
             raise ResultVerificationError("search verification requires the record universe")
+        universe = _logical_product_universe(plan, universe)
         candidates: list[VerifierRecord] = []
         for index, record in enumerate(universe):
             _periodic_deadline_check(index)
@@ -206,7 +251,7 @@ class ResultVerifier:
                 and all(_matches_constraint(record, item) for item in plan.constraints)
                 and all(
                     not ranking_requires_usable_value(plan, ranking.field)
-                    or _comparable_value(record, ranking.field) is not None
+                    or _query_metric_value(record, ranking.field) is not None
                     for ranking in plan.ranking
                 )
             ):
@@ -354,7 +399,12 @@ def _verifier_metric(
     valid_records: list[VerifierRecord] = []
     for index, record in enumerate(records):
         _periodic_deadline_check(index)
-        if _verifier_usable(record, field_name) is not None:
+        usable_value = _verifier_usable(record, field_name)
+        if usable_value is not None and not (
+            definition.value_type.value == "number"
+            and not isinstance(usable_value, bool)
+            and usable_value == 0
+        ):
             valid_records.append(record)
     raise_if_request_stopped()
     currency_unknown = (
@@ -510,6 +560,7 @@ class AggregateResultVerifier:
             raise ResultVerificationError("question_id changed during aggregate execution")
         if executed.manifest.dataset != plan.product_families[0].value:
             raise ResultVerificationError("aggregate manifest dataset differs from the plan")
+        universe = _logical_product_universe(plan, universe)
         candidates: list[VerifierRecord] = []
         for index, record in enumerate(universe):
             _periodic_deadline_check(index)

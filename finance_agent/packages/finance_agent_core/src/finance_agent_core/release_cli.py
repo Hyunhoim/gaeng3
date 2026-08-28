@@ -19,6 +19,7 @@ from finance_agent_core.release import (
     _strict_json_object,
     build_agent_release_manifest,
     deployment_binding_file_bytes,
+    load_external_knowledge_artifact_release,
     load_relation_retrieval_artifact_release,
     manifest_file_bytes,
 )
@@ -132,6 +133,25 @@ def _runtime_inputs(arguments: argparse.Namespace) -> RuntimeReleaseInputs:
             )
         except AgentReleaseError as error:
             raise SystemExit(f"relation retrieval artifact is invalid: {error}") from error
+    external_path = getattr(arguments, "external_knowledge_artifact", None)
+    external_file_sha256 = getattr(
+        arguments,
+        "external_knowledge_artifact_sha256",
+        None,
+    )
+    if (external_path is None) != (external_file_sha256 is None):
+        raise SystemExit(
+            "external knowledge activation requires both artifact path and trusted SHA-256"
+        )
+    external_knowledge_artifact = None
+    if external_path is not None:
+        try:
+            external_knowledge_artifact = load_external_knowledge_artifact_release(
+                artifact_path=external_path,
+                expected_file_sha256=external_file_sha256,
+            )
+        except AgentReleaseError as error:
+            raise SystemExit(f"external knowledge artifact is invalid: {error}") from error
     schema_dense_artifact = None
     schema_dense_policy = None
     schema_dense_path = arguments.schema_dense_index
@@ -183,6 +203,8 @@ def _runtime_inputs(arguments: argparse.Namespace) -> RuntimeReleaseInputs:
         schema_dense_policy=schema_dense_policy,
         relation_retrieval_artifact=relation_retrieval_artifact,
         relation_retrieval_artifact_file_sha256=artifact_file_sha256,
+        external_knowledge_artifact=external_knowledge_artifact,
+        external_knowledge_artifact_file_sha256=external_file_sha256,
         platform=arguments.platform,
         hcx_timeout_seconds=arguments.hcx_timeout_seconds,
         official_answer_timeout_seconds=arguments.official_answer_timeout_seconds,
@@ -323,6 +345,15 @@ def _parser() -> argparse.ArgumentParser:
     manifest.add_argument(
         "--relation-retrieval-artifact-sha256",
         help="trusted SHA-256 of --relation-retrieval-artifact",
+    )
+    manifest.add_argument(
+        "--external-knowledge-artifact",
+        type=Path,
+        help="absolute path to the canonical official external-knowledge artifact",
+    )
+    manifest.add_argument(
+        "--external-knowledge-artifact-sha256",
+        help="trusted SHA-256 of --external-knowledge-artifact",
     )
     manifest.add_argument("--output", type=Path, required=True)
     manifest.set_defaults(handler=_create_manifest)

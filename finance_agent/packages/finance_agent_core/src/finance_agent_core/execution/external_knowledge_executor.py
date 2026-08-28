@@ -4,9 +4,11 @@ from typing import Protocol
 
 from pydantic import BaseModel, ConfigDict
 
+from finance_agent_core.config.knowledge_coverage import KnowledgeCapability
 from finance_agent_core.contracts.external_knowledge import (
     CompositeKnowledgeQueryPlan,
     KnowledgeProductSelection,
+    KnowledgeRequirement,
 )
 from finance_agent_core.contracts.queryplan import ProductFamily
 from finance_agent_core.execution.external_knowledge_verifier import (
@@ -16,6 +18,7 @@ from finance_agent_core.execution.external_knowledge_verifier import (
     OfficialProductFact,
 )
 from finance_agent_core.retrieval.temporal_relations import (
+    TemporalEntityKind,
     TemporalRelationRecord,
     TemporalRelationSearchRequest,
     TemporalRelationStore,
@@ -31,6 +34,7 @@ class OfficialProductFactProvider(Protocol):
         self,
         product_keys: tuple[tuple[ProductFamily, str], ...],
         selection: KnowledgeProductSelection | None,
+        requested_fields: tuple[str, ...],
     ) -> tuple[OfficialProductFact, ...]: ...
 
 
@@ -59,13 +63,24 @@ class ExternalKnowledgeExecutor:
 
     @staticmethod
     def _dependency_subjects(
-        dependencies: tuple[str, ...],
+        requirement: KnowledgeRequirement,
         requirement_relations: dict[str, tuple[TemporalRelationRecord, ...]],
     ) -> tuple[str, ...]:
         labels: set[str] = set()
-        for dependency in dependencies:
+        for dependency in requirement.depends_on:
             for relation in requirement_relations.get(dependency, ()):
-                labels.add(relation.object.canonical_name)
+                if (
+                    requirement.capability is KnowledgeCapability.PRODUCT_RISK_FACTORS
+                    and relation.product_id is not None
+                ):
+                    product_entities = (
+                        item
+                        for item in (relation.subject, relation.object)
+                        if item.kind is TemporalEntityKind.PRODUCT
+                    )
+                    labels.update(item.canonical_name for item in product_entities)
+                else:
+                    labels.add(relation.object.canonical_name)
         return tuple(sorted(labels))
 
     def execute(self, plan: CompositeKnowledgeQueryPlan) -> ExternalKnowledgeExecution:
@@ -73,7 +88,7 @@ class ExternalKnowledgeExecutor:
         all_relations: dict[str, TemporalRelationRecord] = {}
         for requirement in plan.requirements:
             subjects = (
-                self._dependency_subjects(requirement.depends_on, resolved)
+                self._dependency_subjects(requirement, resolved)
                 if requirement.depends_on
                 else (requirement.subject,)
             )
@@ -111,7 +126,11 @@ class ExternalKnowledgeExecutor:
                 key=lambda item: (item[0].value, item[1]),
             )
         )
-        facts = self.product_fact_provider.fetch(product_keys, plan.product_selection)
+        facts = self.product_fact_provider.fetch(
+            product_keys,
+            plan.product_selection,
+            plan.requested_product_fields,
+        )
         bundle = ExternalKnowledgeEvidenceBundle(
             plan=plan,
             relations=tuple(all_relations[key] for key in sorted(all_relations)),

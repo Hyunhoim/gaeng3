@@ -13,7 +13,11 @@ from finance_agent_core.agent.external_knowledge_router import (
 from finance_agent_core.agent.intent_analysis import IntentAnalysisDraft
 from finance_agent_core.agent.knowledge_planning import CompositeKnowledgePlanCompiler
 from finance_agent_core.agent.official_adapter import official_response_from_backend
-from finance_agent_core.config.knowledge_coverage import KnowledgeCapability
+from finance_agent_core.config.knowledge_coverage import (
+    ApprovedKnowledgeCoverageManifest,
+    KnowledgeCapability,
+    KnowledgeCoverageEntry,
+)
 from finance_agent_core.config.source_registry import (
     OfficialSourceRegistryError,
     load_official_source_registry,
@@ -63,6 +67,23 @@ from finance_agent_core.retrieval.temporal_relations import (
 _SHA_A = "a" * 64
 _SHA_B = "b" * 64
 _SHA_C = "c" * 64
+
+
+def _disabled_coverage() -> ApprovedKnowledgeCoverageManifest:
+    return ApprovedKnowledgeCoverageManifest(
+        schema_version="1.0",
+        manifest_id="test-disabled-external-coverage",
+        dataset_release_id="test-dataset",
+        capabilities=tuple(
+            KnowledgeCoverageEntry(
+                capability=capability,
+                status="not_configured",
+                runtime_execution_enabled=False,
+                allowed_source_kinds=("provided", "external_approved"),
+            )
+            for capability in KnowledgeCapability
+        ),
+    )
 
 
 class _FixedIntentProvider:
@@ -267,9 +288,7 @@ def test_pending_corpus_collection_is_hashed_and_never_marked_approved(
                 document_id="fsc-growth-fund-test",
                 title="국민성장펀드 구조",
                 source_uri=url,
-                capabilities=(
-                    KnowledgeCapability.FUND_STRUCTURE_STRATEGY_TREND,
-                ),
+                capabilities=(KnowledgeCapability.FUND_STRUCTURE_STRATEGY_TREND,),
                 published_at=date(2026, 5, 21),
                 as_of=date(2026, 5, 21),
                 language="ko",
@@ -334,7 +353,7 @@ def test_public_api_classifies_incomplete_external_search_as_cannot_verify() -> 
     agent = RoutedFinanceAgent(
         {},
         intent_analysis_provider=_FixedIntentProvider(draft),
-        external_knowledge_router=ExternalKnowledgeRouter(),
+        external_knowledge_router=ExternalKnowledgeRouter(coverage=_disabled_coverage()),
     )
 
     result = execute_answer_request(
@@ -440,7 +459,7 @@ def test_public_example_types_compile_to_non_executable_composite_plans(
         assert plan.requirements[2].depends_on == ("need_2",)
 
 
-def test_normal_external_question_enters_knowledge_search_not_unsupported() -> None:
+def test_normal_external_question_enters_approved_live_execution() -> None:
     question = "캠브리콘을 편입한 중국 반도체 해외 ETF를 찾아줘."
     decision = ExternalKnowledgeRouter().route(
         question,
@@ -452,10 +471,10 @@ def test_normal_external_question_enters_knowledge_search_not_unsupported() -> N
         ),
     )
 
-    assert decision.disposition is ExternalKnowledgeRouteDisposition.KNOWLEDGE_SEARCH
-    assert decision.reason_code == "approved_evidence_required"
+    assert decision.disposition is ExternalKnowledgeRouteDisposition.EXECUTE
+    assert decision.reason_code == "external_knowledge_authorized"
     assert decision.plan is not None
-    assert decision.plan.execution_authorized is False
+    assert decision.plan.execution_authorized is True
 
 
 def test_temporal_relation_store_requires_cutoff_and_exact_entity_aliases() -> None:
@@ -485,19 +504,25 @@ def test_temporal_relation_store_requires_cutoff_and_exact_entity_aliases() -> N
     )
     store = TemporalRelationStore(bundle)
 
-    assert [item.product_id for item in store.search(
-        TemporalRelationSearchRequest(
-            capability=KnowledgeCapability.PORTFOLIO_HOLDINGS,
-            subject="캠브리콘",
-            product_families=(ProductFamily.OVERSEAS_ETP,),
+    assert [
+        item.product_id
+        for item in store.search(
+            TemporalRelationSearchRequest(
+                capability=KnowledgeCapability.PORTFOLIO_HOLDINGS,
+                subject="캠브리콘",
+                product_families=(ProductFamily.OVERSEAS_ETP,),
+            )
         )
-    )] == ["KSTR"]
-    assert store.search(
-        TemporalRelationSearchRequest(
-            capability=KnowledgeCapability.PORTFOLIO_HOLDINGS,
-            subject="임의의 기업",
+    ] == ["KSTR"]
+    assert (
+        store.search(
+            TemporalRelationSearchRequest(
+                capability=KnowledgeCapability.PORTFOLIO_HOLDINGS,
+                subject="임의의 기업",
+            )
         )
-    ) == ()
+        == ()
+    )
 
     late = relation.model_copy(
         update={
@@ -604,9 +629,7 @@ def test_cache_miss_fetches_only_official_snapshot_into_pending_intake() -> None
 
 
 def test_evidence_verifier_requires_complete_multihop_chain_and_provided_aum() -> None:
-    question = (
-        "에코프로의 자회사를 편입한 국내 ETF 중 순자산이 큰 상품의 위험요인을 알려줘."
-    )
+    question = "에코프로의 자회사를 편입한 국내 ETF 중 순자산이 큰 상품의 위험요인을 알려줘."
     plan = CompositeKnowledgePlanCompiler().compile(
         question,
         "ecopro-composite",
@@ -716,9 +739,7 @@ def test_evidence_verifier_requires_complete_multihop_chain_and_provided_aum() -
     )
     assert verification.passed
 
-    broken = bundle.model_copy(
-        update={"requirement_relations": {"need_1": ("rel-1-subsidiary",)}}
-    )
+    broken = bundle.model_copy(update={"requirement_relations": {"need_1": ("rel-1-subsidiary",)}})
     rejected = ExternalKnowledgeEvidenceVerifier().verify(
         broken,
         approved_product_ids={(ProductFamily.DOMESTIC_ETP, "KR-ETF-001")},
@@ -771,9 +792,10 @@ def test_external_knowledge_executor_joins_sealed_relation_and_verifier() -> Non
     )
 
     class _NoProductFacts:
-        def fetch(self, product_keys, selection):
+        def fetch(self, product_keys, selection, requested_fields):
             assert product_keys == ()
             assert selection is None
+            assert requested_fields == ()
             return ()
 
     execution = ExternalKnowledgeExecutor(
@@ -783,6 +805,4 @@ def test_external_knowledge_executor_joins_sealed_relation_and_verifier() -> Non
     ).execute(plan)
 
     assert execution.verification.passed
-    assert execution.evidence.requirement_relations == {
-        "need_1": ("rel-fund-structure",)
-    }
+    assert execution.evidence.requirement_relations == {"need_1": ("rel-fund-structure",)}

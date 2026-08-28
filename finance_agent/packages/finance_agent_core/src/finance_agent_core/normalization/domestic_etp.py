@@ -33,6 +33,8 @@ SOURCE_COLUMNS = (
     "cu_charge_rt",
     "du_last_aum",
     "du_clpr",
+    "du_chas_errt",
+    "du_diff_rt",
     "du_er_1d",
     "du_er_1m",
     "du_er_3m",
@@ -40,12 +42,20 @@ SOURCE_COLUMNS = (
     "du_er_1y",
     "du_er_ytd",
     "du_val_1d",
+    "du_vlty_1m",
+    "du_vlty_1y",
+    "du_vlty_3m",
+    "du_vlty_6m",
+    "du_vol_1d",
+    "pd_dvid_pay_cnt",
+    "pd_dvid_yield",
     "wu_upt_dt",
     "du_upt_dt",
 )
 VALID_PRODUCT_KEY = re.compile(r"(?:KR|KRG)[A-Z0-9]{9,12}")
 MICRO_PRECISION = Decimal("0.000001")
 MONEY_PRECISION = Decimal("0.01")
+EIGHT_DECIMAL_PRECISION = Decimal("0.00000001")
 
 
 class DomesticEtpNormalizationError(ValueError):
@@ -215,6 +225,40 @@ def normalize_domestic_etp_row(
     )
     if daily_trading_value is not None and daily_trading_value < 0:
         raise DomesticEtpNormalizationError("du_val_1d cannot be negative")
+    daily_volume = _quantized_decimal(
+        values.get("du_vol_1d"), field="du_vol_1d", precision=MONEY_PRECISION
+    )
+    if daily_volume is not None and daily_volume < 0:
+        raise DomesticEtpNormalizationError("du_vol_1d cannot be negative")
+    tracking_error = _quantized_decimal(
+        values.get("du_chas_errt"), field="du_chas_errt", precision=MONEY_PRECISION
+    )
+    discrepancy = _quantized_decimal(
+        values.get("du_diff_rt"), field="du_diff_rt", precision=MONEY_PRECISION
+    )
+    volatility = {
+        name: _quantized_decimal(
+            values.get(source), field=source, precision=EIGHT_DECIMAL_PRECISION
+        )
+        for name, source in {
+            "twenty_day_volatility_pct": "du_vlty_1m",
+            "sixty_day_volatility_pct": "du_vlty_3m",
+            "one_hundred_twenty_day_volatility_pct": "du_vlty_6m",
+            "two_hundred_fifty_two_day_volatility_pct": "du_vlty_1y",
+        }.items()
+    }
+    distribution_yield = _quantized_decimal(
+        values.get("pd_dvid_yield"),
+        field="pd_dvid_yield",
+        precision=EIGHT_DECIMAL_PRECISION,
+    )
+    distribution_payments_per_year = _quantized_decimal(
+        values.get("pd_dvid_pay_cnt"),
+        field="pd_dvid_pay_cnt",
+        precision=Decimal("1"),
+    )
+    if distribution_payments_per_year is not None and distribution_payments_per_year < 0:
+        raise DomesticEtpNormalizationError("pd_dvid_pay_cnt cannot be negative")
 
     leverage_factor = _quantized_decimal(
         values.get("cu_lev_fector"),
@@ -222,9 +266,7 @@ def normalize_domestic_etp_row(
         precision=MICRO_PRECISION,
     )
     returns = {
-        name: _quantized_decimal(
-            values.get(source), field=source, precision=MICRO_PRECISION
-        )
+        name: _quantized_decimal(values.get(source), field=source, precision=MICRO_PRECISION)
         for name, source in {
             "one_day_return_pct": "du_er_1d",
             "one_month_return_pct": "du_er_1m",
@@ -263,6 +305,19 @@ def normalize_domestic_etp_row(
             "daily_trading_value_missing",
             False,
         ),
+        "daily_volume": (daily_volume, "daily_volume_missing", True),
+        "tracking_error_pct": (tracking_error, "tracking_error_pct_missing", True),
+        "discrepancy_pct": (discrepancy, "discrepancy_pct_missing", True),
+        "distribution_yield_pct": (
+            distribution_yield,
+            "distribution_yield_pct_missing",
+            True,
+        ),
+        "distribution_payments_per_year": (
+            distribution_payments_per_year,
+            "distribution_payments_per_year_missing",
+            True,
+        ),
         "static_as_of": (
             static_as_of if static_date_present else None,
             "static_as_of_missing_snapshot_fallback",
@@ -274,6 +329,7 @@ def normalize_domestic_etp_row(
             False,
         ),
         **{name: (value, f"{name}_missing", False) for name, value in returns.items()},
+        **{name: (value, f"{name}_missing", True) for name, value in volatility.items()},
     }
     quality_pairs = {
         name: _quality(value, missing_reason=reason, zero_is_unknown=zero_unknown)
@@ -320,6 +376,17 @@ def normalize_domestic_etp_row(
         one_year_return_pct=returns["one_year_return_pct"],
         ytd_return_pct=returns["ytd_return_pct"],
         daily_trading_value=daily_trading_value,
+        daily_volume=daily_volume,
+        tracking_error_pct=tracking_error,
+        discrepancy_pct=discrepancy,
+        twenty_day_volatility_pct=volatility["twenty_day_volatility_pct"],
+        sixty_day_volatility_pct=volatility["sixty_day_volatility_pct"],
+        one_hundred_twenty_day_volatility_pct=volatility["one_hundred_twenty_day_volatility_pct"],
+        two_hundred_fifty_two_day_volatility_pct=volatility[
+            "two_hundred_fifty_two_day_volatility_pct"
+        ],
+        distribution_yield_pct=distribution_yield,
+        distribution_payments_per_year=distribution_payments_per_year,
         static_as_of=static_as_of,
         dynamic_as_of=dynamic_as_of,
         field_quality={name: quality for name, (quality, _) in quality_pairs.items()},

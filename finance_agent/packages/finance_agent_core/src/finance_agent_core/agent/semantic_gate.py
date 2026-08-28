@@ -67,8 +67,17 @@ _PERSONAL_SUITABILITY = re.compile(
     re.IGNORECASE,
 )
 _UNSUPPORTED_DATA_ACTION = re.compile(
-    r"배당\s*수익률|추적\s*오차(?:율)?|실시간\s*(?:가격|시세)|거래량|"
-    r"매수\s*가능\s*수량|매수가능수량|주문\s*가능\s*수량",
+    r"배당\s*수익률|실시간\s*(?:가격|시세)",
+    re.IGNORECASE,
+)
+_INVALID_BUYABLE_QUANTITY_METRIC = re.compile(
+    r"(?:매수\s*가능\s*수량|매수가능수량|주문\s*가능\s*수량)"
+    r"(?:이|가|은|는|을|를)?\s*"
+    r"(?:\d|이상|이하|초과|미만|많|적|높|낮|순|정렬|상위|하위)",
+    re.IGNORECASE,
+)
+_CREDIT_RATING_TOKEN = re.compile(
+    r"신용\s*등급(?:이|은|가|을|를)?\s*([A-Z]{1,6}(?:[+0-])?)",
     re.IGNORECASE,
 )
 _UNAVAILABLE_SNAPSHOT_FIELD = re.compile(
@@ -91,10 +100,14 @@ _UNAPPROVED_DOCUMENT_KNOWLEDGE = re.compile(
     re.IGNORECASE,
 )
 _EXPLICIT_RETURN = re.compile(
-    r"(?:1\s*일|하루|일간|1D|1\s*주|일주일|주간|1W|1\s*개월|한\s*달|월간|1M|"
-    r"3\s*개월|석\s*달|3M|6\s*개월|반년|6M|1\s*년|연간|1Y|YTD|"
+    r"(?:1\s*일|하루|당일|오늘|일간|1D|1\s*주|일주일|주간|1W|"
+    r"1\s*개월|한\s*달|월간|1M|3\s*개월|석\s*달|3M|6\s*개월|반년|6M|"
+    r"18\s*개월|1\s*년|연간|1Y|2\s*년|3\s*년|5\s*년|YTD|"
     r"연초\s*(?:이후|대비))\s*(?:수익률|수익|성과|return)|"
-    r"(?:매수|세후|세전)\s*수익률|(?:표면\s*(?:이율|금리)|쿠폰\s*금리)",
+    r"(?:매수|세후|세전)\s*수익률|민평\s*(?:(?:기준\s*)?수익률|금리)|"
+    r"민평에서\s*(?:계산|산출)된?\s*(?:수익률|금리)|"
+    r"(?:민간평가\s*금리|평가기관\s*수익률)|(?:연환산\s*)?분배\s*수익률|"
+    r"(?:표면\s*(?:이율|금리)|쿠폰\s*금리)",
     re.IGNORECASE,
 )
 _BARE_RETURN = re.compile(r"수익률|성과|\breturn\b", re.IGNORECASE)
@@ -110,14 +123,15 @@ _EXPLICIT_LIQUIDITY_METRIC = re.compile(
 )
 _SIZE = re.compile(r"규모", re.IGNORECASE)
 _EXPLICIT_SIZE_METRIC = re.compile(
-    r"(?:AUM|순자산|운용\s*자산|발행\s*(?:잔액|금액))"
-    r"\s*(?:규모|기준|으로|을\s*기준)|운용\s*규모",
+    r"(?:AUM|순자산(?:총액)?|운용\s*자산|발행\s*(?:잔액|금액))"
+    r"\s*(?:규모|기준|으로|을\s*기준)|운용\s*규모|총\s*발행\s*규모",
     re.IGNORECASE,
 )
 _RISK = re.compile(r"리스크|위험(?:\s*등급|도|성)?", re.IGNORECASE)
 _EXACT_RISK = re.compile(
     r"(?:매우높은|높은|다소높은|보통|낮은|매우낮은)위험\s*\([1-6]등급\)|"
-    r"(?:매우높은|높은|다소높은|보통|낮은|매우낮은)위험\s*[1-6]등급",
+    r"(?:매우높은|높은|다소높은|보통|낮은|매우낮은)위험\s*[1-6]등급|"
+    r"(?:매우\s*높은|높은|다소\s*높은|보통|낮은|매우\s*낮은)\s*위험",
     re.IGNORECASE,
 )
 _RISK_GROUP = re.compile(r"위험\s*등급\s*(?:별|분포|비중)", re.IGNORECASE)
@@ -140,8 +154,8 @@ _UNMAPPED_METRIC = re.compile(
 )
 _DIRECTION_TERM = re.compile(
     r"(?:가장\s*|제일\s*)?"
-    r"(?:높은|낮은|큰|작은|많은|적은|긴|짧은|빠른|오래된|"
-    r"상위|하위|오름차순|내림차순|최신)|"
+    r"(?:높은|낮은|큰|작은|많은|적은|긴|짧은|빠른|오래된|센|"
+    r"상위|하위|오름차순|내림차순|최신|좋은|빨리|먼저|가까운)|"
     r"highest\s*[- ]to\s*[- ]lowest|lowest\s*[- ]to\s*[- ]highest|"
     r"ascending|descending",
     re.IGNORECASE,
@@ -152,20 +166,37 @@ _POTENTIAL_SCHEMA_GAP = re.compile(
     re.IGNORECASE,
 )
 _DIRECTION_METRIC_PATTERN = (
-    r"(?:AUM|순자산|운용\s*(?:자산|규모)|발행\s*(?:잔액|금액)|매수\s*가능\s*수량|"
-    r"거래대금|종가|마감\s*가격|총\s*보수(?:율)?|보수율|"
-    r"(?:1\s*일|하루|1D|1\s*주|1W|1\s*개월|1M|3\s*개월|3M|6\s*개월|6M|"
-    r"1\s*년|1Y|YTD|연초\s*이후)\s*(?:수익률|수익|성과|return)|"
-    r"매수\s*수익률|세후\s*수익률|표면\s*(?:이율|금리)|쿠폰\s*금리|"
-    r"잔존\s*(?:일수|일|기일|기간)|만기(?:까지\s*남은\s*(?:일수|날|기간))?|"
-    r"듀레이션|duration|동적\s*(?:지표\s*)?기준일|정적\s*(?:지표\s*)?기준일|"
+    r"(?:AUM|순자산(?:총액)?|운용\s*(?:자산|규모)|"
+    r"(?:총\s*)?발행\s*(?:잔액|금액|규모|물량)|남은\s*발행\s*물량|"
+    r"매수\s*가능\s*수량|"
+    r"거래대금|외화\s*거래대금|거래량|종가|마감\s*가격|"
+    r"총\s*보수(?:율)?|보수율|연간\s*보수(?:율)?|추적\s*오차(?:율)?|괴리율|분배\s*수익률|"
+    r"연간\s*분배\s*(?:지급\s*)?횟수|분배\s*(?:지급\s*)?횟수|"
+    r"판매(?:\s*회사)?\s*보수|신탁\s*업자\s*보수|수탁보수|"
+    r"(?:국내|해외)(?:주식|채권)\s*(?:구성비율|비중)|최근\s*분배율|보전율|"
+    r"민평\s*(?:(?:기준\s*)?수익률|금리)|민평에서\s*(?:계산|산출)된?\s*(?:수익률|금리)|"
+    r"민간평가\s*금리|평가기관\s*수익률|"
+    r"평가일단가|평가\s*단가|클린\s*프라이스|이자\s*제외\s*평가(?:단가|가격)|"
+    r"이자부단가|경과이자(?:를)?\s*포함(?:한)?\s*(?:단가|가격)|컨벡시티|가격\s*굴곡|"
+    r"(?:20|60|120|252)\s*(?:거래일|일)(?:\s*연환산)?\s*(?:변동성|흔들림)|"
+    r"(?:1\s*개월|3\s*개월|6\s*개월|1\s*년)\s*(?:변동성|흔들림)|"
+    r"(?:1\s*일|하루|당일|오늘|1D|1\s*주|한\s*주|1W|1\s*개월|한\s*달|1M|"
+    r"3\s*개월|석\s*달|3M|6\s*개월|반년|6M|18\s*개월|"
+    r"1\s*년|일\s*년|1Y|2\s*년|3\s*년|5\s*년|YTD|"
+    r"연초\s*이후)\s*(?:수익률|수익|성과|return)|"
+    r"매수\s*수익률|세후\s*수익률|표면\s*(?:이자율|이율|금리)|"
+    r"쿠폰(?:\s*금리)?|액면\s*쿠폰|액면에?\s*붙은\s*이자율|"
+    r"잔존\s*(?:일수|일|기일|기간)|잔여\s*일|"
+    r"(?:상환|만기)(?:까지)?\s*남은\s*(?:일수|날짜|날|기간)|"
+    r"(?:상환|만기)(?:일|일자)?|"
+    r"듀레이션|duration|금리\s*민감도|동적\s*(?:지표\s*)?기준일|정적\s*(?:지표\s*)?기준일|"
     r"상품명|짧은\s*이름|이름|티커|종목\s*코드|"
     r"규모|유동성|리스크|위험(?:\s*등급|도|성)?|"
     r"가격|비용|변동성|테마|섹터|산업|ESG|친환경|금리|이율|기간|수량)"
 )
 _DIRECTION_METRIC = re.compile(_DIRECTION_METRIC_PATTERN, re.IGNORECASE)
 _DIRECTION_METRIC_PREFIX = re.compile(
-    _DIRECTION_METRIC_PATTERN + r"(?:이|가|은|는|을|를|의|\s|기준|순서)*$",
+    _DIRECTION_METRIC_PATTERN + r"(?:이|가|은|는|을|를|의|\s|기준|순|순서|으로)*$",
     re.IGNORECASE,
 )
 _EXCLUSION = re.compile(
@@ -214,12 +245,29 @@ _EXPLICIT_NAME_FILTER = re.compile(
 )
 
 _NUMERIC_SORT_METRIC_PATTERN = (
-    r"(?:AUM|순자산|운용\s*자산|발행\s*(?:잔액|금액)|매수\s*가능\s*수량|"
-    r"거래대금|종가|마감\s*가격|총\s*보수(?:율)?|보수율|"
-    r"(?:1\s*일|하루|1D|1\s*주|1W|1\s*개월|1M|3\s*개월|3M|6\s*개월|6M|"
-    r"1\s*년|1Y|YTD|연초\s*이후)\s*(?:수익률|수익|성과|return)|"
-    r"매수\s*수익률|세후\s*수익률|표면\s*이율|쿠폰\s*금리|"
-    r"잔존\s*(?:일수|일|기일|기간)|만기|듀레이션|duration)"
+    r"(?:AUM|순자산(?:총액)?|운용\s*자산|(?:총\s*)?발행\s*(?:잔액|금액|규모|물량)|"
+    r"남은\s*발행\s*물량|"
+    r"매수\s*가능\s*수량|"
+    r"거래대금|외화\s*거래대금|거래량|종가|마감\s*가격|"
+    r"총\s*보수(?:율)?|보수율|연간\s*보수(?:율)?|추적\s*오차(?:율)?|괴리율|분배\s*수익률|"
+    r"연간\s*분배\s*(?:지급\s*)?횟수|분배\s*(?:지급\s*)?횟수|"
+    r"판매(?:\s*회사)?\s*보수|신탁\s*업자\s*보수|수탁보수|"
+    r"(?:국내|해외)(?:주식|채권)\s*(?:구성비율|비중)|최근\s*분배율|보전율|"
+    r"민평\s*(?:(?:기준\s*)?수익률|금리)|민평에서\s*(?:계산|산출)된?\s*(?:수익률|금리)|"
+    r"민간평가\s*금리|평가기관\s*수익률|"
+    r"평가일단가|평가\s*단가|클린\s*프라이스|이자\s*제외\s*평가(?:단가|가격)|"
+    r"이자부단가|경과이자(?:를)?\s*포함(?:한)?\s*(?:단가|가격)|컨벡시티|가격\s*굴곡|"
+    r"(?:20|60|120|252)\s*(?:거래일|일)(?:\s*연환산)?\s*(?:변동성|흔들림)|"
+    r"(?:1\s*개월|3\s*개월|6\s*개월|1\s*년)\s*(?:변동성|흔들림)|"
+    r"(?:1\s*일|하루|당일|오늘|1D|1\s*주|한\s*주|1W|1\s*개월|한\s*달|1M|"
+    r"3\s*개월|석\s*달|3M|6\s*개월|반년|6M|18\s*개월|"
+    r"1\s*년|일\s*년|1Y|2\s*년|3\s*년|5\s*년|YTD|"
+    r"연초\s*이후)\s*(?:수익률|수익|성과|return)|"
+    r"매수\s*수익률|세후\s*수익률|표면\s*(?:이자율|이율)|"
+    r"쿠폰(?:\s*금리)?|액면\s*쿠폰|액면에?\s*붙은\s*이자율|"
+    r"잔존\s*(?:일수|일|기일|기간)|잔여\s*일|"
+    r"(?:상환|만기)(?:까지)?\s*남은\s*(?:일수|날짜|날|기간)|"
+    r"만기|상환|듀레이션|duration|금리\s*민감도)"
 )
 _DIRECTIONLESS_SORT = re.compile(
     rf"{_NUMERIC_SORT_METRIC_PATTERN}.{{0,24}}?(?:기준(?:으로)?\s*)?(?:정렬|순서(?:대로|로)?)",
@@ -240,7 +288,7 @@ _VAGUE_PERIOD_COMPARISON = re.compile(
     re.IGNORECASE,
 )
 _FUND_AUM = re.compile(r"공모\s*펀드|공모펀드", re.IGNORECASE)
-_AUM_TERM = re.compile(r"AUM|순자산|운용\s*자산", re.IGNORECASE)
+_AUM_TERM = re.compile(r"AUM|순자산(?:총액)?|운용\s*자산", re.IGNORECASE)
 _EXPLICIT_CURRENCY_SCOPE = re.compile(
     r"(?<![A-Z])(?:USD|KRW|EUR|JPY)(?![A-Z])|달러|원화|유로|엔화|"
     r"(?:거래\s*)?통화\s*별|(?:거래\s*)?통화(?:를|를\s*기준으로)?\s*그룹",
@@ -264,14 +312,21 @@ def _unique(values: list[str]) -> tuple[str, ...]:
 
 
 def _metric_has_explicit_mapping(question: str, match: re.Match[str]) -> bool:
+    field_surface = question[max(0, match.start() - 40) : match.end()]
+    if _known_field_surface(field_surface):
+        return True
     prefix = question[max(0, match.start() - 24) : match.start()]
     metric = match.group("metric").casefold()
     known_prefixes = {
-        "가격": r"마감\s*$",
-        "금리": r"(?:쿠폰|표면)\s*$",
+        "가격": r"(?:마감|평가|이자\s*제외\s*평가|경과이자\s*포함)\s*$",
+        "금리": r"(?:쿠폰|표면|민평|민간평가)\s*$",
         "이율": r"표면\s*$",
         "기간": r"(?:잔존|만기까지\s*남은)\s*$",
         "수량": r"매수\s*가능\s*$",
+        "변동성": (
+            r"(?<!\d)(?:20|60|120|252)\s*(?:거래일|일)(?:\s*연환산)?\s*$|"
+            r"(?:1\s*개월|3\s*개월|6\s*개월|1\s*년)(?:\s*연환산)?\s*$"
+        ),
     }
     pattern = known_prefixes.get(metric)
     return pattern is not None and re.search(pattern, prefix, flags=re.IGNORECASE) is not None
@@ -284,6 +339,17 @@ def _direction_has_metric(question: str, match: re.Match[str]) -> bool:
     ):
         return True
     prefix = question[max(0, match.start() - 48) : match.start()]
+    if (
+        re.search(
+            _DIRECTION_METRIC_PATTERN + r"(?:이|가|은|는|을|를)?\s*"
+            r"(?:높(?:은)?|낮(?:은)?|크(?:거나)?|큰|작(?:은)?|많(?:은)?|"
+            r"적(?:은)?|길(?:거나)?|긴|짧(?:은)?|센)\S*\s*$",
+            prefix,
+            flags=re.IGNORECASE,
+        )
+        is not None
+    ):
+        return True
     if _EXPLICIT_SIZE_METRIC.search(prefix) is not None:
         return True
     if _DIRECTION_METRIC_PREFIX.search(prefix) is not None:
@@ -333,17 +399,20 @@ def _compatible_trailing_alias_direction(
     match: re.Match[str],
     alias_matches: tuple[SemanticAliasMatch, ...],
 ) -> bool:
-    """Accept a redundant trailing sort cue only for one resolved alias field."""
+    """Accept a redundant trailing sort cue for one nearest resolved alias."""
 
-    fields = {item.field_id for item in alias_matches}
-    if len(fields) != 1 or re.match(r"\s*순", question[match.end() :]) is None:
+    if re.match(r"\s*순", question[match.end() :]) is None:
         return False
     nearby = [item for item in alias_matches if 0 <= match.start() - item.end <= 48]
     if not nearby:
         return False
+    nearest_gap = min(match.start() - item.end for item in nearby)
+    nearby = [item for item in nearby if match.start() - item.end == nearest_gap]
+    if len({item.field_id for item in nearby}) != 1:
+        return False
     surface = match.group(0)
     ascending = re.search(r"낮|작|적|짧|빠른|하위|오름차순", surface) is not None
-    descending = re.search(r"높|크|많|긴|상위|내림차순", surface) is not None
+    descending = re.search(r"높|크|많|긴|센|상위|내림차순", surface) is not None
     if ascending == descending:
         return False
     expected = "asc" if ascending else "desc"
@@ -369,16 +438,33 @@ def _schema_link_gap_matches(
         "펀드",
         "국내",
         "해외",
+        "가장",
+        "제일",
+        "높은",
+        "낮은",
+        "큰",
+        "작은",
+        "많은",
+        "적은",
+        "상위",
+        "하위",
+        "기준",
+        "기준으로",
+        "좋은",
     }
     exact_risk_ranges = [match.span() for match in _EXACT_RISK.finditer(question)]
     for match in _POTENTIAL_SCHEMA_GAP.finditer(question):
         span = match.group("span").strip()
+        contextual_raw_qualifier = span in {"원천값", "수치"} and _known_field_surface(
+            question[max(0, match.start() - 40) : match.start()]
+        )
         if (
             _overlaps_any(match.start(), match.end(), resolved_ranges)
             or any(
                 match.start() < right and match.end() > left for left, right in exact_risk_ranges
             )
             or span.casefold() in blocked_tokens
+            or contextual_raw_qualifier
             or re.fullmatch(
                 r"(?:상품|종목|것|개|건)(?:을|를|은|는|이|가)?",
                 span,
@@ -446,6 +532,16 @@ class SemanticCoverageGate:
             unsupported.append(match.group(0))
         if match := _UNSUPPORTED_DATA_ACTION.search(normalized):
             unsupported.append(match.group(0))
+        if match := _INVALID_BUYABLE_QUANTITY_METRIC.search(normalized):
+            unsupported.append(match.group(0))
+        if match := _CREDIT_RATING_TOKEN.search(normalized):
+            from finance_agent_core.config import load_field_registry
+
+            supported_ratings = set(
+                load_field_registry().require_field("credit_rating", ["bond"]).enum_values
+            )
+            if match.group(1).upper() not in supported_ratings:
+                unsupported.append(match.group(0))
         if match := _UNAVAILABLE_SNAPSHOT_FIELD.search(normalized):
             unsupported.append(match.group(0))
         if match := _UNAPPROVED_RELATION_FILTER.search(normalized):
@@ -453,11 +549,11 @@ class SemanticCoverageGate:
         if match := _UNAPPROVED_DOCUMENT_KNOWLEDGE.search(normalized):
             unsupported.append(match.group(0))
 
-        # Routed COMPARE/EXPLAIN requests have dedicated fail-closed parsers
+        # Routed DETAIL/COMPARE/EXPLAIN requests have dedicated fail-closed parsers
         # with more specific control messages.  The legacy agent calls this
         # gate without an interaction intent, so it still cannot bypass the
         # checks below with a bare comparison metric.
-        if interaction_intent in {"compare", "explain"}:
+        if interaction_intent in {"detail", "compare", "explain"}:
             return SemanticCoverageDecision(unsupported_spans=_unique(unsupported))
 
         if match := _CROSS_FAMILY_MIXED_RANKING.search(normalized):
@@ -468,13 +564,6 @@ class SemanticCoverageGate:
             ambiguities.append(match.group(0))
         if match := _UNSUPPORTED_INVERSE_EXCLUSION.search(normalized):
             ambiguities.append(match.group(0))
-        if (
-            _FUND_AUM.search(normalized) is not None
-            and _AUM_TERM.search(normalized) is not None
-            and _EXPLICIT_CURRENCY_SCOPE.search(normalized) is None
-        ):
-            ambiguities.append("trading_currency(AUM 비교 통화)")
-
         for match in _DIRECTIONLESS_SORT.finditer(normalized):
             if _DIRECTION_TERM.search(match.group(0)) is None:
                 ambiguities.append(match.group(0))

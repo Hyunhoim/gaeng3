@@ -22,7 +22,6 @@ from finance_agent_core.agent.product_comparison import (
     resolve_exact_product_ids,
 )
 from finance_agent_core.agent.product_identity import (
-    approved_fund_group_alias_term,
     is_named_product_mention,
     is_quoted_product_mention,
 )
@@ -54,6 +53,7 @@ from finance_agent_core.storage import (
     ProductIdentitySnapshotCache,
     RecordSnapshotCache,
 )
+from finance_agent_core.storage.identity_cache import ProductIdentityRecord
 
 
 class PlanCompilationBlockedError(ValueError):
@@ -62,6 +62,31 @@ class PlanCompilationBlockedError(ValueError):
 
 def _normalize_identity_ambiguity_surface(value: object) -> str:
     return " ".join(str(value).strip().strip("\"'“”‘’").casefold().split())
+
+
+def _provided_fund_group_alias(
+    value: str,
+    records: tuple[ProductIdentityRecord, ...],
+) -> str | None:
+    """Resolve a named fund group only when the approved DB corroborates it."""
+
+    stripped = re.sub(r"펀드$", "", value.strip(), flags=re.IGNORECASE).strip()
+    normalized = "".join(character for character in stripped.casefold() if character.isalnum())
+    if len(normalized) < 4:
+        return None
+    matches = [
+        record
+        for record in records
+        if not record.is_quarantined
+        and any(
+            normalized
+            in "".join(character for character in surface.casefold() if character.isalnum())
+            for surface in (record.product_name, record.short_name or "")
+        )
+    ]
+    if not 1 <= len(matches) <= 20:
+        return None
+    return stripped
 
 
 @dataclass(frozen=True)
@@ -163,10 +188,20 @@ class ServerQueryPlanCompiler:
 
     def _compile_search_lowering(self, decision: RouteDecision) -> QueryPlan:
         family = decision.draft.product_families[0]
-        if decision.draft.product_mentions and decision.draft.intent not in {
-            InteractionIntent.DETAIL,
-            InteractionIntent.EXPLAIN,
-        }:
+        ranked_identity_set = (
+            decision.draft.intent is InteractionIntent.SEARCH
+            and 2 <= len(decision.draft.product_mentions) <= 20
+            and ranking_intent_present(decision.draft.question)
+        )
+        if (
+            decision.draft.product_mentions
+            and not ranked_identity_set
+            and decision.draft.intent
+            not in {
+                InteractionIntent.DETAIL,
+                InteractionIntent.EXPLAIN,
+            }
+        ):
             raise PlanCompilationBlockedError(
                 "search contains product identities that were not bound to an exact lookup"
             )
@@ -180,6 +215,31 @@ class ServerQueryPlanCompiler:
         )
         if decision.draft.requested_limit is not None:
             payload["limit"] = decision.draft.requested_limit
+        if ranked_identity_set:
+            try:
+                database_path = self.database_paths[family]
+                product_ids = resolve_exact_product_ids(
+                    family,
+                    decision.draft.product_mentions,
+                    self.identity_cache.get(database_path).records,
+                )
+            except (KeyError, ProductComparisonParseError, ValueError) as error:
+                raise PlanCompilationBlockedError(str(error)) from error
+            payload["constraints"] = [
+                constraint
+                for constraint in payload["constraints"]
+                if constraint["field"]
+                not in {"product_id", "product_name", "short_name", "ticker", "isin"}
+            ]
+            payload["constraints"].append(
+                {
+                    "field": "product_id",
+                    "operator": "in",
+                    "value": product_ids,
+                    "unit": "code",
+                    "strength": "locked",
+                }
+            )
         if decision.draft.intent in {
             InteractionIntent.DETAIL,
             InteractionIntent.EXPLAIN,
@@ -195,10 +255,11 @@ class ServerQueryPlanCompiler:
             ) or is_quoted_product_mention(decision.draft.question, identity_surface)
             try:
                 database_path = self.database_paths[family]
+                identity_records = self.identity_cache.get(database_path).records
                 product_id = resolve_exact_product_ids(
                     family,
                     decision.draft.product_mentions,
-                    self.identity_cache.get(database_path).records,
+                    identity_records,
                 )[0]
             except ProductIdentityNotFoundError as error:
                 mention = identity_surface
@@ -227,7 +288,11 @@ class ServerQueryPlanCompiler:
                 payload["limit"] = 1
             else:
                 assert identity_name_fallback is not None
-                fund_group_alias = approved_fund_group_alias_term(identity_surface)
+                fund_group_alias = (
+                    _provided_fund_group_alias(identity_surface, identity_records)
+                    if family is ProductFamily.FUND
+                    else None
+                )
                 payload["constraints"].append(
                     {
                         "field": "product_name",
@@ -237,9 +302,8 @@ class ServerQueryPlanCompiler:
                         "strength": "locked",
                     }
                 )
-                # Only a server-approved fund group alias may denote several
-                # share classes. Other names remain exact lookups so a longer,
-                # merely similar name cannot turn absence into a false positive.
+                # Only a group surface corroborated by the approved DB may
+                # denote several share classes. Other names remain exact.
                 payload["limit"] = 20 if fund_group_alias is not None else 1
             if identity_surface_is_name:
                 normalized_identity = _normalize_identity_ambiguity_surface(identity_surface)
@@ -247,9 +311,7 @@ class ServerQueryPlanCompiler:
                     ambiguity
                     for ambiguity in payload["ambiguities"]
                     if _normalize_identity_ambiguity_surface(
-                        ambiguity.get("span", "")
-                        if isinstance(ambiguity, dict)
-                        else ambiguity
+                        ambiguity.get("span", "") if isinstance(ambiguity, dict) else ambiguity
                     )
                     != normalized_identity
                 ]

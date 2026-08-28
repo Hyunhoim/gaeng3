@@ -120,9 +120,7 @@ def _select_cases(
     suite_cases = {item["id"]: item for item in suite["cases"]}  # type: ignore[index]
     selective: dict[str, object] = dense_report["selective_policy"]  # type: ignore[assignment]
     diagnostics: list[dict[str, object]] = selective["test_diagnostics"]  # type: ignore[assignment]
-    selected = [
-        item for item in diagnostics if item["decision"] == "hclx_review"
-    ][:maximum_calls]
+    selected = [item for item in diagnostics if item["decision"] == "hclx_review"][:maximum_calls]
     cases: list[_SelectedCase] = []
     for diagnostic in selected:
         source = suite_cases[diagnostic["id"]]
@@ -189,10 +187,7 @@ def evaluate_hclx_candidate_selection(
                 admitted
                 and case["expected"] == "resolve"
                 and draft.selected_field_id == case["gold_field_id"]
-            ) or (
-                draft.decision is ResolutionDecision.CLARIFY
-                and case["expected"] == "clarify"
-            )
+            ) or (draft.decision is ResolutionDecision.CLARIFY and case["expected"] == "clarify")
         except Exception as error:  # noqa: BLE001 - sanitized provider evaluation result
             failure_reason = hyperclova_failure_reason(error)
             decision = "provider_failure"
@@ -238,9 +233,7 @@ def evaluate_hclx_candidate_selection(
                 6,
             ),
             "hclx_accuracy": round(sum(item["hclx_correct"] for item in results) / denominator, 6),
-            "provider_failure_count": sum(
-                item["failure_reason"] is not None for item in results
-            ),
+            "provider_failure_count": sum(item["failure_reason"] is not None for item in results),
         },
         "cases": results,
         "activation_decision": "shadow_only_until_independent_blind_and_zero_false_execution",

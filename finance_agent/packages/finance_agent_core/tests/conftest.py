@@ -85,9 +85,7 @@ def make_overseas_etp_record(
             if aum_decimal == 0
             else None
         ),
-        one_day_return_pct=(
-            None if one_day_return is None else Decimal(one_day_return)
-        ),
+        one_day_return_pct=(None if one_day_return is None else Decimal(one_day_return)),
         one_day_return_quality=(
             QualityStatus.UNKNOWN if one_day_return is None else QualityStatus.VALID
         ),

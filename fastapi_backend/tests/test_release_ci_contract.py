@@ -879,6 +879,10 @@ def test_release_workflow_has_a_commit_pinned_keyless_trust_boundary() -> None:
     assert release["env"]["FINAL_HCX_SEMANTIC_RESOLVER_ENABLED"] == "false"
     assert release["env"]["FINAL_ADAPTIVE_SEMANTIC_ENABLED"] == "true"
     assert release["env"]["FINAL_FUND_EXECUTION_POLICY"] == "public_fund_v1_approved"
+    assert "external_knowledge_release_cli" in text
+    assert "--external-knowledge-artifact" in text
+    assert "external-knowledge-artifact.json" in text
+    assert "external-temporal-relations.json" in text
     assert "check-submission-boundary.py" in text
     assert "--profile development" in text
 

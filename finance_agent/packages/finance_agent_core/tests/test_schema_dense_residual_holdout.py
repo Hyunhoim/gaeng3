@@ -28,9 +28,7 @@ def test_residual_holdout_is_explicitly_not_an_independent_blind() -> None:
 
 
 def test_residual_holdout_report_compares_v1_v2_v3_and_stays_shadow_only() -> None:
-    report = finalize_report(
-        evaluate_residual_holdout(FakeHashEmbeddingProvider(dimension=64))
-    )
+    report = finalize_report(evaluate_residual_holdout(FakeHashEmbeddingProvider(dimension=64)))
 
     assert set(report["corpora"]) == {
         "schema-field-text-v1",

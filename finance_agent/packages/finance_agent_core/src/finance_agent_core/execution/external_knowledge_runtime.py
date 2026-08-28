@@ -66,14 +66,17 @@ class ExternalKnowledgeRuntime:
             ):
                 raise ValueError("external runtime source registry differs from release")
             relation_manifest = acquisition.relation_store.bundle.manifest
-            if release_artifact.temporal_relation_sha256 != (
-                relation_manifest.relation_set_sha256
-            ):
+            if release_artifact.temporal_relation_sha256 != (relation_manifest.relation_set_sha256):
                 raise ValueError("external runtime relation store differs from release")
             if release_artifact.corpus_manifest_sha256 != (
                 relation_manifest.corpus_manifest_sha256
             ):
                 raise ValueError("external runtime corpus differs from release")
+            if (
+                release_artifact.retrieval_mode == "verified_live_official"
+                and acquisition.relation_store.bundle.relations
+            ):
+                raise ValueError("live-only external runtime requires an empty relation cache")
         self.release_artifact = release_artifact
         self.release_artifact_file_sha256 = release_artifact_file_sha256
         self.live_relation_extractor = live_relation_extractor or VerifiedLiveRelationExtractor()
@@ -110,10 +113,10 @@ class ExternalKnowledgeRuntime:
         remaining_fetches = search_plan.budget.max_fetches
         remaining_bytes = search_plan.budget.max_total_bytes
         acquired: list[OfficialEvidenceAcquisitionResult] = []
-        for requirement in search_plan.composite_plan.requirements:
-            remaining_ms = search_plan.budget.deadline_ms - int(
-                (perf_counter() - started) * 1000
-            )
+        requirements = search_plan.composite_plan.requirements
+        for requirement_index, requirement in enumerate(requirements):
+            requirements_left = len(requirements) - requirement_index
+            remaining_ms = search_plan.budget.deadline_ms - int((perf_counter() - started) * 1000)
             if (
                 min(remaining_queries, remaining_fetches, remaining_bytes) <= 0
                 or remaining_ms < 100
@@ -128,14 +131,25 @@ class ExternalKnowledgeRuntime:
                     candidate_universe=universe,
                     acquisitions=tuple(acquired),
                 )
+            # Reserve fetch capacity for every remaining hop.  Passing the
+            # entire remaining budget to an early requirement allowed its
+            # linked documents to starve later holdings/risk joins.
+            requirement_fetch_budget = max(
+                1,
+                remaining_fetches // requirements_left,
+            )
+            requirement_query_budget = min(
+                remaining_queries,
+                len(requirement.source_registry_ids),
+            )
             item = self.acquisition.acquire(
                 requirement,
                 top_k=min(
                     search_plan.budget.max_candidates_per_requirement,
-                    remaining_fetches,
+                    requirement_fetch_budget,
                 ),
-                max_search_queries=remaining_queries,
-                max_fetches=remaining_fetches,
+                max_search_queries=requirement_query_budget,
+                max_fetches=requirement_fetch_budget,
                 max_total_bytes=remaining_bytes,
                 deadline_ms=remaining_ms,
             )
@@ -174,10 +188,7 @@ class ExternalKnowledgeRuntime:
                 candidate_universe=universe,
                 acquisitions=acquisitions,
             )
-        if any(
-            item.status is OfficialEvidenceAcquisitionStatus.NOT_FOUND
-            for item in acquisitions
-        ):
+        if any(item.status is OfficialEvidenceAcquisitionStatus.NOT_FOUND for item in acquisitions):
             return ExternalKnowledgeRuntimeResult(
                 outcome=ExternalKnowledgeOutcome(
                     status=ExternalKnowledgeOutcomeStatus.NOT_FOUND,
@@ -202,9 +213,7 @@ class ExternalKnowledgeRuntime:
             )
 
         all_relations = {
-            relation.relation_id: relation
-            for item in acquisitions
-            for relation in item.relations
+            relation.relation_id: relation for item in acquisitions for relation in item.relations
         }
         for requirement, acquisition in zip(
             search_plan.composite_plan.requirements,
@@ -268,8 +277,7 @@ class ExternalKnowledgeRuntime:
             )
 
         approved_ids = {
-            (candidate.product_family, candidate.product_id)
-            for candidate in universe.candidates
+            (candidate.product_family, candidate.product_id) for candidate in universe.candidates
         }
         executor = ExternalKnowledgeExecutor(
             relation_store=relation_store,

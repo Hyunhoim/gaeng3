@@ -1,36 +1,36 @@
 {
   "schema_version": "1.0",
-  "manifest_id": "official-20260824-knowledge-coverage-v1",
+  "manifest_id": "official-20260824-knowledge-coverage-live-v2",
   "dataset_release_id": "miraeasset-ai-festival-2026-20260824-v2",
   "capabilities": [
     {
       "capability": "fund_structure_strategy_trend",
-      "status": "not_configured",
-      "runtime_execution_enabled": false,
+      "status": "approved_live_official",
+      "runtime_execution_enabled": true,
       "allowed_source_kinds": ["provided", "external_approved"]
     },
     {
       "capability": "portfolio_holdings",
-      "status": "not_configured",
-      "runtime_execution_enabled": false,
+      "status": "approved_live_official",
+      "runtime_execution_enabled": true,
       "allowed_source_kinds": ["provided", "external_approved"]
     },
     {
       "capability": "corporate_subsidiary",
-      "status": "not_configured",
-      "runtime_execution_enabled": false,
+      "status": "approved_live_official",
+      "runtime_execution_enabled": true,
       "allowed_source_kinds": ["provided", "external_approved"]
     },
     {
       "capability": "sector_theme_history",
-      "status": "not_configured",
-      "runtime_execution_enabled": false,
+      "status": "approved_live_official",
+      "runtime_execution_enabled": true,
       "allowed_source_kinds": ["provided", "external_approved"]
     },
     {
       "capability": "product_risk_factors",
-      "status": "not_configured",
-      "runtime_execution_enabled": false,
+      "status": "approved_live_official",
+      "runtime_execution_enabled": true,
       "allowed_source_kinds": ["provided", "external_approved"]
     }
   ]

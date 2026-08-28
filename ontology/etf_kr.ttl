@@ -52,7 +52,16 @@ etfkr:Family
     ga:hasCanonicalField etfkr:field_six_month_return_pct ;
     ga:hasCanonicalField etfkr:field_one_year_return_pct ;
     ga:hasCanonicalField etfkr:field_ytd_return_pct ;
-    ga:hasCanonicalField etfkr:field_daily_trading_value .
+    ga:hasCanonicalField etfkr:field_daily_trading_value ;
+    ga:hasCanonicalField etfkr:field_daily_volume ;
+    ga:hasCanonicalField etfkr:field_tracking_error_pct ;
+    ga:hasCanonicalField etfkr:field_discrepancy_pct ;
+    ga:hasCanonicalField etfkr:field_twenty_day_volatility_pct ;
+    ga:hasCanonicalField etfkr:field_sixty_day_volatility_pct ;
+    ga:hasCanonicalField etfkr:field_one_hundred_twenty_day_volatility_pct ;
+    ga:hasCanonicalField etfkr:field_two_hundred_fifty_two_day_volatility_pct ;
+    ga:hasCanonicalField etfkr:field_distribution_yield_pct ;
+    ga:hasCanonicalField etfkr:field_distribution_payments_per_year .
 
 etfkr:Dataset
     a ga:Dataset ;
@@ -466,6 +475,8 @@ etfkr:field_total_expense_ratio_pct
     rdfs:label "총보수율"@ko ;
     skos:altLabel "총보수"@ko ;
     skos:altLabel "보수율"@ko ;
+    skos:altLabel "연간보수"@ko ;
+    skos:altLabel "연간보수율"@ko ;
     skos:altLabel "expense ratio"@ko ;
     skos:altLabel "fee"@ko ;
     ga:valueType "number" ;
@@ -648,7 +659,7 @@ etfkr:field_one_day_return_pct
     ga:sourceDataset "domestic_etp" ;
     ga:sourceColumn "du_er_1d" ;
     ga:sourceTransform "identity" ;
-    ga:notes "원천 1,585행에 값이 있고 93행의 0도 당일 변동 없음으로 유효하다. 결측은 UNKNOWN이다."@ko .
+    ga:notes "원천 1,585행에 값이 있다. 원천 0과 결측은 감사용으로 보존하되 2026-08-26 공식 규칙에 따라 수치 필터·정렬·집계에서는 기준 없음으로 제외한다."@ko .
 
 etfkr:field_short_name
     a ga:CanonicalField ;
@@ -938,7 +949,7 @@ etfkr:field_one_month_return_pct
     ga:sourceDataset "domestic_etp" ;
     ga:sourceColumn "du_er_1m" ;
     ga:sourceTransform "identity" ;
-    ga:notes "값이 있는 1,584행은 원천 퍼센트포인트를 그대로 보존하고 0도 유효한 수익률로 사용한다. 결측은 UNKNOWN이다."@ko .
+    ga:notes "값이 있는 1,584행의 원천 퍼센트포인트를 보존한다. 원천 0과 결측은 2026-08-26 공식 규칙에 따라 수치 필터·정렬·집계에서 제외한다."@ko .
 
 etfkr:field_three_month_return_pct
     a ga:CanonicalField ;
@@ -968,7 +979,7 @@ etfkr:field_three_month_return_pct
     ga:sourceDataset "domestic_etp" ;
     ga:sourceColumn "du_er_3m" ;
     ga:sourceTransform "identity" ;
-    ga:notes "값이 있는 1,553행은 원천 퍼센트포인트를 그대로 보존하고 0도 유효하다. 결측은 UNKNOWN이다."@ko .
+    ga:notes "값이 있는 1,553행의 원천 퍼센트포인트를 보존한다. 원천 0과 결측은 2026-08-26 공식 규칙에 따라 수치 필터·정렬·집계에서 제외한다."@ko .
 
 etfkr:field_six_month_return_pct
     a ga:CanonicalField ;
@@ -998,7 +1009,7 @@ etfkr:field_six_month_return_pct
     ga:sourceDataset "domestic_etp" ;
     ga:sourceColumn "du_er_6m" ;
     ga:sourceTransform "identity" ;
-    ga:notes "값이 있는 1,486행은 원천 퍼센트포인트를 그대로 보존하고 0도 유효하다. 결측은 UNKNOWN이다."@ko .
+    ga:notes "값이 있는 1,486행의 원천 퍼센트포인트를 보존한다. 원천 0과 결측은 2026-08-26 공식 규칙에 따라 수치 필터·정렬·집계에서 제외한다."@ko .
 
 etfkr:field_one_year_return_pct
     a ga:CanonicalField ;
@@ -1029,7 +1040,7 @@ etfkr:field_one_year_return_pct
     ga:sourceDataset "domestic_etp" ;
     ga:sourceColumn "du_er_1y" ;
     ga:sourceTransform "identity" ;
-    ga:notes "값이 있는 1,416행은 원천 퍼센트포인트를 그대로 보존하고 0도 유효하다. 결측은 UNKNOWN이다."@ko .
+    ga:notes "값이 있는 1,416행의 원천 퍼센트포인트를 보존한다. 원천 0과 결측은 2026-08-26 공식 규칙에 따라 수치 필터·정렬·집계에서 제외한다."@ko .
 
 etfkr:field_ytd_return_pct
     a ga:CanonicalField ;
@@ -1090,4 +1101,296 @@ etfkr:field_daily_trading_value
     ga:sourceDataset "domestic_etp" ;
     ga:sourceColumn "du_val_1d" ;
     ga:sourceTransform "identity" ;
-    ga:notes "0은 거래 없음으로 유효하게 보존하고 결측 4행만 UNKNOWN이다."@ko .
+    ga:notes "원천 0과 결측 4행은 감사용으로 보존하되 2026-08-26 공식 규칙에 따라 수치 필터·정렬·집계에서는 기준 없음으로 제외한다."@ko .
+
+etfkr:field_daily_volume
+    a ga:CanonicalField ;
+    ga:forFamily etfkr:Family ;
+    ga:canonicalName "daily_volume" ;
+    rdfs:label "일 거래량"@ko ;
+    skos:altLabel "거래량"@ko ;
+    skos:altLabel "일간 거래량"@ko ;
+    skos:altLabel "daily volume"@ko ;
+    ga:valueType "number" ;
+    ga:unit "source_quantity" ;
+    ga:quality "PARTIAL" ;
+    ga:coveragePct "99.7753"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable true ;
+    ga:aggregatable true ;
+    ga:comparable true ;
+    ga:comparisonMode "numeric_delta" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "lt" ;
+    ga:allowedOperator "lte" ;
+    ga:allowedOperator "gt" ;
+    ga:allowedOperator "gte" ;
+    ga:allowedOperator "between" ;
+    ga:asOfBasis "dynamic" ;
+    ga:sourceDataset "domestic_etp" ;
+    ga:sourceColumn "du_vol_1d" ;
+    ga:sourceTransform "identity" ;
+    ga:sentinelValuesJson "{\"0\":\"UNKNOWN\"}" ;
+    ga:notes "국내 ETP 공식 일거래량을 보존하고 결측·0은 수치 실행 기준에서 제외한다."@ko .
+
+etfkr:field_tracking_error_pct
+    a ga:CanonicalField ;
+    ga:forFamily etfkr:Family ;
+    ga:canonicalName "tracking_error_pct" ;
+    rdfs:label "추적오차율"@ko ;
+    skos:altLabel "추적 오차"@ko ;
+    skos:altLabel "tracking error"@ko ;
+    ga:valueType "number" ;
+    ga:unit "pct_point" ;
+    ga:quality "PARTIAL" ;
+    ga:coveragePct "89.7753"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable true ;
+    ga:aggregatable true ;
+    ga:comparable true ;
+    ga:comparisonMode "numeric_delta" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "lt" ;
+    ga:allowedOperator "lte" ;
+    ga:allowedOperator "gt" ;
+    ga:allowedOperator "gte" ;
+    ga:allowedOperator "between" ;
+    ga:asOfBasis "dynamic" ;
+    ga:sourceDataset "domestic_etp" ;
+    ga:sourceColumn "du_chas_errt" ;
+    ga:sourceTransform "identity" ;
+    ga:sentinelValuesJson "{\"0\":\"UNKNOWN\"}" ;
+    ga:notes "공식 추적오차율을 보존하며 결측·0은 수치 실행 기준에서 제외한다."@ko .
+
+etfkr:field_discrepancy_pct
+    a ga:CanonicalField ;
+    ga:forFamily etfkr:Family ;
+    ga:canonicalName "discrepancy_pct" ;
+    rdfs:label "괴리율"@ko ;
+    skos:altLabel "가격 괴리율"@ko ;
+    skos:altLabel "NAV 괴리율"@ko ;
+    skos:altLabel "discrepancy"@ko ;
+    ga:valueType "number" ;
+    ga:unit "pct_point" ;
+    ga:quality "PARTIAL" ;
+    ga:coveragePct "89.7753"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable true ;
+    ga:aggregatable true ;
+    ga:comparable true ;
+    ga:comparisonMode "numeric_delta" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "lt" ;
+    ga:allowedOperator "lte" ;
+    ga:allowedOperator "gt" ;
+    ga:allowedOperator "gte" ;
+    ga:allowedOperator "between" ;
+    ga:asOfBasis "dynamic" ;
+    ga:sourceDataset "domestic_etp" ;
+    ga:sourceColumn "du_diff_rt" ;
+    ga:sourceTransform "identity" ;
+    ga:sentinelValuesJson "{\"0\":\"UNKNOWN\"}" ;
+    ga:notes "국내 ETP 공식 괴리율을 보존하며 결측·0은 수치 실행 기준에서 제외한다."@ko .
+
+etfkr:field_twenty_day_volatility_pct
+    a ga:CanonicalField ;
+    ga:forFamily etfkr:Family ;
+    ga:canonicalName "twenty_day_volatility_pct" ;
+    rdfs:label "20거래일 연환산 변동성"@ko ;
+    skos:altLabel "1개월 변동성"@ko ;
+    skos:altLabel "20일 변동성"@ko ;
+    skos:altLabel "20거래일 흔들림"@ko ;
+    skos:altLabel "20-day volatility"@ko ;
+    ga:valueType "number" ;
+    ga:unit "pct_point" ;
+    ga:quality "PARTIAL" ;
+    ga:coveragePct "94.1573"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable true ;
+    ga:aggregatable true ;
+    ga:comparable true ;
+    ga:comparisonMode "numeric_delta" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "lt" ;
+    ga:allowedOperator "lte" ;
+    ga:allowedOperator "gt" ;
+    ga:allowedOperator "gte" ;
+    ga:allowedOperator "between" ;
+    ga:asOfBasis "dynamic" ;
+    ga:sourceDataset "domestic_etp" ;
+    ga:sourceColumn "du_vlty_1m" ;
+    ga:sourceTransform "identity" ;
+    ga:sentinelValuesJson "{\"0\":\"UNKNOWN\"}" ;
+    ga:notes "최근 20거래일 연환산 변동성 원천값이며 결측·0은 수치 실행 기준에서 제외한다."@ko .
+
+etfkr:field_sixty_day_volatility_pct
+    a ga:CanonicalField ;
+    ga:forFamily etfkr:Family ;
+    ga:canonicalName "sixty_day_volatility_pct" ;
+    rdfs:label "60거래일 연환산 변동성"@ko ;
+    skos:altLabel "3개월 변동성"@ko ;
+    skos:altLabel "60일 변동성"@ko ;
+    skos:altLabel "60거래일 흔들림"@ko ;
+    skos:altLabel "60-day volatility"@ko ;
+    ga:valueType "number" ;
+    ga:unit "pct_point" ;
+    ga:quality "PARTIAL" ;
+    ga:coveragePct "89.5506"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable true ;
+    ga:aggregatable true ;
+    ga:comparable true ;
+    ga:comparisonMode "numeric_delta" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "lt" ;
+    ga:allowedOperator "lte" ;
+    ga:allowedOperator "gt" ;
+    ga:allowedOperator "gte" ;
+    ga:allowedOperator "between" ;
+    ga:asOfBasis "dynamic" ;
+    ga:sourceDataset "domestic_etp" ;
+    ga:sourceColumn "du_vlty_3m" ;
+    ga:sourceTransform "identity" ;
+    ga:sentinelValuesJson "{\"0\":\"UNKNOWN\"}" ;
+    ga:notes "최근 60거래일 연환산 변동성 원천값이며 결측·0은 수치 실행 기준에서 제외한다."@ko .
+
+etfkr:field_one_hundred_twenty_day_volatility_pct
+    a ga:CanonicalField ;
+    ga:forFamily etfkr:Family ;
+    ga:canonicalName "one_hundred_twenty_day_volatility_pct" ;
+    rdfs:label "120거래일 연환산 변동성"@ko ;
+    skos:altLabel "6개월 변동성"@ko ;
+    skos:altLabel "120일 변동성"@ko ;
+    skos:altLabel "120거래일 흔들림"@ko ;
+    skos:altLabel "120-day volatility"@ko ;
+    ga:valueType "number" ;
+    ga:unit "pct_point" ;
+    ga:quality "PARTIAL" ;
+    ga:coveragePct "83.4831"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable true ;
+    ga:aggregatable true ;
+    ga:comparable true ;
+    ga:comparisonMode "numeric_delta" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "lt" ;
+    ga:allowedOperator "lte" ;
+    ga:allowedOperator "gt" ;
+    ga:allowedOperator "gte" ;
+    ga:allowedOperator "between" ;
+    ga:asOfBasis "dynamic" ;
+    ga:sourceDataset "domestic_etp" ;
+    ga:sourceColumn "du_vlty_6m" ;
+    ga:sourceTransform "identity" ;
+    ga:sentinelValuesJson "{\"0\":\"UNKNOWN\"}" ;
+    ga:notes "최근 120거래일 연환산 변동성 원천값이며 결측·0은 수치 실행 기준에서 제외한다."@ko .
+
+etfkr:field_two_hundred_fifty_two_day_volatility_pct
+    a ga:CanonicalField ;
+    ga:forFamily etfkr:Family ;
+    ga:canonicalName "two_hundred_fifty_two_day_volatility_pct" ;
+    rdfs:label "252거래일 연환산 변동성"@ko ;
+    skos:altLabel "1년 변동성"@ko ;
+    skos:altLabel "252일 변동성"@ko ;
+    skos:altLabel "252거래일 흔들림"@ko ;
+    skos:altLabel "252-day volatility"@ko ;
+    ga:valueType "number" ;
+    ga:unit "pct_point" ;
+    ga:quality "PARTIAL" ;
+    ga:coveragePct "73.5393"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable true ;
+    ga:aggregatable true ;
+    ga:comparable true ;
+    ga:comparisonMode "numeric_delta" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "lt" ;
+    ga:allowedOperator "lte" ;
+    ga:allowedOperator "gt" ;
+    ga:allowedOperator "gte" ;
+    ga:allowedOperator "between" ;
+    ga:asOfBasis "dynamic" ;
+    ga:sourceDataset "domestic_etp" ;
+    ga:sourceColumn "du_vlty_1y" ;
+    ga:sourceTransform "identity" ;
+    ga:sentinelValuesJson "{\"0\":\"UNKNOWN\"}" ;
+    ga:notes "최근 252거래일 연환산 변동성 원천값이며 결측·0은 수치 실행 기준에서 제외한다."@ko .
+
+etfkr:field_distribution_yield_pct
+    a ga:CanonicalField ;
+    ga:forFamily etfkr:Family ;
+    ga:canonicalName "distribution_yield_pct" ;
+    rdfs:label "연환산 분배수익률"@ko ;
+    skos:altLabel "분배수익률"@ko ;
+    skos:altLabel "분배 수익률"@ko ;
+    skos:altLabel "distribution yield"@ko ;
+    ga:valueType "number" ;
+    ga:unit "pct_point" ;
+    ga:quality "PARTIAL" ;
+    ga:coveragePct "67.8652"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable true ;
+    ga:aggregatable true ;
+    ga:comparable true ;
+    ga:comparisonMode "numeric_delta" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "lt" ;
+    ga:allowedOperator "lte" ;
+    ga:allowedOperator "gt" ;
+    ga:allowedOperator "gte" ;
+    ga:allowedOperator "between" ;
+    ga:asOfBasis "dynamic" ;
+    ga:sourceDataset "domestic_etp" ;
+    ga:sourceColumn "pd_dvid_yield" ;
+    ga:sourceTransform "identity" ;
+    ga:sentinelValuesJson "{\"0\":\"UNKNOWN\"}" ;
+    ga:notes "공식 연환산 분배수익률을 보존하며 결측·0은 수치 실행 기준에서 제외한다."@ko .
+
+etfkr:field_distribution_payments_per_year
+    a ga:CanonicalField ;
+    ga:forFamily etfkr:Family ;
+    ga:canonicalName "distribution_payments_per_year" ;
+    rdfs:label "연간 분배 지급 횟수"@ko ;
+    skos:altLabel "연간 분배 횟수"@ko ;
+    skos:altLabel "분배 지급 횟수"@ko ;
+    skos:altLabel "분배 횟수"@ko ;
+    skos:altLabel "연 몇 회 분배"@ko ;
+    ga:valueType "number" ;
+    ga:unit "source_quantity" ;
+    ga:quality "PARTIAL" ;
+    ga:coveragePct "67.8652"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable true ;
+    ga:aggregatable true ;
+    ga:comparable true ;
+    ga:comparisonMode "numeric_delta" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "lt" ;
+    ga:allowedOperator "lte" ;
+    ga:allowedOperator "gt" ;
+    ga:allowedOperator "gte" ;
+    ga:allowedOperator "between" ;
+    ga:asOfBasis "dynamic" ;
+    ga:sourceDataset "domestic_etp" ;
+    ga:sourceColumn "pd_dvid_pay_cnt" ;
+    ga:sourceTransform "identity" ;
+    ga:sentinelValuesJson "{\"0\":\"UNKNOWN\"}" ;
+    ga:notes "공식 연간 분배 지급 횟수를 보존하며 결측·0은 수치 실행 기준에서 제외한다."@ko .

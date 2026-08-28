@@ -39,6 +39,8 @@ from finance_agent_core.agent.grounded_planning import (
 from finance_agent_core.agent.intent_analysis import (
     IntentAnalysisDraft,
     IntentAnalysisProvider,
+    has_server_authorized_knowledge_requirements,
+    sanitize_server_authorized_knowledge_draft,
     verify_intent_analysis,
 )
 from finance_agent_core.agent.knowledge_router import (
@@ -66,7 +68,7 @@ from finance_agent_core.agent.providers import (
     QueryPlanProvider,
     hyperclova_failure_reason,
 )
-from finance_agent_core.agent.router import IntentRouter
+from finance_agent_core.agent.router import IntentRouter, extract_product_routing_hints
 from finance_agent_core.agent.safety import SafetyDisposition
 from finance_agent_core.agent.semantic_gate import SemanticCoverageDecision
 from finance_agent_core.answering import (
@@ -323,9 +325,7 @@ def _rank_global_products(
     family_searches: list[FamilySearchResult],
     ranking: CrossFamilyGlobalRanking,
 ) -> tuple[list[FamilySearchResult], list[_GlobalRankedProduct]]:
-    family_order = {
-        result.product_family: index for index, result in enumerate(family_searches)
-    }
+    family_order = {result.product_family: index for index, result in enumerate(family_searches)}
     candidates = [
         _GlobalRankedProduct(result.product_family, product, value)
         for result in family_searches
@@ -389,9 +389,7 @@ def _compile_global_cross_family_answer(
     ]
     for position, item in enumerate(ranked, start=1):
         evidence = next(
-            field
-            for field in item.product.fields
-            if field.canonical_field == ranking.field
+            field for field in item.product.fields if field.canonical_field == ranking.field
         )
         suffix = "%" if evidence.unit == "pct_point" else ""
         identifier = item.product.ticker or item.product.product_id
@@ -409,6 +407,7 @@ def _compile_global_cross_family_answer(
         "결측·UNKNOWN 값은 순위에서 제외했습니다."
     )
     return "\n".join(lines)
+
 
 # AuditEvent's owner-only O_APPEND JSONL boundary is 64 KiB. A serialized SHA-256
 # linkage entry costs 67 bytes (quotes, 64 hex characters, and a separator),
@@ -589,17 +588,20 @@ class RoutedFinanceAgent:
             item is not None for item in external_parts
         ):
             raise ValueError("external search runtime requires runtime, universe and compiler")
-        if external_knowledge_runtime is not None and type(
-            external_knowledge_runtime
-        ) is not ExternalKnowledgeRuntime:
+        if (
+            external_knowledge_runtime is not None
+            and type(external_knowledge_runtime) is not ExternalKnowledgeRuntime
+        ):
             raise TypeError("external knowledge runtime has an invalid type")
-        if external_universe_builder is not None and type(
-            external_universe_builder
-        ) is not ProvidedProductUniverseBuilder:
+        if (
+            external_universe_builder is not None
+            and type(external_universe_builder) is not ProvidedProductUniverseBuilder
+        ):
             raise TypeError("external universe builder has an invalid type")
-        if external_search_plan_compiler is not None and type(
-            external_search_plan_compiler
-        ) is not ExternalSearchPlanCompiler:
+        if (
+            external_search_plan_compiler is not None
+            and type(external_search_plan_compiler) is not ExternalSearchPlanCompiler
+        ):
             raise TypeError("external search plan compiler has an invalid type")
         if require_agent_release and release_guard is None:
             raise ValueError("public RoutedFinanceAgent requires a resolved Agent release")
@@ -611,14 +613,10 @@ class RoutedFinanceAgent:
             )
         if require_agent_release:
             assert release_guard is not None
-            signed_external = (
-                release_guard.manifest.components.knowledge_retrieval.external
-            )
+            signed_external = release_guard.manifest.components.knowledge_retrieval.external
             if external_knowledge_runtime is None:
                 if signed_external.status == "activated":
-                    raise ValueError(
-                        "signed external knowledge release requires its runtime"
-                    )
+                    raise ValueError("signed external knowledge release requires its runtime")
             elif (
                 signed_external.status != "activated"
                 or external_knowledge_runtime.release_artifact != signed_external.artifact
@@ -711,8 +709,7 @@ class RoutedFinanceAgent:
         if signed_external.status == "activated":
             matches = matches and (
                 type(self.external_knowledge_runtime) is ExternalKnowledgeRuntime
-                and self.external_knowledge_runtime.release_artifact
-                == signed_external.artifact
+                and self.external_knowledge_runtime.release_artifact == signed_external.artifact
                 and self.external_knowledge_runtime.release_artifact_file_sha256
                 == signed_external.artifact_file_sha256
             )
@@ -795,7 +792,22 @@ class RoutedFinanceAgent:
         try:
             if safety.disposition is not SafetyDisposition.ALLOW:
                 return self._answer_atomically(question, request_id)
-            if intent_draft is not None and intent_draft.knowledge_requirements:
+            lexical_families, lexical_product_mentions = extract_product_routing_hints(
+                safety.normalized_question
+            )
+            knowledge_draft = (
+                None
+                if intent_draft is None
+                else sanitize_server_authorized_knowledge_draft(
+                    question,
+                    intent_draft,
+                    fallback_families=lexical_families,
+                    product_mentions=lexical_product_mentions,
+                )
+            )
+            if knowledge_draft is not None and has_server_authorized_knowledge_requirements(
+                question, knowledge_draft
+            ):
                 if self.external_knowledge_router is None:
                     self._assert_public_knowledge_boundary_current()
                     return ExternalKnowledgeRouteDecision(
@@ -803,10 +815,25 @@ class RoutedFinanceAgent:
                         reason_code="external_knowledge_runtime_not_configured",
                         reason="공식 외부 근거 검색 경로가 현재 공개 런타임에 조립되지 않음",
                     )
+                source_selection_signals = None
+                if self.external_universe_builder is not None:
+                    source_selection_signals = (
+                        self.external_universe_builder.source_selection_signals(
+                            families=tuple(
+                                sorted(
+                                    set(knowledge_draft.product_families),
+                                    key=lambda item: item.value,
+                                )
+                            ),
+                            question=question,
+                            identity_surfaces=lexical_product_mentions,
+                        )
+                    )
                 external_decision = self.external_knowledge_router.route(
                     question,
                     request_id,
-                    intent_draft,
+                    knowledge_draft,
+                    source_selection_signals=source_selection_signals,
                 )
                 if external_decision.disposition is not (
                     ExternalKnowledgeRouteDisposition.NOT_APPLICABLE
@@ -827,7 +854,10 @@ class RoutedFinanceAgent:
                                 key=lambda item: item.value,
                             )
                         )
-                        universe = self.external_universe_builder.build(families=families)
+                        universe = self.external_universe_builder.build(
+                            families=families,
+                            identity_surfaces=lexical_product_mentions,
+                        )
                         search_plan = self.external_search_plan_compiler.compile(
                             external_decision.plan,
                             universe,
@@ -2417,8 +2447,7 @@ class RoutedFinanceAgent:
                         record.isin,
                     )
                     if any(
-                        value is not None
-                        and normalize_product_mention(value) == normalized_mention
+                        value is not None and normalize_product_mention(value) == normalized_mention
                         for value in identities
                     ):
                         matches.add(family)

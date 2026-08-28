@@ -31,6 +31,10 @@ SOURCE_COLUMNS = (
     "pd_std_info_update",
     "buy_yield",
     "after_tax_yield",
+    "applied_yield",
+    "eval_price",
+    "dirty",
+    "cov",
     "buyable_quantity",
     "remaining_days",
     "dur",
@@ -130,6 +134,14 @@ def _quality(
     return present_quality, present_reason
 
 
+def _numeric_quality(value: Decimal | None, *, field: str) -> tuple[QualityStatus, str | None]:
+    if value is None:
+        return QualityStatus.UNKNOWN, f"{field}_missing"
+    if value == 0:
+        return QualityStatus.UNKNOWN, f"{field}_zero_excluded_by_official_policy"
+    return QualityStatus.VALID, None
+
+
 def normalize_bond_row(
     *,
     source_row: int,
@@ -152,9 +164,7 @@ def normalize_bond_row(
         raise BondNormalizationError(f"PD_EXG_MKT has an unsupported value: {bond_market!r}")
 
     raw_issue_amount = _decimal(values.get("isu_bal_amt"), field="isu_bal_amt")
-    issue_amount = (
-        None if raw_issue_amount is None else raw_issue_amount.quantize(MONEY_PRECISION)
-    )
+    issue_amount = None if raw_issue_amount is None else raw_issue_amount.quantize(MONEY_PRECISION)
     if issue_amount is None or issue_amount < 0:
         raise BondNormalizationError("isu_bal_amt must be a non-negative number")
     coupon_rate = _micro_decimal(values.get("srfc_irt"), field="srfc_irt")
@@ -182,6 +192,10 @@ def normalize_bond_row(
         values.get("after_tax_yield"),
         field="after_tax_yield",
     )
+    applied_yield = _micro_decimal(values.get("applied_yield"), field="applied_yield")
+    evaluation_price = _micro_decimal(values.get("eval_price"), field="eval_price")
+    dirty_price = _micro_decimal(values.get("dirty"), field="dirty")
+    convexity = _micro_decimal(values.get("cov"), field="cov")
     short_name = _text(values.get("pd_abrv_nm"), field="pd_abrv_nm")
     issuer = _text(values.get("pd_pbcm"), field="pd_pbcm")
     bond_subclass = _text(values.get("std_pd_scls_nm"), field="std_pd_scls_nm")
@@ -216,6 +230,19 @@ def normalize_bond_row(
             missing_reason="after_tax_yield_missing",
             present_quality=QualityStatus.VALID,
         ),
+        "applied_yield_pct": _numeric_quality(
+            applied_yield,
+            field="applied_yield_pct",
+        ),
+        "evaluation_price": _numeric_quality(
+            evaluation_price,
+            field="evaluation_price",
+        ),
+        "dirty_price": _numeric_quality(
+            dirty_price,
+            field="dirty_price",
+        ),
+        "convexity": _numeric_quality(convexity, field="convexity"),
         "buyable_quantity": _quality(
             buyable_quantity,
             missing_reason="buyable_quantity_missing",
@@ -279,6 +306,10 @@ def normalize_bond_row(
         or "",
         buy_yield_pct=buy_yield,
         after_tax_yield_pct=after_tax_yield,
+        applied_yield_pct=applied_yield,
+        evaluation_price=evaluation_price,
+        dirty_price=dirty_price,
+        convexity=convexity,
         buyable_quantity=buyable_quantity,
         currently_buyable=currently_buyable,
         remaining_days=remaining_days,

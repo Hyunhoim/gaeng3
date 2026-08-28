@@ -1,0 +1,614 @@
+from __future__ import annotations
+
+import hashlib
+from datetime import date
+
+import pytest
+
+from finance_agent_core.agent.external_knowledge_router import (
+    ExternalKnowledgeRouteDisposition,
+    ExternalKnowledgeRouter,
+)
+from finance_agent_core.agent.external_search_planning import (
+    resolve_explicit_candidate_ids,
+)
+from finance_agent_core.agent.intent_analysis import (
+    IntentAnalysisDraft,
+    sanitize_server_authorized_knowledge_draft,
+)
+from finance_agent_core.agent.knowledge_planning import CompositeKnowledgePlanCompiler
+from finance_agent_core.agent.source_selection import SourceSelectionSignals
+from finance_agent_core.config.knowledge_coverage import (
+    ApprovedKnowledgeCoverageManifest,
+    KnowledgeCapability,
+    KnowledgeCoverageEntry,
+)
+from finance_agent_core.config.source_registry import load_official_source_registry
+from finance_agent_core.contracts.external_knowledge import (
+    KnowledgeIntentRequirement,
+    KnowledgeTimeRange,
+    ProvidedProductCandidate,
+    ProvidedProductCandidateUniverse,
+)
+from finance_agent_core.contracts.queryplan import ProductFamily
+from finance_agent_core.contracts.routing import InteractionIntent
+from finance_agent_core.release import ExternalKnowledgeArtifactRelease
+from finance_agent_core.retrieval.external_knowledge_release import (
+    build_live_external_knowledge_bootstrap,
+)
+from finance_agent_core.retrieval.official_connector import OfficialSourceSnapshot
+from finance_agent_core.retrieval.official_live_evidence import (
+    VerifiedLiveRelationExtractor,
+)
+from finance_agent_core.storage.identity_cache import ProductIdentityRecord
+
+
+def _intent(question: str, intent: InteractionIntent) -> IntentAnalysisDraft:
+    return IntentAnalysisDraft(
+        intent=intent,
+        product_families=[ProductFamily.DOMESTIC_ETP],
+        evidence_spans=[],
+        needs_clarification=False,
+        knowledge_requirements=[
+            KnowledgeIntentRequirement(
+                capability=KnowledgeCapability.PORTFOLIO_HOLDINGS,
+                subject_span="에코프로비엠",
+                relation_span="편입이 확인되는",
+            )
+        ],
+    )
+
+
+@pytest.mark.parametrize(
+    "intent",
+    [InteractionIntent.DETAIL, InteractionIntent.COMPARE],
+)
+def test_external_plan_preserves_detail_and_compare_intent(
+    intent: InteractionIntent,
+) -> None:
+    question = "에코프로비엠 편입이 확인되는 국내 ETF를 비교해 주세요."
+
+    plan = CompositeKnowledgePlanCompiler().compile(
+        question,
+        f"external-{intent.value}",
+        _intent(question, intent),
+    )
+
+    assert plan.interaction_intent is intent
+
+
+def test_external_plan_locks_requested_official_db_fields() -> None:
+    question = "캠브리콘 편입 해외 ETF의 티커와 운용사, 투자지역, 최종 AUM과 위험등급을 알려줘."
+    draft = IntentAnalysisDraft(
+        intent=InteractionIntent.DETAIL,
+        product_families=[ProductFamily.OVERSEAS_ETP],
+        evidence_spans=[],
+        needs_clarification=False,
+        knowledge_requirements=[
+            KnowledgeIntentRequirement(
+                capability=KnowledgeCapability.PORTFOLIO_HOLDINGS,
+                subject_span="캠브리콘",
+                relation_span="편입",
+            )
+        ],
+    )
+
+    plan = CompositeKnowledgePlanCompiler().compile(
+        question,
+        "external-requested-fields",
+        draft,
+    )
+
+    assert plan.product_selection is None
+    assert plan.requested_product_fields == (
+        "aum",
+        "investment_region",
+        "manager",
+        "risk_level",
+        "ticker",
+    )
+
+
+def test_server_drops_db_fields_and_repairs_only_explicit_theme_requirement() -> None:
+    question = (
+        "최근 6개월 사이 우주항공 테마로 출시·소개된 KODEX ETF의 위험등급과 최종 AUM을 알려줘."
+    )
+    draft = IntentAnalysisDraft(
+        intent=InteractionIntent.SEARCH,
+        product_families=[ProductFamily.DOMESTIC_ETP],
+        evidence_spans=[],
+        needs_clarification=False,
+        knowledge_requirements=[
+            KnowledgeIntentRequirement(
+                capability=KnowledgeCapability.FUND_STRUCTURE_STRATEGY_TREND,
+                subject_span="우주항공 테마",
+                relation_span="출시·소개된",
+            ),
+            KnowledgeIntentRequirement(
+                capability=KnowledgeCapability.PRODUCT_RISK_FACTORS,
+                subject_span="KODEX ETF",
+                relation_span="위험등급",
+            ),
+        ],
+    )
+
+    sanitized = sanitize_server_authorized_knowledge_draft(question, draft)
+
+    assert len(sanitized.knowledge_requirements) == 1
+    requirement = sanitized.knowledge_requirements[0]
+    assert requirement.capability is KnowledgeCapability.SECTOR_THEME_HISTORY
+    assert requirement.subject_span == "우주항공 테마"
+    assert requirement.relation_span == "우주항공 테마"
+
+
+@pytest.mark.parametrize(
+    ("question", "capability", "subject", "relation"),
+    [
+        (
+            "운용전략이 실물복제인 국내 ETF를 추적오차율이 낮은 순으로 보여 주세요.",
+            KnowledgeCapability.FUND_STRUCTURE_STRATEGY_TREND,
+            "운용전략",
+            "운용전략",
+        ),
+        (
+            "국내 ETF KR7429760002의 운용전략을 확인하고 싶어요.",
+            KnowledgeCapability.FUND_STRUCTURE_STRATEGY_TREND,
+            "운용전략",
+            "운용전략",
+        ),
+        (
+            "퇴직연금 편입 가능 채권을 5개 보여 주세요.",
+            KnowledgeCapability.PORTFOLIO_HOLDINGS,
+            "채권",
+            "편입",
+        ),
+        (
+            "KODEX 2차전지산업의 AUM을 알려 주세요.",
+            KnowledgeCapability.SECTOR_THEME_HISTORY,
+            "2차전지산업",
+            "2차전지산업",
+        ),
+    ],
+)
+def test_provided_db_phrases_cannot_open_external_search_authority(
+    question: str,
+    capability: KnowledgeCapability,
+    subject: str,
+    relation: str,
+) -> None:
+    draft = IntentAnalysisDraft(
+        intent=InteractionIntent.SEARCH,
+        product_families=[ProductFamily.DOMESTIC_ETP],
+        evidence_spans=[],
+        needs_clarification=False,
+        knowledge_requirements=[
+            KnowledgeIntentRequirement(
+                capability=capability,
+                subject_span=subject,
+                relation_span=relation,
+            )
+        ],
+    )
+
+    sanitized = sanitize_server_authorized_knowledge_draft(question, draft)
+
+    assert sanitized.knowledge_requirements == []
+
+
+def test_server_recovers_explicit_fund_structure_from_hclx_unsupported() -> None:
+    question = (
+        "미래에셋국민성장혼합자산-사모재간접C의 제공 상품 데이터와 함께, "
+        "국민참여형 국민성장펀드의 구조와 2026년 5~6월 판매 동향을 정리해 주세요."
+    )
+    draft = IntentAnalysisDraft(
+        intent=InteractionIntent.UNSUPPORTED,
+        product_families=[],
+        evidence_spans=[],
+        needs_clarification=False,
+        knowledge_requirements=[],
+    )
+
+    sanitized = sanitize_server_authorized_knowledge_draft(
+        question,
+        draft,
+        fallback_families=(ProductFamily.FUND,),
+        product_mentions=("미래에셋국민성장혼합자산-사모재간접C",),
+    )
+
+    assert sanitized.intent is InteractionIntent.SEARCH
+    assert sanitized.product_families == [ProductFamily.FUND]
+    assert [item.capability for item in sanitized.knowledge_requirements] == [
+        KnowledgeCapability.FUND_STRUCTURE_STRATEGY_TREND
+    ]
+
+
+def test_server_builds_explicit_subsidiary_holding_and_risk_chain() -> None:
+    question = (
+        "2026년 7월 공식 구성종목에서 에코프로 계열사인 에코프로비엠 편입이 "
+        "확인되는 KODEX 2차전지산업과 KODEX 2차전지핵심소재10 중, 최종 AUM이 "
+        "더 큰 상품 하나의 위험등급과 핵심 위험요인을 설명해 주세요."
+    )
+    draft = IntentAnalysisDraft(
+        intent=InteractionIntent.SEARCH,
+        product_families=[ProductFamily.DOMESTIC_ETP],
+        evidence_spans=[],
+        needs_clarification=False,
+        knowledge_requirements=[],
+    )
+
+    sanitized = sanitize_server_authorized_knowledge_draft(
+        question,
+        draft,
+        product_mentions=("KODEX 2차전지산업과 KODEX 2차전지핵심소재10 중",),
+    )
+    plan = CompositeKnowledgePlanCompiler().compile(
+        question,
+        "external-multihop-chain",
+        sanitized,
+        source_selection_signals=SourceSelectionSignals(
+            product_families=(ProductFamily.DOMESTIC_ETP,),
+            db_confirmed_aliases=("KODEX",),
+            matched_product_names=(
+                "KODEX 2차전지산업",
+                "KODEX 2차전지핵심소재10",
+            ),
+            matched_source_owners=("삼성자산운용",),
+            explicit_identity_bound=True,
+        ),
+    )
+
+    assert [item.capability for item in plan.requirements] == [
+        KnowledgeCapability.CORPORATE_SUBSIDIARY,
+        KnowledgeCapability.PORTFOLIO_HOLDINGS,
+        KnowledgeCapability.PRODUCT_RISK_FACTORS,
+        KnowledgeCapability.PRODUCT_RISK_FACTORS,
+    ]
+    assert plan.requirements[1].depends_on == ("need_1",)
+    assert plan.requirements[2].depends_on == ("need_2",)
+    assert plan.requirements[3].depends_on == ("need_2",)
+    assert plan.requirements[0].source_registry_ids == (
+        "ecopro-corporate",
+        "ecopro-official-brochures",
+    )
+    assert plan.requirements[1].source_registry_ids == (
+        "samsungfund-kodex-newsroom",
+        "samsungfund-kodex-product",
+    )
+    assert plan.requirements[2].source_registry_ids == (
+        "samsungfund-kodex-newsroom",
+        "samsungfund-kodex-product",
+    )
+    assert plan.product_selection is not None
+    assert plan.product_selection.rank_field == "aum"
+    assert plan.product_selection.limit == 1
+    assert plan.requested_product_fields == ("aum", "risk_level")
+    assert plan.requirements[1].time_range == KnowledgeTimeRange(
+        start=date(2026, 7, 1),
+        end=date(2026, 7, 31),
+    )
+
+
+def test_source_selection_uses_registry_and_db_signals_without_entity_policy() -> None:
+    question = "TIGER 반도체 ETF의 구성종목과 위험요인을 알려줘."
+    draft = IntentAnalysisDraft(
+        intent=InteractionIntent.DETAIL,
+        product_families=[ProductFamily.DOMESTIC_ETP],
+        evidence_spans=[],
+        needs_clarification=False,
+        knowledge_requirements=[
+            KnowledgeIntentRequirement(
+                capability=KnowledgeCapability.PORTFOLIO_HOLDINGS,
+                subject_span="TIGER 반도체 ETF",
+                relation_span="구성종목",
+            )
+        ],
+    )
+
+    plan = CompositeKnowledgePlanCompiler().compile(
+        question,
+        "generalized-source-selection",
+        draft,
+        source_selection_signals=SourceSelectionSignals(
+            product_families=(ProductFamily.DOMESTIC_ETP,),
+            db_confirmed_aliases=("TIGER",),
+            matched_product_names=("TIGER 반도체",),
+            matched_source_owners=("미래에셋자산운용",),
+            explicit_identity_bound=True,
+        ),
+    )
+
+    assert plan.requirements[0].source_registry_ids == (
+        "miraeasset-investments",
+        "miraeasset-investments-prod",
+    )
+
+
+def test_hclx_cannot_invent_an_extra_holding_subject() -> None:
+    question = (
+        "2026년 6월 말 KraneShares 공식 보유내역에서 캠브리콘 편입이 확인되는 "
+        "중국 반도체 해외 ETF를 찾아 주세요."
+    )
+    draft = IntentAnalysisDraft(
+        intent=InteractionIntent.SEARCH,
+        product_families=[ProductFamily.OVERSEAS_ETP],
+        evidence_spans=[],
+        needs_clarification=False,
+        knowledge_requirements=[
+            KnowledgeIntentRequirement(
+                capability=KnowledgeCapability.PORTFOLIO_HOLDINGS,
+                subject_span="공식",
+                relation_span="보유",
+            ),
+            KnowledgeIntentRequirement(
+                capability=KnowledgeCapability.PORTFOLIO_HOLDINGS,
+                subject_span="캠브리콘",
+                relation_span="편입",
+                search_aliases=("Cambricon",),
+            ),
+        ],
+    )
+
+    sanitized = sanitize_server_authorized_knowledge_draft(question, draft)
+
+    assert len(sanitized.knowledge_requirements) == 1
+    assert sanitized.knowledge_requirements[0].subject_span == "캠브리콘"
+    assert sanitized.knowledge_requirements[0].search_aliases == ("Cambricon",)
+
+
+def test_live_official_coverage_authorizes_external_execution_without_fake_index() -> None:
+    coverage = ApprovedKnowledgeCoverageManifest(
+        schema_version="1.0",
+        manifest_id="test-live-official",
+        dataset_release_id="test-dataset",
+        capabilities=tuple(
+            KnowledgeCoverageEntry(
+                capability=capability,
+                status="approved_live_official",
+                runtime_execution_enabled=True,
+                allowed_source_kinds=("provided", "external_approved"),
+            )
+            for capability in KnowledgeCapability
+        ),
+    )
+    question = "에코프로비엠 편입이 확인되는 국내 ETF를 비교해 주세요."
+
+    decision = ExternalKnowledgeRouter(coverage=coverage).route(
+        question,
+        "external-live",
+        _intent(question, InteractionIntent.COMPARE),
+    )
+
+    assert decision.disposition is ExternalKnowledgeRouteDisposition.EXECUTE
+    assert decision.plan is not None and decision.plan.execution_authorized
+
+
+def test_live_official_release_does_not_claim_bm25_or_document_dense() -> None:
+    artifact = ExternalKnowledgeArtifactRelease(
+        retrieval_mode="verified_live_official",
+        source_registry_sha256="a" * 64,
+        coverage_manifest_sha256="b" * 64,
+        corpus_manifest_sha256="c" * 64,
+        temporal_relation_sha256="d" * 64,
+        verifier_contract_sha256="e" * 64,
+        embedding_model_revision=None,
+    )
+
+    assert artifact.document_bm25_sha256 is None
+    assert artifact.document_dense_sha256 is None
+
+    with pytest.raises(ValueError):
+        artifact.model_copy(
+            update={"document_dense_sha256": "f" * 64},
+        ).model_validate(
+            artifact.model_copy(
+                update={"document_dense_sha256": "f" * 64},
+            ).model_dump(mode="python")
+        )
+
+
+def test_live_external_bootstrap_is_empty_cache_and_hash_bound() -> None:
+    bootstrap = build_live_external_knowledge_bootstrap()
+
+    assert bootstrap.artifact.retrieval_mode == "verified_live_official"
+    assert bootstrap.relation_bundle.relations == ()
+    assert bootstrap.relation_bundle.manifest.relation_count == 0
+    assert (
+        bootstrap.artifact.temporal_relation_sha256
+        == bootstrap.relation_bundle.manifest.relation_set_sha256
+    )
+    assert len(bootstrap.artifact_file_sha256) == 64
+    assert len(bootstrap.relation_bundle_file_sha256) == 64
+
+
+def test_explicit_product_identity_narrows_only_its_official_family() -> None:
+    domestic = ProductIdentityRecord(
+        product_family="domestic_etp",
+        product_id="KR7123456789",
+        product_name="KODEX 예시산업",
+        ticker="123456",
+        isin="KR7123456789",
+        short_name="KODEX 예시산업",
+        public_offering=None,
+        is_quarantined=False,
+    )
+    overseas = ProductIdentityRecord(
+        product_family="overseas_etp",
+        product_id="EXAMPLE.O",
+        product_name="Example Overseas ETF",
+        ticker="EXAMPLE.O",
+        isin="US0000000001",
+        short_name=None,
+        public_offering=None,
+        is_quarantined=False,
+    )
+
+    resolved = resolve_explicit_candidate_ids(
+        {
+            ProductFamily.DOMESTIC_ETP: (domestic,),
+            ProductFamily.OVERSEAS_ETP: (overseas,),
+        },
+        ("KODEX 예시산업", "에코프로비엠"),
+    )
+
+    assert resolved == {ProductFamily.DOMESTIC_ETP: {"KR7123456789"}}
+
+
+def test_two_exact_short_names_are_resolved_inside_one_conjoined_surface() -> None:
+    records = (
+        ProductIdentityRecord(
+            product_family="domestic_etp",
+            product_id="KR7305720005",
+            product_name="삼성 KODEX 2차전지산업증권상장지수투자신탁",
+            ticker="305720",
+            isin="KR7305720005",
+            short_name="KODEX 2차전지산업",
+            public_offering=None,
+            is_quarantined=False,
+        ),
+        ProductIdentityRecord(
+            product_family="domestic_etp",
+            product_id="KR7461950008",
+            product_name="삼성 KODEX 2차전지핵심소재10증권상장지수투자신탁",
+            ticker="461950",
+            isin="KR7461950008",
+            short_name="KODEX 2차전지핵심소재10",
+            public_offering=None,
+            is_quarantined=False,
+        ),
+    )
+
+    resolved = resolve_explicit_candidate_ids(
+        {ProductFamily.DOMESTIC_ETP: records},
+        ("KODEX 2차전지산업과 KODEX 2차전지핵심소재10 중",),
+    )
+
+    assert resolved == {ProductFamily.DOMESTIC_ETP: {"KR7305720005", "KR7461950008"}}
+
+
+def test_exact_fund_identity_can_bind_official_policy_excerpt_without_label_repeat() -> None:
+    body = (
+        "<html><body><article>국민성장펀드는 민간 자금과 정책 자금을 "
+        "결합하는 구조이며 단계적으로 투자를 집행합니다.</article></body></html>"
+    ).encode()
+    registry = load_official_source_registry()
+    source = registry.authorize_url(
+        "https://www.fsc.go.kr/po010103/86950",
+        KnowledgeCapability.FUND_STRUCTURE_STRATEGY_TREND,
+    )
+    snapshot = OfficialSourceSnapshot(
+        source=source,
+        capability=KnowledgeCapability.FUND_STRUCTURE_STRATEGY_TREND,
+        source_uri="https://www.fsc.go.kr/po010103/86950",
+        title="국민성장 프로젝트 구조 설명",
+        content_type="text/html",
+        content=body,
+        content_sha256=hashlib.sha256(body).hexdigest(),
+        published_at=None,
+        as_of=date(2026, 8, 24),
+    )
+    requirement = (
+        CompositeKnowledgePlanCompiler()
+        .compile(
+            "국민성장펀드의 구조와 투자 전략 동향을 알려줘.",
+            "external-fund-policy",
+            IntentAnalysisDraft(
+                intent=InteractionIntent.DETAIL,
+                product_families=[ProductFamily.FUND],
+                evidence_spans=[],
+                needs_clarification=False,
+                knowledge_requirements=[
+                    KnowledgeIntentRequirement(
+                        capability=KnowledgeCapability.FUND_STRUCTURE_STRATEGY_TREND,
+                        subject_span="국민성장펀드",
+                        relation_span="구조와 투자 전략 동향",
+                    )
+                ],
+            ),
+        )
+        .requirements[0]
+    )
+    universe = ProvidedProductCandidateUniverse(
+        candidates=(
+            ProvidedProductCandidate(
+                product_family=ProductFamily.FUND,
+                product_id="FUND-001",
+                product_name="국민성장펀드 일반형",
+            ),
+        ),
+        database_sha256s={ProductFamily.FUND: "a" * 64},
+        candidate_filter_sha256="b" * 64,
+        explicit_identity_bound=True,
+    )
+
+    relations = VerifiedLiveRelationExtractor().extract(snapshot, requirement, universe)
+
+    assert len(relations) == 1
+    assert relations[0].product_id == "FUND-001"
+
+
+def test_live_subsidiary_relation_requires_exact_parent_and_child_in_source() -> None:
+    question = "에코프로 계열사인 에코프로비엠 편입 국내 ETF를 찾아줘."
+    draft = IntentAnalysisDraft(
+        intent=InteractionIntent.SEARCH,
+        product_families=[ProductFamily.DOMESTIC_ETP],
+        evidence_spans=[],
+        needs_clarification=False,
+        knowledge_requirements=[
+            KnowledgeIntentRequirement(
+                capability=KnowledgeCapability.CORPORATE_SUBSIDIARY,
+                subject_span="에코프로",
+                relation_span="계열사인",
+            )
+        ],
+    )
+    requirement = (
+        CompositeKnowledgePlanCompiler()
+        .compile(
+            question,
+            "external-subsidiary",
+            draft,
+        )
+        .requirements[0]
+    )
+    body = (
+        "<html><body><article>에코프로의 주요 계열사인 에코프로비엠은 "
+        "양극소재 사업을 영위합니다.</article></body></html>"
+    ).encode()
+    registry = load_official_source_registry()
+    source = registry.authorize_url(
+        "https://www.ecopro.co.kr/sub010101/view",
+        KnowledgeCapability.CORPORATE_SUBSIDIARY,
+    )
+    snapshot = OfficialSourceSnapshot(
+        source=source,
+        capability=KnowledgeCapability.CORPORATE_SUBSIDIARY,
+        source_uri="https://www.ecopro.co.kr/sub010101/view",
+        title="에코프로 주요 가족사",
+        content_type="text/html",
+        content=body,
+        content_sha256=hashlib.sha256(body).hexdigest(),
+        published_at=None,
+        as_of=date(2026, 8, 24),
+    )
+    universe = ProvidedProductCandidateUniverse(
+        candidates=(
+            ProvidedProductCandidate(
+                product_family=ProductFamily.DOMESTIC_ETP,
+                product_id="KR7123456789",
+                product_name="KODEX 예시산업",
+            ),
+        ),
+        database_sha256s={ProductFamily.DOMESTIC_ETP: "a" * 64},
+        candidate_filter_sha256="b" * 64,
+    )
+
+    relations = VerifiedLiveRelationExtractor().extract(
+        snapshot,
+        requirement,
+        universe,
+    )
+
+    assert len(relations) == 1
+    assert relations[0].subject.canonical_name == "에코프로"
+    assert relations[0].object.canonical_name == "에코프로비엠"
+    assert relations[0].product_id is None

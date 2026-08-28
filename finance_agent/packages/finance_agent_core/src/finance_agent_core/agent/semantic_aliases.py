@@ -82,18 +82,27 @@ SEMANTIC_ALIAS_RULES: tuple[SemanticAliasRule, ...] = (
         r"(?:남는\s*)?(?:보상|수익)",
     ),
     _rule(
+        "bond.applied_yield.strong",
+        (ProductFamily.BOND,),
+        "applied_yield_pct",
+        SortDirection.DESC,
+        r"민평\s*(?:(?:기준\s*)?수익률|금리)(?:이|가)?\s*센",
+    ),
+    _rule(
         "bond.duration.less_rate_sensitive",
         (ProductFamily.BOND,),
         "duration_years",
         SortDirection.ASC,
-        r"금리\s*(?:변화|변동)에\s*(?:덜|작게)\s*민감",
+        r"금리\s*(?:(?:변화|변동)에\s*)?(?:덜|작게)\s*민감|"
+        r"금리\s*민감도(?:가|이)?\s*(?:작|낮)",
     ),
     _rule(
         "bond.duration.more_rate_sensitive",
         (ProductFamily.BOND,),
         "duration_years",
         SortDirection.DESC,
-        r"금리\s*(?:변화|변동)에\s*(?:더|크게)\s*민감",
+        r"금리\s*(?:(?:변화|변동)에\s*)?(?:더|크게)\s*민감|"
+        r"금리\s*민감도(?:가|이)?\s*(?:크|높)",
     ),
     _rule(
         "bond.coupon.regular_interest",
@@ -101,6 +110,22 @@ SEMANTIC_ALIAS_RULES: tuple[SemanticAliasRule, ...] = (
         "coupon_rate_pct",
         SortDirection.DESC,
         r"정기적으로\s*붙는\s*이자율(?:이|가)?\s*(?:가장\s*)?(?:높|크)",
+    ),
+    _rule(
+        "bond.coupon.explicit_high",
+        (ProductFamily.BOND,),
+        "coupon_rate_pct",
+        SortDirection.DESC,
+        r"(?:액면에?\s*붙은\s*이자율|액면\s*쿠폰|쿠폰(?:\s*금리)?|표면\s*금리)"
+        r"(?:이|가|은|는)?\s*(?:더\s*|가장\s*)?(?:높|크)",
+    ),
+    _rule(
+        "bond.coupon.explicit_low",
+        (ProductFamily.BOND,),
+        "coupon_rate_pct",
+        SortDirection.ASC,
+        r"(?:액면에?\s*붙은\s*이자율|액면\s*쿠폰|쿠폰(?:\s*금리)?|표면\s*금리)"
+        r"(?:이|가|은|는)?\s*(?:더\s*|가장\s*)?(?:낮|작)",
     ),
     _rule(
         "bond.maturity.sooner_redemption",
@@ -123,6 +148,18 @@ SEMANTIC_ALIAS_RULES: tuple[SemanticAliasRule, ...] = (
         SortDirection.DESC,
         r"만기까지\s*(?:시간|기간|날|일수)?(?:이|가)?\s*"
         r"(?:가장\s*)?(?:많이\s*)?남(?:은|아|았)",
+    ),
+    _rule(
+        "bond.remaining_days.sooner",
+        (ProductFamily.BOND,),
+        "remaining_days",
+        SortDirection.ASC,
+        r"(?:(?:상환|만기)(?:이|가|를|를\s*맞는)?\s*(?:가장\s*)?(?:먼저|빨리)|"
+        r"(?:가장\s*)?먼저\s*(?:상환|만기)|"
+        r"(?:상환|만기).{0,16}?가까운|"
+        r"(?:상환까지|만기까지)\s*남은\s*(?:날짜|날|일수|기간)(?:이|가)?\s*"
+        r"(?:가장\s*)?(?:짧|적|작)|잔여\s*일(?:이|가)?\s*(?:짧|적|작)|"
+        r"남은\s*기간(?:이|가)?\s*(?:짧|적|작))",
     ),
     _rule(
         "product.aum.colloquial_size",
@@ -163,40 +200,48 @@ SEMANTIC_ALIAS_RULES: tuple[SemanticAliasRule, ...] = (
         _ETP_FAMILIES,
         "one_day_return_pct",
         SortDirection.DESC,
-        r"(?:최근\s*)?(?:하루|1\s*일|일간).{0,16}?"
+        r"(?:최근\s*)?(?:하루|당일|오늘|1\s*일|일간).{0,16}?"
         r"(?:수익률|수익|성과|성적)(?:이|가)?\s*(?:높|좋|큰)",
+    ),
+    _rule(
+        "etp.return.one_day_low",
+        _ETP_FAMILIES,
+        "one_day_return_pct",
+        SortDirection.ASC,
+        r"(?:최근\s*)?(?:하루|당일|오늘|1\s*일|일간).{0,16}?"
+        r"(?:수익률|수익|성과|성적)(?:이|가)?\s*(?:낮|작)",
     ),
     _rule(
         "product.return.one_month_colloquial",
         _ETP_AND_FUND,
         "one_month_return_pct",
         SortDirection.DESC,
-        r"(?:최근|지난)?\s*(?:한\s*달|1\s*개월).{0,20}?"
-        r"(?:(?:성적(?:표)?|성과)(?:이|가)?\s*(?:좋|높)|잘\s*나간)",
+        r"(?:최근|지난)?\s*(?:한\s*달|1\s*개월).{0,12}?"
+        r"(?:(?:수익률|수익|성적(?:표)?|성과)(?:이|가)?\s*(?:좋|높)|잘\s*나간)",
     ),
     _rule(
         "product.return.three_month_colloquial",
         _ETP_AND_FUND,
         "three_month_return_pct",
         SortDirection.DESC,
-        r"(?:최근|지난)?\s*(?:한\s*분기|분기|석\s*달|3\s*개월).{0,24}?"
-        r"(?:(?:성적(?:표)?|성과)(?:이|가)?\s*(?:좋|높)|잘\s*나간)",
+        r"(?:최근|지난)?\s*(?:한\s*분기|분기|석\s*달|3\s*개월).{0,12}?"
+        r"(?:(?:수익률|수익|성적(?:표)?|성과)(?:이|가)?\s*(?:좋|높)|잘\s*나간)",
     ),
     _rule(
         "product.return.six_month_colloquial",
         _ETP_AND_FUND,
         "six_month_return_pct",
         SortDirection.DESC,
-        r"(?:최근|지난)?\s*(?:반년|여섯\s*달|6\s*개월).{0,24}?"
-        r"(?:(?:성적(?:표)?|성과)(?:이|가)?\s*(?:좋|높)|잘\s*나간)",
+        r"(?:최근|지난)?\s*(?:반년|여섯\s*달|6\s*개월).{0,12}?"
+        r"(?:(?:수익률|수익|성적(?:표)?|성과)(?:이|가)?\s*(?:좋|높)|잘\s*나간)",
     ),
     _rule(
         "product.return.one_year_colloquial",
         _ETP_AND_FUND,
         "one_year_return_pct",
         SortDirection.DESC,
-        r"(?:최근|지난)?\s*(?:1\s*년|일\s*년).{0,24}?"
-        r"(?:(?:성적(?:표)?|성과)(?:이|가)?\s*(?:좋|높)|잘\s*나간)",
+        r"(?:최근|지난)?\s*(?:1\s*년|일\s*년).{0,12}?"
+        r"(?:(?:수익률|수익|성적(?:표)?|성과)(?:이|가)?\s*(?:좋|높)|잘\s*나간)",
     ),
     _rule(
         "domestic_etp.return.ytd_colloquial",
@@ -210,6 +255,7 @@ SEMANTIC_ALIAS_RULES: tuple[SemanticAliasRule, ...] = (
 
 _EXPLICIT_ORDER = re.compile(
     r"(?:오름차순|내림차순|상위|하위|순위|정렬|"
+    r"\d+\s*(?:등(?!급)|위(?!험))|"
     r"(?:높|낮|크|작|많|적|길|짧|빠르|멀|좋|싸)(?!\s*위험).{0,5}?순)",
     re.IGNORECASE,
 )

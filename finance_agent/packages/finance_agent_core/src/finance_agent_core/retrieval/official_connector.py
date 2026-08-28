@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import re
 import urllib.error
 import urllib.parse
@@ -11,6 +12,7 @@ from html.parser import HTMLParser
 from typing import Protocol
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pypdf import PdfReader
 
 from finance_agent_core.config.knowledge_coverage import KnowledgeCapability
 from finance_agent_core.config.source_registry import (
@@ -36,6 +38,37 @@ _PUBLICATION_META_KEYS = frozenset(
         "published_time",
     }
 )
+_KOREAN_EVIDENCE_DATE_PATTERN = re.compile(
+    r"(?:기준일|자료\s*기준|평가\s*기준|구성\s*종목\s*기준)\s*[:：]?\s*"
+    r"(20\d{2})\s*[년./-]\s*(\d{1,2})\s*[월./-]\s*(\d{1,2})\s*일?",
+    re.IGNORECASE,
+)
+_ENGLISH_EVIDENCE_DATE_PATTERN = re.compile(
+    r"(?:as\s+of|holdings\s+(?:date|as\s+of))\s*[:：]?\s*"
+    r"(January|February|March|April|May|June|July|August|September|October|November|December)"
+    r"\s+(\d{1,2}),?\s+(20\d{2})",
+    re.IGNORECASE,
+)
+_ENGLISH_MONTHS = {
+    value.casefold(): index
+    for index, value in enumerate(
+        (
+            "January",
+            "February",
+            "March",
+            "April",
+            "May",
+            "June",
+            "July",
+            "August",
+            "September",
+            "October",
+            "November",
+            "December",
+        ),
+        start=1,
+    )
+}
 
 
 class OfficialConnectorError(RuntimeError):
@@ -167,9 +200,7 @@ class UrllibOfficialHttpTransport:
                 content_type = response.headers.get_content_type().casefold()
                 body = response.read(max_bytes + 1)
         except urllib.error.HTTPError as error:
-            raise OfficialConnectorError(
-                f"official source returned HTTP {error.code}"
-            ) from error
+            raise OfficialConnectorError(f"official source returned HTTP {error.code}") from error
         except (urllib.error.URLError, TimeoutError, OSError) as error:
             raise OfficialConnectorError("official source fetch failed") from error
         if len(body) > max_bytes:
@@ -217,16 +248,35 @@ class _PublicationDateParser(HTMLParser):
         values = {key.casefold(): value for key, value in attrs if value is not None}
         if tag.casefold() == "meta":
             key = (
-                values.get("property")
-                or values.get("name")
-                or values.get("itemprop")
-                or ""
+                values.get("property") or values.get("name") or values.get("itemprop") or ""
             ).casefold()
             content = values.get("content")
             if key in _PUBLICATION_META_KEYS and content:
                 self.values.append(content)
         elif tag.casefold() == "time" and values.get("datetime"):
             self.values.append(values["datetime"])
+
+
+class _EvidenceTextParser(HTMLParser):
+    ignored = frozenset({"script", "style", "noscript", "svg"})
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.depth = 0
+        self.parts: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        del attrs
+        if tag.casefold() in self.ignored:
+            self.depth += 1
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag.casefold() in self.ignored and self.depth:
+            self.depth -= 1
+
+    def handle_data(self, data: str) -> None:
+        if not self.depth:
+            self.parts.append(data)
 
 
 def infer_official_publication_date(
@@ -250,6 +300,49 @@ def infer_official_publication_date(
             for value in parser.values
             if (parsed := _parse_publication_date(value)) is not None
         )
+    return next(iter(candidates)) if len(candidates) == 1 else None
+
+
+def infer_official_evidence_date(content_type: str, body: bytes) -> date | None:
+    """Resolve one explicit as-of date from bounded official document text."""
+
+    media_type = content_type.casefold().split(";", maxsplit=1)[0].strip()
+    if media_type in {"text/html", "application/xhtml+xml"}:
+        parser = _EvidenceTextParser()
+        parser.feed(body.decode("utf-8", errors="replace"))
+        parser.close()
+        text = " ".join(parser.parts)
+    elif media_type == "application/pdf":
+        try:
+            reader = PdfReader(io.BytesIO(body), strict=False)
+            if len(reader.pages) > 250:
+                return None
+            parts: list[str] = []
+            size = 0
+            for page in reader.pages:
+                value = page.extract_text() or ""
+                size += len(value)
+                if size > 2_000_000:
+                    return None
+                parts.append(value)
+            text = "\n".join(parts)
+        except Exception:  # noqa: BLE001 - a malformed date source is rejected
+            return None
+    elif media_type == "text/plain":
+        text = body.decode("utf-8", errors="replace")
+    else:
+        return None
+    candidates: set[date] = set()
+    for year, month, day in _KOREAN_EVIDENCE_DATE_PATTERN.findall(text):
+        try:
+            candidates.add(date(int(year), int(month), int(day)))
+        except ValueError:
+            continue
+    for month, day, year in _ENGLISH_EVIDENCE_DATE_PATTERN.findall(text):
+        try:
+            candidates.add(date(int(year), _ENGLISH_MONTHS[month.casefold()], int(day)))
+        except ValueError:
+            continue
     return next(iter(candidates)) if len(candidates) == 1 else None
 
 
@@ -286,9 +379,7 @@ class OfficialDocumentLinkResolver:
             if source.source_id != snapshot.source.source_id:
                 continue
             is_pdf = urllib.parse.urlsplit(url).path.casefold().endswith(".pdf")
-            if (
-                is_pdf and source.connector_kind is SourceConnectorKind.HTML
-            ) or (
+            if (is_pdf and source.connector_kind is SourceConnectorKind.HTML) or (
                 not is_pdf and source.connector_kind is SourceConnectorKind.PDF
             ):
                 continue
@@ -338,7 +429,7 @@ class StaticThenDynamicOfficialHttpTransport:
         if media_type not in {"text/html", "application/xhtml+xml"}:
             return static
         lowered = static.body.lower()
-        dynamic_markers = (b"__next_data__", b"id=\"__next\"", b"id=\"root\"", b"id=\"app\"")
+        dynamic_markers = (b"__next_data__", b'id="__next"', b'id="root"', b'id="app"')
         if len(static.body) >= self.minimum_static_bytes and not any(
             marker in lowered for marker in dynamic_markers
         ):
@@ -447,7 +538,10 @@ class OfficialSourceConnector:
         )
         if source.publication_date_required and published_at is None:
             raise OfficialConnectorError("official source requires an explicit publication date")
-        effective_as_of = request.as_of or published_at
+        evidence_at = infer_official_evidence_date(response.content_type, response.body)
+        if request.as_of is not None and evidence_at is not None and request.as_of != evidence_at:
+            raise OfficialConnectorError("official source evidence date conflicts with the request")
+        effective_as_of = request.as_of or evidence_at or published_at
         if effective_as_of is None:
             raise OfficialConnectorError("official source requires an explicit evidence date")
         if published_at is not None and published_at > self.registry.evidence_cutoff:
@@ -481,4 +575,5 @@ __all__ = [
     "OfficialSourceSnapshot",
     "StaticThenDynamicOfficialHttpTransport",
     "UrllibOfficialHttpTransport",
+    "infer_official_evidence_date",
 ]

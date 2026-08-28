@@ -207,10 +207,14 @@ class BackendAgentResponse(BackendContractModel):
                 raise ValueError("cannot_verify response cannot contain asserted evidence")
             if self.candidate_count is not None:
                 raise ValueError("cannot_verify cannot assert a candidate count")
-            if self.answer_mode not in {
-                BackendAnswerMode.CONTROL,
-                BackendAnswerMode.LLM_GROUNDED,
-            } or self.fallback_used:
+            if (
+                self.answer_mode
+                not in {
+                    BackendAnswerMode.CONTROL,
+                    BackendAnswerMode.LLM_GROUNDED,
+                }
+                or self.fallback_used
+            ):
                 raise ValueError("cannot_verify requires control or grounded LLM mode")
             if (self.answer_mode is BackendAnswerMode.LLM_GROUNDED) != (
                 self.provider_model is not None

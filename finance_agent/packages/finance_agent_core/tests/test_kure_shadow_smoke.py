@@ -10,7 +10,10 @@ from finance_agent_core.evaluation.schema_embedding_artifacts import (
     SchemaEmbeddingArtifactGateEvidence,
     load_schema_embedding_candidate_link,
 )
-from finance_agent_core.retrieval.schema_dense import EmbeddingProviderMetadata
+from finance_agent_core.retrieval.schema_dense import (
+    EmbeddingProviderMetadata,
+    build_schema_field_entries,
+)
 
 
 class _FakeVerifiedKureProvider:
@@ -100,7 +103,11 @@ def test_kure_shadow_smoke_is_one_call_non_authoritative_and_redacted(
     assert report.call.baseline_result_sha256 == report.call.observed_result_sha256
     assert report.call.query_plan_unchanged is True
     assert report.call.document_call_count == 1
-    assert report.call.document_text_count == report.artifact.field_key_count == 101
+    assert (
+        report.call.document_text_count
+        == report.artifact.field_key_count
+        == len(build_schema_field_entries())
+    )
     assert report.call.query_call_count == report.call.query_text_count == 1
     assert report.call.blocked_control_embedding_calls == 0
     assert report.call.ood_control_embedding_calls == 0

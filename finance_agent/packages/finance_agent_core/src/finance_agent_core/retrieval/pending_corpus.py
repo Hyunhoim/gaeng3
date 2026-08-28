@@ -96,9 +96,7 @@ class PendingCorpusSnapshot(PendingCorpusModel):
     text_size_bytes: int = Field(gt=0, le=_MAX_TEXT_BYTES)
     text_sha256: str = Field(pattern=_SHA256_PATTERN)
     rights_status: Literal["pending_independent_review"] = "pending_independent_review"
-    finance_review_status: Literal["pending_independent_review"] = (
-        "pending_independent_review"
-    )
+    finance_review_status: Literal["pending_independent_review"] = "pending_independent_review"
 
     @field_validator("collected_at_utc")
     @classmethod
@@ -117,9 +115,7 @@ class PendingCorpusFailure(PendingCorpusModel):
 
 class PendingCorpusManifest(PendingCorpusModel):
     schema_version: Literal["1.0"] = "1.0"
-    manifest_kind: Literal["external_corpus_pending_review"] = (
-        "external_corpus_pending_review"
-    )
+    manifest_kind: Literal["external_corpus_pending_review"] = "external_corpus_pending_review"
     status: Literal["not_authorized_for_retrieval_or_release"] = (
         "not_authorized_for_retrieval_or_release"
     )
@@ -253,9 +249,7 @@ def _file_manifest_sha256(
     payload = [
         {
             "document_id": item.document_id,
-            "relative_path": (
-                item.raw_relative_path if kind == "raw" else item.text_relative_path
-            ),
+            "relative_path": (item.raw_relative_path if kind == "raw" else item.text_relative_path),
             "sha256": item.raw_sha256 if kind == "raw" else item.text_sha256,
             "size_bytes": item.raw_size_bytes if kind == "raw" else item.text_size_bytes,
         }
@@ -265,9 +259,7 @@ def _file_manifest_sha256(
 
 
 def load_pending_corpus_catalog() -> PendingCorpusCatalog:
-    resource = files("finance_agent_core.config").joinpath(
-        "external_knowledge_source_catalog.json"
-    )
+    resource = files("finance_agent_core.config").joinpath("external_knowledge_source_catalog.json")
     return PendingCorpusCatalog.model_validate_json(resource.read_bytes())
 
 

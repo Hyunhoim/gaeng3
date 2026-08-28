@@ -81,9 +81,7 @@ class ExternalKnowledgeEvidenceVerifier:
         }
         violations: list[str] = []
         relations_by_id = {item.relation_id: item for item in bundle.relations}
-        requirement_by_id = {
-            item.requirement_id: item for item in bundle.plan.requirements
-        }
+        requirement_by_id = {item.requirement_id: item for item in bundle.plan.requirements}
 
         if set(bundle.requirement_relations) != set(requirement_by_id):
             checks["requirement_coverage"] = False
@@ -112,8 +110,10 @@ class ExternalKnowledgeEvidenceVerifier:
                 }:
                     checks["requirement_scope"] = False
                     violations.append(f"{requirement_id} relation does not bind its subject")
-                if relation.product_family is not None and requirement.product_families and (
-                    relation.product_family not in requirement.product_families
+                if (
+                    relation.product_family is not None
+                    and requirement.product_families
+                    and (relation.product_family not in requirement.product_families)
                 ):
                     checks["requirement_scope"] = False
                     violations.append(f"{requirement_id} relation changed product family")
@@ -136,16 +136,18 @@ class ExternalKnowledgeEvidenceVerifier:
                 ):
                     checks["source_scope"] = False
                     violations.append(f"{requirement_id} used an unauthorized source")
-                if relation.product_id is not None and (
-                    relation.product_family,
-                    relation.product_id,
-                ) not in approved_product_ids:
+                if (
+                    relation.product_id is not None
+                    and (
+                        relation.product_family,
+                        relation.product_id,
+                    )
+                    not in approved_product_ids
+                ):
                     checks["official_product_join"] = False
                     violations.append(f"{requirement_id} product is absent from the official DB")
 
-        fact_product_ids = {
-            (item.product_family, item.product_id) for item in bundle.product_facts
-        }
+        fact_product_ids = {(item.product_family, item.product_id) for item in bundle.product_facts}
         if not fact_product_ids <= approved_product_ids:
             checks["official_product_join"] = False
             violations.append("product facts contain a product outside the official DB")
@@ -160,10 +162,14 @@ class ExternalKnowledgeEvidenceVerifier:
             for relation in bundle.relations
             if relation.capability is KnowledgeCapability.PORTFOLIO_HOLDINGS
         ]
-        if subsidiary_objects and holdings and not any(
-            relation.subject.entity_id in subsidiary_objects
-            or relation.object.entity_id in subsidiary_objects
-            for relation in holdings
+        if (
+            subsidiary_objects
+            and holdings
+            and not any(
+                relation.subject.entity_id in subsidiary_objects
+                or relation.object.entity_id in subsidiary_objects
+                for relation in holdings
+            )
         ):
             checks["multi_hop_chain"] = False
             violations.append("subsidiary and portfolio-holding relations do not join")
@@ -172,9 +178,7 @@ class ExternalKnowledgeEvidenceVerifier:
             for relation in bundle.relations
             if relation.capability is KnowledgeCapability.PRODUCT_RISK_FACTORS
         }
-        holding_products = {
-            (relation.product_family, relation.product_id) for relation in holdings
-        }
+        holding_products = {(relation.product_family, relation.product_id) for relation in holdings}
         if risk_products and holding_products and not risk_products <= holding_products:
             checks["multi_hop_chain"] = False
             violations.append("risk evidence is not attached to a holding-matched product")

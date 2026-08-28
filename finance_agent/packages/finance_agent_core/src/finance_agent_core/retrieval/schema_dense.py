@@ -225,8 +225,7 @@ class SchemaDenseActivationPolicy(SchemaDenseModel):
         if self.hclx_candidate_min_score > self.dense_min_score:
             raise ValueError("HCLX candidate floor cannot exceed the Dense auto-admit score")
         keys = [
-            (item.product_family, item.field_id, item.operation)
-            for item in self.field_thresholds
+            (item.product_family, item.field_id, item.operation) for item in self.field_thresholds
         ]
         if len(keys) != len(set(keys)):
             raise ValueError("Schema Dense field thresholds must be unique")
@@ -273,9 +272,7 @@ _P1_FIELD_GROUPS: dict[str, tuple[str, frozenset[ProductFamily], bool]] = {
     "maturity_date": ("bond_maturity_basis", frozenset({ProductFamily.BOND}), False),
     "aum": (
         "asset_scale",
-        frozenset(
-            {ProductFamily.DOMESTIC_ETP, ProductFamily.OVERSEAS_ETP, ProductFamily.FUND}
-        ),
+        frozenset({ProductFamily.DOMESTIC_ETP, ProductFamily.OVERSEAS_ETP, ProductFamily.FUND}),
         False,
     ),
     "daily_trading_value": (
@@ -771,10 +768,7 @@ def _schema_field_embedding_prototypes(
             f"{prefix} | 사용자 표현: {expression} | 의미: {context['definition']}"
             for expression in context["user_expressions"]
         ),
-        *(
-            f"{prefix} | 구분 기준: {contrast}"
-            for contrast in context["contrasts"]
-        ),
+        *(f"{prefix} | 구분 기준: {contrast}" for contrast in context["contrasts"]),
     ]
     if not context["user_expressions"]:
         prototypes.extend(
@@ -934,11 +928,7 @@ class DenseSchemaIndex:
         if corpus_template_version == _CORPUS_TEMPLATE_VERSION_V3:
             if any(not entry.embedding_prototypes for entry in ordered):
                 raise SchemaDenseContractError("prototype corpus requires every field prototype")
-            flattened = [
-                prototype
-                for entry in ordered
-                for prototype in entry.embedding_prototypes
-            ]
+            flattened = [prototype for entry in ordered for prototype in entry.embedding_prototypes]
             prototype_vectors = provider.embed_documents(flattened)
             if len(prototype_vectors) != len(flattened):
                 raise SchemaDenseContractError(

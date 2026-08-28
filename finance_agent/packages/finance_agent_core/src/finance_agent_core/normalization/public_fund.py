@@ -24,12 +24,14 @@ SOURCE_COLUMNS = (
     "fd_daily_bas_dt",
     "fd_estb_ctry_cd",
     "fd_ivst_rgn_desc",
+    "fd_last_dstb_r",
     "fd_mm18_ern_r",
     "fd_mm1_ern_r",
     "fd_mm3_ern_r",
     "fd_mm6_ern_r",
     "fd_nast_suma",
     "fd_price_bas_dt",
+    "fd_prsv_r",
     "fd_set_pcd",
     "fd_wk1_ern_r",
     "fd_yr1_ern_r",
@@ -40,6 +42,7 @@ SOURCE_COLUMNS = (
     "fss_itm_no",
     "hdge_fd_yn",
     "int_dvd_desc",
+    "han_clas_sales_channel",
     "itm_abrv_nm",
     "itm_eabrv_nm",
     "itm_eng_nm",
@@ -50,6 +53,7 @@ SOURCE_COLUMNS = (
     "mtco_itm_no",
     "ofsfd_yn",
     "or_attr_desc",
+    "sale_co_rwrd_r",
     "or_co_xtn_itt_cd",
     "ovrs_fd_desc",
     "pers_corp_desc",
@@ -64,8 +68,13 @@ SOURCE_COLUMNS = (
     "std_itm_no",
     "thco_sale_yn",
     "trusc_xtn_itt_cd",
+    "trusc_rwrd_r",
+    "zrin_dmst_bd_cmst_rt",
+    "zrin_dmst_stk_cmst_rt",
     "zrin_fd_ivst_risk_gcd",
     "zrin_fd_ivst_risk_grd_nm",
+    "zrin_ovrs_bd_cmst_rt",
+    "zrin_ovrs_stk_cmst_rt",
 )
 PRODUCT_COLUMNS = SOURCE_COLUMNS
 VALID_PRODUCT_KEY = re.compile(r"KR[A-Z0-9]{10}")
@@ -217,6 +226,14 @@ def _quality(
     return present_quality, present_reason
 
 
+def _numeric_quality(value: Decimal | None, *, field: str) -> tuple[QualityStatus, str | None]:
+    if value is None:
+        return QualityStatus.UNKNOWN, f"{field}_missing"
+    if value == 0:
+        return QualityStatus.UNKNOWN, f"{field}_zero_excluded_by_official_policy"
+    return QualityStatus.VALID, None
+
+
 def _normalize_product(
     *,
     source_row: int,
@@ -319,16 +336,54 @@ def _normalize_product(
         aum_quality = (QualityStatus.VALID, None)
 
     short_returns = {
-        name: _quantized_decimal(
-            values.get(source), field=source, precision=MICRO_PRECISION
-        )
+        name: _quantized_decimal(values.get(source), field=source, precision=MICRO_PRECISION)
         for name, source in SHORT_RETURN_SOURCES.items()
     }
     long_returns = {
-        name: _quantized_decimal(
-            values.get(source), field=source, precision=MICRO_PRECISION
-        )
+        name: _quantized_decimal(values.get(source), field=source, precision=MICRO_PRECISION)
         for name, source in LONG_RETURN_SOURCES.items()
+    }
+    numeric_metrics = {
+        "sale_company_fee_pct": _quantized_decimal(
+            values.get("sale_co_rwrd_r"),
+            field="sale_co_rwrd_r",
+            precision=MICRO_PRECISION,
+        ),
+        "trustee_fee_pct": _quantized_decimal(
+            values.get("trusc_rwrd_r"),
+            field="trusc_rwrd_r",
+            precision=MICRO_PRECISION,
+        ),
+        "domestic_stock_ratio_pct": _quantized_decimal(
+            values.get("zrin_dmst_stk_cmst_rt"),
+            field="zrin_dmst_stk_cmst_rt",
+            precision=MICRO_PRECISION,
+        ),
+        "domestic_bond_ratio_pct": _quantized_decimal(
+            values.get("zrin_dmst_bd_cmst_rt"),
+            field="zrin_dmst_bd_cmst_rt",
+            precision=MICRO_PRECISION,
+        ),
+        "overseas_stock_ratio_pct": _quantized_decimal(
+            values.get("zrin_ovrs_stk_cmst_rt"),
+            field="zrin_ovrs_stk_cmst_rt",
+            precision=MICRO_PRECISION,
+        ),
+        "overseas_bond_ratio_pct": _quantized_decimal(
+            values.get("zrin_ovrs_bd_cmst_rt"),
+            field="zrin_ovrs_bd_cmst_rt",
+            precision=MICRO_PRECISION,
+        ),
+        "latest_distribution_pct": _quantized_decimal(
+            values.get("fd_last_dstb_r"),
+            field="fd_last_dstb_r",
+            precision=MICRO_PRECISION,
+        ),
+        "preservation_ratio_pct": _quantized_decimal(
+            values.get("fd_prsv_r"),
+            field="fd_prsv_r",
+            precision=MICRO_PRECISION,
+        ),
     }
     dynamic_source_date = _date(
         values.get("fd_price_bas_dt") or values.get("fd_daily_bas_dt"),
@@ -376,6 +431,14 @@ def _normalize_product(
             QualityStatus.UNKNOWN,
             "benchmark_semantics_unconfirmed",
         ),
+        "sales_channel": _quality(
+            _text(values.get("han_clas_sales_channel"), field="han_clas_sales_channel"),
+            missing_reason="sales_channel_missing",
+        ),
+        "interest_dividend_type": _quality(
+            _text(values.get("int_dvd_desc"), field="int_dvd_desc"),
+            missing_reason="interest_dividend_type_missing",
+        ),
         "static_as_of": (QualityStatus.VALID, None),
         "dynamic_as_of": (
             QualityStatus.VALID if dynamic_source_date is not None else QualityStatus.PARTIAL,
@@ -402,6 +465,8 @@ def _normalize_product(
                 "raw_source_value_preserved_without_outlier_capping",
             )
         )
+    for field_name, value in numeric_metrics.items():
+        quality_pairs[field_name] = _numeric_quality(value, field=field_name)
 
     return NormalizedPublicFundRecord(
         source_row=source_row,
@@ -424,6 +489,19 @@ def _normalize_product(
         risk_level=risk_level,
         aum=aum,
         base_index=_text(values.get("bmrk_nm"), field="bmrk_nm"),
+        sales_channel=_text(
+            values.get("han_clas_sales_channel"),
+            field="han_clas_sales_channel",
+        ),
+        interest_dividend_type=_text(values.get("int_dvd_desc"), field="int_dvd_desc"),
+        sale_company_fee_pct=numeric_metrics["sale_company_fee_pct"],
+        trustee_fee_pct=numeric_metrics["trustee_fee_pct"],
+        domestic_stock_ratio_pct=numeric_metrics["domestic_stock_ratio_pct"],
+        domestic_bond_ratio_pct=numeric_metrics["domestic_bond_ratio_pct"],
+        overseas_stock_ratio_pct=numeric_metrics["overseas_stock_ratio_pct"],
+        overseas_bond_ratio_pct=numeric_metrics["overseas_bond_ratio_pct"],
+        latest_distribution_pct=numeric_metrics["latest_distribution_pct"],
+        preservation_ratio_pct=numeric_metrics["preservation_ratio_pct"],
         one_week_return_pct=short_returns["one_week_return_pct"],
         one_month_return_pct=short_returns["one_month_return_pct"],
         three_month_return_pct=short_returns["three_month_return_pct"],
@@ -457,14 +535,14 @@ def normalize_public_fund_rows(
         raw_row_count += 1
         values = {column: row_values.get(column) for column in SOURCE_COLUMNS}
         item_number = _text(values.get("itm_no"), field="itm_no")
-        aggregate_attribute_code = _text(
-            values.get("prfd_attr_cds"),
-            field="prfd_attr_cds",
-        ) or "__NO_ATTRIBUTE__"
-        if (
-            item_number is None
-            or VALID_PRODUCT_KEY.fullmatch(item_number) is None
-        ):
+        aggregate_attribute_code = (
+            _text(
+                values.get("prfd_attr_cds"),
+                field="prfd_attr_cds",
+            )
+            or "__NO_ATTRIBUTE__"
+        )
+        if item_number is None or VALID_PRODUCT_KEY.fullmatch(item_number) is None:
             quarantine.append(
                 QuarantinedPublicFundRow(
                     source_row=source_row,

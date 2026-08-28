@@ -403,7 +403,10 @@ def test_settings_reject_inline_hcx_environment_by_name_without_exposing_value(
     assert secret not in str(caught.value)
 
 
-@pytest.mark.parametrize("variable", ["NAVER_API_HUB_KEY_ID", "NAVER_API_HUB_KEY"])
+@pytest.mark.parametrize(
+    "variable",
+    ["NAVER_API_HUB_CLIENT_ID", "NAVER_API_HUB_CLIENT_SECRET"],
+)
 def test_settings_reject_inline_naver_api_hub_environment_without_exposing_value(
     monkeypatch: pytest.MonkeyPatch,
     variable: str,

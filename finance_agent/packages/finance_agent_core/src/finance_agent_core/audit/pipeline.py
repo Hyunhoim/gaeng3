@@ -356,9 +356,8 @@ def audit_dataset(
                     if value.strip()
                 }
                 declared_attribute_count = _decimal(cells.get(index["prfd_attr_cnt"]))
-                if (
-                    declared_attribute_count is None
-                    or declared_attribute_count != len(attribute_codes)
+                if declared_attribute_count is None or declared_attribute_count != len(
+                    attribute_codes
                 ):
                     fund_attribute_count_mismatch_products += 1
                 existing = fund_products.get(item_number)

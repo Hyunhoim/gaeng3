@@ -40,6 +40,10 @@ _STALE_BOND_FIELDS = {
     "after_tax_yield_pct",
     "buyable_quantity",
     "duration_years",
+    "applied_yield_pct",
+    "evaluation_price",
+    "dirty_price",
+    "convexity",
 }
 
 

@@ -237,16 +237,42 @@ class PublicDocumentRetrievalRelease(ReleaseModel):
 
 class ExternalKnowledgeArtifactRelease(ReleaseModel):
     artifact_kind: Literal["official_external_knowledge"] = "official_external_knowledge"
+    retrieval_mode: Literal[
+        "approved_corpus_cache_first",
+        "verified_live_official",
+    ] = "approved_corpus_cache_first"
     source_registry_sha256: str = Field(pattern=_SHA256_PATTERN)
     coverage_manifest_sha256: str = Field(pattern=_SHA256_PATTERN)
     corpus_manifest_sha256: str = Field(pattern=_SHA256_PATTERN)
-    document_bm25_sha256: str = Field(pattern=_SHA256_PATTERN)
-    document_dense_sha256: str = Field(pattern=_SHA256_PATTERN)
+    document_bm25_sha256: str | None = Field(default=None, pattern=_SHA256_PATTERN)
+    document_dense_sha256: str | None = Field(default=None, pattern=_SHA256_PATTERN)
     temporal_relation_sha256: str = Field(pattern=_SHA256_PATTERN)
     verifier_contract_sha256: str = Field(pattern=_SHA256_PATTERN)
-    embedding_model_revision: Literal[
+    embedding_model_revision: Literal["d14c8a9423946e268a0c9952fecf3a7aabd73bd9"] | None = (
         "d14c8a9423946e268a0c9952fecf3a7aabd73bd9"
-    ] = "d14c8a9423946e268a0c9952fecf3a7aabd73bd9"
+    )
+
+    @model_validator(mode="after")
+    def validate_retrieval_mode(self) -> ExternalKnowledgeArtifactRelease:
+        if self.retrieval_mode == "approved_corpus_cache_first":
+            if (
+                self.document_bm25_sha256 is None
+                or self.document_dense_sha256 is None
+                or self.embedding_model_revision is None
+            ):
+                raise ValueError(
+                    "approved corpus external knowledge requires BM25, Dense, and KURE revision"
+                )
+        elif any(
+            value is not None
+            for value in (
+                self.document_bm25_sha256,
+                self.document_dense_sha256,
+                self.embedding_model_revision,
+            )
+        ):
+            raise ValueError("live-only external knowledge cannot claim document indexes")
+        return self
 
 
 class PublicExternalKnowledgeRelease(ReleaseModel):
@@ -271,9 +297,7 @@ class PublicKnowledgeRetrievalRelease(ReleaseModel):
     schema_version: Literal["1.0"] = "1.0"
     relation: PublicRelationRetrievalRelease
     document: PublicDocumentRetrievalRelease
-    external: PublicExternalKnowledgeRelease = Field(
-        default_factory=PublicExternalKnowledgeRelease
-    )
+    external: PublicExternalKnowledgeRelease = Field(default_factory=PublicExternalKnowledgeRelease)
 
     @property
     def contract_sha256(self) -> str:

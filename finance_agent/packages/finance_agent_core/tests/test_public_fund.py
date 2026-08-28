@@ -861,7 +861,7 @@ def test_public_fund_scope_is_mandatory_while_agent_execution_is_approved() -> N
     require_internal_evaluation_search(plan)
 
 
-def test_public_fund_aum_comparison_requires_locked_currency_scope() -> None:
+def test_public_fund_aum_uses_official_source_basis_without_currency_scope() -> None:
     payload = fund_vertical_slice_plan("fund-aum-policy-001").model_dump(mode="json")
     payload["ranking"] = [
         {
@@ -872,8 +872,8 @@ def test_public_fund_aum_comparison_requires_locked_currency_scope() -> None:
     ]
     without_currency = QueryPlan.model_validate(payload)
 
-    with pytest.raises(PlanExecutionBlockedError, match="trading_currency = KRW or USD"):
-        compile_search_sql(without_currency)
+    compile_search_sql(without_currency)
+    require_internal_evaluation_search(without_currency)
 
     payload["constraints"].append(
         {

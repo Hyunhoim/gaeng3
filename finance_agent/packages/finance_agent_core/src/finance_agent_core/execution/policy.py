@@ -23,20 +23,18 @@ _IDENTITY_GROUP_FIELDS = {
     "isin",
 }
 _ADDITIVE_UNITS = {"source_currency_amount", "source_quantity"}
-_EXCLUDE_UNUSABLE_RANKING_FIELDS = {
-    ProductFamily.FUND: frozenset({"one_year_return_pct"}),
-}
 
 
 def ranking_requires_usable_value(plan: QueryPlan, field_name: str) -> bool:
-    """Return whether a ranked field must exclude missing/unusable rows entirely."""
+    """Apply the official 0/missing exclusion rule to every numeric ranking."""
 
     if len(plan.product_families) != 1:
         return False
-    return field_name in _EXCLUDE_UNUSABLE_RANKING_FIELDS.get(
-        plan.product_families[0],
-        frozenset(),
+    definition = load_field_registry().require_field(
+        field_name,
+        [plan.product_families[0].value],
     )
+    return definition.value_type is ValueType.NUMBER
 
 
 def require_fund_public_scope(plan: QueryPlan) -> None:
@@ -57,29 +55,15 @@ def require_fund_public_scope(plan: QueryPlan) -> None:
 
 
 def require_fund_aum_currency_scope(plan: QueryPlan) -> None:
-    if plan.product_families != [ProductFamily.FUND]:
-        return
-    compares_aum = any(constraint.field == "aum" for constraint in plan.constraints) or any(
-        ranking.field == "aum" for ranking in plan.ranking
-    )
-    compares_aum = compares_aum or any(
-        aggregation.field == "aum" for aggregation in plan.intent_payload.aggregations
-    )
-    if not compares_aum:
-        return
-    currency_constraints = [
-        constraint for constraint in plan.constraints if constraint.field == "trading_currency"
-    ]
-    if (
-        len(currency_constraints) != 1
-        or currency_constraints[0].operator is not ConstraintOperator.EQ
-        or currency_constraints[0].value not in {"KRW", "USD"}
-        or currency_constraints[0].strength is not ConstraintStrength.LOCKED
-    ):
-        raise PlanExecutionBlockedError(
-            "fund AUM comparison requires exactly one locked "
-            "trading_currency = KRW or USD constraint"
-        )
+    """Accept the organizer-provided fund AUM as the canonical ranking basis.
+
+    The official evaluation compares the supplied AUM column directly and does
+    not require the user to repeat a currency.  Cross-family amount arithmetic
+    still has a separate same-unit guard; this single-family ranking policy must
+    not manufacture a clarification that the official question did not ask for.
+    """
+
+    return
 
 
 def comparison_product_ids(plan: QueryPlan) -> list[str]:

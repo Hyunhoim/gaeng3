@@ -351,9 +351,7 @@ def test_explicit_metric_context_is_not_blocked_as_generic_preference(
     plan = ServerQueryPlanCompiler({}).compile(decision)
 
     assert decision.disposition.value == "execute"
-    assert [(item.field, item.direction.value) for item in plan.ranking] == [
-        (field, direction)
-    ]
+    assert [(item.field, item.direction.value) for item in plan.ranking] == [(field, direction)]
 
 
 @pytest.mark.parametrize(

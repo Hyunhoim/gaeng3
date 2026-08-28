@@ -461,7 +461,6 @@ def test_relation_wiring_preserves_existing_product_intents(
         "미국에 투자하는 국내 ETF 중 판매 가능한 상품을 보여줘",
         "테스트운용이 운용하는 매수 가능한 국내 ETF를 보여줘",
         "미국에 투자하는 국내 ETF 중 테스트운용 상품은 제외해줘",
-        "미국에 투자하는 국내 ETF 중 거래량 100만 이상을 보여줘",
     ],
 )
 def test_relation_mixed_conditions_stop_before_any_execution(
@@ -513,6 +512,11 @@ def test_relation_mixed_conditions_stop_before_any_execution(
             "daily_trading_value",
             "desc",
         ),
+        (
+            "미국에 투자하는 국내 ETF 중 거래량 100만 이상을 보여줘",
+            "daily_volume",
+            1_000_000,
+        ),
     ],
 )
 def test_relation_surface_with_supported_product_conditions_uses_product_sql(
@@ -539,7 +543,9 @@ def test_relation_surface_with_supported_product_conditions_uses_product_sql(
     )
 
     assert result.http_status_code == 200
-    assert result.response.status is BackendStatus.SUCCESS
+    assert result.response.status is (
+        BackendStatus.NOT_FOUND if field == "daily_volume" else BackendStatus.SUCCESS
+    )
     assert result.response.query_plan is not None
     assert any(
         item.field == "investment_region" and item.value == "미국"
@@ -548,6 +554,11 @@ def test_relation_surface_with_supported_product_conditions_uses_product_sql(
     if field == "trading_suspended":
         assert any(
             item.field == field and item.value is expected_value
+            for item in result.response.query_plan.constraints
+        )
+    elif field == "daily_volume":
+        assert any(
+            item.field == field and item.value == expected_value
             for item in result.response.query_plan.constraints
         )
     else:

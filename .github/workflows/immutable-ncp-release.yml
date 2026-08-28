@@ -224,6 +224,14 @@ jobs:
           "$RUNNER_TEMP/release-venv/bin/python" -m pip install \
             --disable-pip-version-check \
             --requirement fastapi_backend/requirements.txt
+          PYTHONPATH="$GITHUB_WORKSPACE/finance_agent/packages/finance_agent_core/src" \
+            "$RUNNER_TEMP/release-venv/bin/python" \
+            -m finance_agent_core.retrieval.external_knowledge_release_cli \
+            --artifact "$RELEASE_OUTPUT_DIR/external-knowledge-artifact.json" \
+            --temporal-relations "$RELEASE_OUTPUT_DIR/external-temporal-relations.json"
+          external_knowledge_artifact_sha256="$(
+            sha256sum "$RELEASE_OUTPUT_DIR/external-knowledge-artifact.json" | cut -d ' ' -f 1
+          )"
           manifest_arguments=(
             --release-id "$RELEASE_ID"
             --environment "$RELEASE_ENVIRONMENT"
@@ -235,6 +243,8 @@ jobs:
             --fund-execution-policy "$FUND_EXECUTION_POLICY"
             --relation-retrieval-artifact "$RELATION_RETRIEVAL_ARTIFACT_FILE"
             --relation-retrieval-artifact-sha256 "$RELATION_RETRIEVAL_ARTIFACT_SHA256"
+            --external-knowledge-artifact "$RELEASE_OUTPUT_DIR/external-knowledge-artifact.json"
+            --external-knowledge-artifact-sha256 "$external_knowledge_artifact_sha256"
             --output "$RELEASE_OUTPUT_DIR/agent-release-manifest.json"
           )
           if [ "$MODEL_ID" = "HCX-007" ]; then
@@ -509,6 +519,8 @@ jobs:
           sha256sum \
             "$RELEASE_OUTPUT_DIR/agent-release-manifest.json" \
             "$RELEASE_OUTPUT_DIR/deployment-binding.json" \
+            "$RELEASE_OUTPUT_DIR/external-knowledge-artifact.json" \
+            "$RELEASE_OUTPUT_DIR/external-temporal-relations.json" \
             "$RELEASE_OUTPUT_DIR/image-runtime-boundary.json" \
             "$RELEASE_OUTPUT_DIR/release-metadata.json" \
             "$RELEASE_OUTPUT_DIR/schema-dense-index.json" \
@@ -523,6 +535,8 @@ jobs:
           path: |
             fastapi_backend/release/agent-release-manifest.json
             fastapi_backend/release/deployment-binding.json
+            fastapi_backend/release/external-knowledge-artifact.json
+            fastapi_backend/release/external-temporal-relations.json
             fastapi_backend/release/release-metadata.json
             fastapi_backend/release/release-artifacts.sha256
             fastapi_backend/release/release-image-inspect.json

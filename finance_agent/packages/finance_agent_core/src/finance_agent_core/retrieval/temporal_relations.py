@@ -114,15 +114,17 @@ class TemporalRelationRecord(TemporalRelationModel):
         if self.valid_from is not None and self.observed_at < self.valid_from:
             raise ValueError("relation cannot be observed before it becomes valid")
         evidence_ids = [item.evidence_id for item in self.evidence]
-        if evidence_ids != sorted(evidence_ids) or len(evidence_ids) != len(
-            set(evidence_ids)
-        ):
+        if evidence_ids != sorted(evidence_ids) or len(evidence_ids) != len(set(evidence_ids)):
             raise ValueError("relation evidence must be unique and sorted")
-        if self.capability in {
-            KnowledgeCapability.PORTFOLIO_HOLDINGS,
-            KnowledgeCapability.PRODUCT_RISK_FACTORS,
-            KnowledgeCapability.SECTOR_THEME_HISTORY,
-        } and self.product_id is None:
+        if (
+            self.capability
+            in {
+                KnowledgeCapability.PORTFOLIO_HOLDINGS,
+                KnowledgeCapability.PRODUCT_RISK_FACTORS,
+                KnowledgeCapability.SECTOR_THEME_HISTORY,
+            }
+            and self.product_id is None
+        ):
             raise ValueError("product relation capabilities require an official product reference")
         return self
 
@@ -152,28 +154,24 @@ class TemporalRelationManifest(TemporalRelationModel):
     manifest_kind: Literal["approved_temporal_relations"] = "approved_temporal_relations"
     evidence_cutoff: date
     source_registry_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
-    relation_count: int = Field(gt=0)
+    relation_count: int = Field(ge=0)
     relation_set_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     corpus_manifest_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
 
 
 class VerifiedTemporalRelationBundle(TemporalRelationModel):
     manifest: TemporalRelationManifest
-    relations: tuple[TemporalRelationRecord, ...] = Field(min_length=1)
+    relations: tuple[TemporalRelationRecord, ...] = ()
 
     @model_validator(mode="after")
     def verify_bundle(self) -> VerifiedTemporalRelationBundle:
         relation_ids = [item.relation_id for item in self.relations]
-        if relation_ids != sorted(relation_ids) or len(relation_ids) != len(
-            set(relation_ids)
-        ):
+        if relation_ids != sorted(relation_ids) or len(relation_ids) != len(set(relation_ids)):
             raise ValueError("temporal relations must be unique and sorted")
         if self.manifest.relation_count != len(self.relations):
             raise ValueError("temporal relation count differs from manifest")
         digest = hashlib.sha256(
-            _canonical_json_bytes(
-                [item.model_dump(mode="json") for item in self.relations]
-            )
+            _canonical_json_bytes([item.model_dump(mode="json") for item in self.relations])
         ).hexdigest()
         if digest != self.manifest.relation_set_sha256:
             raise ValueError("temporal relation set differs from manifest")

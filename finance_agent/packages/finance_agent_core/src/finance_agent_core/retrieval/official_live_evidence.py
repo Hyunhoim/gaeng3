@@ -46,6 +46,12 @@ _RELATION_SIGNAL = {
         r"위험|리스크|손실|변동|risk", re.IGNORECASE
     ),
 }
+_SUBSIDIARY_PAIR = re.compile(
+    r"(?P<parent>[0-9A-Za-z가-힣&·+._/-]{2,80})\s*"
+    r"(?:의\s*)?(?:자회사|계열사|가족사)(?:인|인\s*)?\s*"
+    r"(?P<child>[0-9A-Za-z가-힣&·+._/-]{2,80})",
+    re.IGNORECASE,
+)
 
 
 class OfficialLiveEvidenceError(RuntimeError):
@@ -173,23 +179,104 @@ class VerifiedLiveRelationExtractor:
         if snapshot.capability is not requirement.capability:
             raise OfficialLiveEvidenceError("snapshot capability differs from requirement")
         text = extract_official_snapshot_text(snapshot)
-        subject = _normalized(requirement.subject)
+        subjects = tuple(
+            value
+            for value in (
+                _normalized(requirement.subject),
+                *(_normalized(alias) for alias in requirement.search_aliases),
+            )
+            if value
+        )
         signal = _RELATION_SIGNAL[requirement.capability]
         relations: list[TemporalRelationRecord] = []
-        for ordinal, excerpt in enumerate(
-            chunk_document(text, max_chars=1200, overlap_chars=200)
-        ):
-            if not subject or subject not in _normalized(excerpt) or signal.search(excerpt) is None:
+        subsidiary_pair = (
+            _SUBSIDIARY_PAIR.search(requirement.relation_evidence_span)
+            if requirement.capability is KnowledgeCapability.CORPORATE_SUBSIDIARY
+            else None
+        )
+        for ordinal, excerpt in enumerate(chunk_document(text, max_chars=1200, overlap_chars=200)):
+            normalized_excerpt = _normalized(excerpt)
+            if (
+                not subjects
+                or not any(subject in normalized_excerpt for subject in subjects)
+                or signal.search(excerpt) is None
+            ):
+                continue
+            if requirement.capability is KnowledgeCapability.CORPORATE_SUBSIDIARY:
+                if subsidiary_pair is None:
+                    continue
+                parent = subsidiary_pair.group("parent").strip()
+                child = subsidiary_pair.group("child").strip()
+                if (
+                    _normalized(parent) not in normalized_excerpt
+                    or _normalized(child) not in normalized_excerpt
+                ):
+                    continue
+                evidence_id = _entity_id(
+                    "evidence",
+                    f"{snapshot.content_sha256}:{ordinal}:{parent}:{child}",
+                )
+                relations.append(
+                    TemporalRelationRecord(
+                        relation_id=_entity_id(
+                            "relation",
+                            f"{requirement.requirement_id}:{evidence_id}",
+                        ),
+                        capability=requirement.capability,
+                        predicate=requirement.predicate,
+                        subject=TemporalEntity(
+                            entity_id=_entity_id("company", parent),
+                            kind=TemporalEntityKind.COMPANY,
+                            canonical_name=parent,
+                        ),
+                        object=TemporalEntity(
+                            entity_id=_entity_id("company", child),
+                            kind=TemporalEntityKind.COMPANY,
+                            canonical_name=child,
+                        ),
+                        valid_from=snapshot.published_at or snapshot.as_of,
+                        valid_to=snapshot.published_at or snapshot.as_of,
+                        observed_at=snapshot.as_of,
+                        evidence=(
+                            ExternalEvidenceReference(
+                                evidence_id=evidence_id,
+                                source_registry_id=snapshot.source.source_id,
+                                document_id=_entity_id("doc", snapshot.source_uri),
+                                title=snapshot.title,
+                                publisher=snapshot.source.publisher,
+                                source_uri=snapshot.source_uri,
+                                published_at=snapshot.published_at,
+                                as_of=snapshot.as_of,
+                                content_sha256=snapshot.content_sha256,
+                                locator=f"extracted chunk {ordinal}",
+                                excerpt=excerpt,
+                            ),
+                        ),
+                    )
+                )
                 continue
             products = intersect_evidence_with_provided_products(universe, (excerpt,))
+            if (
+                not products
+                and requirement.capability is KnowledgeCapability.FUND_STRUCTURE_STRATEGY_TREND
+                and universe.explicit_identity_bound
+                and len(universe.candidates) == 1
+            ):
+                # The question has already been bound to one exact provided-DB
+                # product identity.  An approved policy document may describe
+                # the named fund programme without repeating the DB's full
+                # sale-product label in every excerpt.  This exception is
+                # deliberately unavailable to broad or inferred candidates.
+                products = universe.candidates
             for product in products:
+                subject_kind = (
+                    TemporalEntityKind.THEME
+                    if requirement.capability is KnowledgeCapability.SECTOR_THEME_HISTORY
+                    else TemporalEntityKind.COMPANY
+                )
                 subject_entity = TemporalEntity(
-                    entity_id=_entity_id("subject", requirement.subject),
-                    kind=(
-                        TemporalEntityKind.THEME
-                        if requirement.capability is KnowledgeCapability.SECTOR_THEME_HISTORY
-                        else TemporalEntityKind.COMPANY
-                    ),
+                    entity_id=_entity_id(subject_kind.value, requirement.subject),
+                    kind=subject_kind,
                     canonical_name=requirement.subject,
                 )
                 product_entity = _product_entity(product)
@@ -212,8 +299,6 @@ class VerifiedLiveRelationExtractor:
                         canonical_name=excerpt[:500],
                     )
                 else:
-                    # Subsidiary discovery requires a separately verified company
-                    # entity pair; co-occurrence alone is not sufficient.
                     continue
                 evidence_id = _entity_id(
                     "evidence",

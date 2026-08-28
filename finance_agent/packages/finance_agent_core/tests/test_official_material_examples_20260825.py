@@ -5,7 +5,6 @@ import json
 from pathlib import Path
 
 from finance_agent_core.agent import RoutedFinanceAgent, execute_answer_request
-from finance_agent_core.agent.product_identity import approved_fund_group_alias_term
 from finance_agent_core.agent.router import IntentRouter
 from finance_agent_core.config.knowledge_coverage import (
     KnowledgeCapability,
@@ -68,7 +67,6 @@ def test_named_fund_identity_is_preserved_before_unsupported_document_gate() -> 
     assert decision.draft.intent.value == "detail"
     assert decision.draft.product_families == [ProductFamily.FUND]
     assert decision.draft.product_mentions == ["국민성장펀드"]
-    assert approved_fund_group_alias_term(decision.draft.product_mentions[0]) == "국민성장"
 
 
 def test_absent_branded_product_name_executes_locked_lookup_and_returns_not_found(
@@ -103,9 +101,7 @@ def test_absent_branded_product_name_executes_locked_lookup_and_returns_not_foun
     assert result.response.candidate_count == 0
     assert result.response.products == []
     assert result.response.query_plan is not None
-    assert result.response.query_plan == plan.model_copy(
-        update={"question_id": "UNANSWERABLE-03"}
-    )
+    assert result.response.query_plan == plan.model_copy(update={"question_id": "UNANSWERABLE-03"})
 
 
 def test_exact_product_name_alias_resolves_its_family_and_canonical_id(
@@ -125,23 +121,19 @@ def test_exact_product_name_alias_resolves_its_family_and_canonical_id(
     assert result.http_status_code == 200
     assert result.response.status is BackendStatus.SUCCESS
     assert result.response.product_families == [ProductFamily.DOMESTIC_ETP]
-    assert [product.product_id for product in result.response.products] == [
-        expected.product_id
-    ]
+    assert [product.product_id for product in result.response.products] == [expected.product_id]
     assert result.response.query_plan is not None
     assert [
-        item.value
-        for item in result.response.query_plan.constraints
-        if item.field == "product_id"
+        item.value for item in result.response.query_plan.constraints if item.field == "product_id"
     ] == [expected.product_id]
 
 
-def test_external_knowledge_capabilities_have_no_runtime_authority_without_corpus() -> None:
+def test_external_knowledge_capabilities_use_live_official_authority_without_fake_corpus() -> None:
     manifest = load_approved_knowledge_coverage_manifest()
 
     assert manifest.dataset_release_id == "miraeasset-ai-festival-2026-20260824-v2"
     assert {entry.capability for entry in manifest.capabilities} == set(KnowledgeCapability)
-    assert all(entry.status == "not_configured" for entry in manifest.capabilities)
-    assert all(not entry.runtime_execution_enabled for entry in manifest.capabilities)
+    assert all(entry.status == "approved_live_official" for entry in manifest.capabilities)
+    assert all(entry.runtime_execution_enabled for entry in manifest.capabilities)
     assert all(entry.corpus_sha256 is None for entry in manifest.capabilities)
     assert all(entry.index_sha256 is None for entry in manifest.capabilities)

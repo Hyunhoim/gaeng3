@@ -10,6 +10,7 @@ from finance_agent_core.agent.knowledge_planning import (
     CompositeKnowledgePlanCompiler,
     CompositeKnowledgePlanningError,
 )
+from finance_agent_core.agent.source_selection import SourceSelectionSignals
 from finance_agent_core.config.knowledge_coverage import (
     ApprovedKnowledgeCoverageManifest,
     load_approved_knowledge_coverage_manifest,
@@ -68,6 +69,8 @@ class ExternalKnowledgeRouter:
         question: str,
         question_id: str,
         intent: IntentAnalysisDraft,
+        *,
+        source_selection_signals: SourceSelectionSignals | None = None,
     ) -> ExternalKnowledgeRouteDecision:
         if not intent.knowledge_requirements:
             return ExternalKnowledgeRouteDecision(
@@ -76,7 +79,12 @@ class ExternalKnowledgeRouter:
                 reason="외부 공식 근거가 필요한 지식 요구가 없음",
             )
         try:
-            candidate = self.compiler.compile(question, question_id, intent)
+            candidate = self.compiler.compile(
+                question,
+                question_id,
+                intent,
+                source_selection_signals=source_selection_signals,
+            )
         except CompositeKnowledgePlanningError as error:
             return ExternalKnowledgeRouteDecision(
                 disposition=ExternalKnowledgeRouteDisposition.CLARIFY,
@@ -85,14 +93,18 @@ class ExternalKnowledgeRouter:
             )
 
         entries = [
-            self.coverage.require(requirement.capability)
-            for requirement in candidate.requirements
+            self.coverage.require(requirement.capability) for requirement in candidate.requirements
         ]
         executable = all(
-            entry.status == "approved"
-            and entry.runtime_execution_enabled
-            and entry.corpus_sha256 is not None
-            and entry.index_sha256 is not None
+            entry.runtime_execution_enabled
+            and (
+                entry.status == "approved_live_official"
+                or (
+                    entry.status == "approved"
+                    and entry.corpus_sha256 is not None
+                    and entry.index_sha256 is not None
+                )
+            )
             for entry in entries
         )
         if not executable:
@@ -100,8 +112,8 @@ class ExternalKnowledgeRouter:
                 disposition=ExternalKnowledgeRouteDisposition.KNOWLEDGE_SEARCH,
                 reason_code="approved_evidence_required",
                 reason=(
-                    "정상 금융상품 지식 질문이지만 승인 corpus·관계 index가 없어 "
-                    "아직 실행 권한을 부여하지 않음"
+                    "정상 금융상품 지식 질문이지만 승인 corpus·관계 index 또는 "
+                    "검증된 공식 live source 권한이 없어 아직 실행하지 않음"
                 ),
                 plan=candidate,
             )
@@ -112,7 +124,7 @@ class ExternalKnowledgeRouter:
         return ExternalKnowledgeRouteDecision(
             disposition=ExternalKnowledgeRouteDisposition.EXECUTE,
             reason_code="external_knowledge_authorized",
-            reason="승인 corpus·관계 index에 묶인 복합 지식 계획을 실행",
+            reason="승인 artifact 또는 검증된 공식 live source에 묶인 복합 지식 계획을 실행",
             plan=authorized,
         )
 

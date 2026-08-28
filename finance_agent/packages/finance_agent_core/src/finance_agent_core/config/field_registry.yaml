@@ -491,7 +491,7 @@ fields:
 
   total_expense_ratio_pct:
     label: 총보수율
-    aliases: [총보수, 보수율, expense ratio, fee]
+    aliases: [총보수, 보수율, 연간보수, 연간보수율, expense ratio, fee]
     datasets: [overseas_etp, domestic_etp]
     value_type: number
     comparable: true
@@ -716,7 +716,7 @@ fields:
     comparable: true
     comparison_mode: numeric_delta
     allowed_operators: [eq, lt, lte, gt, gte, between]
-    notes: 값이 있는 6,023행의 -51.25~46.91 원천 퍼센트포인트를 보존한다. 0은 당일 변동 없음으로 유효하고 결측 14행은 UNKNOWN이다.
+    notes: 값이 있는 6,023행의 -51.25~46.91 원천 퍼센트포인트를 보존한다. 원천 0과 결측은 감사용으로 보존하되 2026-08-26 공식 규칙에 따라 수치 필터·정렬·집계에서는 기준 없음으로 제외한다.
     dataset_overrides:
       domestic_etp:
         source:
@@ -732,7 +732,7 @@ fields:
         comparison_mode: numeric_delta
         allowed_operators: [eq, lt, lte, gt, gte, between]
         as_of_basis: dynamic
-        notes: 원천 1,585행에 값이 있고 93행의 0도 당일 변동 없음으로 유효하다. 결측은 UNKNOWN이다.
+        notes: 원천 1,585행에 값이 있다. 원천 0과 결측은 감사용으로 보존하되 2026-08-26 공식 규칙에 따라 수치 필터·정렬·집계에서는 기준 없음으로 제외한다.
 
   short_name:
     label: 상품 약어명
@@ -883,7 +883,22 @@ fields:
             "6": 매우낮은위험(6등급)
         quality: PARTIAL
         coverage_pct: 36.8803
-        notes: 8,689개 상품의 코드 1~6을 기준으로 정규화한다. 결측 14,871개는 UNKNOWN이고 원천 등급명의 띄어쓰기 변형은 코드로 통일한다.
+        enum_values:
+          - 매우 높은 위험
+          - 높은 위험
+          - 다소 높은 위험
+          - 보통 위험
+          - 낮은 위험
+          - 매우 낮은 위험
+          - 높은위험
+          - 보통위험
+          - 매우높은위험(1등급)
+          - 높은위험(2등급)
+          - 다소높은위험(3등급)
+          - 보통위험(4등급)
+          - 낮은위험(5등급)
+          - 매우낮은위험(6등급)
+        notes: 원천 위험등급명이 있으면 띄어쓰기까지 그대로 보존하고, 이름이 없을 때만 코드 1~6을 괄호형 등급명으로 변환한다. 결측 14,871개는 UNKNOWN이다.
 
   public_offering:
     label: 공모 여부
@@ -1040,7 +1055,7 @@ fields:
   close_price:
     label: 종가
     aliases: [마감 가격, close price]
-    datasets: [domestic_etp]
+    datasets: [domestic_etp, overseas_etp]
     value_type: number
     comparable: true
     comparison_mode: numeric_delta
@@ -1059,6 +1074,18 @@ fields:
     sentinel_values:
       "0": UNKNOWN
     notes: 결측 4행과 0인 192행은 유효 종가로 단정하지 않고 UNKNOWN으로 처리한다.
+    dataset_overrides:
+      overseas_etp:
+        source:
+          dataset: overseas_etp
+          columns: [du_clpr]
+        quality: PARTIAL
+        coverage_pct: 99.7681
+        comparison_scope: same_trading_currency
+        as_of_basis: dynamic
+        sentinel_values:
+          "0": UNKNOWN
+        notes: 공식 원천 6,023행의 종가를 보존한다. 결측과 0은 수치 실행 기준에서 제외한다.
 
   one_month_return_pct:
     label: 1개월 수익률
@@ -1078,7 +1105,7 @@ fields:
     aggregatable: true
     allowed_operators: [eq, lt, lte, gt, gte, between]
     as_of_basis: dynamic
-    notes: 값이 있는 1,584행은 원천 퍼센트포인트를 그대로 보존하고 0도 유효한 수익률로 사용한다. 결측은 UNKNOWN이다.
+    notes: 값이 있는 1,584행의 원천 퍼센트포인트를 보존한다. 원천 0과 결측은 2026-08-26 공식 규칙에 따라 수치 필터·정렬·집계에서 제외한다.
     dataset_overrides:
       fund:
         source:
@@ -1107,7 +1134,7 @@ fields:
     aggregatable: true
     allowed_operators: [eq, lt, lte, gt, gte, between]
     as_of_basis: dynamic
-    notes: 값이 있는 1,553행은 원천 퍼센트포인트를 그대로 보존하고 0도 유효하다. 결측은 UNKNOWN이다.
+    notes: 값이 있는 1,553행의 원천 퍼센트포인트를 보존한다. 원천 0과 결측은 2026-08-26 공식 규칙에 따라 수치 필터·정렬·집계에서 제외한다.
     dataset_overrides:
       fund:
         source:
@@ -1136,7 +1163,7 @@ fields:
     aggregatable: true
     allowed_operators: [eq, lt, lte, gt, gte, between]
     as_of_basis: dynamic
-    notes: 값이 있는 1,486행은 원천 퍼센트포인트를 그대로 보존하고 0도 유효하다. 결측은 UNKNOWN이다.
+    notes: 값이 있는 1,486행의 원천 퍼센트포인트를 보존한다. 원천 0과 결측은 2026-08-26 공식 규칙에 따라 수치 필터·정렬·집계에서 제외한다.
     dataset_overrides:
       fund:
         source:
@@ -1165,7 +1192,7 @@ fields:
     aggregatable: true
     allowed_operators: [eq, lt, lte, gt, gte, between]
     as_of_basis: dynamic
-    notes: 값이 있는 1,416행은 원천 퍼센트포인트를 그대로 보존하고 0도 유효하다. 결측은 UNKNOWN이다.
+    notes: 값이 있는 1,416행의 원천 퍼센트포인트를 보존한다. 원천 0과 결측은 2026-08-26 공식 규칙에 따라 수치 필터·정렬·집계에서 제외한다.
     dataset_overrides:
       fund:
         source:
@@ -1205,7 +1232,7 @@ fields:
   daily_trading_value:
     label: 일 거래대금
     aliases: [거래대금, 일간 거래대금, daily trading value]
-    datasets: [domestic_etp]
+    datasets: [domestic_etp, overseas_etp]
     value_type: number
     comparable: true
     comparison_mode: numeric_delta
@@ -1221,7 +1248,407 @@ fields:
     aggregatable: true
     allowed_operators: [eq, lt, lte, gt, gte, between]
     as_of_basis: dynamic
-    notes: 0은 거래 없음으로 유효하게 보존하고 결측 4행만 UNKNOWN이다.
+    notes: 원천 0과 결측 4행은 감사용으로 보존하되 2026-08-26 공식 규칙에 따라 수치 필터·정렬·집계에서는 기준 없음으로 제외한다.
+    dataset_overrides:
+      overseas_etp:
+        source:
+          dataset: overseas_etp
+          columns: [du_val_1d]
+        quality: PARTIAL
+        coverage_pct: 99.7681
+        comparison_scope: same_trading_currency
+        as_of_basis: dynamic
+        sentinel_values:
+          "0": UNKNOWN
+        notes: 공식 외화거래대금 6,023행을 보존하고 결측·0은 수치 실행 기준에서 제외한다.
+
+  daily_volume:
+    label: 일 거래량
+    aliases: [거래량, 일간 거래량, daily volume]
+    datasets: [domestic_etp, overseas_etp]
+    value_type: number
+    comparable: true
+    comparison_mode: numeric_delta
+    unit: source_quantity
+    source:
+      dataset: domestic_etp
+      columns: [du_vol_1d]
+    quality: PARTIAL
+    coverage_pct: 99.7753
+    queryable: true
+    sortable: true
+    aggregatable: true
+    allowed_operators: [eq, lt, lte, gt, gte, between]
+    as_of_basis: dynamic
+    sentinel_values:
+      "0": UNKNOWN
+    notes: 국내 ETP 공식 일거래량을 보존하고 결측·0은 수치 실행 기준에서 제외한다.
+    dataset_overrides:
+      overseas_etp:
+        source:
+          dataset: overseas_etp
+          columns: [du_vol_1d]
+        quality: PARTIAL
+        coverage_pct: 99.7681
+        as_of_basis: dynamic
+        sentinel_values:
+          "0": UNKNOWN
+        notes: 해외 ETP 공식 거래량 6,023행을 보존하고 결측·0은 수치 실행 기준에서 제외한다.
+
+  tracking_error_pct:
+    label: 추적오차율
+    aliases: [추적 오차, tracking error]
+    datasets: [domestic_etp]
+    value_type: number
+    comparable: true
+    comparison_mode: numeric_delta
+    unit: pct_point
+    source:
+      dataset: domestic_etp
+      columns: [du_chas_errt]
+    quality: PARTIAL
+    coverage_pct: 89.7753
+    queryable: true
+    sortable: true
+    aggregatable: true
+    allowed_operators: [eq, lt, lte, gt, gte, between]
+    as_of_basis: dynamic
+    sentinel_values:
+      "0": UNKNOWN
+    notes: 공식 추적오차율을 보존하며 결측·0은 수치 실행 기준에서 제외한다.
+
+  discrepancy_pct:
+    label: 괴리율
+    aliases: [가격 괴리율, NAV 괴리율, discrepancy]
+    datasets: [domestic_etp, overseas_etp]
+    value_type: number
+    comparable: true
+    comparison_mode: numeric_delta
+    unit: pct_point
+    source:
+      dataset: domestic_etp
+      columns: [du_diff_rt]
+    quality: PARTIAL
+    coverage_pct: 89.7753
+    queryable: true
+    sortable: true
+    aggregatable: true
+    allowed_operators: [eq, lt, lte, gt, gte, between]
+    as_of_basis: dynamic
+    sentinel_values:
+      "0": UNKNOWN
+    notes: 국내 ETP 공식 괴리율을 보존하며 결측·0은 수치 실행 기준에서 제외한다.
+    dataset_overrides:
+      overseas_etp:
+        source:
+          dataset: overseas_etp
+          columns: [du_diff_rt]
+        quality: PARTIAL
+        coverage_pct: 0.0497
+        as_of_basis: dynamic
+        sentinel_values:
+          "0": UNKNOWN
+        notes: 해외 ETP는 공식 원천값이 있는 3행만 실행 대상으로 사용한다.
+
+  twenty_day_volatility_pct:
+    label: 20거래일 연환산 변동성
+    aliases: [1개월 변동성, 20일 변동성, 20거래일 흔들림, 20-day volatility]
+    datasets: [domestic_etp]
+    value_type: number
+    comparable: true
+    comparison_mode: numeric_delta
+    unit: pct_point
+    source:
+      dataset: domestic_etp
+      columns: [du_vlty_1m]
+    quality: PARTIAL
+    coverage_pct: 94.1573
+    queryable: true
+    sortable: true
+    aggregatable: true
+    allowed_operators: [eq, lt, lte, gt, gte, between]
+    as_of_basis: dynamic
+    sentinel_values: {"0": UNKNOWN}
+    notes: 최근 20거래일 연환산 변동성 원천값이며 결측·0은 수치 실행 기준에서 제외한다.
+
+  sixty_day_volatility_pct:
+    label: 60거래일 연환산 변동성
+    aliases: [3개월 변동성, 60일 변동성, 60거래일 흔들림, 60-day volatility]
+    datasets: [domestic_etp]
+    value_type: number
+    comparable: true
+    comparison_mode: numeric_delta
+    unit: pct_point
+    source: {dataset: domestic_etp, columns: [du_vlty_3m]}
+    quality: PARTIAL
+    coverage_pct: 89.5506
+    queryable: true
+    sortable: true
+    aggregatable: true
+    allowed_operators: [eq, lt, lte, gt, gte, between]
+    as_of_basis: dynamic
+    sentinel_values: {"0": UNKNOWN}
+    notes: 최근 60거래일 연환산 변동성 원천값이며 결측·0은 수치 실행 기준에서 제외한다.
+
+  one_hundred_twenty_day_volatility_pct:
+    label: 120거래일 연환산 변동성
+    aliases: [6개월 변동성, 120일 변동성, 120거래일 흔들림, 120-day volatility]
+    datasets: [domestic_etp]
+    value_type: number
+    comparable: true
+    comparison_mode: numeric_delta
+    unit: pct_point
+    source: {dataset: domestic_etp, columns: [du_vlty_6m]}
+    quality: PARTIAL
+    coverage_pct: 83.4831
+    queryable: true
+    sortable: true
+    aggregatable: true
+    allowed_operators: [eq, lt, lte, gt, gte, between]
+    as_of_basis: dynamic
+    sentinel_values: {"0": UNKNOWN}
+    notes: 최근 120거래일 연환산 변동성 원천값이며 결측·0은 수치 실행 기준에서 제외한다.
+
+  two_hundred_fifty_two_day_volatility_pct:
+    label: 252거래일 연환산 변동성
+    aliases: [1년 변동성, 252일 변동성, 252거래일 흔들림, 252-day volatility]
+    datasets: [domestic_etp]
+    value_type: number
+    comparable: true
+    comparison_mode: numeric_delta
+    unit: pct_point
+    source: {dataset: domestic_etp, columns: [du_vlty_1y]}
+    quality: PARTIAL
+    coverage_pct: 73.5393
+    queryable: true
+    sortable: true
+    aggregatable: true
+    allowed_operators: [eq, lt, lte, gt, gte, between]
+    as_of_basis: dynamic
+    sentinel_values: {"0": UNKNOWN}
+    notes: 최근 252거래일 연환산 변동성 원천값이며 결측·0은 수치 실행 기준에서 제외한다.
+
+  distribution_yield_pct:
+    label: 연환산 분배수익률
+    aliases: [분배수익률, 분배 수익률, distribution yield]
+    datasets: [domestic_etp]
+    value_type: number
+    comparable: true
+    comparison_mode: numeric_delta
+    unit: pct_point
+    source: {dataset: domestic_etp, columns: [pd_dvid_yield]}
+    quality: PARTIAL
+    coverage_pct: 67.8652
+    queryable: true
+    sortable: true
+    aggregatable: true
+    allowed_operators: [eq, lt, lte, gt, gte, between]
+    as_of_basis: dynamic
+    sentinel_values: {"0": UNKNOWN}
+    notes: 공식 연환산 분배수익률을 보존하며 결측·0은 수치 실행 기준에서 제외한다.
+
+  distribution_payments_per_year:
+    label: 연간 분배 지급 횟수
+    aliases: [연간 분배 횟수, 분배 지급 횟수, 분배 횟수, 연 몇 회 분배]
+    datasets: [domestic_etp]
+    value_type: number
+    comparable: true
+    comparison_mode: numeric_delta
+    unit: source_quantity
+    source: {dataset: domestic_etp, columns: [pd_dvid_pay_cnt]}
+    quality: PARTIAL
+    coverage_pct: 67.8652
+    queryable: true
+    sortable: true
+    aggregatable: true
+    allowed_operators: [eq, lt, lte, gt, gte, between]
+    as_of_basis: dynamic
+    sentinel_values: {"0": UNKNOWN}
+    notes: 공식 연간 분배 지급 횟수를 보존하며 결측·0은 수치 실행 기준에서 제외한다.
+
+  sales_channel:
+    label: 클래스 판매채널
+    aliases: [판매채널, 온라인 클래스, 오프라인 클래스]
+    datasets: [fund]
+    value_type: string
+    comparable: true
+    comparison_mode: value_only
+    unit: code
+    source: {dataset: fund, columns: [han_clas_sales_channel]}
+    quality: PARTIAL
+    coverage_pct: 40.5592
+    queryable: true
+    allowed_operators: [eq, contains]
+    as_of_basis: snapshot
+    notes: 공식 클래스 판매채널 원문을 그대로 보존하며 결측은 확인 불가로 처리한다.
+
+  interest_dividend_type:
+    label: 이자배당구분
+    aliases: [이자배당구분, 이자형, 배당형]
+    datasets: [fund]
+    value_type: string
+    comparable: true
+    comparison_mode: value_only
+    unit: code
+    source: {dataset: fund, columns: [int_dvd_desc]}
+    quality: VALID
+    coverage_pct: 100.0
+    queryable: true
+    allowed_operators: [eq, in]
+    as_of_basis: snapshot
+    notes: 공식 이자배당구분 설명값을 그대로 사용한다.
+
+  sale_company_fee_pct:
+    label: 판매회사보수
+    aliases: [판매 회사 보수, 판매보수]
+    datasets: [fund]
+    value_type: number
+    comparable: true
+    comparison_mode: numeric_delta
+    unit: pct_point
+    source: {dataset: fund, columns: [sale_co_rwrd_r]}
+    quality: VALID
+    coverage_pct: 100.0
+    queryable: true
+    sortable: true
+    aggregatable: true
+    allowed_operators: [eq, lt, lte, gt, gte, between]
+    as_of_basis: snapshot
+    sentinel_values: {"0": UNKNOWN}
+    notes: 공식 판매회사보수 원천값을 사용하며 0은 수치 실행에서 제외한다.
+
+  trustee_fee_pct:
+    label: 신탁업자보수
+    aliases: [신탁 업자 보수, 수탁보수]
+    datasets: [fund]
+    value_type: number
+    comparable: true
+    comparison_mode: numeric_delta
+    unit: pct_point
+    source: {dataset: fund, columns: [trusc_rwrd_r]}
+    quality: VALID
+    coverage_pct: 100.0
+    queryable: true
+    sortable: true
+    aggregatable: true
+    allowed_operators: [eq, lt, lte, gt, gte, between]
+    as_of_basis: snapshot
+    sentinel_values: {"0": UNKNOWN}
+    notes: 공식 신탁업자보수 원천값을 사용하며 0은 수치 실행에서 제외한다.
+
+  domestic_stock_ratio_pct:
+    label: 국내주식 구성비율
+    aliases: [국내주식 비중, 국내 주식 구성비]
+    datasets: [fund]
+    value_type: number
+    comparable: true
+    comparison_mode: numeric_delta
+    unit: pct_point
+    source: {dataset: fund, columns: [zrin_dmst_stk_cmst_rt]}
+    quality: PARTIAL
+    coverage_pct: 39.7576
+    queryable: true
+    sortable: true
+    aggregatable: true
+    allowed_operators: [eq, lt, lte, gt, gte, between]
+    as_of_basis: snapshot
+    sentinel_values: {"0": UNKNOWN}
+    notes: 공식 구성비율 원천값을 사용하며 결측·0은 수치 실행에서 제외한다.
+
+  domestic_bond_ratio_pct:
+    label: 국내채권 구성비율
+    aliases: [국내채권 비중, 국내 채권 구성비]
+    datasets: [fund]
+    value_type: number
+    comparable: true
+    comparison_mode: numeric_delta
+    unit: pct_point
+    source: {dataset: fund, columns: [zrin_dmst_bd_cmst_rt]}
+    quality: PARTIAL
+    coverage_pct: 39.7576
+    queryable: true
+    sortable: true
+    aggregatable: true
+    allowed_operators: [eq, lt, lte, gt, gte, between]
+    as_of_basis: snapshot
+    sentinel_values: {"0": UNKNOWN}
+    notes: 공식 구성비율 원천값을 사용하며 결측·0은 수치 실행에서 제외한다.
+
+  overseas_stock_ratio_pct:
+    label: 해외주식 구성비율
+    aliases: [해외주식 비중, 해외 주식 구성비]
+    datasets: [fund]
+    value_type: number
+    comparable: true
+    comparison_mode: numeric_delta
+    unit: pct_point
+    source: {dataset: fund, columns: [zrin_ovrs_stk_cmst_rt]}
+    quality: PARTIAL
+    coverage_pct: 39.7576
+    queryable: true
+    sortable: true
+    aggregatable: true
+    allowed_operators: [eq, lt, lte, gt, gte, between]
+    as_of_basis: snapshot
+    sentinel_values: {"0": UNKNOWN}
+    notes: 공식 구성비율 원천값을 사용하며 결측·0은 수치 실행에서 제외한다.
+
+  overseas_bond_ratio_pct:
+    label: 해외채권 구성비율
+    aliases: [해외채권 비중, 해외 채권 구성비]
+    datasets: [fund]
+    value_type: number
+    comparable: true
+    comparison_mode: numeric_delta
+    unit: pct_point
+    source: {dataset: fund, columns: [zrin_ovrs_bd_cmst_rt]}
+    quality: PARTIAL
+    coverage_pct: 39.7576
+    queryable: true
+    sortable: true
+    aggregatable: true
+    allowed_operators: [eq, lt, lte, gt, gte, between]
+    as_of_basis: snapshot
+    sentinel_values: {"0": UNKNOWN}
+    notes: 공식 구성비율 원천값을 사용하며 결측·0은 수치 실행에서 제외한다.
+
+  latest_distribution_pct:
+    label: 최근 분배율
+    aliases: [최근 분배 수익률, 최신 분배율]
+    datasets: [fund]
+    value_type: number
+    comparable: true
+    comparison_mode: numeric_delta
+    unit: pct_point
+    source: {dataset: fund, columns: [fd_last_dstb_r]}
+    quality: PARTIAL
+    coverage_pct: 45.9373
+    queryable: true
+    sortable: true
+    aggregatable: true
+    allowed_operators: [eq, lt, lte, gt, gte, between]
+    as_of_basis: dynamic
+    sentinel_values: {"0": UNKNOWN}
+    notes: 공식 최근 분배율 원천값을 사용하며 결측·0은 수치 실행에서 제외한다.
+
+  preservation_ratio_pct:
+    label: 보전율
+    aliases: [보전 비율, preservation ratio]
+    datasets: [fund]
+    value_type: number
+    comparable: true
+    comparison_mode: numeric_delta
+    unit: pct_point
+    source: {dataset: fund, columns: [fd_prsv_r]}
+    quality: VALID
+    coverage_pct: 100.0
+    queryable: true
+    sortable: true
+    aggregatable: true
+    allowed_operators: [eq, lt, lte, gt, gte, between]
+    as_of_basis: snapshot
+    sentinel_values: {"0": UNKNOWN}
+    notes: 공식 보전율 원천값을 사용하며 0은 수치 실행에서 제외한다.
 
   one_week_return_pct:
     label: 1주 수익률
@@ -1539,6 +1966,82 @@ fields:
     as_of_basis: dynamic
     notes: 원천값이 있는 행에서만 정렬·비교하며 결측은 제외한다. 미래 수익을 뜻하지 않는다.
 
+  applied_yield_pct:
+    label: 민평수익률
+    aliases: [민평 수익률, 민평금리, 민평 기준 수익률, 민간평가 금리, 평가기관 수익률, 민평 산출 수익률]
+    datasets: [bond]
+    value_type: number
+    comparable: true
+    comparison_mode: numeric_delta
+    unit: pct_point
+    source: {dataset: bond, columns: [applied_yield]}
+    quality: VALID
+    coverage_pct: 99.0814
+    queryable: true
+    sortable: true
+    aggregatable: true
+    allowed_operators: [eq, lt, lte, gt, gte, between]
+    as_of_basis: dynamic
+    sentinel_values: {"0": UNKNOWN}
+    notes: 공식 민평수익률/민평금리 원천값을 사용하며 결측·0은 수치 실행에서 제외한다.
+
+  evaluation_price:
+    label: 평가일단가
+    aliases: [평가 단가, 클린 프라이스, clean price, 이자 제외 평가가격]
+    datasets: [bond]
+    value_type: number
+    comparable: true
+    comparison_mode: numeric_delta
+    unit: source_currency_amount
+    source: {dataset: bond, columns: [eval_price]}
+    quality: VALID
+    coverage_pct: 100.0
+    queryable: true
+    sortable: true
+    aggregatable: true
+    allowed_operators: [eq, lt, lte, gt, gte, between]
+    as_of_basis: dynamic
+    sentinel_values: {"0": UNKNOWN}
+    notes: Clean Price 성격의 공식 평가일단가를 사용하며 0은 수치 실행에서 제외한다.
+
+  dirty_price:
+    label: 이자부단가
+    aliases: [경과이자 포함 단가, 경과이자 포함 가격, dirty price]
+    datasets: [bond]
+    value_type: number
+    comparable: true
+    comparison_mode: numeric_delta
+    unit: source_currency_amount
+    source: {dataset: bond, columns: [dirty]}
+    quality: VALID
+    coverage_pct: 99.9269
+    queryable: true
+    sortable: true
+    aggregatable: true
+    allowed_operators: [eq, lt, lte, gt, gte, between]
+    as_of_basis: dynamic
+    sentinel_values: {"0": UNKNOWN}
+    notes: 경과이자를 포함한 공식 이자부단가를 사용하며 결측·0은 수치 실행에서 제외한다.
+
+  convexity:
+    label: 컨벡시티
+    aliases: [금리 변화에 따른 가격 굴곡, 가격 굴곡, convexity]
+    datasets: [bond]
+    value_type: number
+    comparable: true
+    comparison_mode: numeric_delta
+    unit: none
+    source: {dataset: bond, columns: [cov]}
+    quality: VALID
+    coverage_pct: 99.9269
+    queryable: true
+    sortable: true
+    aggregatable: true
+    allowed_operators: [eq, lt, lte, gt, gte, between]
+    as_of_basis: dynamic
+    sentinel_values: {"0": UNKNOWN}
+    notes: 공식 컨벡시티 원천값을 사용하며 결측·0은 수치 실행에서 제외한다.
+
   after_tax_yield_pct:
     label: 세후수익률
     aliases: [세후 수익률, after-tax yield]
@@ -1621,7 +2124,7 @@ fields:
 
   duration_years:
     label: 듀레이션
-    aliases: [수정 듀레이션, duration]
+    aliases: [수정 듀레이션, 금리 민감도, duration]
     datasets: [bond]
     value_type: number
     comparable: true

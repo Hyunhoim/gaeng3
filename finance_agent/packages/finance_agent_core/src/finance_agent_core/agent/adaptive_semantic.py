@@ -41,6 +41,8 @@ from finance_agent_core.retrieval.schema_adaptive import (
 
 _ASCENDING = re.compile(r"낮|작|적|하위|오름차순|ascending", re.IGNORECASE)
 _DESCENDING = re.compile(r"높|큰|크|많|상위|내림차순|descending", re.IGNORECASE)
+
+
 class AdaptiveSemanticModel(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -187,6 +189,11 @@ class AdaptiveSemanticResolver:
             return _control("clarify", "hard_filter_plan_invalid")
         if base_plan.ambiguities or base_plan.unsupported_conditions:
             return _control("clarify", "hard_filter_plan_unresolved")
+        if base_plan.ranking:
+            # A known ranking plus another unresolved ranking-like span would
+            # let Dense replace or compose user intent.  v1 supports exactly
+            # one ranking meaning, so this conflict stops before embedding.
+            return _control("clarify", "existing_ranking_conflicts_with_residual")
         hard_filter_lock = HardFilterLock.from_plan(
             base_plan,
             requested_limit=route.draft.requested_limit,

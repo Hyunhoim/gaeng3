@@ -424,8 +424,19 @@ def _intent_analysis_schema() -> dict[str, Any]:
                         },
                         "subject_span": {"type": "string"},
                         "relation_span": {"type": "string"},
+                        "search_aliases": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "minItems": 0,
+                            "maxItems": 3,
+                        },
                     },
-                    "required": ["capability", "subject_span", "relation_span"],
+                    "required": [
+                        "capability",
+                        "subject_span",
+                        "relation_span",
+                        "search_aliases",
+                    ],
                 },
                 "minItems": 0,
                 "maxItems": 8,
@@ -451,6 +462,8 @@ def build_intent_analysis_system_prompt() -> str:
 - evidence_spans에는 질문 원문에 실제로 연속해서 존재하는 짧은 문구만 복사한다.
 - search는 상품을 찾거나 필터·정렬·TOP-K로 나열하는 요청이다. 상품군과 정렬 기준이
   명시된 검색은 데이터 존재 여부를 추측하지 말고 search로 분류한다.
+- "더 큰 상품 하나를 골라", "가장 높은 상품을 찾아"처럼 명시된 수치로 순위를 정하는
+  요청도 search다. 개인 맞춤 추천이나 미래 전망으로 해석하지 않는다.
 - detail은 특정 상품 하나의 상세 필드를 요청하는 경우다.
 - compare는 식별된 상품 둘 이상을 서로 비교하는 경우다.
 - aggregate는 평균·합계·최솟값·최댓값·개수 같은 집계값 자체를 요청하는 경우다.
@@ -467,11 +480,20 @@ def build_intent_analysis_system_prompt() -> str:
 - 섹터·테마 또는 특정 기간의 연결 이력은 sector_theme_history다.
 - 펀드 구조·전략·판매·운용 동향은 fund_structure_strategy_trend다.
 - 상품의 공식 위험요인은 product_risk_factors다.
-- 이런 질문은 unsupported가 아니다. intent는 상품을 찾으면 search, 특정 상품·정책을
-  설명하면 explain으로 두고 knowledge_requirements에 필요한 capability를 모두 기록한다.
+- 위험등급, AUM·순자산, 티커, 운용사, 투자지역, 상품번호와 제공 상품 데이터 정보는
+  제공 DB field이므로 knowledge_requirements에 넣지 않는다.
+- 섹터·테마로 출시·소개·연결된 상품을 묻는 경우 sector_theme_history다.
+- 이런 질문은 unsupported가 아니다. 일반 intent 규칙을 그대로 적용한다. 상품을 찾으면
+  search, 특정 상품 하나의 정보면 detail, 둘 이상 비교면 compare, 금융 개념·정책 설명만
+  요청하면 explain으로 두고 knowledge_requirements에 필요한 capability를 모두 기록한다.
 - subject_span과 relation_span은 반드시 질문 원문의 연속 부분 문자열을 그대로 복사한다.
 - 예: "캠브리콘이 편입된 ETF"는 subject_span="캠브리콘",
   relation_span="편입된", capability="portfolio_holdings"다.
+- 공식 자료가 다른 언어·철자를 쓸 수 있으면 search_aliases에 같은 고유명사의 표기 변형만
+  최대 3개 제안할 수 있다. 예: subject_span="캠브리콘", search_aliases=["Cambricon"].
+  질문이 한글 고유명사이고 공식 출처가 영문 기관이면 명백한 영문 표기를 포함한다.
+  표기 자체가 불확실하면 빈 배열로 둔다. URL, 상품명, 관계, 수치, 일반 검색어를 만들지
+  않는다. 검색 별칭은 관계 사실을 주장하지 않는다.
 - knowledge_requirements는 근거 검색 필요성만 제안한다. 외부 사실·URL·상품·관계를
   사전학습 지식으로 생성하지 않는다.
 
@@ -480,6 +502,7 @@ def build_intent_analysis_system_prompt() -> str:
 - domestic_etp: 국내 ETF, 국내 ETN, 국내 ETP
 - overseas_etp: 해외 ETF, 해외 ETN, 해외 ETP
 - fund: 공모펀드, 펀드
+- KODEX는 국내 ETF인 domestic_etp로 분류한다.
 - 국내외 ETF 또는 국내·해외 ETF는 domestic_etp와 overseas_etp를 모두 포함한다.
 - 여러 상품군이 함께 명시되면 빠짐없이 모두 포함한다. 배열 순서에는 의미가 없다.
 

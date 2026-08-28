@@ -22,11 +22,9 @@ class KnowledgeCoverageEntry(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     capability: KnowledgeCapability
-    status: Literal["not_configured", "approved"]
+    status: Literal["not_configured", "approved", "approved_live_official"]
     runtime_execution_enabled: bool
-    allowed_source_kinds: tuple[Literal["provided", "external_approved"], ...] = Field(
-        min_length=1
-    )
+    allowed_source_kinds: tuple[Literal["provided", "external_approved"], ...] = Field(min_length=1)
     corpus_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     index_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
 
@@ -35,8 +33,15 @@ class KnowledgeCoverageEntry(BaseModel):
         if self.status == "not_configured":
             if self.runtime_execution_enabled or self.corpus_sha256 or self.index_sha256:
                 raise ValueError("unconfigured knowledge cannot carry runtime authority")
-        elif not self.corpus_sha256 or not self.index_sha256:
+        elif self.status == "approved" and (not self.corpus_sha256 or not self.index_sha256):
             raise ValueError("approved knowledge requires corpus and index SHA-256")
+        elif self.status == "approved_live_official":
+            if not self.runtime_execution_enabled:
+                raise ValueError("live official knowledge must be enabled explicitly")
+            if self.corpus_sha256 is not None or self.index_sha256 is not None:
+                raise ValueError("live-only knowledge cannot claim a sealed corpus or index")
+            if "external_approved" not in self.allowed_source_kinds:
+                raise ValueError("live official knowledge requires approved external sources")
         return self
 
 

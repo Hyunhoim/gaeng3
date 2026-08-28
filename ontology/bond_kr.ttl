@@ -41,6 +41,10 @@ bond:Family
     ga:hasCanonicalField bond:field_credit_rating ;
     ga:hasCanonicalField bond:field_bond_risk_code ;
     ga:hasCanonicalField bond:field_buy_yield_pct ;
+    ga:hasCanonicalField bond:field_applied_yield_pct ;
+    ga:hasCanonicalField bond:field_evaluation_price ;
+    ga:hasCanonicalField bond:field_dirty_price ;
+    ga:hasCanonicalField bond:field_convexity ;
     ga:hasCanonicalField bond:field_after_tax_yield_pct ;
     ga:hasCanonicalField bond:field_buyable_quantity ;
     ga:hasCanonicalField bond:field_currently_buyable ;
@@ -689,6 +693,138 @@ bond:field_buy_yield_pct
     ga:sourceTransform "identity" ;
     ga:notes "원천값이 있는 행에서만 정렬·비교하며 결측은 제외한다. 미래 수익을 뜻하지 않는다."@ko .
 
+bond:field_applied_yield_pct
+    a ga:CanonicalField ;
+    ga:forFamily bond:Family ;
+    ga:canonicalName "applied_yield_pct" ;
+    rdfs:label "민평수익률"@ko ;
+    skos:altLabel "민평 수익률"@ko ;
+    skos:altLabel "민평금리"@ko ;
+    skos:altLabel "민평 기준 수익률"@ko ;
+    skos:altLabel "민간평가 금리"@ko ;
+    skos:altLabel "평가기관 수익률"@ko ;
+    skos:altLabel "민평 산출 수익률"@ko ;
+    ga:valueType "number" ;
+    ga:unit "pct_point" ;
+    ga:quality "VALID" ;
+    ga:coveragePct "99.0814"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable true ;
+    ga:aggregatable true ;
+    ga:comparable true ;
+    ga:comparisonMode "numeric_delta" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "lt" ;
+    ga:allowedOperator "lte" ;
+    ga:allowedOperator "gt" ;
+    ga:allowedOperator "gte" ;
+    ga:allowedOperator "between" ;
+    ga:asOfBasis "dynamic" ;
+    ga:sourceDataset "bond" ;
+    ga:sourceColumn "applied_yield" ;
+    ga:sourceTransform "identity" ;
+    ga:sentinelValuesJson "{\"0\":\"UNKNOWN\"}" ;
+    ga:notes "공식 민평수익률/민평금리 원천값을 사용하며 결측·0은 수치 실행에서 제외한다."@ko .
+
+bond:field_evaluation_price
+    a ga:CanonicalField ;
+    ga:forFamily bond:Family ;
+    ga:canonicalName "evaluation_price" ;
+    rdfs:label "평가일단가"@ko ;
+    skos:altLabel "평가 단가"@ko ;
+    skos:altLabel "클린 프라이스"@ko ;
+    skos:altLabel "clean price"@ko ;
+    skos:altLabel "이자 제외 평가가격"@ko ;
+    ga:valueType "number" ;
+    ga:unit "source_currency_amount" ;
+    ga:quality "VALID" ;
+    ga:coveragePct "100"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable true ;
+    ga:aggregatable true ;
+    ga:comparable true ;
+    ga:comparisonMode "numeric_delta" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "lt" ;
+    ga:allowedOperator "lte" ;
+    ga:allowedOperator "gt" ;
+    ga:allowedOperator "gte" ;
+    ga:allowedOperator "between" ;
+    ga:asOfBasis "dynamic" ;
+    ga:sourceDataset "bond" ;
+    ga:sourceColumn "eval_price" ;
+    ga:sourceTransform "identity" ;
+    ga:sentinelValuesJson "{\"0\":\"UNKNOWN\"}" ;
+    ga:notes "Clean Price 성격의 공식 평가일단가를 사용하며 0은 수치 실행에서 제외한다."@ko .
+
+bond:field_dirty_price
+    a ga:CanonicalField ;
+    ga:forFamily bond:Family ;
+    ga:canonicalName "dirty_price" ;
+    rdfs:label "이자부단가"@ko ;
+    skos:altLabel "경과이자 포함 단가"@ko ;
+    skos:altLabel "경과이자 포함 가격"@ko ;
+    skos:altLabel "dirty price"@ko ;
+    ga:valueType "number" ;
+    ga:unit "source_currency_amount" ;
+    ga:quality "VALID" ;
+    ga:coveragePct "99.9269"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable true ;
+    ga:aggregatable true ;
+    ga:comparable true ;
+    ga:comparisonMode "numeric_delta" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "lt" ;
+    ga:allowedOperator "lte" ;
+    ga:allowedOperator "gt" ;
+    ga:allowedOperator "gte" ;
+    ga:allowedOperator "between" ;
+    ga:asOfBasis "dynamic" ;
+    ga:sourceDataset "bond" ;
+    ga:sourceColumn "dirty" ;
+    ga:sourceTransform "identity" ;
+    ga:sentinelValuesJson "{\"0\":\"UNKNOWN\"}" ;
+    ga:notes "경과이자를 포함한 공식 이자부단가를 사용하며 결측·0은 수치 실행에서 제외한다."@ko .
+
+bond:field_convexity
+    a ga:CanonicalField ;
+    ga:forFamily bond:Family ;
+    ga:canonicalName "convexity" ;
+    rdfs:label "컨벡시티"@ko ;
+    skos:altLabel "금리 변화에 따른 가격 굴곡"@ko ;
+    skos:altLabel "가격 굴곡"@ko ;
+    skos:altLabel "convexity"@ko ;
+    ga:valueType "number" ;
+    ga:unit "none" ;
+    ga:quality "VALID" ;
+    ga:coveragePct "99.9269"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable true ;
+    ga:aggregatable true ;
+    ga:comparable true ;
+    ga:comparisonMode "numeric_delta" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "lt" ;
+    ga:allowedOperator "lte" ;
+    ga:allowedOperator "gt" ;
+    ga:allowedOperator "gte" ;
+    ga:allowedOperator "between" ;
+    ga:asOfBasis "dynamic" ;
+    ga:sourceDataset "bond" ;
+    ga:sourceColumn "cov" ;
+    ga:sourceTransform "identity" ;
+    ga:sentinelValuesJson "{\"0\":\"UNKNOWN\"}" ;
+    ga:notes "공식 컨벡시티 원천값을 사용하며 결측·0은 수치 실행에서 제외한다."@ko .
+
 bond:field_after_tax_yield_pct
     a ga:CanonicalField ;
     ga:forFamily bond:Family ;
@@ -807,6 +943,7 @@ bond:field_duration_years
     ga:canonicalName "duration_years" ;
     rdfs:label "듀레이션"@ko ;
     skos:altLabel "수정 듀레이션"@ko ;
+    skos:altLabel "금리 민감도"@ko ;
     skos:altLabel "duration"@ko ;
     ga:valueType "number" ;
     ga:unit "year" ;

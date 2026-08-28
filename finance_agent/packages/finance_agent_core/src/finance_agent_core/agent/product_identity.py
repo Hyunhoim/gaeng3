@@ -41,9 +41,6 @@ _GENERIC_FUND_NAMES = frozenset(
         "mmf펀드",
     }
 )
-_APPROVED_FUND_GROUP_ALIASES = {
-    "국민성장펀드": "국민성장",
-}
 
 
 def extract_named_product_mentions(question: str) -> list[str]:
@@ -71,10 +68,6 @@ def is_named_product_mention(value: str) -> bool:
     return match is not None and stripped.casefold() not in _GENERIC_FUND_NAMES
 
 
-def approved_fund_group_alias_term(value: str) -> str | None:
-    return _APPROVED_FUND_GROUP_ALIASES.get(value.strip().casefold())
-
-
 def is_quoted_product_mention(question: str, value: str) -> bool:
     escaped = re.escape(value.strip())
     return any(
@@ -93,7 +86,6 @@ def is_domestic_etp_brand_question(question: str) -> bool:
 
 
 __all__ = [
-    "approved_fund_group_alias_term",
     "extract_named_product_mentions",
     "is_domestic_etp_brand_question",
     "is_named_product_mention",

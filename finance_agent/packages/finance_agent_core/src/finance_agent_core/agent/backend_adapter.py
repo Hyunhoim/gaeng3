@@ -137,9 +137,7 @@ def _finalize_with_official_hclx(
             reason = hyperclova_failure_reason(error)
             audit.emit(
                 stage=AuditStage.HCLX,
-                outcome=(
-                    AuditOutcome.TIMED_OUT if reason == "timed_out" else AuditOutcome.FAILED
-                ),
+                outcome=(AuditOutcome.TIMED_OUT if reason == "timed_out" else AuditOutcome.FAILED),
                 reason_code=f"final_generation_{reason}",
                 duration_ms=0,
             )
@@ -174,9 +172,7 @@ def _finalize_with_official_hclx(
             fallback_used=False,
             provider_model=composition.model_name,
         )
-    return BackendAgentResponse.model_validate(
-        {**response.model_dump(mode="python"), **updates}
-    )
+    return BackendAgentResponse.model_validate({**response.model_dump(mode="python"), **updates})
 
 
 @dataclass(frozen=True, slots=True)

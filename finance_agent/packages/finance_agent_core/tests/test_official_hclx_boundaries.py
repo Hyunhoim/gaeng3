@@ -15,6 +15,11 @@ from finance_agent_core.agent.providers import (
     HyperClovaXStructuredRequest,
 )
 from finance_agent_core.agent.providers.hyperclova import build_intent_analysis_system_prompt
+from finance_agent_core.config.knowledge_coverage import (
+    ApprovedKnowledgeCoverageManifest,
+    KnowledgeCapability,
+    KnowledgeCoverageEntry,
+)
 from finance_agent_core.contracts.backend import (
     BackendAgentRequest,
     BackendAnswerMode,
@@ -93,6 +98,7 @@ class _ExternalKnowledgeTransport:
                             "capability": "portfolio_holdings",
                             "subject_span": "캠브리콘",
                             "relation_span": "편입된",
+                            "search_aliases": ["Cambricon"],
                         }
                     ],
                 },
@@ -120,6 +126,23 @@ class _ExternalKnowledgeTransport:
                 "total_tokens": 15,
             },
         }
+
+
+def _disabled_external_coverage() -> ApprovedKnowledgeCoverageManifest:
+    return ApprovedKnowledgeCoverageManifest(
+        schema_version="1.0",
+        manifest_id="test-disabled-external-coverage",
+        dataset_release_id="test-dataset",
+        capabilities=tuple(
+            KnowledgeCoverageEntry(
+                capability=capability,
+                status="not_configured",
+                runtime_execution_enabled=False,
+                allowed_source_kinds=("provided", "external_approved"),
+            )
+            for capability in KnowledgeCapability
+        ),
+    )
 
 
 def _agent(transport: _BoundaryTransport) -> RoutedFinanceAgent:
@@ -151,9 +174,7 @@ def test_official_control_uses_hclx_intent_and_final_answer_without_execution() 
         "intent_analysis",
         "final_answer",
     ]
-    assert result.response.answer.startswith(
-        "제공 데이터와 허용된 금융상품 조회 범위를 벗어나"
-    )
+    assert result.response.answer.startswith("제공 데이터와 허용된 금융상품 조회 범위를 벗어나")
     assert "요청을 실행하지 않았습니다" in result.response.answer
 
 
@@ -186,7 +207,7 @@ def test_official_external_knowledge_miss_uses_hclx_intent_and_final_answer() ->
         intent_analysis_provider=HyperClovaXIntentAnalysisProvider(settings, transport),
         official_answer_provider=HyperClovaXFinalAnswerProvider(settings, transport),
         require_official_hclx=True,
-        external_knowledge_router=ExternalKnowledgeRouter(),
+        external_knowledge_router=ExternalKnowledgeRouter(coverage=_disabled_external_coverage()),
     )
 
     result = execute_answer_request(

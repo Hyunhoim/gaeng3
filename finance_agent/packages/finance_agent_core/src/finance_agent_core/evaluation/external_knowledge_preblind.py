@@ -28,7 +28,7 @@ class ExternalKnowledgePreblindReport(ExternalPreblindModel):
     )
     status: Literal["ready_for_independent_blind", "blocked"]
     independent_blind_executed: Literal[False] = False
-    production_execution_enabled: Literal[False] = False
+    production_execution_enabled: bool
     source_registry_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     coverage_manifest_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     document_dense_artifact_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
@@ -57,6 +57,9 @@ def build_external_knowledge_preblind_report(
         raise ValueError("public Document Dense calibration metrics are missing")
     registry = load_official_source_registry()
     coverage = load_approved_knowledge_coverage_manifest()
+    production_execution_enabled = any(
+        item.runtime_execution_enabled for item in coverage.capabilities
+    )
 
     source_capabilities = {
         capability
@@ -69,10 +72,9 @@ def build_external_knowledge_preblind_report(
         dense_metrics.get("recall_at_5") if isinstance(dense_metrics, dict) else None
     )
     checks = {
-        "all_capabilities_have_live_source_scope": source_capabilities
-        == set(KnowledgeCapability),
-        "coverage_execution_is_still_disabled": all(
-            item.status == "not_configured" and not item.runtime_execution_enabled
+        "all_capabilities_have_live_source_scope": source_capabilities == set(KnowledgeCapability),
+        "coverage_execution_is_approved_live_official": all(
+            item.status == "approved_live_official" and item.runtime_execution_enabled
             for item in coverage.capabilities
         ),
         "document_dense_is_frozen_kure": (
@@ -95,6 +97,7 @@ def build_external_knowledge_preblind_report(
     blockers = tuple(sorted(name for name, passed in checks.items() if not passed))
     return ExternalKnowledgePreblindReport(
         status="ready_for_independent_blind" if not blockers else "blocked",
+        production_execution_enabled=production_execution_enabled,
         source_registry_sha256=registry.canonical_sha256,
         coverage_manifest_sha256=coverage.canonical_sha256,
         document_dense_artifact_sha256=artifact.canonical_sha256,

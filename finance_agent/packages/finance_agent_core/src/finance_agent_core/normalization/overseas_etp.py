@@ -23,6 +23,10 @@ SOURCE_COLUMNS = (
     "cu_charge_rt",
     "du_last_aum",
     "du_er_1d",
+    "du_clpr",
+    "du_diff_rt",
+    "du_val_1d",
+    "du_vol_1d",
     "pd_trd_ccy",
     "cu_upt_dt",
     "du_upt_dt",
@@ -30,6 +34,7 @@ SOURCE_COLUMNS = (
 SPARSE_PRESENT_FIELD_THRESHOLD = 40
 MICRO_PRECISION = Decimal("0.000001")
 MONEY_PRECISION = Decimal("0.01")
+EIGHT_DECIMAL_PRECISION = Decimal("0.00000001")
 
 
 class NormalizationError(ValueError):
@@ -120,6 +125,18 @@ def _raw_scalar(value: Any) -> str | int | bool | None:
     return str(value).strip()
 
 
+def _numeric_quality(
+    value: Decimal | None,
+    *,
+    field: str,
+) -> tuple[QualityStatus, str | None]:
+    if value is None:
+        return QualityStatus.UNKNOWN, f"{field}_missing"
+    if value == 0:
+        return QualityStatus.UNKNOWN, f"{field}_zero_semantics_unconfirmed"
+    return QualityStatus.VALID, None
+
+
 def normalize_overseas_etp_row(
     *,
     source_row: int,
@@ -184,6 +201,50 @@ def normalize_overseas_etp_row(
         one_day_return_quality = QualityStatus.VALID
         one_day_return_reason = None
 
+    close_price = _quantized_decimal(
+        values.get("du_clpr"),
+        field="du_clpr",
+        precision=EIGHT_DECIMAL_PRECISION,
+    )
+    daily_trading_value = _quantized_decimal(
+        values.get("du_val_1d"),
+        field="du_val_1d",
+        precision=EIGHT_DECIMAL_PRECISION,
+    )
+    daily_volume = _quantized_decimal(
+        values.get("du_vol_1d"),
+        field="du_vol_1d",
+        precision=EIGHT_DECIMAL_PRECISION,
+    )
+    discrepancy = _quantized_decimal(
+        values.get("du_diff_rt"),
+        field="du_diff_rt",
+        precision=MICRO_PRECISION,
+    )
+    for field_name, value in (
+        ("close_price", close_price),
+        ("daily_trading_value", daily_trading_value),
+        ("daily_volume", daily_volume),
+    ):
+        if value is not None and value < 0:
+            raise NormalizationError(f"{field_name} cannot be negative")
+    close_price_quality, close_price_reason = _numeric_quality(
+        close_price,
+        field="close_price",
+    )
+    trading_value_quality, trading_value_reason = _numeric_quality(
+        daily_trading_value,
+        field="daily_trading_value",
+    )
+    volume_quality, volume_reason = _numeric_quality(
+        daily_volume,
+        field="daily_volume",
+    )
+    discrepancy_quality, discrepancy_reason = _numeric_quality(
+        discrepancy,
+        field="discrepancy",
+    )
+
     is_quarantined = present_source_fields < SPARSE_PRESENT_FIELD_THRESHOLD
     quarantine_reason = "sparse_source_row" if is_quarantined else None
 
@@ -214,6 +275,18 @@ def normalize_overseas_etp_row(
         one_day_return_pct=one_day_return,
         one_day_return_quality=one_day_return_quality,
         one_day_return_quality_reason=one_day_return_reason,
+        close_price=close_price,
+        close_price_quality=close_price_quality,
+        close_price_quality_reason=close_price_reason,
+        daily_trading_value=daily_trading_value,
+        daily_trading_value_quality=trading_value_quality,
+        daily_trading_value_quality_reason=trading_value_reason,
+        daily_volume=daily_volume,
+        daily_volume_quality=volume_quality,
+        daily_volume_quality_reason=volume_reason,
+        discrepancy_pct=discrepancy,
+        discrepancy_quality=discrepancy_quality,
+        discrepancy_quality_reason=discrepancy_reason,
         trading_currency=trading_currency,
         static_as_of=_date(values.get("cu_upt_dt"), field="cu_upt_dt"),
         dynamic_as_of=_date(values.get("du_upt_dt"), field="du_upt_dt"),

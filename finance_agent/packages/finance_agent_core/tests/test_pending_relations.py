@@ -57,9 +57,7 @@ def test_pending_relation_requires_verbatim_snapshot_evidence(tmp_path) -> None:
                     document_id="national-growth-fund",
                     title="국민성장펀드 구조",
                     source_uri=url,
-                    capabilities=(
-                        KnowledgeCapability.FUND_STRUCTURE_STRATEGY_TREND,
-                    ),
+                    capabilities=(KnowledgeCapability.FUND_STRUCTURE_STRATEGY_TREND,),
                     published_at=date(2026, 5, 21),
                     as_of=date(2026, 5, 21),
                     language="ko",
@@ -107,9 +105,7 @@ def test_pending_relation_requires_verbatim_snapshot_evidence(tmp_path) -> None:
 
     forged = relation.model_copy(
         update={
-            "evidence": (
-                relation.evidence[0].model_copy(update={"excerpt": "존재하지 않는 근거"}),
-            )
+            "evidence": (relation.evidence[0].model_copy(update={"excerpt": "존재하지 않는 근거"}),)
         }
     )
     with pytest.raises(PendingRelationError, match="not verbatim"):

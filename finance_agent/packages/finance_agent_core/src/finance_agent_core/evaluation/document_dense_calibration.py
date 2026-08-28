@@ -139,9 +139,7 @@ def main() -> int:
         OfflineHybridDocumentIndex(artifact, provider),
     )
     report["artifact_sha256"] = artifact.canonical_sha256
-    data = (
-        json.dumps(report, ensure_ascii=False, sort_keys=True, indent=2) + "\n"
-    ).encode("utf-8")
+    data = (json.dumps(report, ensure_ascii=False, sort_keys=True, indent=2) + "\n").encode("utf-8")
     _write_new(arguments.output, data)
     print(json.dumps(report["metrics"], ensure_ascii=False, sort_keys=True))
     print(f"report_sha256={hashlib.sha256(data).hexdigest()}")

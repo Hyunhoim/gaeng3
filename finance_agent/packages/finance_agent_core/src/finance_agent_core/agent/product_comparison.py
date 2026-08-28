@@ -33,8 +33,20 @@ class ProductIdentityAmbiguousError(ProductComparisonParseError):
 
 _FIELD_PATTERNS: dict[ProductFamily, tuple[tuple[str, tuple[str, ...]], ...]] = {
     ProductFamily.OVERSEAS_ETP: (
+        (
+            "one_day_return_pct",
+            (
+                r"1\s*일\s*(?:수익률|성과)",
+                r"(?:하루|당일|오늘|일간)\s*(?:수익률|성과)",
+                r"1D\s*수익률",
+            ),
+        ),
         ("total_expense_ratio_pct", (r"총\s*보수(?:율)?", r"보수율", r"expense\s*ratio")),
         ("aum", (r"(?<![A-Z])AUM(?![A-Z])", r"순자산", r"운용\s*자산")),
+        ("close_price", (r"종가", r"마감\s*가격")),
+        ("daily_trading_value", (r"(?:외화|일간?)?\s*거래대금",)),
+        ("daily_volume", (r"(?:일간?)?\s*거래량",)),
+        ("discrepancy_pct", (r"괴리율", r"NAV\s*괴리율")),
         ("product_name", (r"상품명", r"상품\s*이름", r"정식\s*명칭")),
         ("product_type", (r"상품\s*유형", r"ETP\s*유형", r"ETF\s*ETN\s*구분")),
         ("exchange_code", (r"거래소(?:\s*코드)?",)),
@@ -71,7 +83,27 @@ _FIELD_PATTERNS: dict[ProductFamily, tuple[tuple[str, tuple[str, ...]], ...]] = 
         ("ytd_return_pct", (r"YTD\s*수익률", r"연초\s*(?:이후|대비)\s*수익률")),
         ("total_expense_ratio_pct", (r"총\s*보수(?:율)?", r"보수율")),
         ("daily_trading_value", (r"일(?:간)?\s*거래대금", r"거래대금")),
-        ("leverage_factor", (r"레버리지\s*배수", r"배수")),
+        ("daily_volume", (r"일(?:간)?\s*거래량", r"거래량")),
+        ("tracking_error_pct", (r"추적\s*오차(?:율)?",)),
+        ("discrepancy_pct", (r"괴리율", r"NAV\s*괴리율")),
+        (
+            "twenty_day_volatility_pct",
+            (r"(?:20\s*거래일|20\s*일|1\s*개월).{0,8}?변동성",),
+        ),
+        (
+            "sixty_day_volatility_pct",
+            (r"(?:60\s*거래일|60\s*일|3\s*개월).{0,8}?변동성",),
+        ),
+        (
+            "one_hundred_twenty_day_volatility_pct",
+            (r"(?:120\s*거래일|120\s*일|6\s*개월).{0,8}?변동성",),
+        ),
+        (
+            "two_hundred_fifty_two_day_volatility_pct",
+            (r"(?:252\s*거래일|252\s*일|1\s*년).{0,8}?변동성",),
+        ),
+        ("distribution_yield_pct", (r"(?:연환산\s*)?분배\s*수익률",)),
+        ("leverage_factor", (r"레버리지\s*배수", r"(?<!분)배수")),
         ("close_price", (r"종가", r"마감\s*가격")),
         ("aum", (r"(?<![A-Z])AUM(?![A-Z])", r"순자산", r"운용\s*자산")),
         ("product_name", (r"상품명", r"상품\s*이름", r"정식\s*명칭")),
@@ -113,10 +145,44 @@ _FIELD_PATTERNS: dict[ProductFamily, tuple[tuple[str, tuple[str, ...]], ...]] = 
         ("product_name", (r"상품명", r"상품\s*이름", r"정식\s*명칭")),
         ("after_tax_yield_pct", (r"세후\s*수익률",)),
         ("buy_yield_pct", (r"매수\s*수익률", r"세전\s*수익률")),
-        ("coupon_rate_pct", (r"표면\s*(?:이율|금리)", r"쿠폰\s*금리")),
-        ("issue_amount", (r"발행\s*(?:잔액|금액)",)),
+        (
+            "applied_yield_pct",
+            (
+                r"민평\s*(?:수익률|금리)",
+                r"민평에서\s*(?:산출|계산)한\s*(?:수익률|금리)",
+                r"민간평가\s*금리",
+                r"평가기관\s*수익률",
+            ),
+        ),
+        (
+            "evaluation_price",
+            (r"평가일단가", r"평가\s*단가", r"클린\s*프라이스"),
+        ),
+        (
+            "dirty_price",
+            (r"이자부단가", r"경과이자(?:를)?\s*포함(?:한)?\s*(?:단가|가격)"),
+        ),
+        ("convexity", (r"컨벡시티", r"가격\s*굴곡")),
+        (
+            "coupon_rate_pct",
+            (
+                r"표면\s*(?:이율|금리)",
+                r"쿠폰(?:\s*금리)?",
+                r"액면\s*쿠폰",
+                r"액면에?\s*붙은\s*이자율",
+            ),
+        ),
+        ("issue_amount", (r"발행\s*(?:잔액|금액|물량)", r"남은\s*발행\s*물량")),
         ("buyable_quantity", (r"매수\s*가능\s*수량", r"주문\s*가능\s*수량")),
-        ("remaining_days", (r"잔존\s*일수?", r"만기까지\s*남은\s*일수")),
+        (
+            "remaining_days",
+            (
+                r"잔존\s*일수?",
+                r"잔여\s*일",
+                r"(?:상환|만기)까지\s*남은\s*(?:일수|날짜|날|기간)",
+                r"(?:상환|만기)(?:이|가)?\s*(?:먼저|빨리)",
+            ),
+        ),
         ("duration_years", (r"듀레이션",)),
         ("bond_market", (r"채권\s*거래\s*시장", r"장내외\s*구분")),
         ("issuer", (r"발행\s*(?:기관|사|자)",)),
@@ -133,10 +199,7 @@ _FIELD_PATTERNS: dict[ProductFamily, tuple[tuple[str, tuple[str, ...]], ...]] = 
 }
 
 _UNSUPPORTED_PATTERNS: dict[ProductFamily, tuple[tuple[str, str], ...]] = {
-    ProductFamily.OVERSEAS_ETP: (
-        (r"수익률|성과", "해외 ETP 수익률"),
-        (r"가격|종가", "해외 ETP 가격"),
-    ),
+    ProductFamily.OVERSEAS_ETP: (),
     ProductFamily.DOMESTIC_ETP: (),
     ProductFamily.BOND: ((r"예상\s*수익률|만기\s*수익률", "제공 데이터에 없는 수익률"),),
 }
@@ -283,10 +346,18 @@ def extract_comparison_fields(
     if (
         family is ProductFamily.DOMESTIC_ETP
         and re.search(r"수익률|성과", question, flags=re.IGNORECASE)
-        and not _DOMESTIC_RETURN_FIELDS.intersection(fields)
+        and not ({*_DOMESTIC_RETURN_FIELDS, "distribution_yield_pct"} & set(fields))
     ):
         raise ProductComparisonParseError(
             "기간이 없는 국내 ETP 수익률 비교는 현재 지원하지 않습니다"
+        )
+    if (
+        family is ProductFamily.OVERSEAS_ETP
+        and re.search(r"수익률|성과", question, flags=re.IGNORECASE)
+        and "one_day_return_pct" not in fields
+    ):
+        raise ProductComparisonParseError(
+            "해외 ETP 수익률 비교는 제공 데이터의 1일 수익률만 지원합니다"
         )
     if fields:
         return fields

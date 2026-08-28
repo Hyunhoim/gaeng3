@@ -31,6 +31,7 @@ from finance_agent_core.contracts.queryplan import ProductFamily
 from finance_agent_core.contracts.routing import InteractionIntent
 from finance_agent_core.execution.external_knowledge_runtime import ExternalKnowledgeRuntime
 from finance_agent_core.execution.external_knowledge_verifier import OfficialProductFact
+from finance_agent_core.release import ExternalKnowledgeArtifactRelease
 from finance_agent_core.retrieval.official_acquisition import (
     OfficialEvidenceAcquisitionCoordinator,
 )
@@ -138,9 +139,7 @@ def _holding_relation() -> TemporalRelationRecord:
                 document_id="doc-kstr-runtime",
                 title="KSTR official presentation",
                 publisher="KraneShares",
-                source_uri=(
-                    "https://engage.kraneshares.com/s/b264ceb1/kstr-presentation/"
-                ),
+                source_uri=("https://engage.kraneshares.com/s/b264ceb1/kstr-presentation/"),
                 published_at=as_of,
                 as_of=as_of,
                 content_sha256=_SHA_A,
@@ -181,9 +180,10 @@ class _EmptyDiscovery:
 
 
 class _FactProvider:
-    def fetch(self, product_keys, selection):
+    def fetch(self, product_keys, selection, requested_fields):
         assert product_keys == ((ProductFamily.OVERSEAS_ETP, "KSTR"),)
         assert selection is None
+        assert requested_fields == ()
         return (
             OfficialProductFact(
                 evidence_id="provided-overseas-etp-kstr-name",
@@ -217,6 +217,37 @@ def _runtime(store: TemporalRelationStore, fact_provider=None) -> ExternalKnowle
     )
 
 
+def test_live_only_release_rejects_a_preseeded_relation_cache() -> None:
+    store = TemporalRelationStore(
+        seal_temporal_relation_bundle(
+            (_holding_relation(),),
+            corpus_manifest_sha256=_SHA_B,
+        )
+    )
+    acquisition = OfficialEvidenceAcquisitionCoordinator(
+        relation_store=store,
+        discovery_provider=_EmptyDiscovery(),
+        connector=OfficialSourceConnector(_UnusedTransport(), store.registry),
+    )
+    artifact = ExternalKnowledgeArtifactRelease(
+        retrieval_mode="verified_live_official",
+        source_registry_sha256=store.registry.canonical_sha256,
+        coverage_manifest_sha256="c" * 64,
+        corpus_manifest_sha256=store.bundle.manifest.corpus_manifest_sha256,
+        temporal_relation_sha256=store.bundle.manifest.relation_set_sha256,
+        verifier_contract_sha256="d" * 64,
+        embedding_model_revision=None,
+    )
+
+    with pytest.raises(ValueError, match="empty relation cache"):
+        ExternalKnowledgeRuntime(
+            acquisition=acquisition,
+            product_fact_provider=_FactProvider(),
+            release_artifact=artifact,
+            release_artifact_file_sha256="e" * 64,
+        )
+
+
 def test_external_outcome_states_cannot_be_mislabeled() -> None:
     with pytest.raises(ValueError):
         ExternalKnowledgeOutcome(
@@ -232,15 +263,13 @@ def test_external_outcome_states_cannot_be_mislabeled() -> None:
         )
 
 
-def test_live_source_scopes_do_not_activate_external_execution_by_themselves() -> None:
+def test_live_source_scopes_and_coverage_activate_external_execution_together() -> None:
     registry = load_official_source_registry()
-    assert registry.registry_id == "official-external-sources-20260824-v2"
-    assert {entry.status for entry in registry.entries} == {
-        "approved_for_live_evidence"
-    }
+    assert registry.registry_id == "official-external-sources-20260824-v4"
+    assert {entry.status for entry in registry.entries} == {"approved_for_live_evidence"}
     coverage = load_approved_knowledge_coverage_manifest()
     assert all(
-        entry.status == "not_configured" and not entry.runtime_execution_enabled
+        entry.status == "approved_live_official" and entry.runtime_execution_enabled
         for entry in coverage.capabilities
     )
 
@@ -437,9 +466,7 @@ def test_dynamic_renderer_and_link_resolution_remain_inside_the_same_source_scop
     )
     assert transport.fetch(url, timeout_seconds=1, max_bytes=4096) == rendered
 
-    source_page = (
-        "https://www.samsungfund.com/upload/kodex/newsroom/index.html"
-    )
+    source_page = "https://www.samsungfund.com/upload/kodex/newsroom/index.html"
     source = registry.authorize_url(
         source_page,
         KnowledgeCapability.PORTFOLIO_HOLDINGS,
@@ -531,6 +558,78 @@ def test_official_connector_accepts_only_unambiguous_publication_metadata() -> N
         unsafe_connector.fetch(candidate, request)
 
 
+def test_static_product_page_requires_one_explicit_evidence_as_of_date() -> None:
+    registry = load_official_source_registry()
+    url = "https://www.samsungfund.com/etf/product/view.do?id=2ETFB1"
+    body = (
+        "<html><body><section>구성 종목 기준일: 2026년 7월 31일 "
+        "에코프로비엠 편입 내역</section></body></html>"
+    ).encode()
+    connector = OfficialSourceConnector(
+        _FixedHttpTransport(
+            OfficialHttpResponse(
+                status_code=200,
+                final_url=url,
+                content_type="text/html",
+                body=body,
+            )
+        ),
+        registry,
+    )
+    candidate = OfficialDiscoveryCandidate(url=url, title="KODEX official holdings")
+    request = OfficialFetchRequest(
+        url=url,
+        capability=KnowledgeCapability.PORTFOLIO_HOLDINGS,
+    )
+
+    snapshot = connector.fetch(candidate, request)
+
+    assert snapshot.published_at is None
+    assert snapshot.as_of == date(2026, 7, 31)
+
+    missing_date = body.replace("기준일: 2026년 7월 31일 ".encode(), b"")
+    unsafe_connector = OfficialSourceConnector(
+        _FixedHttpTransport(
+            OfficialHttpResponse(
+                status_code=200,
+                final_url=url,
+                content_type="text/html",
+                body=missing_date,
+            )
+        ),
+        registry,
+    )
+    with pytest.raises(OfficialConnectorError, match="evidence date"):
+        unsafe_connector.fetch(candidate, request)
+
+
+def test_english_official_holdings_as_of_date_is_accepted() -> None:
+    registry = load_official_source_registry()
+    url = "https://engage.kraneshares.com/s/b264ceb1/kstr-presentation/"
+    body = b"<html><body>KSTR holdings as of June 30, 2026 include Cambricon.</body></html>"
+    connector = OfficialSourceConnector(
+        _FixedHttpTransport(
+            OfficialHttpResponse(
+                status_code=200,
+                final_url=url,
+                content_type="text/html",
+                body=body,
+            )
+        ),
+        registry,
+    )
+
+    snapshot = connector.fetch(
+        OfficialDiscoveryCandidate(url=url, title="KSTR official holdings"),
+        OfficialFetchRequest(
+            url=url,
+            capability=KnowledgeCapability.PORTFOLIO_HOLDINGS,
+        ),
+    )
+
+    assert snapshot.as_of == date(2026, 6, 30)
+
+
 def test_live_relation_extraction_requires_exact_subject_and_provided_product_identity() -> None:
     registry = load_official_source_registry()
     url = "https://engage.kraneshares.com/s/b264ceb1/kstr-presentation/"
@@ -548,8 +647,7 @@ def test_live_relation_extraction_requires_exact_subject_and_provided_product_id
         ),
     )
     content = (
-        "KraneShares SSE STAR Market 50 Index ETF의 구성종목에는 "
-        "캠브리콘이 편입되어 있습니다."
+        "KraneShares SSE STAR Market 50 Index ETF의 구성종목에는 캠브리콘이 편입되어 있습니다."
     ).encode()
     snapshot = OfficialSourceSnapshot(
         source=source,
@@ -580,11 +678,68 @@ def test_live_relation_extraction_requires_exact_subject_and_provided_product_id
             "캠브리콘이 다른 상품에 편입되어 있습니다.".encode()
         ).hexdigest(),
     )
-    assert VerifiedLiveRelationExtractor().extract(
-        no_product,
-        plan.requirements[0],
+    assert (
+        VerifiedLiveRelationExtractor().extract(
+            no_product,
+            plan.requirements[0],
+            _universe(),
+        )
+        == ()
+    )
+
+
+def test_live_relation_extraction_accepts_only_an_hcx_alias_present_in_official_text() -> None:
+    registry = load_official_source_registry()
+    url = "https://engage.kraneshares.com/s/b264ceb1/kstr-presentation/"
+    source = registry.authorize_url(url, KnowledgeCapability.PORTFOLIO_HOLDINGS)
+    question = "캠브리콘이 편입된 해외 ETF를 알려줘."
+    draft = _intent(
+        question,
+        capability=KnowledgeCapability.PORTFOLIO_HOLDINGS,
+        subject="캠브리콘",
+        relation="편입된",
+        family=ProductFamily.OVERSEAS_ETP,
+    ).model_copy(
+        update={
+            "knowledge_requirements": [
+                KnowledgeIntentRequirement(
+                    capability=KnowledgeCapability.PORTFOLIO_HOLDINGS,
+                    subject_span="캠브리콘",
+                    relation_span="편입된",
+                    search_aliases=("Cambricon",),
+                )
+            ]
+        }
+    )
+    requirement = (
+        CompositeKnowledgePlanCompiler()
+        .compile(
+            question,
+            "live-exact-alias",
+            draft,
+        )
+        .requirements[0]
+    )
+    content = b"KSTR official holdings include Cambricon Technologies."
+    snapshot = OfficialSourceSnapshot(
+        source=source,
+        capability=KnowledgeCapability.PORTFOLIO_HOLDINGS,
+        source_uri=url,
+        title="KSTR official holdings",
+        content_type="text/plain",
+        content=content,
+        content_sha256=hashlib.sha256(content).hexdigest(),
+        published_at=date(2026, 6, 30),
+        as_of=date(2026, 6, 30),
+    )
+
+    relations = VerifiedLiveRelationExtractor().extract(
+        snapshot,
+        requirement,
         _universe(),
-    ) == ()
+    )
+
+    assert [item.product_id for item in relations] == ["KSTR"]
 
 
 def test_one_year_external_ranking_is_a_typed_server_plan() -> None:

@@ -46,6 +46,7 @@ class KnowledgeIntentRequirement(ExternalKnowledgeContractModel):
     capability: KnowledgeCapability
     subject_span: str = Field(min_length=1, max_length=120)
     relation_span: str = Field(min_length=1, max_length=120)
+    search_aliases: tuple[str, ...] = Field(default=(), max_length=3)
 
     @field_validator("subject_span", "relation_span")
     @classmethod
@@ -53,6 +54,22 @@ class KnowledgeIntentRequirement(ExternalKnowledgeContractModel):
         if not value.strip():
             raise ValueError("knowledge intent spans cannot be blank")
         return value
+
+    @field_validator("search_aliases")
+    @classmethod
+    def validate_search_aliases(cls, values: tuple[str, ...]) -> tuple[str, ...]:
+        if len(values) != len(set(values)):
+            raise ValueError("knowledge search aliases must be unique")
+        if any(
+            value != value.strip()
+            or not 2 <= len(value) <= 80
+            or "http://" in value.casefold()
+            or "https://" in value.casefold()
+            or any(ord(character) < 0x20 for character in value)
+            for value in values
+        ):
+            raise ValueError("knowledge search aliases must be bounded plain entity text")
+        return values
 
 
 class KnowledgeTimeRange(ExternalKnowledgeContractModel):
@@ -71,6 +88,7 @@ class KnowledgeRequirement(ExternalKnowledgeContractModel):
     capability: KnowledgeCapability
     predicate: KnowledgePredicate
     subject: str = Field(min_length=1, max_length=120)
+    search_aliases: tuple[str, ...] = Field(default=(), max_length=3)
     subject_evidence_span: str = Field(min_length=1, max_length=120)
     relation_evidence_span: str = Field(min_length=1, max_length=120)
     product_families: tuple[ProductFamily, ...] = Field(default=(), max_length=4)
@@ -89,6 +107,8 @@ class KnowledgeRequirement(ExternalKnowledgeContractModel):
             raise ValueError("source registry IDs must be sorted")
         if len(self.source_registry_ids) != len(set(self.source_registry_ids)):
             raise ValueError("source registry IDs must be unique")
+        if self.search_aliases != tuple(sorted(set(self.search_aliases))):
+            raise ValueError("knowledge search aliases must be unique and sorted")
         if list(self.depends_on) != sorted(self.depends_on):
             raise ValueError("knowledge dependencies must be sorted")
         if len(self.depends_on) != len(set(self.depends_on)):
@@ -112,11 +132,24 @@ class CompositeKnowledgeQueryPlan(ExternalKnowledgeContractModel):
     question: str = Field(min_length=1, max_length=2000)
     interaction_intent: Literal[
         InteractionIntent.SEARCH,
+        InteractionIntent.DETAIL,
+        InteractionIntent.COMPARE,
         InteractionIntent.EXPLAIN,
     ]
     evidence_cutoff: date
     requirements: tuple[KnowledgeRequirement, ...] = Field(min_length=1, max_length=8)
     product_selection: KnowledgeProductSelection | None = None
+    requested_product_fields: tuple[
+        Literal[
+            "aum",
+            "investment_region",
+            "manager",
+            "product_name",
+            "risk_level",
+            "ticker",
+        ],
+        ...,
+    ] = Field(default=(), max_length=6)
     join_order: tuple[str, ...] = Field(min_length=2, max_length=9)
     execution_authorized: bool = False
 
@@ -132,13 +165,8 @@ class CompositeKnowledgeQueryPlan(ExternalKnowledgeContractModel):
         if len(self.join_order[:-1]) != len(requirement_ids):
             raise ValueError("join order must not duplicate knowledge requirements")
         for requirement in self.requirements:
-            earlier_ids = requirement_ids[
-                : requirement_ids.index(requirement.requirement_id)
-            ]
-            if any(
-                dependency not in earlier_ids
-                for dependency in requirement.depends_on
-            ):
+            earlier_ids = requirement_ids[: requirement_ids.index(requirement.requirement_id)]
+            if any(dependency not in earlier_ids for dependency in requirement.depends_on):
                 raise ValueError("knowledge dependency must refer to an earlier requirement")
             if requirement.subject_evidence_span not in self.question:
                 raise ValueError("knowledge subject evidence is absent from the question")
@@ -149,6 +177,8 @@ class CompositeKnowledgeQueryPlan(ExternalKnowledgeContractModel):
                 and requirement.time_range.end > self.evidence_cutoff
             ):
                 raise ValueError("knowledge time range exceeds the evidence cutoff")
+        if self.requested_product_fields != tuple(sorted(set(self.requested_product_fields))):
+            raise ValueError("requested external product fields must be unique and sorted")
         return self
 
 
@@ -165,7 +195,7 @@ class ExternalKnowledgeOutcomeStatus(StrEnum):
 class ExternalSearchBudget(ExternalKnowledgeContractModel):
     """Hard limits owned by the server, never by HCX."""
 
-    deadline_ms: int = Field(default=12_000, ge=100, le=60_000)
+    deadline_ms: int = Field(default=60_000, ge=100, le=60_000)
     max_search_queries: int = Field(default=8, ge=1, le=40)
     max_candidates_per_requirement: int = Field(default=8, ge=1, le=20)
     max_fetches: int = Field(default=12, ge=1, le=40)
@@ -197,6 +227,7 @@ class ProvidedProductCandidateUniverse(ExternalKnowledgeContractModel):
     candidates: tuple[ProvidedProductCandidate, ...]
     database_sha256s: dict[ProductFamily, str]
     candidate_filter_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    explicit_identity_bound: bool = False
 
     @model_validator(mode="after")
     def validate_universe(self) -> ProvidedProductCandidateUniverse:
@@ -211,6 +242,8 @@ class ProvidedProductCandidateUniverse(ExternalKnowledgeContractModel):
         families = {item.product_family for item in self.candidates}
         if not families <= set(self.database_sha256s):
             raise ValueError("provided candidate family lacks a database hash")
+        if self.explicit_identity_bound and not self.candidates:
+            raise ValueError("an explicit product identity cannot bind an empty universe")
         return self
 
     @property

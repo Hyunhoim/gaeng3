@@ -11,6 +11,7 @@ from urllib.parse import urlsplit
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from finance_agent_core.config.knowledge_coverage import KnowledgeCapability
+from finance_agent_core.contracts.queryplan import ProductFamily
 
 
 class OfficialSourceRegistryError(RuntimeError):
@@ -60,9 +61,9 @@ class OfficialSourceEntry(SourceRegistryModel):
     path_prefixes: tuple[str, ...] = Field(min_length=1, max_length=20)
     connector_kind: SourceConnectorKind
     capabilities: tuple[KnowledgeCapability, ...] = Field(min_length=1)
-    status: str = Field(
-        pattern=r"^(?:approved_for_snapshot_intake|approved_for_live_evidence)$"
-    )
+    selection_aliases: tuple[str, ...] = Field(default=(), max_length=30)
+    product_families: tuple[ProductFamily, ...] = Field(default=(), max_length=4)
+    status: str = Field(pattern=r"^(?:approved_for_snapshot_intake|approved_for_live_evidence)$")
     publication_date_required: bool = True
 
     @field_validator("publisher")
@@ -99,6 +100,29 @@ class OfficialSourceEntry(SourceRegistryModel):
             raise ValueError("source capabilities must be unique and sorted")
         return values
 
+    @field_validator("selection_aliases")
+    @classmethod
+    def validate_selection_aliases(cls, values: tuple[str, ...]) -> tuple[str, ...]:
+        normalized = [item.strip() for item in values]
+        if any(not item or len(item) > 100 for item in normalized):
+            raise ValueError("source selection aliases must be non-blank and bounded")
+        if normalized != sorted(normalized, key=str.casefold) or len(normalized) != len(
+            {item.casefold() for item in normalized}
+        ):
+            raise ValueError("source selection aliases must be unique and sorted")
+        return tuple(normalized)
+
+    @field_validator("product_families")
+    @classmethod
+    def validate_product_families(
+        cls,
+        values: tuple[ProductFamily, ...],
+    ) -> tuple[ProductFamily, ...]:
+        serialized = [item.value for item in values]
+        if serialized != sorted(serialized) or len(serialized) != len(set(serialized)):
+            raise ValueError("source product families must be unique and sorted")
+        return values
+
 
 class OfficialSourceRegistry(SourceRegistryModel):
     schema_version: str = Field(pattern=r"^1\.0$")
@@ -122,9 +146,7 @@ class OfficialSourceRegistry(SourceRegistryModel):
 
     @property
     def canonical_sha256(self) -> str:
-        return hashlib.sha256(
-            _canonical_json_bytes(self.model_dump(mode="json"))
-        ).hexdigest()
+        return hashlib.sha256(_canonical_json_bytes(self.model_dump(mode="json"))).hexdigest()
 
     def authorize_url(
         self,
@@ -194,12 +216,8 @@ class OfficialSourceRegistry(SourceRegistryModel):
 
 @lru_cache(maxsize=1)
 def load_official_source_registry() -> OfficialSourceRegistry:
-    resource = files("finance_agent_core.config").joinpath(
-        "approved_source_registry.json"
-    )
-    return OfficialSourceRegistry.model_validate(
-        json.loads(resource.read_text(encoding="utf-8"))
-    )
+    resource = files("finance_agent_core.config").joinpath("approved_source_registry.json")
+    return OfficialSourceRegistry.model_validate(json.loads(resource.read_text(encoding="utf-8")))
 
 
 __all__ = [

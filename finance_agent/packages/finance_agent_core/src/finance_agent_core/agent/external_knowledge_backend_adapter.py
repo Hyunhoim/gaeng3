@@ -90,15 +90,10 @@ def external_knowledge_route_to_backend(
         response = BackendAgentResponse(
             request_id=request_id,
             status=(BackendStatus.CLARIFICATION if clarify else BackendStatus.UNSUPPORTED),
-            intent=(
-                InteractionIntent.CLARIFY
-                if clarify
-                else InteractionIntent.UNSUPPORTED
-            ),
+            intent=(InteractionIntent.CLARIFY if clarify else InteractionIntent.UNSUPPORTED),
             product_families=[],
             answer=(
-                "정확한 공식 근거를 찾으려면 대상 상품·기업과 관계 조건을 더 "
-                "구체적으로 알려주세요."
+                "정확한 공식 근거를 찾으려면 대상 상품·기업과 관계 조건을 더 구체적으로 알려주세요."
                 if clarify
                 else "제공 데이터와 허용된 공식 금융상품 근거 범위에서 처리할 수 없습니다."
             ),
@@ -131,9 +126,7 @@ def external_knowledge_route_to_backend(
         )
         audit_outcome = AuditOutcome.CLARIFIED if clarify else AuditOutcome.UNSUPPORTED
         audit_reason = (
-            "external_knowledge_clarified"
-            if clarify
-            else "external_knowledge_unsupported"
+            "external_knowledge_clarified" if clarify else "external_knowledge_unsupported"
         )
 
     audit = current_request_audit()

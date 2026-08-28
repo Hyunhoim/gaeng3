@@ -54,6 +54,7 @@ class VerifierProjection:
 @dataclass(frozen=True, slots=True)
 class ProjectedVerifierRecord:
     projection: VerifierProjection
+    source_row: int
     product_id: str
     product_family: str
     is_quarantined: bool
@@ -165,6 +166,7 @@ def project_verifier_rows(
         records.append(
             ProjectedVerifierRecord(
                 projection=projection,
+                source_row=int(row["_source_row"]),
                 product_id=str(row["_product_id"]),
                 product_family=str(row["_product_family"]),
                 is_quarantined=bool(row["_is_quarantined"]),
@@ -194,6 +196,7 @@ def verifier_select_columns(
         quality = "NULL" if spec.quality_column is None else spec.quality_column
         projected_columns.append(f"{quality} AS q_{index}")
     return [
+        "source_row AS _source_row",
         "product_id AS _product_id",
         "product_family AS _product_family",
         "is_quarantined AS _is_quarantined",

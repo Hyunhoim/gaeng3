@@ -48,6 +48,18 @@ class NormalizedOverseasEtpRecord(DomainModel):
     one_day_return_pct: Decimal | None
     one_day_return_quality: QualityStatus
     one_day_return_quality_reason: str | None
+    close_price: Decimal | None = Field(default=None, ge=0)
+    close_price_quality: QualityStatus = QualityStatus.UNKNOWN
+    close_price_quality_reason: str | None = "close_price_missing"
+    daily_trading_value: Decimal | None = Field(default=None, ge=0)
+    daily_trading_value_quality: QualityStatus = QualityStatus.UNKNOWN
+    daily_trading_value_quality_reason: str | None = "daily_trading_value_missing"
+    daily_volume: Decimal | None = Field(default=None, ge=0)
+    daily_volume_quality: QualityStatus = QualityStatus.UNKNOWN
+    daily_volume_quality_reason: str | None = "daily_volume_missing"
+    discrepancy_pct: Decimal | None = None
+    discrepancy_quality: QualityStatus = QualityStatus.UNKNOWN
+    discrepancy_quality_reason: str | None = "discrepancy_missing"
     trading_currency: str
     static_as_of: date
     dynamic_as_of: date
@@ -76,6 +88,19 @@ class NormalizedOverseasEtpRecord(DomainModel):
                 raise ValueError("missing one-day return must remain UNKNOWN")
         elif self.one_day_return_quality is not QualityStatus.VALID:
             raise ValueError("present one-day return, including zero, must be VALID")
+        for field_name in (
+            "close_price",
+            "daily_trading_value",
+            "daily_volume",
+            "discrepancy_pct",
+        ):
+            value = getattr(self, field_name)
+            quality = getattr(self, f"{field_name.removesuffix('_pct')}_quality")
+            if value is None or value == 0:
+                if quality is not QualityStatus.UNKNOWN:
+                    raise ValueError(f"missing or zero {field_name} must remain UNKNOWN")
+            elif quality is not QualityStatus.VALID:
+                raise ValueError(f"positive {field_name} must be VALID")
         return self
 
     def canonical_value(self, field_name: str) -> object:
@@ -93,6 +118,11 @@ class NormalizedOverseasEtpRecord(DomainModel):
             return self.aum_quality, self.aum_quality_reason
         if field_name == "one_day_return_pct":
             return self.one_day_return_quality, self.one_day_return_quality_reason
+        quality_prefix = field_name.removesuffix("_pct")
+        quality = getattr(self, f"{quality_prefix}_quality", None)
+        reason = getattr(self, f"{quality_prefix}_quality_reason", None)
+        if quality is not None:
+            return quality, reason
         return None, None
 
 
@@ -141,6 +171,15 @@ class NormalizedDomesticEtpRecord(DomainModel):
     one_year_return_pct: Decimal | None
     ytd_return_pct: Decimal | None
     daily_trading_value: Decimal | None = Field(default=None, ge=0)
+    daily_volume: Decimal | None = Field(default=None, ge=0)
+    tracking_error_pct: Decimal | None = None
+    discrepancy_pct: Decimal | None = None
+    twenty_day_volatility_pct: Decimal | None = None
+    sixty_day_volatility_pct: Decimal | None = None
+    one_hundred_twenty_day_volatility_pct: Decimal | None = None
+    two_hundred_fifty_two_day_volatility_pct: Decimal | None = None
+    distribution_yield_pct: Decimal | None = None
+    distribution_payments_per_year: Decimal | None = Field(default=None, ge=0)
     static_as_of: date
     dynamic_as_of: date
     field_quality: dict[str, QualityStatus]
@@ -217,6 +256,10 @@ class NormalizedBondRecord(DomainModel):
     bond_risk_code: str
     buy_yield_pct: Decimal | None
     after_tax_yield_pct: Decimal | None
+    applied_yield_pct: Decimal | None = None
+    evaluation_price: Decimal | None = Field(default=None, ge=0)
+    dirty_price: Decimal | None = Field(default=None, ge=0)
+    convexity: Decimal | None = None
     buyable_quantity: Decimal | None = Field(default=None, ge=0)
     currently_buyable: bool | None
     remaining_days: int | None
@@ -288,6 +331,16 @@ class NormalizedPublicFundRecord(DomainModel):
     risk_level: str | None
     aum: Decimal | None = Field(default=None, ge=0)
     base_index: str | None
+    sales_channel: str | None = None
+    interest_dividend_type: str | None = None
+    sale_company_fee_pct: Decimal | None = None
+    trustee_fee_pct: Decimal | None = None
+    domestic_stock_ratio_pct: Decimal | None = None
+    domestic_bond_ratio_pct: Decimal | None = None
+    overseas_stock_ratio_pct: Decimal | None = None
+    overseas_bond_ratio_pct: Decimal | None = None
+    latest_distribution_pct: Decimal | None = None
+    preservation_ratio_pct: Decimal | None = None
     one_week_return_pct: Decimal | None
     one_month_return_pct: Decimal | None
     three_month_return_pct: Decimal | None

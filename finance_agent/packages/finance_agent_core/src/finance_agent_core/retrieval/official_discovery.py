@@ -53,9 +53,7 @@ class OfficialDiscoveryReport(OfficialDiscoveryModel):
 
     @model_validator(mode="after")
     def validate_report(self) -> OfficialDiscoveryReport:
-        if self.queried_source_registry_ids != tuple(
-            sorted(set(self.queried_source_registry_ids))
-        ):
+        if self.queried_source_registry_ids != tuple(sorted(set(self.queried_source_registry_ids))):
             raise ValueError("queried source IDs must be unique and sorted")
         if self.failure_codes != tuple(sorted(set(self.failure_codes), key=str)):
             raise ValueError("discovery failure codes must be unique and sorted")
@@ -103,28 +101,32 @@ class NaverApiHubWebSearchTransport:
     def __init__(
         self,
         *,
-        api_key_id_file: str | Path,
-        api_key_file: str | Path,
+        client_id_file: str | Path,
+        client_secret_file: str | Path,
         timeout_seconds: float = 5.0,
     ) -> None:
         if not 0.1 <= timeout_seconds <= 30:
             raise ValueError("search timeout must be between 0.1 and 30 seconds")
-        self.api_key_id = _read_secret_file(api_key_id_file)
-        self.api_key = _read_secret_file(api_key_file)
+        self.client_id = _read_secret_file(client_id_file)
+        self.client_secret = _read_secret_file(client_secret_file)
         self.timeout_seconds = timeout_seconds
 
     def search(self, *, query: str, display: int, start: int) -> OfficialWebSearchPage:
         if not query.strip() or not 1 <= display <= 100 or not 1 <= start <= 1000:
             raise ValueError("invalid official web search request")
-        url = _API_URL + "?" + urllib.parse.urlencode(
-            {"query": query, "display": display, "start": start, "sort": "sim"}
+        url = (
+            _API_URL
+            + "?"
+            + urllib.parse.urlencode(
+                {"query": query, "display": display, "start": start, "sort": "sim"}
+            )
         )
         request = urllib.request.Request(
             url,
             headers={
                 "Accept": "application/json",
-                "X-NCP-APIGW-API-KEY-ID": self.api_key_id,
-                "X-NCP-APIGW-API-KEY": self.api_key,
+                "X-NCP-APIGW-API-KEY-ID": self.client_id,
+                "X-NCP-APIGW-API-KEY": self.client_secret,
             },
             method="GET",
         )
@@ -209,8 +211,7 @@ class BoundedOfficialDiscoveryProvider:
         for entry in entries[:query_budget]:
             queried.append(entry.source_id)
             search_query = (
-                f"site:{entry.hostname} {query.strip()} "
-                f"{_RELATION_QUERY_TERMS[capability]}"
+                f"site:{entry.hostname} {query.strip()} {_RELATION_QUERY_TERMS[capability]}"
             )
             try:
                 page = self.transport.search(query=search_query, display=top_k, start=1)

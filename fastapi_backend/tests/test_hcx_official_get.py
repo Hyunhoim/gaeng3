@@ -178,11 +178,7 @@ class _OfficialFakeHyperClovaXTransport:
 
     def complete(self, request: HyperClovaXStructuredRequest) -> object:
         self.operations.append(request.operation)
-        mode = (
-            self.intent_mode
-            if request.operation == "intent_analysis"
-            else self.generation_mode
-        )
+        mode = self.intent_mode if request.operation == "intent_analysis" else self.generation_mode
         if mode == "timeout":
             raise TimeoutError(_PRIVATE_FAILURE)
         if mode == "transport_error":

@@ -193,9 +193,7 @@ def _think_trace(response: BackendAgentResponse) -> str:
                 "predicate": requirement.predicate.value,
                 "subject_evidence_span": requirement.subject_evidence_span,
                 "relation_evidence_span": requirement.relation_evidence_span,
-                "product_families": [
-                    family.value for family in requirement.product_families
-                ],
+                "product_families": [family.value for family in requirement.product_families],
             }
             for requirement in plan.requirements
         ]

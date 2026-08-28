@@ -4,7 +4,8 @@
   "status": "developer_authored_pending_finance_domain_review",
   "base_suite_sha256_by_family": {
     "bond": "b2d19e3af43fb8d6d4be03895088380b263bb8aca2c53c29b32de622a29c4178",
-    "fund": "77d9be9ca86d9654fb61a52290ca08eadff6b618f861b985367b05d195c582b2"
+    "fund": "77d9be9ca86d9654fb61a52290ca08eadff6b618f861b985367b05d195c582b2",
+    "overseas_etp": "166a233166af22cfddee1cf12d96066d133f64a4e5ec3d2f68e6634f7eafa53d"
   },
   "migrations": [
     {
@@ -44,6 +45,18 @@
         "aum"
       ],
       "reason_code": "fund_domestic_investment_region_field_correction",
+      "review_status": "pending_finance_domain_review"
+    },
+    {
+      "case_id": "etp-core-043",
+      "product_family": "overseas_etp",
+      "question_sha256": "ad184a7132fa787723c140e8ea19311a7749002a97633a9030e8843abd458983",
+      "legacy_disposition": "block",
+      "current_disposition": "execute",
+      "gold_field_ids": [
+        "one_day_return_pct"
+      ],
+      "reason_code": "official_20260824_overseas_one_day_return_supported",
       "review_status": "pending_finance_domain_review"
     }
   ]

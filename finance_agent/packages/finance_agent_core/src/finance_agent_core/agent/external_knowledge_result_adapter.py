@@ -21,8 +21,7 @@ def _success_answer(result: ExternalKnowledgeRuntimeResult) -> str:
     names = list(dict.fromkeys(item.product_name for item in facts))
     rendered = ", ".join(names)
     lines = [
-        "제공 데이터에 존재하는 상품과 승인된 공식 외부 근거의 교집합을 "
-        f"확인했습니다: {rendered}"
+        f"제공 데이터에 존재하는 상품과 승인된 공식 외부 근거의 교집합을 확인했습니다: {rendered}"
     ]
     for relation in result.execution.evidence.relations:
         for evidence in relation.evidence:
@@ -48,11 +47,7 @@ def external_knowledge_result_to_backend(
 
     plan = result.search_plan.composite_plan
     families = sorted(
-        {
-            family
-            for requirement in plan.requirements
-            for family in requirement.product_families
-        },
+        {family for requirement in plan.requirements for family in requirement.product_families},
         key=lambda item: item.value,
     )
     status = result.outcome.status
@@ -136,8 +131,7 @@ def external_knowledge_result_to_backend(
                 label=f"{fact.product_name} · {fact.canonical_field}",
                 source_id=fact.source_id,
                 source_locator=(
-                    f"{fact.source_dataset} row {fact.source_row} · "
-                    f"{'/'.join(fact.source_columns)}"
+                    f"{fact.source_dataset} row {fact.source_row} · {'/'.join(fact.source_columns)}"
                 ),
                 as_of=fact.as_of,
                 evidence_refs=[fact.evidence_id],
@@ -205,9 +199,7 @@ def external_knowledge_result_to_backend(
         aggregates=[],
         documents=documents,
         citations=[*product_citations, *relation_citations],
-        as_of_dates=sorted(
-            {*(item.as_of for item in facts), *(item.as_of for item in documents)}
-        ),
+        as_of_dates=sorted({*(item.as_of for item in facts), *(item.as_of for item in documents)}),
         warnings=[],
         answer_mode=BackendAnswerMode.DETERMINISTIC,
         fallback_used=False,

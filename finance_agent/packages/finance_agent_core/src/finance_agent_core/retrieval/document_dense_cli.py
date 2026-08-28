@@ -34,9 +34,7 @@ def _parser() -> argparse.ArgumentParser:
 
 def main() -> int:
     arguments = _parser().parse_args()
-    snapshot_manifest_sha256 = hashlib.sha256(
-        arguments.snapshot_manifest.read_bytes()
-    ).hexdigest()
+    snapshot_manifest_sha256 = hashlib.sha256(arguments.snapshot_manifest.read_bytes()).hexdigest()
     provider = load_verified_schema_embedding_cpu_provider(
         alias="kure-v1",
         snapshot_dir=arguments.snapshot_dir,

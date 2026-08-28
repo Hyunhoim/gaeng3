@@ -22,8 +22,7 @@ class PendingRelationModel(BaseModel):
 
 def _canonical_json_bytes(payload: object) -> bytes:
     return (
-        json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-        + "\n"
+        json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n"
     ).encode("utf-8")
 
 
@@ -49,9 +48,7 @@ class PendingTemporalRelationBundle(PendingRelationModel):
         if self.relation_count != len(self.relations):
             raise ValueError("pending relation count differs")
         digest = hashlib.sha256(
-            _canonical_json_bytes(
-                [item.model_dump(mode="json") for item in self.relations]
-            )
+            _canonical_json_bytes([item.model_dump(mode="json") for item in self.relations])
         ).hexdigest()
         if digest != self.relation_set_sha256:
             raise ValueError("pending relation set SHA-256 differs")
@@ -97,9 +94,7 @@ def verify_pending_relation_candidates(
                 content = candidate.read_bytes()
                 if hashlib.sha256(content).hexdigest() != document.text_sha256:
                     raise PendingRelationError("pending relation snapshot SHA-256 differs")
-                text_cache[evidence.document_id] = normalize_document_text(
-                    content.decode("utf-8")
-                )
+                text_cache[evidence.document_id] = normalize_document_text(content.decode("utf-8"))
             excerpt = normalize_document_text(evidence.excerpt)
             if not excerpt or excerpt not in text_cache[evidence.document_id]:
                 raise PendingRelationError("relation excerpt is not verbatim snapshot text")

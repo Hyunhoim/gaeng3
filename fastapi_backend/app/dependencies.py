@@ -500,6 +500,7 @@ def _relation_artifact_trust_sha256(settings: Settings) -> str:
         payload = b"".join(chunks)
         after = os.fstat(descriptor)
         current = path.stat(follow_symlinks=False)
+
         def fingerprint(item: os.stat_result) -> tuple[int, ...]:
             return (
                 item.st_dev,
@@ -511,6 +512,7 @@ def _relation_artifact_trust_sha256(settings: Settings) -> str:
                 item.st_mtime_ns,
                 item.st_ctime_ns,
             )
+
         if fingerprint(before) != fingerprint(after) or fingerprint(after) != fingerprint(current):
             raise RuntimeError("relation retrieval artifact trust file changed while loading")
         value = payload.decode("ascii")
@@ -701,8 +703,8 @@ def _build_external_knowledge_runtime(
     assert settings.external_knowledge_artifact_sha256 is not None
     assert settings.external_temporal_relation_file is not None
     assert settings.external_temporal_relation_sha256 is not None
-    assert settings.naver_api_hub_key_id_file is not None
-    assert settings.naver_api_hub_key_file is not None
+    assert settings.naver_api_hub_client_id_file is not None
+    assert settings.naver_api_hub_client_secret_file is not None
     artifact = load_external_knowledge_artifact_release(
         artifact_path=settings.external_knowledge_artifact_file,
         expected_file_sha256=settings.external_knowledge_artifact_sha256,
@@ -733,11 +735,13 @@ def _build_external_knowledge_runtime(
         or bundle.manifest.corpus_manifest_sha256 != artifact.corpus_manifest_sha256
     ):
         raise RuntimeError("external temporal relations differ from the release artifact")
+    if artifact.retrieval_mode == "verified_live_official" and bundle.relations:
+        raise RuntimeError("live-only external knowledge requires an empty relation cache")
     relation_store = TemporalRelationStore(bundle, registry)
     discovery = BoundedOfficialDiscoveryProvider(
         NaverApiHubWebSearchTransport(
-            api_key_id_file=settings.naver_api_hub_key_id_file,
-            api_key_file=settings.naver_api_hub_key_file,
+            client_id_file=settings.naver_api_hub_client_id_file,
+            client_secret_file=settings.naver_api_hub_client_secret_file,
         ),
         registry,
     )

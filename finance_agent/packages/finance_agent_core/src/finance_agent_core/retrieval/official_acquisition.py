@@ -108,12 +108,8 @@ class OfficialEvidenceAcquisitionCoordinator:
         self.relation_store = relation_store
         self.discovery_provider = discovery_provider
         self.connector = connector
-        self.discovery_gate = discovery_gate or BoundedOfficialDiscovery(
-            connector.registry
-        )
-        self.link_resolver = link_resolver or OfficialDocumentLinkResolver(
-            connector.registry
-        )
+        self.discovery_gate = discovery_gate or BoundedOfficialDiscovery(connector.registry)
+        self.link_resolver = link_resolver or OfficialDocumentLinkResolver(connector.registry)
         if self.relation_store.registry.canonical_sha256 != (
             self.connector.registry.canonical_sha256
         ):
@@ -167,7 +163,7 @@ class OfficialEvidenceAcquisitionCoordinator:
         try:
             if callable(report_method):
                 report = report_method(
-                    query=requirement.subject,
+                    query=" ".join((requirement.subject, *requirement.search_aliases)),
                     capability=requirement.capability,
                     source_registry_ids=requirement.source_registry_ids,
                     evidence_cutoff=self.connector.registry.evidence_cutoff,
@@ -179,7 +175,7 @@ class OfficialEvidenceAcquisitionCoordinator:
                 discovered = report.candidates[:top_k]
             else:
                 discovered = self.discovery_provider.discover(
-                    query=requirement.subject,
+                    query=" ".join((requirement.subject, *requirement.search_aliases)),
                     capability=requirement.capability,
                     source_registry_ids=requirement.source_registry_ids,
                     evidence_cutoff=self.connector.registry.evidence_cutoff,
@@ -301,8 +297,7 @@ class OfficialEvidenceAcquisitionCoordinator:
                 rejected += 1
         if snapshots:
             live_evidence = all(
-                snapshot.source.status == "approved_for_live_evidence"
-                for snapshot in snapshots
+                snapshot.source.status == "approved_for_live_evidence" for snapshot in snapshots
             )
             return OfficialEvidenceAcquisitionResult(
                 status=(
@@ -324,9 +319,7 @@ class OfficialEvidenceAcquisitionCoordinator:
                         )
                     )
                     if live_evidence
-                    else tuple(
-                        sorted({"evidence_intake_pending", *fetch_failure_codes})
-                    )
+                    else tuple(sorted({"evidence_intake_pending", *fetch_failure_codes}))
                 ),
                 search_query_count=len(report.queried_source_registry_ids),
                 fetch_count=len(snapshots),

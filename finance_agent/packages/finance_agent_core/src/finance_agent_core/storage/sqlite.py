@@ -23,6 +23,7 @@ from finance_agent_core.normalization import iter_normalized_overseas_etp
 
 FEE_SCALE = Decimal("1000000")
 AUM_SCALE = Decimal("100")
+EIGHT_DECIMAL_SCALE = Decimal("100000000")
 
 SCHEMA_SQL = """
 CREATE TABLE metadata (
@@ -59,6 +60,18 @@ CREATE TABLE overseas_etp_products (
     one_day_return_micro_pct INTEGER,
     one_day_return_quality TEXT NOT NULL,
     one_day_return_quality_reason TEXT,
+    close_price_eight_decimals INTEGER,
+    close_price_quality TEXT NOT NULL,
+    close_price_quality_reason TEXT,
+    daily_trading_value_eight_decimals INTEGER,
+    daily_trading_value_quality TEXT NOT NULL,
+    daily_trading_value_quality_reason TEXT,
+    daily_volume_eight_decimals INTEGER,
+    daily_volume_quality TEXT NOT NULL,
+    daily_volume_quality_reason TEXT,
+    discrepancy_micro_pct INTEGER,
+    discrepancy_quality TEXT NOT NULL,
+    discrepancy_quality_reason TEXT,
     trading_currency TEXT NOT NULL,
     static_as_of TEXT NOT NULL,
     dynamic_as_of TEXT NOT NULL
@@ -110,11 +123,24 @@ INSERT INTO overseas_etp_products (
     one_day_return_micro_pct,
     one_day_return_quality,
     one_day_return_quality_reason,
+    close_price_eight_decimals,
+    close_price_quality,
+    close_price_quality_reason,
+    daily_trading_value_eight_decimals,
+    daily_trading_value_quality,
+    daily_trading_value_quality_reason,
+    daily_volume_eight_decimals,
+    daily_volume_quality,
+    daily_volume_quality_reason,
+    discrepancy_micro_pct,
+    discrepancy_quality,
+    discrepancy_quality_reason,
     trading_currency,
     static_as_of,
     dynamic_as_of
 ) VALUES (
-    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
 )
 """
 
@@ -174,6 +200,22 @@ def _database_values(record: NormalizedOverseasEtpRecord) -> tuple[object, ...]:
         _scaled_integer(record.one_day_return_pct, FEE_SCALE, "one_day_return_pct"),
         record.one_day_return_quality.value,
         record.one_day_return_quality_reason,
+        _scaled_integer(record.close_price, EIGHT_DECIMAL_SCALE, "close_price"),
+        record.close_price_quality.value,
+        record.close_price_quality_reason,
+        _scaled_integer(
+            record.daily_trading_value,
+            EIGHT_DECIMAL_SCALE,
+            "daily_trading_value",
+        ),
+        record.daily_trading_value_quality.value,
+        record.daily_trading_value_quality_reason,
+        _scaled_integer(record.daily_volume, EIGHT_DECIMAL_SCALE, "daily_volume"),
+        record.daily_volume_quality.value,
+        record.daily_volume_quality_reason,
+        _scaled_integer(record.discrepancy_pct, FEE_SCALE, "discrepancy_pct"),
+        record.discrepancy_quality.value,
+        record.discrepancy_quality_reason,
         record.trading_currency,
         record.static_as_of.isoformat(),
         record.dynamic_as_of.isoformat(),
@@ -378,6 +420,34 @@ def row_to_record(
         ),
         one_day_return_quality=QualityStatus(row["one_day_return_quality"]),
         one_day_return_quality_reason=row["one_day_return_quality_reason"],
+        close_price=(
+            None
+            if row["close_price_eight_decimals"] is None
+            else Decimal(row["close_price_eight_decimals"]) / EIGHT_DECIMAL_SCALE
+        ),
+        close_price_quality=QualityStatus(row["close_price_quality"]),
+        close_price_quality_reason=row["close_price_quality_reason"],
+        daily_trading_value=(
+            None
+            if row["daily_trading_value_eight_decimals"] is None
+            else Decimal(row["daily_trading_value_eight_decimals"]) / EIGHT_DECIMAL_SCALE
+        ),
+        daily_trading_value_quality=QualityStatus(row["daily_trading_value_quality"]),
+        daily_trading_value_quality_reason=row["daily_trading_value_quality_reason"],
+        daily_volume=(
+            None
+            if row["daily_volume_eight_decimals"] is None
+            else Decimal(row["daily_volume_eight_decimals"]) / EIGHT_DECIMAL_SCALE
+        ),
+        daily_volume_quality=QualityStatus(row["daily_volume_quality"]),
+        daily_volume_quality_reason=row["daily_volume_quality_reason"],
+        discrepancy_pct=(
+            None
+            if row["discrepancy_micro_pct"] is None
+            else Decimal(row["discrepancy_micro_pct"]) / FEE_SCALE
+        ),
+        discrepancy_quality=QualityStatus(row["discrepancy_quality"]),
+        discrepancy_quality_reason=row["discrepancy_quality_reason"],
         trading_currency=row["trading_currency"],
         static_as_of=row["static_as_of"],
         dynamic_as_of=row["dynamic_as_of"],

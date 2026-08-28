@@ -218,27 +218,21 @@ _RULES: tuple[SemanticFieldRule, ...] = (
     SemanticFieldRule(
         field_id="one_month_return_pct",
         semantic_group="return_period",
-        positive=_patterns(
-            r"(?:최근\s*)?(?:1\s*개월|한\s*달|월간).{0,10}(?:성과|성적|수익|실적)"
-        ),
+        positive=_patterns(r"(?:최근\s*)?(?:1\s*개월|한\s*달|월간).{0,10}(?:성과|성적|수익|실적)"),
         families=frozenset({ProductFamily.DOMESTIC_ETP, ProductFamily.FUND}),
         deterministic_anchor=True,
     ),
     SemanticFieldRule(
         field_id="three_month_return_pct",
         semantic_group="return_period",
-        positive=_patterns(
-            r"(?:최근\s*)?(?:3\s*개월|석\s*달|분기).{0,10}(?:성과|성적|수익|실적)"
-        ),
+        positive=_patterns(r"(?:최근\s*)?(?:3\s*개월|석\s*달|분기).{0,10}(?:성과|성적|수익|실적)"),
         families=frozenset({ProductFamily.DOMESTIC_ETP, ProductFamily.FUND}),
         deterministic_anchor=True,
     ),
     SemanticFieldRule(
         field_id="six_month_return_pct",
         semantic_group="return_period",
-        positive=_patterns(
-            r"(?:최근\s*)?(?:6\s*개월|반년|반기).{0,10}(?:성과|성적|수익|실적)"
-        ),
+        positive=_patterns(r"(?:최근\s*)?(?:6\s*개월|반년|반기).{0,10}(?:성과|성적|수익|실적)"),
         families=frozenset({ProductFamily.DOMESTIC_ETP, ProductFamily.FUND}),
         deterministic_anchor=True,
     ),
@@ -415,11 +409,7 @@ def evidence_spans_are_grounded(
         return False
     if any(not value.strip() or value not in residual_span for value in provided):
         return False
-    return any(
-        left in right or right in left
-        for left in provided
-        for right in server_evidence
-    )
+    return any(left in right or right in left for left in provided for right in server_evidence)
 
 
 __all__ = [

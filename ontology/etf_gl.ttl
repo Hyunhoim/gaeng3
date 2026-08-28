@@ -37,7 +37,11 @@ etfgl:Family
     ga:hasCanonicalField etfgl:field_trading_currency ;
     ga:hasCanonicalField etfgl:field_static_as_of ;
     ga:hasCanonicalField etfgl:field_dynamic_as_of ;
-    ga:hasCanonicalField etfgl:field_one_day_return_pct .
+    ga:hasCanonicalField etfgl:field_one_day_return_pct ;
+    ga:hasCanonicalField etfgl:field_close_price ;
+    ga:hasCanonicalField etfgl:field_daily_trading_value ;
+    ga:hasCanonicalField etfgl:field_daily_volume ;
+    ga:hasCanonicalField etfgl:field_discrepancy_pct .
 
 etfgl:Dataset
     a ga:Dataset ;
@@ -453,6 +457,8 @@ etfgl:field_total_expense_ratio_pct
     rdfs:label "총보수율"@ko ;
     skos:altLabel "총보수"@ko ;
     skos:altLabel "보수율"@ko ;
+    skos:altLabel "연간보수"@ko ;
+    skos:altLabel "연간보수율"@ko ;
     skos:altLabel "expense ratio"@ko ;
     skos:altLabel "fee"@ko ;
     ga:valueType "number" ;
@@ -634,4 +640,131 @@ etfgl:field_one_day_return_pct
     ga:sourceDataset "overseas_etp" ;
     ga:sourceColumn "du_er_1d" ;
     ga:sourceTransform "identity" ;
-    ga:notes "값이 있는 6,023행의 -51.25~46.91 원천 퍼센트포인트를 보존한다. 0은 당일 변동 없음으로 유효하고 결측 14행은 UNKNOWN이다."@ko .
+    ga:notes "값이 있는 6,023행의 -51.25~46.91 원천 퍼센트포인트를 보존한다. 원천 0과 결측은 감사용으로 보존하되 2026-08-26 공식 규칙에 따라 수치 필터·정렬·집계에서는 기준 없음으로 제외한다."@ko .
+
+etfgl:field_close_price
+    a ga:CanonicalField ;
+    ga:forFamily etfgl:Family ;
+    ga:canonicalName "close_price" ;
+    rdfs:label "종가"@ko ;
+    skos:altLabel "마감 가격"@ko ;
+    skos:altLabel "close price"@ko ;
+    ga:valueType "number" ;
+    ga:unit "source_currency_amount" ;
+    ga:quality "PARTIAL" ;
+    ga:coveragePct "99.7681"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable true ;
+    ga:aggregatable true ;
+    ga:comparable true ;
+    ga:comparisonMode "numeric_delta" ;
+    ga:comparisonScope "same_trading_currency" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "lt" ;
+    ga:allowedOperator "lte" ;
+    ga:allowedOperator "gt" ;
+    ga:allowedOperator "gte" ;
+    ga:allowedOperator "between" ;
+    ga:asOfBasis "dynamic" ;
+    ga:sourceDataset "overseas_etp" ;
+    ga:sourceColumn "du_clpr" ;
+    ga:sourceTransform "identity" ;
+    ga:sentinelValuesJson "{\"0\":\"UNKNOWN\"}" ;
+    ga:notes "공식 원천 6,023행의 종가를 보존한다. 결측과 0은 수치 실행 기준에서 제외한다."@ko .
+
+etfgl:field_daily_trading_value
+    a ga:CanonicalField ;
+    ga:forFamily etfgl:Family ;
+    ga:canonicalName "daily_trading_value" ;
+    rdfs:label "일 거래대금"@ko ;
+    skos:altLabel "거래대금"@ko ;
+    skos:altLabel "일간 거래대금"@ko ;
+    skos:altLabel "daily trading value"@ko ;
+    ga:valueType "number" ;
+    ga:unit "source_currency_amount" ;
+    ga:quality "PARTIAL" ;
+    ga:coveragePct "99.7681"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable true ;
+    ga:aggregatable true ;
+    ga:comparable true ;
+    ga:comparisonMode "numeric_delta" ;
+    ga:comparisonScope "same_trading_currency" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "lt" ;
+    ga:allowedOperator "lte" ;
+    ga:allowedOperator "gt" ;
+    ga:allowedOperator "gte" ;
+    ga:allowedOperator "between" ;
+    ga:asOfBasis "dynamic" ;
+    ga:sourceDataset "overseas_etp" ;
+    ga:sourceColumn "du_val_1d" ;
+    ga:sourceTransform "identity" ;
+    ga:sentinelValuesJson "{\"0\":\"UNKNOWN\"}" ;
+    ga:notes "공식 외화거래대금 6,023행을 보존하고 결측·0은 수치 실행 기준에서 제외한다."@ko .
+
+etfgl:field_daily_volume
+    a ga:CanonicalField ;
+    ga:forFamily etfgl:Family ;
+    ga:canonicalName "daily_volume" ;
+    rdfs:label "일 거래량"@ko ;
+    skos:altLabel "거래량"@ko ;
+    skos:altLabel "일간 거래량"@ko ;
+    skos:altLabel "daily volume"@ko ;
+    ga:valueType "number" ;
+    ga:unit "source_quantity" ;
+    ga:quality "PARTIAL" ;
+    ga:coveragePct "99.7681"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable true ;
+    ga:aggregatable true ;
+    ga:comparable true ;
+    ga:comparisonMode "numeric_delta" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "lt" ;
+    ga:allowedOperator "lte" ;
+    ga:allowedOperator "gt" ;
+    ga:allowedOperator "gte" ;
+    ga:allowedOperator "between" ;
+    ga:asOfBasis "dynamic" ;
+    ga:sourceDataset "overseas_etp" ;
+    ga:sourceColumn "du_vol_1d" ;
+    ga:sourceTransform "identity" ;
+    ga:sentinelValuesJson "{\"0\":\"UNKNOWN\"}" ;
+    ga:notes "해외 ETP 공식 거래량 6,023행을 보존하고 결측·0은 수치 실행 기준에서 제외한다."@ko .
+
+etfgl:field_discrepancy_pct
+    a ga:CanonicalField ;
+    ga:forFamily etfgl:Family ;
+    ga:canonicalName "discrepancy_pct" ;
+    rdfs:label "괴리율"@ko ;
+    skos:altLabel "가격 괴리율"@ko ;
+    skos:altLabel "NAV 괴리율"@ko ;
+    skos:altLabel "discrepancy"@ko ;
+    ga:valueType "number" ;
+    ga:unit "pct_point" ;
+    ga:quality "PARTIAL" ;
+    ga:coveragePct "0.0497"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable true ;
+    ga:aggregatable true ;
+    ga:comparable true ;
+    ga:comparisonMode "numeric_delta" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "lt" ;
+    ga:allowedOperator "lte" ;
+    ga:allowedOperator "gt" ;
+    ga:allowedOperator "gte" ;
+    ga:allowedOperator "between" ;
+    ga:asOfBasis "dynamic" ;
+    ga:sourceDataset "overseas_etp" ;
+    ga:sourceColumn "du_diff_rt" ;
+    ga:sourceTransform "identity" ;
+    ga:sentinelValuesJson "{\"0\":\"UNKNOWN\"}" ;
+    ga:notes "해외 ETP는 공식 원천값이 있는 3행만 실행 대상으로 사용한다."@ko .

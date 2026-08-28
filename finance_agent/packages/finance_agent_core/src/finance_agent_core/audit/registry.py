@@ -43,9 +43,7 @@ DATASET_SPECS: tuple[DatasetSpec, ...] = (
             "mat_dt",
             "pd_std_info_update",
         ),
-        numeric_fields=frozenset(
-            {"buyable_quantity", "buy_yield", "avg_annual_tax_yield"}
-        ),
+        numeric_fields=frozenset({"buyable_quantity", "buy_yield", "avg_annual_tax_yield"}),
         categorical_fields=frozenset(),
     ),
     DatasetSpec(

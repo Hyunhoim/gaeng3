@@ -55,9 +55,7 @@ def _release_settings(tmp_path: Path, **overrides: object) -> tuple[Settings, Pa
     values.update(overrides)
     answer_provider = values["FINANCE_BACKEND_ANSWER_PROVIDER"]
     hcx_enabled = bool(values.get("FINANCE_BACKEND_HCX_QUERY_PLAN_ENABLED", False))
-    intent_enabled = bool(
-        values.get("FINANCE_BACKEND_HCX_INTENT_ANALYSIS_ENABLED", False)
-    )
+    intent_enabled = bool(values.get("FINANCE_BACKEND_HCX_INTENT_ANALYSIS_ENABLED", False))
     runtime = RuntimeReleaseInputs(
         environment="evaluation",
         source_commit=_SOURCE_COMMIT,

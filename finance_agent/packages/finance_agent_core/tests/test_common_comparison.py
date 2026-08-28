@@ -197,7 +197,7 @@ def test_comparison_supports_exact_product_operational_field_phrases(
     [
         (
             "해외 ETF AMX:B1과 AMX:B2의 총보수율과 수익률을 비교해줘",
-            "해외 ETP 수익률 비교는 현재 지원하지 않습니다",
+            "해외 ETP 수익률 비교는 제공 데이터의 1일 수익률만 지원합니다",
         ),
         (
             "해외 ETF AMX:B1은 제외하고 AMX:B2의 AUM을 비교해줘",

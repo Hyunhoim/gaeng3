@@ -67,8 +67,7 @@ def _sortable_fields(registry: FieldRegistry, family: ProductFamily) -> set[str]
     return {
         field_id
         for field_id, definition in registry.fields.items()
-        if family.value in definition.datasets
-        and definition.resolve(family.value).sortable
+        if family.value in definition.datasets and definition.resolve(family.value).sortable
     }
 
 
@@ -83,18 +82,13 @@ def _lexical_rank(
     normalized = _normalize(span)
     scored: list[tuple[int, int, str]] = []
     for field_id in (
-        _sortable_fields(registry, family)
-        if allowed_field_ids is None
-        else allowed_field_ids
+        _sortable_fields(registry, family) if allowed_field_ids is None else allowed_field_ids
     ):
         definition = registry.require_field(field_id, [family.value])
         surfaces = tuple(
             filter(
                 None,
-                (
-                    _normalize(value)
-                    for value in (field_id, definition.label, *definition.aliases)
-                ),
+                (_normalize(value) for value in (field_id, definition.label, *definition.aliases)),
             )
         )
         exact = any(normalized == value for value in surfaces)
@@ -185,10 +179,7 @@ def _selective_policy_observations(
                 product_family=family,
                 operation="rank",
             )
-            if (
-                evidence.supported
-                and candidate.score >= threshold.hclx_candidate_min_score
-            ):
+            if evidence.supported and candidate.score >= threshold.hclx_candidate_min_score:
                 supported.append(candidate)
         decision = "clarify"
         selected_field_id = None
@@ -227,8 +218,7 @@ def _selective_policy_metrics(
     correct_auto = [
         item
         for item in auto
-        if item["expected"] == "resolve"
-        and item["selected_field_id"] == item["gold_field_id"]
+        if item["expected"] == "resolve" and item["selected_field_id"] == item["gold_field_id"]
     ]
     wrong_auto = len(auto) - len(correct_auto)
     hclx = [item for item in observations if item["decision"] == "hclx_review"]
@@ -248,17 +238,11 @@ def _selective_policy_metrics(
         "dense_auto_admit_count": len(auto),
         "dense_auto_admit_correct": len(correct_auto),
         "dense_auto_admit_wrong": wrong_auto,
-        "dense_auto_admit_precision": (
-            round(len(correct_auto) / len(auto), 6) if auto else 1.0
-        ),
+        "dense_auto_admit_precision": (round(len(correct_auto) / len(auto), 6) if auto else 1.0),
         "hclx_review_count": len(hclx),
         "hclx_review_gold_in_top5": len(hclx_with_gold),
-        "control_auto_execute_count": sum(
-            item["decision"] == "dense_resolve" for item in controls
-        ),
-        "control_sent_to_hclx_count": sum(
-            item["decision"] == "hclx_review" for item in controls
-        ),
+        "control_auto_execute_count": sum(item["decision"] == "dense_resolve" for item in controls),
+        "control_sent_to_hclx_count": sum(item["decision"] == "hclx_review" for item in controls),
         "resolvable_reachable_count": reachable,
         "resolvable_reachable_rate": round(reachable / (len(resolvable) or 1), 6),
     }
@@ -518,9 +502,7 @@ def evaluate_residual_holdout(provider: EmbeddingProvider) -> dict[str, object]:
         "selective_test_control_sent_to_hclx_0": (
             selective_test_metrics["control_sent_to_hclx_count"] == 0
         ),
-        "selective_test_wrong_resolve_0": (
-            selective_test_metrics["dense_auto_admit_wrong"] == 0
-        ),
+        "selective_test_wrong_resolve_0": (selective_test_metrics["dense_auto_admit_wrong"] == 0),
         "independent_blind_completed": False,
     }
     return {

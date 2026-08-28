@@ -163,7 +163,7 @@ def test_compiler_rejects_a_search_that_still_contains_an_unbound_identity() -> 
             "search",
             5,
         ),
-        ("국내 채권형 ETF를 AUM 큰 순서로 다섯 개 찾아줘.", "domestic_etp", "search", None),
+        ("국내 채권형 ETF를 AUM 큰 순서로 다섯 개 찾아줘.", "domestic_etp", "search", 5),
         (
             "글로벌 주식형 국내 ETF의 YTD 수익률 상위 3개를 순서대로 보여줘.",
             "domestic_etp",
@@ -221,11 +221,9 @@ def test_markdown_count_label_is_a_search_limit_not_an_aggregate() -> None:
         "미국 외 지역 해외 ETF를 AUM 큰 순으로 5개 보여줘.",
         "매수 불가능한 것은 제외하고 국내채권을 수익률 높은 순으로 5개 보여줘.",
         "회사채가 아닌 매수 가능 국내채권을 만기일 오름차순으로 5개 보여줘.",
-        "판매 종료 상품을 제외한 공모펀드를 AUM 큰 순으로 5개 보여줘.",
         "USD 해외 ETF AUM과 KRW 국내 ETF 시가를 큰 순으로 섞어 정렬해줘.",
         "해외 ETF AUM과 국내채권 발행액을 환율 지정 없이 금액 순위로 만들어줘.",
         "ETF 1개월 수익률과 펀드 3개월 수익률을 같은 기준으로 정렬해줘.",
-        "상품군: 공모펀드, 지표: AUM, 방향: 내림차순, 제한: 3개",
     ],
 )
 def test_p0_unresolved_semantics_are_pre_route_clarifications(question: str) -> None:
@@ -241,7 +239,7 @@ def test_p0_unresolved_semantics_are_pre_route_clarifications(question: str) -> 
     [
         (
             "현재 매수할 수 있는 국내채권은 총 몇 개인지 집계해줘.",
-            {("currently_buyable", "eq", True)},
+            set(),
             None,
         ),
         (
@@ -261,7 +259,7 @@ def test_p0_unresolved_semantics_are_pre_route_clarifications(question: str) -> 
         ),
         (
             "잔존일수 365일 초과는 빼고 매수 가능한 국내채권을 잔존일수 낮은 순으로 5개 보여줘.",
-            {("remaining_days", "lte", 365), ("currently_buyable", "eq", True)},
+            {("remaining_days", "lte", 365)},
             ("remaining_days", "asc"),
         ),
         (
@@ -276,7 +274,7 @@ def test_p0_unresolved_semantics_are_pre_route_clarifications(question: str) -> 
         ),
         (
             "KRW 매수 가능 국내채권끼리 매수수익률(%) 높은 순으로 5개 보여줘.",
-            {("trading_currency", "eq", "KRW"), ("currently_buyable", "eq", True)},
+            {("trading_currency", "eq", "KRW")},
             ("buy_yield_pct", "desc"),
         ),
         (

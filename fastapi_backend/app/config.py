@@ -19,6 +19,7 @@ class Settings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         extra="ignore",
+        env_ignore_empty=True,
         hide_input_in_errors=True,
         populate_by_name=True,
         frozen=True,
@@ -260,13 +261,13 @@ class Settings(BaseSettings):
         pattern=r"^[0-9a-f]{64}$",
         validation_alias="FINANCE_EXTERNAL_TEMPORAL_RELATION_SHA256",
     )
-    naver_api_hub_key_id_file: Path | None = Field(
+    naver_api_hub_client_id_file: Path | None = Field(
         default=None,
-        validation_alias="NAVER_API_HUB_KEY_ID_FILE",
+        validation_alias="NAVER_API_HUB_CLIENT_ID_FILE",
     )
-    naver_api_hub_key_file: Path | None = Field(
+    naver_api_hub_client_secret_file: Path | None = Field(
         default=None,
-        validation_alias="NAVER_API_HUB_KEY_FILE",
+        validation_alias="NAVER_API_HUB_CLIENT_SECRET_FILE",
     )
     overseas_etp_db: Path | None = Field(
         default=None,
@@ -297,14 +298,18 @@ class Settings(BaseSettings):
             raise ValueError(
                 "inline HyperCLOVA credential is forbidden; use CLOVASTUDIO_API_KEY_FILE"
             )
-        naver_environment = {"NAVER_API_HUB_KEY", "NAVER_API_HUB_KEY_ID"}
-        naver_explicit = {"naver_api_hub_key", "naver_api_hub_key_id"}
+        naver_environment = {
+            "NAVER_API_HUB_CLIENT_ID",
+            "NAVER_API_HUB_CLIENT_SECRET",
+        }
+        naver_explicit = {
+            "naver_api_hub_client_id",
+            "naver_api_hub_client_secret",
+        }
         if naver_environment.intersection(os.environ) or naver_explicit.intersection(
             explicit_names
         ):
-            raise ValueError(
-                "inline NAVER API HUB credential is forbidden; use credential files"
-            )
+            raise ValueError("inline NAVER API HUB credential is forbidden; use credential files")
         return values
 
     @model_validator(mode="after")
@@ -419,8 +424,8 @@ class Settings(BaseSettings):
             self.external_knowledge_artifact_sha256,
             self.external_temporal_relation_file,
             self.external_temporal_relation_sha256,
-            self.naver_api_hub_key_id_file,
-            self.naver_api_hub_key_file,
+            self.naver_api_hub_client_id_file,
+            self.naver_api_hub_client_secret_file,
         )
         if self.external_knowledge_enabled:
             if any(value is None for value in external_values):
@@ -436,8 +441,8 @@ class Settings(BaseSettings):
         external_paths = (
             self.external_knowledge_artifact_file,
             self.external_temporal_relation_file,
-            self.naver_api_hub_key_id_file,
-            self.naver_api_hub_key_file,
+            self.naver_api_hub_client_id_file,
+            self.naver_api_hub_client_secret_file,
         )
         if any(path is not None and not path.is_absolute() for path in external_paths):
             raise ValueError("external knowledge files must use absolute paths")

@@ -102,7 +102,11 @@ def build_product_evidence(
             )
         products.append(
             ProductEvidence(
-                product_id=record.product_id,
+                product_id=(
+                    record.ticker
+                    if record.product_family == "bond" and plan.intent.value != "compare"
+                    else record.product_id
+                ),
                 product_name=record.product_name,
                 ticker=getattr(record, "ticker", None),
                 fields=fields,

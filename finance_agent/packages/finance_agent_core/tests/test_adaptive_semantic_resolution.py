@@ -166,7 +166,7 @@ def test_adaptive_router_records_only_the_unresolved_metric() -> None:
 
 def test_hard_filter_lock_rejects_family_and_constraint_changes() -> None:
     decision = IntentRouter().route(
-        "매수 가능한 국내채권을 매수수익률 높은 순으로 3개 보여줘",
+        "AA- 이상 국내채권을 매수수익률 높은 순으로 3개 보여줘",
         "adaptive-lock",
     )
     plan = ServerQueryPlanCompiler({}).compile(decision)

@@ -148,12 +148,8 @@ _DETERMINISTIC_PROBE_PREFIX = (
     ("route", "succeeded", "routed_execute"),
 )
 _COMPILER_PROBE_PATH = (("compiler", "succeeded", "plan_compiled"),)
-_INTENT_ANALYSIS_HCLX_PROBE_PATH = (
-    ("hclx", "succeeded", "intent_analysis_completed"),
-)
-_INTENT_ANALYSIS_VERIFIER_PROBE_PATH = (
-    ("verifier", "succeeded", "intent_analysis_verified"),
-)
+_INTENT_ANALYSIS_HCLX_PROBE_PATH = (("hclx", "succeeded", "intent_analysis_completed"),)
+_INTENT_ANALYSIS_VERIFIER_PROBE_PATH = (("verifier", "succeeded", "intent_analysis_verified"),)
 _EXECUTION_PROBE_PATH = (
     ("sql", "succeeded", "authority_connection_opened"),
     ("authority", "succeeded", "authority_granted"),
@@ -352,9 +348,7 @@ class ReleaseTarget:
     @property
     def hclx_intent_analysis_enabled(self) -> bool:
         return (
-            self.environment.get(
-                "FINANCE_BACKEND_HCX_INTENT_ANALYSIS_ENABLED", "false"
-            ).lower()
+            self.environment.get("FINANCE_BACKEND_HCX_INTENT_ANALYSIS_ENABLED", "false").lower()
             == "true"
         )
 
