@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import ast
 import hashlib
 import importlib.util
 import json
+import subprocess
 from pathlib import Path
 
 SCRIPT_PATH = Path(__file__).with_name("check-docs.py")
@@ -14,15 +16,48 @@ SPEC.loader.exec_module(FROZEN)
 
 EXPECTED_HISTORICAL_BASELINE_ERRORS_SHA256 = (
     # Reviewed on 2026-08-29 after the latest-data, HCLX Intent, adaptive
-    # semantic, and official external-evidence successor contracts. The 34
-    # entries remain historical baseline drift; this hash does not approve
-    # current runtime behavior or rewrite immutable evidence.
-    "a0f8b99325a9cac7a8d925c51cd4ac8ae9c2c70dff2417fae89e4664e0d66d46"
+    # semantic, and official external-evidence successor contracts. The 28
+    # tracked entries remain historical baseline drift; this hash is computed
+    # from a clean Git tree so ignored local evaluation artifacts cannot affect
+    # release QA. It does not approve current runtime behavior or rewrite
+    # immutable evidence.
+    "228f2cbbb58eb8a059292df84464ad26aaf82d2bddbfb76d6de5c39c981d265b"
 )
 
 
+def _ignored_local_baseline_names() -> set[str]:
+    ignored: set[str] = set()
+    for path in FROZEN.BASELINE_ROOT.glob("*.json"):
+        relative_path = path.relative_to(FROZEN.REPOSITORY_ROOT)
+        result = subprocess.run(
+            ["git", "check-ignore", "--quiet", "--", str(relative_path)],
+            cwd=FROZEN.REPOSITORY_ROOT,
+            check=False,
+        )
+        if result.returncode == 0:
+            ignored.add(path.name)
+    return ignored
+
+
+def _tracked_baseline_errors() -> list[str]:
+    ignored_names = _ignored_local_baseline_names()
+    errors: list[str] = []
+    unexpected_prefix = "unexpected baseline files: "
+    for error in FROZEN._check_baselines():
+        if error.startswith(unexpected_prefix):
+            names = ast.literal_eval(error.removeprefix(unexpected_prefix))
+            tracked_names = [name for name in names if name not in ignored_names]
+            if tracked_names:
+                errors.append(f"{unexpected_prefix}{tracked_names!r}")
+            continue
+        if any(error.startswith(f"{name}:") for name in ignored_names):
+            continue
+        errors.append(error)
+    return errors
+
+
 def main() -> int:
-    baseline_errors = FROZEN._check_baselines()
+    baseline_errors = _tracked_baseline_errors()
     baseline_errors_sha256 = hashlib.sha256(
         json.dumps(
             sorted(baseline_errors),
