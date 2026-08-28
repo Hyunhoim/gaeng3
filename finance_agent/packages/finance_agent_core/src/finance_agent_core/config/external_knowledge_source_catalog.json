@@ -1,0 +1,77 @@
+{
+  "schema_version": "1.0",
+  "catalog_id": "external-knowledge-official-seeds-20260824-v1",
+  "evidence_cutoff": "2026-08-24",
+  "documents": [
+    {
+      "document_id": "ecopro-company-overview-20260824",
+      "title": "에코프로 기업개요 및 지주회사 전환",
+      "source_uri": "https://www.ecopro.co.kr/sub010101/view",
+      "capabilities": ["corporate_subsidiary"],
+      "published_at": null,
+      "as_of": "2026-08-24",
+      "language": "ko",
+      "purposes": ["corporate_relation"]
+    },
+    {
+      "document_id": "fsc-national-growth-fund-structure-20260521",
+      "title": "국민참여형 국민성장펀드 투자구조 설명",
+      "source_uri": "https://www.fsc.go.kr/po010103/86950",
+      "capabilities": ["fund_structure_strategy_trend"],
+      "published_at": "2026-05-21",
+      "as_of": "2026-05-21",
+      "language": "ko",
+      "purposes": ["product_structure", "regulation"]
+    },
+    {
+      "document_id": "fsc-national-growth-fund-trend-20260529",
+      "title": "국민참여형 국민성장펀드 판매 및 향후 일정",
+      "source_uri": "https://www.fsc.go.kr/po010102/87009",
+      "capabilities": ["fund_structure_strategy_trend"],
+      "published_at": "2026-05-29",
+      "as_of": "2026-05-29",
+      "language": "ko",
+      "purposes": ["operation", "trend"]
+    },
+    {
+      "document_id": "kraneshares-kstr-presentation-20260630",
+      "title": "KSTR China STAR Market ETF Presentation",
+      "source_uri": "https://engage.kraneshares.com/s/b264ceb1/kstr-presentation/",
+      "capabilities": ["portfolio_holdings", "product_risk_factors", "sector_theme_history"],
+      "published_at": "2026-06-30",
+      "as_of": "2026-06-30",
+      "language": "en",
+      "purposes": ["holdings", "product_structure", "risk", "theme"]
+    },
+    {
+      "document_id": "samsungfund-kodex-battery-industry-20260824",
+      "title": "KODEX 2차전지산업 ETF",
+      "source_uri": "https://www.samsungfund.com/etf/product/view.do?id=2ETFB1",
+      "capabilities": ["portfolio_holdings", "product_risk_factors", "sector_theme_history"],
+      "published_at": null,
+      "as_of": "2026-08-24",
+      "language": "ko",
+      "purposes": ["holdings", "product_structure", "risk", "theme"]
+    },
+    {
+      "document_id": "samsungfund-kodex-battery-materials-20260824",
+      "title": "KODEX 2차전지핵심소재10 ETF",
+      "source_uri": "https://www.samsungfund.com/etf/product/view.do?id=2ETFK1",
+      "capabilities": ["portfolio_holdings", "product_risk_factors", "sector_theme_history"],
+      "published_at": null,
+      "as_of": "2026-08-24",
+      "language": "ko",
+      "purposes": ["holdings", "product_structure", "risk", "theme"]
+    },
+    {
+      "document_id": "samsungfund-kodex-pension-guide-20260416",
+      "title": "2026년 2분기 KODEX 연금투자 가이드북",
+      "source_uri": "https://www.samsungfund.com/upload/kodex/newsroom/20260416171916907.pdf",
+      "capabilities": ["portfolio_holdings", "product_risk_factors", "sector_theme_history"],
+      "published_at": "2026-04-16",
+      "as_of": "2026-04-16",
+      "language": "ko",
+      "purposes": ["holdings", "product_structure", "risk", "theme"]
+    }
+  ]
+}

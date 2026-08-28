@@ -15,6 +15,7 @@ from finance_agent_core.retrieval.schema_dense import (
     approve_schema_index_for_production,
     build_schema_field_entries,
     dense_schema_index_file_bytes,
+    p1_precision_field_thresholds,
 )
 
 
@@ -70,6 +71,11 @@ def _create(arguments: argparse.Namespace) -> None:
         maximum_residual_spans=arguments.maximum_residual_spans,
         queue_timeout_seconds=arguments.queue_timeout_seconds,
         calibration_report_sha256=arguments.calibration_report_sha256,
+        field_thresholds=(
+            p1_precision_field_thresholds()
+            if arguments.field_policy_profile == "p1_precision"
+            else ()
+        ),
     )
     provider = load_verified_schema_embedding_cpu_provider(
         alias="kure-v1",
@@ -80,7 +86,14 @@ def _create(arguments: argparse.Namespace) -> None:
         batch_size=arguments.batch_size,
         cpu_threads=arguments.cpu_threads,
     )
-    offline = DenseSchemaIndex.build(build_schema_field_entries(), provider)
+    entries = build_schema_field_entries(
+        corpus_template_version=arguments.corpus_template_version,
+    )
+    offline = DenseSchemaIndex.build(
+        entries,
+        provider,
+        corpus_template_version=arguments.corpus_template_version,
+    )
     artifact = approve_schema_index_for_production(offline, policy)
     data = dense_schema_index_file_bytes(artifact)
     file_sha256 = _write_immutable(arguments.output, data)
@@ -106,12 +119,26 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--snapshot-manifest", type=Path, required=True)
     parser.add_argument("--trusted-cache-root", type=Path, required=True)
     parser.add_argument("--calibration-report-sha256", required=True)
+    parser.add_argument(
+        "--corpus-template-version",
+        choices=(
+            "schema-field-text-v1",
+            "schema-field-text-v2",
+            "schema-field-prototype-v3",
+        ),
+        default="schema-field-prototype-v3",
+    )
     parser.add_argument("--dense-min-score", type=float, required=True)
     parser.add_argument("--hclx-candidate-min-score", type=float, required=True)
     parser.add_argument("--minimum-margin", type=float, required=True)
     parser.add_argument("--top-k", type=int, default=10)
     parser.add_argument("--maximum-residual-spans", type=int, default=1)
     parser.add_argument("--queue-timeout-seconds", type=float, default=1.0)
+    parser.add_argument(
+        "--field-policy-profile",
+        choices=("none", "p1_precision"),
+        default="p1_precision",
+    )
     parser.add_argument("--batch-size", type=int, default=16)
     parser.add_argument("--cpu-threads", type=int, default=2)
     parser.add_argument("--output", type=Path, required=True)

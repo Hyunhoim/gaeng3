@@ -44,6 +44,8 @@ SOURCE_COLUMNS = (
     "du_upt_dt",
 )
 VALID_PRODUCT_KEY = re.compile(r"(?:KR|KRG)[A-Z0-9]{9,12}")
+MICRO_PRECISION = Decimal("0.000001")
+MONEY_PRECISION = Decimal("0.01")
 
 
 class DomesticEtpNormalizationError(ValueError):
@@ -79,6 +81,11 @@ def _decimal(value: Any, *, field: str) -> Decimal | None:
         return Decimal(text.replace(",", ""))
     except InvalidOperation as error:
         raise DomesticEtpNormalizationError(f"{field} is not numeric: {text!r}") from error
+
+
+def _quantized_decimal(value: Any, *, field: str, precision: Decimal) -> Decimal | None:
+    parsed = _decimal(value, field=field)
+    return None if parsed is None else parsed.quantize(precision)
 
 
 def _date_or_snapshot(value: Any, *, field: str, snapshot: dt.date) -> tuple[dt.date, bool]:
@@ -148,8 +155,16 @@ def normalize_domestic_etp_row(
     registry = load_field_registry()
     snapshot = source_snapshot_date or registry.datasets["domestic_etp"].snapshot_date
     source_key = _text(values.get("pd_itm_no"), field="pd_itm_no") or ""
-    is_quarantined = VALID_PRODUCT_KEY.fullmatch(source_key) is None
-    quarantine_reason = "invalid_product_key" if is_quarantined else None
+    exchange_code = _text(values.get("pd_exg_mkt_cd"), field="pd_exg_mkt_cd")
+    invalid_product_key = VALID_PRODUCT_KEY.fullmatch(source_key) is None
+    is_quarantined = invalid_product_key or exchange_code is None
+    quarantine_reason = (
+        "invalid_product_key"
+        if invalid_product_key
+        else "missing_exchange_code"
+        if exchange_code is None
+        else None
+    )
 
     def required_text(field: str, fallback: str) -> str:
         value = _text(values.get(field), field=field)
@@ -168,7 +183,9 @@ def normalize_domestic_etp_row(
             )
         product_type = "ETF"
 
-    fee = _decimal(values.get("cu_charge_rt"), field="cu_charge_rt")
+    fee = _quantized_decimal(
+        values.get("cu_charge_rt"), field="cu_charge_rt", precision=MICRO_PRECISION
+    )
     if fee is not None and fee < 0:
         raise DomesticEtpNormalizationError("cu_charge_rt cannot be negative")
     fee_quality, fee_reason = _quality(
@@ -177,7 +194,9 @@ def normalize_domestic_etp_row(
         zero_is_unknown=True,
     )
 
-    aum = _decimal(values.get("du_last_aum"), field="du_last_aum")
+    aum = _quantized_decimal(
+        values.get("du_last_aum"), field="du_last_aum", precision=MONEY_PRECISION
+    )
     if aum is not None and aum < 0:
         raise DomesticEtpNormalizationError("du_last_aum cannot be negative")
     aum_quality, aum_reason = _quality(
@@ -186,21 +205,34 @@ def normalize_domestic_etp_row(
         zero_is_unknown=True,
     )
 
-    close_price = _decimal(values.get("du_clpr"), field="du_clpr")
+    close_price = _quantized_decimal(
+        values.get("du_clpr"), field="du_clpr", precision=MONEY_PRECISION
+    )
     if close_price is not None and close_price < 0:
         raise DomesticEtpNormalizationError("du_clpr cannot be negative")
-    daily_trading_value = _decimal(values.get("du_val_1d"), field="du_val_1d")
+    daily_trading_value = _quantized_decimal(
+        values.get("du_val_1d"), field="du_val_1d", precision=MONEY_PRECISION
+    )
     if daily_trading_value is not None and daily_trading_value < 0:
         raise DomesticEtpNormalizationError("du_val_1d cannot be negative")
 
-    leverage_factor = _decimal(values.get("cu_lev_fector"), field="cu_lev_fector")
+    leverage_factor = _quantized_decimal(
+        values.get("cu_lev_fector"),
+        field="cu_lev_fector",
+        precision=MICRO_PRECISION,
+    )
     returns = {
-        "one_day_return_pct": _decimal(values.get("du_er_1d"), field="du_er_1d"),
-        "one_month_return_pct": _decimal(values.get("du_er_1m"), field="du_er_1m"),
-        "three_month_return_pct": _decimal(values.get("du_er_3m"), field="du_er_3m"),
-        "six_month_return_pct": _decimal(values.get("du_er_6m"), field="du_er_6m"),
-        "one_year_return_pct": _decimal(values.get("du_er_1y"), field="du_er_1y"),
-        "ytd_return_pct": _decimal(values.get("du_er_ytd"), field="du_er_ytd"),
+        name: _quantized_decimal(
+            values.get(source), field=source, precision=MICRO_PRECISION
+        )
+        for name, source in {
+            "one_day_return_pct": "du_er_1d",
+            "one_month_return_pct": "du_er_1m",
+            "three_month_return_pct": "du_er_3m",
+            "six_month_return_pct": "du_er_6m",
+            "one_year_return_pct": "du_er_1y",
+            "ytd_return_pct": "du_er_ytd",
+        }.items()
     }
     static_as_of, static_date_present = _date_or_snapshot(
         values.get("wu_upt_dt"),

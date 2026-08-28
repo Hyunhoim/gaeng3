@@ -11,6 +11,10 @@ from finance_agent_core.agent.planning_policy import (
     PlanningPolicy,
     PlanningTrace,
 )
+from finance_agent_core.agent.product_identity import (
+    extract_named_product_mentions,
+    is_domestic_etp_brand_question,
+)
 from finance_agent_core.agent.safety import (
     SafetyDisposition,
     SafetyEnvelope,
@@ -107,13 +111,14 @@ _EXPLICIT_ETP_TYPE = re.compile(
     re.IGNORECASE,
 )
 _OVERSEAS_UNAVAILABLE_METRIC = re.compile(
-    r"수익률|변동성|하락장|오른|S&P\s*500",
+    r"(?:(?:1\s*주|일주일|1\s*개월|한\s*달|3\s*개월|6\s*개월|1\s*년|YTD|"
+    r"연초\s*이후)\s*(?:수익률|수익|성과))|변동성|하락장|오른|S&P\s*500",
     re.IGNORECASE,
 )
 _FINANCE_SCOPE_SIGNAL = re.compile(
     r"(?<![A-Z])(?:ETF|ETN|ETP)(?![A-Z])|공모\s*펀드|국내\s*채권|"
     r"(?:금융|투자)\s*상품|"
-    r"상품(?:군|유형|목록|조회|검색|추천|을|를|이|가|은|는|중|\s*있(?:어|나|나요))|"
+    r"상품\s*(?:군|유형|목록|정보|조회|검색|추천|을|를|이|가|은|는|중|있(?:어|나|나요))|"
     r"AUM|수익률|총\s*보수|보수율|매수\s*수익률|잔존\s*일수|듀레이션|"
     r"종목\s*코드|티커|만기|채권|펀드",
     re.IGNORECASE,
@@ -200,6 +205,8 @@ def _product_mentions(question: str) -> list[str]:
         mentions.extend((match.start(), match.group(1)) for match in pattern.finditer(question))
     mentions.extend((match.start(), match.group(0)) for match in _KNOWN_ID.finditer(question))
     mentions.extend((match.start(), match.group(1)) for match in _LABELED_ID.finditer(question))
+    named_mentions = extract_named_product_mentions(question)
+    mentions.extend((question.find(value), value) for value in named_mentions)
     return _ordered_unique(_normalize_product_mention(value) for _, value in sorted(mentions))
 
 
@@ -301,8 +308,13 @@ def _product_families(question: str) -> list[ProductFamily]:
                 assert match is not None
                 mentions.append((match.start(), ProductFamily.OVERSEAS_ETP))
 
-    domestic_brand = re.search(r"\b(?:TIGER|ACE)\b", question, re.IGNORECASE)
-    if domestic_brand is not None:
+    if is_domestic_etp_brand_question(question):
+        domestic_brand = re.search(
+            r"\b(?:TIGER|KODEX|ACE|RISE|SOL|HANARO|TIMEFOLIO|ARIRANG|KBSTAR)\b",
+            question,
+            re.IGNORECASE,
+        )
+        assert domestic_brand is not None
         mentions.append((domestic_brand.start(), ProductFamily.DOMESTIC_ETP))
     domestic_underlying = re.search(
         r"(?:삼성전자.*하이닉스|하이닉스.*삼성전자).*레버리지",
@@ -621,11 +633,10 @@ class IntentRouter:
             lexical_intent,
             mentions,
         )
-        coverage_intent = (
-            intent
-            if mentions and all(_KNOWN_ID.fullmatch(mention) is not None for mention in mentions)
-            else lexical_intent
-        )
+        # Server-recognized names are identity-bearing just like product codes.
+        # Unsupported knowledge requirements are still checked before the
+        # coverage gate applies this DETAIL-specific branch.
+        coverage_intent = intent if mentions else lexical_intent
         requested_limit = _requested_limit(stripped)
         if audit is not None:
             audit.emit(

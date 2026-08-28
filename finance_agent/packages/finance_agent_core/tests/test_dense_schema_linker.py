@@ -47,6 +47,43 @@ def test_schema_dense_manifest_pins_registry_provider_and_offline_scope() -> Non
     assert provider.document_calls == 1
 
 
+def test_schema_dense_v2_corpus_is_explicit_versioned_and_contrastive() -> None:
+    entries = build_schema_field_entries(corpus_template_version="schema-field-text-v2")
+    by_key = {item.document_id: item for item in entries}
+    provider = FakeHashEmbeddingProvider(dimension=64)
+    index = DenseSchemaIndex.build(
+        entries,
+        provider,
+        corpus_template_version="schema-field-text-v2",
+    )
+
+    assert index.manifest.corpus_template_version == "schema-field-text-v2"
+    assert "체급" in by_key["domestic_etp:aum"].text
+    assert "하루 거래 흐름" in by_key["domestic_etp:aum"].text
+    assert "매수가격을 반영" in by_key["bond:buy_yield_pct"].text
+    assert "금리 민감도" in by_key["bond:duration_years"].text
+    assert "최근 12개월" in by_key["domestic_etp:ytd_return_pct"].text
+
+
+def test_schema_dense_v1_and_v2_corpus_contracts_cannot_be_substituted() -> None:
+    provider = FakeHashEmbeddingProvider(dimension=64)
+    v2 = DenseSchemaIndex.build(
+        build_schema_field_entries(corpus_template_version="schema-field-text-v2"),
+        provider,
+        corpus_template_version="schema-field-text-v2",
+    )
+    forged = v2.artifact.model_copy(
+        update={
+            "manifest": v2.manifest.model_copy(
+                update={"corpus_template_version": "schema-field-text-v1"}
+            )
+        }
+    )
+
+    with pytest.raises(SchemaDenseContractError, match="canonical complete field corpus"):
+        DenseSchemaIndex.from_artifact(forged, provider)
+
+
 def test_schema_dense_search_returns_only_exact_registry_fields_for_family() -> None:
     index, _ = _index()
 

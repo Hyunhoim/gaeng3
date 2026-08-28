@@ -7,6 +7,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from finance_agent_core.agent.semantic_admission import constrain_semantic_candidate_fields
 from finance_agent_core.agent.semantic_resolution import (
     ResolutionOperation,
     SchemaFieldCandidate,
@@ -46,6 +47,7 @@ class AdaptiveSchemaCandidateSet(AdaptiveSchemaModel):
         "lexical_dense_conflict",
         "dense_low_score",
         "dense_low_margin",
+        "hclx_review_required",
         "no_capable_candidate",
     ]
     candidates: tuple[SchemaFieldCandidate, ...] = Field(default=(), max_length=10)
@@ -195,6 +197,12 @@ class ProductionHybridSchemaLinker:
         if not residual_span.strip():
             raise ValueError("adaptive schema residual span cannot be blank")
         eligible = self._eligible_fields(product_family, interaction_intent, operation)
+        eligible = constrain_semantic_candidate_fields(
+            residual_span,
+            product_family=product_family,
+            operation=operation.value,
+            eligible_field_ids=eligible,
+        )
         if not eligible:
             return AdaptiveSchemaCandidateSet(
                 status=AdaptiveSchemaLinkStatus.ABSTAIN,
@@ -244,10 +252,15 @@ class ProductionHybridSchemaLinker:
         top_dense = dense[0]
         next_dense_score = dense[1].score if len(dense) > 1 else -1.0
         margin = round(max(0.0, top_dense.score - next_dense_score), 9)
-        hclx_candidate_floor_met = (
-            top_dense.score >= self.policy.hclx_candidate_min_score and len(candidates) >= 2
+        threshold = self.policy.threshold_for(
+            product_family=product_family,
+            field_id=top_dense.field_id,
+            operation=operation.value,
         )
-        if top_dense.score < self.policy.dense_min_score:
+        hclx_candidate_floor_met = (
+            top_dense.score >= threshold.hclx_candidate_min_score and len(candidates) >= 2
+        )
+        if top_dense.score < threshold.dense_min_score:
             return AdaptiveSchemaCandidateSet(
                 status=AdaptiveSchemaLinkStatus.ABSTAIN,
                 reason_code="dense_low_score",
@@ -263,7 +276,15 @@ class ProductionHybridSchemaLinker:
                 margin=margin,
                 hclx_eligible=hclx_candidate_floor_met,
             )
-        if margin < self.policy.minimum_margin:
+        if not threshold.auto_admit:
+            return AdaptiveSchemaCandidateSet(
+                status=AdaptiveSchemaLinkStatus.ABSTAIN,
+                reason_code="hclx_review_required",
+                candidates=candidates,
+                margin=margin,
+                hclx_eligible=hclx_candidate_floor_met,
+            )
+        if margin < threshold.minimum_margin:
             return AdaptiveSchemaCandidateSet(
                 status=AdaptiveSchemaLinkStatus.ABSTAIN,
                 reason_code="dense_low_margin",

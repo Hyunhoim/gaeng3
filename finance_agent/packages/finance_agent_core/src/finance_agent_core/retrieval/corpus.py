@@ -31,12 +31,16 @@ _MAX_CORPUS_BYTES = 128 * 1024 * 1024
 _READ_CHUNK_BYTES = 1024 * 1024
 
 DocumentPurpose = Literal[
+    "corporate_relation",
     "definition",
     "product_structure",
     "risk",
     "fee",
+    "holdings",
     "operation",
     "regulation",
+    "theme",
+    "trend",
 ]
 DocumentLanguage = Literal["ko", "en"]
 SnapshotMediaType = Literal["text/plain", "text/markdown"]

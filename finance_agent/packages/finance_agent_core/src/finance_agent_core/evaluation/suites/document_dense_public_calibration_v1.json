@@ -1,0 +1,23 @@
+{
+  "schema_version": "1.0",
+  "suite_id": "document-dense-public-calibration-v1",
+  "suite_kind": "public_calibration_not_blind",
+  "cases": [
+    {"id": "DOC-PUB-001", "question": "에코프로가 지주회사 체제로 전환한 과정을 알려줘", "expected_document_id": "ecopro-company-overview-20260824"},
+    {"id": "DOC-PUB-002", "question": "에코프로비엠과 에코프로에이치엔은 어떻게 설립됐어?", "expected_document_id": "ecopro-company-overview-20260824"},
+    {"id": "DOC-PUB-003", "question": "에코프로의 클로즈드 루프 에코 시스템을 설명해줘", "expected_document_id": "ecopro-company-overview-20260824"},
+    {"id": "DOC-PUB-004", "question": "국민참여형 국민성장펀드의 투자구조를 알려줘", "expected_document_id": "fsc-national-growth-fund-structure-20260521"},
+    {"id": "DOC-PUB-005", "question": "국민성장펀드에서 우선 손실은 누가 부담해?", "expected_document_id": "fsc-national-growth-fund-structure-20260521"},
+    {"id": "DOC-PUB-006", "question": "국민성장펀드는 일반 국민에게 얼마를 모집할 계획이었어?", "expected_document_id": "fsc-national-growth-fund-structure-20260521"},
+    {"id": "DOC-PUB-007", "question": "국민성장펀드의 후순위 출자 구조를 설명해줘", "expected_document_id": "fsc-national-growth-fund-structure-20260521"},
+    {"id": "DOC-PUB-008", "question": "국민성장펀드 6000억원 판매 결과를 알려줘", "expected_document_id": "fsc-national-growth-fund-trend-20260529"},
+    {"id": "DOC-PUB-009", "question": "국민성장펀드는 언제 완판됐어?", "expected_document_id": "fsc-national-growth-fund-trend-20260529"},
+    {"id": "DOC-PUB-010", "question": "국민성장펀드 가입자 수와 평균 가입액은?", "expected_document_id": "fsc-national-growth-fund-trend-20260529"},
+    {"id": "DOC-PUB-011", "question": "국민성장펀드 판매 완료 뒤 취소 물량은 어떻게 확인해?", "expected_document_id": "fsc-national-growth-fund-trend-20260529"},
+    {"id": "DOC-PUB-012", "question": "Kodex 미국우주항공 ETF가 소개된 연금투자 자료를 찾아줘", "expected_document_id": "samsungfund-kodex-pension-guide-20260416"},
+    {"id": "DOC-PUB-013", "question": "연금에서 여러 종목에 나눠 투자하는 이유를 설명한 자료", "expected_document_id": "samsungfund-kodex-pension-guide-20260416"},
+    {"id": "DOC-PUB-014", "question": "2026년 2분기 KODEX 연금투자 가이드북", "expected_document_id": "samsungfund-kodex-pension-guide-20260416"},
+    {"id": "DOC-PUB-015", "question": "KODEX 2차전지산업 ETF 공식 상품 자료", "expected_document_id": "samsungfund-kodex-battery-industry-20260824"},
+    {"id": "DOC-PUB-016", "question": "KODEX 2차전지핵심소재10 ETF 공식 자료", "expected_document_id": "samsungfund-kodex-battery-materials-20260824"}
+  ]
+}

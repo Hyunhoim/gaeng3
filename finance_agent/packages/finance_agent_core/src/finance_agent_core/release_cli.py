@@ -173,6 +173,7 @@ def _runtime_inputs(arguments: argparse.Namespace) -> RuntimeReleaseInputs:
         backend_root=arguments.backend_root.resolve(strict=True),
         answer_provider=arguments.answer_provider,
         hcx_queryplan_enabled=arguments.hcx_queryplan_enabled,
+        hcx_intent_analysis_enabled=arguments.hcx_intent_analysis_enabled,
         hcx_semantic_resolver_enabled=arguments.hcx_semantic_resolver_enabled,
         hcx_model=model,
         fund_execution_policy=arguments.fund_execution_policy,
@@ -287,6 +288,7 @@ def _parser() -> argparse.ArgumentParser:
         default="deterministic",
     )
     manifest.add_argument("--hcx-queryplan-enabled", action="store_true")
+    manifest.add_argument("--hcx-intent-analysis-enabled", action="store_true")
     manifest.add_argument("--hcx-semantic-resolver-enabled", action="store_true")
     manifest.add_argument("--hcx-model")
     manifest.add_argument("--adaptive-semantic-enabled", action="store_true")

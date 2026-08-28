@@ -58,7 +58,7 @@ CREATE TABLE fund_products (
     company_sellable INTEGER
         CHECK (company_sellable IN (0, 1) OR company_sellable IS NULL),
     company_sellable_quality TEXT NOT NULL,
-    trading_currency TEXT NOT NULL CHECK (trading_currency IN ('KRW', 'USD')),
+    trading_currency TEXT NOT NULL,
     trading_currency_quality TEXT NOT NULL,
     investment_region TEXT,
     investment_region_quality TEXT NOT NULL,

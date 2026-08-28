@@ -17,8 +17,14 @@ from finance_agent_core.agent.fund_resolver import FundProductResolver
 from finance_agent_core.agent.linker import canonicalize_query_plan_payload
 from finance_agent_core.agent.product_comparison import (
     ProductComparisonParseError,
+    ProductIdentityNotFoundError,
     compile_product_comparison_plan,
     resolve_exact_product_ids,
+)
+from finance_agent_core.agent.product_identity import (
+    approved_fund_group_alias_term,
+    is_named_product_mention,
+    is_quoted_product_mention,
 )
 from finance_agent_core.agent.semantic_aliases import (
     explicit_product_name_order,
@@ -29,8 +35,16 @@ from finance_agent_core.agent.semantic_resolution import (
     ResolutionOperation,
     SemanticResolutionReceipt,
 )
+from finance_agent_core.config import ValueType, load_field_registry
 from finance_agent_core.contracts import QueryPlan
-from finance_agent_core.contracts.queryplan import Intent, ProductFamily, search_projection
+from finance_agent_core.contracts.queryplan import (
+    ConstraintOperator,
+    Intent,
+    NullPlacement,
+    ProductFamily,
+    SortDirection,
+    search_projection,
+)
 from finance_agent_core.contracts.routing import (
     InteractionIntent,
     RouteDecision,
@@ -46,12 +60,26 @@ class PlanCompilationBlockedError(ValueError):
     """Raised when a routed draft cannot be compiled without guessing."""
 
 
+def _normalize_identity_ambiguity_surface(value: object) -> str:
+    return " ".join(str(value).strip().strip("\"'“”‘’").casefold().split())
+
+
 @dataclass(frozen=True)
 class CompiledFamilySearch:
     """One server-owned plan and its isolated answer-generation question."""
 
     grounded_question: str
     plan: QueryPlan
+
+
+@dataclass(frozen=True)
+class CrossFamilyGlobalRanking:
+    """One server-verified metric shared by every family in a global TOP-K."""
+
+    field: str
+    direction: SortDirection
+    nulls: NullPlacement
+    limit: int
 
 
 class ServerQueryPlanCompiler:
@@ -130,6 +158,7 @@ class ServerQueryPlanCompiler:
                     plan=self._compile_search_lowering(single_decision),
                 )
             )
+        resolve_cross_family_global_ranking(decision.draft.question, searches)
         return searches
 
     def _compile_search_lowering(self, decision: RouteDecision) -> QueryPlan:
@@ -159,6 +188,11 @@ class ServerQueryPlanCompiler:
                 raise PlanCompilationBlockedError(
                     "detail or explain requires one server-linked exact product identity"
                 )
+            identity_name_fallback: str | None = None
+            identity_surface = decision.draft.product_mentions[0]
+            identity_surface_is_name = is_named_product_mention(
+                identity_surface
+            ) or is_quoted_product_mention(decision.draft.question, identity_surface)
             try:
                 database_path = self.database_paths[family]
                 product_id = resolve_exact_product_ids(
@@ -166,23 +200,59 @@ class ServerQueryPlanCompiler:
                     decision.draft.product_mentions,
                     self.identity_cache.get(database_path).records,
                 )[0]
+            except ProductIdentityNotFoundError as error:
+                mention = identity_surface
+                if not identity_surface_is_name:
+                    raise PlanCompilationBlockedError(str(error)) from error
+                identity_name_fallback = mention
+                product_id = None
             except (KeyError, ProductComparisonParseError, ValueError) as error:
                 raise PlanCompilationBlockedError(str(error)) from error
             payload["constraints"] = [
                 constraint
                 for constraint in payload["constraints"]
-                if constraint["field"] not in {"product_id", "ticker", "isin"}
+                if constraint["field"]
+                not in {"product_id", "product_name", "short_name", "ticker", "isin"}
             ]
-            payload["constraints"].append(
-                {
-                    "field": "product_id",
-                    "operator": "eq",
-                    "value": product_id,
-                    "unit": "code",
-                    "strength": "locked",
-                }
-            )
-            payload["limit"] = 1
+            if product_id is not None:
+                payload["constraints"].append(
+                    {
+                        "field": "product_id",
+                        "operator": "eq",
+                        "value": product_id,
+                        "unit": "code",
+                        "strength": "locked",
+                    }
+                )
+                payload["limit"] = 1
+            else:
+                assert identity_name_fallback is not None
+                fund_group_alias = approved_fund_group_alias_term(identity_surface)
+                payload["constraints"].append(
+                    {
+                        "field": "product_name",
+                        "operator": "contains" if fund_group_alias is not None else "eq",
+                        "value": fund_group_alias or identity_name_fallback,
+                        "unit": "none",
+                        "strength": "locked",
+                    }
+                )
+                # Only a server-approved fund group alias may denote several
+                # share classes. Other names remain exact lookups so a longer,
+                # merely similar name cannot turn absence into a false positive.
+                payload["limit"] = 20 if fund_group_alias is not None else 1
+            if identity_surface_is_name:
+                normalized_identity = _normalize_identity_ambiguity_surface(identity_surface)
+                payload["ambiguities"] = [
+                    ambiguity
+                    for ambiguity in payload["ambiguities"]
+                    if _normalize_identity_ambiguity_surface(
+                        ambiguity.get("span", "")
+                        if isinstance(ambiguity, dict)
+                        else ambiguity
+                    )
+                    != normalized_identity
+                ]
             payload["ranking"] = []
         plan = QueryPlan.model_validate(payload)
         if plan.product_families != [family]:
@@ -401,6 +471,75 @@ _SIMPLE_FAMILY_MENTIONS: dict[ProductFamily, re.Pattern[str]] = {
     ProductFamily.FUND: _FUND_MENTION,
 }
 _FAMILY_CONNECTOR = re.compile(r"^[\s,·/&]*(?:(?:및|와|과|또는|이랑|하고)[\s,·/&]*)*$")
+_GLOBAL_TOP_K = re.compile(
+    r"(?:TOP\s*\d+|상위\s*\d+|하위\s*\d+|통틀어|합쳐서|전체\s*순위)",
+    re.IGNORECASE,
+)
+_PER_FAMILY = re.compile(r"각각|상품군\s*별|종류\s*별", re.IGNORECASE)
+
+
+def _shared_currency_constraint(searches: list[CompiledFamilySearch]) -> bool:
+    values: list[str] = []
+    for search in searches:
+        matches = [
+            constraint
+            for constraint in search.plan.constraints
+            if constraint.field == "trading_currency"
+            and constraint.operator is ConstraintOperator.EQ
+            and isinstance(constraint.value, str)
+        ]
+        if len(matches) != 1:
+            return False
+        values.append(str(matches[0].value))
+    return len(set(values)) == 1
+
+
+def resolve_cross_family_global_ranking(
+    question: str,
+    searches: list[CompiledFamilySearch],
+) -> CrossFamilyGlobalRanking | None:
+    """Authorize global TOP-K only for one identical, unit-compatible numeric field."""
+
+    if _PER_FAMILY.search(question) is not None or _GLOBAL_TOP_K.search(question) is None:
+        return None
+    if len(searches) < 2:
+        return None
+    rankings = [search.plan.ranking for search in searches]
+    if any(len(items) != 1 for items in rankings):
+        raise PlanCompilationBlockedError(
+            "교차 상품군 전체 순위에는 모든 상품군에서 같은 수치 정렬 기준이 필요합니다."
+        )
+    first = rankings[0][0]
+    if any(items[0] != first for items in rankings[1:]):
+        raise PlanCompilationBlockedError(
+            "상품군마다 정렬 필드나 방향이 달라 전체 순위를 계산할 수 없습니다."
+        )
+    limits = {search.plan.limit for search in searches}
+    if len(limits) != 1:
+        raise PlanCompilationBlockedError("교차 상품군 전체 순위의 결과 개수가 일치하지 않습니다.")
+
+    registry = load_field_registry()
+    definitions = [
+        registry.require_field(first.field, [search.plan.product_families[0].value])
+        for search in searches
+    ]
+    if any(definition.value_type is not ValueType.NUMBER for definition in definitions):
+        raise PlanCompilationBlockedError("교차 상품군 전체 순위는 검증된 수치 필드만 지원합니다.")
+    if len({definition.unit for definition in definitions}) != 1:
+        raise PlanCompilationBlockedError("상품군 간 단위가 달라 전체 순위를 계산할 수 없습니다.")
+    unit = definitions[0].unit
+    if unit in {"source_currency_amount", "source_quantity"} and not (
+        unit == "source_currency_amount" and _shared_currency_constraint(searches)
+    ):
+        raise PlanCompilationBlockedError(
+            "통화·수량 단위가 다른 상품군의 전체 순위에는 동일 거래통화 조건이 필요합니다."
+        )
+    return CrossFamilyGlobalRanking(
+        field=first.field,
+        direction=first.direction,
+        nulls=first.nulls,
+        limit=next(iter(limits)),
+    )
 
 
 def _scope_cross_family_question(

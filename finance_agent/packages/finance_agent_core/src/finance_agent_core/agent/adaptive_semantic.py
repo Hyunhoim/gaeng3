@@ -11,6 +11,10 @@ from finance_agent_core.agent.planning_policy import (
     PlanningPath,
     PlanningTrace,
 )
+from finance_agent_core.agent.semantic_admission import (
+    is_generic_semantic_ambiguity,
+    semantic_field_evidence,
+)
 from finance_agent_core.agent.semantic_resolution import (
     AdaptivePlanningDecisionV2,
     AdaptivePlanningPolicyV2,
@@ -31,15 +35,12 @@ from finance_agent_core.contracts.queryplan import QueryPlan, SortDirection
 from finance_agent_core.contracts.routing import RouteDisposition
 from finance_agent_core.deadline import RequestDeadlineExceeded
 from finance_agent_core.retrieval.schema_adaptive import (
-    AdaptiveSchemaLinkStatus,
     AdaptiveSchemaLinkUnavailable,
     ProductionHybridSchemaLinker,
 )
 
 _ASCENDING = re.compile(r"낮|작|적|하위|오름차순|ascending", re.IGNORECASE)
 _DESCENDING = re.compile(r"높|큰|크|많|상위|내림차순|descending", re.IGNORECASE)
-
-
 class AdaptiveSemanticModel(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -160,6 +161,12 @@ class AdaptiveSemanticResolver:
         if direction is None:
             return _control("clarify", "residual_direction_unresolved")
         family = route.draft.product_families[0]
+        if is_generic_semantic_ambiguity(
+            residual.text,
+            product_family=family,
+            operation="rank",
+        ):
+            return _control("clarify", "generic_semantic_ambiguity")
         payload = canonicalize_query_plan_payload(
             route.draft.question,
             {
@@ -219,6 +226,8 @@ class AdaptiveSemanticResolver:
         request = SemanticResolutionRequest(
             request_id=route.draft.request_id,
             residual_span=residual.text,
+            context_before=route.draft.question[max(0, residual.start - 80) : residual.start],
+            context_after=route.draft.question[residual.end : residual.end + 80],
             product_family=family,
             interaction_intent=route.draft.intent,
             allowed_operations=(ResolutionOperation.RANK,),
@@ -229,16 +238,50 @@ class AdaptiveSemanticResolver:
             expected_direction=direction,
             hard_filter_lock_sha256=hard_filter_lock.payload_sha256,
         )
-        if linked.status is AdaptiveSchemaLinkStatus.FOUND:
+        supported: list[tuple[SchemaFieldCandidate, tuple[str, ...]]] = []
+        for candidate in request.candidates:
+            if candidate.dense_score is None:
+                continue
+            threshold = self.schema_linker.policy.threshold_for(
+                product_family=family,
+                field_id=candidate.field_id,
+                operation="rank",
+            )
+            if candidate.dense_score < threshold.hclx_candidate_min_score:
+                continue
+            evidence = semantic_field_evidence(
+                request.evidence_context,
+                field_id=candidate.field_id,
+                product_family=family,
+                operation="rank",
+            )
+            if evidence.supported:
+                supported.append((candidate, evidence.evidence_spans))
+
+        # Dense proposes candidates; the server's versioned semantic rules grant
+        # authority only when exactly one candidate is grounded in the question.
+        # This is selective prediction: an unknown or conflicting expression
+        # abstains instead of being guessed from the largest cosine score.
+        if len(supported) == 1:
+            candidate, evidence_spans = supported[0]
             draft = SemanticResolutionDraft(
                 decision=ResolutionDecision.RESOLVE,
-                selected_field_id=linked.candidates[0].field_id,
+                selected_field_id=candidate.field_id,
                 operation=ResolutionOperation.RANK,
                 direction=direction,
                 reason_code="candidate_context_match",
+                evidence_spans=evidence_spans,
             )
             source = SpanSource.SCHEMA_DENSE
-        elif linked.hclx_eligible and self.hclx_provider is not None:
+        elif len(supported) > 1 and self.hclx_provider is not None:
+            request = request.model_copy(
+                update={
+                    "candidates": tuple(
+                        candidate.model_copy(update={"rank": rank})
+                        for rank, (candidate, _) in enumerate(supported, start=1)
+                    )
+                }
+            )
             observation["hclx_attempted"] = True
             try:
                 draft = self.hclx_provider.resolve_semantics(request)
@@ -258,13 +301,13 @@ class AdaptiveSemanticResolver:
                 )
             if draft.decision is ResolutionDecision.UNSUPPORTED:
                 return _control(
-                    "unsupported",
-                    "hclx_semantic_resolver_unsupported",
+                    "clarify",
+                    "hclx_semantic_resolver_abstained",
                     **observation,
                 )
             source = SpanSource.HCLX
         else:
-            return _control("clarify", linked.reason_code, **observation)
+            return _control("clarify", "semantic_field_evidence_missing", **observation)
         try:
             receipt = self.gate.admit(draft, request, source=source)
         except SemanticResolutionError:

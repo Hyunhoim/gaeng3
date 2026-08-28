@@ -48,8 +48,8 @@ def test_approved_sql_expectations_share_the_current_source_workbooks() -> None:
         suite.data[family].source_file_sha256 == approval.datasets[family.value].data_file_sha256
         for family in suite.data
     )
-    assert any(
-        suite.data[family].database_sha256 != approval.datasets[family.value].database_sha256
+    assert all(
+        suite.data[family].database_sha256 == approval.datasets[family.value].database_sha256
         for family in suite.data
     )
 

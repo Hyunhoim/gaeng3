@@ -390,7 +390,8 @@ benchmark·soak 실행법과 2026-08-14 검증 결과는 다음 문서를 따른
 | `OFFICIAL_ANSWER_TIMEOUT_SECONDS` | `270` | 평가용 GET의 바깥쪽 응답 제한, 0초 초과 300초 미만만 허용 |
 | `OFFICIAL_ANSWER_MAX_INFLIGHT` | `2` | 프로세스당 동시 Agent 작업 상한(허용 1~8). timeout 뒤에도 실제 worker 종료까지 자리를 유지하며 초과 요청은 실행 전에 거절 |
 | `FINANCE_BACKEND_ANSWER_PROVIDER` | `deterministic` | 개발 Compose 기본값. 최종 evaluation release는 `hyperclova`로 고정 |
-| `FINANCE_BACKEND_HCX_QUERY_PLAN_ENABLED` | `false` | HCLX QueryPlan 선택 기능. 독립 품질·지연 평가 전에는 비활성 유지 |
+| `FINANCE_BACKEND_HCX_QUERY_PLAN_ENABLED` | `false` | 전체 HCLX QueryPlan 생성은 운영 경로에서 폐기. `true`이면 시작 단계에서 거부 |
+| `FINANCE_BACKEND_HCX_INTENT_ANALYSIS_ENABLED` | `false` | 개발 기본값. 최종 evaluation release는 모든 요청의 제한된 HCLX Intent 분석을 위해 `true`로 고정 |
 | `FINANCE_AGENT_LLM_MODE` | `disabled` | HCLX 사용 시 `APP_ENV`와 같은 `evaluation` 또는 `production` |
 | `LLM_PROVIDER` | `disabled` | HCLX 사용 시에만 `hyperclova` |
 | `HCX_MODEL` | 미설정 | Structured Outputs 사용 경로는 현재 `HCX-007`만 허용 |
@@ -449,17 +450,21 @@ SHA-256만 주입한다. 최종 렌더링에 두 신뢰원이 같이 남거나 �
 `Authorization: Bearer`와 Structured Outputs를 사용한다. 구형 API Gateway URL과
 구형 이중 인증 header는 사용하지 않는다.
 
-기본 연결 순서는 다음과 같다.
+2026-08-24 운영 공지의 “질의 Intent 분석과 답변 생성에 NCP HyperCLOVA X 필수” 조건을
+반영한 최종 연결 순서는 다음과 같다.
 
 ```text
-서버 QueryPlan → SQLite/Python → Verifier → HCLX grounded answer
-→ 로컬 schema/Answer Verifier → 검증된 DB 수치·근거를 서버가 최종 조립
+HCLX 제한 Intent DTO → 서버 Intent 교차검증
+→ 서버 QueryPlan → SQLite/Python → Result Verifier → 근거·citation 생성
+→ HCLX 최종 생성 → Final Answer Verifier → 공식 응답
 ```
 
-즉 HCLX는 상품명·수치·순위·출처를 새로 만들 수 없다. 허용 문장, result 순서,
-evidence field와 warning이 하나라도 다르면 모델 초안을 폐기하고 결정론적 답변으로
-fallback한다. QueryPlan 호출은 질문당 모델 호출 수와 지연을 늘리므로 별도 flag의
-기본값을 `false`로 유지한다.
+Intent DTO는 `intent`, 상품군, 원문 evidence span, clarification 여부만 담으며 field·filter·
+정렬·limit·SQL 권한이 없다. HCLX 해석이 서버의 실행 계획과 충돌하면 SQL을 실행하지 않고
+`CLARIFY`/`UNSUPPORTED`로 종료한다. 최종 생성은 검증된 본문 SHA-256과 허용 lead를
+검사하므로 HCLX가 상품명·수치·순위·출처를 추가하거나 바꿀 수 없다. 두 필수 HCLX 호출 중
+하나라도 실패하면 결정론적 답변으로 대체하지 않고 503/504를 반환한다. 전체 HCLX QueryPlan
+생성 flag는 호환성 검사용 이름만 남아 있으며 `true`인 release는 시작 전에 거부한다.
 
 evaluation/production에서는 실제 키를 container environment에 넣지 않는다. 공식
 `docker-compose.release.yml`이 저장소 밖의 read-only host 파일을 Docker secret으로
@@ -482,8 +487,10 @@ RELEASE_ENV_FILE=fastapi_backend/.env.release \
 실제 `/answer`를 요청하면 과금 가능한 호출이 발생한다. 2026-08-14 연구실 환경에서
 answer-only 실제 호출 3회(초기 2,048-token timeout 1회, 출력 예산 보완 뒤 DETAIL·SEARCH
 성공 2회)를 확인했다. 2026-08-22에는 NCP 격리 후보에서 공모펀드 SEARCH·DETAIL·COMPARE
-HCLX 답변과 결정론적 AGGREGATE, 미지원 수수료 무실행을 확인했다. 최종 evaluation은
-HCLX answer-only, QueryPlan·Dense OFF이며 보호된 Release만 공모펀드 v1을 승인한다.
+HCLX 답변과 결정론적 AGGREGATE, 미지원 수수료 무실행을 확인했다. 이 기록은 과거
+answer-only 배선의 실호출 증거이며, 2026-08-25에 추가한 Intent+최종 생성 배선의 실제
+과금 호출·NCP 배포 검증은 아직 수행하지 않았다. 최종 evaluation Release는 HCLX Intent와
+최종 생성을 함께 켜고 전체 HCLX QueryPlan은 끄며, 보호된 Release만 공모펀드 v1을 승인한다.
 
 - [CLOVA Studio API 개요](https://api.ncloud-docs.com/docs/ai-naver-clovastudio-summary)
 - [Structured Outputs](https://api.ncloud-docs.com/docs/clovastudio-chatcompletionsv3-so)

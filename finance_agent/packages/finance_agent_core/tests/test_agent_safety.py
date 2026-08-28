@@ -226,7 +226,6 @@ def test_scope_gate_does_not_confuse_supported_stock_type_with_individual_stocks
         "AUM 기준으로 규모가 큰 국내 ETF를 보여줘",
         "낮은위험(5등급) 국내 ETF를 보여줘",
         "매수수익률이 높은 국내채권을 보여줘",
-        "매수가능수량이 많은 국내채권을 보여줘",
         "과거 1개월 수익률이 높은 국내 ETF를 보여줘",
         "미국 제외 글로벌 해외 ETF를 보여줘",
     ],
@@ -245,10 +244,7 @@ def test_semantic_gate_preserves_deterministic_near_neighbors(question: str) -> 
         ("유동성이 높은 국내 ETF를 보여줘", "clarify"),
         ("규모가 큰 국내 ETF를 보여줘", "clarify"),
         ("리스크가 낮은 국내 ETF를 보여줘", "clarify"),
-        ("해외 ETF '없는성장상품'을 보여줘", "clarify"),
-        ("TIGER 존재하지않는상품 국내 ETF를 보여줘", "clarify"),
         ("가짜성장상품 해외 ETF를 보여줘", "clarify"),
-        ("미래성장펀드 공모펀드를 보여줘", "clarify"),
         ("종가가 높은 국내 ETF 중 비용이 낮은 상품", "clarify"),
         ("해외 ETF를 높은 순으로 몇 개 보여줘", "clarify"),
         ("가장 큰 해외 ETF를 보여줘", "clarify"),
@@ -269,6 +265,23 @@ def test_semantic_coverage_gate_blocks_unmapped_conditions_and_actions(
         "semantic_unmapped_action",
     }
     assert decision.query_plan_intent is None
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        "해외 ETF '없는성장상품'을 보여줘",
+        "TIGER 존재하지않는상품 국내 ETF를 보여줘",
+        "미래성장펀드 공모펀드를 보여줘",
+    ],
+)
+def test_explicit_product_names_reach_only_the_locked_identity_lookup(question: str) -> None:
+    decision = IntentRouter().route(question, f"identity-{abs(hash(question))}")
+
+    assert decision.disposition.value == "execute"
+    assert decision.draft.intent.value == "detail"
+    assert len(decision.draft.product_mentions) == 1
+    assert decision.query_plan_intent is not None
 
 
 def test_korean_single_item_limit_is_preserved() -> None:

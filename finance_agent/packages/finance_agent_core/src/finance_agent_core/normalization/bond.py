@@ -11,32 +11,35 @@ from finance_agent_core.config import QualityStatus, load_field_registry
 from finance_agent_core.domain import NormalizedBondRecord
 
 SOURCE_COLUMNS = (
-    "PD_NO",
-    "PD_EXG_MKT",
-    "PD_NM",
-    "PD_ABRV_NM",
-    "PD_CTRY_CD",
-    "PD_PBCM",
-    "STD_PD_MCLS_NM",
-    "STD_PD_SCLS_NM",
-    "BD_KND",
-    "CURR_CD",
-    "ISU_BAL_AMT",
-    "ISU_DT",
-    "MAT_DT",
-    "SRFC_IRT",
-    "PD_RISK_GCD",
-    "PD_STD_INFO_UPDATE",
-    "BUY_YIELD",
-    "AFTER_TAX_YIELD",
-    "BUYABLE_QUANTITY",
-    "REMAINING_DAYS",
-    "DUR",
-    "CRD_GRD",
-    "CRD_GRD_DT",
+    "pd_no",
+    "pd_exg_mkt",
+    "info_base_dt",
+    "info_seq",
+    "pd_nm",
+    "pd_abrv_nm",
+    "pd_ctry_cd",
+    "pd_pbcm",
+    "std_pd_mcls_nm",
+    "std_pd_scls_nm",
+    "bd_knd",
+    "curr_cd",
+    "isu_bal_amt",
+    "isu_dt",
+    "mat_dt",
+    "srfc_irt",
+    "pd_risk_gcd",
+    "pd_std_info_update",
+    "buy_yield",
+    "after_tax_yield",
+    "buyable_quantity",
+    "remaining_days",
+    "dur",
+    "crd_grd",
+    "crd_grd_dt",
 )
-DYNAMIC_STALE_REASON = "dynamic_value_as_of_2026-02-24_before_snapshot"
+OFFICIAL_BUYABILITY_REASON = "official_2026-08-24_notice_ignores_buyable_quantity"
 MICRO_PRECISION = Decimal("0.000001")
+MONEY_PRECISION = Decimal("0.01")
 
 
 class BondNormalizationError(ValueError):
@@ -137,50 +140,54 @@ def normalize_bond_row(
     registry = load_field_registry()
     snapshot = source_snapshot_date or registry.datasets["bond"].snapshot_date
 
-    product_id = _text(values.get("PD_NO"), field="PD_NO", required=True)
-    product_name = _text(values.get("PD_NM"), field="PD_NM", required=True)
-    bond_market = _text(values.get("PD_EXG_MKT"), field="PD_EXG_MKT", required=True)
+    ticker = _text(values.get("pd_no"), field="pd_no", required=True) or ""
+    bond_market = _text(values.get("pd_exg_mkt"), field="pd_exg_mkt", required=True)
+    info_base_date = _date(values.get("info_base_dt"), field="info_base_dt")
+    info_sequence = _text(values.get("info_seq"), field="info_seq", required=True) or ""
+    if info_base_date is None:
+        raise BondNormalizationError("info_base_dt is required")
+    product_id = f"{ticker}:{bond_market}:{info_base_date.strftime('%Y%m%d')}:{info_sequence}"
+    product_name = _text(values.get("pd_nm"), field="pd_nm", required=True)
     if bond_market not in {"장내", "장외"}:
         raise BondNormalizationError(f"PD_EXG_MKT has an unsupported value: {bond_market!r}")
 
-    issue_amount = _decimal(values.get("ISU_BAL_AMT"), field="ISU_BAL_AMT")
+    raw_issue_amount = _decimal(values.get("isu_bal_amt"), field="isu_bal_amt")
+    issue_amount = (
+        None if raw_issue_amount is None else raw_issue_amount.quantize(MONEY_PRECISION)
+    )
     if issue_amount is None or issue_amount < 0:
-        raise BondNormalizationError("ISU_BAL_AMT must be a non-negative number")
-    coupon_rate = _micro_decimal(values.get("SRFC_IRT"), field="SRFC_IRT")
+        raise BondNormalizationError("isu_bal_amt must be a non-negative number")
+    coupon_rate = _micro_decimal(values.get("srfc_irt"), field="srfc_irt")
     if coupon_rate is not None and coupon_rate < 0:
-        raise BondNormalizationError("SRFC_IRT cannot be negative")
-    buyable_quantity = _decimal(values.get("BUYABLE_QUANTITY"), field="BUYABLE_QUANTITY")
+        raise BondNormalizationError("srfc_irt cannot be negative")
+    buyable_quantity = _decimal(values.get("buyable_quantity"), field="buyable_quantity")
     if buyable_quantity is not None and buyable_quantity < 0:
-        raise BondNormalizationError("BUYABLE_QUANTITY cannot be negative")
-    duration = _micro_decimal(values.get("DUR"), field="DUR")
+        raise BondNormalizationError("buyable_quantity cannot be negative")
+    duration = _micro_decimal(values.get("dur"), field="dur")
     if duration is not None and duration < 0:
-        raise BondNormalizationError("DUR cannot be negative")
+        raise BondNormalizationError("dur cannot be negative")
 
-    issue_date = _date(values.get("ISU_DT"), field="ISU_DT")
-    maturity_date = _date(values.get("MAT_DT"), field="MAT_DT")
+    issue_date = _date(values.get("isu_dt"), field="isu_dt")
+    maturity_date = _date(values.get("mat_dt"), field="mat_dt")
     dynamic_source_date = _date(
-        values.get("PD_STD_INFO_UPDATE"),
-        field="PD_STD_INFO_UPDATE",
+        values.get("pd_std_info_update"),
+        field="pd_std_info_update",
     )
     dynamic_as_of = dynamic_source_date or snapshot
     remaining_days = None if maturity_date is None else (maturity_date - snapshot).days
-    currently_buyable = (
-        None
-        if buyable_quantity is None or maturity_date is None
-        else buyable_quantity > 0 and maturity_date >= snapshot
-    )
+    currently_buyable = True
 
-    buy_yield = _micro_decimal(values.get("BUY_YIELD"), field="BUY_YIELD")
+    buy_yield = _micro_decimal(values.get("buy_yield"), field="buy_yield")
     after_tax_yield = _micro_decimal(
-        values.get("AFTER_TAX_YIELD"),
-        field="AFTER_TAX_YIELD",
+        values.get("after_tax_yield"),
+        field="after_tax_yield",
     )
-    short_name = _text(values.get("PD_ABRV_NM"), field="PD_ABRV_NM")
-    issuer = _text(values.get("PD_PBCM"), field="PD_PBCM")
-    bond_subclass = _text(values.get("STD_PD_SCLS_NM"), field="STD_PD_SCLS_NM")
-    bond_type = _text(values.get("BD_KND"), field="BD_KND")
-    credit_rating = _text(values.get("CRD_GRD"), field="CRD_GRD")
-    currency = _text(values.get("CURR_CD"), field="CURR_CD", required=True)
+    short_name = _text(values.get("pd_abrv_nm"), field="pd_abrv_nm")
+    issuer = _text(values.get("pd_pbcm"), field="pd_pbcm")
+    bond_subclass = _text(values.get("std_pd_scls_nm"), field="std_pd_scls_nm")
+    bond_type = _text(values.get("bd_knd"), field="bd_knd")
+    credit_rating = _text(values.get("crd_grd"), field="crd_grd")
+    currency = _text(values.get("curr_cd"), field="curr_cd", required=True)
 
     quality_pairs = {
         "short_name": _quality(short_name, missing_reason="short_name_missing"),
@@ -202,26 +209,24 @@ def normalize_bond_row(
         "buy_yield_pct": _quality(
             buy_yield,
             missing_reason="buy_yield_missing",
-            present_quality=QualityStatus.PARTIAL,
-            present_reason=DYNAMIC_STALE_REASON,
+            present_quality=QualityStatus.VALID,
         ),
         "after_tax_yield_pct": _quality(
             after_tax_yield,
             missing_reason="after_tax_yield_missing",
-            present_quality=QualityStatus.PARTIAL,
-            present_reason=DYNAMIC_STALE_REASON,
+            present_quality=QualityStatus.VALID,
         ),
         "buyable_quantity": _quality(
             buyable_quantity,
             missing_reason="buyable_quantity_missing",
-            present_quality=QualityStatus.PARTIAL,
-            present_reason=DYNAMIC_STALE_REASON,
+            present_quality=QualityStatus.UNKNOWN,
+            present_reason=OFFICIAL_BUYABILITY_REASON,
         ),
         "currently_buyable": _quality(
             currently_buyable,
             missing_reason="buyable_quantity_or_maturity_missing",
-            present_quality=QualityStatus.PARTIAL,
-            present_reason=DYNAMIC_STALE_REASON,
+            present_quality=QualityStatus.VALID,
+            present_reason=OFFICIAL_BUYABILITY_REASON,
         ),
         "remaining_days": _quality(
             remaining_days,
@@ -230,15 +235,13 @@ def normalize_bond_row(
         "duration_years": _quality(
             duration,
             missing_reason="duration_missing",
-            present_quality=QualityStatus.PARTIAL,
-            present_reason=DYNAMIC_STALE_REASON,
+            present_quality=QualityStatus.VALID,
         ),
         "static_as_of": (QualityStatus.VALID, None),
         "dynamic_as_of": _quality(
             dynamic_source_date,
             missing_reason="dynamic_as_of_missing_snapshot_fallback",
-            present_quality=QualityStatus.PARTIAL,
-            present_reason=DYNAMIC_STALE_REASON,
+            present_quality=QualityStatus.VALID,
         ),
     }
 
@@ -250,13 +253,13 @@ def normalize_bond_row(
         source_values={column: _raw_scalar(values.get(column)) for column in SOURCE_COLUMNS},
         product_id=product_id or "",
         product_name=product_name or "",
-        ticker=product_id or "",
+        ticker=ticker,
         short_name=short_name,
         bond_market=bond_market,
         issuer=issuer,
         bond_major_class=_text(
-            values.get("STD_PD_MCLS_NM"),
-            field="STD_PD_MCLS_NM",
+            values.get("std_pd_mcls_nm"),
+            field="std_pd_mcls_nm",
             required=True,
         )
         or "",
@@ -269,8 +272,8 @@ def normalize_bond_row(
         coupon_rate_pct=coupon_rate,
         credit_rating=credit_rating,
         bond_risk_code=_text(
-            values.get("PD_RISK_GCD"),
-            field="PD_RISK_GCD",
+            values.get("pd_risk_gcd"),
+            field="pd_risk_gcd",
             required=True,
         )
         or "",

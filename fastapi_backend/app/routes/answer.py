@@ -67,10 +67,9 @@ class OfficialJsonResponse(JSONResponse):
 
 
 def _cache_official_result(result: AnswerAdapterResult) -> bool:
-    """Replay successful or permanent safe results, never transient failures."""
+    """Replay HTTP 200 outcomes only; every provider 5xx remains retryable upstream."""
 
-    error = result.response.error
-    return result.http_status_code == 200 or error is None or not error.retryable
+    return result.http_status_code == 200
 
 
 def _idempotency_terminal_reason(
@@ -245,8 +244,8 @@ async def official_answer(
                 question_id=question_id,
                 question=question,
             )
-    retryable_error = result.response.error is not None and result.response.error.retryable
-    if result.http_status_code == 504 and retryable_error:
+    adapter_error = result.response.error is not None or result.http_status_code != 200
+    if result.http_status_code == 504 and adapter_error:
         mark_request_audit_terminal(
             http_request,
             outcome=AuditOutcome.TIMED_OUT,
@@ -284,16 +283,16 @@ async def official_answer(
         )
     mark_request_audit_terminal(
         http_request,
-        outcome=(AuditOutcome.FAILED if retryable_error else AuditOutcome.SUCCEEDED),
+        outcome=(AuditOutcome.FAILED if adapter_error else AuditOutcome.SUCCEEDED),
         reason_code=(
-            "retryable_adapter_failure"
-            if retryable_error
+            "adapter_failure"
+            if adapter_error
             else (_idempotency_terminal_reason(execution.disposition) or "response_completed")
         ),
     )
-    if retryable_error:
-        # The evaluator retries timeout or 5xx. Collapse retryable non-timeout
-        # adapter failures to 503 while preserving the five-string body.
+    if adapter_error:
+        # The evaluator retries 5xx. Collapse every non-timeout provider failure
+        # to 503 so no unavailable mandatory-HCLX path is mistaken for success.
         http_response.status_code = 503
     if result.response.status in {BackendStatus.SUCCESS, BackendStatus.NOT_FOUND}:
         mark_response_serialization_start(http_request)

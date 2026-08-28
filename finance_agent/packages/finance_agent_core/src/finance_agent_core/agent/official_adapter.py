@@ -4,6 +4,7 @@ import json
 from typing import Any
 
 from finance_agent_core.contracts.backend import BackendAgentResponse, BackendStatus
+from finance_agent_core.contracts.external_knowledge import CompositeKnowledgeQueryPlan
 from finance_agent_core.contracts.knowledge import (
     KnowledgeQueryPlan,
     RelationKnowledgeOperation,
@@ -42,6 +43,7 @@ def _retrieved_context(response: BackendAgentResponse) -> str:
             BackendStatus.CLARIFICATION: "조건 확인 필요",
             BackendStatus.UNSUPPORTED: "현재 데이터·기능 범위에서 지원하지 않음",
             BackendStatus.NOT_FOUND: "조건에 맞는 근거를 찾지 못함",
+            BackendStatus.CANNOT_VERIFY: "공식 외부 근거 탐색이 불완전해 확인할 수 없음",
             BackendStatus.ERROR: "안전하게 공개할 수 있는 근거 없음",
         }.get(response.status, "참조 근거 없음")
         return _json_text({"citations": [], "reason": reason})
@@ -168,7 +170,41 @@ def _retrieved_context(response: BackendAgentResponse) -> str:
 def _think_trace(response: BackendAgentResponse) -> str:
     plan = response.query_plan
     execution_steps = ["intent_router"]
-    if isinstance(plan, KnowledgeQueryPlan):
+    if isinstance(plan, CompositeKnowledgeQueryPlan):
+        external_terminal = {
+            BackendStatus.SUCCESS: "verified_external_db_intersection",
+            BackendStatus.CANNOT_VERIFY: "safe_cannot_verify_response",
+            BackendStatus.NOT_FOUND: "safe_not_found_response",
+        }.get(response.status, "safe_control_response")
+        execution_steps.extend(
+            [
+                "composite_knowledge_plan_validation",
+                "provided_db_candidate_freeze",
+                "official_evidence_authority_check",
+                "temporal_relation_verifier",
+                external_terminal,
+                "response_contract_validation",
+            ]
+        )
+        filters = [
+            {
+                "requirement_id": requirement.requirement_id,
+                "capability": requirement.capability.value,
+                "predicate": requirement.predicate.value,
+                "subject_evidence_span": requirement.subject_evidence_span,
+                "relation_evidence_span": requirement.relation_evidence_span,
+                "product_families": [
+                    family.value for family in requirement.product_families
+                ],
+            }
+            for requirement in plan.requirements
+        ]
+        ranking = (
+            [plan.product_selection.model_dump(mode="json")]
+            if plan.product_selection is not None
+            else []
+        )
+    elif isinstance(plan, KnowledgeQueryPlan):
         is_relation = isinstance(plan.operation, RelationKnowledgeOperation)
         execution_steps.extend(
             [

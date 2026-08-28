@@ -21,6 +21,7 @@ SOURCE_COLUMNS = (
     "bmrk_nm",
     "curr_cd",
     "exchdg_yn",
+    "fd_daily_bas_dt",
     "fd_estb_ctry_cd",
     "fd_ivst_rgn_desc",
     "fd_mm18_ern_r",
@@ -28,6 +29,7 @@ SOURCE_COLUMNS = (
     "fd_mm3_ern_r",
     "fd_mm6_ern_r",
     "fd_nast_suma",
+    "fd_price_bas_dt",
     "fd_set_pcd",
     "fd_wk1_ern_r",
     "fd_yr1_ern_r",
@@ -52,7 +54,9 @@ SOURCE_COLUMNS = (
     "ovrs_fd_desc",
     "pers_corp_desc",
     "pfiv_sale_cntl_tcd",
-    "prfd_attr_cd",
+    "prfd_attr_cds",
+    "prfd_attr_cnt",
+    "prfd_attr_search_text",
     "prvo_fd_desc",
     "prvo_pbff_desc",
     "rptt_ksd_itm_no",
@@ -63,7 +67,7 @@ SOURCE_COLUMNS = (
     "zrin_fd_ivst_risk_gcd",
     "zrin_fd_ivst_risk_grd_nm",
 )
-PRODUCT_COLUMNS = tuple(column for column in SOURCE_COLUMNS if column != "prfd_attr_cd")
+PRODUCT_COLUMNS = SOURCE_COLUMNS
 VALID_PRODUCT_KEY = re.compile(r"KR[A-Z0-9]{10}")
 RISK_LEVEL_BY_CODE = {
     "1": "매우높은위험(1등급)",
@@ -84,6 +88,9 @@ FUND_ATTRIBUTES = {
     "채권혼합",
     "특별자산",
     "혼합자산",
+    "파생상품",
+    "기타",
+    "개발형",
 }
 SHORT_RETURN_SOURCES = {
     "one_week_return_pct": "fd_wk1_ern_r",
@@ -98,6 +105,8 @@ LONG_RETURN_SOURCES = {
     "three_year_return_pct": "fd_yr3_ern_r",
     "five_year_return_pct": "fd_yr5_ern_r",
 }
+MICRO_PRECISION = Decimal("0.000001")
+AUM_PRECISION = Decimal("0.0001")
 
 
 class PublicFundNormalizationError(ValueError):
@@ -109,10 +118,7 @@ class PublicFundNormalizationResult:
     products: tuple[NormalizedPublicFundRecord, ...]
     attributes: tuple[NormalizedPublicFundAttribute, ...]
     quarantine: tuple[QuarantinedPublicFundRow, ...]
-
-    @property
-    def raw_rows(self) -> int:
-        return len(self.attributes) + len(self.quarantine)
+    raw_rows: int
 
 
 def _semantic_missing(value: Any) -> bool:
@@ -144,6 +150,25 @@ def _decimal(value: Any, *, field: str) -> Decimal | None:
         return Decimal(rendered.replace(",", ""))
     except InvalidOperation as error:
         raise PublicFundNormalizationError(f"{field} is not numeric: {rendered!r}") from error
+
+
+def _quantized_decimal(value: Any, *, field: str, precision: Decimal) -> Decimal | None:
+    parsed = _decimal(value, field=field)
+    return None if parsed is None else parsed.quantize(precision)
+
+
+def _date(value: Any, *, field: str) -> dt.date | None:
+    rendered = _text(value, field=field)
+    if rendered is None:
+        return None
+    if rendered.endswith(".0") and rendered[:-2].isdigit():
+        rendered = rendered[:-2]
+    for date_format in ("%Y%m%d", "%Y-%m-%d", "%Y-%m-%d %H:%M:%S"):
+        try:
+            return dt.datetime.strptime(rendered, date_format).date()
+        except ValueError:
+            continue
+    raise PublicFundNormalizationError(f"{field} is not a supported date: {rendered!r}")
 
 
 def _raw_scalar(value: Any) -> str | int | bool | None:
@@ -204,8 +229,10 @@ def _normalize_product(
     product_name = _text(values.get("itm_nm"), field="itm_nm", required=True) or ""
     short_name = _text(values.get("itm_abrv_nm"), field="itm_abrv_nm", required=True) or ""
     currency = _text(values.get("curr_cd"), field="curr_cd", required=True) or ""
-    if currency not in {"KRW", "USD"}:
-        raise PublicFundNormalizationError(f"curr_cd is outside the frozen enum: {currency!r}")
+    if not re.fullmatch(r"[A-Z]{3}", currency):
+        raise PublicFundNormalizationError(
+            f"curr_cd is not an ISO-style currency code: {currency!r}"
+        )
 
     public_offering = _mapped_boolean(
         values.get("prvo_pbff_desc"),
@@ -231,7 +258,9 @@ def _normalize_product(
 
     investment_region = _text(values.get("fd_ivst_rgn_desc"), field="fd_ivst_rgn_desc")
     geography = _text(values.get("ovrs_fd_desc"), field="ovrs_fd_desc")
-    if geography is not None and geography not in {"국내", "해외", "국내외혼합"}:
+    if geography == "해당없음":
+        geography = None
+    elif geography is not None and geography not in {"국내", "해외", "국내외혼합"}:
         raise PublicFundNormalizationError(
             f"ovrs_fd_desc is outside the frozen enum: {geography!r}"
         )
@@ -242,7 +271,7 @@ def _normalize_product(
         )
 
     raw_fund_attribute = _text(values.get("or_attr_desc"), field="or_attr_desc")
-    if raw_fund_attribute in {None, "06"}:
+    if raw_fund_attribute in {None, "06", "해당없음"}:
         fund_attribute = None
         fund_attribute_reason = (
             "fund_management_attribute_missing"
@@ -257,11 +286,17 @@ def _normalize_product(
             f"or_attr_desc is outside the frozen enum: {raw_fund_attribute!r}"
         )
 
+    raw_risk_name = _text(
+        values.get("zrin_fd_ivst_risk_grd_nm"),
+        field="zrin_fd_ivst_risk_grd_nm",
+    )
     raw_risk_code = _text(
         values.get("zrin_fd_ivst_risk_gcd"),
         field="zrin_fd_ivst_risk_gcd",
     )
-    if raw_risk_code is None:
+    if raw_risk_name is not None:
+        risk_level = raw_risk_name
+    elif raw_risk_code is None:
         risk_level = None
     else:
         try:
@@ -271,7 +306,9 @@ def _normalize_product(
                 f"zrin_fd_ivst_risk_gcd is outside 1..6: {raw_risk_code!r}"
             ) from error
 
-    aum = _decimal(values.get("fd_nast_suma"), field="fd_nast_suma")
+    aum = _quantized_decimal(
+        values.get("fd_nast_suma"), field="fd_nast_suma", precision=AUM_PRECISION
+    )
     if aum is not None and aum < 0:
         raise PublicFundNormalizationError("fd_nast_suma cannot be negative")
     if aum is None:
@@ -282,13 +319,22 @@ def _normalize_product(
         aum_quality = (QualityStatus.VALID, None)
 
     short_returns = {
-        name: _decimal(values.get(source), field=source)
+        name: _quantized_decimal(
+            values.get(source), field=source, precision=MICRO_PRECISION
+        )
         for name, source in SHORT_RETURN_SOURCES.items()
     }
     long_returns = {
-        name: _decimal(values.get(source), field=source)
+        name: _quantized_decimal(
+            values.get(source), field=source, precision=MICRO_PRECISION
+        )
         for name, source in LONG_RETURN_SOURCES.items()
     }
+    dynamic_source_date = _date(
+        values.get("fd_price_bas_dt") or values.get("fd_daily_bas_dt"),
+        field="fd_price_bas_dt_or_fd_daily_bas_dt",
+    )
+    dynamic_as_of = dynamic_source_date or snapshot
 
     quality_pairs: dict[str, tuple[QualityStatus, str | None]] = {
         "public_offering": _quality(
@@ -332,8 +378,8 @@ def _normalize_product(
         ),
         "static_as_of": (QualityStatus.VALID, None),
         "dynamic_as_of": (
-            QualityStatus.PARTIAL,
-            "field_level_dynamic_as_of_unavailable_uses_file_snapshot",
+            QualityStatus.VALID if dynamic_source_date is not None else QualityStatus.PARTIAL,
+            None if dynamic_source_date is not None else "dynamic_date_missing_uses_file_snapshot",
         ),
     }
     for field_name, value in short_returns.items():
@@ -342,38 +388,19 @@ def _normalize_product(
                 QualityStatus.UNKNOWN,
                 f"{field_name}_missing",
             )
-        elif value < Decimal("-100") or value > Decimal("500"):
-            quality_pairs[field_name] = (
-                QualityStatus.UNKNOWN,
-                f"{field_name}_outside_executable_range",
-            )
         else:
             quality_pairs[field_name] = (
                 QualityStatus.PARTIAL,
-                "field_level_dynamic_as_of_unavailable_uses_file_snapshot",
+                "raw_source_value_preserved_without_outlier_capping",
             )
-    one_year_return = long_returns["one_year_return_pct"]
-    quality_pairs["one_year_return_pct"] = (
-        (
-            QualityStatus.UNKNOWN,
-            "one_year_return_pct_missing",
-        )
-        if one_year_return is None
-        else (
-            QualityStatus.PARTIAL,
-            "raw_source_value_preserved_without_outlier_capping_uses_file_snapshot",
-        )
-    )
     for field_name, value in long_returns.items():
-        if field_name == "one_year_return_pct":
-            continue
         quality_pairs[field_name] = (
-            QualityStatus.UNKNOWN,
-            (
-                f"{field_name}_missing_and_execution_disabled"
-                if value is None
-                else f"{field_name}_execution_disabled_outlier_policy_unconfirmed"
-            ),
+            (QualityStatus.UNKNOWN, f"{field_name}_missing")
+            if value is None
+            else (
+                QualityStatus.PARTIAL,
+                "raw_source_value_preserved_without_outlier_capping",
+            )
         )
 
     return NormalizedPublicFundRecord(
@@ -407,7 +434,7 @@ def _normalize_product(
         three_year_return_pct=long_returns["three_year_return_pct"],
         five_year_return_pct=long_returns["five_year_return_pct"],
         static_as_of=snapshot,
-        dynamic_as_of=snapshot,
+        dynamic_as_of=dynamic_as_of,
         field_quality={name: quality for name, (quality, _) in quality_pairs.items()},
         field_quality_reasons={name: reason for name, (_, reason) in quality_pairs.items()},
     )
@@ -420,19 +447,23 @@ def normalize_public_fund_rows(
 ) -> PublicFundNormalizationResult:
     registry = load_field_registry()
     snapshot = source_snapshot_date or registry.datasets["fund"].snapshot_date
-    rows_by_product: dict[str, list[tuple[int, int, dict[str, Any], str]]] = {}
-    raw_keys: set[tuple[str, str]] = set()
+    product_keys: set[str] = set()
     attributes: list[NormalizedPublicFundAttribute] = []
     quarantine: list[QuarantinedPublicFundRow] = []
+    products: list[NormalizedPublicFundRecord] = []
+    raw_row_count = 0
 
     for source_row, present_source_fields, row_values in rows:
+        raw_row_count += 1
         values = {column: row_values.get(column) for column in SOURCE_COLUMNS}
         item_number = _text(values.get("itm_no"), field="itm_no")
-        attribute_code = _text(values.get("prfd_attr_cd"), field="prfd_attr_cd")
+        aggregate_attribute_code = _text(
+            values.get("prfd_attr_cds"),
+            field="prfd_attr_cds",
+        ) or "__NO_ATTRIBUTE__"
         if (
             item_number is None
             or VALID_PRODUCT_KEY.fullmatch(item_number) is None
-            or attribute_code is None
         ):
             quarantine.append(
                 QuarantinedPublicFundRow(
@@ -440,8 +471,8 @@ def normalize_public_fund_rows(
                     source_snapshot_date=snapshot,
                     present_source_fields=present_source_fields,
                     raw_item_number=item_number,
-                    raw_attribute_code=attribute_code,
-                    quarantine_reason="invalid_product_or_attribute_key",
+                    raw_attribute_code=aggregate_attribute_code,
+                    quarantine_reason="invalid_product_key",
                     source_values={
                         column: _raw_scalar(values.get(column)) for column in SOURCE_COLUMNS
                     },
@@ -449,59 +480,24 @@ def normalize_public_fund_rows(
             )
             continue
 
-        raw_key = (item_number, attribute_code)
-        if raw_key in raw_keys:
+        if item_number in product_keys:
             raise PublicFundNormalizationError(
-                f"duplicate raw key at source row {source_row}: {raw_key!r}"
+                f"duplicate product key at source row {source_row}: {item_number!r}"
             )
-        raw_keys.add(raw_key)
-        rows_by_product.setdefault(item_number, []).append(
-            (source_row, present_source_fields, values, attribute_code)
-        )
-
-    products: list[NormalizedPublicFundRecord] = []
-    for item_number, product_rows in sorted(rows_by_product.items()):
-        source_row, present_source_fields, first_values, _ = product_rows[0]
-        conflicts = sorted(
-            {
-                column
-                for _, _, values, _ in product_rows[1:]
-                for column in PRODUCT_COLUMNS
-                if _raw_scalar(first_values.get(column)) != _raw_scalar(values.get(column))
-            }
-        )
-        if conflicts:
-            for row_number, present_count, values, attribute_code in product_rows:
-                quarantine.append(
-                    QuarantinedPublicFundRow(
-                        source_row=row_number,
-                        source_snapshot_date=snapshot,
-                        present_source_fields=present_count,
-                        raw_item_number=item_number,
-                        raw_attribute_code=attribute_code,
-                        quarantine_reason=(
-                            "conflicting_product_common_fields:" + ",".join(conflicts)
-                        ),
-                        source_values={
-                            column: _raw_scalar(values.get(column)) for column in SOURCE_COLUMNS
-                        },
-                    )
-                )
-            continue
-        attributes.extend(
+        product_keys.add(item_number)
+        attributes.append(
             NormalizedPublicFundAttribute(
-                source_row=row_number,
+                source_row=source_row,
                 product_id=item_number,
-                attribute_code=attribute_code,
+                attribute_code=aggregate_attribute_code,
             )
-            for row_number, _, _, attribute_code in product_rows
         )
         products.append(
             _normalize_product(
                 source_row=source_row,
                 present_source_fields=present_source_fields,
-                values=first_values,
-                attribute_count=len(product_rows),
+                values=values,
+                attribute_count=1,
                 snapshot=snapshot,
             )
         )
@@ -518,6 +514,7 @@ def normalize_public_fund_rows(
             )
         ),
         quarantine=tuple(sorted(quarantine, key=lambda value: value.source_row)),
+        raw_rows=raw_row_count,
     )
 
 
@@ -542,10 +539,9 @@ def normalize_public_fund_workbook(
         if len(header_names) != len(set(header_names)):
             raise PublicFundNormalizationError("workbook has duplicate header names")
         missing = sorted(set(SOURCE_COLUMNS) - set(header_names))
-        extra = sorted(set(header_names) - set(SOURCE_COLUMNS))
-        if missing or extra:
+        if missing:
             raise PublicFundNormalizationError(
-                f"workbook schema differs from frozen columns; missing={missing}, extra={extra}"
+                f"workbook is missing required source columns: {missing}"
             )
         index = {name: position for position, name in enumerate(header_names)}
 

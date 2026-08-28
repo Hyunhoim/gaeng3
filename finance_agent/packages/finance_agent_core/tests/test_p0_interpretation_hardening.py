@@ -115,12 +115,6 @@ def test_mixed_attack_clauses_are_terminally_unsupported(
             "after_tax_yield_pct",
             "desc",
         ),
-        (
-            "지금 주문할 수 있는 물량이 넉넉한 국내채권부터 3개 보여줘.",
-            "bond",
-            "buyable_quantity",
-            "desc",
-        ),
         ("금리 변화에 덜 민감한 국내채권을 3개 보여줘.", "bond", "duration_years", "asc"),
         ("금리 변동에 더 민감한 국내채권부터 3개 찾아줘.", "bond", "duration_years", "desc"),
         ("정기적으로 붙는 이자율이 높은 국내채권 3개를 보여줘.", "bond", "coupon_rate_pct", "desc"),
@@ -184,9 +178,8 @@ def test_mixed_attack_clauses_are_terminally_unsupported(
             "total_expense_ratio_pct",
             "asc",
         ),
+        ("하루 수익률이 높은 해외 ETF 3개를 보여줘.", "overseas_etp", "one_day_return_pct", "desc"),
         ("원화 공모펀드 중 체급이 큰 상품 3개를 보여줘.", "fund", "aum", "desc"),
-        ("최근 일주일 성적이 좋은 공모펀드 3개를 보여줘.", "fund", "one_week_return_pct", "desc"),
-        ("지난 한 주 동안 잘 나간 공모펀드 3개를 찾아줘.", "fund", "one_week_return_pct", "desc"),
         ("최근 한 달 성적표가 좋은 공모펀드 3개를 보여줘.", "fund", "one_month_return_pct", "desc"),
         (
             "최근 한 분기 동안 성과가 좋은 공모펀드 3개를 찾아줘.",
@@ -243,6 +236,41 @@ def test_plain_relation_query_remains_owned_by_the_relation_router() -> None:
     assert not product_search_has_precedence("미국에 투자하는 해외 ETF 3개를 보여줘.")
 
 
+@pytest.mark.parametrize(
+    "question",
+    [
+        "삼성전자를 보유한 국내 ETF를 1년 수익률 높은 순으로 5개 보여줘.",
+        "반도체 섹터에 투자하는 국내 ETF와 공모펀드를 1년 수익률 순으로 보여줘.",
+    ],
+)
+def test_unapproved_relation_filter_never_falls_through_to_product_sql(question: str) -> None:
+    assert not product_search_has_precedence(question)
+    decision = IntentRouter().route(question, "unapproved-relation-filter")
+
+    assert decision.disposition.value == "unsupported"
+    assert decision.query_plan_intent is None
+
+
+def test_invalid_buyable_quantity_never_acquires_ranking_authority() -> None:
+    decision = IntentRouter().route(
+        "매수가능수량이 많은 국내채권을 3개 보여줘.",
+        "invalid-buyable-quantity",
+    )
+
+    assert decision.disposition.value != "execute"
+    assert decision.query_plan_intent is None
+
+
+def test_all_missing_fund_one_week_return_never_acquires_execution_authority() -> None:
+    decision = IntentRouter().route(
+        "최근 일주일 수익률이 높은 공모펀드 3개를 보여줘.",
+        "missing-fund-one-week-return",
+    )
+
+    assert decision.disposition.value in {"clarify", "unsupported"}
+    assert decision.query_plan_intent is None
+
+
 def test_plain_bond_credit_rating_form_is_preserved_as_a_locked_filter() -> None:
     hints = build_lexical_hints("AAA 등급 회사채를 만기일 빠른 순으로 3개 찾아줘.")
 
@@ -254,6 +282,20 @@ def test_plain_bond_credit_rating_form_is_preserved_as_a_locked_filter() -> None
     assert ("bond_major_class", "eq", "회사채") in filters
     assert hints["required_rankings"] == [
         {"field": "maturity_date", "direction": "asc", "nulls": "last"}
+    ]
+
+
+def test_natural_credit_rating_particle_form_preserves_filter_and_ranking() -> None:
+    question = "회사채 중 신용등급이 AA-인 국내채권을 매수수익률 높은 순으로 5개 보여줘."
+    decision = IntentRouter().route(question, "natural-credit-rating")
+    plan = ServerQueryPlanCompiler({}).compile(decision)
+
+    assert decision.disposition.value == "execute"
+    assert ("credit_rating", "eq", "AA-") in {
+        (item.field, item.operator.value, str(item.value)) for item in plan.constraints
+    }
+    assert [(item.field, item.direction.value) for item in plan.ranking] == [
+        ("buy_yield_pct", "desc")
     ]
 
 
@@ -270,6 +312,48 @@ def test_vague_stability_never_acquires_search_execution_authority(question: str
 
     assert decision.disposition.value == "clarify"
     assert decision.query_plan_intent is None
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        "대표적인 해외 ETF를 3개 보여줘.",
+        "인기 있는 국내 ETF를 3개 보여줘.",
+        "부담이 적은 해외 ETF를 3개 보여줘.",
+        "효율이 높은 국내 ETF를 3개 보여줘.",
+        "알짜 공모펀드를 3개 보여줘.",
+    ],
+)
+def test_generic_preference_never_defaults_to_name_or_dense_ranking(question: str) -> None:
+    decision = IntentRouter(adaptive_semantic_enabled=True).route(
+        question,
+        "p1-generic-preference",
+    )
+
+    assert decision.disposition.value == "clarify"
+    assert decision.query_plan_intent is None
+
+
+@pytest.mark.parametrize(
+    ("question", "field", "direction"),
+    [
+        ("보유 부담이 적은 해외 ETF를 3개 보여줘.", "total_expense_ratio_pct", "asc"),
+        ("한 주 가격이 싼 국내 ETF를 3개 보여줘.", "close_price", "asc"),
+        ("최근 1년 성과가 좋은 공모펀드를 3개 보여줘.", "one_year_return_pct", "desc"),
+    ],
+)
+def test_explicit_metric_context_is_not_blocked_as_generic_preference(
+    question: str,
+    field: str,
+    direction: str,
+) -> None:
+    decision = IntentRouter().route(question, "p1-explicit-preference-metric")
+    plan = ServerQueryPlanCompiler({}).compile(decision)
+
+    assert decision.disposition.value == "execute"
+    assert [(item.field, item.direction.value) for item in plan.ranking] == [
+        (field, direction)
+    ]
 
 
 @pytest.mark.parametrize(

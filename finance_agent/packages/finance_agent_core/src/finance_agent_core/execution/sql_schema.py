@@ -47,6 +47,11 @@ OVERSEAS_SQL_FIELDS = {
         scale=AUM_SCALE,
         quality_column="aum_quality",
     ),
+    "one_day_return_pct": SqlField(
+        "one_day_return_micro_pct",
+        scale=FEE_SCALE,
+        quality_column="one_day_return_quality",
+    ),
     "trading_currency": SqlField("trading_currency"),
     "static_as_of": SqlField("static_as_of"),
     "dynamic_as_of": SqlField("dynamic_as_of"),

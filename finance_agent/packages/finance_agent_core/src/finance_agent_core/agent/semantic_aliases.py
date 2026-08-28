@@ -82,14 +82,6 @@ SEMANTIC_ALIAS_RULES: tuple[SemanticAliasRule, ...] = (
         r"(?:남는\s*)?(?:보상|수익)",
     ),
     _rule(
-        "bond.buyable_quantity.available_supply",
-        (ProductFamily.BOND,),
-        "buyable_quantity",
-        SortDirection.DESC,
-        r"(?:지금\s*)?(?:주문|매수).{0,20}?(?:할\s*수\s*있는|가능한).{0,16}?"
-        r"(?:물량|수량)(?:이|가)?\s*(?:가장\s*)?(?:넉넉|많)",
-    ),
-    _rule(
         "bond.duration.less_rate_sensitive",
         (ProductFamily.BOND,),
         "duration_years",
@@ -156,8 +148,8 @@ SEMANTIC_ALIAS_RULES: tuple[SemanticAliasRule, ...] = (
         "total_expense_ratio_pct",
         SortDirection.ASC,
         r"(?:(?:들고\s*가는|장기간\s*보유|오래\s*들고\s*있어도|보유|유지|관리|"
-        r"운용|운영).{0,20}?(?:비용|부담).{0,16}?(?:작|덜|가벼|저렴)|"
-        r"보유\s*부담(?:이|가)?\s*(?:덜|작|가벼))",
+        r"운용|운영).{0,20}?(?:비용|부담).{0,16}?(?:작|적|덜|가벼|저렴)|"
+        r"보유\s*부담(?:이|가)?\s*(?:덜|작|적|가벼))",
     ),
     _rule(
         "domestic_etp.close_price.share_price",
@@ -167,12 +159,12 @@ SEMANTIC_ALIAS_RULES: tuple[SemanticAliasRule, ...] = (
         r"(?:한\s*주|1\s*주)(?:당)?\s*가격(?:이|가)?\s*(?:가장\s*)?(?:싸|싼|낮)",
     ),
     _rule(
-        "product.return.one_week_colloquial",
-        _ETP_AND_FUND,
-        "one_week_return_pct",
+        "etp.return.one_day",
+        _ETP_FAMILIES,
+        "one_day_return_pct",
         SortDirection.DESC,
-        r"(?:최근|지난)?\s*(?:일주일|한\s*주|1\s*주).{0,20}?"
-        r"(?:(?:성적(?:표)?|성과)(?:이|가)?\s*(?:좋|높)|잘\s*나간)",
+        r"(?:최근\s*)?(?:하루|1\s*일|일간).{0,16}?"
+        r"(?:수익률|수익|성과|성적)(?:이|가)?\s*(?:높|좋|큰)",
     ),
     _rule(
         "product.return.one_month_colloquial",

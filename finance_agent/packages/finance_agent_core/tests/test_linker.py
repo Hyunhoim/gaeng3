@@ -1,4 +1,5 @@
 import pytest
+from pydantic import ValidationError
 
 from finance_agent_core.agent.linker import (
     build_lexical_hints,
@@ -483,6 +484,14 @@ def test_fund_development_linker_matches_frozen_plans_or_documented_migration() 
             case.question,
             first_vertical_slice_plan(case.id).model_dump(mode="json"),
         )
+        if case.id in {"fund-023", "fund-026", "fund-027"}:
+            try:
+                blocked_plan = QueryPlan.model_validate(payload)
+            except ValidationError as error:
+                assert "one_week_return_pct is not queryable" in str(error)
+            else:
+                assert blocked_plan.ambiguities or blocked_plan.unsupported_conditions
+            continue
         plan = QueryPlan.model_validate(payload)
         if case.id == "fund-007":
             # Policy migration: "국내에 투자" describes the investment-region

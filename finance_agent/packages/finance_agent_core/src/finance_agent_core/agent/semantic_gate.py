@@ -67,11 +67,31 @@ _PERSONAL_SUITABILITY = re.compile(
     re.IGNORECASE,
 )
 _UNSUPPORTED_DATA_ACTION = re.compile(
-    r"배당\s*수익률|추적\s*오차(?:율)?|실시간\s*(?:가격|시세)|거래량",
+    r"배당\s*수익률|추적\s*오차(?:율)?|실시간\s*(?:가격|시세)|거래량|"
+    r"매수\s*가능\s*수량|매수가능수량|주문\s*가능\s*수량",
+    re.IGNORECASE,
+)
+_UNAVAILABLE_SNAPSHOT_FIELD = re.compile(
+    r"(?=.*(?:공모\s*펀드|공모펀드))"
+    r"(?=.*(?:1\s*주|일주일|한\s*주).{0,16}?(?:수익률|수익|성과|성적))",
+    re.IGNORECASE,
+)
+_UNAPPROVED_RELATION_FILTER = re.compile(
+    r"(?:섹터|테마|산업)(?:에|로|를|을)?\s*(?:투자|편입|포함)|"
+    r"(?:편입|보유|구성)(?:한|하는|하고\s*있는|된|된\s*종목|\s*종목|\s*자산)|"
+    r"(?:구성\s*종목|보유\s*종목|편입\s*종목)|"
+    r"(?:연결|연관)\s*이력|자회사.{0,24}?(?:편입|보유|구성)|"
+    r"[0-9A-Za-z가-힣&·+._/-]{2,60}\s*관련\s*(?:된\s*)?(?:투자\s*)?상품",
+    re.IGNORECASE,
+)
+_UNAPPROVED_DOCUMENT_KNOWLEDGE = re.compile(
+    r"(?:공모\s*펀드|[0-9A-Za-z가-힣&·+._/-]{2,48}펀드)"
+    r".{0,48}?(?:구조|투자\s*전략\s*동향|운용\s*동향)|"
+    r"(?:위험|리스크)\s*요인",
     re.IGNORECASE,
 )
 _EXPLICIT_RETURN = re.compile(
-    r"(?:1\s*일|일간|1D|1\s*주|일주일|주간|1W|1\s*개월|한\s*달|월간|1M|"
+    r"(?:1\s*일|하루|일간|1D|1\s*주|일주일|주간|1W|1\s*개월|한\s*달|월간|1M|"
     r"3\s*개월|석\s*달|3M|6\s*개월|반년|6M|1\s*년|연간|1Y|YTD|"
     r"연초\s*(?:이후|대비))\s*(?:수익률|수익|성과|return)|"
     r"(?:매수|세후|세전)\s*수익률|(?:표면\s*(?:이율|금리)|쿠폰\s*금리)",
@@ -106,6 +126,13 @@ _VAGUE_STABILITY = re.compile(
     r"(?:국내\s*|해외\s*)?(?:ETF|ETN|ETP|공모\s*펀드|펀드|채권|상품)",
     re.IGNORECASE,
 )
+_GENERIC_PREFERENCE = re.compile(
+    r"대표적(?:인|이다)?|인기\s*(?:있는|많은)|효율(?:이|가)?\s*높(?:은|다)?|"
+    r"부담(?:이|가)?\s*(?:적|작)(?:은|다)?|유망(?:한|하다)?|알짜(?:인|다)?|"
+    r"조건(?:이|가)?\s*(?:괜찮|좋)|비용\s*대비\s*괜찮(?:은|다)?|"
+    r"추천할\s*만한|(?<!않은\s)좋은|괜찮은|싼",
+    re.IGNORECASE,
+)
 _UNMAPPED_METRIC = re.compile(
     r"(?P<metric>가격|비용|변동성|테마|섹터|산업|ESG|친환경|금리|이율|기간|수량)"
     r".{0,16}?(?:높|낮|크|작|많|적|길|짧|저렴|비싸)",
@@ -127,7 +154,7 @@ _POTENTIAL_SCHEMA_GAP = re.compile(
 _DIRECTION_METRIC_PATTERN = (
     r"(?:AUM|순자산|운용\s*(?:자산|규모)|발행\s*(?:잔액|금액)|매수\s*가능\s*수량|"
     r"거래대금|종가|마감\s*가격|총\s*보수(?:율)?|보수율|"
-    r"(?:1\s*일|1D|1\s*주|1W|1\s*개월|1M|3\s*개월|3M|6\s*개월|6M|"
+    r"(?:1\s*일|하루|1D|1\s*주|1W|1\s*개월|1M|3\s*개월|3M|6\s*개월|6M|"
     r"1\s*년|1Y|YTD|연초\s*이후)\s*(?:수익률|수익|성과|return)|"
     r"매수\s*수익률|세후\s*수익률|표면\s*(?:이율|금리)|쿠폰\s*금리|"
     r"잔존\s*(?:일수|일|기일|기간)|만기(?:까지\s*남은\s*(?:일수|날|기간))?|"
@@ -189,7 +216,7 @@ _EXPLICIT_NAME_FILTER = re.compile(
 _NUMERIC_SORT_METRIC_PATTERN = (
     r"(?:AUM|순자산|운용\s*자산|발행\s*(?:잔액|금액)|매수\s*가능\s*수량|"
     r"거래대금|종가|마감\s*가격|총\s*보수(?:율)?|보수율|"
-    r"(?:1\s*일|1D|1\s*주|1W|1\s*개월|1M|3\s*개월|3M|6\s*개월|6M|"
+    r"(?:1\s*일|하루|1D|1\s*주|1W|1\s*개월|1M|3\s*개월|3M|6\s*개월|6M|"
     r"1\s*년|1Y|YTD|연초\s*이후)\s*(?:수익률|수익|성과|return)|"
     r"매수\s*수익률|세후\s*수익률|표면\s*이율|쿠폰\s*금리|"
     r"잔존\s*(?:일수|일|기일|기간)|만기|듀레이션|duration)"
@@ -278,7 +305,13 @@ def _known_field_surface(value: str) -> bool:
     for definition in load_field_registry().fields.values():
         for phrase in (definition.label, *definition.aliases):
             candidate = re.sub(r"\s+", "", phrase).casefold()
-            if len(candidate) >= 2 and (normalized == candidate or normalized in candidate):
+            if len(candidate) >= 2 and (
+                normalized == candidate
+                or normalized in candidate
+                or normalized.endswith(candidate)
+                or re.search(rf"{re.escape(candidate)}(?:이|가|은|는|을|를)?$", normalized)
+                is not None
+            ):
                 return True
     return False
 
@@ -413,6 +446,12 @@ class SemanticCoverageGate:
             unsupported.append(match.group(0))
         if match := _UNSUPPORTED_DATA_ACTION.search(normalized):
             unsupported.append(match.group(0))
+        if match := _UNAVAILABLE_SNAPSHOT_FIELD.search(normalized):
+            unsupported.append(match.group(0))
+        if match := _UNAPPROVED_RELATION_FILTER.search(normalized):
+            unsupported.append(match.group(0))
+        if match := _UNAPPROVED_DOCUMENT_KNOWLEDGE.search(normalized):
+            unsupported.append(match.group(0))
 
         # Routed COMPARE/EXPLAIN requests have dedicated fail-closed parsers
         # with more specific control messages.  The legacy agent calls this
@@ -466,6 +505,9 @@ class SemanticCoverageGate:
             ambiguities.append(match.group(0))
         if match := _VAGUE_STABILITY.search(normalized):
             ambiguities.append(match.group(0))
+        for match in _GENERIC_PREFERENCE.finditer(normalized):
+            if not _covered_by_resolved_alias(match.start(), match.end(), alias_ranges):
+                ambiguities.append(match.group(0))
 
         for match in _UNMAPPED_METRIC.finditer(normalized):
             if not _metric_has_explicit_mapping(normalized, match) and not _overlaps_any(

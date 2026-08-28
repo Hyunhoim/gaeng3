@@ -1,0 +1,484 @@
+from __future__ import annotations
+
+import hashlib
+import re
+import urllib.error
+import urllib.parse
+import urllib.request
+from dataclasses import dataclass
+from datetime import date
+from html.parser import HTMLParser
+from typing import Protocol
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+from finance_agent_core.config.knowledge_coverage import KnowledgeCapability
+from finance_agent_core.config.source_registry import (
+    OfficialSourceEntry,
+    OfficialSourceRegistry,
+    OfficialSourceRegistryError,
+    SourceConnectorKind,
+    load_official_source_registry,
+)
+
+_MAX_FETCH_BYTES = 16 * 1024 * 1024
+_PUBLICATION_DATE_PATTERN = re.compile(
+    r"(?<!\d)(20\d{2})[-./]?(0[1-9]|1[0-2])[-./]?([0-2]\d|3[01])(?!\d)"
+)
+_PUBLICATION_META_KEYS = frozenset(
+    {
+        "article:published_time",
+        "date",
+        "datepublished",
+        "dc.date",
+        "dcterms.date",
+        "publishdate",
+        "published_time",
+    }
+)
+
+
+class OfficialConnectorError(RuntimeError):
+    """Raised when discovery or fetching crosses the approved source boundary."""
+
+
+class OfficialConnectorModel(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+
+class OfficialDiscoveryCandidate(OfficialConnectorModel):
+    url: str = Field(min_length=8, max_length=2000)
+    title: str = Field(min_length=1, max_length=500)
+    published_at: date | None = None
+    as_of: date | None = None
+
+    @field_validator("title")
+    @classmethod
+    def reject_blank_title(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("discovery title cannot be blank")
+        return value
+
+    @model_validator(mode="after")
+    def validate_dates(self) -> OfficialDiscoveryCandidate:
+        if self.as_of is not None and self.published_at is not None:
+            if self.as_of > self.published_at:
+                raise ValueError("candidate as_of cannot be later than publication date")
+        return self
+
+
+class OfficialFetchRequest(OfficialConnectorModel):
+    url: str = Field(min_length=8, max_length=2000)
+    capability: KnowledgeCapability
+    published_at: date | None = None
+    as_of: date | None = None
+    timeout_seconds: float = Field(default=10.0, ge=0.1, le=30.0)
+    max_bytes: int = Field(default=4 * 1024 * 1024, ge=1, le=_MAX_FETCH_BYTES)
+
+    @model_validator(mode="after")
+    def validate_dates(self) -> OfficialFetchRequest:
+        if self.as_of is not None and self.published_at is not None:
+            if self.as_of > self.published_at:
+                raise ValueError("source as_of cannot be later than its publication date")
+        return self
+
+
+@dataclass(frozen=True, slots=True)
+class OfficialHttpResponse:
+    status_code: int
+    final_url: str
+    content_type: str
+    body: bytes
+
+
+@dataclass(frozen=True, slots=True)
+class OfficialSourceSnapshot:
+    source: OfficialSourceEntry
+    capability: KnowledgeCapability
+    source_uri: str
+    title: str
+    content_type: str
+    content: bytes
+    content_sha256: str
+    published_at: date | None
+    as_of: date
+
+
+class OfficialHttpTransport(Protocol):
+    def fetch(
+        self,
+        url: str,
+        *,
+        timeout_seconds: float,
+        max_bytes: int,
+    ) -> OfficialHttpResponse: ...
+
+
+class OfficialDynamicPageRenderer(Protocol):
+    """Injected renderer; production may use an isolated browser service."""
+
+    def render(
+        self,
+        url: str,
+        *,
+        timeout_seconds: float,
+        max_bytes: int,
+    ) -> OfficialHttpResponse: ...
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(  # type: ignore[override]
+        self,
+        req: urllib.request.Request,
+        fp: object,
+        code: int,
+        msg: str,
+        headers: object,
+        newurl: str,
+    ) -> None:
+        return None
+
+
+class UrllibOfficialHttpTransport:
+    """Small production transport with redirects disabled and bounded reads."""
+
+    def __init__(self) -> None:
+        self._opener = urllib.request.build_opener(_NoRedirect())
+
+    def fetch(
+        self,
+        url: str,
+        *,
+        timeout_seconds: float,
+        max_bytes: int,
+    ) -> OfficialHttpResponse:
+        request = urllib.request.Request(
+            url,
+            headers={
+                "Accept": "text/html,application/pdf,text/plain;q=0.8",
+                "User-Agent": "MiraeAssetFinanceAgentEvidence/1.0",
+            },
+            method="GET",
+        )
+        try:
+            with self._opener.open(request, timeout=timeout_seconds) as response:
+                status = int(response.status)
+                final_url = str(response.geturl())
+                content_type = response.headers.get_content_type().casefold()
+                body = response.read(max_bytes + 1)
+        except urllib.error.HTTPError as error:
+            raise OfficialConnectorError(
+                f"official source returned HTTP {error.code}"
+            ) from error
+        except (urllib.error.URLError, TimeoutError, OSError) as error:
+            raise OfficialConnectorError("official source fetch failed") from error
+        if len(body) > max_bytes:
+            raise OfficialConnectorError("official source exceeded the response size limit")
+        return OfficialHttpResponse(
+            status_code=status,
+            final_url=final_url,
+            content_type=content_type,
+            body=body,
+        )
+
+
+class _LinkParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.links: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag.casefold() not in {"a", "link"}:
+            return
+        values = dict(attrs)
+        value = values.get("href")
+        if value:
+            self.links.append(value)
+
+
+def _parse_publication_date(value: str) -> date | None:
+    match = _PUBLICATION_DATE_PATTERN.search(value)
+    if match is None:
+        return None
+    try:
+        return date(*(int(part) for part in match.groups()))
+    except ValueError:
+        return None
+
+
+class _PublicationDateParser(HTMLParser):
+    """Collect only explicit machine-readable publication dates."""
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.values: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        values = {key.casefold(): value for key, value in attrs if value is not None}
+        if tag.casefold() == "meta":
+            key = (
+                values.get("property")
+                or values.get("name")
+                or values.get("itemprop")
+                or ""
+            ).casefold()
+            content = values.get("content")
+            if key in _PUBLICATION_META_KEYS and content:
+                self.values.append(content)
+        elif tag.casefold() == "time" and values.get("datetime"):
+            self.values.append(values["datetime"])
+
+
+def infer_official_publication_date(
+    url: str,
+    content_type: str,
+    body: bytes,
+) -> date | None:
+    """Resolve one unambiguous date from the official URL or HTML metadata."""
+
+    candidates: set[date] = set()
+    url_date = _parse_publication_date(urllib.parse.unquote(url))
+    if url_date is not None:
+        candidates.add(url_date)
+    media_type = content_type.casefold().split(";", maxsplit=1)[0].strip()
+    if media_type in {"text/html", "application/xhtml+xml"}:
+        parser = _PublicationDateParser()
+        parser.feed(body.decode("utf-8", errors="replace"))
+        parser.close()
+        candidates.update(
+            parsed
+            for value in parser.values
+            if (parsed := _parse_publication_date(value)) is not None
+        )
+    return next(iter(candidates)) if len(candidates) == 1 else None
+
+
+class OfficialDocumentLinkResolver:
+    """Resolve static HTML links to approved HTML/PDF documents only."""
+
+    def __init__(self, registry: OfficialSourceRegistry | None = None) -> None:
+        self.registry = registry or load_official_source_registry()
+
+    def resolve(
+        self,
+        snapshot: OfficialSourceSnapshot,
+        *,
+        max_links: int = 8,
+    ) -> tuple[OfficialDiscoveryCandidate, ...]:
+        if not 1 <= max_links <= 20:
+            raise ValueError("max_links must be between 1 and 20")
+        media_type = snapshot.content_type.casefold().split(";", maxsplit=1)[0]
+        if media_type not in {"text/html", "application/xhtml+xml"}:
+            return ()
+        parser = _LinkParser()
+        parser.feed(snapshot.content.decode("utf-8", errors="replace"))
+        parser.close()
+        resolved: list[OfficialDiscoveryCandidate] = []
+        seen: set[str] = set()
+        for raw_link in parser.links:
+            url = urllib.parse.urljoin(snapshot.source_uri, raw_link)
+            if url in seen:
+                continue
+            try:
+                source = self.registry.authorize_url(url, snapshot.capability)
+            except OfficialSourceRegistryError:
+                continue
+            if source.source_id != snapshot.source.source_id:
+                continue
+            is_pdf = urllib.parse.urlsplit(url).path.casefold().endswith(".pdf")
+            if (
+                is_pdf and source.connector_kind is SourceConnectorKind.HTML
+            ) or (
+                not is_pdf and source.connector_kind is SourceConnectorKind.PDF
+            ):
+                continue
+            resolved.append(
+                OfficialDiscoveryCandidate(
+                    url=url,
+                    title=snapshot.title,
+                    published_at=snapshot.published_at,
+                    as_of=snapshot.as_of,
+                )
+            )
+            seen.add(url)
+            if len(resolved) == max_links:
+                break
+        return tuple(resolved)
+
+
+class StaticThenDynamicOfficialHttpTransport:
+    """Use bounded HTTP first and an injected isolated renderer only on thin shells."""
+
+    def __init__(
+        self,
+        renderer: OfficialDynamicPageRenderer,
+        *,
+        static_transport: OfficialHttpTransport | None = None,
+        minimum_static_bytes: int = 256,
+    ) -> None:
+        if minimum_static_bytes < 1:
+            raise ValueError("minimum_static_bytes must be positive")
+        self.static_transport = static_transport or UrllibOfficialHttpTransport()
+        self.renderer = renderer
+        self.minimum_static_bytes = minimum_static_bytes
+
+    def fetch(
+        self,
+        url: str,
+        *,
+        timeout_seconds: float,
+        max_bytes: int,
+    ) -> OfficialHttpResponse:
+        static = self.static_transport.fetch(
+            url,
+            timeout_seconds=timeout_seconds,
+            max_bytes=max_bytes,
+        )
+        media_type = static.content_type.casefold().split(";", maxsplit=1)[0]
+        if media_type not in {"text/html", "application/xhtml+xml"}:
+            return static
+        lowered = static.body.lower()
+        dynamic_markers = (b"__next_data__", b"id=\"__next\"", b"id=\"root\"", b"id=\"app\"")
+        if len(static.body) >= self.minimum_static_bytes and not any(
+            marker in lowered for marker in dynamic_markers
+        ):
+            return static
+        rendered = self.renderer.render(
+            url,
+            timeout_seconds=timeout_seconds,
+            max_bytes=max_bytes,
+        )
+        if rendered.final_url != url:
+            raise OfficialConnectorError("dynamic renderer changed the requested URL")
+        if not rendered.body or len(rendered.body) > max_bytes:
+            raise OfficialConnectorError("dynamic renderer returned invalid content")
+        return rendered
+
+
+class BoundedOfficialDiscovery:
+    """Validate search-engine candidates; search snippets never become evidence."""
+
+    def __init__(self, registry: OfficialSourceRegistry | None = None) -> None:
+        self.registry = registry or load_official_source_registry()
+
+    def authorize_candidates(
+        self,
+        candidates: tuple[OfficialDiscoveryCandidate, ...],
+        capability: KnowledgeCapability,
+        *,
+        max_candidates: int = 8,
+    ) -> tuple[OfficialDiscoveryCandidate, ...]:
+        if not 1 <= max_candidates <= 20:
+            raise ValueError("max_candidates must be between 1 and 20")
+        authorized: list[OfficialDiscoveryCandidate] = []
+        seen: set[str] = set()
+        for candidate in candidates:
+            if candidate.url in seen:
+                continue
+            try:
+                self.registry.authorize_url(candidate.url, capability)
+            except OfficialSourceRegistryError:
+                continue
+            authorized.append(candidate)
+            seen.add(candidate.url)
+            if len(authorized) == max_candidates:
+                break
+        return tuple(authorized)
+
+
+class OfficialSourceConnector:
+    """Fetch one already discovered official document into snapshot intake."""
+
+    def __init__(
+        self,
+        transport: OfficialHttpTransport,
+        registry: OfficialSourceRegistry | None = None,
+    ) -> None:
+        self.transport = transport
+        self.registry = registry or load_official_source_registry()
+
+    @staticmethod
+    def _content_type_allowed(entry: OfficialSourceEntry, content_type: str) -> bool:
+        normalized = content_type.casefold().split(";", maxsplit=1)[0].strip()
+        is_html = normalized in {"text/html", "application/xhtml+xml"}
+        is_pdf = normalized == "application/pdf"
+        if entry.connector_kind is SourceConnectorKind.HTML:
+            return is_html
+        if entry.connector_kind is SourceConnectorKind.PDF:
+            return is_pdf
+        return is_html or is_pdf
+
+    def fetch(
+        self,
+        candidate: OfficialDiscoveryCandidate,
+        request: OfficialFetchRequest,
+    ) -> OfficialSourceSnapshot:
+        if candidate.url != request.url:
+            raise OfficialConnectorError("fetch request differs from its discovered candidate")
+        source = self.registry.authorize_url(request.url, request.capability)
+        if (
+            request.published_at is not None
+            and request.published_at > self.registry.evidence_cutoff
+        ):
+            raise OfficialConnectorError("source was published after the evaluation cutoff")
+        if request.as_of is not None and request.as_of > self.registry.evidence_cutoff:
+            raise OfficialConnectorError("source evidence date exceeds the evaluation cutoff")
+
+        response = self.transport.fetch(
+            request.url,
+            timeout_seconds=request.timeout_seconds,
+            max_bytes=request.max_bytes,
+        )
+        if response.status_code != 200:
+            raise OfficialConnectorError("official source did not return HTTP 200")
+        # Redirects are disabled in the production transport.  Rechecking the final
+        # URL also protects injected test/alternate transports from changing hosts.
+        final_source = self.registry.authorize_url(response.final_url, request.capability)
+        if final_source.source_id != source.source_id:
+            raise OfficialConnectorError("official source changed trust domain while fetching")
+        if not self._content_type_allowed(source, response.content_type):
+            raise OfficialConnectorError("official source content type is not approved")
+        if not response.body or len(response.body) > request.max_bytes:
+            raise OfficialConnectorError("official source body is empty or oversized")
+        published_at = request.published_at or infer_official_publication_date(
+            response.final_url,
+            response.content_type,
+            response.body,
+        )
+        if source.publication_date_required and published_at is None:
+            raise OfficialConnectorError("official source requires an explicit publication date")
+        effective_as_of = request.as_of or published_at
+        if effective_as_of is None:
+            raise OfficialConnectorError("official source requires an explicit evidence date")
+        if published_at is not None and published_at > self.registry.evidence_cutoff:
+            raise OfficialConnectorError("source was published after the evaluation cutoff")
+        if effective_as_of > self.registry.evidence_cutoff:
+            raise OfficialConnectorError("source evidence date exceeds the evaluation cutoff")
+        return OfficialSourceSnapshot(
+            source=source,
+            capability=request.capability,
+            source_uri=response.final_url,
+            title=candidate.title,
+            content_type=response.content_type,
+            content=response.body,
+            content_sha256=hashlib.sha256(response.body).hexdigest(),
+            published_at=published_at,
+            as_of=effective_as_of,
+        )
+
+
+__all__ = [
+    "BoundedOfficialDiscovery",
+    "OfficialConnectorError",
+    "OfficialDiscoveryCandidate",
+    "OfficialFetchRequest",
+    "OfficialHttpResponse",
+    "OfficialHttpTransport",
+    "infer_official_publication_date",
+    "OfficialDocumentLinkResolver",
+    "OfficialDynamicPageRenderer",
+    "OfficialSourceConnector",
+    "OfficialSourceSnapshot",
+    "StaticThenDynamicOfficialHttpTransport",
+    "UrllibOfficialHttpTransport",
+]

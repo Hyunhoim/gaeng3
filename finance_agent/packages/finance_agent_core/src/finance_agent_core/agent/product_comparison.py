@@ -23,6 +23,14 @@ class ProductComparisonParseError(ValueError):
     """Raised when an exact two-product comparison cannot be compiled safely."""
 
 
+class ProductIdentityNotFoundError(ProductComparisonParseError):
+    """An explicit identity has no exact approved alias in the snapshot."""
+
+
+class ProductIdentityAmbiguousError(ProductComparisonParseError):
+    """An explicit identity resolves to more than one canonical product."""
+
+
 _FIELD_PATTERNS: dict[ProductFamily, tuple[tuple[str, tuple[str, ...]], ...]] = {
     ProductFamily.OVERSEAS_ETP: (
         ("total_expense_ratio_pct", (r"총\s*보수(?:율)?", r"보수율", r"expense\s*ratio")),
@@ -244,11 +252,11 @@ def resolve_exact_product_ids(
     for mention in mentions:
         candidates = sorted(alias_index.get(normalize_product_mention(mention), set()))
         if not candidates:
-            raise ProductComparisonParseError(
+            raise ProductIdentityNotFoundError(
                 f"상품 식별자 {mention!r}를 제공 데이터에서 정확히 찾지 못했습니다"
             )
         if len(candidates) != 1:
-            raise ProductComparisonParseError(
+            raise ProductIdentityAmbiguousError(
                 f"상품 식별자 {mention!r}가 여러 상품과 일치합니다: {candidates}"
             )
         resolved.append(candidates[0])

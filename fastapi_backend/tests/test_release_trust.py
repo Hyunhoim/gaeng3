@@ -29,8 +29,9 @@ def _repository_root() -> Path:
 def _fixture(
     tmp_path: Path,
     *,
-    answer_provider: str = "deterministic",
+    answer_provider: str = "hyperclova",
     queryplan_enabled: bool = False,
+    intent_analysis_enabled: bool = True,
     semantic_resolver_enabled: bool = False,
     adaptive_semantic_enabled: bool = False,
     fund_execution_policy: str = "locked",
@@ -41,7 +42,12 @@ def _fixture(
     source_commit = "b" * 40
     release_id = "finance-agent-test-v1"
     relation_artifact_sha256 = "c" * 64
-    uses_hcx = answer_provider == "hyperclova" or queryplan_enabled or semantic_resolver_enabled
+    uses_hcx = (
+        answer_provider == "hyperclova"
+        or queryplan_enabled
+        or intent_analysis_enabled
+        or semantic_resolver_enabled
+    )
     manifest = tmp_path / "agent-release-manifest.json"
     manifest_payload = {
         "schema_version": "1.2",
@@ -68,8 +74,10 @@ def _fixture(
                         "provider_revision_not_exposed" if uses_hcx else "not_used"
                     ),
                     "queryplan_operation_enabled": queryplan_enabled,
+                    "intent_analysis_operation_enabled": intent_analysis_enabled,
                     "semantic_resolver_operation_enabled": semantic_resolver_enabled,
-                    "grounded_answer_operation_enabled": answer_provider == "hyperclova",
+                    "grounded_answer_operation_enabled": False,
+                    "final_answer_operation_enabled": answer_provider == "hyperclova",
                 },
                 "retrieval": {
                     "schema_dense": (
@@ -144,6 +152,8 @@ def _fixture(
                 "FINANCE_RELATION_RETRIEVAL_ARTIFACT_SHA256=" + relation_artifact_sha256,
                 f"FINANCE_BACKEND_ANSWER_PROVIDER={answer_provider}",
                 "FINANCE_BACKEND_HCX_QUERY_PLAN_ENABLED=" + str(queryplan_enabled).lower(),
+                "FINANCE_BACKEND_HCX_INTENT_ANALYSIS_ENABLED="
+                + str(intent_analysis_enabled).lower(),
                 "FINANCE_BACKEND_HCX_SEMANTIC_RESOLVER_ENABLED="
                 + str(semantic_resolver_enabled).lower(),
                 "FINANCE_ADAPTIVE_SEMANTIC_ENABLED=" + str(adaptive_semantic_enabled).lower(),
@@ -259,7 +269,7 @@ def test_release_trust_verifies_image_manifest_and_binding(
     assert all("https://token.actions.githubusercontent.com" in call for call in calls)
 
 
-def test_release_trust_accepts_final_hcx_answer_only_profile(
+def test_release_trust_accepts_final_hcx_intent_and_answer_profile(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -350,6 +360,7 @@ def test_release_trust_accepts_manifest_emitted_by_release_builder(
         backend_root=_repository_root() / "fastapi_backend/app",
         answer_provider="hyperclova",
         hcx_queryplan_enabled=False,
+        hcx_intent_analysis_enabled=True,
         hcx_model="HCX-007",
         fund_execution_policy="locked",
         relation_retrieval_artifact=relation_artifact,
@@ -395,7 +406,8 @@ def test_release_trust_accepts_manifest_emitted_by_release_builder(
 
     assert len(calls) == 3
     assert manifest.components.knowledge_retrieval.relation.status == "activated"
-    assert manifest.components.runtime_features.model.grounded_answer_operation_enabled is True
+    assert manifest.components.runtime_features.model.grounded_answer_operation_enabled is False
+    assert manifest.components.runtime_features.model.final_answer_operation_enabled is True
     assert manifest.components.runtime_features.model.queryplan_operation_enabled is False
 
 
@@ -412,10 +424,7 @@ def test_release_trust_accepts_manifest_emitted_by_release_builder(
             "HCX_MODEL": "HCX-007",
         },
         {
-            "FINANCE_BACKEND_ANSWER_PROVIDER": "hyperclova",
-            "FINANCE_AGENT_LLM_MODE": "evaluation",
-            "LLM_PROVIDER": "hyperclova",
-            "HCX_MODEL": "HCX-007",
+            "FINANCE_BACKEND_HCX_INTENT_ANALYSIS_ENABLED": "false",
         },
     ],
 )
@@ -440,7 +449,7 @@ def test_release_trust_rejects_environment_that_differs_from_signed_profile(
 
     with pytest.raises(
         release_trust.ReleaseTrustError,
-        match="does not match the signed AgentReleaseManifest",
+        match="profile is invalid|does not match the signed AgentReleaseManifest",
     ):
         release_trust.verify_release_trust(env_file)
 
@@ -452,6 +461,7 @@ def test_release_trust_rejects_environment_that_differs_from_signed_profile(
     [
         "FINANCE_BACKEND_ANSWER_PROVIDER",
         "FINANCE_BACKEND_HCX_QUERY_PLAN_ENABLED",
+        "FINANCE_BACKEND_HCX_INTENT_ANALYSIS_ENABLED",
         "FINANCE_BACKEND_FUND_EXECUTION_POLICY",
         "HCX_TIMEOUT_SECONDS",
     ],

@@ -22,6 +22,7 @@ def test_zero_sentinels_and_sparse_rows_remain_explicit() -> None:
             "wu_inv_rgn": None,
             "cu_charge_rt": Decimal("0.000000"),
             "du_last_aum": Decimal("0.00"),
+            "du_er_1d": Decimal("0.000000"),
             "pd_trd_ccy": "USD",
             "cu_upt_dt": 20260614,
             "du_upt_dt": 20260616,
@@ -33,5 +34,7 @@ def test_zero_sentinels_and_sparse_rows_remain_explicit() -> None:
     assert record.quarantine_reason == "sparse_source_row"
     assert record.total_expense_ratio_quality is QualityStatus.UNKNOWN
     assert record.aum_quality is QualityStatus.UNKNOWN
+    assert record.one_day_return_pct == Decimal("0.000000")
+    assert record.one_day_return_quality is QualityStatus.VALID
     assert record.source_values["cu_charge_rt"] == "0.000000"
     assert record.static_as_of.isoformat() == "2026-06-14"

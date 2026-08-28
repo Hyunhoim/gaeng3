@@ -164,8 +164,10 @@ _SUPPORTED_FAMILIES: dict[RelationType, frozenset[ProductFamily]] = {
 }
 
 _UNSUPPORTED_RELATION_SCOPE = re.compile(
-    r"테마|편입\s*(?:종목|자산)|보유\s*(?:종목|자산)|구성\s*종목|"
-    r"약관|설명서|문서|공시",
+    r"섹터|테마|편입(?:한|하는|된|\s*(?:종목|자산))|"
+    r"보유(?:한|하는|하고\s*있는|된|\s*(?:종목|자산))|구성\s*종목|"
+    r"자회사|(?:연결|연관)\s*이력|관련\s*(?:된\s*)?(?:투자\s*)?상품|"
+    r"약관|설명서|문서|공시|(?:위험|리스크)\s*요인",
     re.IGNORECASE,
 )
 _PROHIBITED_ACTION = re.compile(
@@ -214,6 +216,8 @@ _RESIDUAL_TOKEN = re.compile(r"[0-9A-Za-z가-힣]+")
 def product_search_has_precedence(question: str) -> bool:
     """Keep filter/ranking product searches out of the single-relation endpoint."""
 
+    if _UNSUPPORTED_RELATION_SCOPE.search(question):
+        return False
     return bool(
         _relation_signals(question)
         and (

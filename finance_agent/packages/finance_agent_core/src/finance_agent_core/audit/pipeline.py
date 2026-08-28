@@ -178,12 +178,19 @@ class FieldStats:
 def _load_schema_columns(schema_path: Path) -> tuple[list[str], list[str]]:
     with XlsxStream(schema_path) as workbook:
         columns: list[str] = []
-        for row_number, cells in workbook.iter_rows(0):
-            if row_number < 3:
+        name_column: int | None = None
+        for _row_number, cells in workbook.iter_rows(0):
+            if name_column is None:
+                for column_index, value in cells.items():
+                    if _text(value) in {"컬럼명", "column_name"}:
+                        name_column = column_index
+                        break
                 continue
-            name = _text(cells.get(0))
+            name = _text(cells.get(name_column))
             if name:
                 columns.append(name)
+        if name_column is None:
+            raise ValueError(f"Schema workbook has no column-name header: {schema_path}")
         return columns, [name for name, _ in workbook.sheets]
 
 
@@ -266,8 +273,8 @@ def audit_dataset(
         fund_products: dict[str, dict[str, Any]] = {}
         fund_conflicts: Counter[str] = Counter()
         fund_rows_per_product: Counter[str] = Counter()
-        fund_attribute_codes: dict[str, set[str]] = {}
-        fund_product_fields = tuple(name for name in header if name != "prfd_attr_cd")
+        fund_attribute_count_mismatch_products = 0
+        fund_product_fields = tuple(header)
 
         for row_number, cells in rows:
             data_rows += 1
@@ -300,12 +307,12 @@ def audit_dataset(
                 invalid_key_rows.append(row_number)
 
             if spec.name == "bond":
-                quantity = _decimal(cells.get(index["BUYABLE_QUANTITY"]))
+                quantity = _decimal(cells.get(index["buyable_quantity"]))
                 if quantity is not None:
                     bond_counts["buyable_quantity_present"] += 1
                     if quantity > 0:
                         bond_counts["buyable_quantity_gt_zero"] += 1
-                        maturity = _date(cells.get(index["MAT_DT"]))
+                        maturity = _date(cells.get(index["mat_dt"]))
                         if maturity is not None and maturity >= snapshot_date:
                             bond_counts[
                                 "buyable_quantity_gt_zero_maturity_on_or_after_snapshot"
@@ -343,9 +350,17 @@ def audit_dataset(
                 item_number = validation_key
                 values = {name: cells.get(index[name]) for name in fund_product_fields}
                 fund_rows_per_product[item_number] += 1
-                fund_attribute_codes.setdefault(item_number, set()).add(
-                    _text(cells.get(index["prfd_attr_cd"]))
-                )
+                attribute_codes = {
+                    value.strip()
+                    for value in _text(cells.get(index["prfd_attr_cds"])).split(",")
+                    if value.strip()
+                }
+                declared_attribute_count = _decimal(cells.get(index["prfd_attr_cnt"]))
+                if (
+                    declared_attribute_count is None
+                    or declared_attribute_count != len(attribute_codes)
+                ):
+                    fund_attribute_count_mismatch_products += 1
                 existing = fund_products.get(item_number)
                 if existing is None:
                     fund_products[item_number] = values
@@ -390,10 +405,6 @@ def audit_dataset(
                     stats.add(product[name])
             product_fields = {name: stats.to_dict() for name, stats in product_stats.items()}
             rows_histogram = Counter(fund_rows_per_product.values())
-            attribute_count_mismatches = sum(
-                len(fund_attribute_codes[item_number]) != row_count
-                for item_number, row_count in fund_rows_per_product.items()
-            )
             scope_counts = Counter()
             for product in fund_products.values():
                 offering_scope = _text(product["prvo_pbff_desc"])
@@ -436,7 +447,7 @@ def audit_dataset(
                 "product_grain": {
                     "valid_logical_products": len(fund_products),
                     "primary_key": ["itm_no"],
-                    "raw_primary_key": ["itm_no", "prfd_attr_cd"],
+                    "raw_primary_key": ["itm_no"],
                     "rows_per_product": {
                         "min": min(fund_rows_per_product.values()),
                         "max": max(fund_rows_per_product.values()),
@@ -445,7 +456,9 @@ def audit_dataset(
                             for row_count, product_count in sorted(rows_histogram.items())
                         },
                     },
-                    "attribute_code_count_mismatch_products": attribute_count_mismatches,
+                    "attribute_code_count_mismatch_products": (
+                        fund_attribute_count_mismatch_products
+                    ),
                     "coverage": _product_coverage(fund_products, product_stats),
                     "fields": product_fields,
                     "field_conflict_counts": dict(sorted(fund_conflicts.items())),

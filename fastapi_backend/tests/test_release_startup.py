@@ -32,9 +32,17 @@ def _write_read_only(path: Path, data: bytes) -> None:
 
 
 def _release_settings(tmp_path: Path, **overrides: object) -> tuple[Settings, Path]:
+    key_file = tmp_path / "clovastudio-api-key"
+    key_file.write_text("nv-release-startup-test-secret\n", encoding="utf-8")
+    key_file.chmod(0o600)
     values: dict[str, object] = {
         "APP_ENV": "evaluation",
-        "FINANCE_BACKEND_ANSWER_PROVIDER": "deterministic",
+        "FINANCE_BACKEND_ANSWER_PROVIDER": "hyperclova",
+        "FINANCE_BACKEND_HCX_INTENT_ANALYSIS_ENABLED": True,
+        "FINANCE_AGENT_LLM_MODE": "evaluation",
+        "LLM_PROVIDER": "hyperclova",
+        "HCX_MODEL": "HCX-007",
+        "CLOVASTUDIO_API_KEY_FILE": key_file,
         "FINANCE_SOURCE_COMMIT": _SOURCE_COMMIT,
         "FINANCE_RUNTIME_IMAGE_REFERENCE": _IMAGE_REFERENCE,
         "FINANCE_DB_OVERSEAS_ETP": tmp_path / "overseas.sqlite3",
@@ -47,6 +55,9 @@ def _release_settings(tmp_path: Path, **overrides: object) -> tuple[Settings, Pa
     values.update(overrides)
     answer_provider = values["FINANCE_BACKEND_ANSWER_PROVIDER"]
     hcx_enabled = bool(values.get("FINANCE_BACKEND_HCX_QUERY_PLAN_ENABLED", False))
+    intent_enabled = bool(
+        values.get("FINANCE_BACKEND_HCX_INTENT_ANALYSIS_ENABLED", False)
+    )
     runtime = RuntimeReleaseInputs(
         environment="evaluation",
         source_commit=_SOURCE_COMMIT,
@@ -55,6 +66,7 @@ def _release_settings(tmp_path: Path, **overrides: object) -> tuple[Settings, Pa
         backend_root=Path(__file__).resolve().parents[1] / "app",
         answer_provider=answer_provider,  # type: ignore[arg-type]
         hcx_queryplan_enabled=hcx_enabled,
+        hcx_intent_analysis_enabled=intent_enabled,
         hcx_model=values.get("HCX_MODEL"),  # type: ignore[arg-type]
         fund_execution_policy=values.get(
             "FINANCE_BACKEND_FUND_EXECUTION_POLICY",
@@ -100,7 +112,8 @@ def test_resolve_runtime_release_matches_backend_code_and_profile(tmp_path: Path
 
     assert release is not None
     assert release.release_id == "finance-agent-test-v1"
-    assert release.manifest.components.runtime_features.model.provider == "disabled"
+    assert release.manifest.components.runtime_features.model.provider == "hyperclova"
+    assert release.manifest.components.runtime_features.model.intent_analysis_operation_enabled
 
 
 def test_deployment_startup_resolves_release_before_database_and_agent(
@@ -157,10 +170,7 @@ def test_release_profile_mismatch_stops_before_credential_or_agent_build(
     settings, _ = _release_settings(tmp_path)
     mismatched = settings.model_copy(
         update={
-            "answer_provider": "hyperclova",
-            "llm_mode": "evaluation",
-            "llm_provider": "hyperclova",
-            "hcx_model": "HCX-007",
+            "hcx_intent_analysis_enabled": False,
         }
     )
     calls: list[str] = []
@@ -242,8 +252,11 @@ def test_hcx_release_assembles_exact_provider_without_network_call(
     application = create_app(settings=settings)
 
     assert calls == ["release", "database", "credential"]
-    assert application.state.agent.answer_provider.provider_name == "hyperclova"
-    assert application.state.agent.answer_provider.model_name == "HCX-007"
+    assert application.state.agent.answer_provider is None
+    assert application.state.agent.intent_analysis_provider.provider_name == "hyperclova"
+    assert application.state.agent.intent_analysis_provider.model_name == "HCX-007"
+    assert application.state.agent.official_answer_provider.provider_name == "hyperclova"
+    assert application.state.agent.official_answer_provider.model_name == "HCX-007"
     assert (
         application.state.release_guard.manifest.components.runtime_features.model.provider
         == "hyperclova"

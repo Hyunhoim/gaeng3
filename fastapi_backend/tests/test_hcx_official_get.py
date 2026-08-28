@@ -9,18 +9,18 @@ from typing import Literal
 import pytest
 from fastapi.testclient import TestClient
 from fastapi_backend.scripts import rollback_drill
-from finance_agent_core.agent import IntentRouter, RoutedFinanceAgent, ServerQueryPlanCompiler
+from finance_agent_core.agent import RoutedFinanceAgent
 from finance_agent_core.agent.adaptive_semantic import AdaptiveSemanticResolver
 from finance_agent_core.agent.providers import (
     HyperClovaXCallObserver,
-    HyperClovaXQueryPlanProvider,
+    HyperClovaXFinalAnswerProvider,
+    HyperClovaXIntentAnalysisProvider,
     HyperClovaXSemanticResolverProvider,
     HyperClovaXSettings,
     HyperClovaXStructuredRequest,
 )
-from finance_agent_core.answering import HyperClovaXGroundedAnswerProvider
 from finance_agent_core.contracts.official import OfficialAnswerResponse
-from finance_agent_core.contracts.queryplan import ProductFamily, QueryPlan
+from finance_agent_core.contracts.queryplan import ProductFamily
 from finance_agent_core.domain import DatabaseManifest
 from finance_agent_core.evaluation.schema_embedding_artifacts import (
     SchemaEmbeddingArtifactGateEvidence,
@@ -127,6 +127,8 @@ class _SemanticResolverTransport:
                     "operation": "rank",
                     "direction": "desc",
                     "reason_code": "candidate_context_match",
+                    "evidence_spans": ["찍어낸 전체 물량"],
+                    "ambiguity_reason": "",
                 }
             ),
             "request_id": "fake-semantic-official-get",
@@ -166,19 +168,21 @@ def _adaptive_bond_agent(database: Path) -> tuple[RoutedFinanceAgent, _SemanticR
 class _OfficialFakeHyperClovaXTransport:
     def __init__(
         self,
-        plan: QueryPlan,
         *,
-        query_mode: FailureMode = "success",
+        intent_mode: FailureMode = "success",
         generation_mode: FailureMode = "success",
     ) -> None:
-        self.plan = plan
-        self.query_mode = query_mode
+        self.intent_mode = intent_mode
         self.generation_mode = generation_mode
         self.operations: list[str] = []
 
     def complete(self, request: HyperClovaXStructuredRequest) -> object:
         self.operations.append(request.operation)
-        mode = self.query_mode if request.operation == "query_plan" else self.generation_mode
+        mode = (
+            self.intent_mode
+            if request.operation == "intent_analysis"
+            else self.generation_mode
+        )
         if mode == "timeout":
             raise TimeoutError(_PRIVATE_FAILURE)
         if mode == "transport_error":
@@ -194,31 +198,33 @@ class _OfficialFakeHyperClovaXTransport:
                 "service_error": 500,
             }[mode]
             return self._response(status_code=status_code, content=None, usage=False)
-        if request.operation == "query_plan":
-            return self._response(content=self.plan.model_dump_json())
-        if request.operation == "grounded_answer":
-            return self._response(content=self._grounded_content(request))
-        raise AssertionError(f"unexpected HCX operation: {request.operation}")
-
-    def _grounded_content(self, request: HyperClovaXStructuredRequest) -> str:
-        marker = "검증된 입력:\n"
-        payload = json.loads(request.system_prompt.rsplit(marker, maxsplit=1)[1])
-        return json.dumps(
-            {
-                "schema_version": "1.0",
-                "lead": "검증된 조건과 데이터에 따라 결과를 정리했습니다.",
-                "products": [
+        if request.operation == "intent_analysis":
+            return self._response(
+                content=json.dumps(
                     {
-                        "result_ref": product["result_ref"],
-                        "evidence_fields": product["required_evidence_fields"],
-                        "explanation": payload["safe_explanation"],
-                    }
-                    for product in payload["products"]
-                ],
-                "acknowledged_warning_codes": payload["required_warning_codes"],
-            },
-            ensure_ascii=False,
-        )
+                        "schema_version": "1.0",
+                        "intent": "search",
+                        "product_families": ["bond"],
+                        "evidence_spans": ["국내채권", "보여줘"],
+                        "needs_clarification": False,
+                        "knowledge_requirements": [],
+                    },
+                    ensure_ascii=False,
+                )
+            )
+        if request.operation == "final_answer":
+            properties = request.response_schema["properties"]
+            return self._response(
+                content=json.dumps(
+                    {
+                        "schema_version": "1.0",
+                        "lead": properties["lead"]["enum"][0],
+                        "answer_body_sha256": properties["answer_body_sha256"]["enum"][0],
+                    },
+                    ensure_ascii=False,
+                )
+            )
+        raise AssertionError(f"unexpected HCX operation: {request.operation}")
 
     def _response(
         self,
@@ -243,27 +249,29 @@ def _make_bond_database(tmp_path: Path) -> Path:
             source_row=row,
             present_source_fields=40,
             values={
-                "PD_NO": f"KRTEST{row:06d}",
-                "PD_EXG_MKT": "장내",
-                "PD_NM": f"테스트채권 {row}",
-                "PD_ABRV_NM": f"테스트 {row}",
-                "PD_PBCM": "테스트발행사",
-                "STD_PD_MCLS_NM": "회사채",
-                "STD_PD_SCLS_NM": "일반사채",
-                "BD_KND": "일반회사채",
-                "CURR_CD": "KRW",
-                "ISU_BAL_AMT": 1_000_000_000,
-                "ISU_DT": 20260101,
-                "MAT_DT": 20280101,
-                "SRFC_IRT": "3.5",
-                "PD_RISK_GCD": 4,
-                "PD_STD_INFO_UPDATE": 20260224,
-                "BUY_YIELD": buy_yield,
-                "AFTER_TAX_YIELD": "3.0",
-                "BUYABLE_QUANTITY": 100,
-                "REMAINING_DAYS": 9999,
-                "DUR": "0.5",
-                "CRD_GRD": "AA-",
+                "pd_no": f"KRTEST{row:06d}",
+                "pd_exg_mkt": "장내",
+                "info_base_dt": 20260824,
+                "info_seq": row - 1,
+                "pd_nm": f"테스트채권 {row}",
+                "pd_abrv_nm": f"테스트 {row}",
+                "pd_pbcm": "테스트발행사",
+                "std_pd_mcls_nm": "회사채",
+                "std_pd_scls_nm": "일반사채",
+                "bd_knd": "일반회사채",
+                "curr_cd": "KRW",
+                "isu_bal_amt": 1_000_000_000,
+                "isu_dt": 20260101,
+                "mat_dt": 20280101,
+                "srfc_irt": "3.5",
+                "pd_risk_gcd": 4,
+                "pd_std_info_update": 20260224,
+                "buy_yield": buy_yield,
+                "after_tax_yield": "3.0",
+                "buyable_quantity": 100,
+                "remaining_days": 9999,
+                "dur": "0.5",
+                "crd_grd": "AA-",
             },
         )
         for row, buy_yield in ((2, "4.5"), (3, "3.5"))
@@ -274,11 +282,11 @@ def _make_bond_database(tmp_path: Path) -> Path:
         records,
         DatabaseManifest(
             dataset="bond",
-            registry_schema_version="1.2",
+            registry_schema_version="1.4",
             source_file_name="synthetic_official_hcx_bond.xlsx",
             source_file_sha256="c" * 64,
             source_file_size_bytes=1234,
-            source_snapshot_date=date(2026, 7, 11),
+            source_snapshot_date=date(2026, 8, 24),
             total_rows=len(records),
             searchable_rows=len(records),
             quarantined_rows=0,
@@ -292,17 +300,12 @@ def _application(
     monkeypatch: pytest.MonkeyPatch,
     *,
     question_id: str,
-    query_mode: FailureMode = "success",
+    intent_mode: FailureMode = "success",
     generation_mode: FailureMode = "success",
-    query_plan_enabled: bool = True,
-    answer_enabled: bool = True,
 ):
     database = _make_bond_database(tmp_path)
-    decision = IntentRouter().route(_QUESTION, question_id)
-    plan = ServerQueryPlanCompiler({ProductFamily.BOND: database}).compile(decision)
     transport = _OfficialFakeHyperClovaXTransport(
-        plan,
-        query_mode=query_mode,
+        intent_mode=intent_mode,
         generation_mode=generation_mode,
     )
     audit_path = tmp_path / "audit" / "events.jsonl"
@@ -325,25 +328,17 @@ def _application(
         observer = HyperClovaXCallObserver(audit_sink)
         return RoutedFinanceAgent(
             {ProductFamily.BOND: database},
-            query_plan_provider=(
-                HyperClovaXQueryPlanProvider(
-                    _HCX_SETTINGS,
-                    transport,
-                    on_call=observer,
-                )
-                if query_plan_enabled
-                else None
+            intent_analysis_provider=HyperClovaXIntentAnalysisProvider(
+                _HCX_SETTINGS,
+                transport,
+                on_call=observer,
             ),
-            answer_provider=(
-                HyperClovaXGroundedAnswerProvider(
-                    _HCX_SETTINGS,
-                    transport,
-                    on_call=observer,
-                )
-                if answer_enabled
-                else None
+            official_answer_provider=HyperClovaXFinalAnswerProvider(
+                _HCX_SETTINGS,
+                transport,
+                on_call=observer,
             ),
-            hclx_planning_enabled=query_plan_enabled,
+            require_official_hclx=True,
             audit_sink=audit_sink,
         )
 
@@ -373,7 +368,7 @@ def _assert_official_contract(response, *, question_id: str) -> dict[str, object
     return json.loads(body.think_trace)
 
 
-def test_official_get_admits_hclx_semantics_only_after_dense_ambiguity(
+def test_official_get_uses_unique_server_evidence_without_hclx(
     tmp_path: Path,
 ) -> None:
     database = _make_bond_database(tmp_path)
@@ -388,13 +383,13 @@ def test_official_get_admits_hclx_semantics_only_after_dense_ambiguity(
             "/answer",
             params={
                 "question_id": "adaptive-official-get",
-                "question": "체급이 큰 국내채권을 2개 보여줘",
+                "question": "발행사가 찍어낸 전체 물량이 큰 국내채권을 2개 보여줘",
             },
         )
 
     body = OfficialAnswerResponse.model_validate(response.json())
     assert response.status_code == 200
-    assert transport.operations == ["semantic_resolver"]
+    assert transport.operations == []
     assert body.question_id == "adaptive-official-get"
     assert "issue_amount" in body.retrieved_context
     assert "제공 데이터" in body.answer
@@ -448,89 +443,15 @@ def test_build_agent_wires_release_bound_kure_without_eager_inference(
     assert agent.router.adaptive_semantic_enabled is True
 
 
-@pytest.mark.parametrize(
-    ("query_plan_enabled", "answer_enabled", "expected_path", "expected_operations"),
-    [
-        (False, False, rollback_drill._EXPECTED_PROBE_AUDIT_PATH, []),
-        (
-            False,
-            True,
-            rollback_drill._EXPECTED_HCLX_ANSWER_PROBE_AUDIT_PATH,
-            ["grounded_answer"],
-        ),
-        (
-            True,
-            True,
-            rollback_drill._EXPECTED_HCLX_QUERYPLAN_ANSWER_PROBE_AUDIT_PATH,
-            ["query_plan", "grounded_answer"],
-        ),
-    ],
-)
-def test_official_get_success_paths_equal_the_frozen_rollback_audit_contract(
+def test_official_get_uses_hclx_intent_and_final_generation_audit_contract(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    query_plan_enabled: bool,
-    answer_enabled: bool,
-    expected_path: tuple[tuple[str, str, str], ...],
-    expected_operations: list[str],
 ) -> None:
-    question_id = f"Q-PATH-{int(query_plan_enabled)}-{int(answer_enabled)}"
+    question_id = "Q-OFFICIAL-HCLX-PATH"
     application, audit_path, transport = _application(
         tmp_path,
         monkeypatch,
         question_id=question_id,
-        query_plan_enabled=query_plan_enabled,
-        answer_enabled=answer_enabled,
-    )
-
-    with TestClient(application) as client:
-        response = client.get(
-            "/answer",
-            params={"question_id": question_id, "question": _QUESTION},
-        )
-
-    assert response.status_code == 200
-    trace = _assert_official_contract(response, question_id=question_id)
-    assert trace["status"] == "success"
-    assert transport.operations == expected_operations
-    observed_path = tuple(
-        (event.stage.value, event.outcome.value, event.reason_code) for event in _events(audit_path)
-    )
-    assert observed_path == expected_path
-
-
-@pytest.mark.parametrize(
-    ("mode", "reason", "counter"),
-    [
-        (
-            "authentication_error",
-            "planning_authentication_failed",
-            MetricCounter.HCLX_AUTHENTICATION_FAILURES,
-        ),
-        ("rate_limited", "planning_rate_limited", MetricCounter.HCLX_RATE_LIMITS),
-        ("service_error", "planning_service_failed", MetricCounter.HCLX_SERVICE_FAILURES),
-        ("transport_error", "planning_transport_failed", MetricCounter.HCLX_TRANSPORT_FAILURES),
-        ("response_error", "planning_response_rejected", MetricCounter.HCLX_RESPONSE_FAILURES),
-        (
-            "structured_response_error",
-            "planning_response_rejected",
-            MetricCounter.HCLX_RESPONSE_FAILURES,
-        ),
-    ],
-)
-def test_official_get_queryplan_failures_use_the_safe_server_plan(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    mode: FailureMode,
-    reason: str,
-    counter: MetricCounter,
-) -> None:
-    question_id = f"Q-PLAN-{mode}"
-    application, audit_path, transport = _application(
-        tmp_path,
-        monkeypatch,
-        question_id=question_id,
-        query_mode=mode,
     )
 
     with TestClient(application) as client:
@@ -543,7 +464,57 @@ def test_official_get_queryplan_failures_use_the_safe_server_plan(
     trace = _assert_official_contract(response, question_id=question_id)
     assert trace["status"] == "success"
     assert trace["answer_mode"] == "llm_grounded"
-    assert transport.operations == ["query_plan", "grounded_answer"]
+    assert transport.operations == ["intent_analysis", "final_answer"]
+    observed_path = tuple(
+        (event.stage.value, event.outcome.value, event.reason_code) for event in _events(audit_path)
+    )
+    assert observed_path == rollback_drill._EXPECTED_HCLX_ANSWER_PROBE_AUDIT_PATH
+
+
+@pytest.mark.parametrize(
+    ("mode", "reason", "counter"),
+    [
+        (
+            "authentication_error",
+            "intent_authentication_failed",
+            MetricCounter.HCLX_AUTHENTICATION_FAILURES,
+        ),
+        ("rate_limited", "intent_rate_limited", MetricCounter.HCLX_RATE_LIMITS),
+        ("service_error", "intent_service_failed", MetricCounter.HCLX_SERVICE_FAILURES),
+        ("transport_error", "intent_transport_failed", MetricCounter.HCLX_TRANSPORT_FAILURES),
+        ("response_error", "intent_response_rejected", MetricCounter.HCLX_RESPONSE_FAILURES),
+        (
+            "structured_response_error",
+            "intent_response_rejected",
+            MetricCounter.HCLX_RESPONSE_FAILURES,
+        ),
+    ],
+)
+def test_official_get_intent_failures_stop_before_data_execution(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    mode: FailureMode,
+    reason: str,
+    counter: MetricCounter,
+) -> None:
+    question_id = f"Q-PLAN-{mode}"
+    application, audit_path, transport = _application(
+        tmp_path,
+        monkeypatch,
+        question_id=question_id,
+        intent_mode=mode,
+    )
+
+    with TestClient(application) as client:
+        response = client.get(
+            "/answer",
+            params={"question_id": question_id, "question": _QUESTION},
+        )
+
+    assert response.status_code == 503
+    trace = _assert_official_contract(response, question_id=question_id)
+    assert trace["status"] == "error"
+    assert transport.operations == ["intent_analysis"]
     events = _events(audit_path)
     assert any(
         event.stage is AuditStage.HCLX
@@ -553,14 +524,15 @@ def test_official_get_queryplan_failures_use_the_safe_server_plan(
     )
     counters = application.state.audit_sink.metrics.snapshot().counters
     assert counters[counter.value] == 1
-    assert counters[MetricCounter.HCLX_SUCCESSES.value] == 1
+    assert counters.get(MetricCounter.HCLX_SUCCESSES.value, 0) == 0
+    assert not any(event.stage in {AuditStage.SQL, AuditStage.ORACLE} for event in events)
     serialized = audit_path.read_text(encoding="utf-8")
     assert _PRIVATE_FAILURE not in serialized
     assert question_id not in serialized
     assert _QUESTION not in serialized
 
 
-def test_official_get_queryplan_timeout_returns_504_before_oracle_and_generation(
+def test_official_get_intent_timeout_returns_504_before_oracle_and_generation(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -569,7 +541,7 @@ def test_official_get_queryplan_timeout_returns_504_before_oracle_and_generation
         tmp_path,
         monkeypatch,
         question_id=question_id,
-        query_mode="timeout",
+        intent_mode="timeout",
     )
 
     with TestClient(application) as client:
@@ -581,12 +553,12 @@ def test_official_get_queryplan_timeout_returns_504_before_oracle_and_generation
     assert response.status_code == 504
     trace = _assert_official_contract(response, question_id=question_id)
     assert trace["control_code"] == "request_timeout"
-    assert transport.operations == ["query_plan"]
+    assert transport.operations == ["intent_analysis"]
     events = _events(audit_path)
     assert any(
         event.stage is AuditStage.HCLX
         and event.outcome is AuditOutcome.TIMED_OUT
-        and event.reason_code == "deadline_exceeded"
+        and event.reason_code == "intent_timed_out"
         for event in events
     )
     assert not any(event.stage in {AuditStage.SQL, AuditStage.ORACLE} for event in events)
@@ -600,44 +572,49 @@ def test_official_get_queryplan_timeout_returns_504_before_oracle_and_generation
     [
         (
             "authentication_error",
-            "generation_authentication_failed",
+            "final_generation_authentication_failed",
             AuditOutcome.FAILED,
             MetricCounter.HCLX_AUTHENTICATION_FAILURES,
         ),
         (
             "rate_limited",
-            "generation_rate_limited",
+            "final_generation_rate_limited",
             AuditOutcome.FAILED,
             MetricCounter.HCLX_RATE_LIMITS,
         ),
         (
             "service_error",
-            "generation_service_failed",
+            "final_generation_service_failed",
             AuditOutcome.FAILED,
             MetricCounter.HCLX_SERVICE_FAILURES,
         ),
         (
             "transport_error",
-            "generation_transport_failed",
+            "final_generation_transport_failed",
             AuditOutcome.FAILED,
             MetricCounter.HCLX_TRANSPORT_FAILURES,
         ),
         (
             "response_error",
-            "generation_response_rejected",
+            "final_generation_response_rejected",
             AuditOutcome.FAILED,
             MetricCounter.HCLX_RESPONSE_FAILURES,
         ),
         (
             "structured_response_error",
-            "generation_response_rejected",
+            "final_generation_response_rejected",
             AuditOutcome.FAILED,
             MetricCounter.HCLX_RESPONSE_FAILURES,
         ),
-        ("timeout", "generation_timed_out", AuditOutcome.TIMED_OUT, MetricCounter.HCLX_TIMEOUTS),
+        (
+            "timeout",
+            "final_generation_timed_out",
+            AuditOutcome.TIMED_OUT,
+            MetricCounter.HCLX_TIMEOUTS,
+        ),
     ],
 )
-def test_official_get_generation_failures_return_verified_deterministic_fallback(
+def test_official_get_generation_failures_never_serve_deterministic_fallback(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     mode: FailureMode,
@@ -651,7 +628,6 @@ def test_official_get_generation_failures_return_verified_deterministic_fallback
         monkeypatch,
         question_id=question_id,
         generation_mode=mode,
-        query_plan_enabled=False,
     )
 
     with TestClient(application) as client:
@@ -660,15 +636,15 @@ def test_official_get_generation_failures_return_verified_deterministic_fallback
             params={"question_id": question_id, "question": _QUESTION},
         )
 
-    assert response.status_code == 200
+    assert response.status_code == (504 if mode == "timeout" else 503)
     trace = _assert_official_contract(response, question_id=question_id)
-    assert trace["status"] == "success"
-    assert trace["answer_mode"] == "deterministic_fallback"
-    assert trace["fallback_used"] is True
-    context = json.loads(response.json()["retrieved_context"])
-    assert len(context["evidence"]["products"]) == 2
-    assert context["citations"]
-    assert transport.operations == ["grounded_answer"]
+    if mode == "timeout":
+        assert trace["control_code"] == "request_timeout"
+    else:
+        assert trace["status"] == "error"
+        assert trace["fallback_used"] is False
+    assert transport.operations == ["intent_analysis", "final_answer"]
+    assert "테스트채권" not in response.json()["answer"]
     events = _events(audit_path)
     assert any(
         event.stage is AuditStage.HCLX and event.outcome is outcome and event.reason_code == reason
@@ -676,7 +652,7 @@ def test_official_get_generation_failures_return_verified_deterministic_fallback
     )
     counters = application.state.audit_sink.metrics.snapshot().counters
     assert counters[counter.value] == 1
-    assert counters.get(MetricCounter.HCLX_SUCCESSES.value, 0) == 0
+    assert counters[MetricCounter.HCLX_SUCCESSES.value] == 1
     serialized = audit_path.read_text(encoding="utf-8")
     assert _PRIVATE_FAILURE not in serialized
     assert question_id not in serialized

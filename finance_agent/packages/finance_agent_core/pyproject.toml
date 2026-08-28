@@ -11,6 +11,7 @@ requires-python = ">=3.12"
 dependencies = [
     "pydantic>=2.13,<3",
     "PyYAML>=6,<7",
+    "pypdf==6.16.1",
 ]
 
 [project.scripts]
@@ -55,9 +56,14 @@ finance-benchmark-schema-embeddings = "finance_agent_core.evaluation.schema_embe
 finance-analyze-schema-embeddings = "finance_agent_core.evaluation.schema_embedding_analysis_cli:main"
 finance-evaluate-schema-embedding-external-v2 = "finance_agent_core.evaluation.schema_embedding_external_v2_cli:main"
 finance-benchmark-schema-embedding-runtime = "finance_agent_core.evaluation.schema_embedding_runtime_benchmark:main"
+finance-evaluate-schema-dense-residual = "finance_agent_core.evaluation.schema_dense_residual_holdout_cli:main"
+finance-evaluate-schema-dense-hclx-ab = "finance_agent_core.evaluation.schema_dense_hclx_ab:main"
 finance-evaluate-approved-sql = "finance_agent_core.evaluation.approved_sql_baseline_cli:main"
 finance-benchmark-bm25-contract = "finance_agent_core.evaluation.bm25_contract_benchmark_cli:main"
 finance-corpus = "finance_agent_core.retrieval.corpus_cli:main"
+finance-collect-pending-corpus = "finance_agent_core.retrieval.pending_corpus_cli:main"
+finance-build-pending-document-dense = "finance_agent_core.retrieval.document_dense_cli:main"
+finance-check-external-preblind = "finance_agent_core.evaluation.external_knowledge_preblind:main"
 finance-relations = "finance_agent_core.retrieval.relation_cli:main"
 finance-build-agent-release = "finance_agent_core.release_cli:main"
 finance-validate-audit = "finance_agent_core.audit_validation_cli:main"
@@ -71,6 +77,9 @@ where = ["src"]
     "field_registry.yaml",
     "capability_matrix.json",
     "approved_dataset_manifest.json",
+    "approved_knowledge_coverage_manifest.json",
+    "approved_source_registry.json",
+    "external_knowledge_source_catalog.json",
 ]
 "finance_agent_core.contracts" = ["queryplan.hcx.schema.json"]
 "finance_agent_core.contracts.examples" = ["*.json"]

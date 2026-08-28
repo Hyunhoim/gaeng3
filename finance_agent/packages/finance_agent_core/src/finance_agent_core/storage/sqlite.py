@@ -56,6 +56,9 @@ CREATE TABLE overseas_etp_products (
     aum_minor_units INTEGER,
     aum_quality TEXT NOT NULL,
     aum_quality_reason TEXT,
+    one_day_return_micro_pct INTEGER,
+    one_day_return_quality TEXT NOT NULL,
+    one_day_return_quality_reason TEXT,
     trading_currency TEXT NOT NULL,
     static_as_of TEXT NOT NULL,
     dynamic_as_of TEXT NOT NULL
@@ -73,6 +76,9 @@ ON overseas_etp_products (
 
 CREATE INDEX idx_overseas_etp_aum
 ON overseas_etp_products (aum_minor_units DESC);
+
+CREATE INDEX idx_overseas_etp_one_day_return
+ON overseas_etp_products (one_day_return_micro_pct DESC);
 """
 
 INSERT_SQL = """
@@ -101,11 +107,14 @@ INSERT INTO overseas_etp_products (
     aum_minor_units,
     aum_quality,
     aum_quality_reason,
+    one_day_return_micro_pct,
+    one_day_return_quality,
+    one_day_return_quality_reason,
     trading_currency,
     static_as_of,
     dynamic_as_of
 ) VALUES (
-    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
 )
 """
 
@@ -162,6 +171,9 @@ def _database_values(record: NormalizedOverseasEtpRecord) -> tuple[object, ...]:
         _scaled_integer(record.aum, AUM_SCALE, "aum"),
         record.aum_quality.value,
         record.aum_quality_reason,
+        _scaled_integer(record.one_day_return_pct, FEE_SCALE, "one_day_return_pct"),
+        record.one_day_return_quality.value,
+        record.one_day_return_quality_reason,
         record.trading_currency,
         record.static_as_of.isoformat(),
         record.dynamic_as_of.isoformat(),
@@ -359,6 +371,13 @@ def row_to_record(
         aum=None if row["aum_minor_units"] is None else Decimal(row["aum_minor_units"]) / AUM_SCALE,
         aum_quality=QualityStatus(row["aum_quality"]),
         aum_quality_reason=row["aum_quality_reason"],
+        one_day_return_pct=(
+            None
+            if row["one_day_return_micro_pct"] is None
+            else Decimal(row["one_day_return_micro_pct"]) / FEE_SCALE
+        ),
+        one_day_return_quality=QualityStatus(row["one_day_return_quality"]),
+        one_day_return_quality_reason=row["one_day_return_quality_reason"],
         trading_currency=row["trading_currency"],
         static_as_of=row["static_as_of"],
         dynamic_as_of=row["dynamic_as_of"],

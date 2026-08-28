@@ -804,7 +804,7 @@ def build_lexical_hints(
             [
                 ("close_price", ("종가", "마감 가격")),
                 ("daily_trading_value", ("일 거래대금", "거래대금")),
-                ("one_day_return_pct", ("1일 수익률",)),
+                ("one_day_return_pct", ("1일 수익률", "하루 수익률", "일간 수익률")),
                 ("one_month_return_pct", ("1개월 수익률", "1M 수익률")),
                 ("three_month_return_pct", ("3개월 수익률", "3M 수익률")),
                 ("six_month_return_pct", ("6개월 수익률", "6M 수익률")),
@@ -1013,7 +1013,10 @@ def build_lexical_hints(
                     r"(?:큰|작은|높은|낮은|많은|적은|순)",
                     "daily_trading_value",
                 ),
-                (r"1일 수익률.{0,80}(?:큰|작은|높은|낮은|순)", "one_day_return_pct"),
+                (
+                    r"(?:1일|하루|일간) 수익률.{0,80}(?:큰|작은|높은|낮은|순)",
+                    "one_day_return_pct",
+                ),
                 (
                     r"(?:1개월|1M) 수익률.{0,80}(?:큰|작은|높은|낮은|순)",
                     "one_month_return_pct",
@@ -1239,7 +1242,9 @@ def build_lexical_hints(
                 r"신용등급.{0,20}?(?:높은|낮은)",
                 question,
             )
-            if vague_ordered_rating:
+            if vague_ordered_rating and not any(
+                item["field"] == "credit_rating" for item in required
+            ):
                 required[:] = [item for item in required if item["field"] != "credit_rating"]
                 unsupported_spans.append(vague_ordered_rating.group(0))
     ambiguity_spans = [

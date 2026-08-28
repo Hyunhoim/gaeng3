@@ -71,6 +71,8 @@ _FORBIDDEN_ENVIRONMENT_NAMES = (
     "CLOVASTUDIO_API_KEY",
     "ENABLE_NON_HCX_TEST_LLM",
     "LOCAL_TEST_LLM_BASE_URL",
+    "NAVER_API_HUB_KEY",
+    "NAVER_API_HUB_KEY_ID",
 )
 _MODEL_SUFFIXES = {".bin", ".ckpt", ".gguf", ".onnx", ".pt", ".pth", ".safetensors"}
 _APP_FORBIDDEN_NAMES = {".env", ".env.release"}
@@ -325,6 +327,11 @@ def build_report() -> dict[str, object]:
             "inline HyperCLOVA credential is forbidden",
             APP_ENV="evaluation",
             CLOVASTUDIO_API_KEY="must-not-be-loaded",
+        ),
+        "evaluation_rejects_inline_naver_api_hub_key": _settings_reject(
+            "inline NAVER API HUB credential is forbidden",
+            APP_ENV="evaluation",
+            NAVER_API_HUB_KEY="must-not-be-loaded",
         ),
         "evaluation_rejects_local_answer_provider": _settings_reject(
             "FINANCE_BACKEND_ANSWER_PROVIDER=local_test is allowed only in development",

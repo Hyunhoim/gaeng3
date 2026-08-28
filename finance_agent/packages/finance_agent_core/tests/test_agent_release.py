@@ -116,7 +116,7 @@ def test_release_manifest_pins_code_contract_prompt_data_model_and_disabled_inde
     assert len(manifest.components.code.core_package_sha256) == 64
     assert len(manifest.components.code.backend_package_sha256) == 64
     assert manifest.components.queryplan.schema_version == "1.0"
-    assert manifest.components.field_registry_schema_version == "1.3"
+    assert manifest.components.field_registry_schema_version == "1.4"
     assert manifest.components.approved_datasets.snapshots.keys() == {
         "bond",
         "domestic_etp",
@@ -618,6 +618,8 @@ def test_hcx_release_is_explicit_about_provider_revision_limit() -> None:
     assert profile.provider == "hyperclova"
     assert profile.model_id == "HCX-007"
     assert profile.revision_status == "provider_revision_not_exposed"
+    assert profile.grounded_answer_operation_enabled is False
+    assert profile.final_answer_operation_enabled is True
 
 
 def test_rollback_state_is_typed_instead_of_not_applicable() -> None:

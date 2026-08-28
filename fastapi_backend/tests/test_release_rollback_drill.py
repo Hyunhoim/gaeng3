@@ -200,6 +200,7 @@ def _configure_hclx_pair(
         )
         contents += "\n".join(
             [
+                "FINANCE_BACKEND_HCX_INTENT_ANALYSIS_ENABLED=true",
                 "HCX_MODEL=HCX-007",
                 "HCX_TIMEOUT_SECONDS=45",
                 f"CLOVASTUDIO_API_KEY_HOST_FILE={secret}",
@@ -402,7 +403,7 @@ def test_rollback_drill_rejects_hcx_secret_on_deterministic_release(tmp_path: Pa
     assert "must not configure HCLX credentials" in completed.stderr
 
 
-@pytest.mark.parametrize("query_plan_enabled", [False, True])
+@pytest.mark.parametrize("query_plan_enabled", [False])
 def test_rollback_drill_dry_run_accepts_frozen_hclx_profiles_without_calling_docker(
     tmp_path: Path,
     query_plan_enabled: bool,
@@ -452,7 +453,7 @@ def test_rollback_drill_rejects_queryplan_only_hclx_profile(tmp_path: Path) -> N
     )
 
     assert completed.returncode == 2
-    assert "QueryPlan-only HCLX profile" in completed.stderr
+    assert "full HCLX QueryPlan generation is retired" in completed.stderr
 
 
 @pytest.mark.parametrize(
@@ -1071,7 +1072,7 @@ def test_hclx_execute_requires_explicit_billable_call_authorization(tmp_path: Pa
 
 @pytest.mark.parametrize(
     ("query_plan_enabled", "expected_event_count"),
-    [(False, 27), (True, 28)],
+    [(False, 29)],
 )
 def test_fake_docker_hclx_drill_verifies_frozen_provider_audit_path(
     tmp_path: Path,

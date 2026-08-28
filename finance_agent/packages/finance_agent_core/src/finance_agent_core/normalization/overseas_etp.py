@@ -22,11 +22,14 @@ SOURCE_COLUMNS = (
     "wu_inv_rgn",
     "cu_charge_rt",
     "du_last_aum",
+    "du_er_1d",
     "pd_trd_ccy",
     "cu_upt_dt",
     "du_upt_dt",
 )
 SPARSE_PRESENT_FIELD_THRESHOLD = 40
+MICRO_PRECISION = Decimal("0.000001")
+MONEY_PRECISION = Decimal("0.01")
 
 
 class NormalizationError(ValueError):
@@ -62,6 +65,17 @@ def _decimal(value: Any, *, field: str, required: bool = False) -> Decimal | Non
         return Decimal(text.replace(",", ""))
     except InvalidOperation as error:
         raise NormalizationError(f"{field} is not numeric: {text!r}") from error
+
+
+def _quantized_decimal(
+    value: Any,
+    *,
+    field: str,
+    precision: Decimal,
+    required: bool = False,
+) -> Decimal | None:
+    parsed = _decimal(value, field=field, required=required)
+    return None if parsed is None else parsed.quantize(precision)
 
 
 def _date(value: Any, *, field: str) -> dt.date:
@@ -127,7 +141,12 @@ def normalize_overseas_etp_row(
     assert product_name is not None
     assert trading_currency is not None
 
-    fee = _decimal(values.get("cu_charge_rt"), field="cu_charge_rt", required=True)
+    fee = _quantized_decimal(
+        values.get("cu_charge_rt"),
+        field="cu_charge_rt",
+        precision=MICRO_PRECISION,
+        required=True,
+    )
     assert fee is not None
     if fee < 0:
         raise NormalizationError("cu_charge_rt cannot be negative")
@@ -138,7 +157,9 @@ def normalize_overseas_etp_row(
         fee_quality = QualityStatus.VALID
         fee_reason = None
 
-    aum = _decimal(values.get("du_last_aum"), field="du_last_aum")
+    aum = _quantized_decimal(
+        values.get("du_last_aum"), field="du_last_aum", precision=MONEY_PRECISION
+    )
     if aum is not None and aum < 0:
         raise NormalizationError("du_last_aum cannot be negative")
     if aum is None:
@@ -150,6 +171,18 @@ def normalize_overseas_etp_row(
     else:
         aum_quality = QualityStatus.VALID
         aum_reason = None
+
+    one_day_return = _quantized_decimal(
+        values.get("du_er_1d"),
+        field="du_er_1d",
+        precision=MICRO_PRECISION,
+    )
+    if one_day_return is None:
+        one_day_return_quality = QualityStatus.UNKNOWN
+        one_day_return_reason = "one_day_return_missing"
+    else:
+        one_day_return_quality = QualityStatus.VALID
+        one_day_return_reason = None
 
     is_quarantined = present_source_fields < SPARSE_PRESENT_FIELD_THRESHOLD
     quarantine_reason = "sparse_source_row" if is_quarantined else None
@@ -178,6 +211,9 @@ def normalize_overseas_etp_row(
         aum=aum,
         aum_quality=aum_quality,
         aum_quality_reason=aum_reason,
+        one_day_return_pct=one_day_return,
+        one_day_return_quality=one_day_return_quality,
+        one_day_return_quality_reason=one_day_return_reason,
         trading_currency=trading_currency,
         static_as_of=_date(values.get("cu_upt_dt"), field="cu_upt_dt"),
         dynamic_as_of=_date(values.get("du_upt_dt"), field="du_upt_dt"),

@@ -1,6 +1,6 @@
 # HyperCLOVA X provider 계약
 
-마지막 갱신: 2026-08-21
+마지막 갱신: 2026-08-25
 
 이 문서는 HyperCLOVA X provider, 공식 HTTP transport와 FastAPI 연결 경계를
 설명한다. 2026-08-11 NAVER Cloud 공식 문서 기준 endpoint·Bearer 인증·Structured
@@ -8,6 +8,10 @@ Outputs 요청과 응답 형식을 반영했다. 2026-08-14에는 QueryPlan을 �
 경로에서 실제 credential로 HCX-007 호출 3회를 수행했다. 고정 2,048 token 요청의
 timeout 1회와 출력 예산 보완 뒤 DETAIL·SEARCH 성공 2회를 확인했으며, 이 결과는
 연구실 검증이지 clean NCP release 또는 HCLX planning 품질 증거가 아니다.
+
+2026-08-24 운영 공지에 따라 현재 공식 runtime은 모든 평가 요청에서 HCLX의 제한된
+Intent 분석과 최종 답변 생성을 모두 필수로 사용한다. 위 answer-only 실호출 기록은 과거
+배선의 증거이며, 새 두-operation 배선의 실제 과금 호출·NCP 배포 검증은 별도 수행 대상이다.
 
 평가용 `GET /answer`와 다섯 문자열 응답 계약은 별도 Backend adapter가 담당한다.
 HCLX는 그 안에서 검증된 결과를 제한된 문장으로 표현하며, 공식 데이터 검색·수치·
@@ -28,18 +32,17 @@ API가 없는 동안 이 경계를 테스트하면 다음 문제를 미리 차�
 ## 2. 현재 구조
 
 ```text
-QueryPlan / 공모펀드 비교 초안 / 근거 답변 provider
-                         │
-                         ▼
-                HyperClovaXClient
-        설정 gate · schema 검사 · 오류 정규화
-                         │
-                         ▼
-              HyperClovaXTransport 계약
-                 │                 │
-                 ▼                 ▼
-       테스트용 fake transport   공식 Direct v3 HTTP transport
-              완료                 answer-only 실호출 확인
+Intent analysis / 선택적 Semantic Resolver / final answer provider
+                              │
+                              ▼
+                     HyperClovaXClient
+             설정 gate · schema 검사 · 오류 정규화
+                              │
+                              ▼
+                   HyperClovaXTransport 계약
+                      │                 │
+                      ▼                 ▼
+            테스트용 fake transport   공식 Direct v3 HTTP transport
 ```
 
 provider는 API URL, 인증 header, 응답 wire 구조를 직접 알지 못한다.
@@ -47,40 +50,30 @@ provider는 API URL, 인증 header, 응답 wire 구조를 직접 알지 못한�
 서비스 형식으로 변환하도록 분리했다. 실제 transport는 공식 host만 사용하고 redirect를
 따르지 않으며, 상위 Agent와 verifier 계약은 그대로 유지한다.
 
-공통 `RoutedFinanceAgent`의 SEARCH 경로에는 QueryPlan provider를 선택적으로
-주입할 수 있다. 서버가 같은 질문으로 먼저 만든 기준 QueryPlan과 모델
-QueryPlan이 완전히 일치할 때만 Oracle을 실행한다. 모델이 조건·정렬·상품군·
-limit·projection을 추가하거나 누락하면 역질문으로 종료한다. AGGREGATE와
-COMPARE는 현재 서버 결정론적 compiler를 그대로 사용한다.
+공식 runtime의 `IntentAnalysisDraft`는 intent·상품군·질문 원문의 evidence span·
+clarification 여부만 포함한다. field·filter·정렬·limit·SQL을 표현할 수 없으므로 HCLX가
+실행 계획을 직접 만들 수 없다. 서버의 Ontology·Lexical·Schema Dense 경로가 만든 해석과
+HCLX Intent가 충돌하면 Oracle을 실행하지 않고 `CLARIFY` 또는 `UNSUPPORTED`로 종료한다.
 
-HCLX planning(모델을 이용한 계획 제안)은 provider가 주입됐다는 이유만으로 호출되지
-않는다. 서버가 요청마다 만든 `PlanningDecision.hclx_allowed=true`가 QueryPlan provider와
-grounded planning provider 모두의 필수 권한이다. 쉬운 말로, 배포 flag와 provider가 있어도
-서버 정책이 그 요청의 HCLX 계획 제안을 명시적으로 허용하지 않으면 호출 자체를 하지 않는다.
-이 권한은 답변 문장 생성 권한과 별개이며 Oracle 실행 권한을 대신하지 않는다.
+전체 `HyperClovaXQueryPlanProvider` 구현은 과거 실험·호환성 테스트를 위해 Core에 격리되어
+있지만 FastAPI production 조립에서 제거됐다. `FINANCE_BACKEND_HCX_QUERY_PLAN_ENABLED=true`는
+설정·Release trust·launcher에서 모두 거부한다. 공모펀드 비교 초안과 기존 grounded-answer
+provider도 공식 조립 권한이 없으며, 공식 답변은 모든 상태를 다루는 전용 final provider만 쓴다.
 
-여기서 구현 범위를 구분해야 한다. `HyperClovaXQueryPlanProvider`는 FastAPI의 별도 flag로
-실제 production 조립할 수 있다. 반면 grounded planning은 Core의 `GroundedPlanProvider`·
-원문 evidence gate·fake/local 계약과 `PlanningDecision`/`PlanAuthorityGate` 권한 검증까지만
-구현됐고, **HCLX용 grounded-plan operation/provider 및 FastAPI production 배선은 아직 없다.**
-현재 production 조립 검사는 grounded provider가 들어오면 오히려 시작을 거부한다. 두 planning
-provider를 한 번에 연결했을 때 중복 호출·우선순위가 생기지 않도록 별도 operation flag와
-release manifest 계약, 실제 HCLX 품질 평가를 먼저 확정한 뒤 연결한다.
-
-## 3. HyperCLOVA X가 맡는 세 가지 역할
+## 3. 공식 runtime에서 HyperCLOVA X가 맡는 역할
 
 | operation | provider | 입력과 출력 |
 | --- | --- | --- |
-| `query_plan` | `HyperClovaXQueryPlanProvider` | 자연어 질문 → 제한된 `QueryPlan` |
-| `fund_comparison_draft` | `HyperClovaXFundComparisonDraftProvider` | 공모펀드 비교 질문 → 상품명 표현과 비교 필드 초안 |
-| `grounded_answer` | `HyperClovaXGroundedAnswerProvider` | 검증된 field-level evidence → 설명용 답변 초안 |
+| `intent_analysis` | `HyperClovaXIntentAnalysisProvider` | 자연어 질문 → 실행 권한이 없는 제한된 Intent DTO |
+| `semantic_resolver` | `HyperClovaXSemanticResolverProvider` | 서버가 허용한 Dense field 후보 중 하나 선택 또는 `CLARIFY` |
+| `final_answer` | `HyperClovaXFinalAnswerProvider` | 검증된 본문 hash를 보존하며 허용된 최종 lead 생성 |
 
 세 경로 모두 모델 출력 뒤에 HCX JSON schema를 서버에서 다시 검사하고 Pydantic
 계약 검증도 수행한다. 서버 재검증은 object shape·type·enum·anyOf·범위·배열 길이를
 확인하며 undeclared field를 거절한다. 따라서 Structured Outputs가 잘못 동작해도
-허용되지 않은 `lead`나 상품별 `explanation`은 통과할 수 없다. QueryPlan은
-결정론적 canonicalization과 Oracle을 거치고, 근거 답변은 기존 Answer Verifier를
-통과한다. 검증 실패 시 기존 결정론적 fallback 정책을 유지한다.
+허용되지 않은 intent·field·`lead`는 통과할 수 없다. 최종 응답은 HCLX가 돌려준 본문
+SHA-256과 서버가 고정한 검증 본문을 대조한다. Intent 또는 최종 생성 호출 실패·schema
+위반·hash 불일치는 503/504로 종료하며 공식 응답에서 deterministic fallback을 허용하지 않는다.
 
 ## 4. 공식 경로 설정 gate
 
@@ -102,29 +95,17 @@ release Compose는 저장소 밖의 read-only host 파일을 Docker secret으로
 읽는다. caller가 inline key로 만든 임의 HTTP transport 또는 외부 Agent를 주입하는 경로도
 evaluation/production에서는 거부한다.
 
-`FINANCE_BACKEND_ANSWER_PROVIDER=hyperclova`가 HCLX 답변 표현을 켠다.
-`FINANCE_BACKEND_HCX_QUERY_PLAN_ENABLED`는 별도 선택값이며 기본 `false`다. 현재
-QueryPlan은 서버 계획과 완전히 같을 때만 실행되므로 실제 생성 품질·latency·비용을
-측정하기 전에는 켜지 않는다. 실제 endpoint는 보안을 위해 설정값으로 열지 않고 공식
-HTTPS host로 고정한다.
+최종 evaluation/production Release는 다음 조합만 허용한다.
 
-QueryPlan 또는 Core의 optional grounded planning 호출에는 다음 gate(실행 전 허가 조건)가
-모두 필요하다.
+1. `FINANCE_BACKEND_ANSWER_PROVIDER=hyperclova`
+2. `FINANCE_BACKEND_HCX_INTENT_ANALYSIS_ENABLED=true`
+3. `FINANCE_BACKEND_HCX_QUERY_PLAN_ENABLED=false`
+4. `FINANCE_AGENT_LLM_MODE`가 `APP_ENV`와 같고 `LLM_PROVIDER=hyperclova`
+5. `HCX_MODEL=HCX-007`, credential은 승인된 key file만 사용
 
-1. 배포 설정의 `FINANCE_BACKEND_HCX_QUERY_PLAN_ENABLED=true`
-2. 해당 provider가 명시적으로 주입됨
-3. 서버 소유 `PlanningDecision.hclx_allowed=true`
-4. 각 planning 경로가 허용하는 intent·상품군 조건 충족
-
-`PlanningDecision`은 사용자 문구가 아니라 서버 정책이 만든다. 현재 정책에서는 이미
-실행 가능한 deterministic fast path(규칙으로 명확히 해석된 빠른 경로)에만 HCLX 권한을
-기록하며, Dense나 모델이 스스로 권한을 확대할 수 없다. 최종 계획은 다시
-`PlanAuthorityGate`와 Oracle 앞의 검증을 통과해야 한다.
-
-현재 이 권한 정책은 명확한 서버 계획과 같은지 평가하는 보수적 단계다. schema-link gap이나
-복수 해석을 모델이 임의로 구제하도록 열지 않는다. 향후 grounded planning을 실제 HCLX에
-연결하려면 `query_plan`과 `grounded_plan`의 operation별 권한·최대 호출 1회·provider 우선순위,
-Prompt/schema hash를 release manifest에 별도로 고정해야 한다.
+이 조합은 Settings, production assembly guard, AgentReleaseManifest, Release trust,
+Compose launcher, immutable workflow에서 독립적으로 대조한다. 실제 endpoint는 보안을 위해
+설정값으로 열지 않고 공식 HTTPS host로 고정한다.
 
 ## 5. 공식 HTTP 요청·응답 계약
 
@@ -184,12 +165,12 @@ token usage만 기록하고 prompt와 응답 content는 기록하지 않는다. 
 검사까지 통과했음을 뜻한다. 잘못된 JSON·필드·enum은 `response_error`로 집계하며,
 이후 상품 evidence와 최종 문장 검증 결과는 별도의 Verifier 사건으로 기록한다.
 
-planning provider의 timeout은 안전한 서버 계획으로 조용히 바꾸지 않고 상위 request
-deadline으로 그대로 전파한다. 즉, 시간 예산을 넘긴 호출을 성공처럼 숨기지 않는다.
-반대로 timeout이 아닌 transport·schema·adapter 오류는 모델에 실행 권한을 주지 않은 채
-독립적으로 만든 deterministic server plan(서버 규칙 계획)으로 fallback한다. 단,
-QueryPlan provider가 정상 응답했지만 서버 계획과 내용이 다르면 오류 fallback이 아니라
-의도 충돌로 보고 Oracle 실행 전에 CLARIFY로 종료한다.
+필수 Intent provider와 final provider의 timeout·인증 실패·429·5xx·schema 오류는 상위
+request 경계로 그대로 전파한다. 즉, HCLX 호출 실패를 성공이나 deterministic fallback으로
+숨기지 않는다. 공식 GET은 timeout을 504, 나머지 provider 오류를 503으로 반환해 주최 측의
+재시도 계약과 일치시킨다. 단,
+Intent provider가 정상 응답했지만 서버의 안전한 route와 다르면 오류 fallback이 아니라
+의도 충돌로 보고 Oracle 실행 전에 `CLARIFY`로 종료한다.
 
 ## 7. API 없이 검증한 provider·HTTP 계약
 
@@ -198,10 +179,10 @@ QueryPlan provider가 정상 응답했지만 서버 계획과 내용이 다르�
 
 - 공식 mode와 provider 조합 외 실행 차단
 - `HCX-` 모델 ID와 timeout 범위 검증
-- 세 operation의 semantic structured request와 HCX schema subset
-- 외부에서 받은 question ID가 모델이 만든 ID보다 우선하는지 확인
-- 공모펀드 비교가 허용 필드만 모델에 노출하는지 확인
-- 근거 답변 provider가 검증된 evidence만 입력으로 사용하는지 확인
+- `intent_analysis`, `semantic_resolver`, `final_answer`의 structured request와 schema subset
+- Intent DTO가 field·filter·정렬·limit·SQL을 표현할 수 없는지 확인
+- Semantic Resolver가 서버 제공 후보 밖 field를 선택하지 못하는지 확인
+- final provider가 검증 본문 SHA-256과 허용 lead만 반환하는지 확인
 - 401·403·429·500, timeout, 연결 실패의 오류 매핑
 - 오류 본문·질문·prompt가 예외와 call record에 노출되지 않는지 확인
 - 잘못된 transport 응답, JSON, extra field를 fail-closed로 차단
@@ -214,9 +195,10 @@ fake 응답이 통과한다는 사실은 API key 인증, 모델 사용 권한이
 품질을 뜻하지 않는다. 상위 Agent와 공식 wire adapter가 예상 응답과 실패를 안전하게
 처리한다는 계약 테스트다.
 
-## 8. API 없는 전체 경로 E2E
+## 8. 과거 QueryPlan 실험 회귀
 
-provider 단위 계약과 별도로 `hcx-contract-e2e-8`을 동결했다.
+과거 전체 QueryPlan 실험의 동작을 재현하기 위해 `hcx-contract-e2e-8`을 역사 회귀로
+보존한다. 이 suite는 현재 production 조립이나 최종 Release 허용 근거가 아니다.
 
 ```bash
 /home/haeyeongcho/miniforge3/envs/gaeng3-dev/bin/python \
@@ -245,11 +227,10 @@ provider 단위 계약과 별도로 `hcx-contract-e2e-8`을 동결했다.
 ## 9. Backend `/answer` 오류 adapter
 
 provider 예외를 그대로 웹 계층에 올리지 않도록 프레임워크 독립
-`execute_answer_request()`를 추가했다. planning 단계의 timeout은 상위로 전파되어
-안전한 timeout `error` DTO와 HTTP 504로 변환된다. timeout이 아닌 QueryPlan·grounded
-planning provider 장애는 독립 서버 계획으로 복구하므로 Oracle에 모델 계획을 넘기거나
-HTTP 500을 만들지 않는다. grounded answer 단계의 provider 오류도 이미 검증된 evidence가
-있으므로 결정론적 fallback으로 복구해 HTTP 200을 유지한다.
+`execute_answer_request()`가 처리한다. Intent timeout은 SQL 전에, final timeout은 검증된
+결과를 외부에 내보내기 전에 차단되어 HTTP 504가 된다. 인증·429·5xx·transport·schema·
+hash 오류는 안전한 error DTO와 HTTP 503으로 변환된다. 필수 HCLX 경계가 실패한 요청은
+결정론적 본문을 성공 응답으로 내보내지 않는다.
 
 ```bash
 /home/haeyeongcho/miniforge3/envs/gaeng3-dev/bin/python \
@@ -257,32 +238,29 @@ HTTP 500을 만들지 않는다. grounded answer 단계의 provider 오류도 �
   --require-perfect
 ```
 
-`answer-adapter-contract-12`는 provider 설정·인증·rate limit·서비스·timeout·
-transport·응답 오류, dataset 장애, 알 수 없는 예외와 answer fallback을
-12/12 통과한다. 질문·credential·provider 오류 본문·파일 경로는 공개 오류에
-포함하지 않는다. 실제 FastAPI route에는 answer-only HCLX provider를 조립했고,
-QueryPlan provider는 별도 flag로 분리했다. 사용자 인증과 실제 네트워크 호출 검증은
-여전히 이 계약의 바깥이다.
+기존 adapter baseline은 역사 기록으로 유지한다. 현재 공식 GET E2E는 Intent·final 정상,
+인증·rate limit·서비스·timeout·transport·schema 오류, no-fallback과 Audit 순서를
+독립 검증한다. 질문·credential·provider 오류 본문·파일 경로는 공개 오류에 포함하지 않는다.
 
 ## 10. 최종 evaluation 동결과 남은 외부 검증
 
-최종 evaluation은 **HCLX grounded answer만 ON**으로 확정한다. HCLX QueryPlan과
-grounded planning, Schema/Product Dense는 OFF이고 공모펀드는 locked다. 이 결정은
-구현 누락이 아니라 external blind 보정 없이 모델 계획·Dense가 검색 결과를 바꾸지
-못하게 하는 평가 안전 경계다.
+최종 evaluation은 **HCLX Intent 분석과 final generation을 항상 ON**으로 고정한다.
+HCLX 전체 QueryPlan과 grounded planning, Product Dense는 OFF다. Schema Dense는 승인된
+candidate-only adaptive 정책 안에서만 동작하고 HCLX Semantic Resolver는 별도 활성화 전까지
+OFF다. 공모펀드는 `public_fund_v1_approved` Release에서만 실행한다.
 
 남은 필수 작업은 다음 네 가지다.
 
 1. 현재 변경을 clean commit으로 만들고 보호된 main에서 Manifest·OCI digest·Cosign
    서명을 발급한다.
 2. 그 exact image를 NCP에 기동해 공인 IP의 `/health`와 공식 `GET /answer`를 검증한다.
-3. 실제 HCLX 정상·timeout·429·5xx가 answer-only Audit와 deterministic fallback 계약을
+3. 실제 HCLX Intent+final 정상·timeout·429·5xx가 새 Audit와 no-fallback 계약을
    지키는지 최소 호출로 확인한다.
 4. 서명된 새 generation Binding을 사용해 N-1 → N → N-1 rollback과 순차 요청
    p50·p95·p99·payload·memory를 측정한다.
 
-현재 정확한 상태는 “공식 HTTP transport·FastAPI answer-only 배선, 실제 DETAIL·SEARCH
-호환성과 로컬 장애 계약 확인 완료; clean signed NCP release 검증 대기”다.
+현재 정확한 상태는 “공식 HTTP transport·FastAPI Intent+final 배선과 fake/no-network
+장애 계약 검증 완료; 새 배선의 실제 과금 호출과 clean signed NCP release 검증 대기”다.
 
 공식 근거:
 

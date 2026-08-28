@@ -8,6 +8,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from finance_agent_core.agent.routed_service import RoutedAgentResult
+from finance_agent_core.contracts.external_knowledge import CompositeKnowledgeQueryPlan
 from finance_agent_core.contracts.knowledge import KnowledgeQueryPlan
 from finance_agent_core.contracts.queryplan import ProductFamily, QueryPlan
 from finance_agent_core.contracts.routing import InteractionIntent
@@ -30,6 +31,7 @@ class BackendStatus(StrEnum):
     CLARIFICATION = "clarification"
     UNSUPPORTED = "unsupported"
     NOT_FOUND = "not_found"
+    CANNOT_VERIFY = "cannot_verify"
     ERROR = "error"
 
 
@@ -116,7 +118,7 @@ class BackendAgentResponse(BackendContractModel):
     intent: InteractionIntent
     product_families: list[ProductFamily] = Field(max_length=4)
     answer: str = Field(min_length=1)
-    query_plan: QueryPlan | KnowledgeQueryPlan | None
+    query_plan: QueryPlan | KnowledgeQueryPlan | CompositeKnowledgeQueryPlan | None
     candidate_count: int | None = Field(default=None, ge=0)
     products: list[ProductEvidence]
     comparisons: list[ComparisonEvidence] = Field(default_factory=list)
@@ -188,6 +190,32 @@ class BackendAgentResponse(BackendContractModel):
                 raise ValueError("not_found response cannot contain evidence")
             if self.candidate_count != 0:
                 raise ValueError("not_found response requires candidate_count=0")
+        elif self.status is BackendStatus.CANNOT_VERIFY:
+            if (
+                self.products
+                or self.comparisons
+                or self.aggregates
+                or self.documents
+                or self.citations
+                or self.as_of_dates
+                or self.error is not None
+                or self.clarification is not None
+                or self.source_manifest is not None
+                or self.family_searches
+                or self.source_manifests
+            ):
+                raise ValueError("cannot_verify response cannot contain asserted evidence")
+            if self.candidate_count is not None:
+                raise ValueError("cannot_verify cannot assert a candidate count")
+            if self.answer_mode not in {
+                BackendAnswerMode.CONTROL,
+                BackendAnswerMode.LLM_GROUNDED,
+            } or self.fallback_used:
+                raise ValueError("cannot_verify requires control or grounded LLM mode")
+            if (self.answer_mode is BackendAnswerMode.LLM_GROUNDED) != (
+                self.provider_model is not None
+            ):
+                raise ValueError("cannot_verify grounded mode and provider model must agree")
         elif self.status is BackendStatus.CLARIFICATION:
             if self.clarification is None or self.error is not None:
                 raise ValueError("clarification response requires clarification details")

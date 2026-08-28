@@ -165,7 +165,7 @@ def test_official_get_answer_returns_exact_five_string_contract(
     assert fake_agent.calls == [(question, "Q-001")]
 
 
-def test_official_get_answer_converts_internal_exception_to_safe_http_200() -> None:
+def test_official_get_answer_converts_internal_exception_to_safe_http_503() -> None:
     secret = "DO_NOT_LEAK_OFFICIAL_EXCEPTION"
     application = create_app(
         settings=Settings(),
@@ -178,7 +178,7 @@ def test_official_get_answer_converts_internal_exception_to_safe_http_200() -> N
             params={"question_id": "Q-ERR", "question": "해외 ETF를 알려줘"},
         )
 
-    assert response.status_code == 200
+    assert response.status_code == 503
     body = OfficialAnswerResponse.model_validate(response.json())
     assert secret not in response.text
     assert "내부 오류" in body.answer
@@ -212,7 +212,7 @@ def test_router_exception_is_normalized_for_post_and_official_get() -> None:
     assert post_body.product_families == []
     assert secret not in post.text
 
-    assert official.status_code == 200
+    assert official.status_code == 503
     official_body = OfficialAnswerResponse.model_validate(official.json())
     assert "내부 오류" in official_body.answer
     assert secret not in official.text

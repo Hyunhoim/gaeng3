@@ -9,41 +9,68 @@ from fastapi import Request
 from finance_agent_core.agent import IntentRouter, RoutedAgentResult, RoutedFinanceAgent
 from finance_agent_core.agent.adaptive_semantic import AdaptiveSemanticResolver
 from finance_agent_core.agent.compiler import ServerQueryPlanCompiler
+from finance_agent_core.agent.external_knowledge_router import ExternalKnowledgeRouter
+from finance_agent_core.agent.external_search_planning import (
+    ExternalSearchPlanCompiler,
+    ProvidedProductUniverseBuilder,
+)
 from finance_agent_core.agent.grounded_planning import GroundedPlanGate
 from finance_agent_core.agent.knowledge_router import DeterministicKnowledgeRouter
 from finance_agent_core.agent.knowledge_service import KnowledgeAgent
 from finance_agent_core.agent.providers import (
     HyperClovaXCallObserver,
+    HyperClovaXFinalAnswerProvider,
     HyperClovaXHTTPTransport,
-    HyperClovaXQueryPlanProvider,
+    HyperClovaXIntentAnalysisProvider,
     HyperClovaXSemanticResolverProvider,
     HyperClovaXSettings,
     HyperClovaXTransport,
     LocalTestSettings,
 )
 from finance_agent_core.answering import (
-    HyperClovaXGroundedAnswerProvider,
     LocalGroundedAnswerProvider,
 )
+from finance_agent_core.config.knowledge_coverage import (
+    load_approved_knowledge_coverage_manifest,
+)
+from finance_agent_core.config.source_registry import load_official_source_registry
 from finance_agent_core.contracts.queryplan import ProductFamily
 from finance_agent_core.evaluation.schema_embedding_artifacts import (
     load_verified_schema_embedding_cpu_provider,
 )
 from finance_agent_core.execution import PlanAuthorityGate
+from finance_agent_core.execution.external_knowledge_runtime import ExternalKnowledgeRuntime
+from finance_agent_core.execution.official_product_facts import (
+    SqliteOfficialProductFactProvider,
+)
 from finance_agent_core.observability import (
     AppendOnlyJsonlAuditSink,
     BoundedAsyncAuditSink,
     RequestAuditRecorder,
 )
 from finance_agent_core.release import (
+    ExternalKnowledgeArtifactRelease,
     PublicDocumentRetrievalRelease,
     PublicKnowledgeRetrievalRelease,
     PublicRelationRetrievalRelease,
     RelationRetrievalArtifactRelease,
     ResolvedAgentRelease,
     RuntimeReleaseInputs,
+    external_knowledge_verifier_contract_sha256,
+    load_external_knowledge_artifact_release,
     load_relation_retrieval_artifact_release,
     resolve_agent_release,
+)
+from finance_agent_core.retrieval.official_acquisition import (
+    OfficialEvidenceAcquisitionCoordinator,
+)
+from finance_agent_core.retrieval.official_connector import (
+    OfficialSourceConnector,
+    UrllibOfficialHttpTransport,
+)
+from finance_agent_core.retrieval.official_discovery import (
+    BoundedOfficialDiscoveryProvider,
+    NaverApiHubWebSearchTransport,
 )
 from finance_agent_core.retrieval.schema_adaptive import ProductionHybridSchemaLinker
 from finance_agent_core.retrieval.schema_dense import (
@@ -51,6 +78,11 @@ from finance_agent_core.retrieval.schema_dense import (
     DenseSchemaIndexArtifact,
     SchemaDenseActivationPolicy,
     load_dense_schema_index_artifact,
+    p1_precision_field_thresholds,
+)
+from finance_agent_core.retrieval.temporal_relations import (
+    TemporalRelationStore,
+    load_verified_temporal_relation_bundle,
 )
 from finance_agent_core.storage import ProductIdentitySnapshotCache, RecordSnapshotCache
 
@@ -83,6 +115,7 @@ def _schema_dense_policy(settings: Settings) -> SchemaDenseActivationPolicy | No
         minimum_margin=settings.schema_dense_minimum_margin,
         top_k=settings.schema_dense_top_k,
         calibration_report_sha256=(settings.schema_dense_calibration_report_sha256),
+        field_thresholds=p1_precision_field_thresholds(),
     )
 
 
@@ -120,9 +153,12 @@ def _provider_assembly_matches(
     if service.grounded_plan_provider is not None:
         return False
     transports: list[object] = []
-    if settings.hcx_query_plan_enabled:
-        provider = service.query_plan_provider
-        if type(provider) is not HyperClovaXQueryPlanProvider:
+    if service.query_plan_provider is not None or service.hclx_planning_enabled:
+        return False
+
+    if settings.hcx_intent_analysis_enabled:
+        provider = service.intent_analysis_provider
+        if type(provider) is not HyperClovaXIntentAnalysisProvider:
             return False
         if (
             provider.model_name != settings.hcx_model
@@ -132,7 +168,7 @@ def _provider_assembly_matches(
         ):
             return False
         transports.append(provider._client.transport)
-    elif service.query_plan_provider is not None:
+    elif service.intent_analysis_provider is not None:
         return False
 
     semantic_provider = (
@@ -155,8 +191,8 @@ def _provider_assembly_matches(
         return False
 
     if settings.answer_provider == "hyperclova":
-        answer_provider = service.answer_provider
-        if type(answer_provider) is not HyperClovaXGroundedAnswerProvider:
+        answer_provider = service.official_answer_provider
+        if type(answer_provider) is not HyperClovaXFinalAnswerProvider:
             return False
         if (
             answer_provider.model_name != settings.hcx_model
@@ -166,7 +202,9 @@ def _provider_assembly_matches(
         ):
             return False
         transports.append(answer_provider._client.transport)
-    elif service.answer_provider is not None:
+    elif service.official_answer_provider is not None:
+        return False
+    if settings.answer_provider != "local_test" and service.answer_provider is not None:
         return False
     if any(type(transport) is not HyperClovaXHTTPTransport for transport in transports):
         return False
@@ -244,6 +282,32 @@ def _knowledge_assembly_matches(
     )
 
 
+def _external_assembly_matches(
+    service: RoutedFinanceAgent,
+    settings: Settings,
+    release_guard: ResolvedAgentRelease | None,
+) -> bool:
+    if type(release_guard) is not ResolvedAgentRelease:
+        return False
+    signed = release_guard.manifest.components.knowledge_retrieval.external
+    runtime = service.external_knowledge_runtime
+    if not settings.external_knowledge_enabled:
+        return (
+            signed.status == "disabled_not_activated"
+            and runtime is None
+            and service.external_universe_builder is None
+            and service.external_search_plan_compiler is None
+        )
+    return (
+        signed.status == "activated"
+        and type(runtime) is ExternalKnowledgeRuntime
+        and runtime.release_artifact == signed.artifact
+        and runtime.release_artifact_file_sha256 == signed.artifact_file_sha256
+        and type(service.external_universe_builder) is ProvidedProductUniverseBuilder
+        and type(service.external_search_plan_compiler) is ExternalSearchPlanCompiler
+    )
+
+
 def require_approval_guard(
     service: AgentService,
     settings: Settings,
@@ -281,7 +345,9 @@ def require_approval_guard(
         or service.allow_internal_disabled_dataset
         or service.capability_execution_overrides
         != frozenset(settings.capability_execution_overrides)
-        or service.hclx_planning_enabled != settings.hcx_query_plan_enabled
+        or service.hclx_planning_enabled
+        or service.require_official_hclx
+        != (settings.hcx_intent_analysis_enabled and settings.answer_provider == "hyperclova")
         # An arbitrary Shadow observer receives a detached trace containing the
         # raw question, so it remains forbidden even when the release-bound
         # adaptive resolver is activated.
@@ -296,6 +362,7 @@ def require_approval_guard(
         or not _provider_assembly_matches(service, settings, audit_sink)
         or not _adaptive_assembly_matches(service, settings, release_guard)
         or not _knowledge_assembly_matches(service, settings, release_guard)
+        or not _external_assembly_matches(service, settings, release_guard)
         or type(release_guard) is not ResolvedAgentRelease
         or service.release_guard is not release_guard
         or not service.require_agent_release
@@ -327,6 +394,9 @@ def resolve_runtime_release(settings: Settings) -> ResolvedAgentRelease | None:
     relation_binding = _load_relation_retrieval_artifact(settings)
     relation_artifact = relation_binding[0] if relation_binding is not None else None
     relation_artifact_sha256 = relation_binding[1] if relation_binding is not None else None
+    external_binding = _load_external_knowledge_artifact(settings)
+    external_artifact = external_binding[0] if external_binding is not None else None
+    external_artifact_sha256 = external_binding[1] if external_binding is not None else None
     schema_dense_binding = _load_schema_dense_release(settings)
     schema_dense_artifact = schema_dense_binding[0] if schema_dense_binding is not None else None
     schema_dense_policy = schema_dense_binding[1] if schema_dense_binding is not None else None
@@ -338,6 +408,7 @@ def resolve_runtime_release(settings: Settings) -> ResolvedAgentRelease | None:
         backend_root=Path(__file__).resolve().parent,
         answer_provider=settings.answer_provider,
         hcx_queryplan_enabled=settings.hcx_query_plan_enabled,
+        hcx_intent_analysis_enabled=settings.hcx_intent_analysis_enabled,
         hcx_semantic_resolver_enabled=settings.hcx_semantic_resolver_enabled,
         hcx_model=settings.hcx_model,
         fund_execution_policy=settings.fund_execution_policy,
@@ -348,6 +419,8 @@ def resolve_runtime_release(settings: Settings) -> ResolvedAgentRelease | None:
         product_dense_enabled=settings.product_dense_enabled,
         relation_retrieval_artifact=relation_artifact,
         relation_retrieval_artifact_file_sha256=relation_artifact_sha256,
+        external_knowledge_artifact=external_artifact,
+        external_knowledge_artifact_file_sha256=external_artifact_sha256,
         platform=settings.runtime_platform,
         hcx_timeout_seconds=settings.hcx_timeout_seconds,
         official_answer_timeout_seconds=settings.official_answer_timeout_seconds,
@@ -377,6 +450,20 @@ def _load_relation_retrieval_artifact(
         expected_file_sha256=expected_file_sha256,
     )
     return artifact, expected_file_sha256
+
+
+def _load_external_knowledge_artifact(
+    settings: Settings,
+) -> tuple[ExternalKnowledgeArtifactRelease, str] | None:
+    if not settings.external_knowledge_enabled:
+        return None
+    assert settings.external_knowledge_artifact_file is not None
+    assert settings.external_knowledge_artifact_sha256 is not None
+    artifact = load_external_knowledge_artifact_release(
+        artifact_path=settings.external_knowledge_artifact_file,
+        expected_file_sha256=settings.external_knowledge_artifact_sha256,
+    )
+    return artifact, settings.external_knowledge_artifact_sha256
 
 
 def _relation_artifact_trust_sha256(settings: Settings) -> str:
@@ -413,16 +500,17 @@ def _relation_artifact_trust_sha256(settings: Settings) -> str:
         payload = b"".join(chunks)
         after = os.fstat(descriptor)
         current = path.stat(follow_symlinks=False)
-        fingerprint = lambda item: (
-            item.st_dev,
-            item.st_ino,
-            item.st_mode,
-            item.st_uid,
-            item.st_nlink,
-            item.st_size,
-            item.st_mtime_ns,
-            item.st_ctime_ns,
-        )
+        def fingerprint(item: os.stat_result) -> tuple[int, ...]:
+            return (
+                item.st_dev,
+                item.st_ino,
+                item.st_mode,
+                item.st_uid,
+                item.st_nlink,
+                item.st_size,
+                item.st_mtime_ns,
+                item.st_ctime_ns,
+            )
         if fingerprint(before) != fingerprint(after) or fingerprint(after) != fingerprint(current):
             raise RuntimeError("relation retrieval artifact trust file changed while loading")
         value = payload.decode("ascii")
@@ -597,6 +685,82 @@ def _build_adaptive_semantic_resolver(
     )
 
 
+def _build_external_knowledge_runtime(
+    settings: Settings,
+    release_guard: ResolvedAgentRelease | None,
+) -> tuple[
+    ExternalKnowledgeRuntime | None,
+    ProvidedProductUniverseBuilder | None,
+    ExternalSearchPlanCompiler | None,
+]:
+    if not settings.external_knowledge_enabled:
+        return None, None, None
+    if release_guard is None:
+        raise RuntimeError("external knowledge requires a resolved Agent release")
+    assert settings.external_knowledge_artifact_file is not None
+    assert settings.external_knowledge_artifact_sha256 is not None
+    assert settings.external_temporal_relation_file is not None
+    assert settings.external_temporal_relation_sha256 is not None
+    assert settings.naver_api_hub_key_id_file is not None
+    assert settings.naver_api_hub_key_file is not None
+    artifact = load_external_knowledge_artifact_release(
+        artifact_path=settings.external_knowledge_artifact_file,
+        expected_file_sha256=settings.external_knowledge_artifact_sha256,
+    )
+    signed = release_guard.manifest.components.knowledge_retrieval.external
+    if (
+        signed.status != "activated"
+        or signed.artifact != artifact
+        or signed.artifact_file_sha256 != settings.external_knowledge_artifact_sha256
+    ):
+        raise RuntimeError("external knowledge artifact differs from the signed release")
+    registry = load_official_source_registry()
+    coverage = load_approved_knowledge_coverage_manifest()
+    verifier_contract_sha256 = external_knowledge_verifier_contract_sha256()
+    if artifact.source_registry_sha256 != registry.canonical_sha256:
+        raise RuntimeError("external source registry differs from its release artifact")
+    if artifact.coverage_manifest_sha256 != coverage.canonical_sha256:
+        raise RuntimeError("external coverage manifest differs from its release artifact")
+    if artifact.verifier_contract_sha256 != verifier_contract_sha256:
+        raise RuntimeError("external verifier contract differs from its release artifact")
+    bundle = load_verified_temporal_relation_bundle(
+        settings.external_temporal_relation_file,
+        expected_file_sha256=settings.external_temporal_relation_sha256,
+        registry=registry,
+    )
+    if (
+        bundle.manifest.relation_set_sha256 != artifact.temporal_relation_sha256
+        or bundle.manifest.corpus_manifest_sha256 != artifact.corpus_manifest_sha256
+    ):
+        raise RuntimeError("external temporal relations differ from the release artifact")
+    relation_store = TemporalRelationStore(bundle, registry)
+    discovery = BoundedOfficialDiscoveryProvider(
+        NaverApiHubWebSearchTransport(
+            api_key_id_file=settings.naver_api_hub_key_id_file,
+            api_key_file=settings.naver_api_hub_key_file,
+        ),
+        registry,
+    )
+    connector = OfficialSourceConnector(UrllibOfficialHttpTransport(), registry)
+    acquisition = OfficialEvidenceAcquisitionCoordinator(
+        relation_store=relation_store,
+        discovery_provider=discovery,
+        connector=connector,
+    )
+    product_fact_provider = SqliteOfficialProductFactProvider(settings.database_paths)
+    runtime = ExternalKnowledgeRuntime(
+        acquisition=acquisition,
+        product_fact_provider=product_fact_provider,
+        release_artifact=artifact,
+        release_artifact_file_sha256=settings.external_knowledge_artifact_sha256,
+    )
+    return (
+        runtime,
+        ProvidedProductUniverseBuilder(settings.database_paths),
+        ExternalSearchPlanCompiler(registry),
+    )
+
+
 def build_agent(
     settings: Settings,
     *,
@@ -619,7 +783,8 @@ def build_agent(
     ):
         raise RuntimeError("evaluation/production Agent assembly requires a resolved release")
     answer_provider = None
-    query_plan_provider = None
+    intent_analysis_provider = None
+    official_answer_provider = None
     semantic_resolver_provider = None
     if settings.answer_provider == "local_test":
         answer_provider = LocalGroundedAnswerProvider(LocalTestSettings.from_environment())
@@ -631,8 +796,8 @@ def build_agent(
         )
         transport = HyperClovaXHTTPTransport(api_key=_load_hcx_api_key(settings))
         call_observer = HyperClovaXCallObserver(audit_sink) if audit_sink is not None else None
-        if settings.hcx_query_plan_enabled:
-            query_plan_provider = HyperClovaXQueryPlanProvider(
+        if settings.hcx_intent_analysis_enabled:
+            intent_analysis_provider = HyperClovaXIntentAnalysisProvider(
                 hcx_settings,
                 transport,
                 on_call=call_observer,
@@ -644,7 +809,7 @@ def build_agent(
                 on_call=call_observer,
             )
         if settings.answer_provider == "hyperclova":
-            answer_provider = HyperClovaXGroundedAnswerProvider(
+            official_answer_provider = HyperClovaXFinalAnswerProvider(
                 hcx_settings,
                 transport,
                 on_call=call_observer,
@@ -655,11 +820,21 @@ def build_agent(
     )
     knowledge_agent = _build_knowledge_agent(settings, release_guard)
     knowledge_router = DeterministicKnowledgeRouter() if knowledge_agent is not None else None
+    external_knowledge_router = ExternalKnowledgeRouter()
+    (
+        external_knowledge_runtime,
+        external_universe_builder,
+        external_search_plan_compiler,
+    ) = _build_external_knowledge_runtime(settings, release_guard)
     return RoutedFinanceAgent(
         settings.database_paths,
-        query_plan_provider=query_plan_provider,
         answer_provider=answer_provider,
-        hclx_planning_enabled=settings.hcx_query_plan_enabled,
+        intent_analysis_provider=intent_analysis_provider,
+        official_answer_provider=official_answer_provider,
+        require_official_hclx=(
+            settings.hcx_intent_analysis_enabled and settings.answer_provider == "hyperclova"
+        ),
+        hclx_planning_enabled=False,
         capability_execution_overrides=settings.capability_execution_overrides,
         require_approved_databases=settings.app_env in {"evaluation", "production"},
         release_guard=release_guard,
@@ -667,6 +842,10 @@ def build_agent(
         audit_sink=audit_sink,
         knowledge_router=knowledge_router,
         knowledge_agent=knowledge_agent,
+        external_knowledge_router=external_knowledge_router,
+        external_knowledge_runtime=external_knowledge_runtime,
+        external_universe_builder=external_universe_builder,
+        external_search_plan_compiler=external_search_plan_compiler,
         adaptive_semantic_resolver=adaptive_semantic_resolver,
     )
 

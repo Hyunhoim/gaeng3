@@ -192,6 +192,59 @@ def test_cross_family_search_preserves_verified_family_boundaries_and_backend_dt
     assert counters.get(MetricCounter.EVIDENCE_INCOMPLETE.value, 0) == 0
 
 
+def test_cross_family_global_top_k_uses_one_common_metric_and_unit(
+    sample_database: tuple[
+        Path,
+        list[NormalizedOverseasEtpRecord],
+        DatabaseManifest,
+    ],
+    domestic_sample_database: tuple[
+        Path,
+        list[NormalizedDomesticEtpRecord],
+        DatabaseManifest,
+    ],
+) -> None:
+    result = _cross_family_agent(
+        sample_database,
+        domestic_sample_database,
+    ).answer(
+        "국내 ETF와 해외 ETF 중 총보수율이 낮은 상위 3개를 보여줘",
+        "cross-global-top-k-001",
+    )
+
+    assert result.status == "executed"
+    assert len(result.products) == 3
+    assert sum(len(item.products) for item in result.family_searches) == 3
+    assert "통합 정렬했습니다" in result.answer
+    assert "결측·UNKNOWN 값은 순위에서 제외했습니다" in result.answer
+    assert "global TOP-K" in result.warnings[0]
+    assert routed_result_to_backend(result).status is BackendStatus.SUCCESS
+
+
+def test_cross_family_global_money_ranking_requires_one_currency(
+    sample_database: tuple[
+        Path,
+        list[NormalizedOverseasEtpRecord],
+        DatabaseManifest,
+    ],
+    domestic_sample_database: tuple[
+        Path,
+        list[NormalizedDomesticEtpRecord],
+        DatabaseManifest,
+    ],
+) -> None:
+    result = _cross_family_agent(
+        sample_database,
+        domestic_sample_database,
+    ).answer(
+        "국내 ETF와 해외 ETF 중 AUM이 높은 상위 3개를 보여줘",
+        "cross-global-top-k-002",
+    )
+
+    assert result.status == "clarify"
+    assert "동일 거래통화 조건" in result.answer
+
+
 def test_cross_family_search_preserves_success_when_one_family_is_empty(
     sample_database: tuple[
         Path,

@@ -9,7 +9,7 @@
     a owl:Ontology ;
     owl:imports <https://gaeng3.ai/ontology/common> ;
     rdfs:label "공모펀드 Ontology"@ko ;
-    ga:registryVersion "1.3" .
+    ga:registryVersion "1.4" .
 
 fund:PublicFundProduct
     a owl:Class ;
@@ -55,19 +55,18 @@ fund:Dataset
     ga:sourceId "PRFD01N001" ;
     ga:sourceLabel "공모펀드 마스터"@ko ;
     ga:logicalGrain "itm_no로 식별되는 펀드 클래스 한 상품"@ko ;
-    ga:snapshotDate "2026-07-11"^^xsd:date ;
-    ga:rowCount 95619 ;
-    ga:logicalRowCount 11138 ;
-    ga:quarantinedRows 1 ;
-    ga:executionEnabled false ;
+    ga:snapshotDate "2026-08-24"^^xsd:date ;
+    ga:rowCount 23676 ;
+    ga:logicalRowCount 23560 ;
+    ga:quarantinedRows 116 ;
+    ga:executionEnabled true ;
     ga:primaryKey "itm_no" ;
     ga:rawPrimaryKey "itm_no" ;
-    ga:rawPrimaryKey "prfd_attr_cd" ;
     ga:rawFilePattern "PRFD01N001*_datarows*.xlsx" ;
     ga:schemaFilePattern "PRFD01N001*_schema*.xlsx" ;
     ga:staticAsOfColumn "__file_snapshot__" ;
-    ga:dynamicAsOfColumn "__file_snapshot__" ;
-    ga:notes "정상 상품 11,138개 중 공모 11,115개, 사모 15개, 공사모 구분 결측 8개다. 실행 파이프라인이 구현될 때까지 HCX QueryPlan에서는 닫아 둔다."@ko .
+    ga:dynamicAsOfColumn "fd_price_bas_dt" ;
+    ga:notes "2026-08-24 공식 재배포본은 상품당 한 행이며 유효한 itm_no 상품 23,560개를 사용하고 식별키가 불완전한 116행은 격리한다."@ko .
 
 fund:field_product_id
     a ga:CanonicalField ;
@@ -93,7 +92,7 @@ fund:field_product_id
     ga:sourceDataset "fund" ;
     ga:sourceColumn "itm_no" ;
     ga:sourceTransform "identity" ;
-    ga:notes "상품 클래스 수준 논리 기본키다. 원천 반복행 기본키는 itm_no와 prfd_attr_cd의 조합이다."@ko .
+    ga:notes "새 공식본은 itm_no로 식별되는 상품 클래스당 한 행이다."@ko .
 
 fund:field_product_family
     a ga:CanonicalField ;
@@ -150,7 +149,7 @@ fund:field_product_name
     ga:sourceDataset "fund" ;
     ga:sourceColumn "itm_nm" ;
     ga:sourceTransform "identity" ;
-    ga:notes "정상 논리 상품 11,138개에서 모두 존재하며 클래스명이 포함될 수 있다."@ko .
+    ga:notes "정상 논리 상품 23,560개에서 모두 존재하며 클래스명이 포함될 수 있다."@ko .
 
 fund:field_sellable
     a ga:CanonicalField ;
@@ -176,7 +175,7 @@ fund:field_sellable
     ga:sourceColumn "sale_yn" ;
     ga:sourceTransform "boolean_code" ;
     ga:valueMapJson "{\"판매완료\":false,\"판매중\":true}" ;
-    ga:notes "정상 논리 상품 기준 판매중 8,445개, 판매완료 2,693개다."@ko .
+    ga:notes "정상 논리 상품 기준 판매중 10,846개, 판매완료 12,714개다."@ko .
 
 fund:field_investment_region
     a ga:CanonicalField ;
@@ -188,8 +187,8 @@ fund:field_investment_region
     skos:altLabel "investment region"@ko ;
     ga:valueType "enum" ;
     ga:unit "code" ;
-    ga:quality "PARTIAL" ;
-    ga:coveragePct "99.9282"^^xsd:decimal ;
+    ga:quality "VALID" ;
+    ga:coveragePct "100"^^xsd:decimal ;
     ga:queryable true ;
     ga:selectable true ;
     ga:sortable false ;
@@ -273,7 +272,7 @@ fund:field_investment_region
     ga:sourceDataset "fund" ;
     ga:sourceColumn "fd_ivst_rgn_desc" ;
     ga:sourceTransform "identity" ;
-    ga:notes "8개 상품이 결측이며 국내·글로벌·아시아·남미/북미·이머징/브릭스·유럽·중동/아프리카 값을 원문으로 보존한다."@ko .
+    ga:notes "정상 논리 상품 23,560개에서 공식 투자지역 설명값을 원문으로 보존한다."@ko .
 
 fund:field_aum
     a ga:CanonicalField ;
@@ -286,7 +285,7 @@ fund:field_aum
     ga:valueType "number" ;
     ga:unit "source_currency_amount" ;
     ga:quality "PARTIAL" ;
-    ga:coveragePct "83.4082"^^xsd:decimal ;
+    ga:coveragePct "39.9533"^^xsd:decimal ;
     ga:queryable true ;
     ga:selectable true ;
     ga:sortable true ;
@@ -305,7 +304,7 @@ fund:field_aum
     ga:sourceColumn "fd_nast_suma" ;
     ga:sourceTransform "identity" ;
     ga:sentinelValuesJson "{\"0\":\"UNKNOWN\"}" ;
-    ga:notes "1,848개 상품이 결측이고 298개가 0이다. 0의 공식 의미 확인 전 필터·정렬·집계에서 제외한다."@ko .
+    ga:notes "정상 논리 상품 중 9,413개에 양수 값이 있고 14,147개가 결측이다. 결측은 UNKNOWN으로 필터·정렬·집계에서 제외한다."@ko .
 
 fund:field_trading_currency
     a ga:CanonicalField ;
@@ -331,12 +330,15 @@ fund:field_trading_currency
     ga:enumValue "KRW" ;
     ga:enumValue "EUR" ;
     ga:enumValue "JPY" ;
+    ga:enumValue "AUD" ;
+    ga:enumValue "GBP" ;
+    ga:enumValue "SEK" ;
     ga:enumValue "000" ;
     ga:asOfBasis "static" ;
     ga:sourceDataset "fund" ;
     ga:sourceColumn "curr_cd" ;
     ga:sourceTransform "identity" ;
-    ga:notes "정상 논리 상품 기준 KRW 11,067개와 USD 71개다. 통화가 다른 AUM은 직접 비교하지 않는다."@ko .
+    ga:notes "정상 논리 상품에 존재하는 6개 통화 코드를 원문 보존하며 통화가 다른 AUM은 직접 비교하지 않는다."@ko .
 
 fund:field_static_as_of
     a ga:CanonicalField ;
@@ -365,8 +367,8 @@ fund:field_static_as_of
     ga:asOfBasis "snapshot" ;
     ga:sourceDataset "fund" ;
     ga:sourceTransform "constant" ;
-    ga:constantValue "2026-07-11" ;
-    ga:notes "원천에 독립 갱신일이 없어 파일 스냅샷일 2026-07-11을 사용한다."@ko .
+    ga:constantValue "2026-08-24" ;
+    ga:notes "정적 상품 속성은 공식 배포 스냅샷일 2026-08-24를 사용한다."@ko .
 
 fund:field_dynamic_as_of
     a ga:CanonicalField ;
@@ -388,9 +390,9 @@ fund:field_dynamic_as_of
     ga:comparisonScope "same_dataset" ;
     ga:asOfBasis "snapshot" ;
     ga:sourceDataset "fund" ;
-    ga:sourceTransform "constant" ;
-    ga:constantValue "2026-07-11" ;
-    ga:notes "개별 AUM·수익률 갱신일이 없어 파일 스냅샷일만 제공한다. 필드 기준일로 오인하지 않도록 경고한다."@ko .
+    ga:sourceColumn "fd_price_bas_dt" ;
+    ga:sourceTransform "identity" ;
+    ga:notes "가격 기준일을 우선하고 없으면 일별 기준일, 둘 다 없으면 공식 스냅샷일을 사용한다. 보간된 기준일은 행 수준 PARTIAL로 표시한다."@ko .
 
 fund:field_short_name
     a ga:CanonicalField ;
@@ -417,7 +419,7 @@ fund:field_short_name
     ga:sourceDataset "fund" ;
     ga:sourceColumn "itm_abrv_nm" ;
     ga:sourceTransform "identity" ;
-    ga:notes "정상 논리 상품 11,138개에서 모두 존재하지만 상품 식별에는 itm_no를 사용한다."@ko .
+    ga:notes "새 공식본의 상품 약어명을 사용하며 상품 식별에는 itm_no를 사용한다."@ko .
 
 fund:field_base_index
     a ga:CanonicalField ;
@@ -430,7 +432,7 @@ fund:field_base_index
     ga:valueType "string" ;
     ga:unit "none" ;
     ga:quality "UNKNOWN" ;
-    ga:coveragePct "100"^^xsd:decimal ;
+    ga:coveragePct "47.882"^^xsd:decimal ;
     ga:queryable false ;
     ga:selectable true ;
     ga:sortable false ;
@@ -442,7 +444,7 @@ fund:field_base_index
     ga:sourceDataset "fund" ;
     ga:sourceColumn "bmrk_nm" ;
     ga:sourceTransform "identity" ;
-    ga:notes "형식상 모두 존재하지만 placeholder와 의미 품질을 확인하지 못해 표시 전용으로 보존한다."@ko .
+    ga:notes "11,281개 상품에 공식 벤치마크명이 있으나 자유 텍스트 의미 품질 확인 전 표시 전용으로 보존한다."@ko .
 
 fund:field_risk_level
     a ga:CanonicalField ;
@@ -455,7 +457,7 @@ fund:field_risk_level
     ga:valueType "enum" ;
     ga:unit "code" ;
     ga:quality "PARTIAL" ;
-    ga:coveragePct "76.8989"^^xsd:decimal ;
+    ga:coveragePct "36.8803"^^xsd:decimal ;
     ga:queryable true ;
     ga:selectable true ;
     ga:sortable false ;
@@ -476,7 +478,7 @@ fund:field_risk_level
     ga:sourceColumn "zrin_fd_ivst_risk_gcd" ;
     ga:sourceTransform "code_map" ;
     ga:valueMapJson "{\"1\":\"매우높은위험(1등급)\",\"2\":\"높은위험(2등급)\",\"3\":\"다소높은위험(3등급)\",\"4\":\"보통위험(4등급)\",\"5\":\"낮은위험(5등급)\",\"6\":\"매우낮은위험(6등급)\"}" ;
-    ga:notes "코드 1~6을 기준으로 정규화한다. 원천 등급명에는 띄어쓰기 변형이 있어 직접 비교하지 않는다."@ko .
+    ga:notes "8,689개 상품의 코드 1~6을 기준으로 정규화한다. 결측 14,871개는 UNKNOWN이고 원천 등급명의 띄어쓰기 변형은 코드로 통일한다."@ko .
 
 fund:field_public_offering
     a ga:CanonicalField ;
@@ -488,8 +490,8 @@ fund:field_public_offering
     skos:altLabel "public offering"@ko ;
     ga:valueType "boolean" ;
     ga:unit "boolean" ;
-    ga:quality "PARTIAL" ;
-    ga:coveragePct "99.9282"^^xsd:decimal ;
+    ga:quality "VALID" ;
+    ga:coveragePct "100"^^xsd:decimal ;
     ga:queryable true ;
     ga:selectable true ;
     ga:sortable false ;
@@ -503,7 +505,7 @@ fund:field_public_offering
     ga:sourceColumn "prvo_pbff_desc" ;
     ga:sourceTransform "boolean_code" ;
     ga:valueMapJson "{\"공모\":true,\"사모\":false}" ;
-    ga:notes "정상 논리 상품 중 공모 11,115개, 사모 15개, 결측 8개다. 공모펀드 기본 검색은 true를 강제하고 사모·결측은 제외한다."@ko .
+    ga:notes "정상 논리 상품 중 공모 14,606개, 사모 8,954개다. 공모펀드 기본 검색은 true를 강제한다."@ko .
 
 fund:field_company_sellable
     a ga:CanonicalField ;
@@ -516,7 +518,7 @@ fund:field_company_sellable
     ga:valueType "boolean" ;
     ga:unit "boolean" ;
     ga:quality "PARTIAL" ;
-    ga:coveragePct "93.7691"^^xsd:decimal ;
+    ga:coveragePct "44.9788"^^xsd:decimal ;
     ga:queryable true ;
     ga:selectable true ;
     ga:sortable false ;
@@ -530,7 +532,7 @@ fund:field_company_sellable
     ga:sourceColumn "thco_sale_yn" ;
     ga:sourceTransform "boolean_code" ;
     ga:valueMapJson "{\"N\":false,\"Y\":true}" ;
-    ga:notes "Y 10,444개와 결측 694개만 관측되고 N은 없다. Y/N을 boolean으로 매핑하되 결측을 false로 보간하지 않고 UNKNOWN으로 유지한다."@ko .
+    ga:notes "Y 10,597개와 결측 12,963개만 관측되고 N은 없다. 결측을 false로 보간하지 않고 UNKNOWN으로 유지한다."@ko .
 
 fund:field_currency_hedged
     a ga:CanonicalField ;
@@ -542,7 +544,7 @@ fund:field_currency_hedged
     ga:valueType "boolean" ;
     ga:unit "boolean" ;
     ga:quality "PARTIAL" ;
-    ga:coveragePct "62.1207"^^xsd:decimal ;
+    ga:coveragePct "29.6307"^^xsd:decimal ;
     ga:queryable true ;
     ga:selectable true ;
     ga:sortable false ;
@@ -556,7 +558,7 @@ fund:field_currency_hedged
     ga:sourceColumn "exchdg_yn" ;
     ga:sourceTransform "boolean_code" ;
     ga:valueMapJson "{\"N\":false,\"Y\":true}" ;
-    ga:notes "Y 4,612개, N 2,307개, 결측 4,219개다. hdge_fd_yn은 헤지펀드 여부이므로 이 필드와 혼동하지 않는다."@ko .
+    ga:notes "Y 4,618개, N 2,363개, 결측 16,579개다. hdge_fd_yn은 헤지펀드 여부이므로 이 필드와 혼동하지 않는다."@ko .
 
 fund:field_fund_management_attribute
     a ga:CanonicalField ;
@@ -569,7 +571,7 @@ fund:field_fund_management_attribute
     ga:valueType "enum" ;
     ga:unit "code" ;
     ga:quality "PARTIAL" ;
-    ga:coveragePct "93.7691"^^xsd:decimal ;
+    ga:coveragePct "96.1587"^^xsd:decimal ;
     ga:queryable true ;
     ga:selectable true ;
     ga:sortable false ;
@@ -594,7 +596,7 @@ fund:field_fund_management_attribute
     ga:sourceColumn "or_attr_desc" ;
     ga:sourceTransform "identity" ;
     ga:sentinelValuesJson "{\"06\":\"UNKNOWN\"}" ;
-    ga:notes "결측 8개와 의미 미확인 코드 06인 686개를 UNKNOWN으로 제외한 의미상 coverage다."@ko .
+    ga:notes "의미 미확인 코드 06 또는 결측에 해당하는 905개를 UNKNOWN으로 제외한 의미상 coverage다."@ko .
 
 fund:field_fund_geography_scope
     a ga:CanonicalField ;
@@ -606,8 +608,8 @@ fund:field_fund_geography_scope
     skos:altLabel "fund geography"@ko ;
     ga:valueType "enum" ;
     ga:unit "code" ;
-    ga:quality "PARTIAL" ;
-    ga:coveragePct "99.9282"^^xsd:decimal ;
+    ga:quality "VALID" ;
+    ga:coveragePct "100"^^xsd:decimal ;
     ga:queryable true ;
     ga:selectable true ;
     ga:sortable false ;
@@ -624,7 +626,7 @@ fund:field_fund_geography_scope
     ga:sourceDataset "fund" ;
     ga:sourceColumn "ovrs_fd_desc" ;
     ga:sourceTransform "identity" ;
-    ga:notes "국내 4,675개, 해외 5,353개, 국내외혼합 1,102개이며 8개가 결측이다."@ko .
+    ga:notes "정상 논리 상품 23,560개의 국내·해외·국내외혼합 값을 원문 보존한다."@ko .
 
 fund:field_investor_type
     a ga:CanonicalField ;
@@ -636,8 +638,8 @@ fund:field_investor_type
     skos:altLabel "investor type"@ko ;
     ga:valueType "enum" ;
     ga:unit "code" ;
-    ga:quality "PARTIAL" ;
-    ga:coveragePct "99.9282"^^xsd:decimal ;
+    ga:quality "VALID" ;
+    ga:coveragePct "100"^^xsd:decimal ;
     ga:queryable true ;
     ga:selectable true ;
     ga:sortable false ;
@@ -654,7 +656,7 @@ fund:field_investor_type
     ga:sourceDataset "fund" ;
     ga:sourceColumn "pers_corp_desc" ;
     ga:sourceTransform "identity" ;
-    ga:notes "해당없음 8,711개, 개인 1,763개, 법인 656개이며 8개가 결측이다."@ko .
+    ga:notes "정상 논리 상품 23,560개의 해당없음·개인·법인 값을 원문 보존한다."@ko .
 
 fund:field_one_month_return_pct
     a ga:CanonicalField ;
@@ -667,7 +669,7 @@ fund:field_one_month_return_pct
     ga:valueType "number" ;
     ga:unit "pct_point" ;
     ga:quality "PARTIAL" ;
-    ga:coveragePct "67.9655"^^xsd:decimal ;
+    ga:coveragePct "31.3497"^^xsd:decimal ;
     ga:queryable true ;
     ga:selectable true ;
     ga:sortable true ;
@@ -685,7 +687,7 @@ fund:field_one_month_return_pct
     ga:sourceDataset "fund" ;
     ga:sourceColumn "fd_mm1_ern_r" ;
     ga:sourceTransform "identity" ;
-    ga:notes "정상 논리 상품 7,570개에 존재하며 -63.11~15.65 범위다. 결측은 UNKNOWN이다."@ko .
+    ga:notes "정상 논리 상품 7,386개에 존재한다. 0을 포함한 원천값은 그대로 사용하고 결측은 UNKNOWN이다."@ko .
 
 fund:field_three_month_return_pct
     a ga:CanonicalField ;
@@ -697,7 +699,7 @@ fund:field_three_month_return_pct
     ga:valueType "number" ;
     ga:unit "pct_point" ;
     ga:quality "PARTIAL" ;
-    ga:coveragePct "67.3101"^^xsd:decimal ;
+    ga:coveragePct "31.0144"^^xsd:decimal ;
     ga:queryable true ;
     ga:selectable true ;
     ga:sortable true ;
@@ -715,7 +717,7 @@ fund:field_three_month_return_pct
     ga:sourceDataset "fund" ;
     ga:sourceColumn "fd_mm3_ern_r" ;
     ga:sourceTransform "identity" ;
-    ga:notes "정상 논리 상품 7,497개에 존재하며 -88.46~144.21 범위다. 결측은 UNKNOWN이다."@ko .
+    ga:notes "정상 논리 상품 7,307개에 존재한다. 원천값은 수정하지 않고 결측만 UNKNOWN으로 제외한다."@ko .
 
 fund:field_six_month_return_pct
     a ga:CanonicalField ;
@@ -727,7 +729,7 @@ fund:field_six_month_return_pct
     ga:valueType "number" ;
     ga:unit "pct_point" ;
     ga:quality "PARTIAL" ;
-    ga:coveragePct "65.9005"^^xsd:decimal ;
+    ga:coveragePct "30.6452"^^xsd:decimal ;
     ga:queryable true ;
     ga:selectable true ;
     ga:sortable true ;
@@ -745,7 +747,7 @@ fund:field_six_month_return_pct
     ga:sourceDataset "fund" ;
     ga:sourceColumn "fd_mm6_ern_r" ;
     ga:sourceTransform "identity" ;
-    ga:notes "정상 논리 상품 7,340개에 존재하며 -84.16~369.68 범위다. 결측은 UNKNOWN이다."@ko .
+    ga:notes "정상 논리 상품 7,220개에 존재한다. 원천값은 수정하지 않고 결측만 UNKNOWN으로 제외한다."@ko .
 
 fund:field_one_year_return_pct
     a ga:CanonicalField ;
@@ -758,7 +760,7 @@ fund:field_one_year_return_pct
     ga:valueType "number" ;
     ga:unit "pct_point" ;
     ga:quality "PARTIAL" ;
-    ga:coveragePct "63.0005"^^xsd:decimal ;
+    ga:coveragePct "29.8048"^^xsd:decimal ;
     ga:queryable true ;
     ga:selectable true ;
     ga:sortable true ;
@@ -776,7 +778,7 @@ fund:field_one_year_return_pct
     ga:sourceDataset "fund" ;
     ga:sourceColumn "fd_yr1_ern_r" ;
     ga:sourceTransform "identity" ;
-    ga:notes "7,017개 원천값을 수정·제거·상한 처리하지 않고 그대로 사용한다. 결측은 UNKNOWN으로 실행에서 제외하며, 500% 초과 값 15개와 최대 975.10이 포함될 수 있음을 답변에 경고한다."@ko .
+    ga:notes "7,022개 원천값을 수정·제거·상한 처리하지 않고 그대로 사용한다. 결측은 UNKNOWN으로 실행에서 제외하며 500% 초과 값 1개가 포함될 수 있음을 답변에 경고한다."@ko .
 
 fund:field_one_week_return_pct
     a ga:CanonicalField ;
@@ -788,8 +790,32 @@ fund:field_one_week_return_pct
     skos:altLabel "one week return"@ko ;
     ga:valueType "number" ;
     ga:unit "pct_point" ;
+    ga:quality "UNKNOWN" ;
+    ga:coveragePct "0"^^xsd:decimal ;
+    ga:queryable false ;
+    ga:selectable true ;
+    ga:sortable false ;
+    ga:aggregatable false ;
+    ga:comparable true ;
+    ga:comparisonMode "numeric_delta" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:asOfBasis "snapshot" ;
+    ga:sourceDataset "fund" ;
+    ga:sourceColumn "fd_wk1_ern_r" ;
+    ga:sourceTransform "identity" ;
+    ga:notes "새 공식본 23,560개 정상 논리 상품에서 전부 결측이므로 조회·정렬·집계하지 않고 확인할 수 없음으로 종료한다."@ko .
+
+fund:field_eighteen_month_return_pct
+    a ga:CanonicalField ;
+    ga:forFamily fund:Family ;
+    ga:canonicalName "eighteen_month_return_pct" ;
+    rdfs:label "18개월 수익률"@ko ;
+    skos:altLabel "18M 수익률"@ko ;
+    skos:altLabel "eighteen month return"@ko ;
+    ga:valueType "number" ;
+    ga:unit "pct_point" ;
     ga:quality "PARTIAL" ;
-    ga:coveragePct "68.2349"^^xsd:decimal ;
+    ga:coveragePct "29.2317"^^xsd:decimal ;
     ga:queryable true ;
     ga:selectable true ;
     ga:sortable true ;
@@ -805,33 +831,9 @@ fund:field_one_week_return_pct
     ga:allowedOperator "between" ;
     ga:asOfBasis "snapshot" ;
     ga:sourceDataset "fund" ;
-    ga:sourceColumn "fd_wk1_ern_r" ;
-    ga:sourceTransform "identity" ;
-    ga:notes "정상 논리 상품 7,600개에 존재하며 -60.92~26.59 범위다. 개별 기준일은 제공되지 않는다."@ko .
-
-fund:field_eighteen_month_return_pct
-    a ga:CanonicalField ;
-    ga:forFamily fund:Family ;
-    ga:canonicalName "eighteen_month_return_pct" ;
-    rdfs:label "18개월 수익률"@ko ;
-    skos:altLabel "18M 수익률"@ko ;
-    skos:altLabel "eighteen month return"@ko ;
-    ga:valueType "number" ;
-    ga:unit "pct_point" ;
-    ga:quality "UNKNOWN" ;
-    ga:coveragePct "61.7615"^^xsd:decimal ;
-    ga:queryable false ;
-    ga:selectable true ;
-    ga:sortable false ;
-    ga:aggregatable false ;
-    ga:comparable false ;
-    ga:comparisonMode "value_only" ;
-    ga:comparisonScope "same_dataset" ;
-    ga:asOfBasis "snapshot" ;
-    ga:sourceDataset "fund" ;
     ga:sourceColumn "fd_mm18_ern_r" ;
     ga:sourceTransform "identity" ;
-    ga:notes "-100% 미만 1개와 500% 초과 20개가 있어 공식 산식·이상치 기준 확인 전 표시 전용으로 제한한다."@ko .
+    ga:notes "6,887개 원천값을 수정·제거·상한 처리하지 않고 사용한다. 500% 초과 값 16개는 원천값 경고와 함께 보존한다."@ko .
 
 fund:field_two_year_return_pct
     a ga:CanonicalField ;
@@ -842,20 +844,26 @@ fund:field_two_year_return_pct
     skos:altLabel "two year return"@ko ;
     ga:valueType "number" ;
     ga:unit "pct_point" ;
-    ga:quality "UNKNOWN" ;
-    ga:coveragePct "57.1018"^^xsd:decimal ;
-    ga:queryable false ;
+    ga:quality "PARTIAL" ;
+    ga:coveragePct "28.68"^^xsd:decimal ;
+    ga:queryable true ;
     ga:selectable true ;
-    ga:sortable false ;
-    ga:aggregatable false ;
-    ga:comparable false ;
-    ga:comparisonMode "value_only" ;
+    ga:sortable true ;
+    ga:aggregatable true ;
+    ga:comparable true ;
+    ga:comparisonMode "numeric_delta" ;
     ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "lt" ;
+    ga:allowedOperator "lte" ;
+    ga:allowedOperator "gt" ;
+    ga:allowedOperator "gte" ;
+    ga:allowedOperator "between" ;
     ga:asOfBasis "snapshot" ;
     ga:sourceDataset "fund" ;
     ga:sourceColumn "fd_yr2_ern_r" ;
     ga:sourceTransform "identity" ;
-    ga:notes "최솟값 -3675.44와 500% 초과 14개가 있어 공식 산식·이상치 기준 확인 전 표시 전용으로 제한한다."@ko .
+    ga:notes "6,757개 원천값을 수정·제거·상한 처리하지 않고 사용한다. 500% 초과 값 6개는 원천값 경고와 함께 보존한다."@ko .
 
 fund:field_three_year_return_pct
     a ga:CanonicalField ;
@@ -866,20 +874,26 @@ fund:field_three_year_return_pct
     skos:altLabel "three year return"@ko ;
     ga:valueType "number" ;
     ga:unit "pct_point" ;
-    ga:quality "UNKNOWN" ;
-    ga:coveragePct "54.7854"^^xsd:decimal ;
-    ga:queryable false ;
+    ga:quality "PARTIAL" ;
+    ga:coveragePct "27.5467"^^xsd:decimal ;
+    ga:queryable true ;
     ga:selectable true ;
-    ga:sortable false ;
-    ga:aggregatable false ;
-    ga:comparable false ;
-    ga:comparisonMode "value_only" ;
+    ga:sortable true ;
+    ga:aggregatable true ;
+    ga:comparable true ;
+    ga:comparisonMode "numeric_delta" ;
     ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "lt" ;
+    ga:allowedOperator "lte" ;
+    ga:allowedOperator "gt" ;
+    ga:allowedOperator "gte" ;
+    ga:allowedOperator "between" ;
     ga:asOfBasis "snapshot" ;
     ga:sourceDataset "fund" ;
     ga:sourceColumn "fd_yr3_ern_r" ;
     ga:sourceTransform "identity" ;
-    ga:notes "최솟값 -4381.56과 500% 초과 21개가 있어 공식 산식·이상치 기준 확인 전 표시 전용으로 제한한다."@ko .
+    ga:notes "6,490개 원천값을 수정·제거·상한 처리하지 않고 사용한다. 500% 초과 값 16개는 원천값 경고와 함께 보존한다."@ko .
 
 fund:field_five_year_return_pct
     a ga:CanonicalField ;
@@ -890,17 +904,23 @@ fund:field_five_year_return_pct
     skos:altLabel "five year return"@ko ;
     ga:valueType "number" ;
     ga:unit "pct_point" ;
-    ga:quality "UNKNOWN" ;
-    ga:coveragePct "50.0988"^^xsd:decimal ;
-    ga:queryable false ;
+    ga:quality "PARTIAL" ;
+    ga:coveragePct "25.3778"^^xsd:decimal ;
+    ga:queryable true ;
     ga:selectable true ;
-    ga:sortable false ;
-    ga:aggregatable false ;
-    ga:comparable false ;
-    ga:comparisonMode "value_only" ;
+    ga:sortable true ;
+    ga:aggregatable true ;
+    ga:comparable true ;
+    ga:comparisonMode "numeric_delta" ;
     ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "lt" ;
+    ga:allowedOperator "lte" ;
+    ga:allowedOperator "gt" ;
+    ga:allowedOperator "gte" ;
+    ga:allowedOperator "between" ;
     ga:asOfBasis "snapshot" ;
     ga:sourceDataset "fund" ;
     ga:sourceColumn "fd_yr5_ern_r" ;
     ga:sourceTransform "identity" ;
-    ga:notes "최솟값 -4254.75와 500% 초과 15개가 있어 공식 산식·이상치 기준 확인 전 표시 전용으로 제한한다."@ko .
+    ga:notes "5,979개 원천값을 수정·제거·상한 처리하지 않고 사용한다. 500% 초과 값 2개는 원천값 경고와 함께 보존한다."@ko .

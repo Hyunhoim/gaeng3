@@ -26,6 +26,7 @@ _MAX_RELATION_ARTIFACT_BYTES = 4 * 1024
 _MAX_RELEASE_MANIFEST_BYTES = 2 * 1024 * 1024
 _FINAL_ANSWER_PROVIDER = "hyperclova"
 _FINAL_HCX_QUERYPLAN_ENABLED = "false"
+_FINAL_HCX_INTENT_ANALYSIS_ENABLED = "true"
 _FINAL_HCX_SEMANTIC_RESOLVER_ENABLED = "false"
 _FINAL_ADAPTIVE_SEMANTIC_ENABLED = "true"
 _FINAL_FUND_EXECUTION_POLICY = "public_fund_v1_approved"
@@ -87,6 +88,7 @@ def validate_inputs(arguments: argparse.Namespace) -> None:
     profile = {
         "answer_provider": arguments.answer_provider,
         "hcx_queryplan_enabled": arguments.hcx_queryplan_enabled,
+        "hcx_intent_analysis_enabled": arguments.hcx_intent_analysis_enabled,
         "hcx_semantic_resolver_enabled": arguments.hcx_semantic_resolver_enabled,
         "adaptive_semantic_enabled": arguments.adaptive_semantic_enabled,
         "fund_execution_policy": arguments.fund_execution_policy,
@@ -102,6 +104,7 @@ def validate_inputs(arguments: argparse.Namespace) -> None:
     expected_profile = {
         "answer_provider": _FINAL_ANSWER_PROVIDER,
         "hcx_queryplan_enabled": _FINAL_HCX_QUERYPLAN_ENABLED,
+        "hcx_intent_analysis_enabled": _FINAL_HCX_INTENT_ANALYSIS_ENABLED,
         "hcx_semantic_resolver_enabled": _FINAL_HCX_SEMANTIC_RESOLVER_ENABLED,
         "adaptive_semantic_enabled": _FINAL_ADAPTIVE_SEMANTIC_ENABLED,
         "fund_execution_policy": _FINAL_FUND_EXECUTION_POLICY,
@@ -114,7 +117,8 @@ def validate_inputs(arguments: argparse.Namespace) -> None:
     }
     if profile != expected_profile:
         raise ReleaseCIError(
-            "final release profile requires HyperCLOVA answer-only, HCLX QueryPlan disabled, "
+            "final release profile requires HCLX Intent and answer generation, "
+            "HCLX QueryPlan disabled, "
             "the approved public-fund v1 contract, and the exact KURE candidate-only policy"
         )
     model_id = "HCX-007"
@@ -154,6 +158,7 @@ def validate_inputs(arguments: argparse.Namespace) -> None:
             "platform": arguments.platform,
             "answer_provider": arguments.answer_provider,
             "hcx_queryplan_enabled": arguments.hcx_queryplan_enabled,
+            "hcx_intent_analysis_enabled": arguments.hcx_intent_analysis_enabled,
             "hcx_semantic_resolver_enabled": arguments.hcx_semantic_resolver_enabled,
             "adaptive_semantic_enabled": arguments.adaptive_semantic_enabled,
             "fund_execution_policy": arguments.fund_execution_policy,
@@ -565,6 +570,7 @@ def _parser() -> argparse.ArgumentParser:
     validate.add_argument("--previous-binding-sha256", required=True)
     validate.add_argument("--answer-provider", required=True)
     validate.add_argument("--hcx-queryplan-enabled", required=True)
+    validate.add_argument("--hcx-intent-analysis-enabled", required=True)
     validate.add_argument("--hcx-semantic-resolver-enabled", required=True)
     validate.add_argument("--adaptive-semantic-enabled", required=True)
     validate.add_argument("--fund-execution-policy", required=True)

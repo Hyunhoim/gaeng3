@@ -46,6 +46,7 @@ jobs:
       TRUSTED_NCP_REPOSITORY: ${{ vars.NCP_IMAGE_REPOSITORY }}
       FINAL_ANSWER_PROVIDER: hyperclova
       FINAL_HCX_QUERYPLAN_ENABLED: "false"
+      FINAL_HCX_INTENT_ANALYSIS_ENABLED: "true"
       FINAL_HCX_SEMANTIC_RESOLVER_ENABLED: "false"
       FINAL_ADAPTIVE_SEMANTIC_ENABLED: "true"
       FINAL_FUND_EXECUTION_POLICY: public_fund_v1_approved
@@ -76,6 +77,7 @@ jobs:
           TRUSTED_PREVIOUS_BINDING_SHA256: ${{ secrets.PREVIOUS_DEPLOYMENT_BINDING_SHA256 }}
           INPUT_ANSWER_PROVIDER: ${{ env.FINAL_ANSWER_PROVIDER }}
           INPUT_HCX_QUERYPLAN_ENABLED: ${{ env.FINAL_HCX_QUERYPLAN_ENABLED }}
+          INPUT_HCX_INTENT_ANALYSIS_ENABLED: ${{ env.FINAL_HCX_INTENT_ANALYSIS_ENABLED }}
           INPUT_HCX_SEMANTIC_RESOLVER_ENABLED: ${{ env.FINAL_HCX_SEMANTIC_RESOLVER_ENABLED }}
           INPUT_ADAPTIVE_SEMANTIC_ENABLED: ${{ env.FINAL_ADAPTIVE_SEMANTIC_ENABLED }}
           INPUT_FUND_EXECUTION_POLICY: ${{ env.FINAL_FUND_EXECUTION_POLICY }}
@@ -101,6 +103,7 @@ jobs:
             --previous-binding-sha256 "$TRUSTED_PREVIOUS_BINDING_SHA256" \
             --answer-provider "$INPUT_ANSWER_PROVIDER" \
             --hcx-queryplan-enabled "$INPUT_HCX_QUERYPLAN_ENABLED" \
+            --hcx-intent-analysis-enabled "$INPUT_HCX_INTENT_ANALYSIS_ENABLED" \
             --hcx-semantic-resolver-enabled "$INPUT_HCX_SEMANTIC_RESOLVER_ENABLED" \
             --adaptive-semantic-enabled "$INPUT_ADAPTIVE_SEMANTIC_ENABLED" \
             --fund-execution-policy "$INPUT_FUND_EXECUTION_POLICY" \
@@ -200,6 +203,7 @@ jobs:
           RUNTIME_PLATFORM: ${{ steps.release_inputs.outputs.platform }}
           ANSWER_PROVIDER: ${{ steps.release_inputs.outputs.answer_provider }}
           HCX_QUERYPLAN_ENABLED: ${{ steps.release_inputs.outputs.hcx_queryplan_enabled }}
+          HCX_INTENT_ANALYSIS_ENABLED: ${{ steps.release_inputs.outputs.hcx_intent_analysis_enabled }}
           HCX_SEMANTIC_RESOLVER_ENABLED: ${{ steps.release_inputs.outputs.hcx_semantic_resolver_enabled }}
           ADAPTIVE_SEMANTIC_ENABLED: ${{ steps.release_inputs.outputs.adaptive_semantic_enabled }}
           FUND_EXECUTION_POLICY: ${{ steps.release_inputs.outputs.fund_execution_policy }}
@@ -238,6 +242,9 @@ jobs:
           fi
           if [ "$HCX_QUERYPLAN_ENABLED" = "true" ]; then
             manifest_arguments+=(--hcx-queryplan-enabled)
+          fi
+          if [ "$HCX_INTENT_ANALYSIS_ENABLED" = "true" ]; then
+            manifest_arguments+=(--hcx-intent-analysis-enabled)
           fi
           if [ "$HCX_SEMANTIC_RESOLVER_ENABLED" = "true" ]; then
             manifest_arguments+=(--hcx-semantic-resolver-enabled)

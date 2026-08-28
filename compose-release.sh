@@ -82,6 +82,7 @@ allowed = {
     "FINANCE_BACKEND_FUND_EXECUTION_POLICY",
     "FINANCE_BACKEND_ANSWER_PROVIDER",
     "FINANCE_BACKEND_HCX_QUERY_PLAN_ENABLED",
+    "FINANCE_BACKEND_HCX_INTENT_ANALYSIS_ENABLED",
     "FINANCE_BACKEND_HCX_SEMANTIC_RESOLVER_ENABLED",
     "FINANCE_ADAPTIVE_SEMANTIC_ENABLED",
     "FINANCE_SCHEMA_DENSE_INDEX_HOST_FILE",
@@ -123,6 +124,7 @@ required = {
     "FINANCE_BACKEND_FUND_EXECUTION_POLICY",
     "FINANCE_BACKEND_ANSWER_PROVIDER",
     "FINANCE_BACKEND_HCX_QUERY_PLAN_ENABLED",
+    "FINANCE_BACKEND_HCX_INTENT_ANALYSIS_ENABLED",
     "HCX_TIMEOUT_SECONDS",
 }
 missing = sorted(name for name in required if not environment.get(name))
@@ -180,6 +182,9 @@ answer_provider = environment["FINANCE_BACKEND_ANSWER_PROVIDER"]
 hcx_query_plan = environment["FINANCE_BACKEND_HCX_QUERY_PLAN_ENABLED"].lower()
 if hcx_query_plan not in {"true", "false"}:
     raise SystemExit("FINANCE_BACKEND_HCX_QUERY_PLAN_ENABLED must be true or false")
+hcx_intent_analysis = environment["FINANCE_BACKEND_HCX_INTENT_ANALYSIS_ENABLED"].lower()
+if hcx_intent_analysis not in {"true", "false"}:
+    raise SystemExit("FINANCE_BACKEND_HCX_INTENT_ANALYSIS_ENABLED must be true or false")
 hcx_semantic_resolver = environment.get(
     "FINANCE_BACKEND_HCX_SEMANTIC_RESOLVER_ENABLED", "false"
 ).lower()
@@ -192,11 +197,15 @@ if hcx_semantic_resolver == "true" and adaptive_semantic != "true":
     raise SystemExit("HCLX Semantic Resolver requires adaptive semantic mode")
 uses_hcx = (
     answer_provider == "hyperclova"
-    or hcx_query_plan == "true"
+    or hcx_intent_analysis == "true"
     or hcx_semantic_resolver == "true"
 )
 if answer_provider not in {"deterministic", "hyperclova"}:
     raise SystemExit("release answer provider must be deterministic or hyperclova")
+if answer_provider != "hyperclova" or hcx_intent_analysis != "true":
+    raise SystemExit("official release requires HCLX Intent analysis and answer generation")
+if hcx_query_plan != "false":
+    raise SystemExit("full HCLX QueryPlan generation is retired")
 if uses_hcx:
     if (
         environment.get("FINANCE_AGENT_LLM_MODE") != environment["APP_ENV"]
@@ -562,6 +571,7 @@ unset APP_ENV \
     FINANCE_BACKEND_FUND_EXECUTION_POLICY \
     FINANCE_BACKEND_ANSWER_PROVIDER \
     FINANCE_BACKEND_HCX_QUERY_PLAN_ENABLED \
+    FINANCE_BACKEND_HCX_INTENT_ANALYSIS_ENABLED \
     FINANCE_BACKEND_HCX_SEMANTIC_RESOLVER_ENABLED \
     FINANCE_ADAPTIVE_SEMANTIC_ENABLED \
     FINANCE_AGENT_LLM_MODE \
