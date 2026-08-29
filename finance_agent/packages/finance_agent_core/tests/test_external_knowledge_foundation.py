@@ -132,6 +132,23 @@ class _AlwaysFailTransport:
         raise OfficialConnectorError("simulated official fetch failure")
 
 
+class _EchoOfficialTransport:
+    def fetch(
+        self,
+        url: str,
+        *,
+        timeout_seconds: float,
+        max_bytes: int,
+    ) -> OfficialHttpResponse:
+        assert url and timeout_seconds > 0 and max_bytes > 0
+        return OfficialHttpResponse(
+            status_code=200,
+            final_url=url,
+            content_type="text/html",
+            body=b"bounded official evidence",
+        )
+
+
 class _FakeDiscoveryProvider:
     def __init__(self, candidates: tuple[OfficialDiscoveryCandidate, ...]) -> None:
         self.candidates = candidates
@@ -689,6 +706,53 @@ def test_failed_official_fetches_consume_the_bounded_attempt_budget() -> None:
     assert result.fetch_count == 2
     assert transport.calls == 2
     assert result.snapshots == ()
+
+
+def test_acquisition_result_accepts_snapshots_up_to_its_fetch_budget() -> None:
+    store = TemporalRelationStore(
+        seal_temporal_relation_bundle((), corpus_manifest_sha256=_SHA_B)
+    )
+    candidates = tuple(
+        OfficialDiscoveryCandidate(
+            url=f"https://www.fsc.go.kr/po010103/{identifier}",
+            title=f"공식 자료 {identifier}",
+            published_at=date(2026, 5, 21),
+            as_of=date(2026, 5, 21),
+        )
+        for identifier in range(88001, 88010)
+    )
+    coordinator = OfficialEvidenceAcquisitionCoordinator(
+        relation_store=store,
+        discovery_provider=_FakeDiscoveryProvider(candidates),
+        connector=OfficialSourceConnector(_EchoOfficialTransport()),
+    )
+    question = "국민성장펀드의 구조와 투자 전략 및 운용 동향을 알려줘."
+    requirement = (
+        CompositeKnowledgePlanCompiler()
+        .compile(
+            question,
+            "bounded-nine-snapshots",
+            _intent(
+                question,
+                [
+                    (
+                        KnowledgeCapability.FUND_STRUCTURE_STRATEGY_TREND,
+                        "국민성장펀드",
+                        "구조와 투자 전략 및 운용 동향",
+                    )
+                ],
+                [ProductFamily.FUND],
+                interaction_intent=InteractionIntent.EXPLAIN,
+            ),
+        )
+        .requirements[0]
+    )
+
+    result = coordinator.acquire(requirement, top_k=9, max_fetches=9)
+
+    assert result.status is OfficialEvidenceAcquisitionStatus.LIVE_EVIDENCE_CANDIDATE
+    assert result.fetch_count == 9
+    assert len(result.snapshots) == 9
 
 
 def test_evidence_verifier_requires_complete_multihop_chain_and_provided_aum() -> None:
