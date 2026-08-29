@@ -709,9 +709,7 @@ def test_failed_official_fetches_consume_the_bounded_attempt_budget() -> None:
 
 
 def test_acquisition_result_accepts_snapshots_up_to_its_fetch_budget() -> None:
-    store = TemporalRelationStore(
-        seal_temporal_relation_bundle((), corpus_manifest_sha256=_SHA_B)
-    )
+    store = TemporalRelationStore(seal_temporal_relation_bundle((), corpus_manifest_sha256=_SHA_B))
     candidates = tuple(
         OfficialDiscoveryCandidate(
             url=f"https://www.fsc.go.kr/po010103/{identifier}",
