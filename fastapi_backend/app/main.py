@@ -73,6 +73,7 @@ def create_app(
             timeout_seconds=resolved_settings.audit_shutdown_timeout_seconds,
         )
         raise
+
     @asynccontextmanager
     async def lifespan(_application: FastAPI):
         try:
