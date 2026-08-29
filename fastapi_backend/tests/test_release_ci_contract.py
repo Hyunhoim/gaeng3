@@ -63,15 +63,15 @@ def _valid_input_arguments(output: Path) -> list[str]:
         "--fund-execution-policy",
         "public_fund_v1_approved",
         "--schema-dense-index-sha256",
-        "1b0dd3668daee501ef8f24457b2bbf6b4acc074c4b1fc8bbafebe56c1d3594f5",
+        "9055d4cc99f9ab75ab546f860e21380c5e586a55a35272d05cccda08b150efc3",
         "--schema-dense-calibration-report-sha256",
-        "2fcc422baa76b6729933d598ccf6828dc997b92fd15f0fa12d7f1579d75587e3",
+        "cb738558be71c9bd173504fa339302854bdd5fd6f6331143b0e87ae528fb7c47",
         "--schema-dense-min-score",
         "0.340015",
         "--schema-dense-hclx-candidate-min-score",
         "0.3",
         "--schema-dense-minimum-margin",
-        "0.024703",
+        "0.042213",
         "--schema-dense-top-k",
         "10",
         "--python-base-image",
@@ -161,14 +161,14 @@ def test_release_ci_accepts_only_normalized_protected_main_inputs(tmp_path: Path
     assert values["adaptive_semantic_enabled"] == "true"
     assert values["fund_execution_policy"] == "public_fund_v1_approved"
     assert values["schema_dense_index_sha256"] == (
-        "1b0dd3668daee501ef8f24457b2bbf6b4acc074c4b1fc8bbafebe56c1d3594f5"
+        "9055d4cc99f9ab75ab546f860e21380c5e586a55a35272d05cccda08b150efc3"
     )
     assert values["schema_dense_calibration_report_sha256"] == (
-        "2fcc422baa76b6729933d598ccf6828dc997b92fd15f0fa12d7f1579d75587e3"
+        "cb738558be71c9bd173504fa339302854bdd5fd6f6331143b0e87ae528fb7c47"
     )
     assert values["schema_dense_min_score"] == "0.340015"
     assert values["schema_dense_hclx_candidate_min_score"] == "0.3"
-    assert values["schema_dense_minimum_margin"] == "0.024703"
+    assert values["schema_dense_minimum_margin"] == "0.042213"
     assert values["schema_dense_top_k"] == "10"
     assert values["model_id"] == "HCX-007"
 
@@ -818,19 +818,62 @@ def test_release_workflow_binds_exact_adaptive_runtime_artifacts() -> None:
     assert release["env"]["FINAL_HCX_SEMANTIC_RESOLVER_ENABLED"] == "false"
     assert release["env"]["FINAL_ADAPTIVE_SEMANTIC_ENABLED"] == "true"
     assert release["env"]["FINAL_SCHEMA_DENSE_CALIBRATION_REPORT_SHA256"] == (
-        "2fcc422baa76b6729933d598ccf6828dc997b92fd15f0fa12d7f1579d75587e3"
+        "cb738558be71c9bd173504fa339302854bdd5fd6f6331143b0e87ae528fb7c47"
     )
     assert release["env"]["FINAL_SCHEMA_DENSE_CALIBRATION_ARTIFACT_SHA256"] == (
-        "48486114590e785bac118ad80fa374f7c428ff10b7454a064d26c493f75b883b"
+        "8243fba9d219194bfb236b581d8a8a561f44b985f1572227493a135922c64f99"
     )
     assert release["env"]["FINAL_SCHEMA_DENSE_MIN_SCORE"] == "0.340015"
     assert release["env"]["FINAL_SCHEMA_DENSE_HCLX_CANDIDATE_MIN_SCORE"] == "0.3"
-    assert release["env"]["FINAL_SCHEMA_DENSE_MINIMUM_MARGIN"] == "0.024703"
+    assert release["env"]["FINAL_SCHEMA_DENSE_MINIMUM_MARGIN"] == "0.042213"
+    registry_path = (
+        _repository_root()
+        / "finance_agent/packages/finance_agent_core/src/finance_agent_core/config/field_registry.yaml"
+    )
+    index_path = (
+        _repository_root()
+        / "finance_agent/artifacts/runtime/schema-dense/kure-schema-dense-production-v3-20260829.json"
+    )
+    report_path = (
+        _repository_root()
+        / "finance_agent/artifacts/evaluation/kure-schema-dense-p1-selective-v15-20260829.json"
+    )
+    registry = yaml.safe_load(registry_path.read_text(encoding="utf-8"))
+    registry_sha256 = hashlib.sha256(registry_path.read_bytes()).hexdigest()
+    index = json.loads(index_path.read_text(encoding="utf-8"))
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    for manifest in (
+        index["manifest"],
+        report["corpora"]["schema-field-prototype-v3"]["manifest"],
+    ):
+        assert manifest["field_registry_schema_version"] == registry["schema_version"]
+        assert manifest["field_registry_sha256"] == registry_sha256
+    assert (
+        hashlib.sha256(index_path.read_bytes()).hexdigest()
+        == (release["env"]["FINAL_SCHEMA_DENSE_INDEX_SHA256"])
+    )
+    assert (
+        hashlib.sha256(report_path.read_bytes()).hexdigest()
+        == (release["env"]["FINAL_SCHEMA_DENSE_CALIBRATION_ARTIFACT_SHA256"])
+    )
+    assert (
+        report["report_sha256"] == (release["env"]["FINAL_SCHEMA_DENSE_CALIBRATION_REPORT_SHA256"])
+    )
+    assert (
+        str(report["calibrated_threshold"]["minimum_score"])
+        == (release["env"]["FINAL_SCHEMA_DENSE_MIN_SCORE"])
+    )
+    assert (
+        str(report["calibrated_threshold"]["minimum_margin"])
+        == (release["env"]["FINAL_SCHEMA_DENSE_MINIMUM_MARGIN"])
+    )
     assert base_build["with"]["target"] == "adaptive-runtime"
     assert steps.index(adaptive_step) < steps.index(base_build)
     assert "sha256sum" in adaptive_step["run"]
     assert "report_sha256" in adaptive_step["run"]
     assert "claimed == actual" in adaptive_step["run"]
+    assert "field_registry_sha256" in adaptive_step["run"]
+    assert "field_registry_schema_version" in adaptive_step["run"]
     assert "install -m 0444" in adaptive_step["run"]
     assert '--schema-dense-index "$SCHEMA_DENSE_INDEX"' in manifest_step["run"]
     assert "--schema-dense-calibration-report-sha256" in manifest_step["run"]
