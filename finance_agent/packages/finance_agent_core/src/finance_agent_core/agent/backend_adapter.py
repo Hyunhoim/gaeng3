@@ -143,13 +143,18 @@ def _finalize_with_official_hclx(
             )
         raise
     if audit is not None:
+        # Documents are evidence for the returned products, not additional
+        # product results. Counting them as results can make result_count exceed
+        # candidate_count on verified external-knowledge responses and causes
+        # the fail-closed AuditEvent contract to reject the terminal HCLX events.
+        returned_product_count = len(response.products)
         audit.emit(
             stage=AuditStage.HCLX,
             outcome=AuditOutcome.SUCCEEDED,
             reason_code="final_generation_completed",
             duration_ms=composition.generation_latency_ms,
             candidate_count=response.candidate_count or 0,
-            result_count=len(response.products) + len(response.documents),
+            result_count=returned_product_count,
             evidence_count=context.evidence_count,
         )
         audit.emit(
@@ -158,7 +163,7 @@ def _finalize_with_official_hclx(
             reason_code="final_generation_verified",
             duration_ms=0,
             candidate_count=response.candidate_count or 0,
-            result_count=len(response.products) + len(response.documents),
+            result_count=returned_product_count,
             evidence_count=context.evidence_count,
         )
     updates: dict[str, object] = {"answer": composition.answer}
