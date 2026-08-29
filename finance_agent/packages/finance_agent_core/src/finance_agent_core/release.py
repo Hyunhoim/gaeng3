@@ -481,6 +481,7 @@ class RuntimeReleaseInputs:
     hcx_queryplan_enabled: bool
     hcx_model: str | None
     fund_execution_policy: Literal["locked", "public_fund_v1_approved"]
+    core_root: Path | None = None
     hcx_intent_analysis_enabled: bool = False
     hcx_semantic_resolver_enabled: bool = False
     schema_dense_enabled: bool = False
@@ -888,6 +889,13 @@ def build_release_components(inputs: RuntimeReleaseInputs) -> AgentReleaseCompon
             "backend runtime root must be absolute",
         )
 
+    configured_core_root = inputs.core_root
+    if configured_core_root is not None and not Path(configured_core_root).is_absolute():
+        raise AgentReleaseError(
+            AgentReleaseCode.RUNTIME_MISMATCH,
+            "core runtime root must be absolute",
+        )
+
     from finance_agent_core.config.capability import load_capability_matrix
     from finance_agent_core.execution.authority import (
         GROUNDED_PLAN_GATE_VERSION,
@@ -897,7 +905,22 @@ def build_release_components(inputs: RuntimeReleaseInputs) -> AgentReleaseCompon
         SERVER_COMPILER_VERSION,
     )
 
-    core_root = Path(__file__).resolve().parent
+    try:
+        core_root = (
+            Path(__file__).resolve(strict=True).parent
+            if configured_core_root is None
+            else Path(configured_core_root).resolve(strict=True)
+        )
+    except OSError as error:
+        raise AgentReleaseError(
+            AgentReleaseCode.RUNTIME_MISMATCH,
+            "core runtime root is unavailable",
+        ) from error
+    if not core_root.is_dir():
+        raise AgentReleaseError(
+            AgentReleaseCode.RUNTIME_MISMATCH,
+            "core runtime root must be a directory",
+        )
     registry_bytes = _raw_resource("finance_agent_core.config", "field_registry.yaml")
     capability_bytes = _raw_resource("finance_agent_core.config", "capability_matrix.json")
     queryplan_schema_bytes = _raw_resource(

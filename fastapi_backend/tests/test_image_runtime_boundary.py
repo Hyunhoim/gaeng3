@@ -101,6 +101,16 @@ def test_embedded_manifest_binding_requires_exact_bytes_and_release_identity(tmp
     release_id = "finance-agent-eval-001"
     source_commit = "b" * 40
     manifest = tmp_path / "agent-release-manifest.json"
+    core_root = tmp_path / "core"
+    backend_root = tmp_path / "backend"
+    core_root.mkdir()
+    backend_root.mkdir()
+    (core_root / "runtime.py").write_text("CORE = True\n", encoding="utf-8")
+    (backend_root / "main.py").write_text("APP = True\n", encoding="utf-8")
+    expected_code = {
+        "core_package_sha256": image_runtime_boundary.sha256_runtime_tree(core_root),
+        "backend_package_sha256": image_runtime_boundary.sha256_runtime_tree(backend_root),
+    }
     data = (
         json.dumps(
             {
@@ -108,7 +118,8 @@ def test_embedded_manifest_binding_requires_exact_bytes_and_release_identity(tmp
                 "release_id": release_id,
                 "source_commit": source_commit,
                 "components": {
-                    "runtime_features": {"retrieval": {"schema_dense": "disabled_offline_only"}}
+                    "code": expected_code,
+                    "runtime_features": {"retrieval": {"schema_dense": "disabled_offline_only"}},
                 },
             },
             sort_keys=True,
@@ -123,23 +134,41 @@ def test_embedded_manifest_binding_requires_exact_bytes_and_release_identity(tmp
         release_id=release_id,
         source_commit=source_commit,
         manifest_path=manifest,
+        core_root=core_root,
+        backend_root=backend_root,
     )
     tampered_hash = image_runtime_boundary._embedded_manifest_binding(
         expected_sha256="c" * 64,
         release_id=release_id,
         source_commit=source_commit,
         manifest_path=manifest,
+        core_root=core_root,
+        backend_root=backend_root,
     )
     wrong_identity = image_runtime_boundary._embedded_manifest_binding(
         expected_sha256=hashlib.sha256(data).hexdigest(),
         release_id="finance-agent-eval-002",
         source_commit=source_commit,
         manifest_path=manifest,
+        core_root=core_root,
+        backend_root=backend_root,
     )
 
     assert verified["verified"] is True
+    assert verified["runtime_code"]["verified"] is True
     assert tampered_hash["failure_code"] == "manifest_sha256_mismatch"
     assert wrong_identity["failure_code"] == "manifest_identity_mismatch"
+
+    (core_root / "runtime.py").write_text("CORE = False\n", encoding="utf-8")
+    mismatched_runtime = image_runtime_boundary._embedded_manifest_binding(
+        expected_sha256=hashlib.sha256(data).hexdigest(),
+        release_id=release_id,
+        source_commit=source_commit,
+        manifest_path=manifest,
+        core_root=core_root,
+        backend_root=backend_root,
+    )
+    assert mismatched_runtime["failure_code"] == "runtime_code_hash_mismatch"
 
 
 def test_runtime_boundary_allows_only_exact_adaptive_dependencies(monkeypatch) -> None:

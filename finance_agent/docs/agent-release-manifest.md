@@ -125,6 +125,13 @@ export RELEASE_ID=<unique-release-id>
 export RELATION_RETRIEVAL_ARTIFACT_FILE=<approved-canonical-artifact-absolute-path>
 export RELATION_RETRIEVAL_ARTIFACT_SHA256=<64-lowercase-hex>
 export REPO_ROOT="$(git rev-parse --show-toplevel)"
+export RUNTIME_CORE_ROOT="$(mktemp -d)/runtime-core"
+
+python "$REPO_ROOT/fastapi_backend/scripts/build_runtime_core.py" \
+  --source "$REPO_ROOT/finance_agent/packages/finance_agent_core" \
+  --output "$RUNTIME_CORE_ROOT" \
+  --manifest "$REPO_ROOT/fastapi_backend/runtime-core-manifest.json" \
+  --pyproject "$REPO_ROOT/fastapi_backend/runtime-core-pyproject.toml"
 
 PYTHONPATH="$REPO_ROOT/finance_agent/packages/finance_agent_core/src" \
 python -m finance_agent_core.release_cli manifest \
@@ -133,6 +140,7 @@ python -m finance_agent_core.release_cli manifest \
   --source-commit "$SOURCE_COMMIT" \
   --git-root "$REPO_ROOT" \
   --backend-root "$REPO_ROOT/fastapi_backend/app" \
+  --runtime-core-root "$RUNTIME_CORE_ROOT/src/finance_agent_core" \
   --platform linux/amd64 \
   --answer-provider hyperclova \
   --hcx-model HCX-007 \
@@ -146,6 +154,7 @@ python -m finance_agent_core.release_cli manifest \
 - Git top-level, HEAD와 `source_commit` 일치
 - tracked·untracked 변경이 없는 상태를 hash 전후 두 번 확인
 - Core와 Backend가 그 Git checkout의 정확한 경로인지 확인
+- Manifest의 Core code hash가 Docker와 같은 allowlist Runtime bundle 기준인지 확인
 - relation artifact가 canonical JSON이고 외부 file SHA-256과 일치하는지 확인
 - 기존 파일 덮어쓰기 금지, symlink 경로 금지, 결과를 read-only로 생성
 
