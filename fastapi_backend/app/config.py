@@ -303,9 +303,7 @@ class Settings(BaseSettings):
                 "finance_agent_llm_mode",
                 "llm_provider",
             }
-            if any(
-                normalized_values.get(key) == "local_test" for key in retired_provider_keys
-            ):
+            if any(normalized_values.get(key) == "local_test" for key in retired_provider_keys):
                 raise ValueError("local_test/Qwen Runtime provider is retired")
         if "CLOVASTUDIO_API_KEY" in os.environ or "clovastudio_api_key" in explicit_names:
             raise ValueError(
