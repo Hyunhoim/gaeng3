@@ -254,7 +254,8 @@ class AdaptiveShadowPlanningPolicy:
     def __init__(self, *, hclx_planning_enabled: bool = False) -> None:
         if type(hclx_planning_enabled) is not bool:
             raise TypeError("hclx_planning_enabled must be a boolean")
-        self.hclx_planning_enabled = hclx_planning_enabled
+        if hclx_planning_enabled:
+            raise ValueError("legacy HCLX QueryPlan execution is retired")
 
     def decide(
         self,
@@ -300,7 +301,6 @@ class AdaptiveShadowPlanningPolicy:
                 path=PlanningPath.DETERMINISTIC_FAST,
                 semantic_issue=PlanningSemanticIssue.NONE,
                 reason_code="deterministic_route_executable",
-                hclx_allowed=self.hclx_planning_enabled,
                 sql_allowed=True,
                 compiler_allowed=True,
                 oracle_allowed=True,

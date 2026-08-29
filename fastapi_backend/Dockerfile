@@ -10,11 +10,20 @@ ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
 
 WORKDIR /build
 
-# Build into a detached prefix.  The source tree and test files stay in this
-# disposable stage and therefore cannot be recovered from a runtime OCI layer.
-COPY finance_agent/packages/finance_agent_core /build/finance_agent_core
+# Build an explicit Runtime-only source bundle into a detached prefix. Qwen,
+# retired planning, Shadow execution, evaluation CLIs and test helpers never
+# enter the installed wheel or a final OCI layer.
+COPY finance_agent/packages/finance_agent_core /build/finance_agent_core-source
+COPY fastapi_backend/runtime-core-manifest.json /build/runtime-core-manifest.json
+COPY fastapi_backend/runtime-core-pyproject.toml /build/runtime-core-pyproject.toml
+COPY fastapi_backend/scripts/build_runtime_core.py /build/build_runtime_core.py
 COPY finance_agent/requirements/constraints.txt /build/core-constraints.txt
 COPY fastapi_backend/requirements.txt /build/backend-requirements.txt
+RUN python /build/build_runtime_core.py \
+        --source /build/finance_agent_core-source \
+        --output /build/finance_agent_core \
+        --manifest /build/runtime-core-manifest.json \
+        --pyproject /build/runtime-core-pyproject.toml
 RUN python -m pip install \
         --no-compile \
         --prefix /install \

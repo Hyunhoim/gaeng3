@@ -2,12 +2,9 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import asynccontextmanager
-from time import monotonic
 
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
-from finance_agent_core.agent import RoutedFinanceAgent
-from finance_agent_core.retrieval.schema_shadow import AsyncSchemaLinkShadowObserver
 from finance_agent_core.storage import require_approved_database_paths
 
 from app.audit_runtime import AuditRuntimeState
@@ -24,7 +21,6 @@ from app.http_audit import AnswerHttpAuditMiddleware
 from app.request_execution import IdempotentRequestCoordinator, wait_for_request_workers
 from app.routes.answer import router as answer_router
 from app.routes.health import router as health_router
-from app.shadow_runtime import ShadowRuntimeState
 
 
 class _OuterAuditedFastAPI(FastAPI):
@@ -77,68 +73,25 @@ def create_app(
             timeout_seconds=resolved_settings.audit_shutdown_timeout_seconds,
         )
         raise
-    shadow_observer: AsyncSchemaLinkShadowObserver | None = None
-    if type(resolved_agent) is RoutedFinanceAgent:
-        candidate = resolved_agent.schema_link_shadow_observer
-        if candidate is not None:
-            if type(candidate) is not AsyncSchemaLinkShadowObserver:
-                audit_runtime.close(
-                    timeout_seconds=resolved_settings.audit_shutdown_timeout_seconds,
-                )
-                raise RuntimeError("Agent contains an unsupported Schema Shadow observer")
-            shadow_observer = candidate
-    shadow_runtime = ShadowRuntimeState(shadow_observer)
-    if (
-        shadow_observer is not None
-        and shadow_observer.enabled
-        and resolved_audit_sink is not None
-        and (
-            shadow_observer.expected_audit_sink is not resolved_audit_sink
-            or resolved_agent.audit_sink is not resolved_audit_sink
-        )
-    ):
-        shutdown_deadline = monotonic() + resolved_settings.audit_shutdown_timeout_seconds
-        shadow_runtime.close(
-            timeout_seconds=max(0.000_001, shutdown_deadline - monotonic()),
-        )
-        audit_runtime.close(
-            timeout_seconds=max(0.000_001, shutdown_deadline - monotonic()),
-        )
-        raise RuntimeError("Agent and Schema Shadow must use the application audit sink")
-
     @asynccontextmanager
     async def lifespan(_application: FastAPI):
         try:
             audit_runtime.start()
         except BaseException:
-            shutdown_deadline = monotonic() + resolved_settings.audit_shutdown_timeout_seconds
-            shadow_drained = shadow_runtime.close(
-                timeout_seconds=max(0.000_001, shutdown_deadline - monotonic()),
-            )
-            _application.state.shadow_shutdown_drained = shadow_drained
             _application.state.audit_shutdown_drained = audit_runtime.close(
-                timeout_seconds=max(0.000_001, shutdown_deadline - monotonic()),
-                upstream_drained=shadow_drained,
+                timeout_seconds=resolved_settings.audit_shutdown_timeout_seconds,
             )
             raise
         try:
             yield
         finally:
-            shutdown_deadline = monotonic() + resolved_settings.audit_shutdown_timeout_seconds
             request_workers_drained = await asyncio.to_thread(
                 wait_for_request_workers,
                 timeout_seconds=resolved_settings.audit_shutdown_timeout_seconds,
             )
-            remaining_shadow_seconds = max(0.000_001, shutdown_deadline - monotonic())
-            shadow_drained = shadow_runtime.close(
-                timeout_seconds=remaining_shadow_seconds,
-                upstream_drained=request_workers_drained,
-            )
-            _application.state.shadow_shutdown_drained = shadow_drained
-            remaining_audit_seconds = max(0.000_001, shutdown_deadline - monotonic())
             _application.state.audit_shutdown_drained = audit_runtime.close(
-                timeout_seconds=remaining_audit_seconds,
-                upstream_drained=shadow_drained,
+                timeout_seconds=resolved_settings.audit_shutdown_timeout_seconds,
+                upstream_drained=request_workers_drained,
             )
 
     application = _OuterAuditedFastAPI(
@@ -151,8 +104,6 @@ def create_app(
     application.state.audit_sink = resolved_audit_sink
     application.state.audit_runtime = audit_runtime
     application.state.audit_shutdown_drained = None
-    application.state.shadow_runtime = shadow_runtime
-    application.state.shadow_shutdown_drained = None
     application.state.agent = resolved_agent
     application.state.request_coordinator = request_coordinator
     application.add_exception_handler(

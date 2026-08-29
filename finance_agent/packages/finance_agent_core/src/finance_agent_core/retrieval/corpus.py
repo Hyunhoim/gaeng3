@@ -528,23 +528,6 @@ def seal_approved_corpus_manifest(
     )
 
 
-def load_approved_corpus_manifest(path: str | Path) -> ApprovedCorpusManifest:
-    data = _read_regular_file(
-        Path(path),
-        label="approved corpus manifest",
-        max_bytes=_MAX_MANIFEST_BYTES,
-    )
-    try:
-        manifest = ApprovedCorpusManifest.model_validate(
-            _strict_json_object(data, "approved corpus manifest")
-        )
-    except ValueError as error:
-        raise CorpusApprovalError("approved corpus manifest violates the schema") from error
-    if data != approved_corpus_manifest_bytes(manifest):
-        raise CorpusApprovalError("approved corpus manifest is not in canonical file form")
-    return manifest
-
-
 def verify_approved_corpus(
     manifest_path: str | Path,
     corpus_root: str | Path,
@@ -745,7 +728,6 @@ __all__ = [
     "approved_corpus_manifest_bytes",
     "build_approved_corpus_index",
     "corpus_receipt_bytes",
-    "load_approved_corpus_manifest",
     "load_external_corpus_intake_spec",
     "seal_approved_corpus_manifest",
     "verify_approved_corpus",

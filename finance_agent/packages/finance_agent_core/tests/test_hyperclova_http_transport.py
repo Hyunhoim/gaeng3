@@ -69,7 +69,7 @@ class FakeOpener:
 
 def _semantic_request(*, model: str = "HCX-007") -> HyperClovaXStructuredRequest:
     return HyperClovaXStructuredRequest(
-        operation="query_plan",
+        operation="intent_analysis",
         model=model,
         system_prompt="시스템 지시",
         user_prompt="사용자 질문",

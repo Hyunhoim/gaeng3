@@ -13,6 +13,7 @@ def _safe_runtime(monkeypatch) -> None:
         lambda: {"fastapi": "0.116.1", "finance-agent-core": "0.1.0"},
     )
     monkeypatch.setattr(image_runtime_boundary, "_forbidden_files", list)
+    monkeypatch.setattr(image_runtime_boundary, "_forbidden_runtime_module_findings", list)
     monkeypatch.setattr(image_runtime_boundary.os, "getuid", lambda: 10001)
     monkeypatch.setattr(image_runtime_boundary.os, "getgid", lambda: 10001)
     monkeypatch.setattr(image_runtime_boundary.shutil, "which", lambda _name: None)
@@ -227,7 +228,7 @@ def test_adaptive_runtime_allows_torch_support_binary_but_not_other_weights(
 
 def test_runtime_boundary_settings_guards_reject_non_hcx_release_paths() -> None:
     assert image_runtime_boundary._settings_reject(
-        "FINANCE_BACKEND_ANSWER_PROVIDER=local_test is allowed only in development",
+        "local_test/Qwen Runtime provider is retired",
         APP_ENV="evaluation",
         FINANCE_BACKEND_ANSWER_PROVIDER="local_test",
     )

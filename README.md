@@ -30,11 +30,11 @@ ETF·ETN, 공모펀드를 조회·비교·계산한 뒤 근거와 기준일을 �
 | 데이터 | 공식 XLSX에서 네 상품군 SQLite와 관계 artifact·SHA sidecar·관계 SQLite를 자동 생성·검증 |
 | Ontology | 공식 파일명 Turtle 5개를 field registry에서 자동 생성·문법·정합성 검사 |
 | AI Agent | 검색·비교·집계·근거 생성·결과 검증과 공개 관계 Router 구현. 관계 엔터티 전체 값 exact match와 기존 상품 경로 fallthrough 적용 |
-| Backend | FastAPI `GET /health`, 내부용 `POST /answer`, 평가용 `GET /answer`, 관계 DTO·Audit·Shadow·관계 readiness 구현 |
+| Backend | FastAPI `GET /health`, 내부용 `POST /answer`, 평가용 `GET /answer`, 관계 DTO·Audit·관계 readiness 구현. 과거 Shadow worker는 제거하고 주입 차단 계약만 유지 |
 | Release | `AgentReleaseManifest 1.2`가 코드·Prompt·Model·index·공식 데이터·관계 artifact·Docker digest를 결합. 로컬 fail-closed 검증 완료, 실제 NCP 서명 배포 대기 |
 | Frontend | 동료의 `nextjs-frontend/` 코드 합류 후 연결 예정 |
 | LLM | 최종 평가는 모든 유효 요청에 HCX-007 Intent 분석과 검증 근거 기반 최종 답변 생성을 필수화. HCLX 전체 QueryPlan 생성은 운영 배선에서 제거했으며 SQLite/Python·Verifier가 field·filter·정렬·계산·근거를 계속 확정 |
-| 자동 검증 | pre-HCX 동결 pytest 507개는 역사 기록으로 보존. 2026-08-29 현재 Core 1,750개·Backend 456개 통과, 과거 Stage 2 DB·Docker Compose 환경이 필요한 opt-in 테스트 각 1개 skip |
+| 자동 검증 | pre-HCX 동결 pytest 507개는 역사 기록으로 보존. 2026-08-29 최종 Runtime 정리 후 Core 1,704개·Backend 446개 통과, 과거 Stage 2 DB·Docker Compose 환경이 필요한 opt-in 테스트 각 1개 skip |
 
 세부 기능과 평가 결과는 [AI Agent 작업공간](finance_agent/README.md)에서 관리
 배포 버전 고정과 평가·운영 실행은
@@ -230,8 +230,8 @@ PYTHON_BIN=/home/haeyeongcho/miniforge3/envs/gaeng3-dev/bin/python \
 ## 7. LLM과 데이터 원칙
 
 - 평가·제출 경로의 LLM은 공식 규칙에 따라 HyperCLOVA X만 사용
-- 로컬 Qwen은 크레딧과 실제 HCX API 규격을 확보하기 전 내부 회귀·E2E·장애 검증에만 사용
-- 공식 범위 확인 후 제출 후보에서 로컬 모델 관련 코드·설정·의존성 제거 및 검사
+- 로컬 Qwen 실험 기록은 개발 이력으로만 보존하며 최종 Runtime bundle·Docker image에는 코드·설정·의존성을 포함하지 않음
+- 과거 Shadow worker와 HCLX 전체 QueryPlan·grounded planning 실행 구현은 최종 Runtime에서 제거하고, 해당 설정·provider 주입을 거부하는 차단 검증만 유지
 - 답변의 상품명·수치·순위·출처는 제공 데이터와 결정론적 코드로 검증
 - 공식 데이터와 외부 데이터가 충돌하면 공식 데이터 우선
 - 원천 XLSX, 생성 DB, 평가 응답, 로그와 모델 가중치는 Git에 포함하지 않음

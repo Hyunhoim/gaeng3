@@ -6,7 +6,6 @@ import pytest
 from pydantic import ValidationError
 
 from finance_agent_core.agent.backend_adapter import execute_answer_request
-from finance_agent_core.agent.compiler import ServerQueryPlanCompiler
 from finance_agent_core.agent.planning_policy import (
     AdaptiveShadowPlanningPolicy,
     PlanningDecision,
@@ -21,7 +20,7 @@ from finance_agent_core.agent.semantic_gate import (
     SemanticCoverageGate,
 )
 from finance_agent_core.contracts.backend import BackendAgentRequest, BackendStatus
-from finance_agent_core.contracts.queryplan import ProductFamily, QueryPlan
+from finance_agent_core.contracts.queryplan import ProductFamily
 from finance_agent_core.contracts.routing import InteractionIntent, RouteDisposition
 
 
@@ -90,52 +89,6 @@ class _FailThenSucceedPlanningPolicy:
         return self.fallback.decide(route_decision, coverage)
 
 
-class _ExplodingAllModelProviders:
-    provider_name = "must-not-run"
-    model_name = "must-not-run"
-
-    def generate_query_plan(self, *_args: object, **_kwargs: object) -> object:
-        raise AssertionError("QueryPlan provider must not run")
-
-    def generate_grounded_plan(self, *_args: object, **_kwargs: object) -> object:
-        raise AssertionError("grounded plan provider must not run")
-
-    def generate_grounded_answer(self, *_args: object, **_kwargs: object) -> object:
-        raise AssertionError("grounded answer provider must not run")
-
-
-class _CountingPlanningProviders:
-    provider_name = "counting-test"
-    model_name = "counting-test-model"
-
-    def __init__(self, plan: QueryPlan | None = None) -> None:
-        self.plan = plan
-        self.query_plan_calls = 0
-        self.grounded_plan_calls = 0
-
-    def generate_query_plan(self, *_args: object, **_kwargs: object) -> QueryPlan:
-        self.query_plan_calls += 1
-        if self.plan is None:
-            raise AssertionError("QueryPlan provider must not run")
-        return self.plan
-
-    def generate_grounded_plan(self, *_args: object, **_kwargs: object) -> object:
-        self.grounded_plan_calls += 1
-        raise AssertionError("grounded plan provider must not run")
-
-
-class _FailingQueryPlanProvider:
-    provider_name = "failing-test"
-    model_name = "failing-test-model"
-
-    def __init__(self) -> None:
-        self.calls = 0
-
-    def generate_query_plan(self, *_args: object, **_kwargs: object) -> QueryPlan:
-        self.calls += 1
-        raise RuntimeError("simulated advisory transport failure")
-
-
 def _assert_new_calls_are_closed(decision: PlanningDecision) -> None:
     assert decision.dense_allowed is False
     assert decision.hclx_allowed is False
@@ -152,14 +105,7 @@ def _agent_with_exploding_boundaries(
     router: IntentRouter,
     monkeypatch: pytest.MonkeyPatch,
 ) -> RoutedFinanceAgent:
-    providers = _ExplodingAllModelProviders()
-    agent = RoutedFinanceAgent(
-        {},
-        router=router,
-        query_plan_provider=providers,
-        grounded_plan_provider=providers,
-        answer_provider=providers,
-    )
+    agent = RoutedFinanceAgent({}, router=router)
 
     def fail_boundary(*_args: object, **_kwargs: object) -> None:
         raise AssertionError("Compiler or Oracle boundary must not run")
@@ -195,38 +141,16 @@ def test_adaptive_shadow_classifies_clear_question_as_deterministic_fast_path() 
     assert trace.planning_decision.oracle_allowed is True
 
 
-def test_explicit_server_opt_in_authorizes_hclx_only_on_clear_fast_path() -> None:
-    trace = IntentRouter(hclx_planning_enabled=True).route_with_planning(
-        "1개월 수익률이 높은 국내 ETF 3개를 보여줘.",
-        "planning-clear-hclx-enabled",
-    )
-
-    assert trace.route_decision.disposition is RouteDisposition.EXECUTE
-    assert trace.planning_decision.path is PlanningPath.DETERMINISTIC_FAST
-    assert trace.planning_decision.semantic_issue is PlanningSemanticIssue.NONE
-    assert trace.planning_decision.hclx_allowed is True
-
-
 @pytest.mark.parametrize(
-    ("question", "expected_issue"),
+    "factory",
     [
-        ("수익률이 높은 국내 ETF를 보여줘.", PlanningSemanticIssue.TRUE_AMBIGUITY),
-        ("국내 ETF 매수 주문을 실행해 줘.", PlanningSemanticIssue.UNSUPPORTED),
+        lambda: IntentRouter(hclx_planning_enabled=True),
+        lambda: AdaptiveShadowPlanningPolicy(hclx_planning_enabled=True),
     ],
 )
-def test_server_hclx_opt_in_never_opens_control_semantics(
-    question: str,
-    expected_issue: PlanningSemanticIssue,
-) -> None:
-    trace = IntentRouter(hclx_planning_enabled=True).route_with_planning(
-        question,
-        f"planning-hclx-control-{expected_issue.value}",
-    )
-
-    assert trace.planning_decision.path is PlanningPath.CONTROL
-    assert trace.planning_decision.semantic_issue is expected_issue
-    assert trace.planning_decision.hclx_allowed is False
-    _assert_all_calls_are_closed(trace.planning_decision)
+def test_retired_hclx_queryplan_opt_in_is_rejected(factory) -> None:
+    with pytest.raises(ValueError, match="legacy HCLX QueryPlan execution is retired"):
+        factory()
 
 
 def test_cross_family_search_remains_on_the_existing_deterministic_path() -> None:
@@ -329,115 +253,20 @@ def test_control_routes_never_call_model_compiler_or_oracle_boundaries(
     assert result.query_plan is None
 
 
-def test_provider_injection_without_server_permission_keeps_clear_search_deterministic(
-    sample_database,
-) -> None:
-    path, _, _ = sample_database
-    providers = _CountingPlanningProviders()
-    result = RoutedFinanceAgent(
-        {"overseas_etp": path},
-        query_plan_provider=providers,
-    ).answer(
-        "미국 채권형 해외 ETF를 AUM 높은 순으로 3개 보여줘",
-        "planning-provider-default-off",
-    )
-
-    assert result.status == "executed"
-    assert providers.query_plan_calls == 0
-
-
-def test_explicit_server_permission_allows_clear_query_plan_provider_call(
-    sample_database,
-) -> None:
-    path, _, _ = sample_database
-    question = "미국 채권형 해외 ETF를 AUM 높은 순으로 3개 보여줘"
-    request_id = "planning-provider-explicit-on"
-    route = IntentRouter().route(question, request_id)
-    plan = ServerQueryPlanCompiler({"overseas_etp": path}).compile(route)
-    providers = _CountingPlanningProviders(plan)
-
-    result = RoutedFinanceAgent(
-        {"overseas_etp": path},
-        query_plan_provider=providers,
-        hclx_planning_enabled=True,
-    ).answer(question, request_id)
-
-    assert result.status == "executed"
-    assert result.query_plan == plan
-    assert providers.query_plan_calls == 1
-
-
-def test_query_plan_provider_failure_retains_the_deterministic_server_plan(
-    sample_database,
-) -> None:
-    path, _, _ = sample_database
-    provider = _FailingQueryPlanProvider()
-
-    result = RoutedFinanceAgent(
-        {"overseas_etp": path},
-        query_plan_provider=provider,
-        hclx_planning_enabled=True,
-    ).answer(
-        "미국 채권형 해외 ETF를 AUM 높은 순으로 3개 보여줘",
-        "planning-provider-fallback",
-    )
-
-    assert result.status == "executed"
-    assert result.query_plan is not None
-    assert provider.calls == 1
-
-
 @pytest.mark.parametrize(
-    ("question", "expected_status"),
+    "retired_seam",
     [
-        ("수익률이 높은 국내 ETF를 보여줘.", "clarify"),
-        ("국내 ETF 매수 주문을 실행해 줘.", "unsupported"),
-        ("B2 vs B3, 총보수율과 AUM 비교", "clarify"),
+        "query_plan_provider",
+        "grounded_plan_provider",
+        "answer_provider",
+        "hclx_planning_enabled",
+        "schema_link_shadow_observer",
     ],
 )
-def test_explicit_server_permission_still_blocks_all_model_planning_on_controls(
-    question: str,
-    expected_status: str,
-) -> None:
-    providers = _CountingPlanningProviders()
-    result = RoutedFinanceAgent(
-        {},
-        query_plan_provider=providers,
-        grounded_plan_provider=providers,
-        hclx_planning_enabled=True,
-    ).answer(question, f"planning-provider-control-{expected_status}")
-
-    assert result.status == expected_status
-    assert result.query_plan is None
-    assert providers.query_plan_calls == 0
-    assert providers.grounded_plan_calls == 0
-
-
-def test_schema_link_shadow_blocks_all_model_planning_despite_server_opt_in(
-    sample_database,
-) -> None:
-    path, _, _ = sample_database
-    providers = _CountingPlanningProviders()
-    router = IntentRouter(
-        semantic_coverage_gate=_FixedCoverageGate(
-            SemanticCoverageDecision(schema_link_gap_spans=("AUM",))
-        ),
-        hclx_planning_enabled=True,
-    )
-    result = RoutedFinanceAgent(
-        {"overseas_etp": path},
-        router=router,
-        query_plan_provider=providers,
-        grounded_plan_provider=providers,
-        hclx_planning_enabled=True,
-    ).answer(
-        "미국 채권형 해외 ETF를 AUM 높은 순으로 3개 보여줘",
-        "planning-provider-schema-shadow",
-    )
-
-    assert result.status == "executed"
-    assert providers.query_plan_calls == 0
-    assert providers.grounded_plan_calls == 0
+def test_retired_planning_execution_seams_are_rejected(retired_seam: str) -> None:
+    value: object = True if retired_seam == "hclx_planning_enabled" else object()
+    with pytest.raises(ValueError, match="retired from Runtime"):
+        RoutedFinanceAgent({}, **{retired_seam: value})
 
 
 def test_schema_link_gap_requires_a_trusted_separate_signal() -> None:
@@ -453,23 +282,6 @@ def test_schema_link_gap_requires_a_trusted_separate_signal() -> None:
     assert trace.planning_decision.semantic_issue is PlanningSemanticIssue.SCHEMA_LINK_GAP
     assert trace.planning_decision.unresolved_spans == ("운용 비용률",)
     assert trace.planning_decision.reason_code == "schema_link_gap_observed"
-    _assert_all_calls_are_closed(trace.planning_decision)
-
-
-def test_server_hclx_opt_in_never_opens_schema_link_shadow() -> None:
-    gate = _FixedCoverageGate(SemanticCoverageDecision(schema_link_gap_spans=("운용 비용률",)))
-    trace = IntentRouter(
-        semantic_coverage_gate=gate,
-        hclx_planning_enabled=True,
-    ).route_with_planning(
-        "운용 비용률이 낮은 국내 ETF 3개를 보여줘.",
-        "planning-schema-gap-hclx-enabled",
-    )
-
-    assert trace.route_decision.disposition is RouteDisposition.EXECUTE
-    assert trace.planning_decision.path is PlanningPath.SCHEMA_LINK_SHADOW
-    assert trace.planning_decision.semantic_issue is PlanningSemanticIssue.SCHEMA_LINK_GAP
-    assert trace.planning_decision.hclx_allowed is False
     _assert_all_calls_are_closed(trace.planning_decision)
 
 

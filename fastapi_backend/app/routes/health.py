@@ -6,8 +6,8 @@ from pathlib import Path
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Request, Response, status
-from finance_agent_core.agent import RoutedFinanceAgent
 from finance_agent_core.agent.knowledge_service import KnowledgeAgent
+from finance_agent_core.agent.routed_service import RoutedFinanceAgent
 from finance_agent_core.contracts.queryplan import ProductFamily
 from finance_agent_core.release import ResolvedAgentRelease
 from finance_agent_core.storage import (
@@ -21,7 +21,6 @@ from pydantic import BaseModel, ConfigDict
 from app.audit_runtime import AuditRuntimeState, AuditRuntimeStatus
 from app.config import FundExecutionPolicy, Settings
 from app.dependencies import get_settings
-from app.shadow_runtime import ShadowRuntimeState, ShadowRuntimeStatus
 
 router = APIRouter(tags=["health"])
 
@@ -40,7 +39,7 @@ class HealthResponse(BaseModel):
     fund_execution_policy: FundExecutionPolicy
     relation_retrieval_status: Literal["disabled", "ready", "degraded"]
     audit_status: AuditRuntimeStatus
-    shadow_status: ShadowRuntimeStatus
+    shadow_status: Literal["disabled"]
 
 
 def _database_is_ready(
@@ -107,11 +106,6 @@ def health(
         runtime.status() if type(runtime) is AuditRuntimeState else "degraded"
     )
     audit_ready = audit_status != "degraded"
-    shadow_runtime = getattr(request.app.state, "shadow_runtime", None)
-    shadow_status: ShadowRuntimeStatus = (
-        shadow_runtime.status() if type(shadow_runtime) is ShadowRuntimeState else "degraded"
-    )
-    shadow_ready = shadow_status != "degraded"
     service = getattr(request.app.state, "agent", None)
     if not settings.relation_retrieval_configured:
         relation_retrieval_status: Literal["disabled", "ready", "degraded"] = "disabled"
@@ -129,7 +123,6 @@ def health(
         len(ready_families) == len(ProductFamily)
         and release_ready
         and audit_ready
-        and shadow_ready
         and relation_retrieval_ready
     )
     if not is_ready:
@@ -144,5 +137,5 @@ def health(
         fund_execution_policy=settings.fund_execution_policy,
         relation_retrieval_status=relation_retrieval_status,
         audit_status=audit_status,
-        shadow_status=shadow_status,
+        shadow_status="disabled",
     )

@@ -11,19 +11,7 @@ from typing import Any, Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from finance_agent_core.agent.fund_comparison_parser import (
-    SUPPORTED_FUND_COMPARISON_FIELDS,
-    FundComparisonDraft,
-)
 from finance_agent_core.agent.intent_analysis import IntentAnalysisDraft
-from finance_agent_core.agent.linker import (
-    canonicalize_linked_query_plan,
-    canonicalize_query_plan_payload,
-)
-from finance_agent_core.agent.providers.local_test import (
-    build_fund_comparison_draft_system_prompt,
-    build_query_plan_system_prompt,
-)
 from finance_agent_core.agent.semantic_resolution import (
     ResolutionDecision,
     SemanticResolutionDraft,
@@ -35,7 +23,6 @@ from finance_agent_core.answering.final_generation import (
     allowed_final_answer_leads,
 )
 from finance_agent_core.config import load_field_registry
-from finance_agent_core.contracts import QueryPlan, load_hcx_queryplan_schema
 from finance_agent_core.contracts.hcx_schema import (
     validate_hcx_payload,
     validate_hcx_schema,
@@ -48,8 +35,6 @@ from finance_agent_core.retrieval.schema_dense import schema_field_semantic_cont
 
 type HyperClovaXOperation = Literal[
     "intent_analysis",
-    "query_plan",
-    "fund_comparison_draft",
     "semantic_resolver",
     "grounded_answer",
     "final_answer",
@@ -609,132 +594,6 @@ class HyperClovaXFinalAnswerProvider:
             schema_name="grounded_final_answer",
             response_schema=response_schema,
             max_output_tokens=384,
-            response_parser=parse_response,
-        )
-
-
-def _fund_comparison_hcx_schema() -> dict[str, Any]:
-    return {
-        "type": "object",
-        "properties": {
-            "target_mentions": {
-                "type": "array",
-                "items": {"type": "string"},
-                "minItems": 0,
-                "maxItems": 4,
-            },
-            "comparison_fields": {
-                "type": "array",
-                "items": {
-                    "type": "string",
-                    "enum": list(SUPPORTED_FUND_COMPARISON_FIELDS),
-                },
-                "minItems": 0,
-                "maxItems": 16,
-            },
-        },
-        "required": ["target_mentions", "comparison_fields"],
-    }
-
-
-class HyperClovaXQueryPlanProvider:
-    def __init__(
-        self,
-        settings: HyperClovaXSettings,
-        transport: HyperClovaXTransport,
-        *,
-        on_call: Callable[[HyperClovaXCallRecord], None] | None = None,
-    ) -> None:
-        self.settings = settings
-        self._client = HyperClovaXClient(settings, transport, on_call=on_call)
-
-    @property
-    def provider_name(self) -> Literal["hyperclova"]:
-        return "hyperclova"
-
-    @property
-    def model_name(self) -> str:
-        return self.settings.model
-
-    def generate_query_plan(self, question: str, question_id: str) -> QueryPlan:
-        if not question.strip():
-            raise ValueError("question cannot be blank")
-        if not question_id.strip():
-            raise ValueError("question_id cannot be blank")
-        response_schema = load_hcx_queryplan_schema()
-
-        def parse_response(content: str) -> QueryPlan:
-            payload = parse_hcx_json_object(content, "QueryPlan")
-            payload["question_id"] = question_id
-            try:
-                validate_hcx_payload(response_schema, payload)
-                payload = canonicalize_query_plan_payload(question, payload)
-                payload["question_id"] = question_id
-                plan = QueryPlan.model_validate(payload)
-                return canonicalize_linked_query_plan(question, plan)
-            except (KeyError, TypeError, ValueError):
-                raise HyperClovaXResponseError(
-                    "HyperCLOVA X returned an invalid QueryPlan"
-                ) from None
-
-        return self._client.complete(
-            operation="query_plan",
-            system_prompt=build_query_plan_system_prompt(question_id, question),
-            user_prompt=question,
-            schema_name="finance_query_plan",
-            response_schema=response_schema,
-            max_output_tokens=4096,
-            response_parser=parse_response,
-        )
-
-
-class HyperClovaXFundComparisonDraftProvider:
-    def __init__(
-        self,
-        settings: HyperClovaXSettings,
-        transport: HyperClovaXTransport,
-        *,
-        on_call: Callable[[HyperClovaXCallRecord], None] | None = None,
-    ) -> None:
-        self.settings = settings
-        self._client = HyperClovaXClient(settings, transport, on_call=on_call)
-
-    @property
-    def provider_name(self) -> Literal["hyperclova"]:
-        return "hyperclova"
-
-    @property
-    def model_name(self) -> str:
-        return self.settings.model
-
-    def generate_comparison_draft(
-        self,
-        question: str,
-        question_id: str,
-    ) -> FundComparisonDraft:
-        if not question.strip():
-            raise ValueError("question cannot be blank")
-        if not question_id.strip():
-            raise ValueError("question_id cannot be blank")
-        response_schema = _fund_comparison_hcx_schema()
-
-        def parse_response(content: str) -> FundComparisonDraft:
-            payload = parse_hcx_json_object(content, "fund comparison draft")
-            try:
-                validate_hcx_payload(response_schema, payload)
-                return FundComparisonDraft.model_validate(payload)
-            except ValueError:
-                raise HyperClovaXResponseError(
-                    "HyperCLOVA X returned an invalid fund comparison draft"
-                ) from None
-
-        return self._client.complete(
-            operation="fund_comparison_draft",
-            system_prompt=build_fund_comparison_draft_system_prompt(question),
-            user_prompt="질문에 실제로 적힌 비교 대상과 비교 항목만 추출해줘.",
-            schema_name="fund_comparison_draft",
-            response_schema=response_schema,
-            max_output_tokens=1024,
             response_parser=parse_response,
         )
 

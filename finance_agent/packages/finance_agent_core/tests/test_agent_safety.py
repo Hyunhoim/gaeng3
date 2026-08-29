@@ -400,7 +400,7 @@ def test_blocked_routes_never_reach_compilation_provider_or_oracle(
         def generate_query_plan(self, question: str, question_id: str):
             raise AssertionError("query-plan provider must not run")
 
-    agent = RoutedFinanceAgent({}, query_plan_provider=ExplodingProvider())
+    agent = RoutedFinanceAgent({})
 
     def fail_compile(*args: object, **kwargs: object) -> None:
         raise AssertionError("compiler must not run")
@@ -459,7 +459,7 @@ def test_natural_transaction_commands_never_reach_any_execution_boundary(
         def generate_query_plan(self, question: str, question_id: str):
             raise AssertionError("query-plan provider must not run")
 
-    agent = RoutedFinanceAgent({}, query_plan_provider=ExplodingProvider())
+    agent = RoutedFinanceAgent({})
 
     def fail_compile(*args: object, **kwargs: object) -> None:
         raise AssertionError("compiler and Oracle must not run")
@@ -582,7 +582,7 @@ def test_exclusions_fail_closed_at_the_earliest_supported_boundary() -> None:
         def generate_query_plan(self, question: str, question_id: str):
             raise AssertionError("query-plan provider must not run")
 
-    agent = RoutedFinanceAgent({}, query_plan_provider=ExplodingProvider())
+    agent = RoutedFinanceAgent({})
 
     excluded_identity = agent.answer(
         "B2 이외의 해외 ETF를 보여줘",
@@ -1144,7 +1144,7 @@ def test_public_safety_controls_never_call_compiler_provider_or_oracle(
         def generate_query_plan(self, question: str, question_id: str):
             raise AssertionError("query-plan provider must not run")
 
-    agent = RoutedFinanceAgent({}, query_plan_provider=ExplodingProvider())
+    agent = RoutedFinanceAgent({})
 
     def fail_boundary(*args: object, **kwargs: object) -> None:
         raise AssertionError("compiler or Oracle must not run")

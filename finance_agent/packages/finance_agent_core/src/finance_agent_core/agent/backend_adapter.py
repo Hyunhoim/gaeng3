@@ -14,7 +14,7 @@ from finance_agent_core.agent.knowledge_router import (
     KnowledgeRoutedExecutionError,
 )
 from finance_agent_core.agent.knowledge_service import KnowledgeServiceError
-from finance_agent_core.agent.providers import (
+from finance_agent_core.agent.providers.hyperclova import (
     HyperClovaXAuthenticationError,
     HyperClovaXConfigurationError,
     HyperClovaXProviderError,

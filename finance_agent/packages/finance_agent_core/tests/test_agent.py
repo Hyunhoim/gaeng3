@@ -11,7 +11,6 @@ from finance_agent_core.agent.providers import (
     MockProvider,
     first_vertical_slice_plan,
 )
-from finance_agent_core.answering import ExpectedGroundedAnswerProvider
 from finance_agent_core.domain import DatabaseManifest, NormalizedOverseasEtpRecord
 
 
@@ -52,14 +51,11 @@ def test_legacy_agent_requires_explicit_offline_unapproved_mode(sample_database)
         )
 
 
-def test_routed_agent_completes_server_compiled_grounded_path(
+def test_routed_agent_completes_server_compiled_deterministic_path(
     sample_database: tuple[Path, list[NormalizedOverseasEtpRecord], DatabaseManifest],
 ) -> None:
     path, _, _ = sample_database
-    agent = RoutedFinanceAgent(
-        {"overseas_etp": path},
-        answer_provider=ExpectedGroundedAnswerProvider(),
-    )
+    agent = RoutedFinanceAgent({"overseas_etp": path})
 
     result = agent.answer(
         "미국 채권형 해외 ETF 중 현재 거래 가능한 상품에서 "
@@ -79,9 +75,7 @@ def test_routed_agent_completes_server_compiled_grounded_path(
         "B2",
         "B3",
     ]
-    assert result.answer_composition is not None
-    assert result.answer_composition.mode == "llm_grounded"
-    assert result.answer_composition.verification.passed
+    assert result.answer_composition is None
 
 
 @pytest.mark.parametrize("intent_word", ["상세 정보를 조회해줘", "총보수를 설명해줘"])
@@ -165,36 +159,9 @@ def test_routed_agent_never_touches_tools_for_control_route() -> None:
     assert excluded_identity.products == []
 
 
-def test_routed_agent_falls_back_when_answer_provider_fails(
-    sample_database: tuple[Path, list[NormalizedOverseasEtpRecord], DatabaseManifest],
-) -> None:
-    path, _, _ = sample_database
-
-    class FailingAnswerProvider:
-        @property
-        def provider_name(self) -> str:
-            return "failing_test"
-
-        @property
-        def model_name(self) -> str:
-            return "failing-model"
-
-        def generate_grounded_answer(self, context):
-            raise RuntimeError("simulated provider failure")
-
-    result = RoutedFinanceAgent(
-        {"overseas_etp": path},
-        answer_provider=FailingAnswerProvider(),
-    ).answer(
-        "미국 채권형 해외 ETF 중 총보수 0.20% 이하를 AUM 높은 순으로 3개 보여줘",
-        "routed-fallback-001",
-    )
-
-    assert result.status == "executed"
-    assert result.answer_composition is not None
-    assert result.answer_composition.mode == "deterministic_fallback"
-    assert not result.answer_composition.verification.passed
-    assert "검증된 후보" in result.answer
+def test_routed_agent_rejects_retired_grounded_answer_provider() -> None:
+    with pytest.raises(ValueError, match="legacy QueryPlan and grounded-answer"):
+        RoutedFinanceAgent({}, answer_provider=object())
 
 
 def test_local_settings_require_double_opt_in() -> None:
