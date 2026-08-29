@@ -128,6 +128,7 @@ _PRODUCT_LIKE_EXTERNAL_SUBJECT = re.compile(
     re.IGNORECASE,
 )
 _PORTFOLIO_ELIGIBILITY = re.compile(r"편입\s*가능", re.IGNORECASE)
+_GENERIC_ETP_SURFACE = re.compile(r"(?<![A-Za-z])(?:ETF|ETN|ETP)(?![A-Za-z])", re.IGNORECASE)
 _NON_ENTITY_HOLDING_SUBJECTS = frozenset(
     {
         "공식",
@@ -371,9 +372,16 @@ def sanitize_server_authorized_knowledge_draft(
                         ),
                     )
                 )
-    families = tuple(sorted(set(draft.product_families), key=lambda item: item.value))
-    if not families:
+    # Product-family scope is an execution boundary, not an HCX preference.
+    # Explicit server-owned lexical evidence therefore wins whenever it exists.
+    # A bare ETF/ETN/ETP surface names the common domestic+overseas product class;
+    # HCX must not silently narrow that cross-family request to one market.
+    if fallback_families:
         families = tuple(sorted(set(fallback_families), key=lambda item: item.value))
+    elif _GENERIC_ETP_SURFACE.search(question) is not None:
+        families = (ProductFamily.DOMESTIC_ETP, ProductFamily.OVERSEAS_ETP)
+    else:
+        families = tuple(sorted(set(draft.product_families), key=lambda item: item.value))
     intent = draft.intent
     if authorized and intent in {InteractionIntent.CLARIFY, InteractionIntent.UNSUPPORTED}:
         intent = InteractionIntent.SEARCH
