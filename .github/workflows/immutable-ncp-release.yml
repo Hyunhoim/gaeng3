@@ -225,6 +225,11 @@ jobs:
           set -euo pipefail
           python3 -c 'import sys; assert sys.version_info[:2] == (3, 12)'
           python3 -m venv "$RUNNER_TEMP/release-venv"
+          python3 fastapi_backend/scripts/build_runtime_core.py \
+            --source finance_agent/packages/finance_agent_core \
+            --output "$RUNNER_TEMP/manifest-runtime-core" \
+            --manifest fastapi_backend/runtime-core-manifest.json \
+            --pyproject fastapi_backend/runtime-core-pyproject.toml
           "$RUNNER_TEMP/release-venv/bin/python" -m pip install \
             --disable-pip-version-check \
             --constraint finance_agent/requirements/constraints.txt \
@@ -244,6 +249,7 @@ jobs:
             --source-commit "$SOURCE_COMMIT"
             --git-root "$GITHUB_WORKSPACE"
             --backend-root "$GITHUB_WORKSPACE/fastapi_backend/app"
+            --runtime-core-root "$RUNNER_TEMP/manifest-runtime-core/src/finance_agent_core"
             --platform "$RUNTIME_PLATFORM"
             --answer-provider "$ANSWER_PROVIDER"
             --fund-execution-policy "$FUND_EXECUTION_POLICY"

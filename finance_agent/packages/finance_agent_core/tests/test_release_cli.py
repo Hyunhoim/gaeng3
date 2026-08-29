@@ -21,6 +21,8 @@ from finance_agent_core.retrieval.schema_dense import p1_precision_field_thresho
 def _parse_manifest_arguments(tmp_path: Path, *extra: str) -> argparse.Namespace:
     backend_root = tmp_path / "backend"
     backend_root.mkdir(exist_ok=True)
+    runtime_core_root = tmp_path.parent / f"{tmp_path.name}-runtime-core"
+    runtime_core_root.mkdir(exist_ok=True)
     return release_cli._parser().parse_args(
         [
             "manifest",
@@ -34,6 +36,8 @@ def _parse_manifest_arguments(tmp_path: Path, *extra: str) -> argparse.Namespace
             str(tmp_path),
             "--backend-root",
             str(backend_root),
+            "--runtime-core-root",
+            str(runtime_core_root),
             "--output",
             str(tmp_path / "manifest.json"),
             *extra,
@@ -148,18 +152,23 @@ def test_release_source_roots_must_belong_to_verified_checkout(
         / "finance_agent_core"
     )
     backend = tmp_path / "fastapi_backend" / "app"
+    runtime_core = tmp_path.parent / f"{tmp_path.name}-runtime-core"
     core.mkdir(parents=True)
     backend.mkdir(parents=True)
+    runtime_core.mkdir()
     module = core / "release.py"
     module.write_text("# test module\n", encoding="utf-8")
     monkeypatch.setattr(release_cli.release_contract, "__file__", str(module))
 
-    release_cli._require_release_source_roots(tmp_path, backend)
+    release_cli._require_release_source_roots(tmp_path, backend, runtime_core)
 
     unrelated = tmp_path / "unrelated-backend"
     unrelated.mkdir()
     with pytest.raises(SystemExit, match="verified Git checkout"):
-        release_cli._require_release_source_roots(tmp_path, unrelated)
+        release_cli._require_release_source_roots(tmp_path, unrelated, runtime_core)
+
+    with pytest.raises(SystemExit, match="detached allowlisted bundle"):
+        release_cli._require_release_source_roots(tmp_path, backend, core)
 
 
 def test_manifest_generation_rechecks_clean_source_after_hashing(
@@ -168,6 +177,8 @@ def test_manifest_generation_rechecks_clean_source_after_hashing(
 ) -> None:
     backend = tmp_path / "fastapi_backend" / "app"
     backend.mkdir(parents=True)
+    runtime_core = tmp_path.parent / f"{tmp_path.name}-runtime-core"
+    runtime_core.mkdir()
     observed: list[str] = []
     monkeypatch.setattr(
         release_cli,
@@ -194,6 +205,7 @@ def test_manifest_generation_rechecks_clean_source_after_hashing(
     arguments = argparse.Namespace(
         git_root=tmp_path,
         backend_root=backend,
+        runtime_core_root=runtime_core,
         source_commit="b" * 40,
         release_id="finance-agent-test-v1",
         output=tmp_path / "manifest.json",

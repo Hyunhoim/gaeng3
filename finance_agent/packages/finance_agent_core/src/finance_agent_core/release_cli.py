@@ -60,7 +60,11 @@ def _require_clean_source(root: Path, expected_commit: str) -> None:
         raise SystemExit("release manifest generation requires a clean Git checkout")
 
 
-def _require_release_source_roots(git_root: Path, backend_root: Path) -> None:
+def _require_release_source_roots(
+    git_root: Path,
+    backend_root: Path,
+    runtime_core_root: Path,
+) -> None:
     expected_core = (
         git_root
         / "finance_agent"
@@ -73,6 +77,8 @@ def _require_release_source_roots(git_root: Path, backend_root: Path) -> None:
     imported_core = Path(release_contract.__file__).resolve(strict=True).parent
     if imported_core != expected_core or backend_root != expected_backend:
         raise SystemExit("release Core and Backend roots must come from the verified Git checkout")
+    if runtime_core_root == expected_core or runtime_core_root.is_relative_to(git_root):
+        raise SystemExit("release Runtime Core root must be a detached allowlisted bundle")
 
 
 def _write_immutable(path: Path, data: bytes) -> str:
@@ -193,6 +199,7 @@ def _runtime_inputs(arguments: argparse.Namespace) -> RuntimeReleaseInputs:
         ),
         backend_version=arguments.backend_version,
         backend_root=arguments.backend_root.resolve(strict=True),
+        core_root=arguments.runtime_core_root.resolve(strict=True),
         answer_provider=arguments.answer_provider,
         hcx_queryplan_enabled=arguments.hcx_queryplan_enabled,
         hcx_intent_analysis_enabled=arguments.hcx_intent_analysis_enabled,
@@ -221,7 +228,8 @@ def _runtime_inputs(arguments: argparse.Namespace) -> RuntimeReleaseInputs:
 def _create_manifest(arguments: argparse.Namespace) -> None:
     git_root = arguments.git_root.resolve(strict=True)
     backend_root = arguments.backend_root.resolve(strict=True)
-    _require_release_source_roots(git_root, backend_root)
+    runtime_core_root = arguments.runtime_core_root.resolve(strict=True)
+    _require_release_source_roots(git_root, backend_root, runtime_core_root)
     _require_clean_source(git_root, arguments.source_commit)
     manifest = build_agent_release_manifest(
         _runtime_inputs(arguments),
@@ -300,6 +308,7 @@ def _parser() -> argparse.ArgumentParser:
     manifest.add_argument("--source-commit", required=True)
     manifest.add_argument("--git-root", type=Path, required=True)
     manifest.add_argument("--backend-root", type=Path, required=True)
+    manifest.add_argument("--runtime-core-root", type=Path, required=True)
     manifest.add_argument("--backend-version", default="0.1.0")
     manifest.add_argument(
         "--platform",

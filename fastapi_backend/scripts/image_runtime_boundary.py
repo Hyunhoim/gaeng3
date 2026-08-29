@@ -16,6 +16,8 @@ from typing import Any
 from pydantic import ValidationError
 
 from app.config import Settings
+import finance_agent_core.release as release_contract
+from finance_agent_core.release import AgentReleaseError, sha256_runtime_tree
 
 _FORBIDDEN_DISTRIBUTIONS = {
     "accelerate",
@@ -199,6 +201,8 @@ def _embedded_manifest_binding(
     release_id: str,
     source_commit: str,
     manifest_path: Path = _EMBEDDED_RELEASE_MANIFEST,
+    core_root: Path | None = None,
+    backend_root: Path = Path("/app/app"),
 ) -> dict[str, object]:
     result: dict[str, object] = {
         "verified": False,
@@ -206,6 +210,7 @@ def _embedded_manifest_binding(
         "expected_sha256": expected_sha256,
         "observed_sha256": None,
         "failure_code": None,
+        "runtime_code": None,
     }
     if _SHA256_PATTERN.fullmatch(expected_sha256) is None:
         result["failure_code"] = "invalid_expected_sha256"
@@ -270,6 +275,7 @@ def _embedded_manifest_binding(
         return result
     try:
         schema_dense = manifest["components"]["runtime_features"]["retrieval"]["schema_dense"]
+        expected_code = manifest["components"]["code"]
     except (KeyError, TypeError):
         result["failure_code"] = "manifest_runtime_profile_missing"
         return result
@@ -278,6 +284,25 @@ def _embedded_manifest_binding(
         "activated_kure_candidate_only",
     }:
         result["failure_code"] = "manifest_runtime_profile_invalid"
+        return result
+    resolved_core_root = (
+        Path(release_contract.__file__).resolve().parent if core_root is None else core_root
+    )
+    try:
+        observed_code = {
+            "core_package_sha256": sha256_runtime_tree(resolved_core_root),
+            "backend_package_sha256": sha256_runtime_tree(backend_root),
+        }
+    except (AgentReleaseError, OSError, ValueError):
+        result["failure_code"] = "runtime_code_hash_unavailable"
+        return result
+    result["runtime_code"] = {
+        "expected": expected_code,
+        "observed": observed_code,
+        "verified": expected_code == observed_code,
+    }
+    if expected_code != observed_code:
+        result["failure_code"] = "runtime_code_hash_mismatch"
         return result
     result["adaptive_semantic_enabled"] = schema_dense == "activated_kure_candidate_only"
     result["verified"] = True
