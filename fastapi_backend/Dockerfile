@@ -10,8 +10,8 @@ ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
 
 WORKDIR /build
 
-# Build an explicit Runtime-only source bundle into a detached prefix. Qwen,
-# retired planning, Shadow execution, evaluation CLIs and test helpers never
+# Build an explicit Runtime-only source bundle into a detached prefix. Retired
+# planning, Shadow execution, evaluation CLIs and test helpers never
 # enter the installed wheel or a final OCI layer.
 COPY finance_agent/packages/finance_agent_core /build/finance_agent_core-source
 COPY fastapi_backend/runtime-core-manifest.json /build/runtime-core-manifest.json
