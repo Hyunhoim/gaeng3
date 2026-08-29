@@ -222,6 +222,49 @@ def test_server_recovers_explicit_fund_structure_from_hclx_unsupported() -> None
     ]
 
 
+def test_server_lexical_family_scope_overrides_hclx_external_guess() -> None:
+    question = "캠브리콘이 편입된 중국 반도체 해외 ETF를 알려줘."
+    draft = IntentAnalysisDraft(
+        intent=InteractionIntent.SEARCH,
+        product_families=[ProductFamily.DOMESTIC_ETP],
+        evidence_spans=[],
+        needs_clarification=False,
+        knowledge_requirements=[],
+    )
+
+    sanitized = sanitize_server_authorized_knowledge_draft(
+        question,
+        draft,
+        fallback_families=(ProductFamily.OVERSEAS_ETP,),
+    )
+
+    assert sanitized.product_families == [ProductFamily.OVERSEAS_ETP]
+    assert [item.capability for item in sanitized.knowledge_requirements] == [
+        KnowledgeCapability.PORTFOLIO_HOLDINGS
+    ]
+
+
+def test_bare_etf_external_scope_keeps_both_provided_etp_families() -> None:
+    question = "최근 6개월 동안 우주항공 테마와 연결 이력이 있는 ETF를 정리해줘."
+    draft = IntentAnalysisDraft(
+        intent=InteractionIntent.SEARCH,
+        product_families=[ProductFamily.OVERSEAS_ETP],
+        evidence_spans=[],
+        needs_clarification=False,
+        knowledge_requirements=[],
+    )
+
+    sanitized = sanitize_server_authorized_knowledge_draft(question, draft)
+
+    assert sanitized.product_families == [
+        ProductFamily.DOMESTIC_ETP,
+        ProductFamily.OVERSEAS_ETP,
+    ]
+    assert [item.capability for item in sanitized.knowledge_requirements] == [
+        KnowledgeCapability.SECTOR_THEME_HISTORY
+    ]
+
+
 def test_server_builds_explicit_subsidiary_holding_and_risk_chain() -> None:
     question = (
         "2026년 7월 공식 구성종목에서 에코프로 계열사인 에코프로비엠 편입이 "

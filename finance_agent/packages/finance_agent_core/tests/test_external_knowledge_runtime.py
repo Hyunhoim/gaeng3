@@ -893,6 +893,52 @@ def test_official_connector_accepts_only_unambiguous_publication_metadata() -> N
         unsafe_connector.fetch(candidate, request)
 
 
+def test_official_connector_accepts_one_unambiguous_visible_publication_date() -> None:
+    registry = load_official_source_registry()
+    url = "https://www.fsc.go.kr/no010101/86950"
+    body = (
+        '<html><body><article>국민참여형 국민성장펀드 구조 설명</article>'
+        '<div class="day"><span>2026-05-21</span><span>조회수: 1</span></div>'
+        "</body></html>"
+    ).encode()
+    candidate = OfficialDiscoveryCandidate(url=url, title="official policy")
+    request = OfficialFetchRequest(
+        url=url,
+        capability=KnowledgeCapability.FUND_STRUCTURE_STRATEGY_TREND,
+    )
+    connector = OfficialSourceConnector(
+        _FixedHttpTransport(
+            OfficialHttpResponse(
+                status_code=200,
+                final_url=url,
+                content_type="text/html",
+                body=body,
+            )
+        ),
+        registry,
+    )
+
+    snapshot = connector.fetch(candidate, request)
+
+    assert snapshot.published_at == date(2026, 5, 21)
+    assert snapshot.as_of == date(2026, 5, 21)
+
+    ambiguous = body.replace(b"</article>", b" (2026-05-29)</article>")
+    unsafe_connector = OfficialSourceConnector(
+        _FixedHttpTransport(
+            OfficialHttpResponse(
+                status_code=200,
+                final_url=url,
+                content_type="text/html",
+                body=ambiguous,
+            )
+        ),
+        registry,
+    )
+    with pytest.raises(OfficialConnectorError, match="evidence date"):
+        unsafe_connector.fetch(candidate, request)
+
+
 def test_static_product_page_requires_one_explicit_evidence_as_of_date() -> None:
     registry = load_official_source_registry()
     url = "https://www.samsungfund.com/etf/product/view.do?id=2ETFB1"

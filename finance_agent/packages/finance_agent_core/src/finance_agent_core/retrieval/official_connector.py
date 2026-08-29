@@ -301,6 +301,22 @@ def infer_official_publication_date(
             for value in parser.values
             if (parsed := _parse_publication_date(value)) is not None
         )
+        # Some regulator pages expose the publication date only as visible
+        # text (for example a single ``<div class="day">2026-05-21``) and do
+        # not provide machine-readable metadata.  Accept that date only when
+        # the entire official HTML contains exactly one distinct full calendar
+        # date. Multiple visible dates remain ambiguous and fail closed.
+        if not candidates:
+            visible = _EvidenceTextParser()
+            visible.feed(body.decode("utf-8", errors="replace"))
+            visible.close()
+            visible_dates = {
+                parsed
+                for match in _PUBLICATION_DATE_PATTERN.finditer(" ".join(visible.parts))
+                if (parsed := _parse_publication_date(match.group(0))) is not None
+            }
+            if len(visible_dates) == 1:
+                candidates.update(visible_dates)
     return next(iter(candidates)) if len(candidates) == 1 else None
 
 
