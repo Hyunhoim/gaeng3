@@ -5,6 +5,8 @@ import json
 import shutil
 from pathlib import Path
 
+_RUNTIME_SOURCE_PREFIX = "src/finance_agent_core/"
+
 
 def _load_manifest(path: Path) -> dict[str, object]:
     payload = json.loads(path.read_text(encoding="utf-8"))
@@ -48,7 +50,8 @@ def build_runtime_core(
             excluded_files += 1
             continue
         excluded = (
-            relative in excluded_paths
+            not relative.startswith(_RUNTIME_SOURCE_PREFIX)
+            or relative in excluded_paths
             or any(relative.startswith(prefix) for prefix in excluded_prefixes)
             or any(relative.endswith(suffix) for suffix in excluded_suffixes)
         )

@@ -5,6 +5,9 @@ finance_agent/*
 finance_agent/packages/*
 !finance_agent/packages/finance_agent_core/
 !finance_agent/packages/finance_agent_core/**
+finance_agent/packages/finance_agent_core/build/
+finance_agent/packages/finance_agent_core/dist/
+finance_agent/packages/finance_agent_core/src/finance_agent_core.egg-info/
 !finance_agent/requirements/
 finance_agent/requirements/*
 !finance_agent/requirements/constraints.txt
