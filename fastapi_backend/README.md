@@ -77,8 +77,8 @@ Backend는 다음 Agent 공개 계약만 사용
 - evaluation·production에서는 release manifest에 해시로 고정된 `knowledge_retrieval`
   계약과 실제 `KnowledgeAgent` release가 exact match여야 함. disabled↔active나 내부 후보 release
   혼합은 시작과 요청 경계에서 거부
-- 공개 관계 release에는 claim provider를 주입하지 않음. 현재 답변은 검증된 relation
-  evidence의 결정론적 rendering이며 Qwen·HyperCLOVA X 관계 설명을 호출하지 않음
+- 공개 관계 release에는 claim provider를 주입하지 않음. 관계 후보와 제공 DB 교집합은
+  결정론적으로 검증하고 최종 문장만 공식 HCLX grounded answer 경계를 사용
 - deadline, authority, SQL, verifier, renderer, answer event를 같은 plan·상품군·
   `relation_set_sha256`로 연결. timeout과 실패 원인이 맞지 않는 감사 trace는 거부
 - 실행 실패도 검증된 관계 route를 보존해 ERROR DTO의 `intent=search`와 상품군을
@@ -99,14 +99,10 @@ Backend는 다음 Agent 공개 계약만 사용
 - `relation_retrieval_status`는 `disabled|ready|degraded`. startup에서 확인한 관계
   index·세 상품 DB의 path/inode/size/mtime/ctime이 바뀌면 `degraded`와 HTTP 503
 - `fund_execution_policy`는 공모펀드가 기본 잠금인지, 명시적 버전 승인으로 열렸는지 표시
-- `audit_status`와 `shadow_status`는 각각 `disabled|ok|degraded`만 표시
-- 활성 Shadow의 queue drop, artifact·embedding 오류, audit correlation 실패, worker
-  death·stall은 답변을 바꾸지 않지만 `shadow_status=degraded`와 HTTP 503으로 운영자에게 알림
+- `audit_status`는 `disabled|ok|degraded`, 호환 DTO인 `shadow_status`는 항상 `disabled`
 
-종료 시에는 새 요청을 멈춘 뒤 `요청 worker → Shadow worker → audit sink` 순서로 정리한다.
-세 단계는 하나의 timeout 예산을 공유해 Shadow의 마지막 audit event가 저장되기 전에 sink가
-닫히거나 단계별 timeout이 중복 소비되지 않게 한다. 현재 evaluation/production에서는
-Schema Dense와 Shadow가 OFF이고 observer 주입도 시작 단계에서 차단된다.
+종료 시에는 새 요청을 멈춘 뒤 `요청 worker → audit sink` 순서로 정리한다. 과거 Shadow
+worker 실행 구현은 제거했으며 observer 주입은 모든 profile에서 시작 단계에 차단된다.
 
 ```bash
 curl --fail http://127.0.0.1:18001/health
@@ -496,16 +492,11 @@ answer-only 배선의 실호출 증거이며, 2026-08-25에 추가한 Intent+최
 - [Structured Outputs](https://api.ncloud-docs.com/docs/clovastudio-chatcompletionsv3-so)
 - [API 키 가이드](https://guide.ncloud-docs.com/docs/clovastudio-apikey)
 
-## 10. 개발 전용 로컬 Qwen 연결
+## 10. 과거 로컬 Qwen 실험 경계
 
-로컬 Qwen은 내부 개발 회귀에만 사용. 실제 HyperCLOVA X 평가·제출·운영 경로가 아니며
-`docker-compose.local-llm.yml`도 제출 후보에서 제거할 대상
-
-Backend에서는 검증된 검색 결과와 field-level evidence를 설명하는 단계에만 연결.
-검색·정렬·계산과 Result/Answer Verifier는 결정론적 경로를 유지
-
-실행 순서와 장애 fallback 검증은
-[로컬 LLM 테스트 런타임](../finance_agent/docs/local-llm.md)을 기준으로 사용
+로컬 Qwen 실험 문서와 개발 이력은 재현성 때문에 저장소에 남지만 Backend Runtime에서는
+`local_test` 설정을 거부한다. 최종 Runtime bundle·Docker image에는 Qwen provider,
+로컬 LLM compose, 개발 평가 CLI와 관련 의존성이 포함되지 않는다.
 
 ## 11. `nextjs-frontend` 연결 약속
 
@@ -532,4 +523,4 @@ Frontend가 합류하면 다음 최소 범위부터 연결
 | `data-init` 실패 | `./compose.sh logs data-init`과 원천 XLSX 8개 확인 |
 | `/health`가 503 | 응답의 누락 상품군과 data-init 로그 확인 |
 | `/answer`가 422 | 요청 JSON과 `schema_version`, `request_id`, `question`, `locale` 확인 |
-| 로컬 Qwen 장애 | 기본 결정론적 fallback 여부 확인 후 로컬 LLM 문서 참고 |
+| `local_test/Qwen Runtime provider is retired` | 최종 Runtime에서는 공식 HCLX profile만 사용 |

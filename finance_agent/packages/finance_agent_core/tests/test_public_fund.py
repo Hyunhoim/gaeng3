@@ -425,7 +425,6 @@ def test_routed_agent_executes_internal_fund_comparison(
     path, _, _ = write_comparison_fund_database(tmp_path)
     agent = RoutedFinanceAgent(
         {"fund": path},
-        answer_provider=ExpectedGroundedAnswerProvider(),
         allow_internal_disabled_dataset=True,
     )
 
@@ -441,9 +440,7 @@ def test_routed_agent_executes_internal_fund_comparison(
         "KR0000000001",
         "KR0000000002",
     ]
-    assert result.answer_composition is not None
-    assert result.answer_composition.mode == "llm_grounded"
-    assert result.answer_composition.verification.passed
+    assert result.answer_composition is None
 
 
 def test_public_fund_normalization_preserves_product_grain_and_quality() -> None:
@@ -567,7 +564,6 @@ def test_public_fund_one_year_return_search_preserves_outlier_and_excludes_missi
     path, _, _ = write_one_year_return_fund_database(tmp_path)
     result = RoutedFinanceAgent(
         {"fund": path},
-        answer_provider=ExpectedGroundedAnswerProvider(),
         allow_internal_disabled_dataset=True,
     ).answer(
         "1년 수익률이 높은 공모펀드를 5개 찾아줘",
@@ -575,9 +571,7 @@ def test_public_fund_one_year_return_search_preserves_outlier_and_excludes_missi
     )
 
     assert result.status == "executed"
-    assert result.answer_composition is not None
-    assert result.answer_composition.mode == "llm_grounded"
-    assert result.answer_composition.verification.passed
+    assert result.answer_composition is None
     assert result.query_plan is not None
     assert result.query_plan.ranking[0].field == "one_year_return_pct"
     assert result.candidate_count == 2

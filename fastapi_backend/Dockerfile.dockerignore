@@ -15,6 +15,11 @@ fastapi_backend/*
 !fastapi_backend/Dockerfile
 !fastapi_backend/requirements.txt
 !fastapi_backend/requirements.embedding.txt
+!fastapi_backend/runtime-core-manifest.json
+!fastapi_backend/runtime-core-pyproject.toml
+!fastapi_backend/scripts/
+fastapi_backend/scripts/*
+!fastapi_backend/scripts/build_runtime_core.py
 !fastapi_backend/start.sh
 **/__pycache__/
 **/*.py[cod]

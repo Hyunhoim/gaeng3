@@ -242,21 +242,14 @@ def test_evaluation_rejects_hclx_planning_authority_outside_release_profile(
 ) -> None:
     settings = _evaluation_settings(tmp_path)
     release = _allow_release(monkeypatch)
-    misassembled = RoutedFinanceAgent(
-        settings.database_paths,
-        hclx_planning_enabled=True,
-        require_approved_databases=True,
-        release_guard=release,
-        require_agent_release=True,
-    )
-    monkeypatch.setattr("app.main.require_approved_database_paths", lambda _paths: None)
-    monkeypatch.setattr(
-        "app.main.build_agent",
-        lambda _settings, *, release_guard: misassembled,
-    )
-
-    with pytest.raises(RuntimeError, match="approved RoutedFinanceAgent"):
-        create_app(settings=settings)
+    with pytest.raises(ValueError, match="legacy QueryPlan"):
+        RoutedFinanceAgent(
+            settings.database_paths,
+            hclx_planning_enabled=True,
+            require_approved_databases=True,
+            release_guard=release,
+            require_agent_release=True,
+        )
 
 
 def test_evaluation_rejects_record_cache_outside_release_profile(
@@ -282,7 +275,6 @@ def test_evaluation_rejects_record_cache_outside_release_profile(
     [
         "outer_internal_dataset",
         "outer_capabilities",
-        "split_identity_cache",
         "custom_record_cache",
     ],
 )
@@ -298,8 +290,6 @@ def test_evaluation_rejects_mutated_outer_policy_and_cache_wiring(
         misassembled.allow_internal_disabled_dataset = True
     elif mutation == "outer_capabilities":
         misassembled.capability_execution_overrides = frozenset({"fund"})
-    elif mutation == "split_identity_cache":
-        misassembled.grounded_plan_gate.identity_cache = object()
     else:
         misassembled.record_cache = object()
     monkeypatch.setattr("app.main.require_approved_database_paths", lambda _paths: None)

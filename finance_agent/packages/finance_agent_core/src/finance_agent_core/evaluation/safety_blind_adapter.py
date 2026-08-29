@@ -84,7 +84,7 @@ class CurrentCoreSafetyBlindAdapter:
     """Run the sealed prompts through routing, compilation, Oracle and evidence."""
 
     name = "current-routed-finance-agent"
-    scope = "full-routed-core-with-approved-fund-override-and-queryplan-provider-oracle-spies"
+    scope = "full-routed-core-with-approved-fund-override-and-compiler-oracle-spies"
 
     def run(
         self,
@@ -106,10 +106,6 @@ class CurrentCoreSafetyBlindAdapter:
         service.compiler.compile_family_searches = spies.wrap_query_plan_callable(
             "server_compiler.compile_family_searches",
             service.compiler.compile_family_searches,
-        )
-        service._provider_search_plan = spies.wrap_provider_callable(  # noqa: SLF001
-            "query_plan_provider_boundary",
-            service._provider_search_plan,  # noqa: SLF001
         )
         original_search_oracle = routed_service_module.SQLiteOracle
         original_aggregate_oracle = routed_service_module.SQLiteAggregateOracle

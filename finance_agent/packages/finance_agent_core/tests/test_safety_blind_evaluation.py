@@ -481,7 +481,9 @@ def test_current_core_adapter_control_has_zero_instrumented_execution(
 
     service = _build_evaluation_service()
     assert service.capability_execution_overrides == frozenset({ProductFamily.FUND})
-    assert "approved-fund-override" in current_core_adapter.scope
+    assert current_core_adapter.scope == (
+        "full-routed-core-with-approved-fund-override-and-compiler-oracle-spies"
+    )
 
     envelope = invoke_adapter(current_core_adapter, case, bundle.universe)
 

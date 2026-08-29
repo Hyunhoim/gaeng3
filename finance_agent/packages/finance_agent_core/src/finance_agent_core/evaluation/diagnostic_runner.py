@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Protocol
-
 from finance_agent_core.agent.linker import build_lexical_hints
 from finance_agent_core.config.capability import load_capability_matrix
 from finance_agent_core.contracts.queryplan import Intent, ProductFamily
@@ -11,10 +9,6 @@ from finance_agent_core.contracts.routing import (
     RouteDecision,
     RouteDisposition,
 )
-
-
-class Router(Protocol):
-    def route(self, question: str, request_id: str) -> RouteDecision: ...
 
 
 class PreRouterSnapshot:

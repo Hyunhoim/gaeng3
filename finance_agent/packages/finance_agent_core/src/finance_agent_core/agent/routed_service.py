@@ -30,12 +30,6 @@ from finance_agent_core.agent.external_search_planning import (
     ExternalSearchPlanCompiler,
     ProvidedProductUniverseBuilder,
 )
-from finance_agent_core.agent.grounded_planning import (
-    GroundedPlanGate,
-    GroundedPlanProvider,
-    GroundedPlanRejectedError,
-    grounded_plan_is_eligible,
-)
 from finance_agent_core.agent.intent_analysis import (
     IntentAnalysisDraft,
     IntentAnalysisProvider,
@@ -62,22 +56,16 @@ from finance_agent_core.agent.planning_policy import (
     PlanningTrace,
 )
 from finance_agent_core.agent.product_comparison import normalize_product_mention
-from finance_agent_core.agent.providers import (
+from finance_agent_core.agent.providers.hyperclova import (
     HyperClovaXConfigurationError,
     HyperClovaXTimeoutError,
-    QueryPlanProvider,
     hyperclova_failure_reason,
 )
 from finance_agent_core.agent.router import IntentRouter, extract_product_routing_hints
 from finance_agent_core.agent.safety import SafetyDisposition
 from finance_agent_core.agent.semantic_gate import SemanticCoverageDecision
-from finance_agent_core.answering import (
-    AnswerComposition,
-    CrossFamilyAnswerVerifier,
-    GroundedAnswerProvider,
-    compose_grounded_answer,
-)
 from finance_agent_core.answering.final_generation import FinalAnswerProvider
+from finance_agent_core.answering.models import AnswerComposition
 from finance_agent_core.config import QualityStatus, load_field_registry
 from finance_agent_core.contracts import QueryPlan, RouteDecision, RouteDisposition
 from finance_agent_core.contracts.knowledge import (
@@ -153,10 +141,6 @@ from finance_agent_core.release import (
     ResolvedAgentRelease,
 )
 from finance_agent_core.retrieval.relations import RelationIndexError
-from finance_agent_core.retrieval.schema_shadow import (
-    AsyncSchemaLinkShadowObserver,
-    SchemaLinkShadowObserver,
-)
 from finance_agent_core.storage import (
     ProductIdentitySnapshotCache,
     RecordSnapshotCache,
@@ -492,9 +476,9 @@ class RoutedFinanceAgent:
         database_paths: dict[ProductFamily | str, str | Path],
         *,
         router: IntentRouter | None = None,
-        query_plan_provider: QueryPlanProvider | None = None,
-        grounded_plan_provider: GroundedPlanProvider | None = None,
-        answer_provider: GroundedAnswerProvider | None = None,
+        query_plan_provider: object | None = None,
+        grounded_plan_provider: object | None = None,
+        answer_provider: object | None = None,
         intent_analysis_provider: IntentAnalysisProvider | None = None,
         official_answer_provider: FinalAnswerProvider | None = None,
         require_official_hclx: bool = False,
@@ -507,7 +491,7 @@ class RoutedFinanceAgent:
         record_cache: RecordSnapshotCache | None = None,
         identity_cache: ProductIdentitySnapshotCache | None = None,
         adaptive_semantic_resolver: AdaptiveSemanticResolver | None = None,
-        schema_link_shadow_observer: SchemaLinkShadowObserver | None = None,
+        schema_link_shadow_observer: object | None = None,
         audit_sink: BoundedAsyncAuditSink | None = None,
         knowledge_router: DeterministicKnowledgeRouter | None = None,
         knowledge_agent: KnowledgeAgent | None = None,
@@ -518,6 +502,25 @@ class RoutedFinanceAgent:
     ) -> None:
         if type(hclx_planning_enabled) is not bool:
             raise TypeError("hclx_planning_enabled must be a boolean")
+        if (
+            query_plan_provider is not None
+            or grounded_plan_provider is not None
+            or answer_provider is not None
+            or hclx_planning_enabled
+        ):
+            raise ValueError(
+                "legacy QueryPlan and grounded-answer providers are retired from Runtime"
+            )
+        if schema_link_shadow_observer is not None:
+            raise ValueError("Schema Shadow execution is retired from Runtime")
+        # Retired seams stay as immutable-by-contract sentinels so the Backend
+        # approval guard can detect post-construction monkeypatching/tampering.
+        # No execution method reads these attributes.
+        self.query_plan_provider = None
+        self.grounded_plan_provider = None
+        self.answer_provider = None
+        self.hclx_planning_enabled = False
+        self.schema_link_shadow_observer = None
         self.database_paths = {
             ProductFamily(key): Path(value) for key, value in database_paths.items()
         }
@@ -528,23 +531,14 @@ class RoutedFinanceAgent:
         self.identity_cache = identity_cache or ProductIdentitySnapshotCache(
             max_entries=max(1, len(self.database_paths))
         )
-        self.hclx_planning_enabled = hclx_planning_enabled
         self.router = router or IntentRouter(
-            hclx_planning_enabled=hclx_planning_enabled,
             adaptive_semantic_enabled=adaptive_semantic_resolver is not None,
         )
-        self.query_plan_provider = query_plan_provider
-        self.grounded_plan_provider = grounded_plan_provider
         self.compiler = ServerQueryPlanCompiler(
             self.database_paths,
             record_cache=self.record_cache,
             identity_cache=self.identity_cache,
         )
-        self.grounded_plan_gate = GroundedPlanGate(
-            self.database_paths,
-            identity_cache=self.identity_cache,
-        )
-        self.answer_provider = answer_provider
         self.intent_analysis_provider = intent_analysis_provider
         self.official_answer_provider = official_answer_provider
         self.require_official_hclx = require_official_hclx
@@ -607,10 +601,6 @@ class RoutedFinanceAgent:
             raise ValueError("public RoutedFinanceAgent requires a resolved Agent release")
         if release_guard is not None and type(release_guard) is not ResolvedAgentRelease:
             raise TypeError("release_guard must be a ResolvedAgentRelease")
-        if require_agent_release and schema_link_shadow_observer is not None:
-            raise ValueError(
-                "the current public Agent release profile keeps Schema Dense shadow disabled"
-            )
         if require_agent_release:
             assert release_guard is not None
             signed_external = release_guard.manifest.components.knowledge_retrieval.external
@@ -661,12 +651,6 @@ class RoutedFinanceAgent:
         if audit_sink is not None and type(audit_sink) is not BoundedAsyncAuditSink:
             raise TypeError("audit_sink must be the bounded async audit sink")
         self.audit_sink = audit_sink
-        if (
-            schema_link_shadow_observer is not None
-            and type(schema_link_shadow_observer) is not AsyncSchemaLinkShadowObserver
-        ):
-            raise TypeError("schema_link_shadow_observer must be the bounded async observer")
-        self.schema_link_shadow_observer = schema_link_shadow_observer
         self.plan_authority_gate = PlanAuthorityGate(
             self.database_paths,
             require_approved_databases=require_approved_databases,
@@ -1618,57 +1602,6 @@ class RoutedFinanceAgent:
         except Exception:
             pass
 
-    def _emit_composition_audit(
-        self,
-        *,
-        composition: AnswerComposition,
-        elapsed_ms: float,
-        candidate_count: int,
-        result_count: int,
-        audit_fields: dict[str, object],
-    ) -> None:
-        audit = current_request_audit()
-        if audit is None or composition.mode == "deterministic":
-            return
-        provider_completed = composition.draft is not None
-        failure_reason = composition.provider_failure_reason
-        provider_timed_out = not provider_completed and failure_reason == "timed_out"
-        if provider_completed:
-            outcome = AuditOutcome.SUCCEEDED
-            reason_code = "generation_completed"
-        elif provider_timed_out:
-            outcome = AuditOutcome.TIMED_OUT
-            reason_code = "generation_timed_out"
-        else:
-            outcome = AuditOutcome.FAILED
-            reason_code = (
-                "provider_failed"
-                if failure_reason in {None, "provider_failed"}
-                else f"generation_{failure_reason}"
-            )
-        audit.emit(
-            stage=AuditStage.HCLX,
-            outcome=outcome,
-            reason_code=reason_code,
-            duration_ms=composition.generation_latency_ms,
-            candidate_count=candidate_count,
-            result_count=result_count,
-            **audit_fields,
-        )
-        self._increment_audit_metric(MetricCounter.HCLX_CALLS)
-        verification_passed = composition.verification.passed
-        audit.emit(
-            stage=AuditStage.VERIFIER,
-            outcome=(AuditOutcome.SUCCEEDED if verification_passed else AuditOutcome.FAILED),
-            reason_code=("composition_verified" if verification_passed else "composition_rejected"),
-            duration_ms=max(0.0, elapsed_ms - composition.generation_latency_ms),
-            candidate_count=candidate_count,
-            result_count=result_count,
-            **audit_fields,
-        )
-        if not verification_passed:
-            self._increment_audit_metric(MetricCounter.VERIFIER_FAILURES)
-
     def _answer_once(
         self,
         question: str,
@@ -1689,21 +1622,6 @@ class RoutedFinanceAgent:
                     duration_ms=(perf_counter() - route_started) * 1000,
                 )
             raise
-        if (
-            self.schema_link_shadow_observer is not None
-            and trace.planning_decision.path is PlanningPath.SCHEMA_LINK_SHADOW
-        ):
-            # The observer receives a detached snapshot. Even a faulty or
-            # stateful implementation cannot mutate the RouteDecision or
-            # PlanningDecision used by Compiler, SQL, or the served response.
-            trusted_trace = PlanningTrace.model_validate_json(trace.model_dump_json())
-            observer_trace = PlanningTrace.model_validate_json(trace.model_dump_json())
-            try:
-                self.schema_link_shadow_observer.submit(observer_trace)
-            except Exception:
-                # Shadow telemetry has no authority over the Agent result.
-                pass
-            trace = trusted_trace
         decision = trace.route_decision
         route_emitted = False
         try:
@@ -1715,9 +1633,7 @@ class RoutedFinanceAgent:
                 # from the final route so CONTROL metadata cannot silently
                 # accompany an executable plan.
                 planning_started = perf_counter()
-                planning_decision = AdaptiveShadowPlanningPolicy(
-                    hclx_planning_enabled=self.hclx_planning_enabled
-                ).decide(
+                planning_decision = AdaptiveShadowPlanningPolicy().decide(
                     decision,
                     SemanticCoverageDecision(),
                 )
@@ -1801,7 +1717,6 @@ class RoutedFinanceAgent:
         planning_decision: PlanningDecision,
         trace: PlanningTrace,
     ) -> RoutedAgentResult:
-        question = decision.draft.question
         request_id = decision.draft.request_id
         semantic_plan: QueryPlan | None = None
         semantic_planning_decision: BaseModel | None = None
@@ -1887,13 +1802,9 @@ class RoutedFinanceAgent:
         compiler_started = perf_counter()
         try:
             compiled = (
-                (decision, semantic_plan, False)
+                (decision, semantic_plan)
                 if semantic_plan is not None
-                else self._compile_with_optional_grounded_plan(
-                    question,
-                    decision,
-                    planning_decision,
-                )
+                else self._compile_server_plan(decision)
             )
         except PlanCompilationBlockedError as error:
             if audit is not None and decision.disposition is RouteDisposition.EXECUTE:
@@ -1925,7 +1836,7 @@ class RoutedFinanceAgent:
                 disposition=RouteDisposition.CLARIFY,
                 reason="질문의 실행 조건을 안전한 계획으로 확정하지 못했습니다.",
             )
-        decision, plan, used_grounded_plan = compiled
+        decision, plan = compiled
         if audit is not None:
             audit.emit(
                 stage=AuditStage.COMPILER,
@@ -1935,18 +1846,6 @@ class RoutedFinanceAgent:
                 plan_sha256=query_plan_authority_sha256(plan),
                 **self._decision_audit_fields(decision),
             )
-        if used_grounded_plan:
-            # Grounded planning is admitted only from an already executable
-            # deterministic route. Recompute server-owned metadata from the
-            # fully validated final decision while preserving the explicit
-            # deployment-owned HCLX permission.
-            planning_decision = AdaptiveShadowPlanningPolicy(
-                hclx_planning_enabled=planning_decision.hclx_allowed
-            ).decide(
-                decision,
-                SemanticCoverageDecision(),
-            )
-
         # A blocked server plan must stop before any advisory provider call.
         # The same contract is checked again after provider admission below.
         try:
@@ -1974,31 +1873,6 @@ class RoutedFinanceAgent:
                 reason=f"{answer} {error}",
                 plan=plan,
             )
-
-        if (
-            self.query_plan_provider is not None
-            and self.hclx_planning_enabled
-            and planning_decision.hclx_allowed
-            and not used_grounded_plan
-            and plan.intent is Intent.SEARCH
-        ):
-            try:
-                plan = self._provider_search_plan(decision, plan)
-            except PlanCompilationBlockedError as error:
-                return self._control_result(
-                    decision,
-                    disposition=RouteDisposition.CLARIFY,
-                    reason=str(error),
-                    plan=plan,
-                )
-            except (HyperClovaXTimeoutError, RequestDeadlineExceeded, TimeoutError):
-                raise
-            except Exception:
-                # QueryPlan generation is advisory. Transport, schema, or
-                # adapter failures retain the independently compiled server
-                # plan; a model can never turn a valid deterministic request
-                # into an infrastructure failure.
-                pass
 
         # Preserve the existing user-facing CLARIFY/UNSUPPORTED classification
         # before resolving infrastructure. PlanAuthorityGate repeats these
@@ -2037,21 +1911,9 @@ class RoutedFinanceAgent:
                 decision,
                 planning_decision=(semantic_planning_decision or planning_decision),
                 semantic_receipts=semantic_authority_receipts,
-                compiler_kind=(
-                    PlanCompilerKind.GROUNDED_PLAN_GATE
-                    if used_grounded_plan
-                    else PlanCompilerKind.SERVER_QUERY_PLAN
-                ),
-                proposal_provider_name=(
-                    self.grounded_plan_provider.provider_name
-                    if used_grounded_plan and self.grounded_plan_provider is not None
-                    else None
-                ),
-                proposal_model_name=(
-                    self.grounded_plan_provider.model_name
-                    if used_grounded_plan and self.grounded_plan_provider is not None
-                    else None
-                ),
+                compiler_kind=PlanCompilerKind.SERVER_QUERY_PLAN,
+                proposal_provider_name=None,
+                proposal_model_name=None,
             )
             plan = validated_plan.canonical_plan
         except PlanAuthorityError as error:
@@ -2401,24 +2263,6 @@ class RoutedFinanceAgent:
                 evidence_ids=linkage.evidence_ids,
                 **self._validated_audit_fields(validated_plan),
             )
-        composition: AnswerComposition | None = None
-        if self.answer_provider is not None:
-            composition_started = perf_counter()
-            composition = compose_grounded_answer(
-                question=question,
-                plan=plan,
-                verified=verified,
-                products=products,
-                provider=self.answer_provider,
-            )
-            answer = composition.answer
-            self._emit_composition_audit(
-                composition=composition,
-                elapsed_ms=(perf_counter() - composition_started) * 1000,
-                candidate_count=verified.candidate_count,
-                result_count=len(products),
-                audit_fields=self._validated_audit_fields(validated_plan),
-            )
         return RoutedAgentResult(
             request_id=request_id,
             status="executed",
@@ -2431,7 +2275,7 @@ class RoutedFinanceAgent:
             comparisons=comparisons,
             warnings=warnings,
             source_manifest=verified.manifest,
-            answer_composition=composition,
+            answer_composition=None,
         )
 
     def _resolve_exact_identity_family(self, decision: RouteDecision) -> RouteDecision:
@@ -2478,149 +2322,15 @@ class RoutedFinanceAgent:
             capability_matrix_version=decision.capability_matrix_version,
         )
 
-    def _compile_with_optional_grounded_plan(
+    def _compile_server_plan(
         self,
-        question: str,
         decision: RouteDecision,
-        planning_decision: PlanningDecision,
-    ) -> tuple[RouteDecision, QueryPlan, bool] | None:
-        server_plan: QueryPlan | None = None
-        server_error: PlanCompilationBlockedError | None = None
-        if decision.disposition is RouteDisposition.EXECUTE:
-            try:
-                server_plan = self.compiler.compile(decision)
-            except PlanCompilationBlockedError as error:
-                server_error = error
+    ) -> tuple[RouteDecision, QueryPlan] | None:
+        """Compile the only executable QueryPlan: the server-owned deterministic plan."""
 
-        eligible = (
-            self.grounded_plan_provider is not None
-            and self.hclx_planning_enabled
-            and planning_decision.hclx_allowed
-            and grounded_plan_is_eligible(decision)
-        )
-        if eligible:
-            assert self.grounded_plan_provider is not None
-            family_hint = (
-                decision.draft.product_families[0]
-                if len(decision.draft.product_families) == 1
-                else None
-            )
-            audit = current_request_audit()
-            provider_started = perf_counter()
-            provider_observed = False
-            self._increment_audit_metric(MetricCounter.HCLX_CALLS)
-            try:
-                proposal = self.grounded_plan_provider.generate_grounded_plan(
-                    question,
-                    decision.draft.request_id,
-                    family_hint,
-                )
-                provider_observed = True
-                if audit is not None:
-                    audit.emit(
-                        stage=AuditStage.HCLX,
-                        outcome=AuditOutcome.SUCCEEDED,
-                        reason_code="provider_completed",
-                        duration_ms=(perf_counter() - provider_started) * 1000,
-                        **self._decision_audit_fields(decision),
-                    )
-                grounded_plan = self.grounded_plan_gate.compile(
-                    question,
-                    decision,
-                    proposal,
-                    trusted_plan=server_plan,
-                )
-                grounded_decision = self._grounded_execution_decision(
-                    decision,
-                    grounded_plan,
-                )
-                return grounded_decision, grounded_plan, True
-            except (HyperClovaXTimeoutError, RequestDeadlineExceeded, TimeoutError):
-                if audit is not None and not provider_observed:
-                    audit.emit(
-                        stage=AuditStage.HCLX,
-                        outcome=AuditOutcome.TIMED_OUT,
-                        reason_code="deadline_exceeded",
-                        duration_ms=(perf_counter() - provider_started) * 1000,
-                        **self._decision_audit_fields(decision),
-                    )
-                raise
-            except GroundedPlanRejectedError:
-                if audit is not None:
-                    audit.emit(
-                        stage=AuditStage.COMPILER,
-                        outcome=AuditOutcome.BLOCKED,
-                        reason_code="grounded_plan_rejected",
-                        duration_ms=(perf_counter() - provider_started) * 1000,
-                        **self._decision_audit_fields(decision),
-                    )
-            except Exception as error:
-                if audit is not None:
-                    failure_reason = hyperclova_failure_reason(error)
-                    audit.emit(
-                        stage=(AuditStage.COMPILER if provider_observed else AuditStage.HCLX),
-                        outcome=AuditOutcome.FAILED,
-                        reason_code=(
-                            "grounded_plan_gate_failed"
-                            if provider_observed
-                            else (
-                                "provider_failed"
-                                if failure_reason == "provider_failed"
-                                else f"planning_{failure_reason}"
-                            )
-                        ),
-                        duration_ms=(perf_counter() - provider_started) * 1000,
-                        **self._decision_audit_fields(decision),
-                    )
-                # A planning model is advisory only. Malformed output, transport
-                # failure, or an adapter bug must never become an HTTP 500 or
-                # acquire execution authority. Reuse the independently compiled
-                # server plan when one exists; otherwise answer with the normal
-                # fail-closed clarification path.
-                pass
-        if server_plan is None:
-            if server_error is not None:
-                raise server_error
+        if decision.disposition is not RouteDisposition.EXECUTE:
             return None
-        return decision, server_plan, False
-
-    @staticmethod
-    def _grounded_execution_decision(
-        decision: RouteDecision,
-        plan: QueryPlan,
-    ) -> RouteDecision:
-        if plan.intent is Intent.COMPARE:
-            interaction_intent = InteractionIntent.COMPARE
-        elif plan.intent is Intent.AGGREGATE:
-            interaction_intent = InteractionIntent.AGGREGATE
-        elif decision.draft.intent in {
-            InteractionIntent.DETAIL,
-            InteractionIntent.EXPLAIN,
-        }:
-            interaction_intent = decision.draft.intent
-        else:
-            interaction_intent = InteractionIntent.SEARCH
-        mentions: list[str] = []
-        for constraint in plan.constraints:
-            if constraint.field not in {"product_id", "ticker", "isin"}:
-                continue
-            values = constraint.value if isinstance(constraint.value, list) else [constraint.value]
-            mentions.extend(str(value) for value in values)
-        draft = decision.draft.model_copy(
-            update={
-                "intent": interaction_intent,
-                "product_families": plan.product_families,
-                "product_mentions": list(dict.fromkeys(mentions)),
-            }
-        )
-        return RouteDecision(
-            draft=draft,
-            disposition=RouteDisposition.EXECUTE,
-            reason_code="grounded_model_plan_accepted",
-            reason="모델 계획의 모든 실행 조건을 원문 근거와 서버 계약으로 검증",
-            query_plan_intent=plan.intent,
-            capability_matrix_version=decision.capability_matrix_version,
-        )
+        return decision, self.compiler.compile(decision)
 
     def _answer_cross_family_search(
         self,
@@ -2747,16 +2457,11 @@ class RoutedFinanceAgent:
 
         deterministic_searches = [execution.result for execution in executions]
         family_searches = deterministic_searches
-        answer_composition: AnswerComposition | None = None
         global_ranked: list[_GlobalRankedProduct] = []
         if global_ranking is not None:
             family_searches, global_ranked = _rank_global_products(
                 deterministic_searches,
                 global_ranking,
-            )
-        elif self.answer_provider is not None:
-            family_searches, answer_composition = self._compose_cross_family_grounded_answer(
-                executions
             )
 
         products = [
@@ -2776,16 +2481,6 @@ class RoutedFinanceAgent:
                 for warning in item.warnings
             ),
         ]
-        if self.query_plan_provider is not None:
-            warnings.append(
-                "교차 상품군 SEARCH는 QueryPlan 모델을 호출하지 않고 "
-                "서버가 상품군별 실행 계획을 확정했습니다."
-            )
-        if answer_composition is not None and answer_composition.mode == "deterministic_fallback":
-            warnings.append(
-                "상품군별 생성 또는 교차 답변 검증이 실패해 전체 답변을 "
-                "결정론적 결과로 교체했습니다."
-            )
         return RoutedAgentResult(
             request_id=decision.draft.request_id,
             status="executed",
@@ -2806,7 +2501,7 @@ class RoutedFinanceAgent:
             comparisons=[],
             warnings=warnings,
             source_manifest=None,
-            answer_composition=answer_composition,
+            answer_composition=None,
             family_searches=family_searches,
         )
 
@@ -2965,157 +2660,6 @@ class RoutedFinanceAgent:
             ),
             verified=verified,
         )
-
-    def _compose_cross_family_grounded_answer(
-        self,
-        executions: list[_ExecutedFamilySearch],
-    ) -> tuple[list[FamilySearchResult], AnswerComposition]:
-        if self.answer_provider is None:
-            raise RuntimeError("cross-family grounded composition requires an answer provider")
-
-        family_compositions: list[tuple[ProductFamily, AnswerComposition]] = []
-        generated_searches: list[FamilySearchResult] = []
-        audit = current_request_audit()
-        for execution in executions:
-            result = execution.result
-            composition_started = perf_counter()
-            composition = compose_grounded_answer(
-                question=execution.grounded_question,
-                plan=result.query_plan,
-                verified=execution.verified,
-                products=result.products,
-                provider=self.answer_provider,
-            )
-            family_compositions.append((result.product_family, composition))
-            generated_searches.append(result.model_copy(update={"answer": composition.answer}))
-            self._emit_composition_audit(
-                composition=composition,
-                elapsed_ms=(perf_counter() - composition_started) * 1000,
-                candidate_count=result.candidate_count,
-                result_count=len(result.products),
-                audit_fields={
-                    "route_disposition": RouteDisposition.EXECUTE,
-                    "interaction_intent": InteractionIntent.SEARCH,
-                    "product_families": (result.product_family,),
-                    "plan_sha256": query_plan_authority_sha256(result.query_plan),
-                },
-            )
-
-        candidate_answer = _compile_cross_family_answer(generated_searches)
-        verifier_started = perf_counter()
-        verification = CrossFamilyAnswerVerifier().verify(
-            family_compositions=family_compositions,
-            family_answers=[(item.product_family, item.answer) for item in generated_searches],
-            answer=candidate_answer,
-            safety_notice=_CROSS_FAMILY_SAFETY_NOTICE,
-        )
-        if audit is not None:
-            audit.emit(
-                stage=AuditStage.VERIFIER,
-                outcome=(AuditOutcome.SUCCEEDED if verification.passed else AuditOutcome.FAILED),
-                reason_code=(
-                    "cross_composition_verified"
-                    if verification.passed
-                    else "cross_composition_rejected"
-                ),
-                duration_ms=(perf_counter() - verifier_started) * 1000,
-                route_disposition=RouteDisposition.EXECUTE,
-                interaction_intent=InteractionIntent.SEARCH,
-                product_families=tuple(execution.result.product_family for execution in executions),
-                candidate_count=sum(execution.result.candidate_count for execution in executions),
-                result_count=sum(len(execution.result.products) for execution in executions),
-            )
-            if not verification.passed:
-                self._increment_audit_metric(MetricCounter.VERIFIER_FAILURES)
-        latency_ms = round(
-            sum(composition.generation_latency_ms for _, composition in family_compositions),
-            3,
-        )
-        if verification.passed:
-            mode: Literal["llm_grounded", "deterministic"] = (
-                "llm_grounded"
-                if any(composition.mode == "llm_grounded" for _, composition in family_compositions)
-                else "deterministic"
-            )
-            return generated_searches, AnswerComposition(
-                mode=mode,
-                answer=candidate_answer,
-                model=self.answer_provider.model_name,
-                generation_latency_ms=latency_ms,
-                draft=None,
-                verification=verification,
-            )
-
-        deterministic_searches = [execution.result for execution in executions]
-        deterministic_answer = _compile_cross_family_answer(deterministic_searches)
-        return deterministic_searches, AnswerComposition(
-            mode="deterministic_fallback",
-            answer=deterministic_answer,
-            model=self.answer_provider.model_name,
-            generation_latency_ms=latency_ms,
-            draft=None,
-            verification=verification,
-        )
-
-    def _provider_search_plan(
-        self,
-        decision: RouteDecision,
-        server_plan: QueryPlan,
-    ) -> QueryPlan:
-        if self.query_plan_provider is None:
-            return server_plan
-        audit = current_request_audit()
-        started = perf_counter()
-        self._increment_audit_metric(MetricCounter.HCLX_CALLS)
-        try:
-            provider_plan = self.query_plan_provider.generate_query_plan(
-                decision.draft.question,
-                decision.draft.request_id,
-            )
-        except (HyperClovaXTimeoutError, RequestDeadlineExceeded, TimeoutError):
-            if audit is not None:
-                audit.emit(
-                    stage=AuditStage.HCLX,
-                    outcome=AuditOutcome.TIMED_OUT,
-                    reason_code="deadline_exceeded",
-                    duration_ms=(perf_counter() - started) * 1000,
-                    plan_sha256=query_plan_authority_sha256(server_plan),
-                    **self._decision_audit_fields(decision),
-                )
-            raise
-        except Exception as error:
-            if audit is not None:
-                failure_reason = hyperclova_failure_reason(error)
-                audit.emit(
-                    stage=AuditStage.HCLX,
-                    outcome=AuditOutcome.FAILED,
-                    reason_code=(
-                        "provider_failed"
-                        if failure_reason == "provider_failed"
-                        else f"planning_{failure_reason}"
-                    ),
-                    duration_ms=(perf_counter() - started) * 1000,
-                    plan_sha256=query_plan_authority_sha256(server_plan),
-                    **self._decision_audit_fields(decision),
-                )
-            raise
-        if audit is not None:
-            audit.emit(
-                stage=AuditStage.HCLX,
-                outcome=AuditOutcome.SUCCEEDED,
-                reason_code="provider_completed",
-                duration_ms=(perf_counter() - started) * 1000,
-                plan_sha256=query_plan_authority_sha256(server_plan),
-                **self._decision_audit_fields(decision),
-            )
-        if provider_plan != server_plan:
-            raise PlanCompilationBlockedError(
-                "model QueryPlan differs from the server-compiled execution contract"
-            )
-        # Equality is only an admission check. Keep the server-owned object as
-        # the proposal that reaches PlanAuthorityGate so a provider instance is
-        # never substituted after deterministic validation.
-        return server_plan
 
     def _require_execution(self, plan: QueryPlan) -> None:
         uses_approved_override = bool(plan.product_families) and set(

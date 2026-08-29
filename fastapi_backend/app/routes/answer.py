@@ -7,9 +7,11 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, Request, Response
 from fastapi.responses import JSONResponse
-from finance_agent_core.agent import (
+from finance_agent_core.agent.backend_adapter import (
     AnswerAdapterResult,
     execute_answer_request,
+)
+from finance_agent_core.agent.official_adapter import (
     invalid_official_request_response,
     official_response_from_backend,
     official_timeout_response,

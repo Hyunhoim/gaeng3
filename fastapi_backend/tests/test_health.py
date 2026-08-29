@@ -10,16 +10,9 @@ from finance_agent_core.agent.knowledge_router import DeterministicKnowledgeRout
 from finance_agent_core.agent.knowledge_service import KnowledgeAgent, KnowledgeServiceError
 from finance_agent_core.contracts.queryplan import ProductFamily
 from finance_agent_core.domain import DatabaseManifest
-from finance_agent_core.retrieval.schema_shadow import (
-    AsyncSchemaLinkShadowObserver,
-    HybridSchemaLinkShadow,
-    SchemaShadowMode,
-    SchemaShadowSettings,
-)
 
 from app.config import Settings
 from app.main import create_app
-from app.shadow_runtime import ShadowRuntimeState
 from tests.conftest import FakeAgentService
 
 
@@ -190,33 +183,6 @@ def test_evaluation_startup_rejects_injected_agent_before_readiness(
         create_app(settings=settings, agent=FakeAgentService())
 
 
-def test_health_fails_closed_when_shadow_runtime_is_degraded(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    paths = {family: tmp_path / f"{family.value}.sqlite3" for family in ProductFamily}
-    for family, path in paths.items():
-        _create_manifest_database(path, family)
-    settings = Settings(
-        overseas_etp_db=paths[ProductFamily.OVERSEAS_ETP],
-        domestic_etp_db=paths[ProductFamily.DOMESTIC_ETP],
-        bond_db=paths[ProductFamily.BOND],
-        fund_db=paths[ProductFamily.FUND],
-    )
-    application = create_app(settings=settings, agent=FakeAgentService())
-    observer = AsyncSchemaLinkShadowObserver(
-        HybridSchemaLinkShadow(settings=SchemaShadowSettings(mode=SchemaShadowMode.SHADOW))
-    )
-    runtime = ShadowRuntimeState(observer)
-    failed = observer.snapshot().model_copy(update={"operational_failure_count": 1})
-    monkeypatch.setattr(observer, "snapshot", lambda: failed)
-    application.state.shadow_runtime = runtime
-
-    with TestClient(application) as client:
-        response = client.get("/health")
-
-    assert response.status_code == 503
-    assert response.json()["status"] == "degraded"
-    assert response.json()["audit_status"] == "disabled"
-    assert response.json()["shadow_status"] == "degraded"
-    assert AsyncSchemaLinkShadowObserver.shutdown(observer, timeout_seconds=1)
+def test_retired_shadow_observer_is_rejected_before_runtime_startup() -> None:
+    with pytest.raises(ValueError, match="Schema Shadow execution is retired"):
+        RoutedFinanceAgent({}, schema_link_shadow_observer=object())

@@ -25,7 +25,6 @@ from finance_agent_core.execution.policy import (
     ranking_requires_usable_value,
     require_aggregate_contract,
     require_comparison_contract,
-    require_fund_aum_currency_scope,
     require_fund_public_scope,
 )
 from finance_agent_core.execution.sql_schema import (
@@ -162,7 +161,6 @@ def compile_search_sql(
         require_comparison_contract(plan)
     else:
         require_fund_public_scope(plan)
-        require_fund_aum_currency_scope(plan)
     family = plan.product_families[0].value
     try:
         sql_fields = SQL_FIELDS_BY_FAMILY[family]

@@ -1,0 +1,43 @@
+{
+  "schema_version": "1.0",
+  "excluded_prefixes": [
+    "src/finance_agent_core/evaluation/",
+    "src/finance_agent_core/contracts/examples/",
+    "tests/"
+  ],
+  "excluded_paths": [
+    "src/finance_agent_core/agent/__main__.py",
+    "src/finance_agent_core/agent/cli.py",
+    "src/finance_agent_core/agent/grounded_planning.py",
+    "src/finance_agent_core/agent/knowledge_cli.py",
+    "src/finance_agent_core/agent/providers/base.py",
+    "src/finance_agent_core/agent/providers/local_test.py",
+    "src/finance_agent_core/agent/providers/mock.py",
+    "src/finance_agent_core/agent/service.py",
+    "src/finance_agent_core/answering/composer.py",
+    "src/finance_agent_core/answering/context.py",
+    "src/finance_agent_core/answering/providers.py",
+    "src/finance_agent_core/answering/verifier.py",
+    "src/finance_agent_core/audit/cli.py",
+    "src/finance_agent_core/audit_validation_cli.py",
+    "src/finance_agent_core/release_cli.py",
+    "src/finance_agent_core/retrieval/schema_shadow.py",
+    "src/finance_agent_core/storage/cli.py",
+    "src/finance_agent_core/storage/prepare.py"
+  ],
+  "excluded_suffixes": [
+    "_cli.py"
+  ],
+  "allowed_excluded_prefix_paths": [
+    "src/finance_agent_core/evaluation/__init__.py",
+    "src/finance_agent_core/evaluation/schema_embedding_artifacts.py",
+    "src/finance_agent_core/evaluation/schema_embedding_models.py",
+    "src/finance_agent_core/evaluation/schema_embedding_models_v1.json"
+  ],
+  "empty_package_initializers": [
+    "src/finance_agent_core/agent/__init__.py",
+    "src/finance_agent_core/agent/providers/__init__.py",
+    "src/finance_agent_core/answering/__init__.py",
+    "src/finance_agent_core/evaluation/__init__.py"
+  ]
+}

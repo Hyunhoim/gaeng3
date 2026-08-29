@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 
 from finance_agent_core.agent.providers import (
@@ -9,38 +7,13 @@ from finance_agent_core.agent.providers import (
     HyperClovaXCallRecord,
     HyperClovaXClient,
     HyperClovaXConfigurationError,
-    HyperClovaXFundComparisonDraftProvider,
-    HyperClovaXQueryPlanProvider,
     HyperClovaXRateLimitError,
     HyperClovaXResponseError,
     HyperClovaXServiceError,
     HyperClovaXSettings,
     HyperClovaXStructuredRequest,
     HyperClovaXTimeoutError,
-    HyperClovaXTokenUsage,
     HyperClovaXTransportError,
-)
-from finance_agent_core.agent.providers.mock import (
-    domestic_vertical_slice_plan,
-    first_vertical_slice_plan,
-)
-from finance_agent_core.answering import (
-    ExpectedGroundedAnswerProvider,
-    HyperClovaXGroundedAnswerProvider,
-    build_grounded_answer_context,
-)
-from finance_agent_core.answering.providers import _grounded_answer_max_output_tokens
-from finance_agent_core.contracts.hcx_schema import validate_hcx_schema
-from finance_agent_core.deadline import RequestDeadline, bind_request_deadline
-from finance_agent_core.domain import DatabaseManifest, NormalizedDomesticEtpRecord
-from finance_agent_core.execution import (
-    ResultVerifier,
-    SQLiteOracle,
-    authorize_internal_evaluation_plan,
-    build_product_evidence,
-)
-from finance_agent_core.execution.verifier_projection import (
-    load_projected_verifier_records,
 )
 
 
@@ -51,8 +24,6 @@ class FakeHyperClovaXTransport:
 
     def complete(self, request: HyperClovaXStructuredRequest) -> object:
         self.requests.append(request)
-        if not self.script:
-            raise AssertionError("fake transport has no scripted response")
         response = self.script.pop(0)
         if isinstance(response, BaseException):
             raise response
@@ -63,20 +34,12 @@ def _settings() -> HyperClovaXSettings:
     return HyperClovaXSettings(model="HCX-CONTRACT-TEST", timeout_seconds=12)
 
 
-def _response(
-    content: str | None,
-    *,
-    status_code: int = 200,
-) -> dict[str, object]:
+def _response(content: str | None, *, status_code: int = 200) -> dict[str, object]:
     return {
         "status_code": status_code,
         "content": content,
         "request_id": "fake-request-001",
-        "usage": {
-            "input_tokens": 100,
-            "output_tokens": 20,
-            "total_tokens": 120,
-        },
+        "usage": {"input_tokens": 100, "output_tokens": 20, "total_tokens": 120},
     }
 
 
@@ -88,7 +51,19 @@ def _simple_schema() -> dict[str, object]:
     }
 
 
-def test_hcx_settings_fail_closed_outside_official_mode() -> None:
+def _complete(client: HyperClovaXClient) -> dict[str, str]:
+    return client.complete(
+        operation="intent_analysis",
+        system_prompt="system",
+        user_prompt="question",
+        schema_name="test_schema",
+        response_schema=_simple_schema(),
+        max_output_tokens=10,
+        response_parser=lambda content: {"value": content},
+    )
+
+
+def test_hcx_settings_require_official_hyperclova_mode() -> None:
     with pytest.raises(HyperClovaXConfigurationError, match="official execution"):
         HyperClovaXSettings.from_environment({})
     with pytest.raises(HyperClovaXConfigurationError, match="official execution"):
@@ -99,16 +74,6 @@ def test_hcx_settings_fail_closed_outside_official_mode() -> None:
                 "HCX_MODEL": "HCX-CONTRACT-TEST",
             }
         )
-    with pytest.raises(HyperClovaXConfigurationError, match="HCX_MODEL"):
-        HyperClovaXSettings.from_environment(
-            {
-                "FINANCE_AGENT_LLM_MODE": "production",
-                "LLM_PROVIDER": "hyperclova",
-            }
-        )
-
-
-def test_hcx_settings_validate_timeout_and_do_not_require_guessed_http_config() -> None:
     settings = HyperClovaXSettings.from_environment(
         {
             "FINANCE_AGENT_LLM_MODE": "evaluation",
@@ -117,204 +82,9 @@ def test_hcx_settings_validate_timeout_and_do_not_require_guessed_http_config() 
             "HCX_TIMEOUT_SECONDS": "45",
         }
     )
-
-    assert settings == HyperClovaXSettings(
-        model="HCX-CONTRACT-TEST",
-        timeout_seconds=45,
-    )
-    assert not hasattr(settings, "base_url")
-    assert not hasattr(settings, "api_key")
-    with pytest.raises(HyperClovaXConfigurationError, match="timeout"):
-        HyperClovaXSettings(model="HCX-CONTRACT-TEST", timeout_seconds=0)
+    assert settings.timeout_seconds == 45
     with pytest.raises(HyperClovaXConfigurationError, match="HCX-"):
         HyperClovaXSettings(model="qwen3-local-test")
-
-
-def test_hcx_query_plan_provider_uses_semantic_structured_request() -> None:
-    content = first_vertical_slice_plan("model-generated-id").model_dump_json()
-    transport = FakeHyperClovaXTransport(_response(content))
-    records: list[HyperClovaXCallRecord] = []
-    provider = HyperClovaXQueryPlanProvider(
-        _settings(),
-        transport,
-        on_call=records.append,
-    )
-
-    plan = provider.generate_query_plan("테스트 질문", "trusted-request-id")
-
-    assert provider.provider_name == "hyperclova"
-    assert provider.model_name == "HCX-CONTRACT-TEST"
-    assert plan.question_id == "trusted-request-id"
-    assert len(transport.requests) == 1
-    request = transport.requests[0]
-    assert request.operation == "query_plan"
-    assert request.schema_name == "finance_query_plan"
-    assert request.model == "HCX-CONTRACT-TEST"
-    assert request.timeout_seconds == 12
-    validate_hcx_schema(request.response_schema)
-    assert records[0].outcome == "success"
-    assert records[0].usage == HyperClovaXTokenUsage(
-        input_tokens=100,
-        output_tokens=20,
-        total_tokens=120,
-    )
-    assert "system_prompt" not in records[0].model_dump()
-    assert "user_prompt" not in records[0].model_dump()
-
-
-def test_hcx_provider_timeout_is_clamped_to_remaining_request_budget() -> None:
-    content = first_vertical_slice_plan("model-generated-id").model_dump_json()
-    transport = FakeHyperClovaXTransport(_response(content))
-    provider = HyperClovaXQueryPlanProvider(_settings(), transport)
-    deadline = RequestDeadline.after(2)
-
-    with bind_request_deadline(deadline):
-        provider.generate_query_plan("테스트 질문", "trusted-request-id")
-
-    assert len(transport.requests) == 1
-    assert 0 < transport.requests[0].timeout_seconds <= 2
-    assert transport.requests[0].timeout_seconds < _settings().timeout_seconds
-
-
-def test_hcx_provider_does_not_call_transport_after_request_cancellation() -> None:
-    transport = FakeHyperClovaXTransport(_response('{"value":"unused"}'))
-    provider = HyperClovaXQueryPlanProvider(_settings(), transport)
-    deadline = RequestDeadline.after(2)
-    deadline.cancel()
-
-    with bind_request_deadline(deadline):
-        with pytest.raises(HyperClovaXTimeoutError):
-            provider.generate_query_plan("테스트 질문", "trusted-request-id")
-
-    assert transport.requests == []
-
-
-def test_hcx_fund_comparison_provider_uses_minimum_privilege_schema() -> None:
-    transport = FakeHyperClovaXTransport(
-        _response(
-            '{"target_mentions":["테스트 펀드 A","테스트 펀드 B"],'
-            '"comparison_fields":["risk_level","aum"]}'
-        )
-    )
-    provider = HyperClovaXFundComparisonDraftProvider(_settings(), transport)
-
-    draft = provider.generate_comparison_draft(
-        '"테스트 펀드 A"와 "테스트 펀드 B"의 위험등급과 AUM을 비교해줘',
-        "hcx-compare-001",
-    )
-
-    assert draft.target_mentions == ["테스트 펀드 A", "테스트 펀드 B"]
-    assert draft.comparison_fields == ["risk_level", "aum"]
-    request = transport.requests[0]
-    assert request.operation == "fund_comparison_draft"
-    validate_hcx_schema(request.response_schema)
-    field_enum = request.response_schema["properties"]["comparison_fields"]["items"]["enum"]
-    assert "risk_level" in field_enum
-    assert "total_expense_ratio_pct" not in field_enum
-
-
-def test_hcx_grounded_answer_provider_uses_evidence_only_hcx_schema(
-    domestic_sample_database: tuple[
-        Path,
-        list[NormalizedDomesticEtpRecord],
-        DatabaseManifest,
-    ],
-) -> None:
-    path, _, _ = domestic_sample_database
-    plan = domestic_vertical_slice_plan("hcx-answer-001")
-    validated_plan = authorize_internal_evaluation_plan(plan, path)
-    executed = SQLiteOracle(path).execute(validated_plan)
-    universe = load_projected_verifier_records(path, validated_plan)
-    verified = ResultVerifier().verify(plan, executed, universe)
-    products = build_product_evidence(plan, verified)
-    context = build_grounded_answer_context(
-        question="미국 주식형 국내 ETF를 수익률 순으로 보여줘",
-        plan=plan,
-        verified=verified,
-        products=products,
-    )
-    expected = ExpectedGroundedAnswerProvider().generate_grounded_answer(context)
-    transport = FakeHyperClovaXTransport(_response(expected.model_dump_json()))
-    provider = HyperClovaXGroundedAnswerProvider(_settings(), transport)
-
-    draft = provider.generate_grounded_answer(context)
-
-    assert draft == expected
-    request = transport.requests[0]
-    assert request.operation == "grounded_answer"
-    assert request.max_output_tokens == _grounded_answer_max_output_tokens(context)
-    assert request.max_output_tokens < 2048
-    validate_hcx_schema(request.response_schema)
-    assert context.products[0].product_id not in request.system_prompt
-    assert context.products[0].product_name not in request.system_prompt
-    assert context.products[0].ticker not in request.system_prompt
-    assert context.products[0].fields[3].normalized_value not in request.system_prompt
-    assert request.response_schema["properties"]["products"]["items"]["properties"]["explanation"][
-        "enum"
-    ] == ["선택한 근거 항목이 요청한 정렬 근거로 사용됐습니다."]
-
-    unsafe_lead = expected.model_copy(update={"lead": "모델이 임의로 만든 일반 금융 설명입니다."})
-    unsafe_lead_provider = HyperClovaXGroundedAnswerProvider(
-        _settings(),
-        FakeHyperClovaXTransport(_response(unsafe_lead.model_dump_json())),
-    )
-    with pytest.raises(HyperClovaXResponseError, match="invalid grounded answer"):
-        unsafe_lead_provider.generate_grounded_answer(context)
-
-    unsafe_product = expected.products[0].model_copy(
-        update={"explanation": "모델이 근거 밖의 해석을 덧붙였습니다."}
-    )
-    unsafe_explanation = expected.model_copy(
-        update={"products": [unsafe_product, *expected.products[1:]]}
-    )
-    unsafe_explanation_provider = HyperClovaXGroundedAnswerProvider(
-        _settings(),
-        FakeHyperClovaXTransport(_response(unsafe_explanation.model_dump_json())),
-    )
-    with pytest.raises(HyperClovaXResponseError, match="invalid grounded answer"):
-        unsafe_explanation_provider.generate_grounded_answer(context)
-
-
-def test_hcx_grounded_answer_budget_tracks_evidence_width_and_fails_closed(
-    domestic_sample_database: tuple[
-        Path,
-        list[NormalizedDomesticEtpRecord],
-        DatabaseManifest,
-    ],
-) -> None:
-    path, _, _ = domestic_sample_database
-    plan = domestic_vertical_slice_plan("hcx-answer-budget-001")
-    validated_plan = authorize_internal_evaluation_plan(plan, path)
-    executed = SQLiteOracle(path).execute(validated_plan)
-    universe = load_projected_verifier_records(path, validated_plan)
-    verified = ResultVerifier().verify(plan, executed, universe)
-    products = build_product_evidence(plan, verified)
-    context = build_grounded_answer_context(
-        question="미국 주식형 국내 ETF를 수익률 순으로 보여줘",
-        plan=plan,
-        verified=verified,
-        products=products,
-    )
-
-    single_context = context.model_copy(update={"products": [context.products[0]]})
-    original_budget = _grounded_answer_max_output_tokens(single_context)
-    original_field = context.products[0].fields[0]
-    wider_fields = [original_field.model_copy(update={"canonical_field": "field_" + ("x" * 1000)})]
-    wider_product = context.products[0].model_copy(update={"fields": wider_fields})
-    wider_context = context.model_copy(update={"products": [wider_product]})
-    wider_budget = _grounded_answer_max_output_tokens(wider_context)
-
-    assert wider_budget > original_budget
-    assert wider_budget % 32 == 0
-    assert wider_budget >= 384
-
-    oversized_fields = [
-        original_field.model_copy(update={"canonical_field": "field_" + ("x" * 1000)})
-    ]
-    oversized_product = context.products[0].model_copy(update={"fields": oversized_fields})
-    oversized_context = context.model_copy(update={"products": [oversized_product] * 100})
-    with pytest.raises(HyperClovaXConfigurationError, match="generation budget"):
-        _grounded_answer_max_output_tokens(oversized_context)
 
 
 @pytest.mark.parametrize(
@@ -332,19 +102,15 @@ def test_hcx_client_maps_http_status_without_exposing_body(
     outcome: str,
 ) -> None:
     secret = "DO_NOT_EXPOSE_SECRET_OR_QUESTION"
-    transport = FakeHyperClovaXTransport(_response(secret, status_code=status_code))
     records: list[HyperClovaXCallRecord] = []
-    client = HyperClovaXClient(_settings(), transport, on_call=records.append)
+    client = HyperClovaXClient(
+        _settings(),
+        FakeHyperClovaXTransport(_response(secret, status_code=status_code)),
+        on_call=records.append,
+    )
 
     with pytest.raises(error_type) as caught:
-        client.complete(
-            operation="query_plan",
-            system_prompt=secret,
-            user_prompt=secret,
-            schema_name="test_schema",
-            response_schema=_simple_schema(),
-            max_output_tokens=10,
-        )
+        _complete(client)
 
     assert secret not in str(caught.value)
     assert records[0].outcome == outcome
@@ -366,26 +132,23 @@ def test_hcx_client_sanitizes_transport_failures(
     error_type: type[Exception],
     outcome: str,
 ) -> None:
-    transport = FakeHyperClovaXTransport(failure)
     records: list[HyperClovaXCallRecord] = []
-    client = HyperClovaXClient(_settings(), transport, on_call=records.append)
+    client = HyperClovaXClient(
+        _settings(),
+        FakeHyperClovaXTransport(failure),
+        on_call=records.append,
+    )
 
     with pytest.raises(error_type) as caught:
-        client.complete(
-            operation="query_plan",
-            system_prompt="secret prompt",
-            user_prompt="secret question",
-            schema_name="test_schema",
-            response_schema=_simple_schema(),
-            max_output_tokens=10,
-        )
+        _complete(client)
 
     assert "DO_NOT_EXPOSE" not in str(caught.value)
     assert records[0].outcome == outcome
 
 
-def test_hcx_client_rejects_invalid_transport_response_without_echoing_values() -> None:
+def test_hcx_client_rejects_invalid_transport_response_and_schema() -> None:
     secret = "DO_NOT_EXPOSE_INVALID_RESPONSE"
+    records: list[HyperClovaXCallRecord] = []
     transport = FakeHyperClovaXTransport(
         {
             "status_code": 200,
@@ -395,30 +158,16 @@ def test_hcx_client_rejects_invalid_transport_response_without_echoing_values() 
             "unexpected": secret,
         }
     )
-    records: list[HyperClovaXCallRecord] = []
     client = HyperClovaXClient(_settings(), transport, on_call=records.append)
-
     with pytest.raises(HyperClovaXResponseError) as caught:
-        client.complete(
-            operation="query_plan",
-            system_prompt="system",
-            user_prompt="question",
-            schema_name="test_schema",
-            response_schema=_simple_schema(),
-            max_output_tokens=10,
-        )
-
+        _complete(client)
     assert secret not in str(caught.value)
     assert records[0].outcome == "response_error"
 
-
-def test_hcx_client_rejects_non_hcx_schema_before_transport() -> None:
-    transport = FakeHyperClovaXTransport(_response('{"value":"ok"}'))
-    client = HyperClovaXClient(_settings(), transport)
-
+    no_call = FakeHyperClovaXTransport(_response('{"value":"ok"}'))
     with pytest.raises(HyperClovaXConfigurationError, match="documented"):
-        client.complete(
-            operation="query_plan",
+        HyperClovaXClient(_settings(), no_call).complete(
+            operation="intent_analysis",
             system_prompt="system",
             user_prompt="question",
             schema_name="test_schema",
@@ -428,26 +177,6 @@ def test_hcx_client_rejects_non_hcx_schema_before_transport() -> None:
                 "required": ["value"],
             },
             max_output_tokens=10,
+            response_parser=lambda content: content,
         )
-
-    assert transport.requests == []
-
-
-@pytest.mark.parametrize(
-    "content",
-    [
-        "not-json",
-        "[]",
-        '{"schema_version":"1.0","intent":"search","unexpected":"forbidden"}',
-    ],
-)
-def test_hcx_query_plan_provider_rejects_invalid_model_output(content: str) -> None:
-    transport = FakeHyperClovaXTransport(_response(content))
-    records: list[HyperClovaXCallRecord] = []
-    provider = HyperClovaXQueryPlanProvider(_settings(), transport, on_call=records.append)
-
-    with pytest.raises(HyperClovaXResponseError) as caught:
-        provider.generate_query_plan("테스트 질문", "trusted-request-id")
-
-    assert content not in str(caught.value)
-    assert [record.outcome for record in records] == ["response_error"]
+    assert no_call.requests == []

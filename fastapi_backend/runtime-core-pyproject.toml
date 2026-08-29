@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools==80.9.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "finance-agent-core"
+version = "0.1.0"
+description = "Minimal evaluation Runtime for the Mirae Asset Product Finder"
+requires-python = ">=3.12"
+dependencies = [
+    "pydantic>=2.13,<3",
+    "PyYAML>=6,<7",
+    "pypdf==6.16.1",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"finance_agent_core.audit" = ["expectations.json"]
+"finance_agent_core.config" = [
+    "field_registry.yaml",
+    "capability_matrix.json",
+    "approved_dataset_manifest.json",
+    "approved_knowledge_coverage_manifest.json",
+    "approved_source_registry.json",
+    "external_knowledge_source_catalog.json",
+]
+"finance_agent_core.contracts" = ["queryplan.hcx.schema.json"]
+"finance_agent_core.evaluation" = ["schema_embedding_models_v1.json"]

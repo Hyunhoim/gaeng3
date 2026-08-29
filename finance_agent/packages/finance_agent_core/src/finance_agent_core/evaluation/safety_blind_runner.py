@@ -29,7 +29,7 @@ from finance_agent_core.evaluation.safety_blind import (
 
 T = TypeVar("T")
 ExecutionBoundary = Literal["query_plan", "provider", "oracle", "answer_provider", "tool"]
-REQUIRED_INSTRUMENTED_BOUNDARIES = frozenset({"query_plan", "provider", "oracle"})
+REQUIRED_INSTRUMENTED_BOUNDARIES = frozenset({"query_plan", "oracle"})
 
 
 class SafetyBlindRunError(RuntimeError):

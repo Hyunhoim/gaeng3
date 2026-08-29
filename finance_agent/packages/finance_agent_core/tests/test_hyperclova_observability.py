@@ -24,7 +24,7 @@ def _record(
     usage: HyperClovaXTokenUsage | None = None,
 ) -> HyperClovaXCallRecord:
     return HyperClovaXCallRecord(
-        operation="query_plan",
+        operation="intent_analysis",
         model="HCX-007-PRIVATE-MODEL-SENTINEL",
         outcome=outcome,  # type: ignore[arg-type]
         status_code=429 if outcome == "rate_limited" else 200,

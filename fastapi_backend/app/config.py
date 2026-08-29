@@ -37,7 +37,7 @@ class Settings(BaseSettings):
         default="development",
         validation_alias="APP_ENV",
     )
-    answer_provider: Literal["deterministic", "local_test", "hyperclova"] = Field(
+    answer_provider: Literal["deterministic", "hyperclova"] = Field(
         default="deterministic",
         validation_alias="FINANCE_BACKEND_ANSWER_PROVIDER",
     )
@@ -53,11 +53,11 @@ class Settings(BaseSettings):
         default=False,
         validation_alias="FINANCE_BACKEND_HCX_SEMANTIC_RESOLVER_ENABLED",
     )
-    llm_mode: Literal["disabled", "local_test", "evaluation", "production"] = Field(
+    llm_mode: Literal["disabled", "evaluation", "production"] = Field(
         default="disabled",
         validation_alias="FINANCE_AGENT_LLM_MODE",
     )
-    llm_provider: Literal["disabled", "local_test", "hyperclova"] = Field(
+    llm_provider: Literal["disabled", "hyperclova"] = Field(
         default="disabled",
         validation_alias="LLM_PROVIDER",
     )
@@ -294,6 +294,19 @@ class Settings(BaseSettings):
         explicit_names = (
             {str(name).casefold() for name in values} if isinstance(values, dict) else set()
         )
+        if isinstance(values, dict):
+            normalized_values = {str(name).casefold(): value for name, value in values.items()}
+            retired_provider_keys = {
+                "answer_provider",
+                "finance_backend_answer_provider",
+                "llm_mode",
+                "finance_agent_llm_mode",
+                "llm_provider",
+            }
+            if any(
+                normalized_values.get(key) == "local_test" for key in retired_provider_keys
+            ):
+                raise ValueError("local_test/Qwen Runtime provider is retired")
         if "CLOVASTUDIO_API_KEY" in os.environ or "clovastudio_api_key" in explicit_names:
             raise ValueError(
                 "inline HyperCLOVA credential is forbidden; use CLOVASTUDIO_API_KEY_FILE"
@@ -313,13 +326,9 @@ class Settings(BaseSettings):
         return values
 
     @model_validator(mode="after")
-    def require_development_for_local_provider(self) -> Settings:
+    def require_approved_provider_contract(self) -> Settings:
         """Keep provider and capability opt-ins fail-closed."""
 
-        if self.answer_provider == "local_test" and self.app_env != "development":
-            raise ValueError(
-                "FINANCE_BACKEND_ANSWER_PROVIDER=local_test is allowed only in development"
-            )
         if self.hcx_query_plan_enabled:
             raise ValueError(
                 "full HCLX QueryPlan generation is retired; enable HCLX Intent analysis instead"

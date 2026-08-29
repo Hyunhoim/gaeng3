@@ -572,6 +572,8 @@ class IntentRouter:
     ) -> None:
         if type(hclx_planning_enabled) is not bool:
             raise TypeError("hclx_planning_enabled must be a boolean")
+        if hclx_planning_enabled:
+            raise ValueError("legacy HCLX QueryPlan execution is retired")
         if type(adaptive_semantic_enabled) is not bool:
             raise TypeError("adaptive_semantic_enabled must be a boolean")
         self.matrix = matrix or load_capability_matrix()
@@ -580,9 +582,7 @@ class IntentRouter:
             schema_link_gaps_enabled=adaptive_semantic_enabled
         )
         self.adaptive_semantic_enabled = adaptive_semantic_enabled
-        self._authority_planning_policy = AdaptiveShadowPlanningPolicy(
-            hclx_planning_enabled=hclx_planning_enabled
-        )
+        self._authority_planning_policy = AdaptiveShadowPlanningPolicy()
         self.planning_policy = planning_policy or self._authority_planning_policy
 
     def route(self, question: str, request_id: str) -> RouteDecision:

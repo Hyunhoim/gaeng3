@@ -6,7 +6,6 @@ from pathlib import Path
 from typing import Protocol, cast
 
 from fastapi import Request
-from finance_agent_core.agent import IntentRouter, RoutedAgentResult, RoutedFinanceAgent
 from finance_agent_core.agent.adaptive_semantic import AdaptiveSemanticResolver
 from finance_agent_core.agent.compiler import ServerQueryPlanCompiler
 from finance_agent_core.agent.external_knowledge_router import ExternalKnowledgeRouter
@@ -14,22 +13,19 @@ from finance_agent_core.agent.external_search_planning import (
     ExternalSearchPlanCompiler,
     ProvidedProductUniverseBuilder,
 )
-from finance_agent_core.agent.grounded_planning import GroundedPlanGate
 from finance_agent_core.agent.knowledge_router import DeterministicKnowledgeRouter
 from finance_agent_core.agent.knowledge_service import KnowledgeAgent
-from finance_agent_core.agent.providers import (
-    HyperClovaXCallObserver,
+from finance_agent_core.agent.providers.hyperclova import (
     HyperClovaXFinalAnswerProvider,
-    HyperClovaXHTTPTransport,
     HyperClovaXIntentAnalysisProvider,
     HyperClovaXSemanticResolverProvider,
     HyperClovaXSettings,
     HyperClovaXTransport,
-    LocalTestSettings,
 )
-from finance_agent_core.answering import (
-    LocalGroundedAnswerProvider,
-)
+from finance_agent_core.agent.providers.hyperclova_http import HyperClovaXHTTPTransport
+from finance_agent_core.agent.providers.hyperclova_observability import HyperClovaXCallObserver
+from finance_agent_core.agent.routed_service import RoutedAgentResult, RoutedFinanceAgent
+from finance_agent_core.agent.router import IntentRouter
 from finance_agent_core.config.knowledge_coverage import (
     load_approved_knowledge_coverage_manifest,
 )
@@ -150,11 +146,14 @@ def _provider_assembly_matches(
     settings: Settings,
     audit_sink: BoundedAsyncAuditSink | None,
 ) -> bool:
-    if service.grounded_plan_provider is not None:
+    if (
+        service.query_plan_provider is not None
+        or service.grounded_plan_provider is not None
+        or service.answer_provider is not None
+        or service.hclx_planning_enabled
+    ):
         return False
     transports: list[object] = []
-    if service.query_plan_provider is not None or service.hclx_planning_enabled:
-        return False
 
     if settings.hcx_intent_analysis_enabled:
         provider = service.intent_analysis_provider
@@ -203,8 +202,6 @@ def _provider_assembly_matches(
             return False
         transports.append(answer_provider._client.transport)
     elif service.official_answer_provider is not None:
-        return False
-    if settings.answer_provider != "local_test" and service.answer_provider is not None:
         return False
     if any(type(transport) is not HyperClovaXHTTPTransport for transport in transports):
         return False
@@ -335,23 +332,17 @@ def require_approval_guard(
         or gate.capability_execution_overrides != frozenset(settings.capability_execution_overrides)
         or type(service.router) is not IntentRouter
         or type(service.compiler) is not ServerQueryPlanCompiler
-        or type(service.grounded_plan_gate) is not GroundedPlanGate
         or service._record_cache_enabled
         or type(service.record_cache) is not RecordSnapshotCache
         or type(service.identity_cache) is not ProductIdentitySnapshotCache
         or service.compiler.record_cache is not service.record_cache
         or service.compiler.identity_cache is not service.identity_cache
-        or service.grounded_plan_gate.identity_cache is not service.identity_cache
         or service.allow_internal_disabled_dataset
         or service.capability_execution_overrides
         != frozenset(settings.capability_execution_overrides)
-        or service.hclx_planning_enabled
+        or service.schema_link_shadow_observer is not None
         or service.require_official_hclx
         != (settings.hcx_intent_analysis_enabled and settings.answer_provider == "hyperclova")
-        # An arbitrary Shadow observer receives a detached trace containing the
-        # raw question, so it remains forbidden even when the release-bound
-        # adaptive resolver is activated.
-        or service.schema_link_shadow_observer is not None
         or (
             settings.has_release_configuration
             and (
@@ -786,13 +777,9 @@ def build_agent(
         and type(release_guard) is not ResolvedAgentRelease
     ):
         raise RuntimeError("evaluation/production Agent assembly requires a resolved release")
-    answer_provider = None
     intent_analysis_provider = None
     official_answer_provider = None
     semantic_resolver_provider = None
-    if settings.answer_provider == "local_test":
-        answer_provider = LocalGroundedAnswerProvider(LocalTestSettings.from_environment())
-        answer_provider.healthcheck()
     if settings.uses_hyperclova:
         hcx_settings = HyperClovaXSettings(
             model=settings.hcx_model or "",
@@ -832,13 +819,11 @@ def build_agent(
     ) = _build_external_knowledge_runtime(settings, release_guard)
     return RoutedFinanceAgent(
         settings.database_paths,
-        answer_provider=answer_provider,
         intent_analysis_provider=intent_analysis_provider,
         official_answer_provider=official_answer_provider,
         require_official_hclx=(
             settings.hcx_intent_analysis_enabled and settings.answer_provider == "hyperclova"
         ),
-        hclx_planning_enabled=False,
         capability_execution_overrides=settings.capability_execution_overrides,
         require_approved_databases=settings.app_env in {"evaluation", "production"},
         release_guard=release_guard,

@@ -54,18 +54,6 @@ def require_fund_public_scope(plan: QueryPlan) -> None:
         )
 
 
-def require_fund_aum_currency_scope(plan: QueryPlan) -> None:
-    """Accept the organizer-provided fund AUM as the canonical ranking basis.
-
-    The official evaluation compares the supplied AUM column directly and does
-    not require the user to repeat a currency.  Cross-family amount arithmetic
-    still has a separate same-unit guard; this single-family ranking policy must
-    not manufacture a clarification that the official question did not ask for.
-    """
-
-    return
-
-
 def comparison_product_ids(plan: QueryPlan) -> list[str]:
     constraints = [
         constraint for constraint in plan.constraints if constraint.field == "product_id"
@@ -159,21 +147,6 @@ def require_comparison_contract(
             blockers.append(f"product family {family!r} is not enabled for execution")
     if blockers:
         raise PlanExecutionBlockedError("; ".join(blockers))
-
-
-def require_fund_comparison_contract(
-    plan: QueryPlan,
-    *,
-    require_enabled_dataset: bool = False,
-) -> None:
-    """Backward-compatible public-fund comparison contract."""
-
-    if plan.product_families != [ProductFamily.FUND]:
-        raise PlanExecutionBlockedError("fund comparison requires product family fund")
-    require_comparison_contract(
-        plan,
-        require_enabled_dataset=require_enabled_dataset,
-    )
 
 
 def require_aggregate_contract(
@@ -274,10 +247,6 @@ def _require_search_contract(
                 blockers.append(f"product family {family.value!r} is not enabled for execution")
     try:
         require_fund_public_scope(plan)
-    except PlanExecutionBlockedError as error:
-        blockers.append(str(error))
-    try:
-        require_fund_aum_currency_scope(plan)
     except PlanExecutionBlockedError as error:
         blockers.append(str(error))
     if blockers:

@@ -90,6 +90,17 @@ _SETTINGS_RELEASE_NULLS = {
     "FINANCE_RUNTIME_IMAGE_REFERENCE": None,
     "FINANCE_SOURCE_COMMIT": None,
 }
+_FORBIDDEN_RUNTIME_MODULES = (
+    "app.shadow_runtime",
+    "finance_agent_core.agent.cli",
+    "finance_agent_core.agent.grounded_planning",
+    "finance_agent_core.agent.providers.local_test",
+    "finance_agent_core.agent.providers.mock",
+    "finance_agent_core.agent.service",
+    "finance_agent_core.answering.providers",
+    "finance_agent_core.evaluation.briefing_examples",
+    "finance_agent_core.retrieval.schema_shadow",
+)
 
 
 def _normalized_distribution_name(value: str) -> str:
@@ -129,6 +140,12 @@ def _forbidden_files() -> list[str]:
             ):
                 findings.append(f"{label}:{candidate.relative_to(root).as_posix()}")
     return sorted(findings)
+
+
+def _forbidden_runtime_module_findings() -> list[str]:
+    return sorted(
+        name for name in _FORBIDDEN_RUNTIME_MODULES if importlib.util.find_spec(name) is not None
+    )
 
 
 def _settings_reject(expected_message: str, **values: object) -> bool:
@@ -272,6 +289,7 @@ def build_report() -> dict[str, object]:
     forbidden_environment = sorted(
         name for name in _FORBIDDEN_ENVIRONMENT_NAMES if os.environ.get(name)
     )
+    forbidden_runtime_modules = _forbidden_runtime_module_findings()
     detected_model_like_files = _forbidden_files()
     image_reference = os.environ.get("FINANCE_RUNTIME_IMAGE_REFERENCE", "")
     release_id = os.environ.get("FINANCE_RELEASE_ID", "")
@@ -334,7 +352,7 @@ def build_report() -> dict[str, object]:
             NAVER_API_HUB_CLIENT_SECRET="must-not-be-loaded",
         ),
         "evaluation_rejects_local_answer_provider": _settings_reject(
-            "FINANCE_BACKEND_ANSWER_PROVIDER=local_test is allowed only in development",
+            "local_test/Qwen Runtime provider is retired",
             APP_ENV="evaluation",
             FINANCE_BACKEND_ANSWER_PROVIDER="local_test",
         ),
@@ -358,6 +376,7 @@ def build_report() -> dict[str, object]:
         and not forbidden_executables
         and not adaptive_dependency_mismatches
         and not forbidden_environment
+        and not forbidden_runtime_modules
         and not forbidden_files
         and release_identity_valid
         and embedded_manifest["verified"] is True
@@ -379,11 +398,10 @@ def build_report() -> dict[str, object]:
         "forbidden_executables": forbidden_executables,
         "adaptive_dependency_mismatches": adaptive_dependency_mismatches,
         "forbidden_environment_names": forbidden_environment,
+        "forbidden_runtime_modules": forbidden_runtime_modules,
         "forbidden_files": forbidden_files,
         "runtime_guards": guards,
-        "local_development_provider_source_present": (
-            importlib.util.find_spec("finance_agent_core.agent.providers.local_test") is not None
-        ),
+        "runtime_source_pruned": not forbidden_runtime_modules,
         "interpretation": (
             (
                 "The release contains only the exact approved KURE CPU dependencies; model and "
