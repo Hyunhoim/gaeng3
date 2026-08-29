@@ -844,6 +844,28 @@ def _approved_dataset_release() -> ApprovedDatasetRelease:
     )
 
 
+_INTENT_AND_RESOLUTION_PROMPT_FILES = (
+    "agent/adaptive_semantic.py",
+    "agent/intent_analysis.py",
+    "agent/linker.py",
+    "agent/providers/hyperclova.py",
+    "agent/semantic_ledger.py",
+    "agent/semantic_resolution.py",
+    "contracts/hcx_schema.py",
+)
+_ANSWER_PROMPT_FILES = (
+    "agent/backend_adapter.py",
+    "answering/final_generation.py",
+    "answering/models.py",
+)
+_GENERATION_CONTRACT_FILES = (
+    "agent/providers/hyperclova.py",
+    "agent/providers/hyperclova_http.py",
+    "agent/providers/hyperclova_observability.py",
+    "answering/final_generation.py",
+)
+
+
 def build_release_components(inputs: RuntimeReleaseInputs) -> AgentReleaseComponents:
     if inputs.product_dense_enabled:
         raise AgentReleaseError(
@@ -885,29 +907,6 @@ def build_release_components(inputs: RuntimeReleaseInputs) -> AgentReleaseCompon
     registry = load_field_registry()
     capability = load_capability_matrix()
 
-    queryplan_prompt_files = (
-        "agent/adaptive_semantic.py",
-        "agent/grounded_planning.py",
-        "agent/intent_analysis.py",
-        "agent/linker.py",
-        "agent/providers/local_test.py",
-        "agent/providers/hyperclova.py",
-        "agent/semantic_ledger.py",
-        "agent/semantic_resolution.py",
-        "contracts/hcx_schema.py",
-    )
-    answer_prompt_files = (
-        "answering/context.py",
-        "answering/final_generation.py",
-        "answering/providers.py",
-        "answering/verifier.py",
-    )
-    generation_files = (
-        "agent/providers/hyperclova.py",
-        "agent/providers/hyperclova_http.py",
-        "answering/final_generation.py",
-        "answering/providers.py",
-    )
     return AgentReleaseComponents(
         code=CodeRelease(
             core_package_sha256=sha256_runtime_tree(core_root),
@@ -933,9 +932,15 @@ def build_release_components(inputs: RuntimeReleaseInputs) -> AgentReleaseCompon
         ),
         approved_datasets=_approved_dataset_release(),
         prompts=PromptRelease(
-            queryplan_bundle_sha256=_hash_named_files(core_root, queryplan_prompt_files),
-            answer_bundle_sha256=_hash_named_files(core_root, answer_prompt_files),
-            generation_contract_sha256=_hash_named_files(core_root, generation_files),
+            queryplan_bundle_sha256=_hash_named_files(
+                core_root,
+                _INTENT_AND_RESOLUTION_PROMPT_FILES,
+            ),
+            answer_bundle_sha256=_hash_named_files(core_root, _ANSWER_PROMPT_FILES),
+            generation_contract_sha256=_hash_named_files(
+                core_root,
+                _GENERATION_CONTRACT_FILES,
+            ),
         ),
         execution=ExecutionRelease(
             planning_policy_version=(
