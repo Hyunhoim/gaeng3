@@ -274,6 +274,7 @@ def test_official_document_evidence_is_not_counted_as_a_product_result_in_audit(
     settings = HyperClovaXSettings(model="HCX-007", timeout_seconds=10)
     service = RoutedFinanceAgent(
         {},
+        intent_analysis_provider=HyperClovaXIntentAnalysisProvider(settings, transport),
         official_answer_provider=HyperClovaXFinalAnswerProvider(settings, transport),
         require_official_hclx=True,
     )
