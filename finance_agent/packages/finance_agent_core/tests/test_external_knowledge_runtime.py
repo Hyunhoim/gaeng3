@@ -897,7 +897,7 @@ def test_official_connector_accepts_one_unambiguous_visible_publication_date() -
     registry = load_official_source_registry()
     url = "https://www.fsc.go.kr/no010101/86950"
     body = (
-        '<html><body><article>국민참여형 국민성장펀드 구조 설명</article>'
+        "<html><body><article>국민참여형 국민성장펀드 구조 설명</article>"
         '<div class="day"><span>2026-05-21</span><span>조회수: 1</span></div>'
         "</body></html>"
     ).encode()
