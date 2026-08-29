@@ -13,11 +13,11 @@ import sysconfig
 from pathlib import Path
 from typing import Any
 
+import finance_agent_core.release as release_contract
+from finance_agent_core.release import AgentReleaseError, sha256_runtime_tree
 from pydantic import ValidationError
 
 from app.config import Settings
-import finance_agent_core.release as release_contract
-from finance_agent_core.release import AgentReleaseError, sha256_runtime_tree
 
 _FORBIDDEN_DISTRIBUTIONS = {
     "accelerate",
