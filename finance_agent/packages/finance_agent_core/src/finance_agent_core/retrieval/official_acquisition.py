@@ -46,7 +46,11 @@ class OfficialEvidenceAcquisitionModel(BaseModel):
 class OfficialEvidenceAcquisitionResult(OfficialEvidenceAcquisitionModel):
     status: OfficialEvidenceAcquisitionStatus
     relations: tuple[TemporalRelationRecord, ...] = Field(default=(), max_length=50)
-    snapshots: tuple[OfficialSourceSnapshot, ...] = Field(default=(), max_length=8)
+    # One discovery candidate can fan out to linked official PDF/API documents.
+    # Keep this bound aligned with the validated per-acquisition fetch budget;
+    # otherwise a valid ninth snapshot raises at the result boundary and turns
+    # an evidence miss into an HTTP 5xx.
+    snapshots: tuple[OfficialSourceSnapshot, ...] = Field(default=(), max_length=40)
     discovered_candidate_count: int = Field(ge=0, le=20)
     rejected_candidate_count: int = Field(ge=0, le=20)
     search_complete: bool
