@@ -4,12 +4,14 @@ from collections.abc import Mapping
 from datetime import date
 from pathlib import Path
 
+from finance_agent_core.config import load_field_registry
 from finance_agent_core.contracts.external_knowledge import KnowledgeProductSelection
 from finance_agent_core.contracts.queryplan import ProductFamily, SortDirection
 from finance_agent_core.execution.external_knowledge_verifier import OfficialProductFact
 from finance_agent_core.storage.approval import (
     load_approved_dataset_manifest,
     require_approved_database_paths,
+    sha256_file,
 )
 from finance_agent_core.storage.sqlite import connect_read_only
 
@@ -180,14 +182,23 @@ class SqliteOfficialProductFactProvider:
         }
         if verify_approved_databases:
             require_approved_database_paths(self.database_paths)
-        approval = load_approved_dataset_manifest()
-        self.database_sha256s = {
-            family: approval.datasets[family.value].database_sha256
-            for family in self.database_paths
-        }
-        self.source_ids = {
-            family: approval.datasets[family.value].source_id for family in self.database_paths
-        }
+        if verify_approved_databases:
+            approval = load_approved_dataset_manifest()
+            self.database_sha256s = {
+                family: approval.datasets[family.value].database_sha256
+                for family in self.database_paths
+            }
+            self.source_ids = {
+                family: approval.datasets[family.value].source_id for family in self.database_paths
+            }
+        else:
+            registry = load_field_registry()
+            self.database_sha256s = {
+                family: sha256_file(path) for family, path in self.database_paths.items()
+            }
+            self.source_ids = {
+                family: registry.datasets[family.value].source_id for family in self.database_paths
+            }
 
     def fetch(
         self,

@@ -26,6 +26,7 @@ from finance_agent_core.release import (
 from finance_agent_core.retrieval.schema_dense import (
     SchemaDenseActivationPolicy,
     load_dense_schema_index_artifact,
+    p1_precision_field_thresholds,
 )
 
 
@@ -176,6 +177,7 @@ def _runtime_inputs(arguments: argparse.Namespace) -> RuntimeReleaseInputs:
             minimum_margin=arguments.schema_dense_minimum_margin,
             top_k=arguments.schema_dense_top_k,
             calibration_report_sha256=(arguments.schema_dense_calibration_report_sha256),
+            field_thresholds=p1_precision_field_thresholds(),
         )
         schema_dense_artifact = load_dense_schema_index_artifact(
             schema_dense_path,

@@ -39,6 +39,7 @@ _GENERIC_FUND_NAMES = frozenset(
         "재간접펀드",
         "단기금융펀드",
         "mmf펀드",
+        "상장지수펀드",
     }
 )
 

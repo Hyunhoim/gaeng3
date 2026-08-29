@@ -812,10 +812,7 @@ class RoutedFinanceAgent:
                     dict.fromkeys(
                         (
                             *lexical_product_mentions,
-                            *(
-                                item.subject_span
-                                for item in knowledge_draft.knowledge_requirements
-                            ),
+                            *(item.subject_span for item in knowledge_draft.knowledge_requirements),
                         )
                     )
                 )

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import io
+import json
 import re
 import urllib.error
 import urllib.parse
@@ -188,7 +189,7 @@ class UrllibOfficialHttpTransport:
         request = urllib.request.Request(
             url,
             headers={
-                "Accept": "text/html,application/pdf,text/plain;q=0.8",
+                "Accept": "text/html,application/pdf,application/json,text/plain;q=0.8",
                 "User-Agent": "MiraeAssetFinanceAgentEvidence/1.0",
             },
             method="GET",
@@ -330,6 +331,34 @@ def infer_official_evidence_date(content_type: str, body: bytes) -> date | None:
             return None
     elif media_type == "text/plain":
         text = body.decode("utf-8", errors="replace")
+    elif media_type == "application/json":
+        try:
+            payload = json.loads(body)
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            return None
+        values: list[str] = []
+
+        def collect(value: object) -> None:
+            if isinstance(value, dict):
+                for key, item in value.items():
+                    if key.casefold() in {
+                        "asof",
+                        "as_of",
+                        "date",
+                        "gijunymd",
+                        "holdingsdate",
+                    } and isinstance(item, (str, int)):
+                        values.append(str(item))
+                    collect(item)
+            elif isinstance(value, list):
+                for item in value:
+                    collect(item)
+
+        collect(payload)
+        candidates = {
+            parsed for value in values if (parsed := _parse_publication_date(value)) is not None
+        }
+        return next(iter(candidates)) if len(candidates) == 1 else None
     else:
         return None
     candidates: set[date] = set()
@@ -357,12 +386,52 @@ class OfficialDocumentLinkResolver:
         snapshot: OfficialSourceSnapshot,
         *,
         max_links: int = 8,
+        evidence_as_of: date | None = None,
     ) -> tuple[OfficialDiscoveryCandidate, ...]:
         if not 1 <= max_links <= 20:
             raise ValueError("max_links must be between 1 and 20")
         media_type = snapshot.content_type.casefold().split(";", maxsplit=1)[0]
         if media_type not in {"text/html", "application/xhtml+xml"}:
             return ()
+        # KODEX product pages are server-rendered for identity but load their
+        # holdings from a same-origin official JSON endpoint.  Resolve that
+        # endpoint generically from the page's opaque product ID; company names
+        # and ETF names are never embedded in this connector.
+        parsed_source = urllib.parse.urlsplit(snapshot.source_uri)
+        if snapshot.source.source_id == "samsungfund-kodex-product":
+            product_ids = urllib.parse.parse_qs(parsed_source.query).get("id", [])
+            if len(product_ids) == 1 and re.fullmatch(r"[0-9A-Za-z_-]{2,40}", product_ids[0]):
+                product_id = product_ids[0]
+                if snapshot.capability is KnowledgeCapability.PRODUCT_RISK_FACTORS:
+                    relative = f"/upload/invest/{product_id}-A.pdf"
+                    risk_url = urllib.parse.urljoin(snapshot.source_uri, relative)
+                    source = self.registry.authorize_url(risk_url, snapshot.capability)
+                    if source.source_id != snapshot.source.source_id:
+                        raise OfficialConnectorError("linked KODEX PDF changed source scope")
+                    return (
+                        OfficialDiscoveryCandidate(
+                            url=risk_url,
+                            title=snapshot.title,
+                        ),
+                    )
+                target_date = min(
+                    evidence_as_of or self.registry.evidence_cutoff,
+                    self.registry.evidence_cutoff,
+                )
+                api_url = (
+                    "https://www.samsungfund.com/api/v1/kodex/product-pdf/"
+                    f"{urllib.parse.quote(product_id, safe='')}.do?"
+                    f"gijunYMD={target_date:%Y.%m.%d}"
+                )
+                source = self.registry.authorize_url(api_url, snapshot.capability)
+                if source.source_id != snapshot.source.source_id:
+                    raise OfficialConnectorError("linked KODEX API changed source scope")
+                return (
+                    OfficialDiscoveryCandidate(
+                        url=api_url,
+                        title=snapshot.title,
+                    ),
+                )
         parser = _LinkParser()
         parser.feed(snapshot.content.decode("utf-8", errors="replace"))
         parser.close()
@@ -493,10 +562,15 @@ class OfficialSourceConnector:
         normalized = content_type.casefold().split(";", maxsplit=1)[0].strip()
         is_html = normalized in {"text/html", "application/xhtml+xml"}
         is_pdf = normalized == "application/pdf"
+        is_json = normalized == "application/json"
         if entry.connector_kind is SourceConnectorKind.HTML:
             return is_html
         if entry.connector_kind is SourceConnectorKind.PDF:
             return is_pdf
+        if entry.connector_kind is SourceConnectorKind.HTML_OR_JSON:
+            return is_html or is_json
+        if entry.connector_kind is SourceConnectorKind.HTML_PDF_OR_JSON:
+            return is_html or is_pdf or is_json
         return is_html or is_pdf
 
     def fetch(

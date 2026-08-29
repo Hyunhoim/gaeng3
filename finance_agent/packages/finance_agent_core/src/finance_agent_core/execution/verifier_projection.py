@@ -119,6 +119,11 @@ def _canonical_value(
     if value_type is ValueType.BOOLEAN:
         return bool(raw_value)
     if value_type is ValueType.DATE:
+        if isinstance(raw_value, str) and (
+            raw_value.strip() in {"", "0", "00000000", "0000-00-00"}
+            or raw_value.strip().startswith("0000-")
+        ):
+            return None
         return _date_value(raw_value)
     if value_type is ValueType.NUMBER:
         if isinstance(raw_value, bool):

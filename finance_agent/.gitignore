@@ -10,6 +10,7 @@ artifacts/*
 !artifacts/evaluation/
 artifacts/evaluation/*
 !artifacts/evaluation/kure-internal-codex-calibration-v1.summary.json
+!artifacts/evaluation/kure-schema-dense-p1-selective-20260824.json
 !artifacts/evaluation/schema-embedding/
 artifacts/evaluation/schema-embedding/*
 !artifacts/evaluation/schema-embedding/snapshot-manifests/

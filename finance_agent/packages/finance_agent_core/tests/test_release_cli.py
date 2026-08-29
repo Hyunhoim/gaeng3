@@ -15,6 +15,7 @@ from finance_agent_core.release import (
     deployment_binding_file_bytes,
     relation_retrieval_artifact_file_bytes,
 )
+from finance_agent_core.retrieval.schema_dense import p1_precision_field_thresholds
 
 
 def _parse_manifest_arguments(tmp_path: Path, *extra: str) -> argparse.Namespace:
@@ -56,6 +57,45 @@ def test_manifest_cli_requires_both_relation_artifact_and_hash(tmp_path: Path) -
 
     with pytest.raises(SystemExit, match="requires both"):
         release_cli._runtime_inputs(arguments)
+
+
+def test_manifest_cli_binds_the_runtime_field_threshold_policy(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    artifact = object()
+    monkeypatch.setattr(
+        release_cli,
+        "load_dense_schema_index_artifact",
+        lambda *_args, **_kwargs: artifact,
+    )
+    arguments = _parse_manifest_arguments(
+        tmp_path,
+        "--adaptive-semantic-enabled",
+        "--schema-dense-index",
+        str(tmp_path / "schema-dense-index.json"),
+        "--schema-dense-index-sha256",
+        "a" * 64,
+        "--schema-dense-calibration-report-sha256",
+        "2fcc422baa76b6729933d598ccf6828dc997b92fd15f0fa12d7f1579d75587e3",
+        "--schema-dense-min-score",
+        "0.340015",
+        "--schema-dense-hclx-candidate-min-score",
+        "0.3",
+        "--schema-dense-minimum-margin",
+        "0.024703",
+        "--schema-dense-top-k",
+        "10",
+    )
+
+    runtime = release_cli._runtime_inputs(arguments)
+
+    assert runtime.schema_dense_artifact is artifact
+    assert runtime.schema_dense_policy is not None
+    assert runtime.schema_dense_policy.field_thresholds == p1_precision_field_thresholds()
+    assert runtime.schema_dense_policy.policy_sha256 == (
+        "0fcc4560dd5ef2944135907cbc0fa46b5446c7328bbf10657bb98eed81352c42"
+    )
 
 
 def test_manifest_cli_loads_only_trusted_canonical_relation_artifact(tmp_path: Path) -> None:

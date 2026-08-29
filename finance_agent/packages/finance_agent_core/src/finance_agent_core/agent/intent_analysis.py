@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import unicodedata
 from typing import Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -149,6 +150,22 @@ def _entity_surface_key(value: str) -> str:
     return surface
 
 
+def _literal_evidence_key(value: str) -> str:
+    """Normalize presentation-only Unicode while preserving literal token order."""
+
+    normalized = unicodedata.normalize("NFKC", value).casefold()
+    return "".join(character for character in normalized if character.isalnum())
+
+
+def _evidence_span_is_grounded(question: str, span: str) -> bool:
+    if not span.strip():
+        return False
+    if span in question:
+        return True
+    normalized_span = _literal_evidence_key(span)
+    return bool(normalized_span) and normalized_span in _literal_evidence_key(question)
+
+
 def _explicit_industry_relation(question: str, subject: str) -> bool:
     """Distinguish a real industry relation from an ETF name suffix."""
 
@@ -232,9 +249,7 @@ def sanitize_server_authorized_knowledge_draft(
         return tuple(
             sorted(
                 alias
-                for alias in proposed_aliases.get(
-                    (capability, _entity_surface_key(subject)), set()
-                )
+                for alias in proposed_aliases.get((capability, _entity_surface_key(subject)), set())
                 if alias in question
             )
         )
@@ -377,9 +392,9 @@ class IntentAnalysisVerification(IntentAnalysisModel):
     reason_code: Literal[
         "intent_analysis_verified",
         "intent_analysis_invalid_evidence",
-        "intent_analysis_requires_clarification",
-        "intent_analysis_intent_conflict",
-        "intent_analysis_family_conflict",
+        "intent_analysis_advisory_clarification",
+        "intent_analysis_advisory_intent_conflict",
+        "intent_analysis_advisory_family_conflict",
     ]
 
 
@@ -396,7 +411,7 @@ def verify_intent_analysis(
         for span in (requirement.subject_span, requirement.relation_span)
     ]
     if any(
-        not span.strip() or span not in question
+        not _evidence_span_is_grounded(question, span)
         for span in [*draft.evidence_spans, *knowledge_spans]
     ):
         return IntentAnalysisVerification(
@@ -412,26 +427,31 @@ def verify_intent_analysis(
             reason_code="intent_analysis_verified",
         )
 
+    # HCX participation is mandatory, but the model has no authority to veto a
+    # deterministic plan that already passed SafetyEnvelope and semantic
+    # coverage.  A disagreement is retained as an auditable advisory signal;
+    # it never upgrades a blocked route and never changes fields, filters,
+    # direction, limit, or SQL authority.
     if draft.needs_clarification or draft.intent in {
         InteractionIntent.CLARIFY,
         InteractionIntent.UNSUPPORTED,
     }:
         return IntentAnalysisVerification(
-            passed=False,
-            reason_code="intent_analysis_requires_clarification",
+            passed=True,
+            reason_code="intent_analysis_advisory_clarification",
         )
     if draft.intent is not server_decision.draft.intent:
         return IntentAnalysisVerification(
-            passed=False,
-            reason_code="intent_analysis_intent_conflict",
+            passed=True,
+            reason_code="intent_analysis_advisory_intent_conflict",
         )
     # Product-family order carries no execution meaning.  Require the exact
     # same unique set while allowing HCX to serialize multi-family mentions in
     # a different order from the deterministic router.
     if set(draft.product_families) != set(server_decision.draft.product_families):
         return IntentAnalysisVerification(
-            passed=False,
-            reason_code="intent_analysis_family_conflict",
+            passed=True,
+            reason_code="intent_analysis_advisory_family_conflict",
         )
     return IntentAnalysisVerification(
         passed=True,

@@ -16,12 +16,12 @@ SPEC.loader.exec_module(FROZEN)
 
 EXPECTED_HISTORICAL_BASELINE_ERRORS_SHA256 = (
     # Reviewed on 2026-08-29 after the latest-data, HCLX Intent, adaptive
-    # semantic, and official external-evidence successor contracts. The 28
+    # semantic, and official external-evidence successor contracts. The 29
     # tracked entries remain historical baseline drift; this hash is computed
     # from a clean Git tree so ignored local evaluation artifacts cannot affect
     # release QA. It does not approve current runtime behavior or rewrite
     # immutable evidence.
-    "228f2cbbb58eb8a059292df84464ad26aaf82d2bddbfb76d6de5c39c981d265b"
+    "fe07c7d752ad17abbeb71a658aeccf1d7a28f29c7299d0d5f16f258305f8a15f"
 )
 
 

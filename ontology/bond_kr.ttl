@@ -9,7 +9,7 @@
     a owl:Ontology ;
     owl:imports <https://gaeng3.ai/ontology/common> ;
     rdfs:label "국내채권 Ontology"@ko ;
-    ga:registryVersion "1.4" .
+    ga:registryVersion "1.5" .
 
 bond:KoreanBondProduct
     a owl:Class ;
@@ -29,6 +29,10 @@ bond:Family
     ga:hasCanonicalField bond:field_static_as_of ;
     ga:hasCanonicalField bond:field_dynamic_as_of ;
     ga:hasCanonicalField bond:field_short_name ;
+    ga:hasCanonicalField bond:field_risk_level ;
+    ga:hasCanonicalField bond:field_public_offering ;
+    ga:hasCanonicalField bond:field_pension_eligible ;
+    ga:hasCanonicalField bond:field_sales_channel ;
     ga:hasCanonicalField bond:field_bond_market ;
     ga:hasCanonicalField bond:field_issuer ;
     ga:hasCanonicalField bond:field_bond_major_class ;
@@ -49,7 +53,8 @@ bond:Family
     ga:hasCanonicalField bond:field_buyable_quantity ;
     ga:hasCanonicalField bond:field_currently_buyable ;
     ga:hasCanonicalField bond:field_remaining_days ;
-    ga:hasCanonicalField bond:field_duration_years .
+    ga:hasCanonicalField bond:field_duration_years ;
+    ga:hasCanonicalField bond:field_total_issue_amount .
 
 bond:Dataset
     a ga:Dataset ;
@@ -303,6 +308,121 @@ bond:field_short_name
     ga:sourceColumn "pd_abrv_nm" ;
     ga:sourceTransform "identity" ;
     ga:notes "14행이 결측이며 식별자로 사용하지 않는다."@ko .
+
+bond:field_risk_level
+    a ga:CanonicalField ;
+    ga:forFamily bond:Family ;
+    ga:canonicalName "risk_level" ;
+    rdfs:label "상품 위험등급"@ko ;
+    skos:altLabel "위험등급"@ko ;
+    skos:altLabel "위험도"@ko ;
+    skos:altLabel "risk level"@ko ;
+    ga:valueType "enum" ;
+    ga:unit "code" ;
+    ga:quality "PARTIAL" ;
+    ga:coveragePct "100"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable false ;
+    ga:aggregatable false ;
+    ga:comparable true ;
+    ga:comparisonMode "value_only" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "in" ;
+    ga:enumValue "매우높은위험(1등급)" ;
+    ga:enumValue "높은위험(2등급)" ;
+    ga:enumValue "다소높은위험(3등급)" ;
+    ga:enumValue "보통위험(4등급)" ;
+    ga:enumValue "낮은위험(5등급)" ;
+    ga:enumValue "매우낮은위험(6등급)" ;
+    ga:enumValue "해당없음" ;
+    ga:asOfBasis "static" ;
+    ga:sourceDataset "bond" ;
+    ga:sourceColumn "pd_risk_nm" ;
+    ga:sourceTransform "identity" ;
+    ga:notes "국내채권 공식 위험등급명을 원문 그대로 사용한다."@ko .
+
+bond:field_public_offering
+    a ga:CanonicalField ;
+    ga:forFamily bond:Family ;
+    ga:canonicalName "public_offering" ;
+    rdfs:label "공모 여부"@ko ;
+    skos:altLabel "공모펀드 여부"@ko ;
+    skos:altLabel "공사모 구분"@ko ;
+    skos:altLabel "public offering"@ko ;
+    ga:valueType "boolean" ;
+    ga:unit "boolean" ;
+    ga:quality "VALID" ;
+    ga:coveragePct "100"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable false ;
+    ga:aggregatable false ;
+    ga:comparable false ;
+    ga:comparisonMode "value_only" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:asOfBasis "static" ;
+    ga:sourceDataset "bond" ;
+    ga:sourceColumn "bd_ofr_tcd" ;
+    ga:sourceTransform "boolean_code" ;
+    ga:valueMapJson "{\"공모\":true,\"사모\":false}" ;
+    ga:notes "채권 모집구분의 공모·사모를 boolean으로 고정한다."@ko .
+
+bond:field_pension_eligible
+    a ga:CanonicalField ;
+    ga:forFamily bond:Family ;
+    ga:canonicalName "pension_eligible" ;
+    rdfs:label "연금 거래 가능 여부"@ko ;
+    skos:altLabel "연금 가능"@ko ;
+    skos:altLabel "연금계좌 거래"@ko ;
+    skos:altLabel "pension eligible"@ko ;
+    ga:valueType "boolean" ;
+    ga:unit "boolean" ;
+    ga:quality "VALID" ;
+    ga:coveragePct "100"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable false ;
+    ga:aggregatable false ;
+    ga:comparable true ;
+    ga:comparisonMode "value_only" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:asOfBasis "static" ;
+    ga:sourceDataset "bond" ;
+    ga:sourceColumn "pd_pen_tr_yn" ;
+    ga:sourceTransform "boolean_code" ;
+    ga:valueMapJson "{\"N\":false,\"Y\":true}" ;
+    ga:notes "채권 공식 연금 편입 가능 여부 Y/N을 사용한다."@ko .
+
+bond:field_sales_channel
+    a ga:CanonicalField ;
+    ga:forFamily bond:Family ;
+    ga:canonicalName "sales_channel" ;
+    rdfs:label "클래스 판매채널"@ko ;
+    skos:altLabel "판매채널"@ko ;
+    skos:altLabel "온라인 클래스"@ko ;
+    skos:altLabel "오프라인 클래스"@ko ;
+    ga:valueType "string" ;
+    ga:unit "code" ;
+    ga:quality "PARTIAL" ;
+    ga:coveragePct "2.8974"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable false ;
+    ga:aggregatable false ;
+    ga:comparable true ;
+    ga:comparisonMode "value_only" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "contains" ;
+    ga:asOfBasis "snapshot" ;
+    ga:sourceDataset "bond" ;
+    ga:sourceColumn "bdbns_abl_chnl_nm" ;
+    ga:sourceTransform "identity" ;
+    ga:notes "공식 채권 매매가능채널명이 있는 행만 필터에 사용한다."@ko .
 
 bond:field_bond_market
     a ga:CanonicalField ;
@@ -627,7 +747,7 @@ bond:field_credit_rating
     ga:sourceDataset "bond" ;
     ga:sourceColumn "crd_grd" ;
     ga:sourceTransform "identity" ;
-    ga:notes "결측이 많고 원천 등급 표기가 AA0·A0처럼 혼재한다. QueryPlan은 정확값·목록 일치만 사용하며, 명시적인 'AA- 이상' 같은 표현은 registry의 최고→최저 enum 순서를 기준으로 허용 목록(in)으로 확장한다. 임계 등급이 없는 '등급이 높은' 표현은 추정하지 않는다."@ko .
+    ga:notes "결측이 많고 원천 등급 표기가 AA0·A0처럼 혼재한다. QueryPlan은 정확값·목록 일치만 사용하며, 명시적인 'AA- 이상' 같은 표현은 registry의 최고→최저 enum 순서를 기준으로 허용 목록(in)으로 확장한다. 명시한 정확 등급이 enum에 없으면 parameterized SQL의 빈 결과로 검증해 NOT_FOUND 처리하며, 임계 등급이 없는 '등급이 높은' 표현은 추정하지 않는다."@ko .
 
 bond:field_bond_risk_code
     a ga:CanonicalField ;
@@ -967,3 +1087,35 @@ bond:field_duration_years
     ga:sourceColumn "dur" ;
     ga:sourceTransform "identity" ;
     ga:notes "원천 dur을 연 단위 수치로 보존하고 결측은 정렬·집계에서 제외한다."@ko .
+
+bond:field_total_issue_amount
+    a ga:CanonicalField ;
+    ga:forFamily bond:Family ;
+    ga:canonicalName "total_issue_amount" ;
+    rdfs:label "총발행금액"@ko ;
+    skos:altLabel "총 발행 규모"@ko ;
+    skos:altLabel "총발행액"@ko ;
+    skos:altLabel "total issue amount"@ko ;
+    ga:valueType "number" ;
+    ga:unit "source_currency_amount" ;
+    ga:quality "PARTIAL" ;
+    ga:coveragePct "100"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable true ;
+    ga:aggregatable true ;
+    ga:comparable true ;
+    ga:comparisonMode "numeric_delta" ;
+    ga:comparisonScope "same_trading_currency" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "lt" ;
+    ga:allowedOperator "lte" ;
+    ga:allowedOperator "gt" ;
+    ga:allowedOperator "gte" ;
+    ga:allowedOperator "between" ;
+    ga:asOfBasis "static" ;
+    ga:sourceDataset "bond" ;
+    ga:sourceColumn "bd_tisu_a" ;
+    ga:sourceTransform "identity" ;
+    ga:sentinelValuesJson "{\"0\":\"UNKNOWN\"}" ;
+    ga:notes "발행잔액 isu_bal_amt와 구분되는 공식 총발행금액이며 0·결측은 수치 실행에서 제외한다."@ko .

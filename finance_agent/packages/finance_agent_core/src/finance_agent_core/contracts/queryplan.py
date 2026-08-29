@@ -234,7 +234,7 @@ def _validate_value_type(constraint: Constraint, definition: FieldDefinition) ->
         raise ValueError(f"{constraint.field} expects {definition.value_type.value} values")
     if definition.value_type is ValueType.ENUM:
         unknown_values = set(values) - set(definition.enum_values)
-        if unknown_values:
+        if unknown_values and not definition.unknown_enum_as_empty_set:
             raise ValueError(
                 f"{constraint.field} has unknown enum values: {sorted(unknown_values)}"
             )

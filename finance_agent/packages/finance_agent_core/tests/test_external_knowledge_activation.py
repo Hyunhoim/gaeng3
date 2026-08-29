@@ -541,10 +541,13 @@ def test_company_surface_does_not_narrow_products_by_reverse_substring() -> None
         is_quarantined=False,
     )
 
-    assert resolve_explicit_candidate_ids(
-        {ProductFamily.DOMESTIC_ETP: (record,)},
-        ("에코프로",),
-    ) == {}
+    assert (
+        resolve_explicit_candidate_ids(
+            {ProductFamily.DOMESTIC_ETP: (record,)},
+            ("에코프로",),
+        )
+        == {}
+    )
 
 
 def test_explicit_fund_core_can_bind_multiple_official_sale_classes() -> None:
@@ -686,9 +689,7 @@ def test_live_subsidiary_relation_requires_exact_parent_and_child_in_source() ->
 
 
 def test_server_normalizes_particles_and_builds_parent_only_multihop_chain() -> None:
-    question = (
-        "에코프로의 자회사를 편입한 ETF 중 순자산이 큰 상품의 위험요인을 알려줘."
-    )
+    question = "에코프로의 자회사를 편입한 ETF 중 순자산이 큰 상품의 위험요인을 알려줘."
     draft = IntentAnalysisDraft(
         intent=InteractionIntent.SEARCH,
         product_families=[ProductFamily.DOMESTIC_ETP],
@@ -737,11 +738,15 @@ def test_live_parent_only_subsidiary_extracts_exact_official_company_spans() -> 
             knowledge_requirements=[],
         ),
     )
-    requirement = CompositeKnowledgePlanCompiler().compile(
-        question,
-        "parent-only-extract",
-        draft,
-    ).requirements[0]
+    requirement = (
+        CompositeKnowledgePlanCompiler()
+        .compile(
+            question,
+            "parent-only-extract",
+            draft,
+        )
+        .requirements[0]
+    )
     body = (
         "<html><body><article>2016년 에코프로비엠, 2021년 에코프로에이치엔을 "
         "각각 분할 설립하며 지주회사 체제로 전환한 에코프로입니다.</article></body></html>"

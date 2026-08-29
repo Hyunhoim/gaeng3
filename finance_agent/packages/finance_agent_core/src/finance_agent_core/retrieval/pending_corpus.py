@@ -295,18 +295,14 @@ def rebind_pending_corpus_registry(
                 for capability in snapshot.capabilities
             )
         except OfficialSourceRegistryError as error:
-            raise PendingCorpusError(
-                "pending corpus source is no longer authorized"
-            ) from error
+            raise PendingCorpusError("pending corpus source is no longer authorized") from error
         if (
             len({entry.source_id for entry in entries}) != 1
             or entries[0].source_id != snapshot.source_registry_id
             or entries[0].publisher != snapshot.publisher
         ):
             raise PendingCorpusError("pending corpus source authority changed")
-    return manifest.model_copy(
-        update={"source_registry_sha256": registry.canonical_sha256}
-    )
+    return manifest.model_copy(update={"source_registry_sha256": registry.canonical_sha256})
 
 
 def _extract_text(

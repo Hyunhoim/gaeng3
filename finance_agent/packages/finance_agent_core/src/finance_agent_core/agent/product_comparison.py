@@ -274,6 +274,14 @@ def _identity_aliases(
         for alias in (record.ticker, record.isin, record.short_name):
             if alias:
                 yield alias
+    elif family is ProductFamily.FUND:
+        # The organizer's fund table exposes the sale-class identity in the
+        # short name (for example C, C-e and C1-e).  Exact DETAIL requests must
+        # resolve that approved DB identity before broad fund-group fallback.
+        # Omitting this alias made a quoted, unique short name look like a group
+        # search and could return the wrong share class.
+        if record.short_name:
+            yield record.short_name
     elif family is ProductFamily.BOND:
         if record.ticker:
             yield record.ticker

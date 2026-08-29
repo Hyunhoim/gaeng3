@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>금융상품 Agent All-ON 300문항 검증 보고서</title>
+  <style>
+    :root { --ink:#172033; --muted:#5e6b82; --line:#dbe2ee; --navy:#16355c; --blue:#2878d0; --good:#08775c; --warn:#a45b00; --bad:#b33535; --bg:#f5f7fb; }
+    * { box-sizing:border-box; }
+    body { margin:0; color:var(--ink); background:var(--bg); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",sans-serif; line-height:1.6; }
+    main { max-width:1160px; margin:0 auto; padding:42px 24px 72px; }
+    header, section { background:#fff; border:1px solid var(--line); border-radius:16px; padding:28px; margin-bottom:18px; box-shadow:0 6px 18px rgba(22,53,92,.04); }
+    header { color:#fff; background:linear-gradient(130deg,var(--navy),#245f9e); border:0; }
+    h1 { margin:0 0 8px; font-size:30px; line-height:1.25; }
+    h2 { margin:0 0 18px; font-size:21px; color:var(--navy); }
+    h3 { margin:22px 0 8px; font-size:17px; }
+    p { margin:7px 0; }
+    .sub { color:#d9e8fa; }
+    .notice { padding:13px 15px; border-left:4px solid var(--warn); background:#fff8eb; border-radius:8px; }
+    .good { color:var(--good); font-weight:700; }
+    .bad { color:var(--bad); font-weight:700; }
+    .grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; }
+    .card { border:1px solid var(--line); border-radius:12px; padding:15px; background:#fbfcff; }
+    .card b { display:block; font-size:22px; color:var(--navy); }
+    .card span { color:var(--muted); font-size:13px; }
+    table { width:100%; border-collapse:collapse; font-size:14px; }
+    th, td { padding:10px 9px; border-bottom:1px solid var(--line); text-align:right; vertical-align:top; }
+    th:first-child, td:first-child { text-align:left; }
+    th { color:#40506a; background:#f7f9fc; }
+    ul, ol { margin:8px 0; padding-left:22px; }
+    li { margin:5px 0; }
+    code { overflow-wrap:anywhere; color:#254d7b; background:#f0f4f9; border-radius:5px; padding:2px 5px; }
+    .flow { padding:16px; border:1px dashed #9fb4cd; border-radius:12px; background:#f7fbff; font-weight:650; text-align:center; }
+    .tag { display:inline-block; margin:2px 4px 2px 0; padding:3px 8px; border-radius:999px; background:#eaf3ff; color:#245d98; font-size:12px; font-weight:700; }
+    .small { color:var(--muted); font-size:12px; }
+    @media (max-width:800px) { .grid { grid-template-columns:repeat(2,minmax(0,1fr)); } table { font-size:12px; } }
+    @media (max-width:520px) { main { padding:16px 10px 40px; } header,section { padding:19px; } .grid { grid-template-columns:1fr; } }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>금융상품 Agent All-ON 300문항 검증 보고서</h1>
+    <p class="sub">Independent Holdout v2.2.1 · 2026-08-29 · 연구실 격리 Docker · HCX-007 실제 호출</p>
+  </header>
+
+  <section>
+    <h2>1. 결론</h2>
+    <div class="grid">
+      <div class="card"><b>93.33%</b><span>상태 정확도</span></div>
+      <div class="card"><b>73.93%</b><span>상품 micro F1</span></div>
+      <div class="card"><b>69.00%</b><span>상태+상품 순서 결과 일치</span></div>
+      <div class="card"><b>58.33%</b><span>Strict Exact</span></div>
+    </div>
+    <p class="notice"><strong>해석 주의:</strong> 최초 실행만 독립 Blind다. 개선 실행은 Gold 공개 후 일반화 가능한 병목을 수정한 <strong>post-Gold development regression</strong>이므로 최종 일반화 성능으로 주장할 수 없다. 같은 300문항을 반복 학습하지 않았고, 남은 개선은 새 미공개 질문에서 검증해야 한다.</p>
+    <p>안전 상태는 강하다. 실제 복수 해석 40문항은 <span class="good">40/40 CLARIFY</span>, 답변 불가·정책 문항군은 <span class="good">29/30 상태 일치</span>였다. 반면 정확한 상품 순서와 복합 비교는 아직 제출 직전 P0다.</p>
+  </section>
+
+  <section>
+    <h2>2. 실제 활성화 구조</h2>
+    <div class="flow">질문 → SafetyEnvelope → HCX-007 Intent → Ontology·Lexical → Schema Dense 후보 → 제한된 HCLX Resolver → Typed QueryPlan 검증 → 제공 DB SQL/Python → 필요 시 공식 외부 검색·Document Dense Cache → 제공 DB 교집합 → Verifier → HCX-007 grounded answer</div>
+    <p>
+      <span class="tag">HCLX Intent ON</span><span class="tag">Ontology·Lexical ON</span>
+      <span class="tag">Schema Dense candidate-only ON</span><span class="tag">HCLX Resolver bounded ON</span>
+      <span class="tag">SQL/Python·Verifier ON</span><span class="tag">Official Live Search ON</span>
+      <span class="tag">Document Dense cache-first ON</span><span class="tag">DB intersection ON</span>
+      <span class="tag">HCLX grounded answer ON</span><span class="tag">Qwen absent</span>
+    </p>
+    <ul>
+      <li>Dense와 HCLX는 후보 field만 제안·선택한다. hard filter, 상품군, 정렬 방향, limit, SQL 결과를 바꿀 권한이 없다.</li>
+      <li>외부 근거 상품이 제공 DB에 없으면 <code>NOT_FOUND</code>, 근거를 끝까지 검증하지 못하면 <code>CANNOT_VERIFY</code>다.</li>
+      <li>Document Dense는 승인된 공식 문서 cache의 URL 후보 검색에 활성화됐다. Cache Miss만 공식 출처 Live Search로 전환한다.</li>
+      <li>평가 실행에서 NCP 배포는 하지 않았고, Generation 7은 그대로 보존했다.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>3. 최초 Blind 대비 개선</h2>
+    <table>
+      <thead><tr><th>지표</th><th>최초 Blind</th><th>개선 회귀</th><th>변화</th></tr></thead>
+      <tbody>
+        <tr><td>상태 정확도</td><td>75.67%</td><td>93.33%</td><td class="good">+17.67%p</td></tr>
+        <tr><td>Result Status 정확도</td><td>75.09%</td><td>92.67%</td><td class="good">+17.58%p</td></tr>
+        <tr><td>상품 micro Precision</td><td>64.64%</td><td>75.23%</td><td class="good">+10.59%p</td></tr>
+        <tr><td>상품 micro Recall</td><td>50.63%</td><td>72.68%</td><td class="good">+22.06%p</td></tr>
+        <tr><td>상품 micro F1</td><td>56.78%</td><td>73.93%</td><td class="good">+17.15%p</td></tr>
+        <tr><td>상품 macro F1</td><td>46.93%</td><td>69.80%</td><td class="good">+22.88%p</td></tr>
+        <tr><td>상품 순서 완전일치</td><td>39.13%</td><td>60.00%</td><td class="good">+20.87%p</td></tr>
+        <tr><td>상태+상품 순서 결과 일치</td><td>50.67%</td><td>69.00%</td><td class="good">+18.33%p</td></tr>
+        <tr><td>Strict Exact</td><td>40.67%</td><td>58.33%</td><td class="good">+17.67%p</td></tr>
+        <tr><td>QueryPlan filter</td><td>32.17%</td><td>55.65%</td><td class="good">+23.48%p</td></tr>
+        <tr><td>QueryPlan family</td><td>71.30%</td><td>91.74%</td><td class="good">+20.43%p</td></tr>
+        <tr><td>QueryPlan ranking</td><td>66.96%</td><td>84.35%</td><td class="good">+17.39%p</td></tr>
+        <tr><td>공식 외부 결과 정확도</td><td>0.00%</td><td>42.86%</td><td class="good">+42.86%p</td></tr>
+        <tr><td>HTTP non-200</td><td>15건</td><td>2건</td><td class="good">-13건</td></tr>
+      </tbody>
+    </table>
+    <p class="small">동일 Gold·동일 최신 비교기 기준이다. 비교기는 공모/사모↔Boolean, 판매중↔Boolean, ticker/ISIN/product_id의 공식 상품군별 식별자 동등성을 반영한다.</p>
+  </section>
+
+  <section>
+    <h2>4. 영역별 결과</h2>
+    <h3>질문 범주</h3>
+    <table>
+      <thead><tr><th>범주</th><th>문항</th><th>상태 정확도</th><th>결과 일치</th><th>Strict Exact</th></tr></thead>
+      <tbody>
+        <tr><td>명확 조건</td><td>30</td><td>93.33%</td><td>73.33%</td><td>53.33%</td></tr>
+        <tr><td>해석 가능한 의미 표현</td><td>200</td><td>91.50%</td><td>58.00%</td><td>45.00%</td></tr>
+        <tr><td>실제 복수 해석</td><td>40</td><td>100.00%</td><td>100.00%</td><td>100.00%</td></tr>
+        <tr><td>답변 불가·정책</td><td>30</td><td>96.67%</td><td>96.67%</td><td>96.67%</td></tr>
+      </tbody>
+    </table>
+    <h3>상품군</h3>
+    <table>
+      <thead><tr><th>상품군</th><th>실행 Gold</th><th>순서 완전일치</th><th>평균 상품 F1</th></tr></thead>
+      <tbody>
+        <tr><td>국내채권</td><td>58</td><td>27</td><td>58.42%</td></tr>
+        <tr><td>국내 ETF/ETN</td><td>58</td><td>38</td><td>75.60%</td></tr>
+        <tr><td>해외 ETF/ETN</td><td>57</td><td>23</td><td>56.87%</td></tr>
+        <tr><td>공모펀드</td><td>57</td><td>50</td><td>88.42%</td></tr>
+      </tbody>
+    </table>
+    <h3>Operation</h3>
+    <table>
+      <thead><tr><th>Operation</th><th>문항</th><th>순서 완전일치</th><th>평균 상품 F1</th></tr></thead>
+      <tbody>
+        <tr><td>SEARCH</td><td>190</td><td>125</td><td>72.18%</td></tr>
+        <tr><td>DETAIL</td><td>16</td><td>10</td><td>65.00%</td></tr>
+        <tr><td>COMPARE</td><td>24</td><td class="bad">3</td><td>54.17%</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>5. 실제 호출·지연</h2>
+    <div class="grid">
+      <div class="card"><b>304회</b><span>HCX Intent</span></div>
+      <div class="card"><b>298회</b><span>HCX grounded answer</span></div>
+      <div class="card"><b>480,016</b><span>총 HCX tokens</span></div>
+      <div class="card"><b>7/8</b><span>공식 문서 cache hit</span></div>
+    </div>
+    <table>
+      <thead><tr><th>지연</th><th>최초 Blind</th><th>개선 회귀</th><th>해석</th></tr></thead>
+      <tbody>
+        <tr><td>p50</td><td>3.821초</td><td>3.763초</td><td>소폭 개선</td></tr>
+        <tr><td>p95</td><td>7.485초</td><td>7.038초</td><td>약 6.0% 개선</td></tr>
+        <tr><td>p99</td><td>10.056초</td><td>14.396초</td><td class="bad">외부 관계 탐색 영향</td></tr>
+        <tr><td>최대</td><td>18.257초</td><td>26.720초</td><td>다중 공식 근거 체인</td></tr>
+      </tbody>
+    </table>
+    <p>평가 timeout 300초 이내지만, 점수 차등을 고려하면 외부 Live Search는 capability별 시간 예산·공식 문서 cache 확대로 줄여야 한다.</p>
+  </section>
+
+  <section>
+    <h2>6. 이번에 수정한 일반화 병목</h2>
+    <ol>
+      <li><strong>공식 0 날짜 sentinel로 인한 500:</strong> <code>00000000</code>, <code>0000-00-00</code>를 “값 없음”으로 처리해 SQL 필터와 Verifier 모두에서 제외했다. 동일 결정론적 문항은 5개 결과와 원래 listing_date·AUM 계획을 보존해 완주했다.</li>
+      <li><strong>HCX Intent JSON shape drift로 인한 502:</strong> HCX가 추가 설명 field 또는 동일 배열 값을 반복해도 권한 있는 5개 field만 추출하고 exact duplicate만 제거한다. 잘못된 intent·상품군·필수 field 누락은 계속 거부한다.</li>
+      <li><strong>비교기 source column 대소문자:</strong> 새 공식 XLSX의 대문자 raw column과 registry의 소문자 계약을 case-insensitive로 연결했다.</li>
+      <li><strong>비교기 의미 동등성:</strong> 공모/사모·판매중 label과 Boolean QueryPlan, exact 상품 identity field 표현을 같은 의미로 비교한다.</li>
+      <li><strong>상품군별 공개 식별자:</strong> 채권·해외 ETF는 Gold의 공개 ticker, 국내 ETF·공모펀드는 runtime product_id로 비교해 내부 키와 공개 키 혼동을 제거했다.</li>
+      <li><strong>공식 외부 관계:</strong> 엔티티별 하드코딩 없이 Source Registry, 운용사·브랜드·상품 metadata, 공식 connector, 시점·exact evidence, 제공 DB 교집합을 사용한다.</li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>7. 남은 P0와 보수적 판단</h2>
+    <ol>
+      <li><strong>COMPARE 정확성:</strong> 24건 중 순서 완전일치 3건이다. 상품 식별자 두 개 보존, 비교 field 보존, “더 높은 쪽”의 단일 선택을 새 미공개 회귀로 검증해야 한다.</li>
+      <li><strong>Filter 보존:</strong> 의미 동등성 보정 후에도 230개 실행 문항 중 102건이 불일치한다. 고빈도 누락군은 product_type·asset_type·investment_region·manager·leverage·remaining_days다.</li>
+      <li><strong>채권·해외 ETF 정렬:</strong> 발행잔액·잔존일수와 해외 보수·종가·거래대금·거래량의 순서 정확도가 낮다. 0·결측 제외와 단위 변환을 독립 SQL Oracle로 재대조해야 한다.</li>
+      <li><strong>외부 근거 coverage:</strong> 요구 7건 중 3건만 결과·근거가 완전히 일치했다. 현재 cache-first 설계는 유지하되 공식 도메인 connector와 날짜 검증 coverage를 넓혀야 한다.</li>
+      <li><strong>Reliability 재실행:</strong> 300문항에서 관측한 500·502는 수정됐지만 전체 300을 다시 돌려 점수를 재사용하지 않는다. 새 organizer-shaped 35문항에서 HTTP 오류 0을 확인한다.</li>
+      <li><strong>새 Blind:</strong> 단일 상품군 개선을 확인한 뒤, 계획대로 국내/해외 ETF·공모펀드 교차 TOP-K가 포함된 별도 unopened 300문항을 수행한다.</li>
+    </ol>
+    <p class="notice">현재 수치는 개선 증거로는 유효하지만 최종 제출 성능으로 단정하면 안 된다. 동일 Gold에 맞춘 alias 추가보다 새 미공개 질문에서 false execution 0, hard filter 보존, 상품 순서 정확성을 검증하는 편이 안전하다.</p>
+  </section>
+
+  <section>
+    <h2>8. 검증·봉인 정보</h2>
+    <ul>
+      <li>Core: 1,789 passed, 1 conditional skip. 이미지에 Git이 없어 실패한 1건은 호스트 Git read-only 연결 후 통과.</li>
+      <li>Backend: 458 passed, 1 conditional skip, 2 benign warnings.</li>
+      <li>Ruff 정적 검사: 전체 통과.</li>
+      <li>질문 SHA-256: <code>080e00c13b37be45d060f1f17f2ac60c899b9b0e0ffb4d2b023b2bdad3918578</code></li>
+      <li>Gold SHA-256: <code>1fd0d7d2e25494a970bd8e93a59cb7a8e4a8e6ae73989e10397a179cef8d102a</code></li>
+      <li>최초 Blind prediction canonical SHA-256: <code>f231a02fe099c08cb601526139b6e3416f2d9b165f0dfbdbebdb415fca042bb2</code></li>
+      <li>개선 회귀 prediction canonical SHA-256: <code>048d849b95d071893db319dc7c33fef92654ee593fab65473cd3838afdf6318a</code></li>
+      <li>최종 비교 report SHA-256: <code>8748fdac4c41988d457b4d77a706af41695a755b90678e0ca90f453bdb0c55b5</code></li>
+      <li>실행 commit: <code>9c9deabe6f807253b5e44260cb98f3ba9ea23c33</code> + 봉인된 development diff.</li>
+    </ul>
+    <p>질문 원문, Gold 정답, API Key, HCLX 응답 원문은 보고서와 Git에 포함하지 않았다. 기존 staged Release 변경도 보존했으며 commit·push·PR·NCP 배포는 수행하지 않았다.</p>
+  </section>
+</main>
+</body>
+</html>

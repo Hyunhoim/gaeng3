@@ -9,7 +9,7 @@
     a owl:Ontology ;
     owl:imports <https://gaeng3.ai/ontology/common> ;
     rdfs:label "국내 ETF·ETN Ontology"@ko ;
-    ga:registryVersion "1.4" .
+    ga:registryVersion "1.5" .
 
 etfkr:KoreanETPProduct
     a owl:Class ;
@@ -61,7 +61,8 @@ etfkr:Family
     ga:hasCanonicalField etfkr:field_one_hundred_twenty_day_volatility_pct ;
     ga:hasCanonicalField etfkr:field_two_hundred_fifty_two_day_volatility_pct ;
     ga:hasCanonicalField etfkr:field_distribution_yield_pct ;
-    ga:hasCanonicalField etfkr:field_distribution_payments_per_year .
+    ga:hasCanonicalField etfkr:field_distribution_payments_per_year ;
+    ga:hasCanonicalField etfkr:field_net_asset_value .
 
 etfkr:Dataset
     a ga:Dataset ;
@@ -801,7 +802,7 @@ etfkr:field_leverage_factor
     ga:sourceDataset "domestic_etp" ;
     ga:sourceColumn "cu_lev_fector" ;
     ga:sourceTransform "identity" ;
-    ga:notes "-3배부터 3배까지 관측되며 결측 182행은 UNKNOWN이다."@ko .
+    ga:notes "-3배부터 3배까지 관측되며 결측은 UNKNOWN이다."@ko .
 
 etfkr:field_risk_level
     a ga:CanonicalField ;
@@ -1394,3 +1395,35 @@ etfkr:field_distribution_payments_per_year
     ga:sourceTransform "identity" ;
     ga:sentinelValuesJson "{\"0\":\"UNKNOWN\"}" ;
     ga:notes "공식 연간 분배 지급 횟수를 보존하며 결측·0은 수치 실행 기준에서 제외한다."@ko .
+
+etfkr:field_net_asset_value
+    a ga:CanonicalField ;
+    ga:forFamily etfkr:Family ;
+    ga:canonicalName "net_asset_value" ;
+    rdfs:label "최종 NAV"@ko ;
+    skos:altLabel "순자산가치"@ko ;
+    skos:altLabel "최종 기준가"@ko ;
+    skos:altLabel "NAV"@ko ;
+    ga:valueType "number" ;
+    ga:unit "source_currency_amount" ;
+    ga:quality "PARTIAL" ;
+    ga:coveragePct "100"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable true ;
+    ga:aggregatable true ;
+    ga:comparable true ;
+    ga:comparisonMode "numeric_delta" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "lt" ;
+    ga:allowedOperator "lte" ;
+    ga:allowedOperator "gt" ;
+    ga:allowedOperator "gte" ;
+    ga:allowedOperator "between" ;
+    ga:asOfBasis "dynamic" ;
+    ga:sourceDataset "domestic_etp" ;
+    ga:sourceColumn "du_last_nav" ;
+    ga:sourceTransform "identity" ;
+    ga:sentinelValuesJson "{\"0\":\"UNKNOWN\"}" ;
+    ga:notes "공식 최종 NAV 원천값을 사용하고 0·결측은 수치 실행에서 제외한다."@ko .

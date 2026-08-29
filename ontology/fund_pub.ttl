@@ -9,7 +9,7 @@
     a owl:Ontology ;
     owl:imports <https://gaeng3.ai/ontology/common> ;
     rdfs:label "공모펀드 Ontology"@ko ;
-    ga:registryVersion "1.4" .
+    ga:registryVersion "1.5" .
 
 fund:PublicFundProduct
     a owl:Class ;
@@ -57,7 +57,9 @@ fund:Family
     ga:hasCanonicalField fund:field_eighteen_month_return_pct ;
     ga:hasCanonicalField fund:field_two_year_return_pct ;
     ga:hasCanonicalField fund:field_three_year_return_pct ;
-    ga:hasCanonicalField fund:field_five_year_return_pct .
+    ga:hasCanonicalField fund:field_five_year_return_pct ;
+    ga:hasCanonicalField fund:field_fee_type ;
+    ga:hasCanonicalField fund:field_management_company_fee_pct .
 
 fund:Dataset
     a ga:Dataset ;
@@ -1244,3 +1246,65 @@ fund:field_five_year_return_pct
     ga:sourceColumn "fd_yr5_ern_r" ;
     ga:sourceTransform "identity" ;
     ga:notes "5,979개 원천값을 수정·제거·상한 처리하지 않고 사용한다. 500% 초과 값 2개는 원천값 경고와 함께 보존한다."@ko .
+
+fund:field_fee_type
+    a ga:CanonicalField ;
+    ga:forFamily fund:Family ;
+    ga:canonicalName "fee_type" ;
+    rdfs:label "클래스 수수료 유형"@ko ;
+    skos:altLabel "수수료 징구 유형"@ko ;
+    skos:altLabel "수수료미징구"@ko ;
+    skos:altLabel "수수료선취"@ko ;
+    ga:valueType "enum" ;
+    ga:unit "code" ;
+    ga:quality "PARTIAL" ;
+    ga:coveragePct "40"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable false ;
+    ga:aggregatable false ;
+    ga:comparable false ;
+    ga:comparisonMode "value_only" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "in" ;
+    ga:enumValue "수수료미징구" ;
+    ga:enumValue "수수료선취" ;
+    ga:enumValue "수수료후취" ;
+    ga:asOfBasis "static" ;
+    ga:sourceDataset "fund" ;
+    ga:sourceColumn "han_clas_fee_type" ;
+    ga:sourceTransform "identity" ;
+    ga:notes "공식 클래스 수수료 유형을 원문 그대로 사용하고 결측은 제외한다."@ko .
+
+fund:field_management_company_fee_pct
+    a ga:CanonicalField ;
+    ga:forFamily fund:Family ;
+    ga:canonicalName "management_company_fee_pct" ;
+    rdfs:label "집합투자업자보수"@ko ;
+    skos:altLabel "운용사보수"@ko ;
+    skos:altLabel "집합 투자 업자 보수"@ko ;
+    skos:altLabel "management company fee"@ko ;
+    ga:valueType "number" ;
+    ga:unit "pct_point" ;
+    ga:quality "PARTIAL" ;
+    ga:coveragePct "100"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable true ;
+    ga:aggregatable true ;
+    ga:comparable true ;
+    ga:comparisonMode "numeric_delta" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "lt" ;
+    ga:allowedOperator "lte" ;
+    ga:allowedOperator "gt" ;
+    ga:allowedOperator "gte" ;
+    ga:allowedOperator "between" ;
+    ga:asOfBasis "static" ;
+    ga:sourceDataset "fund" ;
+    ga:sourceColumn "or_co_rwrd_r" ;
+    ga:sourceTransform "identity" ;
+    ga:sentinelValuesJson "{\"0\":\"UNKNOWN\"}" ;
+    ga:notes "공식 집합투자업자보수 원천값을 사용하고 0·결측은 수치 실행에서 제외한다."@ko .

@@ -26,6 +26,7 @@ from finance_agent_core.contracts.queryplan import ProductFamily
 from finance_agent_core.storage.approval import (
     load_approved_dataset_manifest,
     require_approved_database_paths,
+    sha256_file,
 )
 from finance_agent_core.storage.identity_cache import (
     ProductIdentityRecord,
@@ -204,6 +205,7 @@ class ProvidedProductUniverseBuilder:
         }
         if verify_approved_databases:
             require_approved_database_paths(self.database_paths)
+        self.verify_approved_databases = verify_approved_databases
         self.identity_cache = identity_cache or ProductIdentitySnapshotCache(
             max_entries=max(1, len(self.database_paths))
         )
@@ -217,7 +219,7 @@ class ProvidedProductUniverseBuilder:
     ) -> ProvidedProductCandidateUniverse:
         if not families:
             raise ValueError("external search requires at least one product family")
-        approval = load_approved_dataset_manifest()
+        approval = load_approved_dataset_manifest() if self.verify_approved_databases else None
         records = {
             family: self.identity_cache.get(self.database_paths[family]).records
             for family in sorted(set(families), key=lambda item: item.value)
@@ -229,7 +231,11 @@ class ProvidedProductUniverseBuilder:
                 for family, values in explicit_ids.items()
             }
         effective_ids = explicit_ids if explicit_ids else candidate_ids_by_family
-        hashes = {family: approval.datasets[family.value].database_sha256 for family in records}
+        if self.verify_approved_databases:
+            assert approval is not None
+            hashes = {family: approval.datasets[family.value].database_sha256 for family in records}
+        else:
+            hashes = {family: sha256_file(self.database_paths[family]) for family in records}
         return build_provided_candidate_universe(
             records,
             database_sha256s=hashes,

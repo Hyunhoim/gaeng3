@@ -29,6 +29,8 @@ class SourceConnectorKind(StrEnum):
     HTML = "html"
     PDF = "pdf"
     HTML_OR_PDF = "html_or_pdf"
+    HTML_OR_JSON = "html_or_json"
+    HTML_PDF_OR_JSON = "html_pdf_or_json"
 
 
 class SourceRegistryModel(BaseModel):
@@ -63,6 +65,10 @@ class OfficialSourceEntry(SourceRegistryModel):
     capabilities: tuple[KnowledgeCapability, ...] = Field(min_length=1)
     selection_aliases: tuple[str, ...] = Field(default=(), max_length=30)
     product_families: tuple[ProductFamily, ...] = Field(default=(), max_length=4)
+    historical_link_capabilities: tuple[KnowledgeCapability, ...] = Field(
+        default=(),
+        max_length=5,
+    )
     status: str = Field(pattern=r"^(?:approved_for_snapshot_intake|approved_for_live_evidence)$")
     publication_date_required: bool = True
 
@@ -99,6 +105,23 @@ class OfficialSourceEntry(SourceRegistryModel):
         if serialized != sorted(serialized) or len(serialized) != len(set(serialized)):
             raise ValueError("source capabilities must be unique and sorted")
         return values
+
+    @field_validator("historical_link_capabilities")
+    @classmethod
+    def validate_historical_link_capabilities(
+        cls,
+        values: tuple[KnowledgeCapability, ...],
+    ) -> tuple[KnowledgeCapability, ...]:
+        serialized = [item.value for item in values]
+        if serialized != sorted(serialized) or len(serialized) != len(set(serialized)):
+            raise ValueError("historical link capabilities must be unique and sorted")
+        return values
+
+    @model_validator(mode="after")
+    def validate_historical_link_scope(self) -> OfficialSourceEntry:
+        if not set(self.historical_link_capabilities).issubset(self.capabilities):
+            raise ValueError("historical link capabilities must be authorized capabilities")
+        return self
 
     @field_validator("selection_aliases")
     @classmethod

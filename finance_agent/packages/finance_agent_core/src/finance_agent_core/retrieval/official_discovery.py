@@ -26,9 +26,7 @@ from finance_agent_core.retrieval.official_connector import OfficialDiscoveryCan
 
 _MAX_SECRET_BYTES = 4096
 _API_URL = "https://naverapihub.apigw.ntruss.com/search/v1/webkr"
-_URL_DATE = re.compile(
-    r"(?<!\d)(20\d{2})[_-]?(0[1-9]|1[0-2])[_-]?([0-2]\d|3[01])"
-)
+_URL_DATE = re.compile(r"(?<!\d)(20\d{2})[_-]?(0[1-9]|1[0-2])[_-]?([0-2]\d|3[01])")
 
 
 def _canonical_candidate_url(url: str) -> str:
@@ -37,9 +35,7 @@ def _canonical_candidate_url(url: str) -> str:
     parsed = urllib.parse.urlsplit(url)
     if parsed.scheme != "http" or parsed.hostname is None:
         return url
-    return urllib.parse.urlunsplit(
-        ("https", parsed.netloc, parsed.path, parsed.query, "")
-    )
+    return urllib.parse.urlunsplit(("https", parsed.netloc, parsed.path, parsed.query, ""))
 
 
 def _candidate_specificity(url: str) -> int:
@@ -319,11 +315,7 @@ class BoundedOfficialDiscoveryProvider:
             bucket.sort(
                 key=lambda item: (
                     item[0],
-                    -(
-                        item[2].published_at.toordinal()
-                        if item[2].published_at is not None
-                        else 0
-                    ),
+                    -(item[2].published_at.toordinal() if item[2].published_at is not None else 0),
                     item[1],
                     item[2].url,
                 )

@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from finance_agent_core.config import QualityStatus
+from finance_agent_core.config import QualityStatus, ValueType, load_field_registry
+from finance_agent_core.config.registry import SourceTransform
 from finance_agent_core.contracts.queryplan import AggregateFunction, QueryPlan
 
 type RawScalar = str | int | bool | None
@@ -15,6 +16,76 @@ type EvidenceScalar = str | int | bool | None
 
 class DomainModel(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
+
+    def _source_backed_value(self, field_name: str) -> object | None:
+        """Resolve an approved canonical field retained only in source_values.
+
+        Sparse organizer fields do not need a bespoke model/database column merely
+        to become queryable.  The Field Registry remains the authority for their
+        source column and transform, while SQLite uses the same frozen JSON value.
+        """
+
+        source_dataset = getattr(self, "source_dataset", None)
+        source_values = getattr(self, "source_values", None)
+        if not isinstance(source_dataset, str) or not isinstance(source_values, dict):
+            raise AttributeError(field_name)
+        definition = load_field_registry().require_field(field_name, [source_dataset])
+        source = definition.source
+        if source.transform is SourceTransform.CONSTANT:
+            raw: object | None = source.constant_value
+        elif len(source.columns) == 1:
+            raw = source_values.get(source.columns[0])
+        else:
+            raise AttributeError(field_name)
+        if raw is None or (isinstance(raw, str) and not raw.strip()):
+            return None
+        if source.transform in {SourceTransform.BOOLEAN_CODE, SourceTransform.CODE_MAP}:
+            raw = source.value_map.get(str(raw), raw)
+        if definition.value_type is ValueType.BOOLEAN:
+            if isinstance(raw, bool):
+                return raw
+            normalized = str(raw).strip().casefold()
+            if normalized in {"y", "yes", "true", "1"}:
+                return True
+            if normalized in {"n", "no", "false", "0"}:
+                return False
+            return None
+        if definition.value_type is ValueType.NUMBER:
+            return Decimal(str(raw).replace(",", ""))
+        if definition.value_type is ValueType.DATE:
+            rendered = str(raw).strip().removesuffix(".0")
+            for date_format in ("%Y%m%d", "%Y-%m-%d", "%Y-%m-%d %H:%M:%S"):
+                try:
+                    return datetime.strptime(rendered, date_format).date()
+                except ValueError:
+                    continue
+            return None
+        return str(raw).strip()
+
+    def _canonical_value(self, field_name: str) -> object | None:
+        try:
+            return getattr(self, field_name)
+        except AttributeError:
+            return self._source_backed_value(field_name)
+
+    def _source_backed_quality(
+        self,
+        field_name: str,
+    ) -> tuple[QualityStatus | None, str | None]:
+        value = self._source_backed_value(field_name)
+        if value is None or (isinstance(value, Decimal) and value == 0):
+            return QualityStatus.UNKNOWN, f"{field_name}_missing_or_zero"
+        return QualityStatus.VALID, None
+
+    def _canonical_quality(
+        self,
+        field_name: str,
+    ) -> tuple[QualityStatus | None, str | None]:
+        """Use sparse-source quality only when no normalized model field exists."""
+
+        if field_name in type(self).model_fields or hasattr(self, field_name):
+            return None, None
+        return self._source_backed_quality(field_name)
 
 
 class NormalizedOverseasEtpRecord(DomainModel):
@@ -106,7 +177,7 @@ class NormalizedOverseasEtpRecord(DomainModel):
     def canonical_value(self, field_name: str) -> object:
         if field_name == "total_expense_ratio_pct":
             return self.total_expense_ratio_pct
-        return getattr(self, field_name)
+        return self._canonical_value(field_name)
 
     def row_level_quality(self, field_name: str) -> tuple[QualityStatus | None, str | None]:
         if field_name == "total_expense_ratio_pct":
@@ -123,7 +194,7 @@ class NormalizedOverseasEtpRecord(DomainModel):
         reason = getattr(self, f"{quality_prefix}_quality_reason", None)
         if quality is not None:
             return quality, reason
-        return None, None
+        return self._canonical_quality(field_name)
 
 
 class NormalizedDomesticEtpRecord(DomainModel):
@@ -210,7 +281,7 @@ class NormalizedDomesticEtpRecord(DomainModel):
         return self
 
     def canonical_value(self, field_name: str) -> object:
-        return getattr(self, field_name)
+        return self._canonical_value(field_name)
 
     def row_level_quality(self, field_name: str) -> tuple[QualityStatus | None, str | None]:
         if field_name == "total_expense_ratio_pct":
@@ -220,10 +291,10 @@ class NormalizedDomesticEtpRecord(DomainModel):
             )
         if field_name == "aum":
             return self.aum_quality, self.aum_quality_reason
-        return (
-            self.field_quality.get(field_name),
-            self.field_quality_reasons.get(field_name),
-        )
+        quality = self.field_quality.get(field_name)
+        if quality is not None:
+            return quality, self.field_quality_reasons.get(field_name)
+        return self._canonical_quality(field_name)
 
 
 class NormalizedBondRecord(DomainModel):
@@ -294,13 +365,13 @@ class NormalizedBondRecord(DomainModel):
         return self
 
     def canonical_value(self, field_name: str) -> object:
-        return getattr(self, field_name)
+        return self._canonical_value(field_name)
 
     def row_level_quality(self, field_name: str) -> tuple[QualityStatus | None, str | None]:
-        return (
-            self.field_quality.get(field_name),
-            self.field_quality_reasons.get(field_name),
-        )
+        quality = self.field_quality.get(field_name)
+        if quality is not None:
+            return quality, self.field_quality_reasons.get(field_name)
+        return self._canonical_quality(field_name)
 
 
 class NormalizedPublicFundRecord(DomainModel):
@@ -386,13 +457,13 @@ class NormalizedPublicFundRecord(DomainModel):
         return self
 
     def canonical_value(self, field_name: str) -> object:
-        return getattr(self, field_name)
+        return self._canonical_value(field_name)
 
     def row_level_quality(self, field_name: str) -> tuple[QualityStatus | None, str | None]:
-        return (
-            self.field_quality.get(field_name),
-            self.field_quality_reasons.get(field_name),
-        )
+        quality = self.field_quality.get(field_name)
+        if quality is not None:
+            return quality, self.field_quality_reasons.get(field_name)
+        return self._canonical_quality(field_name)
 
 
 class NormalizedPublicFundAttribute(DomainModel):

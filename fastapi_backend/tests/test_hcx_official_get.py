@@ -203,7 +203,6 @@ class _OfficialFakeHyperClovaXTransport:
                         "product_families": ["bond"],
                         "evidence_spans": ["국내채권", "보여줘"],
                         "needs_clarification": False,
-                        "knowledge_requirements": [],
                     },
                     ensure_ascii=False,
                 )
@@ -384,7 +383,7 @@ def test_official_get_uses_unique_server_evidence_without_hclx(
         )
 
     body = OfficialAnswerResponse.model_validate(response.json())
-    assert response.status_code == 200
+    assert response.status_code == 200, response.text
     assert transport.operations == []
     assert body.question_id == "adaptive-official-get"
     assert "issue_amount" in body.retrieved_context
@@ -456,7 +455,7 @@ def test_official_get_uses_hclx_intent_and_final_generation_audit_contract(
             params={"question_id": question_id, "question": _QUESTION},
         )
 
-    assert response.status_code == 200
+    assert response.status_code == 200, response.text
     trace = _assert_official_contract(response, question_id=question_id)
     assert trace["status"] == "success"
     assert trace["answer_mode"] == "llm_grounded"

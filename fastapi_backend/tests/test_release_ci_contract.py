@@ -65,13 +65,13 @@ def _valid_input_arguments(output: Path) -> list[str]:
         "--schema-dense-index-sha256",
         "1b0dd3668daee501ef8f24457b2bbf6b4acc074c4b1fc8bbafebe56c1d3594f5",
         "--schema-dense-calibration-report-sha256",
-        "b6cd6e1c4c371929306499ec4efaba8b9a29934ec40d6d300ad8a9d2d93c4d60",
+        "2fcc422baa76b6729933d598ccf6828dc997b92fd15f0fa12d7f1579d75587e3",
         "--schema-dense-min-score",
-        "1.0",
+        "0.340015",
         "--schema-dense-hclx-candidate-min-score",
-        "0.361907478",
+        "0.3",
         "--schema-dense-minimum-margin",
-        "2.0",
+        "0.024703",
         "--schema-dense-top-k",
         "10",
         "--python-base-image",
@@ -164,11 +164,11 @@ def test_release_ci_accepts_only_normalized_protected_main_inputs(tmp_path: Path
         "1b0dd3668daee501ef8f24457b2bbf6b4acc074c4b1fc8bbafebe56c1d3594f5"
     )
     assert values["schema_dense_calibration_report_sha256"] == (
-        "b6cd6e1c4c371929306499ec4efaba8b9a29934ec40d6d300ad8a9d2d93c4d60"
+        "2fcc422baa76b6729933d598ccf6828dc997b92fd15f0fa12d7f1579d75587e3"
     )
-    assert values["schema_dense_min_score"] == "1.0"
-    assert values["schema_dense_hclx_candidate_min_score"] == "0.361907478"
-    assert values["schema_dense_minimum_margin"] == "2.0"
+    assert values["schema_dense_min_score"] == "0.340015"
+    assert values["schema_dense_hclx_candidate_min_score"] == "0.3"
+    assert values["schema_dense_minimum_margin"] == "0.024703"
     assert values["schema_dense_top_k"] == "10"
     assert values["model_id"] == "HCX-007"
 
@@ -185,7 +185,7 @@ def test_release_ci_accepts_only_normalized_protected_main_inputs(tmp_path: Path
         ("--schema-dense-index-sha256", "a" * 64),
         ("--schema-dense-calibration-report-sha256", "b" * 64),
         ("--schema-dense-min-score", "0.9"),
-        ("--schema-dense-hclx-candidate-min-score", "0.3"),
+        ("--schema-dense-hclx-candidate-min-score", "0.31"),
         ("--schema-dense-minimum-margin", "0.1"),
         ("--schema-dense-top-k", "5"),
     ],
@@ -817,11 +817,20 @@ def test_release_workflow_binds_exact_adaptive_runtime_artifacts() -> None:
 
     assert release["env"]["FINAL_HCX_SEMANTIC_RESOLVER_ENABLED"] == "false"
     assert release["env"]["FINAL_ADAPTIVE_SEMANTIC_ENABLED"] == "true"
-    assert release["env"]["FINAL_SCHEMA_DENSE_MIN_SCORE"] == "1.0"
-    assert release["env"]["FINAL_SCHEMA_DENSE_MINIMUM_MARGIN"] == "2.0"
+    assert release["env"]["FINAL_SCHEMA_DENSE_CALIBRATION_REPORT_SHA256"] == (
+        "2fcc422baa76b6729933d598ccf6828dc997b92fd15f0fa12d7f1579d75587e3"
+    )
+    assert release["env"]["FINAL_SCHEMA_DENSE_CALIBRATION_ARTIFACT_SHA256"] == (
+        "48486114590e785bac118ad80fa374f7c428ff10b7454a064d26c493f75b883b"
+    )
+    assert release["env"]["FINAL_SCHEMA_DENSE_MIN_SCORE"] == "0.340015"
+    assert release["env"]["FINAL_SCHEMA_DENSE_HCLX_CANDIDATE_MIN_SCORE"] == "0.3"
+    assert release["env"]["FINAL_SCHEMA_DENSE_MINIMUM_MARGIN"] == "0.024703"
     assert base_build["with"]["target"] == "adaptive-runtime"
     assert steps.index(adaptive_step) < steps.index(base_build)
     assert "sha256sum" in adaptive_step["run"]
+    assert "report_sha256" in adaptive_step["run"]
+    assert "claimed == actual" in adaptive_step["run"]
     assert "install -m 0444" in adaptive_step["run"]
     assert '--schema-dense-index "$SCHEMA_DENSE_INDEX"' in manifest_step["run"]
     assert "--schema-dense-calibration-report-sha256" in manifest_step["run"]

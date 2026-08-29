@@ -161,9 +161,7 @@ class ExternalKnowledgeRuntime:
                             {
                                 key
                                 for _, _, key in targets
-                                if key is not None
-                                and key[0] is not None
-                                and key[1] is not None
+                                if key is not None and key[0] is not None and key[1] is not None
                             },
                             key=lambda item: (item[0].value, item[1]),
                         )
@@ -173,12 +171,8 @@ class ExternalKnowledgeRuntime:
                         search_plan.composite_plan.product_selection,
                         (),
                     )
-                    selected_keys = {
-                        (item.product_family, item.product_id) for item in rank_facts
-                    }
-                    targets = tuple(
-                        item for item in targets if item[2] in selected_keys
-                    )
+                    selected_keys = {(item.product_family, item.product_id) for item in rank_facts}
+                    targets = tuple(item for item in targets if item[2] in selected_keys)
             else:
                 targets = ((requirement.subject, requirement.search_aliases, None),)
             if not targets:
@@ -214,18 +208,23 @@ class ExternalKnowledgeRuntime:
                 # extraction over already fetched bytes before opening another
                 # web search. This is evidence reuse, not inferred relation
                 # reuse: a subject still has to occur in the official text.
-                reused = []
-                for snapshot in all_snapshots:
-                    try:
-                        reused.extend(
-                            self.live_relation_extractor.extract(
+                try:
+                    extract_many = getattr(self.live_relation_extractor, "extract_many", None)
+                    reused = (
+                        list(extract_many(tuple(all_snapshots), effective, universe))
+                        if callable(extract_many)
+                        else [
+                            relation
+                            for snapshot in all_snapshots
+                            for relation in self.live_relation_extractor.extract(
                                 snapshot,
                                 effective,
                                 universe,
                             )
-                        )
-                    except (OfficialLiveEvidenceError, ValueError):
-                        continue
+                        ]
+                    )
+                except (OfficialLiveEvidenceError, ValueError):
+                    reused = []
                 if reused:
                     requirement_relations.update(
                         {relation.relation_id: relation for relation in reused}
@@ -233,6 +232,20 @@ class ExternalKnowledgeRuntime:
                     continue
                 item = self.acquisition.acquire(
                     effective,
+                    discovery_terms=(
+                        tuple(
+                            dict.fromkeys(
+                                candidate.product_name
+                                for candidate in universe.candidates
+                                if candidate.product_family in effective.product_families
+                            )
+                        )[:3]
+                        if (
+                            effective.capability is KnowledgeCapability.PORTFOLIO_HOLDINGS
+                            and universe.explicit_identity_bound
+                        )
+                        else ()
+                    ),
                     top_k=min(
                         search_plan.budget.max_candidates_per_requirement,
                         max(1, remaining_fetches // targets_left),
@@ -263,13 +276,22 @@ class ExternalKnowledgeRuntime:
                 else:
                     all_snapshots.extend(item.snapshots)
                     try:
-                        extracted = tuple(
-                            relation
-                            for snapshot in item.snapshots
-                            for relation in self.live_relation_extractor.extract(
-                                snapshot,
-                                effective,
-                                universe,
+                        extract_many = getattr(
+                            self.live_relation_extractor,
+                            "extract_many",
+                            None,
+                        )
+                        extracted = (
+                            tuple(extract_many(item.snapshots, effective, universe))
+                            if callable(extract_many)
+                            else tuple(
+                                relation
+                                for snapshot in item.snapshots
+                                for relation in self.live_relation_extractor.extract(
+                                    snapshot,
+                                    effective,
+                                    universe,
+                                )
                             )
                         )
                     except (OfficialLiveEvidenceError, ValueError):
@@ -301,9 +323,7 @@ class ExternalKnowledgeRuntime:
                     ExternalKnowledgeOutcomeStatus.CANNOT_VERIFY,
                     ("verified_relation_chain_incomplete",),
                 )
-            ordered = tuple(
-                requirement_relations[key] for key in sorted(requirement_relations)
-            )
+            ordered = tuple(requirement_relations[key] for key in sorted(requirement_relations))
             resolved[requirement.requirement_id] = ordered
             all_relations.update(requirement_relations)
 

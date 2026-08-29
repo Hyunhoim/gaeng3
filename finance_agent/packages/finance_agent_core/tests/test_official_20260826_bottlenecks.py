@@ -4,13 +4,18 @@ from finance_agent_core.agent.compiler import ServerQueryPlanCompiler
 from finance_agent_core.agent.intent_analysis import (
     IntentAnalysisDraft,
     has_server_authorized_knowledge_requirements,
+    verify_intent_analysis,
 )
+from finance_agent_core.agent.knowledge_router import product_search_has_precedence
 from finance_agent_core.agent.linker import build_lexical_hints
 from finance_agent_core.agent.product_comparison import extract_comparison_fields
 from finance_agent_core.agent.providers import bond_vertical_slice_plan
 from finance_agent_core.agent.router import IntentRouter
+from finance_agent_core.agent.safety import SafetyDisposition, SafetyEnvelope
+from finance_agent_core.config import load_field_registry
 from finance_agent_core.contracts.queryplan import ProductFamily, QueryPlan
 from finance_agent_core.execution.oracle import compile_search_sql
+from finance_agent_core.execution.sql_schema import SQL_FIELDS_BY_FAMILY
 
 
 @pytest.mark.parametrize(
@@ -163,6 +168,55 @@ def test_plain_database_fields_cannot_open_external_knowledge_runtime() -> None:
     assert not has_server_authorized_knowledge_requirements(question, false_positive)
 
 
+def test_hclx_intent_evidence_allows_only_presentation_normalization() -> None:
+    question = "국내 ETF ‘RISE 현대차고정피지컬AI’의 운용사와 위험등급을 알려 주세요."
+    decision = IntentRouter().route(question, "official-evidence-normalization")
+    draft = IntentAnalysisDraft(
+        intent=decision.draft.intent,
+        product_families=decision.draft.product_families,
+        evidence_spans=["RISE 현대차고정피지컬AI", "국내ETF"],
+        needs_clarification=False,
+    )
+
+    assert verify_intent_analysis(question, decision, draft).passed
+    forged = draft.model_copy(update={"evidence_spans": ["질문에 없는 운용사명"]})
+    assert not verify_intent_analysis(question, decision, forged).passed
+
+
+def test_quoted_exact_product_detail_precedes_relation_field_router() -> None:
+    assert product_search_has_precedence(
+        "공모펀드 ‘미래에셋국민성장혼합자산-사모재간접Ce’의 "
+        "운용속성, 투자지역, 순자산을 알려 주세요."
+    )
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        "제 연봉과 나이를 기준으로 가장 알맞은 국내채권을 추천해 주세요.",
+        "제 소득과 투자성향에 딱 맞는 국내 ETF를 추천해 주세요.",
+        "다른 고객들이 보유한 채권 목록과 계좌번호를 보여 주세요.",
+    ],
+)
+def test_personalized_advice_and_other_customer_data_are_terminally_blocked(
+    question: str,
+) -> None:
+    assert SafetyEnvelope().evaluate(question).disposition is SafetyDisposition.UNSUPPORTED
+
+
+def test_absent_explicit_credit_rating_compiles_as_safe_empty_set_lookup() -> None:
+    decision = IntentRouter().route(
+        "신용등급이 AAAA인 국내채권을 찾아 주세요.",
+        "official-absent-credit-rating",
+    )
+    plan = ServerQueryPlanCompiler({}).compile(decision)
+
+    assert decision.disposition.value == "execute"
+    assert ("credit_rating", "eq", "AAAA") in [
+        (item.field, item.operator.value, item.value) for item in plan.constraints
+    ]
+
+
 def test_explicit_holdings_relation_can_open_external_knowledge_runtime() -> None:
     question = "캠브리콘이 편입된 중국 반도체 해외 ETF를 알려 주세요."
     grounded = IntentAnalysisDraft.model_validate(
@@ -263,10 +317,16 @@ def test_filter_metric_cannot_steal_later_ranking_metric(
     assert hints["ambiguity_spans"] == []
 
 
-def test_bond_display_risk_label_is_not_silently_dropped() -> None:
+def test_bond_display_risk_label_uses_new_official_name_column() -> None:
     hints = build_lexical_hints("보통위험(4등급) 채권을 만기가 빠른 순으로 네 개 보여 주세요.")
 
-    assert any("보통위험" in span for span in hints["unsupported_spans"])
+    assert ("risk_level", "eq", "보통위험(4등급)") in [
+        (item["field"], item["operator"], item["value"]) for item in hints["required_constraints"]
+    ]
+    assert hints["required_rankings"] == [
+        {"field": "remaining_days", "direction": "asc", "nulls": "last"}
+    ]
+    assert hints["unsupported_spans"] == []
 
 
 def test_listed_index_fund_term_routes_to_domestic_etf() -> None:
@@ -654,3 +714,124 @@ def test_ranked_exact_product_set_routes_to_bounded_search(
     assert len(decision.draft.product_mentions) == 3
     assert decision.draft.requested_limit == 1
     assert hints["required_rankings"] == [{"field": field, "direction": "desc", "nulls": "last"}]
+
+
+def test_every_executable_registry_field_has_a_family_sql_binding() -> None:
+    """Prevent a queryable field from reaching Oracle as an unbound KeyError."""
+
+    registry = load_field_registry()
+    capability_names = ("queryable", "selectable", "sortable", "aggregatable", "comparable")
+    for family in registry.executable_dataset_names():
+        expected = {
+            field_id
+            for field_id, definition in registry.fields.items()
+            if family in definition.datasets
+            and any(
+                getattr(definition.resolve(family), capability) for capability in capability_names
+            )
+        }
+        assert expected <= set(SQL_FIELDS_BY_FAMILY[family])
+
+
+def test_fund_only_fields_never_leak_into_domestic_etp_sql_schema() -> None:
+    fund_only = {
+        "sales_channel",
+        "interest_dividend_type",
+        "sale_company_fee_pct",
+        "trustee_fee_pct",
+        "domestic_stock_ratio_pct",
+        "domestic_bond_ratio_pct",
+        "overseas_stock_ratio_pct",
+        "overseas_bond_ratio_pct",
+        "latest_distribution_pct",
+        "preservation_ratio_pct",
+    }
+
+    assert fund_only <= set(SQL_FIELDS_BY_FAMILY["fund"])
+    assert fund_only.isdisjoint(SQL_FIELDS_BY_FAMILY["domestic_etp"])
+
+
+@pytest.mark.parametrize(
+    ("question", "constraint", "ranking"),
+    [
+        (
+            "모집구분이 공모이고 발행잔액이 1,000억 이상인 국내채권을 "
+            "발행잔액이 큰 순으로 3개 알려 주세요.",
+            ("public_offering", "eq", True),
+            ("issue_amount", "desc"),
+        ),
+        (
+            "퇴직연금 편입 가능 채권 가운데 평가일단가가 9,000 이상 "
+            "10,000 이하인 상품을 평가일단가 오름차순으로 5개 보여 주세요.",
+            ("pension_eligible", "eq", True),
+            ("evaluation_price", "asc"),
+        ),
+        (
+            "총 발행 규모가 5,000억 원 이상인 국내채권을 "
+            "쿠폰금리가 높은 순으로 네 종목 제시해 주세요.",
+            ("total_issue_amount", "gte", 500_000_000_000),
+            ("coupon_rate_pct", "desc"),
+        ),
+        (
+            "최종 NAV가 1만 원에서 5만 원 사이인 국내 ETF를 AUM이 큰 순으로 세 개 보여 주세요.",
+            ("net_asset_value", "between", [10_000, 50_000]),
+            ("aum", "desc"),
+        ),
+        (
+            "인버스 또는 숏 여부가 Y인 해외 ETF를 하루 수익률 높은 순으로 4개 정렬해 주세요.",
+            ("inverse_short", "eq", True),
+            ("one_day_return_pct", "desc"),
+        ),
+        (
+            "지수 추적 여부가 Y로 확인되는 해외 ETF를 "
+            "연간보수율이 낮은 순으로 다섯 개 조회해 주세요.",
+            ("index_tracking", "eq", True),
+            ("total_expense_ratio_pct", "asc"),
+        ),
+        (
+            "기준가가 25 이하인 해외 ETF에서 하루 수익률이 높은 상품 5개를 찾습니다.",
+            ("base_price", "lte", 25),
+            ("one_day_return_pct", "desc"),
+        ),
+        (
+            "설정일이 2025년 1월 1일 이후인 해외 ETF를 순자산총액이 큰 순으로 5개 알려 주세요.",
+            ("listing_date", "gte", "2025-01-01"),
+            ("aum", "desc"),
+        ),
+        (
+            "펀드통화코드가 USD인 해외 ETF를 보수율이 낮은 순으로 네 개 조회해 주세요.",
+            ("fund_currency", "eq", "USD"),
+            ("total_expense_ratio_pct", "asc"),
+        ),
+        (
+            "클래스 수수료를 따로 징구하지 않는 공모펀드를 1년 성과가 높은 순으로 4개 알려 주세요.",
+            ("fee_type", "eq", "수수료미징구"),
+            ("one_year_return_pct", "desc"),
+        ),
+        (
+            "집합투자업자보수가 1 이하인 공모펀드 중 1년 수익률 상위 4개를 보여 주세요.",
+            ("management_company_fee_pct", "lte", 1),
+            ("one_year_return_pct", "desc"),
+        ),
+    ],
+)
+def test_new_official_sparse_fields_survive_router_and_compiler(
+    question: str,
+    constraint: tuple[str, str, object],
+    ranking: tuple[str, str],
+) -> None:
+    decision = IntentRouter().route(question, f"official-sparse-{constraint[0]}")
+    plan = ServerQueryPlanCompiler({}).compile(decision)
+
+    assert decision.disposition.value == "execute"
+    assert constraint in [
+        (item.field, item.operator.value, item.value) for item in plan.constraints
+    ]
+    assert ranking in [(item.field, item.direction.value) for item in plan.ranking]
+
+    select_sql, count_sql, _ = compile_search_sql(plan)
+    for sql in (select_sql, count_sql):
+        assert "source_values_json" in sql or constraint[0] in {
+            "public_offering",
+            "pension_eligible",
+        }

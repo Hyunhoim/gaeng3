@@ -116,7 +116,7 @@ def test_release_manifest_pins_code_contract_prompt_data_model_and_disabled_inde
     assert len(manifest.components.code.core_package_sha256) == 64
     assert len(manifest.components.code.backend_package_sha256) == 64
     assert manifest.components.queryplan.schema_version == "1.0"
-    assert manifest.components.field_registry_schema_version == "1.4"
+    assert manifest.components.field_registry_schema_version == "1.5"
     assert manifest.components.approved_datasets.snapshots.keys() == {
         "bond",
         "domestic_etp",

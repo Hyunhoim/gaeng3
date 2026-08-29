@@ -459,7 +459,7 @@ def test_bond_ordered_credit_rating_expands_from_registry_scale() -> None:
     }
 
 
-def test_bond_invalid_credit_rating_is_blocked_instead_of_silently_dropped() -> None:
+def test_absent_bond_credit_rating_is_preserved_for_safe_empty_set_lookup() -> None:
     payload = first_vertical_slice_plan("invalid-rating").model_dump(mode="json")
     linked = canonicalize_query_plan_payload(
         "신용등급 AAAA인 채권 찾아줘",
@@ -467,9 +467,10 @@ def test_bond_invalid_credit_rating_is_blocked_instead_of_silently_dropped() -> 
     )
 
     assert linked["product_families"] == ["bond"]
-    assert linked["unsupported_conditions"]
-    assert linked["unsupported_conditions"][0]["span"] == "신용등급 AAAA"
-    assert not any(item["field"] == "credit_rating" for item in linked["constraints"])
+    assert linked["unsupported_conditions"] == []
+    assert ("credit_rating", "eq", "AAAA") in [
+        (item["field"], item["operator"], item["value"]) for item in linked["constraints"]
+    ]
 
 
 def test_fund_development_linker_matches_frozen_plans_or_documented_migration() -> None:

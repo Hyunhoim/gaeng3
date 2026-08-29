@@ -172,7 +172,8 @@ def _database_paths(arguments: argparse.Namespace) -> dict[ProductFamily, Path]:
         ProductFamily.OVERSEAS_ETP: arguments.overseas_etp_db,
         ProductFamily.FUND: arguments.fund_db,
     }
-    require_approved_database_paths(paths)
+    if not arguments.development_unapproved_databases:
+        require_approved_database_paths(paths)
     return paths
 
 
@@ -182,7 +183,7 @@ def _load_json_object(path: Path, *, label: str) -> dict[str, Any]:
     except (OSError, ValueError) as error:
         raise RuntimeError(f"{label} is invalid") from error
     if not isinstance(payload, dict):
-        raise RuntimeError(f"{label} must be a JSON object")
+        raise TypeError(f"{label} must be a JSON object")
     return payload
 
 
@@ -207,16 +208,10 @@ def _validate_schema_calibration(
         raise RuntimeError("Schema Dense calibration decision differs")
     gates = report.get("activation_gates")
     if not isinstance(gates, dict) or any(
-        value is not True
-        for key, value in gates.items()
-        if key != "independent_blind_completed"
+        value is not True for key, value in gates.items() if key != "independent_blind_completed"
     ):
         raise RuntimeError("Schema Dense calibration quality gate failed")
-    prototype = (
-        report.get("corpora", {})
-        .get("schema-field-prototype-v3", {})
-        .get("manifest", {})
-    )
+    prototype = report.get("corpora", {}).get("schema-field-prototype-v3", {}).get("manifest", {})
     manifest = schema_artifact.manifest
     for key in (
         "corpus_sha256",
@@ -342,7 +337,10 @@ def _build_agent(
     )
     external_runtime = ExternalKnowledgeRuntime(
         acquisition=acquisition,
-        product_fact_provider=SqliteOfficialProductFactProvider(database_paths),
+        product_fact_provider=SqliteOfficialProductFactProvider(
+            database_paths,
+            verify_approved_databases=not arguments.development_unapproved_databases,
+        ),
         release_artifact=live_bootstrap.artifact,
         release_artifact_file_sha256=live_bootstrap.artifact_file_sha256,
     )
@@ -360,12 +358,15 @@ def _build_agent(
         ),
         require_official_hclx=True,
         capability_execution_overrides={ProductFamily.FUND},
-        require_approved_databases=True,
+        require_approved_databases=not arguments.development_unapproved_databases,
         knowledge_router=DeterministicKnowledgeRouter(),
         knowledge_agent=knowledge_agent,
         external_knowledge_router=ExternalKnowledgeRouter(),
         external_knowledge_runtime=external_runtime,
-        external_universe_builder=ProvidedProductUniverseBuilder(database_paths),
+        external_universe_builder=ProvidedProductUniverseBuilder(
+            database_paths,
+            verify_approved_databases=not arguments.development_unapproved_databases,
+        ),
         external_search_plan_compiler=ExternalSearchPlanCompiler(registry),
         adaptive_semantic_resolver=AdaptiveSemanticResolver(
             schema_linker,
@@ -439,6 +440,14 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--journal", type=Path, required=True)
     parser.add_argument("--source-commit", type=str, required=True)
+    parser.add_argument(
+        "--development-diff-sha256",
+        type=lambda v: _require_sha256(v, label="development diff"),
+        help=(
+            "required for a post-Gold regression that mounts source newer than the "
+            "recorded clean commit"
+        ),
+    )
     parser.add_argument("--image-id", type=str, required=True)
     parser.add_argument(
         "--runner-sha256", type=lambda v: _require_sha256(v, label="runner"), required=True
@@ -450,6 +459,11 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--domestic-etp-db", type=Path, required=True)
     parser.add_argument("--overseas-etp-db", type=Path, required=True)
     parser.add_argument("--fund-db", type=Path, required=True)
+    parser.add_argument(
+        "--development-unapproved-databases",
+        action="store_true",
+        help="post-Gold development rerun only; never valid for release or NCP deployment",
+    )
     parser.add_argument("--relation-artifact", type=Path, required=True)
     parser.add_argument("--relation-artifact-sha256-file", type=Path, required=True)
     parser.add_argument("--relation-index", type=Path, required=True)
@@ -504,6 +518,21 @@ def _parser() -> argparse.ArgumentParser:
         action="store_true",
         help="assemble every trusted runtime input without opening the question-only file",
     )
+    parser.add_argument(
+        "--post-gold-development-regression",
+        action="store_true",
+        help=(
+            "label the output as a post-Gold development regression; this can never "
+            "be represented as the first independent Blind prediction"
+        ),
+    )
+    parser.add_argument(
+        "--development-case-ids",
+        help=(
+            "comma-separated IH IDs for a post-Gold smoke regression; the full suite "
+            "remains the default"
+        ),
+    )
     return parser
 
 
@@ -520,6 +549,12 @@ def main(argv: list[str] | None = None) -> int:
         raise SystemExit("runner SHA-256 differs")
     if not 0 <= arguments.max_retries <= 2:
         raise SystemExit("max retries must be between zero and two")
+    if arguments.post_gold_development_regression != bool(arguments.development_diff_sha256):
+        raise SystemExit(
+            "post-Gold development regression and development diff SHA-256 must be set together"
+        )
+    if arguments.development_case_ids and not arguments.post_gold_development_regression:
+        raise SystemExit("development case selection is forbidden for the first Blind run")
     if arguments.output.exists() or arguments.journal.exists():
         raise SystemExit("blind output or journal already exists")
 
@@ -532,14 +567,13 @@ def main(argv: list[str] | None = None) -> int:
                 {
                     "preflight": "passed_without_opening_question_only",
                     "source_commit": arguments.source_commit,
+                    "development_diff_sha256": arguments.development_diff_sha256,
                     "image_id": arguments.image_id,
                     "hclx_model": "HCX-007",
                     "schema_dense_policy_sha256": (
                         agent.adaptive_semantic_resolver.schema_linker.policy.policy_sha256
                     ),
-                    "source_registry_sha256": (
-                        load_official_source_registry().canonical_sha256
-                    ),
+                    "source_registry_sha256": (load_official_source_registry().canonical_sha256),
                     "document_cache_queries": document_discovery.cache_queries,
                     "hclx_calls": len(calls),
                 },
@@ -549,6 +583,16 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 0
     cases = _validate_question_only(arguments.questions, arguments.questions_sha256)
+    if arguments.development_case_ids:
+        requested_ids = [
+            value.strip() for value in arguments.development_case_ids.split(",") if value.strip()
+        ]
+        if not requested_ids or len(requested_ids) != len(set(requested_ids)):
+            raise SystemExit("development case IDs must be a non-empty unique list")
+        by_id = {case["id"]: case for case in cases}
+        if any(case_id not in by_id for case_id in requested_ids):
+            raise SystemExit("development case ID is outside the sealed suite")
+        cases = [by_id[case_id] for case_id in requested_ids]
     created_at = datetime.now(UTC).isoformat().replace("+00:00", "Z")
     results: list[dict[str, Any]] = []
     journal = _open_new_journal(arguments.journal)
@@ -568,7 +612,7 @@ def main(argv: list[str] | None = None) -> int:
             print(
                 json.dumps(
                     {
-                        "progress": f"{index}/300",
+                        "progress": f"{index}/{len(cases)}",
                         "id": case["id"],
                         "http_status": result["http_status"],
                         "status": backend["status"],
@@ -588,18 +632,32 @@ def main(argv: list[str] | None = None) -> int:
             arguments.journal.chmod(0o400)
 
     database_paths = _database_paths(arguments)
+    post_gold = arguments.post_gold_development_regression
     body: dict[str, Any] = {
         "schema_version": "2.0",
-        "artifact_kind": "independent_blind_question_only_first_predictions",
-        "status": "predictions_frozen_awaiting_gold_reveal",
-        "answer_key_opened": False,
+        "artifact_kind": (
+            "post_gold_development_regression_predictions"
+            if post_gold
+            else "independent_blind_question_only_first_predictions"
+        ),
+        "status": (
+            "post_gold_development_regression_frozen"
+            if post_gold
+            else "predictions_frozen_awaiting_gold_reveal"
+        ),
+        "evaluation_kind": (
+            "post_gold_development_regression" if post_gold else "first_independent_blind"
+        ),
+        "answer_key_opened": post_gold,
         "created_at_utc": created_at,
         "completed_at_utc": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
         "implementation_commit": arguments.source_commit,
+        "development_diff_sha256": arguments.development_diff_sha256,
         "image_id": arguments.image_id,
         "runner_sha256": arguments.runner_sha256,
         "questions_sha256": arguments.questions_sha256,
-        "question_count": 300,
+        "question_count": len(cases),
+        "suite_question_count": 300,
         "database_sha256s": {
             family.value: _sha256(path)
             for family, path in sorted(database_paths.items(), key=lambda item: item[0].value)
@@ -607,19 +665,13 @@ def main(argv: list[str] | None = None) -> int:
         "schema_dense_index_sha256": arguments.schema_dense_index_sha256,
         "schema_dense_activation_policy_sha256": agent.adaptive_semantic_resolver.schema_linker.policy.policy_sha256,
         "schema_dense_calibration_sha256": arguments.schema_dense_calibration_sha256,
-        "schema_dense_calibration_file_sha256": (
-            arguments.schema_dense_calibration_file_sha256
-        ),
+        "schema_dense_calibration_file_sha256": (arguments.schema_dense_calibration_file_sha256),
         "kure_snapshot_manifest_sha256": _sha256(arguments.kure_snapshot_manifest),
         "document_dense_index_sha256": arguments.document_dense_index_sha256,
-        "document_dense_calibration_sha256": (
-            arguments.document_dense_calibration_sha256
-        ),
+        "document_dense_calibration_sha256": (arguments.document_dense_calibration_sha256),
         "pending_corpus_manifest_sha256": arguments.pending_corpus_manifest_sha256,
         "relation_artifact_sha256": _sha256(arguments.relation_artifact),
-        "relation_artifact_sha256_file_sha256": _sha256(
-            arguments.relation_artifact_sha256_file
-        ),
+        "relation_artifact_sha256_file_sha256": _sha256(arguments.relation_artifact_sha256_file),
         "relation_index_sha256": _sha256(arguments.relation_index),
         "source_registry_sha256": load_official_source_registry().canonical_sha256,
         "hclx_model": "HCX-007",
@@ -649,7 +701,7 @@ def main(argv: list[str] | None = None) -> int:
         json.dumps(
             {
                 "completed": True,
-                "case_count": 300,
+                "case_count": len(cases),
                 "output": str(arguments.output),
                 "output_sha256": _sha256(arguments.output),
                 "canonical_prediction_sha256": body["canonical_prediction_sha256"],

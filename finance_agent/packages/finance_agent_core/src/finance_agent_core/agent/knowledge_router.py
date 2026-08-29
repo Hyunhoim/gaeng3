@@ -211,6 +211,10 @@ _STANDALONE_REQUEST_PARTICLE = re.compile(
 )
 _REQUEST_PUNCTUATION = re.compile(r"[\s.,!?~:;·'\"“”‘’()\[\]{}]+")
 _RESIDUAL_TOKEN = re.compile(r"[0-9A-Za-z가-힣]+")
+_QUOTED_PRODUCT_DETAIL = re.compile(
+    r"(?:‘[^’]{2,120}’|“[^”]{2,120}”|'[^']{2,120}'|\"[^\"]{2,120}\")\s*의",
+    re.IGNORECASE,
+)
 
 
 def product_search_has_precedence(question: str) -> bool:
@@ -218,6 +222,11 @@ def product_search_has_precedence(question: str) -> bool:
 
     if _UNSUPPORTED_RELATION_SCOPE.search(question):
         return False
+    # A quoted identity followed by the possessive marker is a product DETAIL
+    # request even when the requested DB fields are named 운용사·투자지역·자산군.
+    # Entity-to-product relation searches do not have this exact-identity shape.
+    if _QUOTED_PRODUCT_DETAIL.search(question):
+        return True
     return bool(
         _relation_signals(question)
         and (

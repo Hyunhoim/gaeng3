@@ -569,7 +569,7 @@ def test_grounded_schema_restricts_catalog_to_one_family() -> None:
     assert definitions["ProductFamily"]["enum"] == ["bond"]
     fields = definitions["GroundedConstraintProposal"]["properties"]["field"]["enum"]
     assert "buy_yield_pct" in fields
-    assert "pension_eligible" not in fields
+    assert "pension_eligible" in fields
     assert "product_family" not in fields
 
 

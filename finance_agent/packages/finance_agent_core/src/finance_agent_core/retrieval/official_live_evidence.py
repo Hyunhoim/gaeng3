@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import hashlib
 import io
+import json
 import re
 import unicodedata
 from html.parser import HTMLParser
+from urllib.parse import parse_qs, urlsplit
 
 from pypdf import PdfReader
 
@@ -152,13 +154,17 @@ def extract_official_snapshot_text(snapshot: OfficialSourceSnapshot) -> str:
     media_type = snapshot.content_type.casefold().split(";", maxsplit=1)[0]
     if media_type == "application/pdf":
         try:
-            reader = PdfReader(io.BytesIO(snapshot.content), strict=True)
+            # Default extraction preserves Korean glyph streams that pypdf's
+            # layout mode can silently omit on otherwise valid organizer-era
+            # asset-manager PDFs.  Hash, page and text budgets remain fixed;
+            # malformed files still fail closed below.
+            reader = PdfReader(io.BytesIO(snapshot.content), strict=False)
             if len(reader.pages) > _MAX_PDF_PAGES:
                 raise OfficialLiveEvidenceError("official PDF exceeds the page budget")
             parts = []
             size = 0
             for page in reader.pages:
-                text = page.extract_text(extraction_mode="layout") or ""
+                text = page.extract_text() or ""
                 size += len(text)
                 if size > _MAX_EXTRACTED_CHARS:
                     raise OfficialLiveEvidenceError("official PDF text exceeds the budget")
@@ -175,6 +181,32 @@ def extract_official_snapshot_text(snapshot: OfficialSourceSnapshot) -> str:
         extracted = "".join(parser.parts)
     elif media_type == "text/plain":
         extracted = snapshot.content.decode("utf-8", errors="strict")
+    elif media_type == "application/json":
+        try:
+            payload = json.loads(snapshot.content)
+        except (UnicodeDecodeError, json.JSONDecodeError) as error:
+            raise OfficialLiveEvidenceError("official JSON extraction failed") from error
+
+        rows: list[str] = []
+
+        def flatten(value: object, path: str = "root") -> None:
+            if isinstance(value, dict):
+                scalar = [
+                    f"{key}={item}"
+                    for key, item in value.items()
+                    if item is None or isinstance(item, (str, int, float, bool))
+                ]
+                if scalar:
+                    rows.append(f"{path} " + " ".join(scalar))
+                for key, item in value.items():
+                    if isinstance(item, (dict, list)):
+                        flatten(item, f"{path}.{key}")
+            elif isinstance(value, list):
+                for index, item in enumerate(value):
+                    flatten(item, f"{path}[{index}]")
+
+        flatten(payload)
+        extracted = "\n".join(rows)
     else:
         raise OfficialLiveEvidenceError("official document media type is unsupported")
     normalized = normalize_document_text(extracted)
@@ -212,6 +244,342 @@ class VerifiedLiveRelationExtractor:
     present in the same bounded excerpt as the subject and relation signal.
     """
 
+    @staticmethod
+    def _kodex_product_page_id(snapshot: OfficialSourceSnapshot) -> str | None:
+        if snapshot.source.source_id != "samsungfund-kodex-product":
+            return None
+        parsed = urlsplit(snapshot.source_uri)
+        if parsed.path != "/etf/product/view.do":
+            return None
+        values = parse_qs(parsed.query).get("id", [])
+        if len(values) != 1 or re.fullmatch(r"[0-9A-Za-z_-]{2,40}", values[0]) is None:
+            return None
+        return values[0]
+
+    @staticmethod
+    def _kodex_holdings_api_id(snapshot: OfficialSourceSnapshot) -> str | None:
+        if snapshot.source.source_id != "samsungfund-kodex-product":
+            return None
+        match = re.fullmatch(
+            r"/api/v1/kodex/product-pdf/([0-9A-Za-z_-]{2,40})\.do",
+            urlsplit(snapshot.source_uri).path,
+        )
+        return None if match is None else match.group(1)
+
+    @staticmethod
+    def _kodex_risk_pdf_id(snapshot: OfficialSourceSnapshot) -> str | None:
+        if snapshot.source.source_id != "samsungfund-kodex-product":
+            return None
+        match = re.fullmatch(
+            r"/upload/invest/([0-9A-Za-z_-]{2,40})-A\.pdf",
+            urlsplit(snapshot.source_uri).path,
+        )
+        return None if match is None else match.group(1)
+
+    @staticmethod
+    def _kodex_page_bindings(
+        snapshots: tuple[OfficialSourceSnapshot, ...],
+        universe: ProvidedProductCandidateUniverse,
+    ) -> dict[str, list[tuple[OfficialSourceSnapshot, ProvidedProductCandidate, str, int]]]:
+        bindings: dict[
+            str,
+            list[tuple[OfficialSourceSnapshot, ProvidedProductCandidate, str, int]],
+        ] = {}
+        for snapshot in snapshots:
+            page_id = VerifiedLiveRelationExtractor._kodex_product_page_id(snapshot)
+            if page_id is None:
+                continue
+            try:
+                page_text = extract_official_snapshot_text(snapshot)
+            except OfficialLiveEvidenceError:
+                continue
+            for ordinal, excerpt in enumerate(
+                chunk_document(page_text, max_chars=1200, overlap_chars=200)
+            ):
+                for product in intersect_evidence_with_provided_products(
+                    universe,
+                    (excerpt,),
+                ):
+                    bindings.setdefault(page_id, []).append((snapshot, product, excerpt, ordinal))
+        return bindings
+
+    def _extract_linked_kodex_holdings(
+        self,
+        snapshots: tuple[OfficialSourceSnapshot, ...],
+        requirement: KnowledgeRequirement,
+        universe: ProvidedProductCandidateUniverse,
+    ) -> tuple[TemporalRelationRecord, ...]:
+        """Join two same-source official resources without trusting search titles.
+
+        The HTML page proves the opaque KODEX page ID -> provided-DB product
+        identity binding.  The historical JSON endpoint proves the exact
+        holding and as-of date.  Both original content hashes and excerpts are
+        retained on the relation.
+        """
+
+        if requirement.capability is not KnowledgeCapability.PORTFOLIO_HOLDINGS:
+            return ()
+        page_bindings = self._kodex_page_bindings(snapshots, universe)
+        api_snapshots: dict[str, list[OfficialSourceSnapshot]] = {}
+        for snapshot in snapshots:
+            api_id = self._kodex_holdings_api_id(snapshot)
+            if api_id is not None:
+                api_snapshots.setdefault(api_id, []).append(snapshot)
+
+        subject_surfaces = tuple(dict.fromkeys((requirement.subject, *requirement.search_aliases)))
+        normalized_subjects = {
+            _normalized(surface): surface for surface in subject_surfaces if _normalized(surface)
+        }
+        relations: dict[str, TemporalRelationRecord] = {}
+        for product_page_id in sorted(set(page_bindings) & set(api_snapshots)):
+            for api_snapshot in api_snapshots[product_page_id]:
+                if requirement.time_range is not None and (
+                    api_snapshot.as_of > requirement.time_range.end
+                    or (
+                        requirement.time_range.start is not None
+                        and api_snapshot.as_of < requirement.time_range.start
+                    )
+                ):
+                    continue
+                try:
+                    payload = json.loads(api_snapshot.content)
+                except (UnicodeDecodeError, json.JSONDecodeError):
+                    continue
+                holdings = (
+                    payload.get("pdf", {}).get("list", []) if isinstance(payload, dict) else []
+                )
+                if not isinstance(holdings, list):
+                    continue
+                raw_api = api_snapshot.content.decode("utf-8", errors="strict")
+                for row_index, row in enumerate(holdings):
+                    if not isinstance(row, dict) or not isinstance(row.get("secNm"), str):
+                        continue
+                    holding_name = row["secNm"].strip()
+                    normalized_holding = _normalized(holding_name)
+                    matched_surfaces = tuple(
+                        surface
+                        for normalized, surface in normalized_subjects.items()
+                        if normalized in normalized_holding or normalized_holding in normalized
+                    )
+                    if not matched_surfaces:
+                        continue
+                    serialized_row = json.dumps(
+                        row,
+                        ensure_ascii=False,
+                        separators=(",", ":"),
+                    )
+                    api_excerpt = serialized_row if serialized_row in raw_api else ""
+                    if not api_excerpt:
+                        needle = json.dumps(holding_name, ensure_ascii=False)
+                        position = raw_api.find(needle)
+                        if position < 0:
+                            continue
+                        left = raw_api.rfind("{", 0, position)
+                        right = raw_api.find("}", position)
+                        if left < 0 or right < 0:
+                            continue
+                        api_excerpt = raw_api[left : right + 1]
+                    for page_snapshot, product, page_excerpt, page_ordinal in page_bindings[
+                        product_page_id
+                    ]:
+                        for matched_surface in matched_surfaces:
+                            subject_entity = TemporalEntity(
+                                entity_id=_entity_id("company", matched_surface),
+                                kind=TemporalEntityKind.COMPANY,
+                                canonical_name=matched_surface,
+                            )
+                            product_entity = _product_entity(product)
+                            page_evidence_id = _entity_id(
+                                "evidence",
+                                f"{page_snapshot.content_sha256}:{page_ordinal}:{product.product_id}",
+                            )
+                            api_evidence_id = _entity_id(
+                                "evidence",
+                                f"{api_snapshot.content_sha256}:{row_index}:{holding_name}",
+                            )
+                            relation_id = _entity_id(
+                                "relation",
+                                f"{requirement.requirement_id}:{product.product_id}:{api_evidence_id}",
+                            )
+                            evidence = tuple(
+                                sorted(
+                                    (
+                                        ExternalEvidenceReference(
+                                            evidence_id=page_evidence_id,
+                                            source_registry_id=page_snapshot.source.source_id,
+                                            document_id=_entity_id("doc", page_snapshot.source_uri),
+                                            title=page_snapshot.title,
+                                            publisher=page_snapshot.source.publisher,
+                                            source_uri=page_snapshot.source_uri,
+                                            published_at=page_snapshot.published_at,
+                                            as_of=page_snapshot.as_of,
+                                            content_sha256=page_snapshot.content_sha256,
+                                            locator=f"extracted chunk {page_ordinal}",
+                                            excerpt=page_excerpt,
+                                        ),
+                                        ExternalEvidenceReference(
+                                            evidence_id=api_evidence_id,
+                                            source_registry_id=api_snapshot.source.source_id,
+                                            document_id=_entity_id("doc", api_snapshot.source_uri),
+                                            title=api_snapshot.title,
+                                            publisher=api_snapshot.source.publisher,
+                                            source_uri=api_snapshot.source_uri,
+                                            published_at=api_snapshot.published_at,
+                                            as_of=api_snapshot.as_of,
+                                            content_sha256=api_snapshot.content_sha256,
+                                            locator=f"pdf.list[{row_index}]",
+                                            excerpt=api_excerpt,
+                                        ),
+                                    ),
+                                    key=lambda item: item.evidence_id,
+                                )
+                            )
+                            relations[relation_id] = TemporalRelationRecord(
+                                relation_id=relation_id,
+                                capability=requirement.capability,
+                                predicate=requirement.predicate,
+                                subject=product_entity,
+                                object=subject_entity,
+                                product_family=product.product_family,
+                                product_id=product.product_id,
+                                valid_from=api_snapshot.as_of,
+                                valid_to=api_snapshot.as_of,
+                                observed_at=api_snapshot.as_of,
+                                evidence=evidence,
+                            )
+        return tuple(relations[key] for key in sorted(relations))
+
+    def _extract_linked_kodex_risks(
+        self,
+        snapshots: tuple[OfficialSourceSnapshot, ...],
+        requirement: KnowledgeRequirement,
+        universe: ProvidedProductCandidateUniverse,
+    ) -> tuple[TemporalRelationRecord, ...]:
+        """Bind product identity and risk text across two same-ID official resources."""
+
+        if requirement.capability is not KnowledgeCapability.PRODUCT_RISK_FACTORS:
+            return ()
+        page_bindings = self._kodex_page_bindings(snapshots, universe)
+        pdf_snapshots: dict[str, list[OfficialSourceSnapshot]] = {}
+        for snapshot in snapshots:
+            product_id = self._kodex_risk_pdf_id(snapshot)
+            if product_id is not None:
+                pdf_snapshots.setdefault(product_id, []).append(snapshot)
+
+        signal = _RELATION_SIGNAL[KnowledgeCapability.PRODUCT_RISK_FACTORS]
+        relations: dict[str, TemporalRelationRecord] = {}
+        for opaque_id in sorted(set(page_bindings) & set(pdf_snapshots)):
+            for pdf_snapshot in pdf_snapshots[opaque_id]:
+                try:
+                    pdf_text = extract_official_snapshot_text(pdf_snapshot)
+                except OfficialLiveEvidenceError:
+                    continue
+                risk_chunks = tuple(
+                    (ordinal, excerpt)
+                    for ordinal, excerpt in enumerate(
+                        chunk_document(pdf_text, max_chars=1200, overlap_chars=200)
+                    )
+                    if signal.search(excerpt) is not None
+                )[:10]
+                for page_snapshot, product, page_excerpt, page_ordinal in page_bindings[opaque_id]:
+                    product_entity = _product_entity(product)
+                    page_evidence_id = _entity_id(
+                        "evidence",
+                        f"{page_snapshot.content_sha256}:{page_ordinal}:{product.product_id}",
+                    )
+                    for risk_ordinal, risk_excerpt in risk_chunks:
+                        risk_evidence_id = _entity_id(
+                            "evidence",
+                            f"{pdf_snapshot.content_sha256}:{risk_ordinal}:{product.product_id}",
+                        )
+                        relation_id = _entity_id(
+                            "relation",
+                            f"{requirement.requirement_id}:{product.product_id}:{risk_evidence_id}",
+                        )
+                        relations[relation_id] = TemporalRelationRecord(
+                            relation_id=relation_id,
+                            capability=requirement.capability,
+                            predicate=requirement.predicate,
+                            subject=product_entity,
+                            object=TemporalEntity(
+                                entity_id=_entity_id("risk", risk_excerpt),
+                                kind=TemporalEntityKind.RISK_CLAIM,
+                                canonical_name=risk_excerpt[:500],
+                            ),
+                            product_family=product.product_family,
+                            product_id=product.product_id,
+                            valid_from=pdf_snapshot.published_at or pdf_snapshot.as_of,
+                            valid_to=pdf_snapshot.published_at or pdf_snapshot.as_of,
+                            observed_at=pdf_snapshot.as_of,
+                            evidence=tuple(
+                                sorted(
+                                    (
+                                        ExternalEvidenceReference(
+                                            evidence_id=page_evidence_id,
+                                            source_registry_id=page_snapshot.source.source_id,
+                                            document_id=_entity_id("doc", page_snapshot.source_uri),
+                                            title=page_snapshot.title,
+                                            publisher=page_snapshot.source.publisher,
+                                            source_uri=page_snapshot.source_uri,
+                                            published_at=page_snapshot.published_at,
+                                            as_of=page_snapshot.as_of,
+                                            content_sha256=page_snapshot.content_sha256,
+                                            locator=f"extracted chunk {page_ordinal}",
+                                            excerpt=page_excerpt,
+                                        ),
+                                        ExternalEvidenceReference(
+                                            evidence_id=risk_evidence_id,
+                                            source_registry_id=pdf_snapshot.source.source_id,
+                                            document_id=_entity_id("doc", pdf_snapshot.source_uri),
+                                            title=pdf_snapshot.title,
+                                            publisher=pdf_snapshot.source.publisher,
+                                            source_uri=pdf_snapshot.source_uri,
+                                            published_at=pdf_snapshot.published_at,
+                                            as_of=pdf_snapshot.as_of,
+                                            content_sha256=pdf_snapshot.content_sha256,
+                                            locator=f"extracted chunk {risk_ordinal}",
+                                            excerpt=risk_excerpt,
+                                        ),
+                                    ),
+                                    key=lambda item: item.evidence_id,
+                                )
+                            ),
+                        )
+        return tuple(relations[key] for key in sorted(relations))
+
+    def extract_many(
+        self,
+        snapshots: tuple[OfficialSourceSnapshot, ...],
+        requirement: KnowledgeRequirement,
+        universe: ProvidedProductCandidateUniverse,
+    ) -> tuple[TemporalRelationRecord, ...]:
+        relations = {
+            relation.relation_id: relation
+            for snapshot in snapshots
+            for relation in self.extract(snapshot, requirement, universe)
+        }
+        relations.update(
+            {
+                relation.relation_id: relation
+                for relation in self._extract_linked_kodex_holdings(
+                    snapshots,
+                    requirement,
+                    universe,
+                )
+            }
+        )
+        relations.update(
+            {
+                relation.relation_id: relation
+                for relation in self._extract_linked_kodex_risks(
+                    snapshots,
+                    requirement,
+                    universe,
+                )
+            }
+        )
+        return tuple(relations[key] for key in sorted(relations))
+
     def extract(
         self,
         snapshot: OfficialSourceSnapshot,
@@ -223,12 +591,8 @@ class VerifiedLiveRelationExtractor:
         if snapshot.capability is not requirement.capability:
             raise OfficialLiveEvidenceError("snapshot capability differs from requirement")
         text = extract_official_snapshot_text(snapshot)
-        subject_surfaces = tuple(
-            dict.fromkeys((requirement.subject, *requirement.search_aliases))
-        )
-        subjects = tuple(
-            value for surface in subject_surfaces if (value := _normalized(surface))
-        )
+        subject_surfaces = tuple(dict.fromkeys((requirement.subject, *requirement.search_aliases)))
+        subjects = tuple(value for surface in subject_surfaces if (value := _normalized(surface)))
         if requirement.capability is KnowledgeCapability.SECTOR_THEME_HISTORY:
             expanded_subjects = set(subjects)
             for subject in subjects:
@@ -312,6 +676,20 @@ class VerifiedLiveRelationExtractor:
                     )
                 continue
             products = intersect_evidence_with_provided_products(universe, (excerpt,))
+            if requirement.capability is KnowledgeCapability.SECTOR_THEME_HISTORY:
+                # A thematic guide often lists many neighbouring ETFs in one
+                # table.  Only a provided-DB product whose own approved name or
+                # alias contains the requested theme surface can inherit that
+                # relation; proximity alone is not evidence.
+                products = tuple(
+                    product
+                    for product in products
+                    if any(
+                        subject in _normalized(product.product_name)
+                        or any(subject in _normalized(alias) for alias in product.aliases)
+                        for subject in subjects
+                    )
+                )
             if (
                 not products
                 and requirement.capability is KnowledgeCapability.FUND_STRUCTURE_STRATEGY_TREND
@@ -329,8 +707,7 @@ class VerifiedLiveRelationExtractor:
                         for candidate in universe.candidates
                         if core in normalize_product_identity(candidate.product_name)
                         or any(
-                            core in normalize_product_identity(alias)
-                            for alias in candidate.aliases
+                            core in normalize_product_identity(alias) for alias in candidate.aliases
                         )
                     )
             relation_subject_surfaces = (

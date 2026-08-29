@@ -5,23 +5,23 @@
   "status": "public_performance_regression_not_blind",
   "data": {
     "overseas_etp": {
-      "database_sha256": "0c36a48f6555d0d09b8d1f5f6026bec68d9cac100ea393987f082d4e890f6371",
-      "manifest_sha256": "3830b94be468c59adb97cc3ca9da89d1a5531e20934f0526c7762167311982dc",
+      "database_sha256": "4d0ac2972ff4bae01e72041b4aad1f9b1222fc7f4c8a16a87ecab4746549e2f2",
+      "manifest_sha256": "fc9b3831a839e88477ebd669913c3aa1a8fb1e5b0ca89158318a7db07ea992d1",
       "source_file_sha256": "ca6a274aeaf3f884f2f7635d7802558bc6dabf408871ecb1f71e5a50d9d34067"
     },
     "domestic_etp": {
-      "database_sha256": "ece8f990703434baaac4ab305dc10f94b954b307e0f170bc46816f477178061b",
-      "manifest_sha256": "35691ee234d5fb748df848dabb930a221f53f1780a1f5d0e430cf68aee2ac082",
+      "database_sha256": "1b4295881857488b6c21bad7c1bd36a2d039a7ea8a84e7286b4a65cf87287bcb",
+      "manifest_sha256": "b110efb81362c85ae66e3f612b261b414867a20cbd0dac31f127677b155b0be3",
       "source_file_sha256": "18c4329d8fc8768d030316816f3e6e48226a3c217db3354245b766a2c6f6c592"
     },
     "bond": {
-      "database_sha256": "7c128f4ae1096255cae2533e92627768384e97c91feb1457c44f0f524c28bf64",
-      "manifest_sha256": "0fa6ee3ecee5ab517f97effb70d3c76950136a833b4fb121609dcc082c0d61ce",
+      "database_sha256": "c009153fc89ac5c153c8e6ddf6385e16aa1287946f8a3d37225382c6268436c8",
+      "manifest_sha256": "875c8d88f13b464771b5f409af51e789150d9911e1a3f2e421f499b3ed079962",
       "source_file_sha256": "574ae5d6c1d98704712c256ed5352cbaed065ea9c3a6eb7b2a52adb305fa9001"
     },
     "fund": {
-      "database_sha256": "a7acd0503a645bf25176fdcfc75dd33c47c4c86f6edb8fc15aa61ac699de6838",
-      "manifest_sha256": "99f25c69238fd6676861f2c31e524affdc603ff11352a273c791f40c956651e9",
+      "database_sha256": "950bf043d87d95d18ac8edf7162d4598eaead263608b68dfacf96818bd017422",
+      "manifest_sha256": "d9f66c5d3e32292de64054d2a51ffdec8433afa59c3322783ec4c70d6a072a81",
       "source_file_sha256": "81b3ce3f1d5042b32fd52a76acff094fc5b8dd9fa36289af2fb54c195eb5d94c"
     }
   },

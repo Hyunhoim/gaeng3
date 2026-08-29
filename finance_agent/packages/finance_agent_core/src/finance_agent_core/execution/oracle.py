@@ -95,7 +95,7 @@ def _constraint_sql(
     parameters: list[str | int | bool] = []
     if spec.quality_column is not None:
         clauses.append(f"{spec.quality_column} IN ('VALID', 'PARTIAL')")
-    if spec.scale is not None:
+    if spec.scale is not None or spec.usable_numeric:
         # Official 2026-08-26 evaluation rule: a numeric 0 or missing value is
         # not a usable filter/ranking basis.  Keep the source value intact in
         # storage, but exclude it at deterministic query time.

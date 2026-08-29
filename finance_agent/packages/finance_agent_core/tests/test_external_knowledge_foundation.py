@@ -645,9 +645,7 @@ def test_cache_miss_fetches_only_official_snapshot_into_pending_intake() -> None
 
 
 def test_failed_official_fetches_consume_the_bounded_attempt_budget() -> None:
-    store = TemporalRelationStore(
-        seal_temporal_relation_bundle((), corpus_manifest_sha256=_SHA_B)
-    )
+    store = TemporalRelationStore(seal_temporal_relation_bundle((), corpus_manifest_sha256=_SHA_B))
     candidates = tuple(
         OfficialDiscoveryCandidate(
             url=f"https://www.fsc.go.kr/po010103/{identifier}",
@@ -664,22 +662,26 @@ def test_failed_official_fetches_consume_the_bounded_attempt_budget() -> None:
         connector=OfficialSourceConnector(transport),
     )
     question = "국민성장펀드의 구조와 투자 전략 및 운용 동향을 알려줘."
-    requirement = CompositeKnowledgePlanCompiler().compile(
-        question,
-        "bounded-failed-fetches",
-        _intent(
+    requirement = (
+        CompositeKnowledgePlanCompiler()
+        .compile(
             question,
-            [
-                (
-                    KnowledgeCapability.FUND_STRUCTURE_STRATEGY_TREND,
-                    "국민성장펀드",
-                    "구조와 투자 전략 및 운용 동향",
-                )
-            ],
-            [ProductFamily.FUND],
-            interaction_intent=InteractionIntent.EXPLAIN,
-        ),
-    ).requirements[0]
+            "bounded-failed-fetches",
+            _intent(
+                question,
+                [
+                    (
+                        KnowledgeCapability.FUND_STRUCTURE_STRATEGY_TREND,
+                        "국민성장펀드",
+                        "구조와 투자 전략 및 운용 동향",
+                    )
+                ],
+                [ProductFamily.FUND],
+                interaction_intent=InteractionIntent.EXPLAIN,
+            ),
+        )
+        .requirements[0]
+    )
 
     result = coordinator.acquire(requirement, top_k=2, max_fetches=2)
 

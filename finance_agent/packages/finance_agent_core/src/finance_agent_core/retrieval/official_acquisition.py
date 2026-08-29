@@ -127,12 +127,25 @@ class OfficialEvidenceAcquisitionCoordinator:
         self,
         requirement: KnowledgeRequirement,
         *,
+        discovery_terms: tuple[str, ...] = (),
         top_k: int = 8,
         max_search_queries: int = 8,
         max_fetches: int = 8,
         max_total_bytes: int = 16 * 1024 * 1024,
         deadline_ms: int = 12_000,
     ) -> OfficialEvidenceAcquisitionResult:
+        if (
+            len(discovery_terms) > 3
+            or len(discovery_terms) != len(set(discovery_terms))
+            or any(
+                value != value.strip()
+                or not 2 <= len(value) <= 120
+                or "http://" in value.casefold()
+                or "https://" in value.casefold()
+                for value in discovery_terms
+            )
+        ):
+            raise ValueError("discovery terms must be unique bounded entity text")
         if not 1 <= top_k <= 20:
             raise ValueError("top_k must be between 1 and 20")
         if not 1 <= max_search_queries <= 40 or not 1 <= max_fetches <= 40:
@@ -163,7 +176,13 @@ class OfficialEvidenceAcquisitionCoordinator:
         try:
             if callable(report_method):
                 report = report_method(
-                    query=" ".join((requirement.subject, *requirement.search_aliases)),
+                    query=" ".join(
+                        (
+                            requirement.subject,
+                            *requirement.search_aliases,
+                            *discovery_terms,
+                        )
+                    ),
                     capability=requirement.capability,
                     source_registry_ids=requirement.source_registry_ids,
                     evidence_cutoff=self.connector.registry.evidence_cutoff,
@@ -175,7 +194,13 @@ class OfficialEvidenceAcquisitionCoordinator:
                 discovered_pool = report.candidates[:20]
             else:
                 discovered_pool = self.discovery_provider.discover(
-                    query=" ".join((requirement.subject, *requirement.search_aliases)),
+                    query=" ".join(
+                        (
+                            requirement.subject,
+                            *requirement.search_aliases,
+                            *discovery_terms,
+                        )
+                    ),
                     capability=requirement.capability,
                     source_registry_ids=requirement.source_registry_ids,
                     evidence_cutoff=self.connector.registry.evidence_cutoff,
@@ -196,18 +221,34 @@ class OfficialEvidenceAcquisitionCoordinator:
                 failure_codes=("official_discovery_failed",),
                 search_query_count=1,
             )
-        time_filtered = tuple(
-            candidate
-            for candidate in discovered_pool
-            if requirement.time_range is None
-            or candidate.published_at is None
-            or (
-                candidate.published_at <= requirement.time_range.end
-                and (
-                    requirement.time_range.start is None
-                    or candidate.published_at >= requirement.time_range.start
+
+        def is_time_eligible(candidate: OfficialDiscoveryCandidate) -> bool:
+            if (
+                requirement.time_range is None
+                or candidate.published_at is None
+                or (
+                    candidate.published_at <= requirement.time_range.end
+                    and (
+                        requirement.time_range.start is None
+                        or candidate.published_at >= requirement.time_range.start
+                    )
                 )
-            )
+            ):
+                return True
+            try:
+                source = self.connector.registry.authorize_url(
+                    candidate.url,
+                    requirement.capability,
+                )
+            except OfficialSourceRegistryError:
+                return False
+            # A registry-approved product page can be only a navigation root.
+            # Its linked official API/PDF carries the requested historical date,
+            # so the page publication date must not discard that linked evidence.
+            return requirement.capability in source.historical_link_capabilities
+
+        time_filtered = tuple(
+            candidate for candidate in discovered_pool if is_time_eligible(candidate)
         )
         if requirement.time_range is not None:
             time_filtered = tuple(
@@ -291,6 +332,9 @@ class OfficialEvidenceAcquisitionCoordinator:
                 linked = self.link_resolver.resolve(
                     snapshot,
                     max_links=min(8, remaining_link_fetches),
+                    evidence_as_of=(
+                        requirement.time_range.end if requirement.time_range is not None else None
+                    ),
                 )
                 for linked_candidate in linked:
                     if linked_candidate.url in seen_snapshot_urls:

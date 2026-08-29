@@ -49,7 +49,6 @@ class _BoundaryTransport:
                     "product_families": [],
                     "evidence_spans": ["API Key", "서버 경로"],
                     "needs_clarification": False,
-                    "knowledge_requirements": [],
                 },
                 ensure_ascii=False,
             )
@@ -93,14 +92,6 @@ class _ExternalKnowledgeTransport:
                     "product_families": ["overseas_etp"],
                     "evidence_spans": ["캠브리콘", "해외 ETF"],
                     "needs_clarification": False,
-                    "knowledge_requirements": [
-                        {
-                            "capability": "portfolio_holdings",
-                            "subject_span": "캠브리콘",
-                            "relation_span": "편입된",
-                            "search_aliases": ["Cambricon"],
-                        }
-                    ],
                 },
                 ensure_ascii=False,
             )
@@ -126,6 +117,43 @@ class _ExternalKnowledgeTransport:
                 "total_tokens": 15,
             },
         }
+
+
+class _HarmlessIntentDriftTransport:
+    def complete(self, request: HyperClovaXStructuredRequest) -> object:
+        assert request.operation == "intent_analysis"
+        return {
+            "status_code": 200,
+            "content": json.dumps(
+                {
+                    "schema_version": "1.0",
+                    "intent": "compare",
+                    "product_families": ["domestic_etp", "domestic_etp"],
+                    "evidence_spans": ["ETF", "ETF"],
+                    "needs_clarification": False,
+                    "reason": "non-authoritative explanation",
+                },
+                ensure_ascii=False,
+            ),
+            "request_id": "harmless-intent-drift",
+            "usage": {"input_tokens": 10, "output_tokens": 5, "total_tokens": 15},
+        }
+
+
+def test_intent_provider_projects_harmless_shape_drift_to_closed_dto() -> None:
+    provider = HyperClovaXIntentAnalysisProvider(
+        HyperClovaXSettings(model="HCX-007", timeout_seconds=10),
+        _HarmlessIntentDriftTransport(),
+    )
+
+    draft = provider.analyze_intent(
+        "ETF 상품번호 두 개 중 수익률이 높은 쪽을 골라 주세요.",
+        "intent-shape-drift",
+    )
+
+    assert draft.intent.value == "compare"
+    assert [family.value for family in draft.product_families] == ["domestic_etp"]
+    assert draft.evidence_spans == ["ETF"]
 
 
 def _disabled_external_coverage() -> ApprovedKnowledgeCoverageManifest:
@@ -268,3 +296,32 @@ def test_intent_verifier_treats_multi_family_order_as_semantically_irrelevant() 
 
     assert verification.passed
     assert verification.reason_code == "intent_analysis_verified"
+
+
+def test_hclx_intent_disagreement_is_audited_but_cannot_veto_server_execution() -> None:
+    question = "국내 ETF를 1년 수익률 순으로 보여줘."
+    route = RouteDecision(
+        draft=MinimalQueryDraft(
+            request_id="official-intent-advisory-001",
+            question=question,
+            intent=InteractionIntent.SEARCH,
+            product_families=[ProductFamily.DOMESTIC_ETP],
+            product_mentions=[],
+        ),
+        disposition=RouteDisposition.EXECUTE,
+        reason_code="capability_executable",
+        reason="server-owned route is executable",
+        query_plan_intent=Intent.SEARCH,
+        capability_matrix_version="1.0",
+    )
+    draft = IntentAnalysisDraft(
+        intent=InteractionIntent.CLARIFY,
+        product_families=[],
+        evidence_spans=["국내 ETF"],
+        needs_clarification=True,
+    )
+
+    verification = verify_intent_analysis(question, route, draft)
+
+    assert verification.passed
+    assert verification.reason_code == "intent_analysis_advisory_clarification"

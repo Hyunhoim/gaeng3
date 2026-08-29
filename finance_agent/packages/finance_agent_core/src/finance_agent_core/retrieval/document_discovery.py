@@ -123,7 +123,15 @@ class CacheFirstOfficialDiscoveryProvider:
                 continue
             if source.source_id == document.source_registry_id:
                 eligible_dense.append(hit)
-        if not eligible_dense or eligible_dense[0].score < self.minimum_dense_score:
+        bm25_ids = {
+            item.document_id
+            for item in self.index.bm25_search(query, top_k=min(10, max(2, top_k)))
+            if item.score > 0
+        }
+        if not eligible_dense or (
+            eligible_dense[0].score < self.minimum_dense_score
+            and eligible_dense[0].document_id not in bm25_ids
+        ):
             return ()
         # Confidence is a document-level decision. Comparing adjacent chunks
         # from the same document made a clearly correct document look
@@ -155,11 +163,6 @@ class CacheFirstOfficialDiscoveryProvider:
         )
         if eligible_dense[0].score - next_score < self.minimum_dense_margin:
             return ()
-        bm25_ids = {
-            item.document_id
-            for item in self.index.bm25_search(query, top_k=min(10, max(2, top_k)))
-            if item.score > 0
-        }
         ordered_ids: list[str] = []
         for hit in eligible_dense:
             if hit.document_id in ordered_ids:

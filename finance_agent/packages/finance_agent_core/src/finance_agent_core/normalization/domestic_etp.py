@@ -32,6 +32,7 @@ SOURCE_COLUMNS = (
     "cu_lev_fector",
     "cu_charge_rt",
     "du_last_aum",
+    "du_last_nav",
     "du_clpr",
     "du_chas_errt",
     "du_diff_rt",

@@ -9,7 +9,7 @@
     a owl:Ontology ;
     owl:imports <https://gaeng3.ai/ontology/common> ;
     rdfs:label "해외 ETF·ETN Ontology"@ko ;
-    ga:registryVersion "1.4" .
+    ga:registryVersion "1.5" .
 
 etfgl:GlobalETPProduct
     a owl:Class ;
@@ -38,10 +38,18 @@ etfgl:Family
     ga:hasCanonicalField etfgl:field_static_as_of ;
     ga:hasCanonicalField etfgl:field_dynamic_as_of ;
     ga:hasCanonicalField etfgl:field_one_day_return_pct ;
+    ga:hasCanonicalField etfgl:field_short_name ;
+    ga:hasCanonicalField etfgl:field_manager ;
+    ga:hasCanonicalField etfgl:field_leverage_factor ;
     ga:hasCanonicalField etfgl:field_close_price ;
     ga:hasCanonicalField etfgl:field_daily_trading_value ;
     ga:hasCanonicalField etfgl:field_daily_volume ;
-    ga:hasCanonicalField etfgl:field_discrepancy_pct .
+    ga:hasCanonicalField etfgl:field_discrepancy_pct ;
+    ga:hasCanonicalField etfgl:field_inverse_short ;
+    ga:hasCanonicalField etfgl:field_index_tracking ;
+    ga:hasCanonicalField etfgl:field_base_price ;
+    ga:hasCanonicalField etfgl:field_listing_date ;
+    ga:hasCanonicalField etfgl:field_fund_currency .
 
 etfgl:Dataset
     a ga:Dataset ;
@@ -642,6 +650,91 @@ etfgl:field_one_day_return_pct
     ga:sourceTransform "identity" ;
     ga:notes "값이 있는 6,023행의 -51.25~46.91 원천 퍼센트포인트를 보존한다. 원천 0과 결측은 감사용으로 보존하되 2026-08-26 공식 규칙에 따라 수치 필터·정렬·집계에서는 기준 없음으로 제외한다."@ko .
 
+etfgl:field_short_name
+    a ga:CanonicalField ;
+    ga:forFamily etfgl:Family ;
+    ga:canonicalName "short_name" ;
+    rdfs:label "상품 약어명"@ko ;
+    skos:altLabel "약어명"@ko ;
+    skos:altLabel "단축 상품명"@ko ;
+    skos:altLabel "short name"@ko ;
+    ga:valueType "string" ;
+    ga:unit "none" ;
+    ga:quality "VALID" ;
+    ga:coveragePct "100"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable true ;
+    ga:aggregatable false ;
+    ga:comparable true ;
+    ga:comparisonMode "value_only" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "contains" ;
+    ga:asOfBasis "static" ;
+    ga:sourceDataset "overseas_etp" ;
+    ga:sourceColumn "pd_abrv_nm" ;
+    ga:sourceTransform "identity" ;
+    ga:notes "공식 해외 ETP 약어명을 원문 그대로 사용한다."@ko .
+
+etfgl:field_manager
+    a ga:CanonicalField ;
+    ga:forFamily etfgl:Family ;
+    ga:canonicalName "manager" ;
+    rdfs:label "운용사"@ko ;
+    skos:altLabel "자산운용사"@ko ;
+    skos:altLabel "발행사"@ko ;
+    skos:altLabel "manager"@ko ;
+    ga:valueType "string" ;
+    ga:unit "none" ;
+    ga:quality "PARTIAL" ;
+    ga:coveragePct "99"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable true ;
+    ga:aggregatable false ;
+    ga:comparable true ;
+    ga:comparisonMode "value_only" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "contains" ;
+    ga:asOfBasis "static" ;
+    ga:sourceDataset "overseas_etp" ;
+    ga:sourceColumn "cu_fund_mgmt_co" ;
+    ga:sourceTransform "identity" ;
+    ga:notes "해외 ETP의 공식 운용사명을 원문 그대로 사용하고 결측은 제외한다."@ko .
+
+etfgl:field_leverage_factor
+    a ga:CanonicalField ;
+    ga:forFamily etfgl:Family ;
+    ga:canonicalName "leverage_factor" ;
+    rdfs:label "레버리지 배수"@ko ;
+    skos:altLabel "배수"@ko ;
+    skos:altLabel "레버리지"@ko ;
+    skos:altLabel "leverage factor"@ko ;
+    ga:valueType "number" ;
+    ga:unit "none" ;
+    ga:quality "PARTIAL" ;
+    ga:coveragePct "14.9"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable true ;
+    ga:aggregatable true ;
+    ga:comparable true ;
+    ga:comparisonMode "numeric_delta" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "lt" ;
+    ga:allowedOperator "lte" ;
+    ga:allowedOperator "gt" ;
+    ga:allowedOperator "gte" ;
+    ga:allowedOperator "between" ;
+    ga:asOfBasis "static" ;
+    ga:sourceDataset "overseas_etp" ;
+    ga:sourceColumn "cu_lev_fector" ;
+    ga:sourceTransform "identity" ;
+    ga:notes "해외 ETP 원천 배수 값이 있는 행만 필터·정렬에 사용하고 결측·0은 제외한다."@ko .
+
 etfgl:field_close_price
     a ga:CanonicalField ;
     ga:forFamily etfgl:Family ;
@@ -768,3 +861,148 @@ etfgl:field_discrepancy_pct
     ga:sourceTransform "identity" ;
     ga:sentinelValuesJson "{\"0\":\"UNKNOWN\"}" ;
     ga:notes "해외 ETP는 공식 원천값이 있는 3행만 실행 대상으로 사용한다."@ko .
+
+etfgl:field_inverse_short
+    a ga:CanonicalField ;
+    ga:forFamily etfgl:Family ;
+    ga:canonicalName "inverse_short" ;
+    rdfs:label "인버스·숏 여부"@ko ;
+    skos:altLabel "인버스 여부"@ko ;
+    skos:altLabel "숏 여부"@ko ;
+    skos:altLabel "inverse short"@ko ;
+    ga:valueType "boolean" ;
+    ga:unit "boolean" ;
+    ga:quality "PARTIAL" ;
+    ga:coveragePct "3"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable false ;
+    ga:aggregatable false ;
+    ga:comparable false ;
+    ga:comparisonMode "value_only" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:asOfBasis "static" ;
+    ga:sourceDataset "overseas_etp" ;
+    ga:sourceColumn "cu_inverse_short_yn" ;
+    ga:sourceTransform "boolean_code" ;
+    ga:valueMapJson "{\"N\":false,\"Y\":true}" ;
+    ga:notes "Y/N이 명시된 행만 사용하며 결측을 false로 추정하지 않는다."@ko .
+
+etfgl:field_index_tracking
+    a ga:CanonicalField ;
+    ga:forFamily etfgl:Family ;
+    ga:canonicalName "index_tracking" ;
+    rdfs:label "지수 추적 여부"@ko ;
+    skos:altLabel "지수추적"@ko ;
+    skos:altLabel "인덱스 추종 여부"@ko ;
+    skos:altLabel "index tracking"@ko ;
+    ga:valueType "boolean" ;
+    ga:unit "boolean" ;
+    ga:quality "PARTIAL" ;
+    ga:coveragePct "39.9"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable false ;
+    ga:aggregatable false ;
+    ga:comparable false ;
+    ga:comparisonMode "value_only" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:asOfBasis "static" ;
+    ga:sourceDataset "overseas_etp" ;
+    ga:sourceColumn "cu_index_tracking_yn" ;
+    ga:sourceTransform "boolean_code" ;
+    ga:valueMapJson "{\"N\":false,\"Y\":true}" ;
+    ga:notes "Y/N이 명시된 행만 사용하며 결측을 false로 추정하지 않는다."@ko .
+
+etfgl:field_base_price
+    a ga:CanonicalField ;
+    ga:forFamily etfgl:Family ;
+    ga:canonicalName "base_price" ;
+    rdfs:label "기준가"@ko ;
+    skos:altLabel "펀드 기준가"@ko ;
+    skos:altLabel "base price"@ko ;
+    ga:valueType "number" ;
+    ga:unit "source_currency_amount" ;
+    ga:quality "PARTIAL" ;
+    ga:coveragePct "90"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable true ;
+    ga:aggregatable true ;
+    ga:comparable true ;
+    ga:comparisonMode "numeric_delta" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "lt" ;
+    ga:allowedOperator "lte" ;
+    ga:allowedOperator "gt" ;
+    ga:allowedOperator "gte" ;
+    ga:allowedOperator "between" ;
+    ga:asOfBasis "dynamic" ;
+    ga:sourceDataset "overseas_etp" ;
+    ga:sourceColumn "du_bpr" ;
+    ga:sourceTransform "identity" ;
+    ga:sentinelValuesJson "{\"0\":\"UNKNOWN\"}" ;
+    ga:notes "공식 기준가 원천값을 사용하고 0·결측은 수치 실행에서 제외한다."@ko .
+
+etfgl:field_listing_date
+    a ga:CanonicalField ;
+    ga:forFamily etfgl:Family ;
+    ga:canonicalName "listing_date" ;
+    rdfs:label "설정·상장일"@ko ;
+    skos:altLabel "설정일"@ko ;
+    skos:altLabel "상장일"@ko ;
+    skos:altLabel "listing date"@ko ;
+    ga:valueType "date" ;
+    ga:unit "date" ;
+    ga:quality "PARTIAL" ;
+    ga:coveragePct "99"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable true ;
+    ga:aggregatable false ;
+    ga:comparable false ;
+    ga:comparisonMode "value_only" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "lt" ;
+    ga:allowedOperator "lte" ;
+    ga:allowedOperator "gt" ;
+    ga:allowedOperator "gte" ;
+    ga:allowedOperator "between" ;
+    ga:asOfBasis "static" ;
+    ga:sourceDataset "overseas_etp" ;
+    ga:sourceColumn "pd_lstg_dt" ;
+    ga:sourceTransform "identity" ;
+    ga:notes "공식 해외 ETP 설정·상장일을 ISO 날짜로 비교한다."@ko .
+
+etfgl:field_fund_currency
+    a ga:CanonicalField ;
+    ga:forFamily etfgl:Family ;
+    ga:canonicalName "fund_currency" ;
+    rdfs:label "펀드통화코드"@ko ;
+    skos:altLabel "펀드 통화"@ko ;
+    skos:altLabel "상품통화"@ko ;
+    skos:altLabel "fund currency"@ko ;
+    ga:valueType "enum" ;
+    ga:unit "code" ;
+    ga:quality "PARTIAL" ;
+    ga:coveragePct "99.8"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable false ;
+    ga:aggregatable false ;
+    ga:comparable false ;
+    ga:comparisonMode "value_only" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "in" ;
+    ga:enumValue "USD" ;
+    ga:enumValue "INR" ;
+    ga:asOfBasis "static" ;
+    ga:sourceDataset "overseas_etp" ;
+    ga:sourceColumn "pd_curr_cd" ;
+    ga:sourceTransform "identity" ;
+    ga:notes "거래통화 pd_trd_ccy와 구분해 공식 펀드통화코드를 원문 보존한다."@ko .

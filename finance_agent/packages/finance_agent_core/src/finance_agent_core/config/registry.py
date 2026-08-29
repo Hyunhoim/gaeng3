@@ -162,6 +162,7 @@ class FieldDefinition(BaseModel):
     comparison_mode: ComparisonMode = ComparisonMode.VALUE_ONLY
     allowed_operators: list[str] = Field(default_factory=list)
     enum_values: list[str] = Field(default_factory=list)
+    unknown_enum_as_empty_set: bool = False
     comparison_scope: str = "same_dataset"
     as_of_basis: AsOfBasis = AsOfBasis.STATIC
     sentinel_values: dict[str, str] = Field(default_factory=dict)
@@ -191,6 +192,8 @@ class FieldDefinition(BaseModel):
             raise ValueError("enum fields require enum_values")
         if self.value_type is not ValueType.ENUM and self.enum_values:
             raise ValueError("enum_values are only valid for enum fields")
+        if self.unknown_enum_as_empty_set and self.value_type is not ValueType.ENUM:
+            raise ValueError("unknown_enum_as_empty_set is only valid for enum fields")
         if len(self.enum_values) != len(set(self.enum_values)):
             raise ValueError("enum_values must be unique")
         if len(self.datasets) != len(set(self.datasets)):

@@ -54,7 +54,7 @@ def test_packaged_approval_is_complete_and_bound_to_registry() -> None:
     release = load_approved_dataset_manifest()
 
     assert release.status == "official_competition_data_approved"
-    assert release.registry_schema_version == "1.4"
+    assert release.registry_schema_version == "1.5"
     assert set(release.datasets) == {"bond", "domestic_etp", "overseas_etp", "fund"}
     assert len(release.canonical_sha256) == 64
     assert release.datasets["fund"].logical_product_rows == 23560

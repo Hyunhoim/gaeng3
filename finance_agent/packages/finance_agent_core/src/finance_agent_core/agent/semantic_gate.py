@@ -76,10 +76,6 @@ _INVALID_BUYABLE_QUANTITY_METRIC = re.compile(
     r"(?:\d|이상|이하|초과|미만|많|적|높|낮|순|정렬|상위|하위)",
     re.IGNORECASE,
 )
-_CREDIT_RATING_TOKEN = re.compile(
-    r"신용\s*등급(?:이|은|가|을|를)?\s*([A-Z]{1,6}(?:[+0-])?)",
-    re.IGNORECASE,
-)
 _UNAVAILABLE_SNAPSHOT_FIELD = re.compile(
     r"(?=.*(?:공모\s*펀드|공모펀드))"
     r"(?=.*(?:1\s*주|일주일|한\s*주).{0,16}?(?:수익률|수익|성과|성적))",
@@ -135,6 +131,13 @@ _EXACT_RISK = re.compile(
     re.IGNORECASE,
 )
 _RISK_GROUP = re.compile(r"위험\s*등급\s*(?:별|분포|비중)", re.IGNORECASE)
+_RISK_PROJECTION = re.compile(
+    r"위험\s*(?:등급(?:\s*명)?|도|성)(?:을|를|은|는|이|가|과|와|,|\s)*"
+    r"(?:알려|보여|정리|조회|제시|설명)|"
+    r"(?:알려|보여|정리|조회|제시|설명).{0,20}"
+    r"위험\s*(?:등급(?:\s*명)?|도|성)",
+    re.IGNORECASE,
+)
 _VAGUE_STABILITY = re.compile(
     r"(?:안정적(?:인|으로)?|안정성이\s*(?:높|좋)|안전한).{0,16}?"
     r"(?:국내\s*|해외\s*)?(?:ETF|ETN|ETP|공모\s*펀드|펀드|채권|상품)",
@@ -534,14 +537,10 @@ class SemanticCoverageGate:
             unsupported.append(match.group(0))
         if match := _INVALID_BUYABLE_QUANTITY_METRIC.search(normalized):
             unsupported.append(match.group(0))
-        if match := _CREDIT_RATING_TOKEN.search(normalized):
-            from finance_agent_core.config import load_field_registry
-
-            supported_ratings = set(
-                load_field_registry().require_field("credit_rating", ["bond"]).enum_values
-            )
-            if match.group(1).upper() not in supported_ratings:
-                unsupported.append(match.group(0))
+        # An explicit but absent credit-rating value is a safe empty-set lookup.
+        # The Field Registry marks only credit_rating for this policy; it is
+        # executed through parameterized SQL and returns NOT_FOUND rather than
+        # being misreported as an unsupported action.
         if match := _UNAVAILABLE_SNAPSHOT_FIELD.search(normalized):
             unsupported.append(match.group(0))
         if match := _UNAPPROVED_RELATION_FILTER.search(normalized):
@@ -590,6 +589,7 @@ class SemanticCoverageGate:
             (match := _RISK.search(normalized))
             and _EXACT_RISK.search(normalized) is None
             and _RISK_GROUP.search(normalized) is None
+            and _RISK_PROJECTION.search(normalized) is None
         ):
             ambiguities.append(match.group(0))
         if match := _VAGUE_STABILITY.search(normalized):

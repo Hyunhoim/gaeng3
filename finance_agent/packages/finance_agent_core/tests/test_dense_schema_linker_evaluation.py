@@ -35,7 +35,7 @@ def test_fake_dense_schema_evaluation_is_safe_but_never_adoption_evidence() -> N
     # than treating obsolete fields as correct lexical links.
     assert report.lexical.micro_precision_among_returned_at_5 == 0.987315
     assert report.lexical.fixed_k_micro_precision_at_5 == 0.510383
-    assert report.hybrid.fixed_k_micro_precision_at_5 == 0.507104
+    assert report.hybrid.fixed_k_micro_precision_at_5 == 0.504918
     assert set(report.metrics_by_family) == {
         "bond",
         "domestic_etp",

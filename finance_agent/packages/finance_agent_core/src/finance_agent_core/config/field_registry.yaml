@@ -1,4 +1,4 @@
-schema_version: "1.4"
+schema_version: "1.5"
 
 datasets:
   overseas_etp:
@@ -737,7 +737,7 @@ fields:
   short_name:
     label: 상품 약어명
     aliases: [약어명, 단축 상품명, short name]
-    datasets: [domestic_etp, bond, fund]
+    datasets: [overseas_etp, domestic_etp, bond, fund]
     value_type: string
     comparable: true
     source:
@@ -750,6 +750,13 @@ fields:
     allowed_operators: [eq, contains]
     notes: 원천 1,780행 모두 존재하며 이름은 중복될 수 있어 식별자로 사용하지 않는다.
     dataset_overrides:
+      overseas_etp:
+        source:
+          dataset: overseas_etp
+          columns: [pd_abrv_nm]
+        quality: VALID
+        coverage_pct: 100.0
+        notes: 공식 해외 ETP 약어명을 원문 그대로 사용한다.
       bond:
         source:
           dataset: bond
@@ -768,7 +775,7 @@ fields:
   manager:
     label: 운용사
     aliases: [자산운용사, 발행사, manager]
-    datasets: [domestic_etp]
+    datasets: [domestic_etp, overseas_etp]
     value_type: string
     comparable: true
     source:
@@ -780,6 +787,14 @@ fields:
     sortable: true
     allowed_operators: [eq, contains]
     notes: ETF 운용사와 ETN 발행사 표기가 혼재하므로 원문을 보존한다.
+    dataset_overrides:
+      overseas_etp:
+        source:
+          dataset: overseas_etp
+          columns: [cu_fund_mgmt_co]
+        quality: PARTIAL
+        coverage_pct: 99.0
+        notes: 해외 ETP의 공식 운용사명을 원문 그대로 사용하고 결측은 제외한다.
 
   base_index:
     label: 기초지수
@@ -830,7 +845,7 @@ fields:
   leverage_factor:
     label: 레버리지 배수
     aliases: [배수, 레버리지, leverage factor]
-    datasets: [domestic_etp]
+    datasets: [domestic_etp, overseas_etp]
     value_type: number
     comparable: true
     comparison_mode: numeric_delta
@@ -844,12 +859,20 @@ fields:
     sortable: true
     aggregatable: true
     allowed_operators: [eq, lt, lte, gt, gte, between]
-    notes: -3배부터 3배까지 관측되며 결측 182행은 UNKNOWN이다.
+    notes: -3배부터 3배까지 관측되며 결측은 UNKNOWN이다.
+    dataset_overrides:
+      overseas_etp:
+        source:
+          dataset: overseas_etp
+          columns: [cu_lev_fector]
+        quality: PARTIAL
+        coverage_pct: 14.9
+        notes: 해외 ETP 원천 배수 값이 있는 행만 필터·정렬에 사용하고 결측·0은 제외한다.
 
   risk_level:
     label: 상품 위험등급
     aliases: [위험등급, 위험도, risk level]
-    datasets: [domestic_etp, fund]
+    datasets: [domestic_etp, fund, bond]
     value_type: enum
     comparable: true
     unit: code
@@ -899,11 +922,26 @@ fields:
           - 낮은위험(5등급)
           - 매우낮은위험(6등급)
         notes: 원천 위험등급명이 있으면 띄어쓰기까지 그대로 보존하고, 이름이 없을 때만 코드 1~6을 괄호형 등급명으로 변환한다. 결측 14,871개는 UNKNOWN이다.
+      bond:
+        source:
+          dataset: bond
+          columns: [pd_risk_nm]
+        quality: PARTIAL
+        coverage_pct: 100.0
+        enum_values:
+          - 매우높은위험(1등급)
+          - 높은위험(2등급)
+          - 다소높은위험(3등급)
+          - 보통위험(4등급)
+          - 낮은위험(5등급)
+          - 매우낮은위험(6등급)
+          - 해당없음
+        notes: 국내채권 공식 위험등급명을 원문 그대로 사용한다.
 
   public_offering:
     label: 공모 여부
     aliases: [공모펀드 여부, 공사모 구분, public offering]
-    datasets: [fund]
+    datasets: [fund, bond]
     value_type: boolean
     unit: boolean
     source:
@@ -918,6 +956,18 @@ fields:
     queryable: true
     allowed_operators: [eq]
     notes: 정상 논리 상품 중 공모 14,606개, 사모 8,954개다. 공모펀드 기본 검색은 true를 강제한다.
+    dataset_overrides:
+      bond:
+        source:
+          dataset: bond
+          columns: [bd_ofr_tcd]
+          transform: boolean_code
+          value_map:
+            공모: true
+            사모: false
+        quality: VALID
+        coverage_pct: 100.0
+        notes: 채권 모집구분의 공모·사모를 boolean으로 고정한다.
 
   company_sellable:
     label: 당사 판매 여부
@@ -1015,7 +1065,7 @@ fields:
   pension_eligible:
     label: 연금 거래 가능 여부
     aliases: [연금 가능, 연금계좌 거래, pension eligible]
-    datasets: [domestic_etp]
+    datasets: [domestic_etp, bond]
     value_type: boolean
     comparable: true
     unit: boolean
@@ -1031,6 +1081,18 @@ fields:
     queryable: true
     allowed_operators: [eq]
     notes: schema가 연금거래가능여부로 명시하고 값이 Y/N으로 완결되어 있다.
+    dataset_overrides:
+      bond:
+        source:
+          dataset: bond
+          columns: [pd_pen_tr_yn]
+          transform: boolean_code
+          value_map:
+            N: false
+            Y: true
+        quality: VALID
+        coverage_pct: 100.0
+        notes: 채권 공식 연금 편입 가능 여부 Y/N을 사용한다.
 
   core_etf:
     label: 핵심 ETF 여부
@@ -1469,7 +1531,7 @@ fields:
   sales_channel:
     label: 클래스 판매채널
     aliases: [판매채널, 온라인 클래스, 오프라인 클래스]
-    datasets: [fund]
+    datasets: [fund, bond]
     value_type: string
     comparable: true
     comparison_mode: value_only
@@ -1481,6 +1543,14 @@ fields:
     allowed_operators: [eq, contains]
     as_of_basis: snapshot
     notes: 공식 클래스 판매채널 원문을 그대로 보존하며 결측은 확인 불가로 처리한다.
+    dataset_overrides:
+      bond:
+        source:
+          dataset: bond
+          columns: [bdbns_abl_chnl_nm]
+        quality: PARTIAL
+        coverage_pct: 2.8974
+        notes: 공식 채권 매매가능채널명이 있는 행만 필터에 사용한다.
 
   interest_dividend_type:
     label: 이자배당구분
@@ -1927,7 +1997,8 @@ fields:
     enum_values:
       [AAA, AA+, AA0, AA-, A+, A0, A-, BBB+, BBB0, BBB-, BB+, BB0, BB-,
        B+, B0, B-, CCC, CC0, C0, C]
-    notes: 결측이 많고 원천 등급 표기가 AA0·A0처럼 혼재한다. QueryPlan은 정확값·목록 일치만 사용하며, 명시적인 'AA- 이상' 같은 표현은 registry의 최고→최저 enum 순서를 기준으로 허용 목록(in)으로 확장한다. 임계 등급이 없는 '등급이 높은' 표현은 추정하지 않는다.
+    unknown_enum_as_empty_set: true
+    notes: 결측이 많고 원천 등급 표기가 AA0·A0처럼 혼재한다. QueryPlan은 정확값·목록 일치만 사용하며, 명시적인 'AA- 이상' 같은 표현은 registry의 최고→최저 enum 순서를 기준으로 허용 목록(in)으로 확장한다. 명시한 정확 등급이 enum에 없으면 parameterized SQL의 빈 결과로 검증해 NOT_FOUND 처리하며, 임계 등급이 없는 '등급이 높은' 표현은 추정하지 않는다.
 
   bond_risk_code:
     label: 원천 위험코드
@@ -2141,3 +2212,168 @@ fields:
     allowed_operators: [eq, lt, lte, gt, gte, between]
     as_of_basis: dynamic
     notes: 원천 dur을 연 단위 수치로 보존하고 결측은 정렬·집계에서 제외한다.
+
+  total_issue_amount:
+    label: 총발행금액
+    aliases: [총 발행 규모, 총발행액, total issue amount]
+    datasets: [bond]
+    value_type: number
+    comparable: true
+    comparison_mode: numeric_delta
+    unit: source_currency_amount
+    source:
+      dataset: bond
+      columns: [bd_tisu_a]
+    quality: PARTIAL
+    coverage_pct: 100.0
+    queryable: true
+    sortable: true
+    aggregatable: true
+    allowed_operators: [eq, lt, lte, gt, gte, between]
+    comparison_scope: same_trading_currency
+    sentinel_values: {"0": UNKNOWN}
+    notes: 발행잔액 isu_bal_amt와 구분되는 공식 총발행금액이며 0·결측은 수치 실행에서 제외한다.
+
+  net_asset_value:
+    label: 최종 NAV
+    aliases: [순자산가치, 최종 기준가, NAV]
+    datasets: [domestic_etp]
+    value_type: number
+    comparable: true
+    comparison_mode: numeric_delta
+    unit: source_currency_amount
+    source:
+      dataset: domestic_etp
+      columns: [du_last_nav]
+    quality: PARTIAL
+    coverage_pct: 100.0
+    queryable: true
+    sortable: true
+    aggregatable: true
+    allowed_operators: [eq, lt, lte, gt, gte, between]
+    as_of_basis: dynamic
+    sentinel_values: {"0": UNKNOWN}
+    notes: 공식 최종 NAV 원천값을 사용하고 0·결측은 수치 실행에서 제외한다.
+
+  inverse_short:
+    label: 인버스·숏 여부
+    aliases: [인버스 여부, 숏 여부, inverse short]
+    datasets: [overseas_etp]
+    value_type: boolean
+    unit: boolean
+    source:
+      dataset: overseas_etp
+      columns: [cu_inverse_short_yn]
+      transform: boolean_code
+      value_map: {N: false, Y: true}
+    quality: PARTIAL
+    coverage_pct: 3.0
+    queryable: true
+    allowed_operators: [eq]
+    notes: Y/N이 명시된 행만 사용하며 결측을 false로 추정하지 않는다.
+
+  index_tracking:
+    label: 지수 추적 여부
+    aliases: [지수추적, 인덱스 추종 여부, index tracking]
+    datasets: [overseas_etp]
+    value_type: boolean
+    unit: boolean
+    source:
+      dataset: overseas_etp
+      columns: [cu_index_tracking_yn]
+      transform: boolean_code
+      value_map: {N: false, Y: true}
+    quality: PARTIAL
+    coverage_pct: 39.9
+    queryable: true
+    allowed_operators: [eq]
+    notes: Y/N이 명시된 행만 사용하며 결측을 false로 추정하지 않는다.
+
+  base_price:
+    label: 기준가
+    aliases: [펀드 기준가, base price]
+    datasets: [overseas_etp]
+    value_type: number
+    comparable: true
+    comparison_mode: numeric_delta
+    unit: source_currency_amount
+    source:
+      dataset: overseas_etp
+      columns: [du_bpr]
+    quality: PARTIAL
+    coverage_pct: 90.0
+    queryable: true
+    sortable: true
+    aggregatable: true
+    allowed_operators: [eq, lt, lte, gt, gte, between]
+    as_of_basis: dynamic
+    sentinel_values: {"0": UNKNOWN}
+    notes: 공식 기준가 원천값을 사용하고 0·결측은 수치 실행에서 제외한다.
+
+  listing_date:
+    label: 설정·상장일
+    aliases: [설정일, 상장일, listing date]
+    datasets: [overseas_etp]
+    value_type: date
+    unit: date
+    source:
+      dataset: overseas_etp
+      columns: [pd_lstg_dt]
+    quality: PARTIAL
+    coverage_pct: 99.0
+    queryable: true
+    sortable: true
+    allowed_operators: [eq, lt, lte, gt, gte, between]
+    notes: 공식 해외 ETP 설정·상장일을 ISO 날짜로 비교한다.
+
+  fund_currency:
+    label: 펀드통화코드
+    aliases: [펀드 통화, 상품통화, fund currency]
+    datasets: [overseas_etp]
+    value_type: enum
+    unit: code
+    source:
+      dataset: overseas_etp
+      columns: [pd_curr_cd]
+    quality: PARTIAL
+    coverage_pct: 99.8
+    queryable: true
+    allowed_operators: [eq, in]
+    enum_values: [USD, INR]
+    notes: 거래통화 pd_trd_ccy와 구분해 공식 펀드통화코드를 원문 보존한다.
+
+  fee_type:
+    label: 클래스 수수료 유형
+    aliases: [수수료 징구 유형, 수수료미징구, 수수료선취]
+    datasets: [fund]
+    value_type: enum
+    unit: code
+    source:
+      dataset: fund
+      columns: [han_clas_fee_type]
+    quality: PARTIAL
+    coverage_pct: 40.0
+    queryable: true
+    allowed_operators: [eq, in]
+    enum_values: [수수료미징구, 수수료선취, 수수료후취]
+    notes: 공식 클래스 수수료 유형을 원문 그대로 사용하고 결측은 제외한다.
+
+  management_company_fee_pct:
+    label: 집합투자업자보수
+    aliases: [운용사보수, 집합 투자 업자 보수, management company fee]
+    datasets: [fund]
+    value_type: number
+    comparable: true
+    comparison_mode: numeric_delta
+    unit: pct_point
+    source:
+      dataset: fund
+      columns: [or_co_rwrd_r]
+    quality: PARTIAL
+    coverage_pct: 100.0
+    queryable: true
+    sortable: true
+    aggregatable: true
+    allowed_operators: [eq, lt, lte, gt, gte, between]
+    sentinel_values: {"0": UNKNOWN}
+    notes: 공식 집합투자업자보수 원천값을 사용하고 0·결측은 수치 실행에서 제외한다.

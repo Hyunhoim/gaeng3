@@ -179,6 +179,15 @@ class _EmptyDiscovery:
         return ()
 
 
+class _CapturingEmptyDiscovery:
+    def __init__(self) -> None:
+        self.query: str | None = None
+
+    def discover(self, **kwargs):
+        self.query = kwargs["query"]
+        return ()
+
+
 class _FactProvider:
     def fetch(self, product_keys, selection, requested_fields):
         assert product_keys == ((ProductFamily.OVERSEAS_ETP, "KSTR"),)
@@ -215,6 +224,44 @@ def _runtime(store: TemporalRelationStore, fact_provider=None) -> ExternalKnowle
         acquisition=acquisition,
         product_fact_provider=fact_provider or _FactProvider(),
     )
+
+
+def test_product_discovery_terms_do_not_mutate_relation_subject_aliases() -> None:
+    registry = load_official_source_registry()
+    store = TemporalRelationStore(
+        seal_temporal_relation_bundle((), corpus_manifest_sha256=_SHA_B, registry=registry),
+        registry,
+    )
+    discovery = _CapturingEmptyDiscovery()
+    acquisition = OfficialEvidenceAcquisitionCoordinator(
+        relation_store=store,
+        discovery_provider=discovery,
+        connector=OfficialSourceConnector(_UnusedTransport(), registry),
+    )
+    question = "에코프로비엠이 편입된 KODEX ETF를 알려줘."
+    requirement = (
+        CompositeKnowledgePlanCompiler()
+        .compile(
+            question,
+            "discovery-only-product-terms",
+            _intent(
+                question,
+                capability=KnowledgeCapability.PORTFOLIO_HOLDINGS,
+                subject="에코프로비엠",
+                relation="편입된",
+                family=ProductFamily.DOMESTIC_ETP,
+            ),
+        )
+        .requirements[0]
+    )
+
+    acquisition.acquire(
+        requirement,
+        discovery_terms=("KODEX 2차전지산업", "KODEX 2차전지핵심소재10"),
+    )
+
+    assert discovery.query == ("에코프로비엠 KODEX 2차전지산업 KODEX 2차전지핵심소재10")
+    assert requirement.search_aliases == ()
 
 
 def test_live_only_release_rejects_a_preseeded_relation_cache() -> None:
@@ -511,6 +558,294 @@ def test_dynamic_renderer_and_link_resolution_remain_inside_the_same_source_scop
     )
     with pytest.raises(OfficialConnectorError):
         redirected.fetch(url, timeout_seconds=1, max_bytes=4096)
+
+
+def test_kodex_product_page_resolves_cutoff_bounded_official_holdings_api() -> None:
+    registry = load_official_source_registry()
+    url = "https://www.samsungfund.com/etf/product/view.do?id=2ETFB1"
+    body = b"<html><head><title>KODEX official</title></head></html>"
+    snapshot = OfficialSourceSnapshot(
+        source=registry.authorize_url(url, KnowledgeCapability.PORTFOLIO_HOLDINGS),
+        capability=KnowledgeCapability.PORTFOLIO_HOLDINGS,
+        source_uri=url,
+        title="KODEX official",
+        content_type="text/html",
+        content=body,
+        content_sha256=hashlib.sha256(body).hexdigest(),
+        published_at=None,
+        as_of=date(2026, 8, 24),
+    )
+    assert KnowledgeCapability.PORTFOLIO_HOLDINGS in (snapshot.source.historical_link_capabilities)
+
+    linked = OfficialDocumentLinkResolver(registry).resolve(
+        snapshot,
+        evidence_as_of=date(2026, 7, 31),
+    )
+
+    assert [item.url for item in linked] == [
+        "https://www.samsungfund.com/api/v1/kodex/product-pdf/2ETFB1.do?gijunYMD=2026.07.31"
+    ]
+    assert (
+        registry.authorize_url(
+            linked[0].url,
+            KnowledgeCapability.PORTFOLIO_HOLDINGS,
+        ).source_id
+        == "samsungfund-kodex-product"
+    )
+
+
+def test_kodex_product_page_resolves_only_same_source_official_risk_pdf_template() -> None:
+    registry = load_official_source_registry()
+    url = "https://www.samsungfund.com/etf/product/view.do?id=2ETFB1"
+    body = b"<html><head><title>KODEX official</title></head></html>"
+    snapshot = OfficialSourceSnapshot(
+        source=registry.authorize_url(url, KnowledgeCapability.PRODUCT_RISK_FACTORS),
+        capability=KnowledgeCapability.PRODUCT_RISK_FACTORS,
+        source_uri=url,
+        title="KODEX official",
+        content_type="text/html",
+        content=body,
+        content_sha256=hashlib.sha256(body).hexdigest(),
+        published_at=None,
+        as_of=date(2026, 8, 24),
+    )
+
+    linked = OfficialDocumentLinkResolver(registry).resolve(snapshot)
+
+    assert [item.url for item in linked] == [
+        "https://www.samsungfund.com/upload/invest/2ETFB1-A.pdf"
+    ]
+    assert linked[0].as_of is None
+    assert (
+        registry.authorize_url(
+            linked[0].url,
+            KnowledgeCapability.PRODUCT_RISK_FACTORS,
+        ).source_id
+        == "samsungfund-kodex-product"
+    )
+
+
+def test_linked_kodex_identity_and_holdings_json_require_same_official_product_id() -> None:
+    registry = load_official_source_registry()
+    page_url = "https://www.samsungfund.com/etf/product/view.do?id=2ETFB1"
+    api_url = "https://www.samsungfund.com/api/v1/kodex/product-pdf/2ETFB1.do?gijunYMD=2026.08.24"
+    page_body = (
+        "<html><head><title>KODEX 2차전지산업 ETF</title></head><body>종목코드 305720</body></html>"
+    ).encode()
+    api_body = (
+        '{"pdf":{"gijunYMD":"20260824","list":['
+        '{"secNm":"에코프로비엠","itmNo":"247540","ratio":"7.12"}'
+        "]}}"
+    ).encode()
+    snapshots = (
+        OfficialSourceSnapshot(
+            source=registry.authorize_url(
+                page_url,
+                KnowledgeCapability.PORTFOLIO_HOLDINGS,
+            ),
+            capability=KnowledgeCapability.PORTFOLIO_HOLDINGS,
+            source_uri=page_url,
+            title="KODEX official product",
+            content_type="text/html",
+            content=page_body,
+            content_sha256=hashlib.sha256(page_body).hexdigest(),
+            published_at=None,
+            as_of=date(2026, 8, 24),
+        ),
+        OfficialSourceSnapshot(
+            source=registry.authorize_url(
+                api_url,
+                KnowledgeCapability.PORTFOLIO_HOLDINGS,
+            ),
+            capability=KnowledgeCapability.PORTFOLIO_HOLDINGS,
+            source_uri=api_url,
+            title="KODEX official holdings",
+            content_type="application/json",
+            content=api_body,
+            content_sha256=hashlib.sha256(api_body).hexdigest(),
+            published_at=None,
+            as_of=date(2026, 8, 24),
+        ),
+    )
+    question = "에코프로비엠이 편입된 KODEX 2차전지산업 ETF를 알려줘."
+    requirement = (
+        CompositeKnowledgePlanCompiler()
+        .compile(
+            question,
+            "linked-kodex-holdings",
+            _intent(
+                question,
+                capability=KnowledgeCapability.PORTFOLIO_HOLDINGS,
+                subject="에코프로비엠",
+                relation="편입된",
+                family=ProductFamily.DOMESTIC_ETP,
+            ),
+        )
+        .requirements[0]
+    )
+    universe = ProvidedProductCandidateUniverse(
+        candidates=(
+            ProvidedProductCandidate(
+                product_family=ProductFamily.DOMESTIC_ETP,
+                product_id="KR7305720005",
+                product_name="KODEX 2차전지산업",
+                aliases=("305720",),
+            ),
+        ),
+        database_sha256s={ProductFamily.DOMESTIC_ETP: _SHA_A},
+        candidate_filter_sha256=_SHA_B,
+    )
+
+    relations = VerifiedLiveRelationExtractor().extract_many(
+        snapshots,
+        requirement,
+        universe,
+    )
+
+    assert [item.product_id for item in relations] == ["KR7305720005"]
+    assert relations[0].object.canonical_name == "에코프로비엠"
+    assert relations[0].valid_from == date(2026, 8, 24)
+    assert len(relations[0].evidence) == 2
+    assert {item.source_uri for item in relations[0].evidence} == {page_url, api_url}
+
+
+def test_linked_kodex_identity_and_risk_pdf_keep_two_exact_evidence_spans() -> None:
+    registry = load_official_source_registry()
+    page_url = "https://www.samsungfund.com/etf/product/view.do?id=2ETFK1"
+    risk_url = "https://www.samsungfund.com/upload/invest/2ETFK1-A.pdf"
+    page_body = "KODEX 2차전지핵심소재10 종목코드 461950".encode()
+    risk_body = "이 투자상품은 원금 손실 위험과 특정 산업 집중 위험이 있습니다.".encode()
+    snapshots = (
+        OfficialSourceSnapshot(
+            source=registry.authorize_url(
+                page_url,
+                KnowledgeCapability.PRODUCT_RISK_FACTORS,
+            ),
+            capability=KnowledgeCapability.PRODUCT_RISK_FACTORS,
+            source_uri=page_url,
+            title="KODEX official product",
+            content_type="text/html",
+            content=page_body,
+            content_sha256=hashlib.sha256(page_body).hexdigest(),
+            published_at=None,
+            as_of=date(2026, 8, 24),
+        ),
+        OfficialSourceSnapshot(
+            source=registry.authorize_url(
+                risk_url,
+                KnowledgeCapability.PRODUCT_RISK_FACTORS,
+            ),
+            capability=KnowledgeCapability.PRODUCT_RISK_FACTORS,
+            source_uri=risk_url,
+            title="KODEX official investment guide",
+            content_type="text/plain",
+            content=risk_body,
+            content_sha256=hashlib.sha256(risk_body).hexdigest(),
+            published_at=None,
+            as_of=date(2026, 8, 24),
+        ),
+    )
+    question = "KODEX 2차전지핵심소재10의 핵심 위험요인을 알려줘."
+    requirement = (
+        CompositeKnowledgePlanCompiler()
+        .compile(
+            question,
+            "linked-kodex-risk",
+            _intent(
+                question,
+                capability=KnowledgeCapability.PRODUCT_RISK_FACTORS,
+                subject="KODEX 2차전지핵심소재10",
+                relation="핵심 위험요인",
+                family=ProductFamily.DOMESTIC_ETP,
+            ),
+        )
+        .requirements[0]
+    )
+    universe = ProvidedProductCandidateUniverse(
+        candidates=(
+            ProvidedProductCandidate(
+                product_family=ProductFamily.DOMESTIC_ETP,
+                product_id="KR7461950003",
+                product_name="KODEX 2차전지핵심소재10",
+                aliases=("461950",),
+            ),
+        ),
+        database_sha256s={ProductFamily.DOMESTIC_ETP: _SHA_A},
+        candidate_filter_sha256=_SHA_B,
+    )
+
+    relations = VerifiedLiveRelationExtractor().extract_many(
+        snapshots,
+        requirement,
+        universe,
+    )
+
+    assert {item.product_id for item in relations} == {"KR7461950003"}
+    assert all(len(item.evidence) == 2 for item in relations)
+    assert {item.source_uri for item in relations[0].evidence} == {page_url, risk_url}
+
+
+def test_theme_relation_does_not_spill_to_neighbouring_products_in_one_table() -> None:
+    registry = load_official_source_registry()
+    url = "https://www.samsungfund.com/upload/kodex/newsroom/theme-guide.pdf"
+    body = (
+        "우주항공 테마 관련 상품\nKODEX 미국우주항공\n기타 상품 목록 KODEX 반도체 KODEX 은행"
+    ).encode()
+    snapshot = OfficialSourceSnapshot(
+        source=registry.authorize_url(url, KnowledgeCapability.SECTOR_THEME_HISTORY),
+        capability=KnowledgeCapability.SECTOR_THEME_HISTORY,
+        source_uri=url,
+        title="official theme guide",
+        content_type="text/plain",
+        content=body,
+        content_sha256=hashlib.sha256(body).hexdigest(),
+        published_at=date(2026, 4, 16),
+        as_of=date(2026, 4, 16),
+    )
+    question = "최근 6개월 동안 우주항공 테마와 연결 이력이 있는 ETF를 정리해줘."
+    requirement = (
+        CompositeKnowledgePlanCompiler()
+        .compile(
+            question,
+            "theme-no-neighbour-spill",
+            _intent(
+                question,
+                capability=KnowledgeCapability.SECTOR_THEME_HISTORY,
+                subject="우주항공 테마",
+                relation="연결 이력이 있는",
+                family=ProductFamily.DOMESTIC_ETP,
+            ),
+        )
+        .requirements[0]
+    )
+    universe = ProvidedProductCandidateUniverse(
+        candidates=(
+            ProvidedProductCandidate(
+                product_family=ProductFamily.DOMESTIC_ETP,
+                product_id="BANK",
+                product_name="KODEX 은행",
+                aliases=(),
+            ),
+            ProvidedProductCandidate(
+                product_family=ProductFamily.DOMESTIC_ETP,
+                product_id="SEMI",
+                product_name="KODEX 반도체",
+                aliases=(),
+            ),
+            ProvidedProductCandidate(
+                product_family=ProductFamily.DOMESTIC_ETP,
+                product_id="SPACE",
+                product_name="KODEX 미국우주항공",
+                aliases=(),
+            ),
+        ),
+        database_sha256s={ProductFamily.DOMESTIC_ETP: _SHA_A},
+        candidate_filter_sha256=_SHA_B,
+    )
+
+    relations = VerifiedLiveRelationExtractor().extract(snapshot, requirement, universe)
+
+    assert [item.product_id for item in relations] == ["SPACE"]
 
 
 def test_official_connector_accepts_only_unambiguous_publication_metadata() -> None:

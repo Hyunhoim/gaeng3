@@ -250,7 +250,7 @@ def test_semantic_gate_preserves_deterministic_near_neighbors(question: str) -> 
         ("가장 큰 해외 ETF를 보여줘", "clarify"),
         ("해외 ETF를 매수해줘", "unsupported"),
         ("국내 ETF 결과를 CSV 파일로 저장해줘", "unsupported"),
-        ("내게 맞는 해외 ETF 하나 골라줘", "clarify"),
+        ("내게 맞는 해외 ETF 하나 골라줘", "unsupported"),
     ],
 )
 def test_semantic_coverage_gate_blocks_unmapped_conditions_and_actions(
@@ -263,6 +263,7 @@ def test_semantic_coverage_gate_blocks_unmapped_conditions_and_actions(
     assert decision.reason_code in {
         "semantic_coverage_incomplete",
         "semantic_unmapped_action",
+        "safety_forecast",
     }
     assert decision.query_plan_intent is None
 

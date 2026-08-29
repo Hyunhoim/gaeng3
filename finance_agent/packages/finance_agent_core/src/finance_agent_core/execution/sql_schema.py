@@ -38,6 +38,48 @@ class SqlField:
     column: str
     scale: Decimal | None = None
     quality_column: str | None = None
+    usable_numeric: bool = False
+
+
+def _json_value(source_column: str) -> str:
+    if not source_column.replace("_", "").isalnum():
+        raise ValueError(f"unsafe source column: {source_column!r}")
+    return f"json_extract(source_values_json, '$.{source_column}')"
+
+
+def _source_text(source_column: str) -> SqlField:
+    return SqlField(_json_value(source_column))
+
+
+def _source_number(source_column: str) -> SqlField:
+    return SqlField(
+        f"CAST({_json_value(source_column)} AS REAL)",
+        usable_numeric=True,
+    )
+
+
+def _source_boolean(source_column: str) -> SqlField:
+    value = _json_value(source_column)
+    return SqlField(
+        f"CASE UPPER(CAST({value} AS TEXT)) "
+        "WHEN 'Y' THEN 1 WHEN '1' THEN 1 "
+        "WHEN 'N' THEN 0 WHEN '0' THEN 0 ELSE NULL END"
+    )
+
+
+def _source_date(source_column: str) -> SqlField:
+    value = f"CAST({_json_value(source_column)} AS TEXT)"
+    normalized = (
+        f"CASE WHEN length({value}) = 8 THEN "
+        f"substr({value}, 1, 4) || '-' || substr({value}, 5, 2) || '-' || "
+        f"substr({value}, 7, 2) ELSE {value} END"
+    )
+    return SqlField(
+        f"CASE WHEN {_json_value(source_column)} IS NULL "
+        f"OR TRIM({value}) IN ('', '0', '00000000', '0000-00-00') "
+        f"OR substr(TRIM({value}), 1, 4) = '0000' "
+        f"THEN NULL ELSE {normalized} END"
+    )
 
 
 OVERSEAS_SQL_FIELDS = {
@@ -45,6 +87,7 @@ OVERSEAS_SQL_FIELDS = {
     "product_family": SqlField("product_family"),
     "product_type": SqlField("product_type"),
     "product_name": SqlField("product_name"),
+    "short_name": _source_text("pd_abrv_nm"),
     "exchange_code": SqlField("exchange_code"),
     "ticker": SqlField("ticker"),
     "isin": SqlField("isin"),
@@ -52,6 +95,13 @@ OVERSEAS_SQL_FIELDS = {
     "trading_suspended": SqlField("trading_suspended"),
     "asset_type": SqlField("asset_type"),
     "investment_region": SqlField("investment_region"),
+    "manager": _source_text("cu_fund_mgmt_co"),
+    "leverage_factor": _source_number("cu_lev_fector"),
+    "inverse_short": _source_boolean("cu_inverse_short_yn"),
+    "index_tracking": _source_boolean("cu_index_tracking_yn"),
+    "base_price": _source_number("du_bpr"),
+    "listing_date": _source_date("pd_lstg_dt"),
+    "fund_currency": _source_text("pd_curr_cd"),
     "total_expense_ratio_pct": SqlField(
         "total_expense_ratio_micro_pct",
         scale=FEE_SCALE,
@@ -96,52 +146,8 @@ DOMESTIC_SQL_FIELDS = {
     **OVERSEAS_SQL_FIELDS,
     "short_name": SqlField("short_name"),
     "manager": SqlField("manager"),
+    "net_asset_value": _source_number("du_last_nav"),
     "base_index": SqlField("base_index", quality_column="base_index_quality"),
-    "sales_channel": SqlField("sales_channel", quality_column="sales_channel_quality"),
-    "interest_dividend_type": SqlField(
-        "interest_dividend_type",
-        quality_column="interest_dividend_type_quality",
-    ),
-    "sale_company_fee_pct": SqlField(
-        "sale_company_fee_micro_pct",
-        scale=FUND_RETURN_SCALE,
-        quality_column="sale_company_fee_quality",
-    ),
-    "trustee_fee_pct": SqlField(
-        "trustee_fee_micro_pct",
-        scale=FUND_RETURN_SCALE,
-        quality_column="trustee_fee_quality",
-    ),
-    "domestic_stock_ratio_pct": SqlField(
-        "domestic_stock_ratio_micro_pct",
-        scale=FUND_RETURN_SCALE,
-        quality_column="domestic_stock_ratio_quality",
-    ),
-    "domestic_bond_ratio_pct": SqlField(
-        "domestic_bond_ratio_micro_pct",
-        scale=FUND_RETURN_SCALE,
-        quality_column="domestic_bond_ratio_quality",
-    ),
-    "overseas_stock_ratio_pct": SqlField(
-        "overseas_stock_ratio_micro_pct",
-        scale=FUND_RETURN_SCALE,
-        quality_column="overseas_stock_ratio_quality",
-    ),
-    "overseas_bond_ratio_pct": SqlField(
-        "overseas_bond_ratio_micro_pct",
-        scale=FUND_RETURN_SCALE,
-        quality_column="overseas_bond_ratio_quality",
-    ),
-    "latest_distribution_pct": SqlField(
-        "latest_distribution_micro_pct",
-        scale=FUND_RETURN_SCALE,
-        quality_column="latest_distribution_quality",
-    ),
-    "preservation_ratio_pct": SqlField(
-        "preservation_ratio_micro_pct",
-        scale=FUND_RETURN_SCALE,
-        quality_column="preservation_ratio_quality",
-    ),
     "strategy": SqlField("strategy", quality_column="strategy_quality"),
     "leverage_factor": SqlField(
         "leverage_factor_micro",
@@ -243,6 +249,15 @@ DOMESTIC_SQL_FIELDS = {
     "dynamic_as_of": SqlField("dynamic_as_of", quality_column="dynamic_as_of_quality"),
 }
 
+for _overseas_only_field in (
+    "base_price",
+    "fund_currency",
+    "index_tracking",
+    "inverse_short",
+    "listing_date",
+):
+    DOMESTIC_SQL_FIELDS.pop(_overseas_only_field)
+
 BOND_SQL_FIELDS = {
     # The database keeps a physical LOT-level composite key, while the
     # organizer's PD_NO (ticker) is the public, logical bond identity.
@@ -259,6 +274,11 @@ BOND_SQL_FIELDS = {
         quality_column="bond_subclass_quality",
     ),
     "bond_type": SqlField("bond_type", quality_column="bond_type_quality"),
+    "public_offering": _source_boolean("bd_ofr_tcd"),
+    "pension_eligible": _source_boolean("pd_pen_tr_yn"),
+    "sales_channel": _source_text("bdbns_abl_chnl_nm"),
+    "risk_level": _source_text("pd_risk_nm"),
+    "total_issue_amount": _source_number("bd_tisu_a"),
     "trading_currency": SqlField(
         "trading_currency",
         quality_column="trading_currency_quality",
@@ -380,6 +400,53 @@ FUND_SQL_FIELDS = {
         quality_column="aum_quality",
     ),
     "base_index": SqlField("base_index", quality_column="base_index_quality"),
+    "sales_channel": SqlField("sales_channel", quality_column="sales_channel_quality"),
+    "fee_type": _source_text("han_clas_fee_type"),
+    "management_company_fee_pct": _source_number("or_co_rwrd_r"),
+    "interest_dividend_type": SqlField(
+        "interest_dividend_type",
+        quality_column="interest_dividend_type_quality",
+    ),
+    "sale_company_fee_pct": SqlField(
+        "sale_company_fee_micro_pct",
+        scale=FUND_RETURN_SCALE,
+        quality_column="sale_company_fee_quality",
+    ),
+    "trustee_fee_pct": SqlField(
+        "trustee_fee_micro_pct",
+        scale=FUND_RETURN_SCALE,
+        quality_column="trustee_fee_quality",
+    ),
+    "domestic_stock_ratio_pct": SqlField(
+        "domestic_stock_ratio_micro_pct",
+        scale=FUND_RETURN_SCALE,
+        quality_column="domestic_stock_ratio_quality",
+    ),
+    "domestic_bond_ratio_pct": SqlField(
+        "domestic_bond_ratio_micro_pct",
+        scale=FUND_RETURN_SCALE,
+        quality_column="domestic_bond_ratio_quality",
+    ),
+    "overseas_stock_ratio_pct": SqlField(
+        "overseas_stock_ratio_micro_pct",
+        scale=FUND_RETURN_SCALE,
+        quality_column="overseas_stock_ratio_quality",
+    ),
+    "overseas_bond_ratio_pct": SqlField(
+        "overseas_bond_ratio_micro_pct",
+        scale=FUND_RETURN_SCALE,
+        quality_column="overseas_bond_ratio_quality",
+    ),
+    "latest_distribution_pct": SqlField(
+        "latest_distribution_micro_pct",
+        scale=FUND_RETURN_SCALE,
+        quality_column="latest_distribution_quality",
+    ),
+    "preservation_ratio_pct": SqlField(
+        "preservation_ratio_micro_pct",
+        scale=FUND_RETURN_SCALE,
+        quality_column="preservation_ratio_quality",
+    ),
     "one_week_return_pct": SqlField(
         "one_week_return_micro_pct",
         scale=FUND_RETURN_SCALE,
