@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import json
+from importlib.resources import files
 
 from finance_agent_core.agent import RoutedFinanceAgent, execute_answer_request
+from finance_agent_core.agent.backend_adapter import _finalize_with_official_hclx
 from finance_agent_core.agent.external_knowledge_router import ExternalKnowledgeRouter
 from finance_agent_core.agent.intent_analysis import (
     IntentAnalysisDraft,
@@ -22,6 +24,7 @@ from finance_agent_core.config.knowledge_coverage import (
 )
 from finance_agent_core.contracts.backend import (
     BackendAgentRequest,
+    BackendAgentResponse,
     BackendAnswerMode,
     BackendStatus,
 )
@@ -31,6 +34,13 @@ from finance_agent_core.contracts.routing import (
     MinimalQueryDraft,
     RouteDecision,
     RouteDisposition,
+)
+from finance_agent_core.observability import (
+    AuditStage,
+    BoundedAsyncAuditSink,
+    InMemoryAuditSink,
+    RequestAuditRecorder,
+    bind_request_audit,
 )
 
 
@@ -257,6 +267,47 @@ def test_official_external_knowledge_miss_uses_hclx_intent_and_final_answer() ->
         "intent_analysis",
         "final_answer",
     ]
+
+
+def test_official_document_evidence_is_not_counted_as_a_product_result_in_audit() -> None:
+    transport = _ExternalKnowledgeTransport()
+    settings = HyperClovaXSettings(model="HCX-007", timeout_seconds=10)
+    service = RoutedFinanceAgent(
+        {},
+        official_answer_provider=HyperClovaXFinalAnswerProvider(settings, transport),
+        require_official_hclx=True,
+    )
+    payload = json.loads(
+        files("finance_agent_core.contracts.examples")
+        .joinpath("backend_document_response_v1.json")
+        .read_text(encoding="utf-8")
+    )
+    response = BackendAgentResponse.model_validate(payload)
+    downstream = InMemoryAuditSink()
+    sink = BoundedAsyncAuditSink(downstream)
+    recorder = RequestAuditRecorder(
+        request_id=response.request_id,
+        question="ETF 정의를 제공 근거로 설명해줘.",
+        sink=sink,
+    )
+
+    with bind_request_audit(recorder):
+        finalized = _finalize_with_official_hclx(
+            service,
+            "ETF 정의를 제공 근거로 설명해줘.",
+            response,
+        )
+
+    assert finalized.answer_mode is BackendAnswerMode.LLM_GROUNDED
+    assert sink.close(timeout_seconds=1) is True
+    events = downstream.snapshot()
+    assert [(event.stage, event.reason_code) for event in events] == [
+        (AuditStage.HCLX, "final_generation_completed"),
+        (AuditStage.VERIFIER, "final_generation_verified"),
+    ]
+    assert all(event.candidate_count == 0 for event in events)
+    assert all(event.result_count == 0 for event in events)
+    assert all(event.evidence_count == 1 for event in events)
 
 
 def test_intent_prompt_defines_korean_product_family_mapping_and_search_boundary() -> None:
