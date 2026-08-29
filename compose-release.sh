@@ -56,6 +56,10 @@ if "CLOVASTUDIO_API_KEY" in environment:
     raise SystemExit(
         "release deployments forbid inline CLOVASTUDIO_API_KEY; use a secret file"
     )
+if "NAVER_API_HUB_CLIENT_ID" in environment or "NAVER_API_HUB_CLIENT_SECRET" in environment:
+    raise SystemExit(
+        "release deployments forbid inline NAVER API HUB credentials; use secret files"
+    )
 
 allowed = {
     "APP_ENV",
@@ -102,6 +106,17 @@ allowed = {
     "HCX_TIMEOUT_SECONDS",
     "CLOVASTUDIO_API_KEY_HOST_FILE",
     "CLOVASTUDIO_API_KEY_FILE",
+    "FINANCE_EXTERNAL_KNOWLEDGE_ENABLED",
+    "FINANCE_EXTERNAL_KNOWLEDGE_ARTIFACT_HOST_FILE",
+    "FINANCE_EXTERNAL_KNOWLEDGE_ARTIFACT_FILE",
+    "FINANCE_EXTERNAL_KNOWLEDGE_ARTIFACT_SHA256",
+    "FINANCE_EXTERNAL_TEMPORAL_RELATION_HOST_FILE",
+    "FINANCE_EXTERNAL_TEMPORAL_RELATION_FILE",
+    "FINANCE_EXTERNAL_TEMPORAL_RELATION_SHA256",
+    "NAVER_API_HUB_CLIENT_ID_HOST_FILE",
+    "NAVER_API_HUB_CLIENT_ID_FILE",
+    "NAVER_API_HUB_CLIENT_SECRET_HOST_FILE",
+    "NAVER_API_HUB_CLIENT_SECRET_FILE",
 }
 extra = sorted(set(environment) - allowed)
 if extra:
@@ -140,6 +155,53 @@ if environment["WEB_CONCURRENCY"] != "1":
 relation_artifact_sha256 = environment["FINANCE_RELATION_RETRIEVAL_ARTIFACT_SHA256"]
 if re.fullmatch(r"[0-9a-f]{64}", relation_artifact_sha256) is None:
     raise SystemExit("FINANCE_RELATION_RETRIEVAL_ARTIFACT_SHA256 is invalid")
+
+external_knowledge_enabled = environment.get(
+    "FINANCE_EXTERNAL_KNOWLEDGE_ENABLED", "false"
+).lower()
+if external_knowledge_enabled not in {"true", "false"}:
+    raise SystemExit("FINANCE_EXTERNAL_KNOWLEDGE_ENABLED must be true or false")
+external_required = {
+    "FINANCE_EXTERNAL_KNOWLEDGE_ARTIFACT_HOST_FILE",
+    "FINANCE_EXTERNAL_KNOWLEDGE_ARTIFACT_FILE",
+    "FINANCE_EXTERNAL_KNOWLEDGE_ARTIFACT_SHA256",
+    "FINANCE_EXTERNAL_TEMPORAL_RELATION_HOST_FILE",
+    "FINANCE_EXTERNAL_TEMPORAL_RELATION_FILE",
+    "FINANCE_EXTERNAL_TEMPORAL_RELATION_SHA256",
+    "NAVER_API_HUB_CLIENT_ID_HOST_FILE",
+    "NAVER_API_HUB_CLIENT_ID_FILE",
+    "NAVER_API_HUB_CLIENT_SECRET_HOST_FILE",
+    "NAVER_API_HUB_CLIENT_SECRET_FILE",
+}
+if external_knowledge_enabled == "true":
+    missing_external = sorted(name for name in external_required if not environment.get(name))
+    if missing_external:
+        raise SystemExit("missing external knowledge settings: " + ", ".join(missing_external))
+    expected_container_paths = {
+        "FINANCE_EXTERNAL_KNOWLEDGE_ARTIFACT_FILE": (
+            "/run/finance-release/external-knowledge-artifact.json"
+        ),
+        "FINANCE_EXTERNAL_TEMPORAL_RELATION_FILE": (
+            "/run/finance-release/external-temporal-relations.json"
+        ),
+        "NAVER_API_HUB_CLIENT_ID_FILE": "/run/secrets/naver_api_hub_client_id",
+        "NAVER_API_HUB_CLIENT_SECRET_FILE": "/run/secrets/naver_api_hub_client_secret",
+    }
+    if any(environment[name] != value for name, value in expected_container_paths.items()):
+        raise SystemExit("external knowledge container paths differ from the release contract")
+    for name in (
+        "FINANCE_EXTERNAL_KNOWLEDGE_ARTIFACT_SHA256",
+        "FINANCE_EXTERNAL_TEMPORAL_RELATION_SHA256",
+    ):
+        if re.fullmatch(r"[0-9a-f]{64}", environment[name]) is None:
+            raise SystemExit(name + " is invalid")
+else:
+    unexpected_external = sorted(name for name in external_required if environment.get(name))
+    if unexpected_external:
+        raise SystemExit(
+            "disabled external knowledge cannot configure: "
+            + ", ".join(unexpected_external)
+        )
 
 RELEASE_BACKEND_UID = 10001
 audit_root = Path(environment["FINANCE_AUDIT_HOST_DIR"])
@@ -377,6 +439,41 @@ def read_secure(source, label):
         raise SystemExit(label + " changed while reading or has an invalid size")
     return payload
 
+if external_knowledge_enabled == "true":
+    for source_name, digest_name in (
+        (
+            "FINANCE_EXTERNAL_KNOWLEDGE_ARTIFACT_HOST_FILE",
+            "FINANCE_EXTERNAL_KNOWLEDGE_ARTIFACT_SHA256",
+        ),
+        (
+            "FINANCE_EXTERNAL_TEMPORAL_RELATION_HOST_FILE",
+            "FINANCE_EXTERNAL_TEMPORAL_RELATION_SHA256",
+        ),
+    ):
+        external_payload = read_secure(Path(environment[source_name]), source_name)
+        if hashlib.sha256(external_payload).hexdigest() != environment[digest_name]:
+            raise SystemExit(source_name + " differs from its trusted SHA-256")
+
+    for secret_name in (
+        "NAVER_API_HUB_CLIENT_ID_HOST_FILE",
+        "NAVER_API_HUB_CLIENT_SECRET_HOST_FILE",
+    ):
+        secret_path = Path(environment[secret_name])
+        try:
+            secret_stat = secret_path.stat(follow_symlinks=False)
+        except OSError:
+            raise SystemExit("NAVER API HUB release secret is unavailable") from None
+        if (
+            not secret_path.is_absolute()
+            or not stat.S_ISREG(secret_stat.st_mode)
+            or secret_path.is_symlink()
+            or secret_stat.st_uid != RELEASE_BACKEND_UID
+            or secret_stat.st_nlink != 1
+            or secret_stat.st_mode & 0o077
+            or not 0 < secret_stat.st_size <= 4096
+        ):
+            raise SystemExit("NAVER API HUB release secret must be an owner-only regular file")
+
 data = read_secure(binding_path, "FINANCE_DEPLOYMENT_BINDING_HOST_FILE")
 if hashlib.sha256(data).hexdigest() != expected:
     raise SystemExit("DeploymentBinding differs from its trusted SHA-256")
@@ -521,6 +618,15 @@ snapshot_file(
     "FINANCE_DEPLOYMENT_BINDING_SIGSTORE_BUNDLE_HOST_FILE",
     "deployment-binding.sigstore.json",
 )
+if external_knowledge_enabled == "true":
+    snapshot_file(
+        "FINANCE_EXTERNAL_KNOWLEDGE_ARTIFACT_HOST_FILE",
+        "external-knowledge-artifact.json",
+    )
+    snapshot_file(
+        "FINANCE_EXTERNAL_TEMPORAL_RELATION_HOST_FILE",
+        "external-temporal-relations.json",
+    )
 
 output = Path(sys.argv[2])
 descriptor = os.open(
@@ -580,12 +686,25 @@ unset APP_ENV \
     HCX_TIMEOUT_SECONDS \
     CLOVASTUDIO_API_KEY \
     CLOVASTUDIO_API_KEY_HOST_FILE \
-    CLOVASTUDIO_API_KEY_FILE
+    CLOVASTUDIO_API_KEY_FILE \
+    FINANCE_EXTERNAL_KNOWLEDGE_ENABLED \
+    FINANCE_EXTERNAL_KNOWLEDGE_ARTIFACT_HOST_FILE \
+    FINANCE_EXTERNAL_KNOWLEDGE_ARTIFACT_FILE \
+    FINANCE_EXTERNAL_KNOWLEDGE_ARTIFACT_SHA256 \
+    FINANCE_EXTERNAL_TEMPORAL_RELATION_HOST_FILE \
+    FINANCE_EXTERNAL_TEMPORAL_RELATION_FILE \
+    FINANCE_EXTERNAL_TEMPORAL_RELATION_SHA256 \
+    NAVER_API_HUB_CLIENT_ID \
+    NAVER_API_HUB_CLIENT_ID_HOST_FILE \
+    NAVER_API_HUB_CLIENT_ID_FILE \
+    NAVER_API_HUB_CLIENT_SECRET \
+    NAVER_API_HUB_CLIENT_SECRET_HOST_FILE \
+    NAVER_API_HUB_CLIENT_SECRET_FILE
 
 # Compose gives inherited shell variables precedence over --env-file.  Remove
 # every namespaced control variable, including future additions, so the private
 # validated snapshot remains the only release configuration source.
-for release_variable in ${!FINANCE_@} ${!HCX_@} ${!CLOVASTUDIO_@} ${!COMPOSE_@}; do
+for release_variable in ${!FINANCE_@} ${!HCX_@} ${!CLOVASTUDIO_@} ${!NAVER_@} ${!COMPOSE_@}; do
     unset "$release_variable"
 done
 

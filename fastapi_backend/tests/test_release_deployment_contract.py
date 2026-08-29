@@ -185,6 +185,9 @@ def test_release_launcher_forbids_build_and_forces_no_build() -> None:
     assert "audit_root_stat.st_uid not in {10001, os.geteuid()}" not in launcher
     assert 'environment["WEB_CONCURRENCY"] != "1"' in launcher
     assert "FINANCE_AUDIT_QUEUE_CAPACITY" in launcher
+    assert "FINANCE_EXTERNAL_KNOWLEDGE_ENABLED" in launcher
+    assert "NAVER_API_HUB_CLIENT_SECRET_HOST_FILE" in launcher
+    assert "forbid inline NAVER API HUB credentials" in launcher
     assert "forbids command" in launcher
     assert "--force-recreate" in launcher
     assert "--no-recreate" in launcher
@@ -652,6 +655,106 @@ def test_release_launcher_requires_valid_relation_artifact_sha256(tmp_path: Path
 
     assert completed.returncode == 1
     assert "FINANCE_RELATION_RETRIEVAL_ARTIFACT_SHA256 is invalid" in completed.stderr
+    assert not capture.exists()
+
+
+def test_release_launcher_accepts_complete_external_knowledge_profile(tmp_path: Path) -> None:
+    environment_path, environment, capture, test_launcher = _release_launcher_fixture(tmp_path)
+    external_artifact = tmp_path / "external-knowledge-artifact.json"
+    temporal_relations = tmp_path / "external-temporal-relations.json"
+    client_id = tmp_path / "naver-api-hub-client-id"
+    client_secret = tmp_path / "naver-api-hub-client-secret"
+    external_artifact.write_bytes(b'{"artifact":"approved"}\n')
+    temporal_relations.write_bytes(b'{"relations":[]}\n')
+    external_artifact.chmod(0o444)
+    temporal_relations.chmod(0o444)
+    client_id.write_text("test-client-id\n", encoding="utf-8")
+    client_secret.write_text("test-client-secret\n", encoding="utf-8")
+    client_id.chmod(0o600)
+    client_secret.chmod(0o600)
+    with environment_path.open("a", encoding="utf-8") as stream:
+        stream.write(
+            "\n".join(
+                [
+                    "FINANCE_EXTERNAL_KNOWLEDGE_ENABLED=true",
+                    f"FINANCE_EXTERNAL_KNOWLEDGE_ARTIFACT_HOST_FILE={external_artifact}",
+                    "FINANCE_EXTERNAL_KNOWLEDGE_ARTIFACT_FILE=/run/finance-release/external-knowledge-artifact.json",
+                    "FINANCE_EXTERNAL_KNOWLEDGE_ARTIFACT_SHA256="
+                    + hashlib.sha256(external_artifact.read_bytes()).hexdigest(),
+                    f"FINANCE_EXTERNAL_TEMPORAL_RELATION_HOST_FILE={temporal_relations}",
+                    "FINANCE_EXTERNAL_TEMPORAL_RELATION_FILE=/run/finance-release/external-temporal-relations.json",
+                    "FINANCE_EXTERNAL_TEMPORAL_RELATION_SHA256="
+                    + hashlib.sha256(temporal_relations.read_bytes()).hexdigest(),
+                    f"NAVER_API_HUB_CLIENT_ID_HOST_FILE={client_id}",
+                    "NAVER_API_HUB_CLIENT_ID_FILE=/run/secrets/naver_api_hub_client_id",
+                    f"NAVER_API_HUB_CLIENT_SECRET_HOST_FILE={client_secret}",
+                    "NAVER_API_HUB_CLIENT_SECRET_FILE=/run/secrets/naver_api_hub_client_secret",
+                ]
+            )
+            + "\n"
+        )
+
+    completed = subprocess.run(
+        [str(test_launcher), "config", "--quiet"],
+        cwd=_repository_root(),
+        env=environment,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    assert capture.is_file()
+
+
+def test_release_launcher_rejects_external_knowledge_artifact_hash_mismatch(
+    tmp_path: Path,
+) -> None:
+    environment_path, environment, capture, test_launcher = _release_launcher_fixture(tmp_path)
+    external_artifact = tmp_path / "external-knowledge-artifact.json"
+    temporal_relations = tmp_path / "external-temporal-relations.json"
+    client_id = tmp_path / "naver-api-hub-client-id"
+    client_secret = tmp_path / "naver-api-hub-client-secret"
+    external_artifact.write_bytes(b'{"artifact":"approved"}\n')
+    temporal_relations.write_bytes(b'{"relations":[]}\n')
+    external_artifact.chmod(0o444)
+    temporal_relations.chmod(0o444)
+    client_id.write_text("test-client-id\n", encoding="utf-8")
+    client_secret.write_text("test-client-secret\n", encoding="utf-8")
+    client_id.chmod(0o600)
+    client_secret.chmod(0o600)
+    with environment_path.open("a", encoding="utf-8") as stream:
+        stream.write(
+            "\n".join(
+                [
+                    "FINANCE_EXTERNAL_KNOWLEDGE_ENABLED=true",
+                    f"FINANCE_EXTERNAL_KNOWLEDGE_ARTIFACT_HOST_FILE={external_artifact}",
+                    "FINANCE_EXTERNAL_KNOWLEDGE_ARTIFACT_FILE=/run/finance-release/external-knowledge-artifact.json",
+                    "FINANCE_EXTERNAL_KNOWLEDGE_ARTIFACT_SHA256=" + "0" * 64,
+                    f"FINANCE_EXTERNAL_TEMPORAL_RELATION_HOST_FILE={temporal_relations}",
+                    "FINANCE_EXTERNAL_TEMPORAL_RELATION_FILE=/run/finance-release/external-temporal-relations.json",
+                    "FINANCE_EXTERNAL_TEMPORAL_RELATION_SHA256="
+                    + hashlib.sha256(temporal_relations.read_bytes()).hexdigest(),
+                    f"NAVER_API_HUB_CLIENT_ID_HOST_FILE={client_id}",
+                    "NAVER_API_HUB_CLIENT_ID_FILE=/run/secrets/naver_api_hub_client_id",
+                    f"NAVER_API_HUB_CLIENT_SECRET_HOST_FILE={client_secret}",
+                    "NAVER_API_HUB_CLIENT_SECRET_FILE=/run/secrets/naver_api_hub_client_secret",
+                ]
+            )
+            + "\n"
+        )
+
+    completed = subprocess.run(
+        [str(test_launcher), "config", "--quiet"],
+        cwd=_repository_root(),
+        env=environment,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 1
+    assert "differs from its trusted SHA-256" in completed.stderr
     assert not capture.exists()
 
 
