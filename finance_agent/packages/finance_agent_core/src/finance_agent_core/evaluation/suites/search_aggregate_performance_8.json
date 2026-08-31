@@ -5,22 +5,22 @@
   "status": "public_performance_regression_not_blind",
   "data": {
     "overseas_etp": {
-      "database_sha256": "4d0ac2972ff4bae01e72041b4aad1f9b1222fc7f4c8a16a87ecab4746549e2f2",
+      "database_sha256": "c10df20f6762218eeee97b9b8a57abecfe5187d1fa6863b4465327175830a64b",
       "manifest_sha256": "fc9b3831a839e88477ebd669913c3aa1a8fb1e5b0ca89158318a7db07ea992d1",
       "source_file_sha256": "ca6a274aeaf3f884f2f7635d7802558bc6dabf408871ecb1f71e5a50d9d34067"
     },
     "domestic_etp": {
-      "database_sha256": "1b4295881857488b6c21bad7c1bd36a2d039a7ea8a84e7286b4a65cf87287bcb",
+      "database_sha256": "c22b66f735d324b646fa70865580909a3542ae0404b8262f77fdda656fbb6a51",
       "manifest_sha256": "b110efb81362c85ae66e3f612b261b414867a20cbd0dac31f127677b155b0be3",
       "source_file_sha256": "18c4329d8fc8768d030316816f3e6e48226a3c217db3354245b766a2c6f6c592"
     },
     "bond": {
-      "database_sha256": "c009153fc89ac5c153c8e6ddf6385e16aa1287946f8a3d37225382c6268436c8",
+      "database_sha256": "4f8d42652fa2cbed582e2a32ef66f3823746739b6253c1b1fe7c3f98ebbefcd9",
       "manifest_sha256": "875c8d88f13b464771b5f409af51e789150d9911e1a3f2e421f499b3ed079962",
       "source_file_sha256": "574ae5d6c1d98704712c256ed5352cbaed065ea9c3a6eb7b2a52adb305fa9001"
     },
     "fund": {
-      "database_sha256": "950bf043d87d95d18ac8edf7162d4598eaead263608b68dfacf96818bd017422",
+      "database_sha256": "23980b7ef4c9c4959b83af05920d6aa8df076eb72981071bafc664070acf7ffd",
       "manifest_sha256": "d9f66c5d3e32292de64054d2a51ffdec8433afa59c3322783ec4c70d6a072a81",
       "source_file_sha256": "81b3ce3f1d5042b32fd52a76acff094fc5b8dd9fa36289af2fb54c195eb5d94c"
     }
@@ -34,7 +34,13 @@
       "question": "미국 채권형 해외 ETF 중 현재 거래 가능한 상품에서 총보수 0.20% 이하인 상품을 AUM 순으로 5개 보여줘.",
       "expected": {
         "candidate_count": 427,
-        "top_product_ids": ["NAS:BND.O", "AMX:AGG", "NYS:SGOV.K", "AMX:BIL", "NAS:TLT.O"],
+        "top_product_ids": [
+          "NAS:BND.O",
+          "AMX:AGG",
+          "NYS:SGOV.K",
+          "AMX:BIL",
+          "NAS:TLT.O"
+        ],
         "aggregates": []
       }
     },
@@ -46,7 +52,13 @@
       "question": "미국 주식형 국내 ETF 중 연금 거래 가능한 상품을 1개월 수익률 순으로 보여줘",
       "expected": {
         "candidate_count": 211,
-        "top_product_ids": ["KR7457990000", "KR70000J0003", "KR70083S0002", "KR70102A0009", "KR7301400008"],
+        "top_product_ids": [
+          "KR7457990000",
+          "KR70000J0003",
+          "KR70083S0002",
+          "KR70102A0009",
+          "KR7301400008"
+        ],
         "aggregates": []
       }
     },
@@ -58,7 +70,13 @@
       "question": "원화 매수 가능한 국내채권을 매수수익률 높은 순으로 5개 보여줘",
       "expected": {
         "candidate_count": 98,
-        "top_product_ids": ["KR6003342G73", "KR6169372G67", "KR6169372G18", "KR103502GA34", "KR6185452FA9"],
+        "top_product_ids": [
+          "KR6003342G73",
+          "KR6169372G67",
+          "KR6169372G18",
+          "KR103502GA34",
+          "KR6185452FA9"
+        ],
         "aggregates": []
       }
     },
@@ -70,7 +88,13 @@
       "question": "현재 판매 중인 공모펀드를 3개월 수익률 높은 순으로 5개 보여줘",
       "expected": {
         "candidate_count": 7182,
-        "top_product_ids": ["KR5152420027", "KR5152420030", "KR5152420029", "KR5152420024", "KR5152420028"],
+        "top_product_ids": [
+          "KR5152420027",
+          "KR5152420030",
+          "KR5152420029",
+          "KR5152420024",
+          "KR5152420028"
+        ],
         "aggregates": []
       }
     },
@@ -118,7 +142,9 @@
           {
             "function": "count",
             "field": "product_id",
-            "group_values": {"product_type": "ETF"},
+            "group_values": {
+              "product_type": "ETF"
+            },
             "value": 1232,
             "row_count": 1232,
             "valid_count": 1232,
@@ -127,7 +153,9 @@
           {
             "function": "count",
             "field": "product_id",
-            "group_values": {"product_type": "ETN"},
+            "group_values": {
+              "product_type": "ETN"
+            },
             "value": 545,
             "row_count": 545,
             "valid_count": 545,
@@ -177,15 +205,105 @@
         "candidate_count": 14606,
         "top_product_ids": [],
         "aggregates": [
-          {"function": "count", "field": "product_id", "group_values": {"risk_level": null}, "value": 5918, "row_count": 5918, "valid_count": 5918, "missing_count": 0},
-          {"function": "count", "field": "product_id", "group_values": {"risk_level": "높은 위험"}, "value": 3023, "row_count": 3023, "valid_count": 3023, "missing_count": 0},
-          {"function": "count", "field": "product_id", "group_values": {"risk_level": "다소 높은 위험"}, "value": 1765, "row_count": 1765, "valid_count": 1765, "missing_count": 0},
-          {"function": "count", "field": "product_id", "group_values": {"risk_level": "보통 위험"}, "value": 1428, "row_count": 1428, "valid_count": 1428, "missing_count": 0},
-          {"function": "count", "field": "product_id", "group_values": {"risk_level": "낮은 위험"}, "value": 1192, "row_count": 1192, "valid_count": 1192, "missing_count": 0},
-          {"function": "count", "field": "product_id", "group_values": {"risk_level": "매우 높은 위험"}, "value": 897, "row_count": 897, "valid_count": 897, "missing_count": 0},
-          {"function": "count", "field": "product_id", "group_values": {"risk_level": "매우 낮은 위험"}, "value": 355, "row_count": 355, "valid_count": 355, "missing_count": 0},
-          {"function": "count", "field": "product_id", "group_values": {"risk_level": "높은위험"}, "value": 20, "row_count": 20, "valid_count": 20, "missing_count": 0},
-          {"function": "count", "field": "product_id", "group_values": {"risk_level": "보통위험"}, "value": 8, "row_count": 8, "valid_count": 8, "missing_count": 0}
+          {
+            "function": "count",
+            "field": "product_id",
+            "group_values": {
+              "risk_level": null
+            },
+            "value": 5918,
+            "row_count": 5918,
+            "valid_count": 5918,
+            "missing_count": 0
+          },
+          {
+            "function": "count",
+            "field": "product_id",
+            "group_values": {
+              "risk_level": "높은 위험"
+            },
+            "value": 3023,
+            "row_count": 3023,
+            "valid_count": 3023,
+            "missing_count": 0
+          },
+          {
+            "function": "count",
+            "field": "product_id",
+            "group_values": {
+              "risk_level": "다소 높은 위험"
+            },
+            "value": 1765,
+            "row_count": 1765,
+            "valid_count": 1765,
+            "missing_count": 0
+          },
+          {
+            "function": "count",
+            "field": "product_id",
+            "group_values": {
+              "risk_level": "보통 위험"
+            },
+            "value": 1428,
+            "row_count": 1428,
+            "valid_count": 1428,
+            "missing_count": 0
+          },
+          {
+            "function": "count",
+            "field": "product_id",
+            "group_values": {
+              "risk_level": "낮은 위험"
+            },
+            "value": 1192,
+            "row_count": 1192,
+            "valid_count": 1192,
+            "missing_count": 0
+          },
+          {
+            "function": "count",
+            "field": "product_id",
+            "group_values": {
+              "risk_level": "매우 높은 위험"
+            },
+            "value": 897,
+            "row_count": 897,
+            "valid_count": 897,
+            "missing_count": 0
+          },
+          {
+            "function": "count",
+            "field": "product_id",
+            "group_values": {
+              "risk_level": "매우 낮은 위험"
+            },
+            "value": 355,
+            "row_count": 355,
+            "valid_count": 355,
+            "missing_count": 0
+          },
+          {
+            "function": "count",
+            "field": "product_id",
+            "group_values": {
+              "risk_level": "높은위험"
+            },
+            "value": 20,
+            "row_count": 20,
+            "valid_count": 20,
+            "missing_count": 0
+          },
+          {
+            "function": "count",
+            "field": "product_id",
+            "group_values": {
+              "risk_level": "보통위험"
+            },
+            "value": 8,
+            "row_count": 8,
+            "valid_count": 8,
+            "missing_count": 0
+          }
         ]
       }
     }

@@ -15,13 +15,18 @@ FROZEN = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(FROZEN)
 
 EXPECTED_HISTORICAL_BASELINE_ERRORS_SHA256 = (
-    # Reviewed on 2026-08-29 after the latest-data, HCLX Intent, adaptive
-    # semantic, official external-evidence, and dead-contract cleanup changes.
-    # The 29 tracked entries remain historical baseline drift; this hash is
-    # computed from a clean Git tree so ignored local evaluation artifacts
-    # cannot affect release QA. It does not approve current runtime behavior or
-    # rewrite immutable evidence.
-    "10352b171de43a9afe331a7cfe4212c59765c5597eb6e179b510147051d8f52d"
+    # Reviewed on 2026-08-31 after restoring 2026-08-24 official-data ingestion.
+    # Still 29 tracked entries of the same kinds as the 2026-08-29 review; only
+    # two existing entries gained one component each, both intentionally changed
+    # here: `docker-compose.yml` (development data-init could no longer reach the
+    # preparer excluded from the runtime image) and `test_data_prepare.py` (the
+    # workbook fixture now uses the organizer's redistributed file names).
+    # Previous reviewed hash:
+    # 10352b171de43a9afe331a7cfe4212c59765c5597eb6e179b510147051d8f52d
+    # The hash is computed from a clean Git tree so ignored local evaluation
+    # artifacts cannot affect release QA. It does not approve current runtime
+    # behavior or rewrite immutable evidence.
+    "255ebafa3ecc5f31c47332794f6fe9aacbf01419566a3a1cf54dd8224322289c"
 )
 
 
