@@ -148,7 +148,12 @@ _QUOTED = (
     re.compile(r"‘([^’\n]+)’"),
 )
 _KNOWN_ID = re.compile(
+    # Domestic ETP tickers are seven characters: an `A` (ETF) or `Q` (ETN)
+    # prefix, four digits, then two alphanumerics. Requiring the four digits
+    # keeps brand words such as ARIRANG or KODEX from being read as an
+    # identifier, and every approved domestic ticker matches this shape.
     r"(?<![A-Z0-9])(?:KR[A-Z0-9]{10}|(?:[A-Z]{2,5}|[0-9]{3}):[A-Z0-9._-]+|"
+    r"[AQ][0-9]{4}[A-Z0-9]{2}|"
     r"[A-Z][A-Z0-9]{0,9}\.[A-Z0-9]{1,5})(?![A-Z0-9])",
     re.IGNORECASE,
 )
@@ -233,15 +238,44 @@ def _normalize_product_mention(value: str) -> str:
     return stripped
 
 
+def _drop_enclosed_mentions(spans: list[tuple[int, int, str]]) -> list[tuple[int, int, str]]:
+    """Keep the widest span when one mention is printed inside another.
+
+    A quoted product name can contain its own ticker, and a labelled identifier
+    repeats the bare identifier. Counting those twice turns a single DETAIL
+    target into an ambiguous two-product request. Spans whose position could not
+    be located are neither dropped nor used to drop others.
+    """
+
+    return [
+        (start, end, value)
+        for start, end, value in spans
+        if start < 0
+        or not any(
+            other_start >= 0
+            and (other_start, other_end) != (start, end)
+            and other_start <= start
+            and end <= other_end
+            for other_start, other_end, _ in spans
+        )
+    ]
+
+
 def _product_mentions(question: str) -> list[str]:
-    mentions: list[tuple[int, str]] = []
+    mentions: list[tuple[int, int, str]] = []
     for pattern in _QUOTED:
-        mentions.extend((match.start(), match.group(1)) for match in pattern.finditer(question))
+        mentions.extend(
+            (match.start(1), match.end(1), match.group(1)) for match in pattern.finditer(question)
+        )
     known_id_matches = list(_KNOWN_ID.finditer(question))
-    mentions.extend((match.start(), match.group(0)) for match in known_id_matches)
-    mentions.extend((match.start(), match.group(1)) for match in _LABELED_ID.finditer(question))
+    mentions.extend((match.start(), match.end(), match.group(0)) for match in known_id_matches)
+    mentions.extend(
+        (match.start(1), match.end(1), match.group(1)) for match in _LABELED_ID.finditer(question)
+    )
     named_mentions = extract_named_product_mentions(question)
-    mentions.extend((question.find(value), value) for value in named_mentions)
+    mentions.extend(
+        (question.find(value), question.find(value) + len(value), value) for value in named_mentions
+    )
     if re.search(r"해외\s*(?:ETF|ETN|ETP)", question, re.IGNORECASE):
         bare_ticker_matches = [
             match
@@ -255,8 +289,11 @@ def _product_mentions(question: str) -> list[str]:
         if known_id_matches or (
             len(bare_ticker_matches) == 2 and _COMPARE.search(question) is not None
         ):
-            mentions.extend((match.start(), match.group(1)) for match in bare_ticker_matches)
-    return _ordered_unique(_normalize_product_mention(value) for _, value in sorted(mentions))
+            mentions.extend(
+                (match.start(1), match.end(1), match.group(1)) for match in bare_ticker_matches
+            )
+    kept = _drop_enclosed_mentions(mentions)
+    return _ordered_unique(_normalize_product_mention(value) for _, _, value in sorted(kept))
 
 
 def _unresolved_identifier_spans(question: str, mentions: list[str]) -> list[str]:
