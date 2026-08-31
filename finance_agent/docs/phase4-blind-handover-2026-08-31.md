@@ -71,23 +71,33 @@ Runtime에 연결하려면 별도 calibration, artifact SHA-256, Release manifes
 | question-only SHA-256 | `55f42578afa9e665920e5eee294bfd98a82661fc10404e7a4abecc8eb4c431eb` |
 | Gold 경로 | `/home/hyunholim/uploads/document-dense-blind/independent-holdout-phase4-gold-private.json` |
 
-Gold는 아직 열람·hash·parse하지 않았다. 이 상태가 최초 Blind의 전제다.
+이 저장소에는 Gold 내용·SHA-256·정답 정보가 기록되지 않는다. 최초 Blind는
+해영이형에게 별도 전달하는 clean question-only·Gold 복사본으로 수행하며,
+prediction 생성 전에는 Gold를 열람·hash·parse하지 않는다.
+
+Phase 4의 `P4-0001`~`P4-1000` sealed lab suite 계약은
+`run_sealed_lab_blind.py`와 `compare_sealed_blind.py`에 등록돼 있다. Runner는
+HCLX Intent·Schema Dense·bounded HCLX Semantic Resolver·Document Dense
+cache-first·NAVER API HUB 공식 검색·제공 DB 교집합·HCLX grounded answer를
+모두 ON으로 조립한다.
+
+Document Dense index와 calibration artifact는 Git에 넣지 않는다. 실제 all-on
+실행 전에는 해영이형의 검증된 artifact 경로·SHA-256과 KURE snapshot을 runner
+인자로 주입해야 한다.
 
 ## 다음 Sol 작업의 엄격한 순서
 
-1. `run_sealed_lab_blind.py`에 위 Phase 4 suite ID, `P4` ID prefix, 1,000건
-   계약을 등록하고 관련 pytest를 추가한다. 이 단계에서 Gold는 열지 않는다.
-2. clean commit에서 `git rev-parse HEAD`, question-only SHA, source diff SHA,
+1. clean commit에서 `git rev-parse HEAD`, question-only SHA, source diff SHA,
    네 DB SHA, relation/schema-dense/document-dense artifact SHA를 기록한다.
-3. `--preflight-only`로 Secret file, DB, artifact, runner 계약만 검증한다.
+2. `--preflight-only`로 Secret file, DB, artifact, runner 계약만 검증한다.
    HCLX 호출과 question-only 열람은 하지 않는다.
-4. 동일 clean commit·image·승인 입력으로 최초 1회 prediction을 생성한다.
+3. 동일 clean commit·image·승인 입력으로 최초 1회 prediction을 생성한다.
    결과 JSON과 receipt SHA-256을 먼저 고정한다.
-5. 그 뒤에만 Gold의 SHA를 확인하고 comparator로 상태·상품 ID·Top-N·수치·근거
+4. 그 뒤에만 Gold의 SHA를 확인하고 comparator로 상태·상품 ID·Top-N·수치·근거
    정확도, Precision, Recall, F1을 계산한다.
-6. Gold 공개 뒤 수정은 반드시 `post-gold-development-regression`으로 분리한다.
+5. Gold 공개 뒤 수정은 반드시 `post-gold-development-regression`으로 분리한다.
    최초 Blind prediction을 덮어쓰거나 재생성하지 않는다.
-7. Phase 1~4의 receipt와 report를 합쳐 통합 HTML 보고서를 작성한다.
+6. Phase 1~4의 receipt와 report를 합쳐 통합 HTML 보고서를 작성한다.
 
 ## 금지 사항
 

@@ -102,6 +102,13 @@ _SUPPORTED_SUITES = {
             "phase2": "2132e13e5c1cb9f820bd097f17f534dcd05e0c3eaf59821b4493cf014f0ad5d9",
         },
     },
+    "finance-agent-independent-holdout-phase4-v1-1000": {
+        "id_prefix": "P4",
+        "id_width": 4,
+        "case_count": 1000,
+        "status": "sealed_question_only_not_used_for_development",
+        "phase": 4,
+    },
 }
 
 
@@ -223,7 +230,8 @@ def _validate_question_only(
         )
     ):
         raise RuntimeError("question-only suite contract differs")
-    expected_ids = [f"{id_prefix}-{index:03d}" for index in range(1, case_count + 1)]
+    id_width = int(contract.get("id_width", 3))
+    expected_ids = [f"{id_prefix}-{index:0{id_width}d}" for index in range(1, case_count + 1)]
     if [item.get("id") for item in cases] != expected_ids:
         raise RuntimeError("question-only IDs differ")
     if any(

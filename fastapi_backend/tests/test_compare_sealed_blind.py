@@ -77,6 +77,33 @@ def test_phase3_600_case_question_only_contract_is_supported(tmp_path) -> None:
     assert cases[-1]["id"] == "P3-600"
 
 
+def test_phase4_1000_case_question_only_contract_is_supported(tmp_path) -> None:
+    payload = {
+        "schema_version": "1.0",
+        "suite_id": "finance-agent-independent-holdout-phase4-v1-1000",
+        "status": "sealed_question_only_not_used_for_development",
+        "phase": 4,
+        "case_count": 1000,
+        "cases": [
+            {"id": f"P4-{index:04d}", "question": f"질문 {index}"} for index in range(1, 1001)
+        ],
+    }
+    path = tmp_path / "phase4-questions.json"
+    path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+
+    metadata, cases = _validate_question_only(
+        path,
+        hashlib.sha256(path.read_bytes()).hexdigest(),
+    )
+
+    assert metadata["suite_id"] == "finance-agent-independent-holdout-phase4-v1-1000"
+    assert metadata["phase"] == 4
+    assert metadata["suite_case_count"] == 1000
+    assert len(cases) == 1000
+    assert cases[0]["id"] == "P4-0001"
+    assert cases[-1]["id"] == "P4-1000"
+
+
 def test_pre_gold_source_diff_file_is_verified(tmp_path) -> None:
     diff_file = tmp_path / "source.diff"
     diff_file.write_bytes(b"diff --git a/runtime.py b/runtime.py\n")
@@ -129,6 +156,29 @@ def test_phase3_600_case_gold_comparator_contract_is_supported(
         "cases": [{"id": f"P3-{index:03d}"} for index in range(1, 601)],
     }
     marker = {"phase3": "accepted"}
+    monkeypatch.setattr(sealed_comparator, "_compare_phase2", lambda *args, **kwargs: marker)
+
+    assert sealed_comparator.compare(predictions, gold) is marker
+
+
+def test_phase4_1000_case_gold_comparator_contract_is_supported(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    question_hash = "b" * 64
+    predictions = {
+        "suite_id": "finance-agent-independent-holdout-phase4-v1-1000",
+        "suite_phase": 4,
+        "answer_key_opened": False,
+        "question_count": 1000,
+        "questions_sha256": question_hash,
+        "results": [{"id": f"P4-{index:04d}"} for index in range(1, 1001)],
+    }
+    gold = {
+        "suite_id": predictions["suite_id"],
+        "questions_sha256": question_hash,
+        "cases": [{"id": f"P4-{index:04d}"} for index in range(1, 1001)],
+    }
+    marker = {"phase4": "accepted"}
     monkeypatch.setattr(sealed_comparator, "_compare_phase2", lambda *args, **kwargs: marker)
 
     assert sealed_comparator.compare(predictions, gold) is marker

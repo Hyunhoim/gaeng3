@@ -17,7 +17,17 @@ _SUPPORTED_SUITES = {
     "finance-agent-independent-holdout-v2-300": ("IH", 300, "phase1"),
     "finance-agent-independent-holdout-phase2-v1-300": ("P2", 300, "phase2"),
     "finance-agent-development-phase3-v1-600": ("P3", 600, "phase2_style"),
+    "finance-agent-independent-holdout-phase4-v1-1000": ("P4", 1000, "phase2_style"),
 }
+
+_SUITE_ID_WIDTHS = {
+    "finance-agent-independent-holdout-phase4-v1-1000": 4,
+}
+
+
+def _expected_ids(suite_id: str, prefix: str, case_count: int) -> set[str]:
+    width = _SUITE_ID_WIDTHS.get(suite_id, 3)
+    return {f"{prefix}-{index:0{width}d}" for index in range(1, case_count + 1)}
 
 
 def _sha256(path: Path) -> str:
@@ -383,7 +393,7 @@ def _compare_phase2(
     if suite_contract is None or suite_contract[2] not in {"phase2", "phase2_style"}:
         raise RuntimeError("prediction suite is not a registered Phase 2-style contract")
     id_prefix, case_count, _ = suite_contract
-    expected_ids = {f"{id_prefix}-{index:03d}" for index in range(1, case_count + 1)}
+    expected_ids = _expected_ids(suite_id, id_prefix, case_count)
     prediction_by_id = {item["id"]: item for item in predictions["results"]}
     gold_by_id = {item["id"]: item for item in gold.get("cases", ())}
     if set(prediction_by_id) != expected_ids or set(gold_by_id) != expected_ids:
@@ -698,7 +708,7 @@ def compare(
         raise RuntimeError("Gold and prediction question hashes differ")
     prediction_by_id = {item["id"]: item for item in predictions["results"]}
     gold_by_id = {item["id"]: item for item in gold.get("cases", ())}
-    expected_ids = {f"{id_prefix}-{index:03d}" for index in range(1, case_count + 1)}
+    expected_ids = _expected_ids(suite_id, id_prefix, case_count)
     if set(prediction_by_id) != expected_ids or set(gold_by_id) != expected_ids:
         raise RuntimeError("Gold or prediction IDs differ")
 
