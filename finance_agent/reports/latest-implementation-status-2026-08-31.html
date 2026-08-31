@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>금융상품 Agent 최신 구현 현황 — 2026-08-31</title>
+  <style>
+    :root {
+      --ink: #162033;
+      --muted: #5f6b7a;
+      --line: #dce3ec;
+      --panel: #ffffff;
+      --soft: #f5f8fc;
+      --navy: #183153;
+      --blue: #1769e0;
+      --green: #12805c;
+      --amber: #a35b00;
+      --red: #b42318;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: #edf2f8;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans KR", sans-serif;
+      line-height: 1.65;
+      word-break: keep-all;
+    }
+    main {
+      width: min(1120px, calc(100% - 32px));
+      margin: 28px auto 60px;
+    }
+    header {
+      padding: 38px 42px;
+      color: #fff;
+      border-radius: 20px;
+      background: linear-gradient(135deg, #122845, #1d4f87);
+      box-shadow: 0 14px 34px rgba(25, 49, 83, .18);
+    }
+    h1, h2, h3, p { margin-top: 0; }
+    h1 { margin-bottom: 10px; font-size: clamp(28px, 4vw, 43px); line-height: 1.25; }
+    h2 { margin: 0 0 18px; color: var(--navy); font-size: 25px; }
+    h3 { margin-bottom: 10px; color: var(--navy); font-size: 18px; }
+    header p { margin: 0; color: #dbe9f9; font-size: 17px; }
+    .meta { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 22px; }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 5px 10px;
+      border: 1px solid rgba(255, 255, 255, .25);
+      border-radius: 999px;
+      background: rgba(255, 255, 255, .1);
+      font-size: 13px;
+    }
+    section {
+      margin-top: 20px;
+      padding: 28px 30px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: var(--panel);
+      box-shadow: 0 5px 16px rgba(25, 49, 83, .05);
+    }
+    .summary {
+      border-left: 6px solid var(--blue);
+      font-size: 18px;
+    }
+    .summary strong { color: var(--blue); }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+    .card {
+      padding: 19px;
+      border: 1px solid var(--line);
+      border-radius: 13px;
+      background: var(--soft);
+    }
+    .card p:last-child, .card ul:last-child { margin-bottom: 0; }
+    ul { margin: 8px 0 0; padding-left: 21px; }
+    li + li { margin-top: 6px; }
+    code {
+      padding: 2px 6px;
+      border-radius: 6px;
+      color: #0f3b6d;
+      background: #e9f1fb;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: .92em;
+    }
+    .flow { display: grid; gap: 8px; }
+    .step {
+      position: relative;
+      padding: 14px 16px 14px 52px;
+      border: 1px solid var(--line);
+      border-radius: 11px;
+      background: #fbfdff;
+    }
+    .step::before {
+      content: attr(data-n);
+      position: absolute;
+      left: 14px;
+      top: 13px;
+      width: 25px;
+      height: 25px;
+      display: grid;
+      place-items: center;
+      color: #fff;
+      border-radius: 50%;
+      background: var(--blue);
+      font-weight: 700;
+      font-size: 13px;
+    }
+    .step b { color: var(--navy); }
+    table { width: 100%; border-collapse: collapse; font-size: 15px; }
+    th, td { padding: 12px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+    th { color: var(--navy); background: var(--soft); }
+    .ok { color: var(--green); font-weight: 700; }
+    .pending { color: var(--amber); font-weight: 700; }
+    .blocked { color: var(--red); font-weight: 700; }
+    .notice {
+      margin-top: 16px;
+      padding: 15px 17px;
+      border-radius: 10px;
+      color: #663c00;
+      background: #fff7e8;
+      border: 1px solid #f1d39d;
+    }
+    .small { color: var(--muted); font-size: 14px; }
+    footer { margin-top: 22px; color: var(--muted); text-align: center; font-size: 13px; }
+    @media (max-width: 760px) {
+      main { width: min(100% - 18px, 1120px); margin-top: 10px; }
+      header, section { padding: 23px 20px; border-radius: 13px; }
+      .grid { grid-template-columns: 1fr; }
+      table { display: block; overflow-x: auto; }
+    }
+    @media print {
+      body { background: #fff; }
+      main { width: 100%; margin: 0; }
+      header, section { box-shadow: none; break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>금융상품 Agent 최신 구현 현황</h1>
+    <p>제공 DB를 최종 기준으로 삼고, 필요한 경우에만 승인된 공식 외부 근거를 결합하는 필터 우선 단계별 적응형 검색 Agent</p>
+    <div class="meta">
+      <span class="badge">작성 기준: 2026-08-31</span>
+      <span class="badge">브랜치: hyunhoim</span>
+      <span class="badge">HEAD: 2433f98</span>
+      <span class="badge">PR #51 검토 대기</span>
+    </div>
+  </header>
+
+  <section class="summary">
+    <strong>현재 결론:</strong> 자연어 해석부터 SQL 실행·외부 근거 검색·최종 답변 생성까지의 안전 경계가 연결됐다. HCLX와 Dense는 의미 해석을 보조하지만 상품·수치·순위를 결정하지 않으며, 최종 결과는 제공 DB와 Verifier가 확정한다.
+  </section>
+
+  <section>
+    <h2>1. 이번 최신 구현의 핵심</h2>
+    <div class="grid">
+      <article class="card">
+        <h3>Typed Alias Registry 통합</h3>
+        <p>사용자 표현과 DB field의 연결 규칙을 한곳에 모았다. Router·Compiler·SemanticCoverageGate가 같은 해석 결과를 사용하므로 단계별 조건 유실과 해석 불일치를 줄인다.</p>
+      </article>
+      <article class="card">
+        <h3>HCLX 권한 제한</h3>
+        <p>HCLX는 Intent(질문 목적)와 검증된 근거의 문장화만 담당한다. SQL, 상품 추가, 수치 계산, 순위 변경 권한은 갖지 않는다.</p>
+      </article>
+      <article class="card">
+        <h3>선택적 의미 검색</h3>
+        <p>명확한 질문은 Ontology·Lexical Fast Path로 처리한다. 남은 표현에만 Schema Dense가 field 후보를 제안하고, 필요할 때만 HCLX Semantic Resolver가 후보 안에서 선택한다.</p>
+      </article>
+      <article class="card">
+        <h3>공식 외부 근거 경로</h3>
+        <p>구성종목·기업관계·테마·동향이 필요할 때만 공식 문서를 검색한다. 외부 근거에서 찾은 상품과 제공 DB 상품의 교집합만 답변 후보가 된다.</p>
+      </article>
+      <article class="card">
+        <h3>실패 상태 명확화</h3>
+        <p><code>NOT_FOUND</code>는 검증했지만 DB 교집합이 없는 경우, <code>CANNOT_VERIFY</code>는 공식 근거를 끝까지 확인하지 못한 경우, <code>CLARIFY</code>는 의미가 복수인 경우다.</p>
+      </article>
+      <article class="card">
+        <h3>공식 데이터 규칙 반영</h3>
+        <p>수치형 필터·정렬에서 0·결측값을 제외한다. 채권 구매 가능 여부는 무효화된 <code>BUYABLE_QUANTITY</code>를 검색 조건으로 사용하지 않는다.</p>
+      </article>
+    </div>
+  </section>
+
+  <section>
+    <h2>2. 현재 Agent 작동 흐름</h2>
+    <div class="flow">
+      <div class="step" data-n="1"><b>질문 접수·SafetyEnvelope</b> — 공격, 비금융, 예측·보장, 민감정보, 검증 우회 요청을 실행 전에 차단한다.</div>
+      <div class="step" data-n="2"><b>HCLX Intent 분석</b> — 닫힌 DTO 형식으로 SEARCH·DETAIL·COMPARE·AGGREGATE 등 질문 목적을 제안한다.</div>
+      <div class="step" data-n="3"><b>Ontology·Lexical 해석</b> — 명확한 상품군, 기간, 수익률, 정렬 방향, 수치 조건을 결정론적으로 확정한다.</div>
+      <div class="step" data-n="4"><b>Schema Dense·HCLX Resolver</b> — 아직 해석되지 않은 표현만 허용된 field 후보 안에서 제한적으로 해석한다.</div>
+      <div class="step" data-n="5"><b>SemanticCoverageGate</b> — 질문의 조건이 빠지거나 바뀌지 않았는지 검사한다. 미해결 표현이 남으면 SQL을 실행하지 않는다.</div>
+      <div class="step" data-n="6"><b>Typed QueryPlan 확정</b> — 서버가 상품군·filter·정렬·기간·limit를 검증하고 실행 가능한 계획만 승인한다.</div>
+      <div class="step" data-n="7"><b>제공 DB 검색</b> — SQLite/Python Oracle이 후보 고정, 필터, 정렬, 집계를 수행한다.</div>
+      <div class="step" data-n="8"><b>필요한 외부 근거만 검색</b> — Document Dense cache를 먼저 보고, 부족할 때 NAVER API HUB로 공식 원문 후보를 제한 검색한다.</div>
+      <div class="step" data-n="9"><b>DB 교집합·Verifier</b> — 공식 외부 근거의 상품을 제공 DB 상품과 결합하고 상품 ID·수치·기간·순위·출처를 재검산한다.</div>
+      <div class="step" data-n="10"><b>HCLX grounded answer</b> — 검증된 결과만 문장으로 만든 뒤 Answer Verifier를 통과한 답변을 API DTO로 반환한다.</div>
+    </div>
+  </section>
+
+  <section>
+    <h2>3. 구성요소별 현재 상태</h2>
+    <table>
+      <thead><tr><th>구성요소</th><th>상태</th><th>현재 역할과 경계</th></tr></thead>
+      <tbody>
+        <tr><td>SafetyEnvelope</td><td class="ok">구현·ON</td><td><code>UNSUPPORTED &gt; CLARIFY &gt; EXECUTE</code> 우선순위로 위험 요청의 축소 실행을 금지한다.</td></tr>
+        <tr><td>HCLX Intent</td><td class="ok">구현·ON</td><td>제한된 Intent DTO만 제안하며 malformed 응답은 1회 repair 후 fail-closed한다.</td></tr>
+        <tr><td>Ontology·Lexical</td><td class="ok">구현·ON</td><td>명확한 표현을 빠르고 결정론적으로 처리한다.</td></tr>
+        <tr><td>Schema Dense</td><td class="ok">후보 제안 ON</td><td>KURE 기반 의미 연결 후보만 제안하며 직접 실행 권한은 없다.</td></tr>
+        <tr><td>HCLX Semantic Resolver</td><td class="ok">제한 선택 ON</td><td>서버가 제공한 후보 밖 field나 filter·direction·limit 변경을 금지한다.</td></tr>
+        <tr><td>SQL/Python·Verifier</td><td class="ok">구현·ON</td><td>상품·수치·정렬·집계의 최종 결정권을 갖는다.</td></tr>
+        <tr><td>공식 Live Search</td><td class="ok">구현·ON</td><td>Source Registry 허용 출처만 탐색하고 검색 결과 자체는 근거로 사용하지 않는다.</td></tr>
+        <tr><td>Document Dense</td><td class="pending">배선 완료·artifact 필요</td><td>검증된 index·calibration을 주입하면 cache-first 검색으로 동작한다. pending corpus는 승인 전 운영 근거가 아니다.</td></tr>
+        <tr><td>제공 DB 교집합</td><td class="ok">구현·ON</td><td>외부 자료에 등장해도 제공 DB에 없는 상품은 반환하지 않는다.</td></tr>
+        <tr><td>HCLX 최종 답변</td><td class="ok">구현·ON</td><td>Verifier가 승인한 상품·수치·근거만 문장화한다.</td></tr>
+        <tr><td>Qwen</td><td class="ok">평가 Runtime 제외</td><td>최종 평가 경로에서는 사용하지 않는다.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>4. 외부 근거 검색의 안전 원칙</h2>
+    <ul>
+      <li>NAVER API HUB는 공식 원문 URL을 찾는 Discovery(후보 탐색) 용도이며, 검색 결과 요약문을 답변 근거로 사용하지 않는다.</li>
+      <li>Source Registry에 등록된 공식 도메인·경로·문서 유형만 허용한다.</li>
+      <li>HTML·PDF 원문에서 정확한 evidence span(근거 문장), 발행일, 대상 기간을 확인한다.</li>
+      <li>외부 자료는 제공 DB의 상품 검색을 보조할 뿐, 제공 DB에 없는 상품을 새로 추가하지 않는다.</li>
+      <li>외부 값이 공식 DB의 기존 값과 충돌하면 공식 DB가 우선한다.</li>
+      <li>근거가 부족할 때 일부 조건을 무시하고 답하지 않고 <code>CANNOT_VERIFY</code>로 종료한다.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>5. 검증 및 Git 상태</h2>
+    <table>
+      <thead><tr><th>항목</th><th>결과</th></tr></thead>
+      <tbody>
+        <tr><td>Agent Core 전체 테스트</td><td class="ok">1,862 passed · 1 skipped</td></tr>
+        <tr><td>FastAPI Backend 전체 테스트</td><td class="ok">463 passed · 1 skipped</td></tr>
+        <tr><td>관련 집중 회귀</td><td class="ok">60 passed</td></tr>
+        <tr><td>정적 검사·형식 검사</td><td class="ok">Ruff·format·git diff check 통과</td></tr>
+        <tr><td>현재 commit</td><td><code>2433f989b06de1e0b452c4e6fe34b03a05e75f71</code></td></tr>
+        <tr><td>원격 브랜치</td><td class="ok">HEAD = origin/hyunhoim · working tree clean</td></tr>
+        <tr><td>GitHub PR</td><td class="pending">PR #51 · 해영 담당자 review 필요</td></tr>
+        <tr><td>NCP 배포</td><td class="pending">이번 변경은 아직 배포하지 않음</td></tr>
+      </tbody>
+    </table>
+    <div class="notice"><b>보안 경계:</b> Secret, 공식 DB, 모델 weight, 평가 question-only, Gold, prediction 원문은 Git에 포함하지 않는다.</div>
+  </section>
+
+  <section>
+    <h2>6. 다음 단계와 완료 기준</h2>
+    <ol>
+      <li><b>PR 검토:</b> 해영 담당자가 권한 경계·조건 보존·외부 근거 교집합을 중심으로 PR #51을 검토한다.</li>
+      <li><b>Document Dense artifact 확정:</b> 승인 corpus 기반 KURE index와 calibration을 만들고 SHA-256으로 고정한다.</li>
+      <li><b>독립 성능 검증:</b> 동결된 코드·DB·index로 question-only 예측을 먼저 봉인한 뒤 Gold를 공개해 비교한다.</li>
+      <li><b>최종 배포:</b> 성능과 안전성 검증을 통과한 clean commit으로만 새 Release를 만들고, 사용자의 명시적 최종 승인 후 NCP에 배포한다.</li>
+    </ol>
+    <p class="small">성능 보고서와 구현 현황 보고서는 분리한다. 이 문서는 코드 구조와 준비 상태를 설명하며, 독립 Blind 성능 수치를 미리 단정하지 않는다.</p>
+  </section>
+
+  <footer>미래에셋증권 AI Festival 금융상품 Agent · 내부 공유용 구현 현황</footer>
+</main>
+</body>
+</html>
