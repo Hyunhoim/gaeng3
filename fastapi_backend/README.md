@@ -380,7 +380,7 @@ benchmark·soak 실행법과 2026-08-14 검증 결과는 다음 문서를 따른
 | --- | --- | --- |
 | `BACKEND_BIND_ADDRESS` | `127.0.0.1` | 호스트 바인딩 주소 |
 | `BACKEND_PORT` | `18001` | 호스트에서 접근할 Backend 포트 |
-| `FINANCE_RAW_DATA_DIR` | `../../2. Data/1. Raw/1.금융상품` | 읽기 전용 공식 XLSX 경로 |
+| `FINANCE_RAW_DATA_DIR` | `../../2. Data/1. Raw/2.금융상품_20260824` | 읽기 전용 공식 XLSX 경로 |
 | `APP_ENV` | `development` | 기본 Compose는 로컬 개발. `evaluation`·`production`은 전용 release manifest·Binding을 강제 |
 | `WEB_CONCURRENCY` | `1` | Uvicorn worker 수 |
 | `OFFICIAL_ANSWER_TIMEOUT_SECONDS` | `270` | 평가용 GET의 바깥쪽 응답 제한, 0초 초과 300초 미만만 허용 |

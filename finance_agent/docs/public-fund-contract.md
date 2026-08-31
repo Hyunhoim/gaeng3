@@ -52,7 +52,7 @@ expectation으로 고정
 
 ```bash
 conda run -n gaeng3-dev finance-data-audit \
-  --data-dir "../../../2. Data/1. Raw/1.금융상품" \
+  --data-dir "../../../2. Data/1. Raw/2.금융상품_20260824" \
   --output-dir artifacts/data-audit \
   --dataset fund
 ```
@@ -113,7 +113,7 @@ fund_quarantine
 
 ```bash
 conda run -n gaeng3-dev finance-build-etp \
-  --data-dir "../../../2. Data/1. Raw/1.금융상품" \
+  --data-dir "../../../2. Data/1. Raw/2.금융상품_20260824" \
   --dataset fund \
   --output artifacts/normalized/fund.sqlite3
 ```

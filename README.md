@@ -93,7 +93,7 @@ test -f fastapi_backend/.env || \
   cp fastapi_backend/.env.example fastapi_backend/.env
 ```
 
-기본 원천 데이터 경로는 프로젝트의 `2. Data/1. Raw/1.금융상품`. 다른 위치를
+기본 원천 데이터 경로는 프로젝트의 `2. Data/1. Raw/2.금융상품_20260824`. 다른 위치를
 사용한다면 `fastapi_backend/.env`의 `FINANCE_RAW_DATA_DIR` 수정
 
 ### 5.2 실행

@@ -149,7 +149,7 @@ conda run -n gaeng3-dev python scripts/check-docs.py
 Docker 없이 특정 상품군의 정규화와 결정론적 Agent 경로를 확인하는 개발 예시
 
 ```bash
-export FINANCE_DATA_DIR="/path/to/1.금융상품"
+export FINANCE_DATA_DIR="/path/to/2.금융상품_20260824"
 
 conda run -n gaeng3-dev \
   python -m finance_agent_core.storage \

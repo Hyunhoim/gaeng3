@@ -24,7 +24,7 @@ services:
       - "${BACKEND_HOST_GID:-10001}"
     volumes:
       - type: bind
-        source: ${FINANCE_RAW_DATA_DIR:-../../2. Data/1. Raw/1.금융상품}
+        source: ${FINANCE_RAW_DATA_DIR:-../../2. Data/1. Raw/2.금융상품_20260824}
         target: /raw
         read_only: true
         bind:

@@ -143,7 +143,7 @@ SOURCE_DATE_EPOCH=1785283200 \
 
 ```bash
 /home/haeyeongcho/miniforge3/envs/gaeng3-dev/bin/finance-data-audit \
-  --data-dir "../../../2. Data/1. Raw/1.금융상품" \
+  --data-dir "../../../2. Data/1. Raw/2.금융상품_20260824" \
   --output-dir artifacts/data-audit
 ```
 
