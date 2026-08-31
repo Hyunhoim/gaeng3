@@ -97,6 +97,11 @@ _UNAPPROVED_RELATION_FILTER = re.compile(
     r"[0-9A-Za-z가-힣&·+._-]{2,40}(?:을|를)\s*"
     r"(?:담(?:은|고\s*있는|긴)|포함(?:한|하는)|들고\s*있는)\s*"
     r"(?:국내\s*|해외\s*)?(?:ETF|ETN|ETP|공모\s*펀드|펀드|채권|상품|종목)|"
+    # A company/constituent weight requires external holdings evidence.  Keep
+    # the four approved public-fund allocation fields executable instead of
+    # treating them as unapproved constituent relations.
+    r"(?<![0-9A-Za-z가-힣&·+._-])"
+    r"(?!(?:국내|해외)\s*(?:주식|채권)\s*비중(?:이|을)?\s*(?:높은|큰|많은))"
     r"[0-9A-Za-z가-힣&·+._-]{2,40}\s*비중(?:이|을)?\s*(?:높은|큰|많은)|"
     r"[0-9A-Za-z가-힣&·+._/-]{2,60}\s*관련\s*(?:된\s*)?"
     r"(?:(?:국내|해외)\s*)?(?:투자\s*)?"

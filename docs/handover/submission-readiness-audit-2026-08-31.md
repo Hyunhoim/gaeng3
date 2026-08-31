@@ -108,7 +108,7 @@ registry 1.4 산출물이었고, 그래서 세 상품군의 DB 크기가 승인�
 ./compose.sh up --detach --wait
 ```
 
-- data-init이 8/24 공식 데이터로 네 SQLite와 관계 색인 37,787건을 생성하고 승인 검사 통과
+- data-init이 8/24 공식 데이터로 네 SQLite와 관계 색인 37,793건을 생성하고 승인 검사 통과
 - `/health`가 네 상품군 `ready`와 `relation_retrieval_status=ready` 반환
 - 공식 `GET /answer`가 다섯 문자열로 응답, 기준일 2026-08-21·2026-08-24 확인
 
@@ -290,7 +290,7 @@ NCP quota·429·5xx·공인 경로 지연은 아직 측정되지 않았다.
 | --- | ---: |
 | 문서 기재값 (7월 데이터) | 58,005 |
 | 팀원 8/25 빌드 (8월, registry 1.4) | 39,166 |
-| 현재 (8월, registry 1.5) | 37,787 |
+| 현재 (8월, registry 1.5) | 37,793 |
 
 `technical-proposal.md`, `finance_agent/README.md`, `project-baseline.md`,
 `system-architecture.md`가 교체된 데이터의 수치를 싣고 있어 제출 전 정정이 필요하다.

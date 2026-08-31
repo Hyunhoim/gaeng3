@@ -35,7 +35,7 @@
 - [ ] Git 이력을 재작성하지 않고 개발 이력과 제출 경로를 투명하게 분리
 - [x] 외부 문서의 금융·데이터 권한 독립 review·HTTPS 출처·본문 hash·변조 차단 계약
 - [x] 승인된 실제 외부 corpus가 없으므로 최종 평가 Release에서 문서 BM25를 OFF로 동결
-- [x] 승인 상품 DB 제공 관계 37,787개 색인·상품 ID 재검증·출처·해시 계약
+- [x] 승인 상품 DB 제공 관계 37,793개 색인·상품 ID 재검증·출처·해시 계약
 - [ ] 관계 값·한영 표기·동의어의 금융 도메인 검수
 - [x] P0-7 관계·문서 Typed Plan·Claim Verifier·결정론적 fallback 내부 계약
 - [x] P0-10 공개 Router·Backend adapter와 manifest에 해시로 고정된 Agent Release 계약 연결을 로컬에서 검증

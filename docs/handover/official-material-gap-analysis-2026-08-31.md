@@ -40,7 +40,7 @@ Retrieve(Federated Query) → Reason(LLM)**이며, 우리 구조는 이 형태�
 | 공식 자료가 요구하는 층 | 우리 구현 | 판정 |
 | --- | --- | --- |
 | Ontology (TBox, 런타임 통제) | `field_registry.yaml`에서 Turtle 5종을 생성하고 동일성을 검사. registry가 실행 권한·필드·연산자를 확정 | **강함** |
-| Knowledge Graph (ABox) | 승인 DB 기반 관계 색인 37,787개. 자산유형·투자지역·발행사 중심 | **약함** |
+| Knowledge Graph (ABox) | 승인 DB 기반 관계 색인 37,793개. 자산유형·투자지역·발행사 중심 | **약함** |
 | RDB (숫자·필터) | 네 상품군 SQLite, 결정론적 Oracle, 0·결측 제외 | **강함** |
 | Vector (의미 검색) | Schema Dense가 field 후보만 제안. 상품 Dense는 최종 Release에서 OFF | 보통 |
 | Federated Query (분해·라우팅·통합) | 질문을 capability 단위로 분해하고 상품군·정렬까지 계획 | **강함** |

@@ -215,7 +215,7 @@ hard filter·상품군·정렬 방향·limit·SQL 결과를 바꿀 권한이 없
 - 통화·단위·기준일이 호환되지 않으면 차이 또는 합산을 차단
 - 제공 데이터의 발행사·운용사·기초지수·자산유형·투자지역은 별도 SQLite FTS5
   관계 색인으로 구성하고, 후보 상품 ID를 공식 상품 DB에서 다시 확인
-- 현재 승인 DB에서 관계 37,787개와 검색 smoke 4/4를 검증하고, 관계·문서 전용
+- 현재 승인 DB에서 관계 37,793개와 검색 smoke 4/4를 검증하고, 관계·문서 전용
   Typed Plan과 Claim Verifier를 내부 경로에 연결
 - P0-10에서 안전 검사 → 결정론적 관계 Router → manifest에 해시로 고정된 public release 결속 →
   exact FTS 후보 → canonical 전체 일치 → 공식 DB identity 재검증 순서로 공개
@@ -255,7 +255,7 @@ Release에 연결한다.
   FastAPI 내부 `POST /answer`, 공식 `GET /answer` 계약, Ontology Turtle 5개,
   Docker 데이터 준비·HTTP smoke
 - 교차 상품군 SEARCH의 family별 근거 격리·답변 검증·전체 fallback
-- 승인 상품 DB의 제공 관계 37,787개 색인·공식 상품 ID 재검증·출처 추적
+- 승인 상품 DB의 제공 관계 37,793개 색인·공식 상품 ID 재검증·출처 추적
 - 관계 Typed Plan·정확 일치·manifest에 해시로 고정된 public release 계약·공식 DB identity 재검증·
   field evidence·결정론적 답변·인과적 Audit의 P0-10 로컬 공개 경로
 - 외부 통합 대기: Next.js, NCP의 실제 서명 배포·공인 IP,
@@ -328,7 +328,7 @@ Release에 연결한다.
 - 4종 원천 53,375행 감사, 핵심 expectation 55/55 (2026-08-24 공식 데이터)
 - Agent Core 1,763 passed·2 skipped, Backend 451 passed (2026-08-31 `15e1dd8`)
 - 공식 XLSX에서 SQLite 4개를 자동 생성·검증한 뒤 Backend를 시작하는 Docker 경로 완료
-- 승인 상품 DB 관계 37,787개·관계 계약 14/14·실제 검색 smoke 4/4와 공식 상품 ID 재검증 완료
+- 승인 상품 DB 관계 37,793개·관계 계약 14/14·실제 검색 smoke 4/4와 공식 상품 ID 재검증 완료
 - P0-7 관계·문서 계획·주장 검증 계약 22/22, 승인 관계 전체 경로 smoke 4/4
 - P0-10 집중 회귀 522/522, clean Docker Backend smoke
   8/8·공식 형식 GET 호환 smoke 8/8, 관계 질문 3 products/3 citations, 부분 표현 `not_found`,
