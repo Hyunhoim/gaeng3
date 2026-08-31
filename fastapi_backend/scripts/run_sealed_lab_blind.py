@@ -5,13 +5,14 @@ import hashlib
 import json
 import os
 import re
+import stat
 import time
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from finance_agent_core.agent import RoutedFinanceAgent, execute_answer_request
 from finance_agent_core.agent.adaptive_semantic import AdaptiveSemanticResolver
+from finance_agent_core.agent.backend_adapter import execute_answer_request
 from finance_agent_core.agent.external_knowledge_router import ExternalKnowledgeRouter
 from finance_agent_core.agent.external_search_planning import (
     ExternalSearchPlanCompiler,
@@ -19,19 +20,19 @@ from finance_agent_core.agent.external_search_planning import (
 )
 from finance_agent_core.agent.knowledge_router import DeterministicKnowledgeRouter
 from finance_agent_core.agent.official_adapter import official_response_from_backend
-from finance_agent_core.agent.providers import (
+from finance_agent_core.agent.providers.hyperclova import (
     HyperClovaXCallRecord,
     HyperClovaXFinalAnswerProvider,
-    HyperClovaXHTTPTransport,
     HyperClovaXIntentAnalysisProvider,
     HyperClovaXSemanticResolverProvider,
     HyperClovaXSettings,
 )
+from finance_agent_core.agent.providers.hyperclova_http import HyperClovaXHTTPTransport
+from finance_agent_core.agent.routed_service import RoutedFinanceAgent
 from finance_agent_core.config.source_registry import load_official_source_registry
 from finance_agent_core.contracts.backend import BackendAgentRequest
 from finance_agent_core.contracts.queryplan import ProductFamily
 from finance_agent_core.deadline import RequestDeadline, bind_request_deadline
-from finance_agent_core.evaluation.schema_dense_hclx_ab import _load_key_file
 from finance_agent_core.evaluation.schema_embedding_artifacts import (
     load_verified_schema_embedding_cpu_provider,
 )
@@ -76,8 +77,88 @@ from app.dependencies import _build_knowledge_agent
 
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _COMMIT = re.compile(r"^[0-9a-f]{40}$")
-_EXPECTED_SUITE_ID = "finance-agent-independent-holdout-v2-300"
-_EXPECTED_SUITE_STATUS = "sealed_question_only_not_used_for_development"
+_MAX_SECRET_BYTES = 16 * 1024
+_SUPPORTED_SUITES = {
+    "finance-agent-independent-holdout-v2-300": {
+        "id_prefix": "IH",
+        "case_count": 300,
+        "status": "sealed_question_only_not_used_for_development",
+        "phase": "phase1",
+    },
+    "finance-agent-independent-holdout-phase2-v1-300": {
+        "id_prefix": "P2",
+        "case_count": 300,
+        "status": "sealed_question_only_not_used_for_development",
+        "phase": "phase2",
+    },
+    "finance-agent-development-phase3-v1-600": {
+        "id_prefix": "P3",
+        "case_count": 600,
+        "status": "sealed_question_only",
+        "phase": "phase3",
+        "purpose": "error_discovery_and_knowledge_expansion",
+        "predecessor_question_sha256": {
+            "phase1": "080e00c13b37be45d060f1f17f2ac60c899b9b0e0ffb4d2b023b2bdad3918578",
+            "phase2": "2132e13e5c1cb9f820bd097f17f534dcd05e0c3eaf59821b4493cf014f0ad5d9",
+        },
+    },
+    "finance-agent-independent-holdout-phase4-v1-1000": {
+        "id_prefix": "P4",
+        "id_width": 4,
+        "case_count": 1000,
+        "status": "sealed_question_only_not_used_for_development",
+        "phase": 4,
+    },
+}
+
+
+def _load_owner_only_secret_file(path: Path) -> str:
+    """Read one immutable owner-only secret without evaluation-module coupling."""
+
+    if not path.is_absolute():
+        raise RuntimeError("secret file must be absolute")
+    descriptor: int | None = None
+    try:
+        descriptor = os.open(
+            path,
+            os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0),
+        )
+        before = os.fstat(descriptor)
+        if (
+            not stat.S_ISREG(before.st_mode)
+            or before.st_nlink != 1
+            or before.st_uid not in {0, os.geteuid()}
+            or before.st_mode & (stat.S_IRWXG | stat.S_IRWXO)
+            or not 0 < before.st_size <= _MAX_SECRET_BYTES
+        ):
+            raise RuntimeError("secret file is insecure")
+        payload = os.read(descriptor, before.st_size)
+        after = os.fstat(descriptor)
+        current = path.stat(follow_symlinks=False)
+        identity = lambda item: (
+            item.st_dev,
+            item.st_ino,
+            item.st_mode,
+            item.st_uid,
+            item.st_nlink,
+            item.st_size,
+            item.st_mtime_ns,
+            item.st_ctime_ns,
+        )
+        if len(payload) != before.st_size or identity(before) != identity(after):
+            raise RuntimeError("secret file changed while loading")
+        if identity(after) != identity(current):
+            raise RuntimeError("secret file changed while loading")
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
+    try:
+        value = payload.decode("ascii").strip()
+    except (UnicodeDecodeError, UnboundLocalError):
+        raise RuntimeError("secret file is invalid") from None
+    if not value or any(character.isspace() for character in value):
+        raise RuntimeError("secret file is invalid")
+    return value
 
 
 def _sha256(path: Path) -> str:
@@ -105,7 +186,23 @@ def _require_sha256(value: str, *, label: str) -> str:
     return value
 
 
-def _validate_question_only(path: Path, expected_sha256: str) -> list[dict[str, str]]:
+def _verify_pre_gold_source_state(arguments: argparse.Namespace) -> str | None:
+    expected = arguments.pre_gold_development_diff_sha256
+    diff_file = arguments.pre_gold_development_diff_file
+    if expected is None and diff_file is None:
+        return None
+    if expected is None or diff_file is None:
+        raise RuntimeError("pre-Gold development diff file and SHA-256 must be set together")
+    actual = _sha256(diff_file)
+    if actual != expected:
+        raise RuntimeError("pre-Gold development diff SHA-256 differs")
+    return actual
+
+
+def _validate_question_only(
+    path: Path,
+    expected_sha256: str,
+) -> tuple[dict[str, Any], list[dict[str, str]]]:
     if _sha256(path) != expected_sha256:
         raise RuntimeError("question-only SHA-256 differs from the sealed value")
     try:
@@ -113,15 +210,28 @@ def _validate_question_only(path: Path, expected_sha256: str) -> list[dict[str, 
     except (OSError, ValueError) as error:
         raise RuntimeError("question-only file is invalid") from error
     cases = payload.get("cases") if isinstance(payload, dict) else None
+    suite_id = payload.get("suite_id")
+    contract = _SUPPORTED_SUITES.get(suite_id)
+    if contract is None:
+        raise RuntimeError("question-only suite contract differs")
+    id_prefix = contract["id_prefix"]
+    case_count = contract["case_count"]
     if (
-        payload.get("suite_id") != _EXPECTED_SUITE_ID
-        or payload.get("status") != _EXPECTED_SUITE_STATUS
-        or payload.get("case_count") != 300
+        payload.get("status") != contract["status"]
+        or payload.get("phase") != contract["phase"]
+        or payload.get("case_count") != case_count
         or not isinstance(cases, list)
-        or len(cases) != 300
+        or len(cases) != case_count
+        or (contract.get("purpose") is not None and payload.get("purpose") != contract["purpose"])
+        or (
+            contract.get("predecessor_question_sha256") is not None
+            and payload.get("predecessor_question_sha256")
+            != contract["predecessor_question_sha256"]
+        )
     ):
         raise RuntimeError("question-only suite contract differs")
-    expected_ids = [f"IH-{index:03d}" for index in range(1, 301)]
+    id_width = int(contract.get("id_width", 3))
+    expected_ids = [f"{id_prefix}-{index:0{id_width}d}" for index in range(1, case_count + 1)]
     if [item.get("id") for item in cases] != expected_ids:
         raise RuntimeError("question-only IDs differ")
     if any(
@@ -133,7 +243,14 @@ def _validate_question_only(path: Path, expected_sha256: str) -> list[dict[str, 
         for item in cases
     ):
         raise RuntimeError("question-only case contains hidden labels or invalid input")
-    return cases
+    metadata = {
+        "suite_id": suite_id,
+        "phase": payload.get("phase"),
+        "phase1_reference": payload.get("phase1_reference"),
+        "predecessor_question_sha256": payload.get("predecessor_question_sha256"),
+        "suite_case_count": case_count,
+    }
+    return metadata, cases
 
 
 def _write_new_read_only(path: Path, payload: object) -> None:
@@ -251,7 +368,9 @@ def _build_agent(
     database_paths = _database_paths(arguments)
     hcx_settings = HyperClovaXSettings(model="HCX-007", timeout_seconds=45.0)
     calls: list[HyperClovaXCallRecord] = []
-    transport = HyperClovaXHTTPTransport(api_key=_load_key_file(arguments.hclx_key_file))
+    transport = HyperClovaXHTTPTransport(
+        api_key=_load_owner_only_secret_file(arguments.hclx_key_file)
+    )
 
     policy = SchemaDenseActivationPolicy(
         dense_min_score=arguments.schema_dense_min_score,
@@ -431,7 +550,7 @@ def _case_result(
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Run the sealed 300-case lab-only all-on blind evaluation."
+        description="Run a registered sealed lab-only all-on evaluation suite."
     )
     parser.add_argument("--questions", type=Path, required=True)
     parser.add_argument(
@@ -448,6 +567,19 @@ def _parser() -> argparse.ArgumentParser:
             "recorded clean commit"
         ),
     )
+    parser.add_argument(
+        "--pre-gold-development-diff-file",
+        type=Path,
+        help="read-only binary Git diff generated from the recorded source commit",
+    )
+    parser.add_argument(
+        "--pre-gold-development-diff-sha256",
+        type=lambda v: _require_sha256(v, label="pre-Gold development diff"),
+        help=(
+            "exact tracked Git diff for a first Blind run that evaluates reviewed "
+            "development changes before the answer key is opened"
+        ),
+    )
     parser.add_argument("--image-id", type=str, required=True)
     parser.add_argument(
         "--runner-sha256", type=lambda v: _require_sha256(v, label="runner"), required=True
@@ -462,7 +594,10 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--development-unapproved-databases",
         action="store_true",
-        help="post-Gold development rerun only; never valid for release or NCP deployment",
+        help=(
+            "lab-only frozen database mode; every DB SHA-256 is recorded, but the "
+            "result is never valid for release or NCP deployment"
+        ),
     )
     parser.add_argument("--relation-artifact", type=Path, required=True)
     parser.add_argument("--relation-artifact-sha256-file", type=Path, required=True)
@@ -484,9 +619,9 @@ def _parser() -> argparse.ArgumentParser:
         type=lambda v: _require_sha256(v, label="Schema Dense calibration file"),
         required=True,
     )
-    parser.add_argument("--schema-dense-min-score", type=float, default=0.382017)
+    parser.add_argument("--schema-dense-min-score", type=float, default=0.340015)
     parser.add_argument("--schema-dense-hclx-candidate-min-score", type=float, default=0.3)
-    parser.add_argument("--schema-dense-minimum-margin", type=float, default=0.007688)
+    parser.add_argument("--schema-dense-minimum-margin", type=float, default=0.042213)
     parser.add_argument("--kure-snapshot-dir", type=Path, required=True)
     parser.add_argument("--kure-snapshot-manifest", type=Path, required=True)
     parser.add_argument("--kure-cache-root", type=Path, required=True)
@@ -553,10 +688,17 @@ def main(argv: list[str] | None = None) -> int:
         raise SystemExit(
             "post-Gold development regression and development diff SHA-256 must be set together"
         )
+    if (
+        arguments.pre_gold_development_diff_sha256 is not None
+        and arguments.post_gold_development_regression
+    ):
+        raise SystemExit("pre-Gold and post-Gold development modes are mutually exclusive")
     if arguments.development_case_ids and not arguments.post_gold_development_regression:
         raise SystemExit("development case selection is forbidden for the first Blind run")
     if arguments.output.exists() or arguments.journal.exists():
         raise SystemExit("blind output or journal already exists")
+
+    verified_pre_gold_diff = _verify_pre_gold_source_state(arguments)
 
     # The question-only file is the last input opened. All executable code,
     # models, indexes, credentials and DB trust boundaries must assemble first.
@@ -568,6 +710,7 @@ def main(argv: list[str] | None = None) -> int:
                     "preflight": "passed_without_opening_question_only",
                     "source_commit": arguments.source_commit,
                     "development_diff_sha256": arguments.development_diff_sha256,
+                    "pre_gold_development_diff_sha256": verified_pre_gold_diff,
                     "image_id": arguments.image_id,
                     "hclx_model": "HCX-007",
                     "schema_dense_policy_sha256": (
@@ -582,7 +725,13 @@ def main(argv: list[str] | None = None) -> int:
             flush=True,
         )
         return 0
-    cases = _validate_question_only(arguments.questions, arguments.questions_sha256)
+    # Re-check after all runtime inputs assemble. A concurrent edit must never
+    # cross the boundary between the sealed source state and question exposure.
+    verified_pre_gold_diff = _verify_pre_gold_source_state(arguments)
+    suite_metadata, cases = _validate_question_only(
+        arguments.questions,
+        arguments.questions_sha256,
+    )
     if arguments.development_case_ids:
         requested_ids = [
             value.strip() for value in arguments.development_case_ids.split(",") if value.strip()
@@ -653,15 +802,25 @@ def main(argv: list[str] | None = None) -> int:
         "completed_at_utc": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
         "implementation_commit": arguments.source_commit,
         "development_diff_sha256": arguments.development_diff_sha256,
+        "pre_gold_development_diff_sha256": verified_pre_gold_diff,
         "image_id": arguments.image_id,
         "runner_sha256": arguments.runner_sha256,
         "questions_sha256": arguments.questions_sha256,
+        "suite_id": suite_metadata["suite_id"],
+        "suite_phase": suite_metadata["phase"],
+        "phase1_reference": suite_metadata["phase1_reference"],
         "question_count": len(cases),
-        "suite_question_count": 300,
+        "suite_question_count": suite_metadata["suite_case_count"],
+        "predecessor_question_sha256": suite_metadata["predecessor_question_sha256"],
         "database_sha256s": {
             family.value: _sha256(path)
             for family, path in sorted(database_paths.items(), key=lambda item: item[0].value)
         },
+        "database_approval_mode": (
+            "lab_frozen_sha256_not_release_approved"
+            if arguments.development_unapproved_databases
+            else "release_approved"
+        ),
         "schema_dense_index_sha256": arguments.schema_dense_index_sha256,
         "schema_dense_activation_policy_sha256": agent.adaptive_semantic_resolver.schema_linker.policy.policy_sha256,
         "schema_dense_calibration_sha256": arguments.schema_dense_calibration_sha256,

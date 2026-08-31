@@ -21,7 +21,7 @@ from finance_agent_core.contracts.external_knowledge import (
     KnowledgeTimeRange,
     predicate_for_capability,
 )
-from finance_agent_core.contracts.queryplan import SortDirection
+from finance_agent_core.contracts.queryplan import ProductFamily, SortDirection
 from finance_agent_core.contracts.routing import InteractionIntent
 
 
@@ -35,7 +35,11 @@ _CAPABILITY_SIGNAL: dict[KnowledgeCapability, re.Pattern[str]] = {
     ),
     KnowledgeCapability.CORPORATE_SUBSIDIARY: re.compile(r"자회사|계열사|가족사", re.IGNORECASE),
     KnowledgeCapability.SECTOR_THEME_HISTORY: re.compile(
-        r"테마|섹터|산업|연결\s*이력|연관\s*이력", re.IGNORECASE
+        r"테마|섹터|산업|연결\s*이력|연관\s*이력|"
+        r"관련\s*(?:된\s*)?(?:국내\s*|해외\s*)?(?:ETF|ETN|ETP)|"
+        r"^(?:국내\s*|해외\s*)?(?:ETF|ETN|ETP)$|"
+        r"[A-Za-z][A-Za-z0-9._-]{2,40}\s+(?:국내\s*|해외\s*)?(?:ETF|ETN|ETP)",
+        re.IGNORECASE,
     ),
     KnowledgeCapability.FUND_STRUCTURE_STRATEGY_TREND: re.compile(
         r"구조|투자\s*전략|운용\s*동향|판매|향후\s*일정", re.IGNORECASE
@@ -63,6 +67,12 @@ _ONE_YEAR_RETURN = re.compile(
     re.IGNORECASE,
 )
 _DESCENDING = re.compile(r"큰|높|많|상위|TOP|내림차순", re.IGNORECASE)
+_PERFORMANCE_RANKING = re.compile(
+    r"(?:수익률|성과|실적)\s*(?:이\s*)?(?:높은\s*)?(?:순|상위|TOP)|"
+    r"(?:순|상위|TOP).{0,8}(?:수익률|성과|실적)",
+    re.IGNORECASE,
+)
+_SUBJECTIVE_THEME = re.compile(r"테마로\s*(?:볼|분류할)\s*수\s*있는", re.IGNORECASE)
 _REQUESTED_PRODUCT_FIELD_PATTERNS: dict[str, re.Pattern[str]] = {
     "aum": _AUM,
     "investment_region": re.compile(r"투자\s*지역|지역", re.IGNORECASE),
@@ -84,6 +94,42 @@ _CAPABILITY_ORDER = {
     KnowledgeCapability.FUND_STRUCTURE_STRATEGY_TREND: 3,
     KnowledgeCapability.PRODUCT_RISK_FACTORS: 4,
 }
+_REQUIREMENT_FAMILY_CUES: dict[ProductFamily, re.Pattern[str]] = {
+    ProductFamily.BOND: re.compile(r"(?:원화|국내)?\s*채권", re.IGNORECASE),
+    ProductFamily.DOMESTIC_ETP: re.compile(r"국내\s*(?:ETF|ETN|ETP)", re.IGNORECASE),
+    ProductFamily.OVERSEAS_ETP: re.compile(r"해외\s*(?:ETF|ETN|ETP)", re.IGNORECASE),
+    ProductFamily.FUND: re.compile(r"(?:공모\s*)?펀드", re.IGNORECASE),
+}
+
+
+def _requirement_families(
+    subject: str,
+    relation: str,
+    global_families: tuple[ProductFamily, ...],
+) -> tuple[ProductFamily, ...]:
+    """Bind an external relation to its explicit local product-family clause."""
+
+    surface = f"{subject} {relation}"
+    scoped = tuple(
+        family for family, cue in _REQUIREMENT_FAMILY_CUES.items() if cue.search(surface)
+    )
+    if scoped:
+        allowed = set(global_families)
+        return tuple(
+            sorted(
+                (family for family in scoped if not allowed or family in allowed),
+                key=lambda item: item.value,
+            )
+        )
+    if re.search(r"(?<![A-Za-z])(?:ETF|ETN|ETP)(?![A-Za-z])", surface, re.IGNORECASE):
+        etp_families = {
+            ProductFamily.DOMESTIC_ETP,
+            ProductFamily.OVERSEAS_ETP,
+        }
+        selected = etp_families.intersection(global_families)
+        if selected:
+            return tuple(sorted(selected, key=lambda item: item.value))
+    return global_families
 
 
 def _subtract_months(value: date, months: int) -> date:
@@ -228,6 +274,26 @@ class CompositeKnowledgePlanCompiler:
                 and KnowledgeCapability.PORTFOLIO_HOLDINGS in capability_id
             ):
                 dependencies = (capability_id[KnowledgeCapability.PORTFOLIO_HOLDINGS],)
+            requirement_families = _requirement_families(
+                subject_span,
+                relation_span,
+                families,
+            )
+            if not requirement_families:
+                raise CompositeKnowledgePlanningError(
+                    "external relation product-family scope conflicts with the request"
+                )
+            requirement_signals = (
+                None
+                if source_selection_signals is None
+                else SourceSelectionSignals(
+                    product_families=requirement_families,
+                    db_confirmed_aliases=source_selection_signals.db_confirmed_aliases,
+                    matched_product_names=source_selection_signals.matched_product_names,
+                    matched_source_owners=source_selection_signals.matched_source_owners,
+                    explicit_identity_bound=source_selection_signals.explicit_identity_bound,
+                )
+            )
             compiled_requirements.append(
                 KnowledgeRequirement(
                     requirement_id=f"need_{index}",
@@ -237,7 +303,7 @@ class CompositeKnowledgePlanCompiler:
                     search_aliases=tuple(sorted(item.search_aliases)),
                     subject_evidence_span=subject_span,
                     relation_evidence_span=relation_span,
-                    product_families=families,
+                    product_families=requirement_families,
                     time_range=(
                         time_range
                         if item.capability
@@ -252,12 +318,19 @@ class CompositeKnowledgePlanCompiler:
                         item.capability,
                         question=question,
                         subject=subject_span,
-                        signals=source_selection_signals,
+                        signals=requirement_signals,
                     ),
                     depends_on=dependencies,
                 )
             )
         requirements = tuple(compiled_requirements)
+
+        if _SUBJECTIVE_THEME.search(question) is not None and any(
+            item.capability is KnowledgeCapability.SECTOR_THEME_HISTORY for item in requirements
+        ):
+            raise CompositeKnowledgePlanningError(
+                "theme meaning is subjective; state an explicit related/linked theme condition"
+            )
 
         product_selection = None
         ranking_fields = (
@@ -275,6 +348,10 @@ class CompositeKnowledgePlanCompiler:
         if len(ranking_fields) > 1:
             raise CompositeKnowledgePlanningError(
                 "external product selection contains multiple ranking metrics"
+            )
+        if _PERFORMANCE_RANKING.search(question) is not None and not ranking_fields:
+            raise CompositeKnowledgePlanningError(
+                "external performance ranking requires an explicit supported period"
             )
         if ranking_fields:
             if not _DESCENDING.search(question):

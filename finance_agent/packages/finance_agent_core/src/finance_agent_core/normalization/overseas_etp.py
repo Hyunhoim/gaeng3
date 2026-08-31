@@ -253,8 +253,14 @@ def normalize_overseas_etp_row(
         field="discrepancy",
     )
 
-    is_quarantined = present_source_fields < SPARSE_PRESENT_FIELD_THRESHOLD
-    quarantine_reason = "sparse_source_row" if is_quarantined else None
+    # The organizer explicitly defines missing cells as intentional field-level
+    # absence.  A row that still has the required product identity must remain
+    # searchable for its valid fields; sparsity alone cannot quarantine the
+    # whole product. Required identity/type/name failures are rejected earlier
+    # by the strict parsers instead.
+    sparse_source_row = present_source_fields < SPARSE_PRESENT_FIELD_THRESHOLD
+    is_quarantined = False
+    quarantine_reason = None
 
     return NormalizedOverseasEtpRecord(
         source_row=source_row,
@@ -262,7 +268,7 @@ def normalize_overseas_etp_row(
         present_source_fields=present_source_fields,
         is_quarantined=is_quarantined,
         quarantine_reason=quarantine_reason,
-        row_quality=QualityStatus.PARTIAL if is_quarantined else QualityStatus.VALID,
+        row_quality=QualityStatus.PARTIAL if sparse_source_row else QualityStatus.VALID,
         source_values={column: _raw_scalar(values.get(column)) for column in SOURCE_COLUMNS},
         product_id=f"{exchange_code}:{ticker}",
         product_type=product_type,
@@ -274,6 +280,7 @@ def normalize_overseas_etp_row(
         trading_suspended=_boolean_code(values.get("pd_tr_yn"), field="pd_tr_yn"),
         asset_type=_text(values.get("wu_inv_ast_type"), field="wu_inv_ast_type"),
         investment_region=_text(values.get("wu_inv_rgn"), field="wu_inv_rgn"),
+        manager=_text(values.get("cu_fund_mgmt_co"), field="cu_fund_mgmt_co"),
         total_expense_ratio_pct=fee,
         total_expense_ratio_quality=fee_quality,
         total_expense_ratio_quality_reason=fee_reason,

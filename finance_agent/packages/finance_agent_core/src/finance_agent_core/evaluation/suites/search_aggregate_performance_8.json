@@ -5,8 +5,8 @@
   "status": "public_performance_regression_not_blind",
   "data": {
     "overseas_etp": {
-      "database_sha256": "4d0ac2972ff4bae01e72041b4aad1f9b1222fc7f4c8a16a87ecab4746549e2f2",
-      "manifest_sha256": "fc9b3831a839e88477ebd669913c3aa1a8fb1e5b0ca89158318a7db07ea992d1",
+      "database_sha256": "04513fd545ed19916459efe25f836e9bac52d1269de3dcb093798297bdfa9402",
+      "manifest_sha256": "8f5ee98da7b340d49bebefe478894933fe2d0477d1abb5236248a15d0984888b",
       "source_file_sha256": "ca6a274aeaf3f884f2f7635d7802558bc6dabf408871ecb1f71e5a50d9d34067"
     },
     "domestic_etp": {
@@ -81,26 +81,26 @@
       "executor": "routed",
       "question": "해외 ETF의 총보수율 평균과 최댓값을 집계해줘",
       "expected": {
-        "candidate_count": 5958,
+        "candidate_count": 5972,
         "top_product_ids": [],
         "aggregates": [
           {
             "function": "avg",
             "field": "total_expense_ratio_pct",
             "group_values": {},
-            "value": "0.543856854695",
-            "row_count": 5958,
-            "valid_count": 5602,
-            "missing_count": 356
+            "value": "0.543841202712",
+            "row_count": 5972,
+            "valid_count": 5604,
+            "missing_count": 368
           },
           {
             "function": "max",
             "field": "total_expense_ratio_pct",
             "group_values": {},
             "value": "2.5",
-            "row_count": 5958,
-            "valid_count": 5602,
-            "missing_count": 356
+            "row_count": 5972,
+            "valid_count": 5604,
+            "missing_count": 368
           }
         ]
       }

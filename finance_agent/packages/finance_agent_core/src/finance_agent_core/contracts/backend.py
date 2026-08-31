@@ -159,12 +159,33 @@ class BackendAgentResponse(BackendContractModel):
                 item.source_manifest for item in self.family_searches
             ]:
                 raise ValueError("source_manifests must match family_searches")
-            if [product.product_id for product in self.products] != [
+            product_ids = [product.product_id for product in self.products]
+            family_product_ids = [
                 product_id
                 for item in self.family_searches
                 for product_id in item.returned_product_ids
-            ]:
-                raise ValueError("products must preserve family search result order")
+            ]
+            if product_ids != family_product_ids:
+                # A global TOP-K is allowed to interleave the exact family
+                # results, but it cannot add/drop products or reorder products
+                # inside any one family result.
+                unmatched = list(family_product_ids)
+                for product_id in product_ids:
+                    try:
+                        unmatched.remove(product_id)
+                    except ValueError as error:
+                        raise ValueError(
+                            "products must contain only family search results"
+                        ) from error
+                if unmatched:
+                    raise ValueError("products must contain every family search result")
+                for family_search in self.family_searches:
+                    positions = [
+                        product_ids.index(product_id)
+                        for product_id in family_search.returned_product_ids
+                    ]
+                    if positions != sorted(positions):
+                        raise ValueError("products must preserve each family search result order")
         elif self.source_manifests:
             raise ValueError("source_manifests require family_searches")
         if self.status is BackendStatus.SUCCESS:
@@ -180,14 +201,20 @@ class BackendAgentResponse(BackendContractModel):
             if self.error is not None or self.clarification is not None:
                 raise ValueError("success response cannot contain control details")
         elif self.status is BackendStatus.NOT_FOUND:
-            if (
-                self.products
-                or self.comparisons
-                or self.aggregates
-                or self.documents
-                or self.citations
-            ):
-                raise ValueError("not_found response cannot contain evidence")
+            if self.products or self.comparisons or self.aggregates:
+                raise ValueError("not_found response cannot contain product evidence")
+            # External identity/relationship verification may prove the named
+            # concept from an approved official source and still yield an empty
+            # intersection with the provided product DB.  Those source excerpts
+            # explain *why* NOT_FOUND is trustworthy; they must never carry a
+            # product or turn a plain SQL empty result into web evidence.
+            if self.documents or self.citations or self.as_of_dates:
+                if not isinstance(self.query_plan, CompositeKnowledgeQueryPlan):
+                    raise ValueError(
+                        "only external-knowledge not_found may contain source evidence"
+                    )
+                if not self.documents or not self.citations:
+                    raise ValueError("external not_found evidence requires documents and citations")
             if self.candidate_count != 0:
                 raise ValueError("not_found response requires candidate_count=0")
         elif self.status is BackendStatus.CANNOT_VERIFY:

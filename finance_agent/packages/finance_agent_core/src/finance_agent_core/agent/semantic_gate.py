@@ -3,8 +3,12 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
+from finance_agent_core.agent.presentation import mask_response_presentation
 from finance_agent_core.agent.safety import data_scope_policy_surface, normalize_user_question
-from finance_agent_core.agent.semantic_aliases import SemanticAliasMatch, rank_alias_matches
+from finance_agent_core.agent.semantic_aliases import (
+    TypedAliasMatch,
+    typed_alias_matches,
+)
 from finance_agent_core.contracts.queryplan import ProductFamily
 
 
@@ -86,7 +90,9 @@ _UNAPPROVED_RELATION_FILTER = re.compile(
     r"(?:편입|보유|구성)(?:한|하는|하고\s*있는|된|된\s*종목|\s*종목|\s*자산)|"
     r"(?:구성\s*종목|보유\s*종목|편입\s*종목)|"
     r"(?:연결|연관)\s*이력|자회사.{0,24}?(?:편입|보유|구성)|"
-    r"[0-9A-Za-z가-힣&·+._/-]{2,60}\s*관련\s*(?:된\s*)?(?:투자\s*)?상품",
+    r"[0-9A-Za-z가-힣&·+._/-]{2,60}\s*관련\s*(?:된\s*)?"
+    r"(?:(?:국내|해외)\s*)?(?:투자\s*)?"
+    r"(?:상품|ETF|ETN|ETP)",
     re.IGNORECASE,
 )
 _UNAPPROVED_DOCUMENT_KNOWLEDGE = re.compile(
@@ -101,9 +107,16 @@ _EXPLICIT_RETURN = re.compile(
     r"18\s*개월|1\s*년|연간|1Y|2\s*년|3\s*년|5\s*년|YTD|"
     r"연초\s*(?:이후|대비))\s*(?:수익률|수익|성과|return)|"
     r"(?:매수|세후|세전)\s*수익률|민평\s*(?:(?:기준\s*)?수익률|금리)|"
-    r"민평에서\s*(?:계산|산출)된?\s*(?:수익률|금리)|"
+    r"민평에서\s*(?:계산|산출)(?:된|한)?\s*(?:수익률|금리)|"
     r"(?:민간평가\s*금리|평가기관\s*수익률)|(?:연환산\s*)?분배\s*수익률|"
     r"(?:표면\s*(?:이율|금리)|쿠폰\s*금리)",
+    re.IGNORECASE,
+)
+_EXPLICIT_PERIOD_RETURN = re.compile(
+    r"(?:1\s*일|하루|당일|오늘|일간|1D|1\s*주|일주일|주간|1W|"
+    r"1\s*개월|한\s*달|월간|1M|3\s*개월|석\s*달|3M|6\s*개월|반년|6M|"
+    r"18\s*개월|1\s*년|연간|1Y|2\s*년|3\s*년|5\s*년|YTD|"
+    r"연초\s*(?:이후|대비))\s*(?:수익률|수익|성과|return)",
     re.IGNORECASE,
 )
 _BARE_RETURN = re.compile(r"수익률|성과|\breturn\b", re.IGNORECASE)
@@ -133,8 +146,9 @@ _EXACT_RISK = re.compile(
 _RISK_GROUP = re.compile(r"위험\s*등급\s*(?:별|분포|비중)", re.IGNORECASE)
 _RISK_PROJECTION = re.compile(
     r"위험\s*(?:등급(?:\s*명)?|도|성)(?:을|를|은|는|이|가|과|와|,|\s)*"
-    r"(?:알려|보여|정리|조회|제시|설명)|"
-    r"(?:알려|보여|정리|조회|제시|설명).{0,20}"
+    r"(?:(?:원천값|데이터에\s*적힌\s*값)(?:\s*그대로|대로)?\s*)?"
+    r"(?:알려|보여|정리|조회|제시|설명|확인)|"
+    r"(?:알려|보여|정리|조회|제시|설명|확인).{0,20}"
     r"위험\s*(?:등급(?:\s*명)?|도|성)",
     re.IGNORECASE,
 )
@@ -145,7 +159,8 @@ _VAGUE_STABILITY = re.compile(
 )
 _GENERIC_PREFERENCE = re.compile(
     r"대표적(?:인|이다)?|인기\s*(?:있는|많은)|효율(?:이|가)?\s*높(?:은|다)?|"
-    r"부담(?:이|가)?\s*(?:적|작)(?:은|다)?|유망(?:한|하다)?|알짜(?:인|다)?|"
+    r"부담(?:이|가)?\s*(?:(?:적|작)(?:은|다)?|없(?:는|다)?|되지\s*않(?:는|다)?)|"
+    r"무난(?:한|하다)?|유망(?:한|하다)?|알짜(?:인|다)?|"
     r"조건(?:이|가)?\s*(?:괜찮|좋)|비용\s*대비\s*괜찮(?:은|다)?|"
     r"추천할\s*만한|(?<!않은\s)좋은|괜찮은|싼",
     re.IGNORECASE,
@@ -163,6 +178,22 @@ _DIRECTION_TERM = re.compile(
     r"ascending|descending",
     re.IGNORECASE,
 )
+_GENERIC_NUMERIC_THRESHOLD = re.compile(
+    r"-?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?\s*"
+    r"(?:%|퍼센트)?\s*보다\s*(?:큰|높은|작은|낮은)",
+    re.IGNORECASE,
+)
+_ANSWER_ORDER_EXPLANATION = re.compile(
+    r"(?:첫|선두|맨\s*앞).{0,24}?왜.{0,10}?먼저|왜\s*(?:가장\s*)?먼저(?:인지|인가)",
+    re.IGNORECASE,
+)
+_GLOBAL_RANKING_SCOPE = re.compile(
+    r"통합\s*(?:비교|정렬|순위)|한\s*줄\s*순위|(?:한\s*순위에\s*)?합쳐|"
+    r"통합\s*(?:높은|낮은)\s*순|함께\s*(?:비교|정렬|순위)|"
+    r"한\s*(?:목록|리스트)(?:으로|에)?|따로\s*나누지\s*말고|"
+    r"직접\s*비교|통틀어|전체\s*순위",
+    re.IGNORECASE,
+)
 _POTENTIAL_SCHEMA_GAP = re.compile(
     r"(?P<span>[A-Za-z가-힣][A-Za-z0-9가-힣._/-]{1,30}?)"
     r"(?:이|가|은|는|을|를)?\s*(?:높은|낮은|큰|작은|많은|적은)",
@@ -177,7 +208,7 @@ _DIRECTION_METRIC_PATTERN = (
     r"연간\s*분배\s*(?:지급\s*)?횟수|분배\s*(?:지급\s*)?횟수|"
     r"판매(?:\s*회사)?\s*보수|신탁\s*업자\s*보수|수탁보수|"
     r"(?:국내|해외)(?:주식|채권)\s*(?:구성비율|비중)|최근\s*분배율|보전율|"
-    r"민평\s*(?:(?:기준\s*)?수익률|금리)|민평에서\s*(?:계산|산출)된?\s*(?:수익률|금리)|"
+    r"민평\s*(?:(?:기준\s*)?수익률|금리)|민평에서\s*(?:계산|산출)(?:된|한)?\s*(?:수익률|금리)|"
     r"민간평가\s*금리|평가기관\s*수익률|"
     r"평가일단가|평가\s*단가|클린\s*프라이스|이자\s*제외\s*평가(?:단가|가격)|"
     r"이자부단가|경과이자(?:를)?\s*포함(?:한)?\s*(?:단가|가격)|컨벡시티|가격\s*굴곡|"
@@ -218,7 +249,9 @@ _SAFE_EXCLUSION = re.compile(
     r"외(?:의|에는|로)?)|"
     r"거래\s*(?:중지|정지)(?:된|인)?\s*(?:상품|것)?"
     r"(?:은|는|을|를)?\s*(?:제외(?:하고|한|해)?|말고|빼고)|"
-    r"미국\s*제외\s*글로벌|"
+    r"미국(?:을)?\s*제외(?:한)?\s*글로벌(?:\s*지역)?(?:\s*\(Global\s*Ex\s*US\))?|"
+    r"따로\s*나누지\s*말고|"
+    r"이자(?:를)?\s*(?:제외|뺀)\s*평가(?:단가|가격)|"
     r"연금\s*거래\s*불가.{0,16}?(?:제외(?:하고|한|해)?|말고|빼고)|"
     r"잔존\s*(?:일수|일).{0,20}?초과.{0,16}?(?:제외|말고|빼고)|"
     r"환헤지(?:를)?\s*하지\s*않는.{0,16}?(?:제외|말고|빼고)|"
@@ -242,10 +275,16 @@ _UNLABELED_PRODUCT_NAME = re.compile(
     re.IGNORECASE,
 )
 _EXPLICIT_NAME_FILTER = re.compile(
-    r"(?:상품명|정식\s*상품명|짧은\s*이름|약어명)"
-    r".{0,40}?(?:포함|들어간|contains)",
+    r"(?:(?:상품명|정식\s*상품명|짧은\s*이름|약어명)"
+    r".{0,40}?(?:포함|들어간|contains)|"
+    r"정확(?:한)?\s*(?:상품명|이름|명칭)(?:이|은|가)?\s*[:：]?)",
     re.IGNORECASE,
 )
+_PER_FAMILY_IDENTITY_BATCH = re.compile(
+    r"각각|나란히|상품군별로|모두\s*포함한\s*목록|한\s*답변에서|한\s*번에",
+    re.IGNORECASE,
+)
+_LATEST_DB_VALUE = re.compile(r"최신\s*(?:DB|데이터베이스|제공\s*데이터)\s*값", re.IGNORECASE)
 
 _NUMERIC_SORT_METRIC_PATTERN = (
     r"(?:AUM|순자산(?:총액)?|운용\s*자산|(?:총\s*)?발행\s*(?:잔액|금액|규모|물량)|"
@@ -256,7 +295,7 @@ _NUMERIC_SORT_METRIC_PATTERN = (
     r"연간\s*분배\s*(?:지급\s*)?횟수|분배\s*(?:지급\s*)?횟수|"
     r"판매(?:\s*회사)?\s*보수|신탁\s*업자\s*보수|수탁보수|"
     r"(?:국내|해외)(?:주식|채권)\s*(?:구성비율|비중)|최근\s*분배율|보전율|"
-    r"민평\s*(?:(?:기준\s*)?수익률|금리)|민평에서\s*(?:계산|산출)된?\s*(?:수익률|금리)|"
+    r"민평\s*(?:(?:기준\s*)?수익률|금리)|민평에서\s*(?:계산|산출)(?:된|한)?\s*(?:수익률|금리)|"
     r"민간평가\s*금리|평가기관\s*수익률|"
     r"평가일단가|평가\s*단가|클린\s*프라이스|이자\s*제외\s*평가(?:단가|가격)|"
     r"이자부단가|경과이자(?:를)?\s*포함(?:한)?\s*(?:단가|가격)|컨벡시티|가격\s*굴곡|"
@@ -400,7 +439,7 @@ def _covered_by_resolved_alias(
 def _compatible_trailing_alias_direction(
     question: str,
     match: re.Match[str],
-    alias_matches: tuple[SemanticAliasMatch, ...],
+    alias_matches: tuple[TypedAliasMatch, ...],
 ) -> bool:
     """Accept a redundant trailing sort cue for one nearest resolved alias."""
 
@@ -454,10 +493,31 @@ def _schema_link_gap_matches(
         "기준",
         "기준으로",
         "좋은",
+        "비교해",
+        "비교하여",
+        "비교하려고",
+        "단위로",
+        "수익률",
+        "보다",
+        "대상으로",
+        "골라",
+        "남겨",
+        "추려",
+        "추린",
+        "뽑아",
+        "뽑고",
+        "선택하고",
+        "통합",
+        "주세요",
+        "알려",
+        "보여",
+        "제시",
+        "정리",
     }
     exact_risk_ranges = [match.span() for match in _EXACT_RISK.finditer(question)]
     for match in _POTENTIAL_SCHEMA_GAP.finditer(question):
         span = match.group("span").strip()
+        normalized_span = span.casefold().strip("._/-")
         contextual_raw_qualifier = span in {"원천값", "수치"} and _known_field_surface(
             question[max(0, match.start() - 40) : match.start()]
         )
@@ -466,7 +526,7 @@ def _schema_link_gap_matches(
             or any(
                 match.start() < right and match.end() > left for left, right in exact_risk_ranges
             )
-            or span.casefold() in blocked_tokens
+            or normalized_span in blocked_tokens
             or contextual_raw_qualifier
             or re.fullmatch(
                 r"(?:상품|종목|것|개|건)(?:을|를|은|는|이|가)?",
@@ -502,7 +562,7 @@ class SemanticCoverageGate:
         interaction_intent: str | None = None,
         check_exclusions: bool = True,
     ) -> SemanticCoverageDecision:
-        normalized = normalize_user_question(question)
+        normalized = mask_response_presentation(normalize_user_question(question)).strip()
         scope_surface = data_scope_policy_surface(normalized)
         if interaction_intent in {"clarify", "unsupported"}:
             return SemanticCoverageDecision()
@@ -516,16 +576,17 @@ class SemanticCoverageGate:
             if pattern.search(normalized)
         )
         if not alias_families:
-            alias_matches = rank_alias_matches(normalized)
+            typed_aliases = typed_alias_matches(normalized)
         else:
-            alias_matches = tuple(
+            typed_aliases = tuple(
                 {
                     (item.rule_id, item.start, item.end): item
                     for family in alias_families
-                    for item in rank_alias_matches(normalized, family)
+                    for item in typed_alias_matches(normalized, family)
                 }.values()
             )
-        alias_ranges = tuple((item.start, item.end) for item in alias_matches)
+        rank_aliases = tuple(item for item in typed_aliases if item.operation == "rank")
+        alias_ranges = tuple((item.start, item.end) for item in typed_aliases)
 
         if match := _TRANSACTIONAL_ACTION.search(normalized):
             unsupported.append(match.group(0))
@@ -565,11 +626,33 @@ class SemanticCoverageGate:
             ambiguities.append(match.group(0))
         for match in _DIRECTIONLESS_SORT.finditer(normalized):
             if _DIRECTION_TERM.search(match.group(0)) is None:
+                if (
+                    (
+                        len({item.field_id for item in rank_aliases}) == 1
+                        or len(list(_EXPLICIT_PERIOD_RETURN.finditer(normalized))) == 1
+                    )
+                    and _GLOBAL_RANKING_SCOPE.search(normalized) is not None
+                    and _DIRECTION_TERM.search(normalized[match.end() :]) is not None
+                ):
+                    continue
                 ambiguities.append(match.group(0))
 
         return_surface = _EXPLICIT_RETURN.sub(" ", normalized)
+        resolved_return_fields = {
+            item.field_id
+            for item in rank_aliases
+            if "return_pct" in item.field_id or "yield_pct" in item.field_id
+        }
+        explicit_period_returns = list(_EXPLICIT_PERIOD_RETURN.finditer(normalized))
         if match := _BARE_RETURN.search(return_surface):
-            if not _overlaps_any(match.start(), match.end(), alias_ranges):
+            # A repeated bare "수익률" in a numeric threshold refers to the
+            # one explicit period metric already locked in the same question.
+            # Multiple resolved return fields remain ambiguous and fail closed.
+            if (
+                not _overlaps_any(match.start(), match.end(), alias_ranges)
+                and len(resolved_return_fields) != 1
+                and len(explicit_period_returns) != 1
+            ):
                 ambiguities.append(match.group(0))
 
         if (match := _CHEAP.search(normalized)) and _EXPLICIT_CHEAP_METRIC.search(
@@ -614,10 +697,32 @@ class SemanticCoverageGate:
         else:
             ambiguities.extend(detected_schema_gaps)
 
+        explanation_ranges = tuple(
+            item.span() for item in _ANSWER_ORDER_EXPLANATION.finditer(normalized)
+        )
+        generic_threshold_ranges = tuple(
+            item.span() for item in _GENERIC_NUMERIC_THRESHOLD.finditer(normalized)
+        )
+        exact_risk_ranges = tuple(item.span() for item in _EXACT_RISK.finditer(normalized))
         for match in _DIRECTION_TERM.finditer(normalized):
+            if _overlaps_any(match.start(), match.end(), exact_risk_ranges):
+                continue
+            if match.group(0).strip() == "먼저" and _overlaps_any(
+                match.start(), match.end(), explanation_ranges
+            ):
+                continue
+            if len(explicit_period_returns) == 1 and _overlaps_any(
+                match.start(), match.end(), generic_threshold_ranges
+            ):
+                continue
             if _covered_by_resolved_alias(match.start(), match.end(), alias_ranges):
                 continue
-            if _compatible_trailing_alias_direction(normalized, match, alias_matches):
+            if (
+                len(explicit_period_returns) == 1
+                and _GLOBAL_RANKING_SCOPE.search(normalized) is not None
+            ):
+                continue
+            if _compatible_trailing_alias_direction(normalized, match, rank_aliases):
                 continue
             if any(
                 candidate.start() <= match.start() <= candidate.end() + 8
@@ -643,14 +748,24 @@ class SemanticCoverageGate:
 
         if interaction_intent in {None, "search"}:
             explicit_name_filter = _EXPLICIT_NAME_FILTER.search(normalized) is not None
+            batch_families = set(alias_families)
+            if _BRANDED_PRODUCT.search(normalized) is not None:
+                batch_families.add(ProductFamily.DOMESTIC_ETP)
+            family_identity_batch = (
+                _PER_FAMILY_IDENTITY_BATCH.search(normalized) is not None
+                and len(batch_families) > 1
+            )
             if not explicit_name_filter:
                 for match in _QUOTED_PRODUCT.finditer(normalized):
                     if match.group(1).strip().upper() not in {"ETF", "ETN", "ETP"}:
                         ambiguities.append(match.group(0))
-                if match := _BRANDED_PRODUCT.search(normalized):
+                if (match := _BRANDED_PRODUCT.search(normalized)) and not family_identity_batch:
                     ambiguities.append(match.group(0))
                 if match := _UNLABELED_PRODUCT_NAME.search(normalized):
                     ambiguities.append(match.group(0))
+
+        if _LATEST_DB_VALUE.search(normalized) is not None:
+            ambiguities = [item for item in ambiguities if item.strip() != "최신"]
 
         return SemanticCoverageDecision(
             ambiguity_spans=_unique(ambiguities),

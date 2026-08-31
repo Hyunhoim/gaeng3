@@ -21,6 +21,12 @@ _BRANDED_PRODUCT = re.compile(
     r"[?!.,]|$)",
     re.IGNORECASE,
 )
+_EXPLICIT_BRANDED_NAME = re.compile(
+    rf"(?:정확한?\s*)?(?:상품명|이름|명칭)(?:이|은|가)?\s*[:：]?\s*"
+    rf"(?P<name>\b(?:{_BRAND})\b(?:\s+[0-9A-Za-z가-힣&·+._/-]+){{1,10}}?)"
+    r"(?=\s*인\s+(?:(?:국내|한국)\s*)?(?:ETF|ETN|ETP)(?:을|를|이|가|은|는|\s|$))",
+    re.IGNORECASE,
+)
 _NAMED_FUND = re.compile(
     r"(?<![0-9A-Za-z가-힣])"
     r"(?P<name>[0-9A-Za-z가-힣&·+._/-]{2,48}펀드)"
@@ -44,19 +50,46 @@ _GENERIC_FUND_NAMES = frozenset(
 )
 
 
+def _trim_branded_product_surface(value: str) -> str:
+    """Remove request grammar greedily captured after one branded name."""
+
+    normalized = " ".join(value.split())
+    normalized = re.split(
+        r"\s+(?:최신|DB|데이터|값|정보|상세|찾아|알려|보여|검색|조회|비교|"
+        r"각각|나란히|상품군별로)(?:\s|$)",
+        normalized,
+        maxsplit=1,
+        flags=re.IGNORECASE,
+    )[0]
+    return re.sub(r"(?:의|을|를|은|는|이|가)$", "", normalized).strip()
+
+
 def extract_named_product_mentions(question: str) -> list[str]:
     """Extract narrow product-name surfaces without guessing a DB identity."""
 
-    matches: list[tuple[int, str]] = []
+    matches: list[tuple[int, int, str]] = []
+    exact_spans = [
+        (match.start("name"), match.end("name"), match.group("name").strip())
+        for match in _EXPLICIT_BRANDED_NAME.finditer(question)
+    ]
+    matches.extend(exact_spans)
     matches.extend(
-        (match.start(), match.group("name").strip())
+        (
+            match.start(),
+            match.end(),
+            _trim_branded_product_surface(match.group("name")),
+        )
         for match in _BRANDED_PRODUCT.finditer(question)
+        if not any(
+            match.start() < exact_end and exact_start < match.end()
+            for exact_start, exact_end, _ in exact_spans
+        )
     )
     for match in _NAMED_FUND.finditer(question):
         value = match.group("name").strip()
         if value.casefold() not in _GENERIC_FUND_NAMES:
-            matches.append((match.start(), value))
-    return list(dict.fromkeys(value for _, value in sorted(matches)))
+            matches.append((match.start(), match.end(), value))
+    return list(dict.fromkeys(value for _, _, value in sorted(matches)))
 
 
 def is_named_product_mention(value: str) -> bool:

@@ -5,7 +5,10 @@ import io
 import json
 import re
 import unicodedata
+from collections import OrderedDict
+from difflib import SequenceMatcher
 from html.parser import HTMLParser
+from threading import Lock
 from urllib.parse import parse_qs, urlsplit
 
 from pypdf import PdfReader
@@ -56,6 +59,162 @@ _SUBSIDIARY_PAIR = re.compile(
     r"(?P<child>[0-9A-Za-z가-힣&·+._/-]{2,80})",
     re.IGNORECASE,
 )
+
+_HANGUL_INITIAL = (
+    "g",
+    "kk",
+    "n",
+    "d",
+    "tt",
+    "r",
+    "m",
+    "b",
+    "pp",
+    "s",
+    "ss",
+    "",
+    "j",
+    "jj",
+    "ch",
+    "k",
+    "t",
+    "p",
+    "h",
+)
+_HANGUL_VOWEL = (
+    "a",
+    "ae",
+    "ya",
+    "yae",
+    "eo",
+    "e",
+    "yeo",
+    "ye",
+    "o",
+    "wa",
+    "wae",
+    "oe",
+    "yo",
+    "u",
+    "wo",
+    "we",
+    "wi",
+    "yu",
+    "eu",
+    "ui",
+    "i",
+)
+_HANGUL_FINAL = (
+    "",
+    "k",
+    "k",
+    "k",
+    "n",
+    "n",
+    "n",
+    "t",
+    "l",
+    "k",
+    "m",
+    "p",
+    "t",
+    "t",
+    "p",
+    "t",
+    "m",
+    "p",
+    "p",
+    "t",
+    "t",
+    "ng",
+    "t",
+    "t",
+    "k",
+    "t",
+    "p",
+    "t",
+)
+_ASCII_ENTITY_TOKEN = re.compile(r"(?<![A-Za-z])[A-Z][A-Za-z]{3,39}(?![A-Za-z])")
+_GENERIC_ASCII_ENTITY_TOKENS = frozenset(
+    {
+        "company",
+        "corporation",
+        "fund",
+        "holding",
+        "holdings",
+        "investment",
+        "official",
+        "portfolio",
+        "semiconductor",
+        "strategy",
+        "technologies",
+    }
+)
+
+
+def _hangul_romanization_key(value: str) -> str:
+    """Return a deterministic phonetic key, not a linguistic translation.
+
+    The key is used only to recover an exact Latin spelling already present in
+    an approved official document.  It never creates evidence or authorizes a
+    source on its own.
+    """
+
+    output: list[str] = []
+    for character in unicodedata.normalize("NFKC", value):
+        codepoint = ord(character)
+        if 0xAC00 <= codepoint <= 0xD7A3:
+            offset = codepoint - 0xAC00
+            initial = offset // 588
+            vowel = (offset % 588) // 28
+            final = offset % 28
+            output.extend(
+                (
+                    _HANGUL_INITIAL[initial],
+                    _HANGUL_VOWEL[vowel],
+                    _HANGUL_FINAL[final],
+                )
+            )
+    return "".join(output)
+
+
+def _official_cross_script_aliases(subject: str, text: str) -> tuple[str, ...]:
+    """Find one conservative exact Latin spelling for a Hangul proper name.
+
+    HCLX aliases remain proposals.  If a proposal is misspelled but discovery
+    still reaches an approved document, this function may recover a repeated
+    source-authored proper-name token whose phonetic key is uniquely close to
+    the Hangul subject.  A relation signal and a provided-DB product identity
+    must still occur in the same verified excerpt before execution.
+    """
+
+    romanized = _hangul_romanization_key(subject)
+    if len(romanized) < 5:
+        return ()
+    occurrences: dict[str, int] = {}
+    for match in _ASCII_ENTITY_TOKEN.finditer(text):
+        token = match.group(0)
+        normalized = token.casefold()
+        if normalized in _GENERIC_ASCII_ENTITY_TOKENS:
+            continue
+        occurrences[token] = occurrences.get(token, 0) + 1
+    scored = []
+    for token, count in occurrences.items():
+        if count < 2:
+            continue
+        folded = token.casefold()
+        length_ratio = len(folded) / len(romanized)
+        if not 0.55 <= length_ratio <= 1.45:
+            continue
+        score = SequenceMatcher(None, romanized, folded).ratio()
+        if score >= 0.64:
+            scored.append((score, token))
+    scored.sort(key=lambda item: (-item[0], item[1].casefold()))
+    if not scored:
+        return ()
+    if len(scored) > 1 and scored[0][0] - scored[1][0] < 0.08:
+        return ()
+    return (scored[0][1],)
 
 
 def _parent_only_subsidiaries(parent: str, excerpt: str) -> tuple[str, ...]:
@@ -244,6 +403,141 @@ class VerifiedLiveRelationExtractor:
     present in the same bounded excerpt as the subject and relation signal.
     """
 
+    def __init__(self, *, text_cache_entries: int = 64) -> None:
+        if not 1 <= text_cache_entries <= 256:
+            raise ValueError("text_cache_entries must be between 1 and 256")
+        self._text_cache_entries = text_cache_entries
+        self._text_cache: OrderedDict[str, str | None] = OrderedDict()
+        self._text_cache_lock = Lock()
+
+    def _snapshot_text(self, snapshot: OfficialSourceSnapshot) -> str:
+        """Extract each immutable official document at most once per runtime."""
+
+        if hashlib.sha256(snapshot.content).hexdigest() != snapshot.content_sha256:
+            raise OfficialLiveEvidenceError("official snapshot content SHA-256 differs")
+        with self._text_cache_lock:
+            if snapshot.content_sha256 in self._text_cache:
+                cached = self._text_cache.pop(snapshot.content_sha256)
+                self._text_cache[snapshot.content_sha256] = cached
+                if cached is None:
+                    raise OfficialLiveEvidenceError(
+                        "official document previously failed text extraction"
+                    )
+                return cached
+            try:
+                extracted = extract_official_snapshot_text(snapshot)
+            except OfficialLiveEvidenceError:
+                extracted = None
+            self._text_cache[snapshot.content_sha256] = extracted
+            self._text_cache.move_to_end(snapshot.content_sha256)
+            while len(self._text_cache) > self._text_cache_entries:
+                self._text_cache.popitem(last=False)
+        if extracted is None:
+            raise OfficialLiveEvidenceError("official document text extraction failed")
+        return extracted
+
+    def extract_subject_evidence(
+        self,
+        snapshots: tuple[OfficialSourceSnapshot, ...],
+        requirement: KnowledgeRequirement,
+    ) -> tuple[ExternalEvidenceReference, ...]:
+        """Verify only the named external entity, without inventing a relation.
+
+        This narrow primitive supports an empty-intersection result such as an
+        officially documented company/model name for which the complete
+        provided-product DB has no matching product identity.  It is not a
+        holdings/theme relation extractor: callers must keep relation-bearing
+        or time-bounded questions on the stricter ``extract`` path.
+        """
+
+        subjects = tuple(
+            dict.fromkeys(
+                value
+                for value in (requirement.subject, *requirement.search_aliases)
+                if _normalized(value)
+            )
+        )
+        normalized_subjects = tuple(_normalized(value) for value in subjects)
+        evidence: dict[str, ExternalEvidenceReference] = {}
+        for snapshot in snapshots:
+            if snapshot.capability is not requirement.capability:
+                continue
+            if requirement.time_range is not None:
+                # A dated relationship/history request cannot be satisfied by
+                # proving only that the subject itself exists.
+                continue
+            try:
+                text = self._snapshot_text(snapshot)
+            except OfficialLiveEvidenceError:
+                continue
+            for ordinal, excerpt in enumerate(
+                chunk_document(text, max_chars=1200, overlap_chars=200)
+            ):
+                normalized_excerpt = _normalized(excerpt)
+                if not any(subject in normalized_excerpt for subject in normalized_subjects):
+                    continue
+                suffix = f"{snapshot.content_sha256[:24]}:{ordinal}"
+                item = ExternalEvidenceReference(
+                    evidence_id=f"live-subject:{suffix}",
+                    source_registry_id=snapshot.source.source_id,
+                    document_id=(
+                        f"live-{snapshot.source.source_id}-{snapshot.content_sha256[:16]}"
+                    ),
+                    title=snapshot.title,
+                    publisher=snapshot.source.publisher,
+                    source_uri=snapshot.source_uri,
+                    published_at=snapshot.published_at,
+                    as_of=snapshot.as_of,
+                    content_sha256=snapshot.content_sha256,
+                    locator=f"extracted chunk {ordinal}",
+                    excerpt=excerpt,
+                )
+                evidence[item.evidence_id] = item
+                # One exact official excerpt per fetched document is enough to
+                # verify the entity identity and keeps the response bounded.
+                break
+        return tuple(evidence[key] for key in sorted(evidence))
+
+    @staticmethod
+    def _theme_product_has_explicit_relation(
+        excerpt: str,
+        product: ProvidedProductCandidate,
+        subjects: tuple[str, ...],
+        signal: re.Pattern[str],
+    ) -> bool:
+        """Require one sentence/line to bind theme, relation and DB product.
+
+        A product whose approved name contains the requested theme remains a
+        valid table-style match. Otherwise all three elements must co-occur in
+        one bounded sentence or source line. This admits explicit prose such as
+        ``상품 X는 우주항공 테마 관련 ETF`` without letting neighbouring table
+        rows inherit the heading.
+        """
+
+        product_surfaces = tuple(
+            value
+            for value in (
+                _normalized(product.product_name),
+                *(_normalized(alias) for alias in product.aliases),
+            )
+            if value
+        )
+        if any(
+            subject in product_surface
+            for subject in subjects
+            for product_surface in product_surfaces
+        ):
+            return True
+        units = tuple(
+            unit.strip() for unit in re.split(r"(?:\r?\n)+|(?<=[.!?])\s+", excerpt) if unit.strip()
+        )
+        return any(
+            signal.search(unit) is not None
+            and any(subject in _normalized(unit) for subject in subjects)
+            and any(product_surface in _normalized(unit) for product_surface in product_surfaces)
+            for unit in units
+        )
+
     @staticmethod
     def _kodex_product_page_id(snapshot: OfficialSourceSnapshot) -> str | None:
         if snapshot.source.source_id != "samsungfund-kodex-product":
@@ -276,8 +570,8 @@ class VerifiedLiveRelationExtractor:
         )
         return None if match is None else match.group(1)
 
-    @staticmethod
     def _kodex_page_bindings(
+        self,
         snapshots: tuple[OfficialSourceSnapshot, ...],
         universe: ProvidedProductCandidateUniverse,
     ) -> dict[str, list[tuple[OfficialSourceSnapshot, ProvidedProductCandidate, str, int]]]:
@@ -290,18 +584,37 @@ class VerifiedLiveRelationExtractor:
             if page_id is None:
                 continue
             try:
-                page_text = extract_official_snapshot_text(snapshot)
+                page_text = self._snapshot_text(snapshot)
             except OfficialLiveEvidenceError:
                 continue
+            page_candidates = intersect_evidence_with_provided_products(
+                universe,
+                (page_text,),
+            )
+            page_universe = self._narrowed_universe(universe, page_candidates)
             for ordinal, excerpt in enumerate(
                 chunk_document(page_text, max_chars=1200, overlap_chars=200)
             ):
                 for product in intersect_evidence_with_provided_products(
-                    universe,
+                    page_universe,
                     (excerpt,),
                 ):
                     bindings.setdefault(page_id, []).append((snapshot, product, excerpt, ordinal))
         return bindings
+
+    @staticmethod
+    def _narrowed_universe(
+        universe: ProvidedProductCandidateUniverse,
+        candidates: tuple[ProvidedProductCandidate, ...],
+    ) -> ProvidedProductCandidateUniverse:
+        """Keep immutable DB provenance while reducing repeated chunk joins."""
+
+        return ProvidedProductCandidateUniverse(
+            candidates=candidates,
+            database_sha256s=universe.database_sha256s,
+            candidate_filter_sha256=universe.candidate_filter_sha256,
+            explicit_identity_bound=universe.explicit_identity_bound and bool(candidates),
+        )
 
     def _extract_linked_kodex_holdings(
         self,
@@ -471,7 +784,7 @@ class VerifiedLiveRelationExtractor:
         for opaque_id in sorted(set(page_bindings) & set(pdf_snapshots)):
             for pdf_snapshot in pdf_snapshots[opaque_id]:
                 try:
-                    pdf_text = extract_official_snapshot_text(pdf_snapshot)
+                    pdf_text = self._snapshot_text(pdf_snapshot)
                 except OfficialLiveEvidenceError:
                     continue
                 risk_chunks = tuple(
@@ -590,8 +903,18 @@ class VerifiedLiveRelationExtractor:
             raise OfficialLiveEvidenceError("source is not approved for live evidence")
         if snapshot.capability is not requirement.capability:
             raise OfficialLiveEvidenceError("snapshot capability differs from requirement")
-        text = extract_official_snapshot_text(snapshot)
+        text = self._snapshot_text(snapshot)
         subject_surfaces = tuple(dict.fromkeys((requirement.subject, *requirement.search_aliases)))
+        normalized_document = _normalized(text)
+        if not any(_normalized(surface) in normalized_document for surface in subject_surfaces):
+            subject_surfaces = tuple(
+                dict.fromkeys(
+                    (
+                        *subject_surfaces,
+                        *_official_cross_script_aliases(requirement.subject, text),
+                    )
+                )
+            )
         subjects = tuple(value for surface in subject_surfaces if (value := _normalized(surface)))
         if requirement.capability is KnowledgeCapability.SECTOR_THEME_HISTORY:
             expanded_subjects = set(subjects)
@@ -607,7 +930,33 @@ class VerifiedLiveRelationExtractor:
             if requirement.capability is KnowledgeCapability.CORPORATE_SUBSIDIARY
             else None
         )
-        for ordinal, excerpt in enumerate(chunk_document(text, max_chars=1200, overlap_chars=200)):
+        chunks = tuple(chunk_document(text, max_chars=1200, overlap_chars=200))
+        document_candidates = intersect_evidence_with_provided_products(
+            universe,
+            (text,),
+        )
+        document_universe = self._narrowed_universe(universe, document_candidates)
+        document_product_bindings: dict[str, tuple[ProvidedProductCandidate, int, str]] = {}
+        for chunk_ordinal, chunk_excerpt in enumerate(chunks):
+            for candidate in intersect_evidence_with_provided_products(
+                document_universe,
+                (chunk_excerpt,),
+            ):
+                document_product_bindings.setdefault(
+                    candidate.product_id,
+                    (candidate, chunk_ordinal, chunk_excerpt),
+                )
+        # Some official single-product reports put the product identity on the
+        # cover and holdings/risk evidence on later pages.  A same-chunk join
+        # is therefore too strict.  Admit a two-span join only when the entire
+        # immutable document binds exactly one provided-DB product.  Multi-
+        # product catalogues remain on the stricter same-chunk path.
+        unique_document_binding = (
+            next(iter(document_product_bindings.values()))
+            if len(document_product_bindings) == 1
+            else None
+        )
+        for ordinal, excerpt in enumerate(chunks):
             normalized_excerpt = _normalized(excerpt)
             if (
                 not subjects
@@ -675,7 +1024,15 @@ class VerifiedLiveRelationExtractor:
                         )
                     )
                 continue
-            products = intersect_evidence_with_provided_products(universe, (excerpt,))
+            products = intersect_evidence_with_provided_products(document_universe, (excerpt,))
+            document_identity_evidence: dict[str, tuple[int, str]] = {}
+            if not products and unique_document_binding is not None:
+                bound_product, bound_ordinal, bound_excerpt = unique_document_binding
+                products = (bound_product,)
+                document_identity_evidence[bound_product.product_id] = (
+                    bound_ordinal,
+                    bound_excerpt,
+                )
             if requirement.capability is KnowledgeCapability.SECTOR_THEME_HISTORY:
                 # A thematic guide often lists many neighbouring ETFs in one
                 # table.  Only a provided-DB product whose own approved name or
@@ -684,10 +1041,11 @@ class VerifiedLiveRelationExtractor:
                 products = tuple(
                     product
                     for product in products
-                    if any(
-                        subject in _normalized(product.product_name)
-                        or any(subject in _normalized(alias) for alias in product.aliases)
-                        for subject in subjects
+                    if self._theme_product_has_explicit_relation(
+                        excerpt,
+                        product,
+                        subjects,
+                        signal,
                     )
                 )
             if (
@@ -767,6 +1125,46 @@ class VerifiedLiveRelationExtractor:
                             f"{relation_subject_surface}"
                         ),
                     )
+                    evidence = [
+                        ExternalEvidenceReference(
+                            evidence_id=evidence_id,
+                            source_registry_id=snapshot.source.source_id,
+                            document_id=_entity_id("doc", snapshot.source_uri),
+                            title=snapshot.title,
+                            publisher=snapshot.source.publisher,
+                            source_uri=snapshot.source_uri,
+                            published_at=snapshot.published_at,
+                            as_of=snapshot.as_of,
+                            content_sha256=snapshot.content_sha256,
+                            locator=f"extracted chunk {ordinal}",
+                            excerpt=excerpt,
+                        )
+                    ]
+                    identity_binding = document_identity_evidence.get(product.product_id)
+                    if identity_binding is not None and identity_binding[0] != ordinal:
+                        identity_ordinal, identity_excerpt = identity_binding
+                        identity_evidence_id = _entity_id(
+                            "evidence",
+                            (
+                                f"{snapshot.content_sha256}:{identity_ordinal}:"
+                                f"{product.product_id}:document-identity"
+                            ),
+                        )
+                        evidence.append(
+                            ExternalEvidenceReference(
+                                evidence_id=identity_evidence_id,
+                                source_registry_id=snapshot.source.source_id,
+                                document_id=_entity_id("doc", snapshot.source_uri),
+                                title=snapshot.title,
+                                publisher=snapshot.source.publisher,
+                                source_uri=snapshot.source_uri,
+                                published_at=snapshot.published_at,
+                                as_of=snapshot.as_of,
+                                content_sha256=snapshot.content_sha256,
+                                locator=f"extracted chunk {identity_ordinal}",
+                                excerpt=identity_excerpt,
+                            )
+                        )
                     relations.append(
                         TemporalRelationRecord(
                             relation_id=_entity_id(
@@ -784,21 +1182,7 @@ class VerifiedLiveRelationExtractor:
                             valid_from=snapshot.published_at or snapshot.as_of,
                             valid_to=snapshot.published_at or snapshot.as_of,
                             observed_at=snapshot.as_of,
-                            evidence=(
-                                ExternalEvidenceReference(
-                                    evidence_id=evidence_id,
-                                    source_registry_id=snapshot.source.source_id,
-                                    document_id=_entity_id("doc", snapshot.source_uri),
-                                    title=snapshot.title,
-                                    publisher=snapshot.source.publisher,
-                                    source_uri=snapshot.source_uri,
-                                    published_at=snapshot.published_at,
-                                    as_of=snapshot.as_of,
-                                    content_sha256=snapshot.content_sha256,
-                                    locator=f"extracted chunk {ordinal}",
-                                    excerpt=excerpt,
-                                ),
-                            ),
+                            evidence=tuple(sorted(evidence, key=lambda item: item.evidence_id)),
                         )
                     )
         unique = {item.relation_id: item for item in relations}

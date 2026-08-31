@@ -157,13 +157,16 @@ def test_bond_sqlite_oracle_verifier_and_evidence_agree(tmp_path: Path) -> None:
     verified = ResultVerifier().verify(plan, executed, universe)
     products = build_product_evidence(plan, verified)
 
-    assert verified.candidate_count == 6
+    # The default search scope excludes a bond whose maturity is on or before
+    # its own dynamic-as-of date; the organizer's buyability override does not
+    # make an already matured instrument active again.
+    assert verified.candidate_count == 5
     assert [record.product_id for record in verified.records] == [
         "KRTEST000005:장내:20260824:5",
-        "KRTEST000004:장내:20260824:4",
         "KRTEST000003:장내:20260824:3",
         "KRTEST000006:장내:20260824:6",
         "KRTEST000001:장내:20260824:1",
+        "KRTEST000002:장내:20260824:2",
     ]
     buy_yield = next(
         field for field in products[0].fields if field.canonical_field == "buy_yield_pct"
@@ -204,7 +207,7 @@ def test_bond_search_uses_first_source_row_per_official_product_id(tmp_path: Pat
     verified = ResultVerifier().verify(plan, executed, universe)
     products = build_product_evidence(plan, verified)
 
-    assert verified.candidate_count == 6
+    assert verified.candidate_count == 5
     assert all(record.source_row != 8 for record in verified.records)
     assert len({product.product_id for product in products}) == len(products)
     assert all(":" not in product.product_id for product in products)
@@ -221,7 +224,7 @@ def test_bond_mock_agent_completes_verified_vertical_slice(tmp_path: Path) -> No
         "bond-agent-001",
     )
 
-    assert response.candidate_count == 6
+    assert response.candidate_count == 5
     assert response.products[0].ticker == "KRTEST000005"
     assert "매수수익률 7.5%" in response.answer
     assert response.source_manifest.dataset == "bond"
@@ -238,11 +241,10 @@ def test_bond_briefing_query_executes_with_sellability_and_rating_threshold(
     )
 
     assert result.status == "executed"
-    assert result.candidate_count == 5
+    assert result.candidate_count == 4
     assert {product.ticker for product in result.products} == {
         "KRTEST000001",
         "KRTEST000003",
-        "KRTEST000004",
         "KRTEST000005",
         "KRTEST000006",
     }

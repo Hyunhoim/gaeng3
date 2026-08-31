@@ -90,7 +90,7 @@ class ExternalKnowledgeExecutor:
             subjects = (
                 self._dependency_subjects(requirement, resolved)
                 if requirement.depends_on
-                else (requirement.subject,)
+                else tuple(dict.fromkeys((requirement.subject, *requirement.search_aliases)))
             )
             if not subjects:
                 raise ExternalKnowledgeExecutionError(

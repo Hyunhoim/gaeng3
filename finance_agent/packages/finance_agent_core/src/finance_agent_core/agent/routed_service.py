@@ -3,6 +3,7 @@ from __future__ import annotations
 import contextvars
 import hashlib
 import json
+import re
 import sqlite3
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
@@ -224,10 +225,34 @@ class RoutedAgentResult(RoutedServiceModel):
                     item.candidate_count for item in self.family_searches
                 ):
                     raise ValueError("multi-family candidate count must equal the family sum")
-                if self.products != [
+                family_products = [
                     product for item in self.family_searches for product in item.products
-                ]:
-                    raise ValueError("multi-family products must preserve the family result order")
+                ]
+                if self.products != family_products:
+                    # A verified global TOP-K may interleave products from multiple
+                    # families.  Permit only a stable interleaving of the exact
+                    # per-family evidence: no product may be added, removed, or
+                    # reordered inside its own family result.
+                    unmatched = list(family_products)
+                    for product in self.products:
+                        try:
+                            unmatched.remove(product)
+                        except ValueError as error:
+                            raise ValueError(
+                                "multi-family products must contain only family evidence"
+                            ) from error
+                    if unmatched:
+                        raise ValueError(
+                            "multi-family products must contain every family evidence item"
+                        )
+                    for family_search in self.family_searches:
+                        positions = [
+                            self.products.index(product) for product in family_search.products
+                        ]
+                        if positions != sorted(positions):
+                            raise ValueError(
+                                "multi-family products must preserve each family result order"
+                            )
                 if [item.product_family for item in self.family_searches] != (
                     self.decision.draft.product_families
                 ):
@@ -279,6 +304,33 @@ _FAMILY_LABELS = {
 _CROSS_FAMILY_SAFETY_NOTICE = (
     "상품군별로 독립 검색했으며, 상품군 간 수치의 직접 비교·합산·우열 판단은 수행하지 않았습니다."
 )
+_CROSS_FAMILY_ALL_REQUIRED = re.compile(
+    r"각각|나란히|한\s*번에|모두|정확한\s*(?:이름|상품명)|상품군별",
+    re.IGNORECASE,
+)
+_CROSS_FAMILY_EXACT_FIELDS = frozenset(
+    {"product_id", "product_name", "ticker", "isin", "credit_rating"}
+)
+
+
+def _requires_complete_exact_cross_family_match(
+    question: str,
+    searches: list[CompiledFamilySearch],
+) -> bool:
+    """Keep an explicitly conjunctive exact request atomic across families."""
+
+    if _CROSS_FAMILY_ALL_REQUIRED.search(question) is None:
+        return False
+    exact_families = 0
+    for search in searches:
+        if any(
+            constraint.field in _CROSS_FAMILY_EXACT_FIELDS
+            and constraint.operator.value in {"eq", "in"}
+            and constraint.strength.value == "locked"
+            for constraint in search.plan.constraints
+        ):
+            exact_families += 1
+    return exact_families >= 2
 
 
 @dataclass(frozen=True)
@@ -2456,6 +2508,42 @@ class RoutedFinanceAgent:
             executions = [future.result() for future in futures]
 
         deterministic_searches = [execution.result for execution in executions]
+        if _requires_complete_exact_cross_family_match(decision.draft.question, searches) and any(
+            item.candidate_count == 0 for item in deterministic_searches
+        ):
+            atomic_not_found = [
+                item.model_copy(
+                    update={
+                        "status": "not_found",
+                        "answer": (
+                            "교차 상품군에 명시한 정확 조건 중 하나 이상을 제공 데이터에서 "
+                            "찾지 못해 부분 결과를 반환하지 않았습니다."
+                        ),
+                        "candidate_count": 0,
+                        "products": [],
+                    }
+                )
+                for item in deterministic_searches
+            ]
+            return RoutedAgentResult(
+                request_id=decision.draft.request_id,
+                status="executed",
+                decision=decision,
+                answer=(
+                    "각 상품군에 명시한 정확 조건을 모두 만족하는 조합을 제공 데이터에서 "
+                    "찾지 못했습니다. 충족되지 않은 조건을 자동으로 완화하거나 다른 상품군의 "
+                    "부분 결과만 반환하지 않았습니다."
+                ),
+                query_plan=None,
+                candidate_count=0,
+                products=[],
+                aggregates=[],
+                comparisons=[],
+                warnings=["교차 상품군의 정확 조건을 하나의 원자적 요청으로 검증했습니다."],
+                source_manifest=None,
+                answer_composition=None,
+                family_searches=atomic_not_found,
+            )
         family_searches = deterministic_searches
         global_ranked: list[_GlobalRankedProduct] = []
         if global_ranking is not None:
@@ -2464,9 +2552,13 @@ class RoutedFinanceAgent:
                 global_ranking,
             )
 
-        products = [
-            product for family_search in family_searches for product in family_search.products
-        ]
+        products = (
+            [item.product for item in global_ranked]
+            if global_ranking is not None
+            else [
+                product for family_search in family_searches for product in family_search.products
+            ]
+        )
         candidate_count = sum(family_search.candidate_count for family_search in family_searches)
         cross_family_notice = (
             "동일 canonical field와 단위가 검증된 상품군만 global TOP-K에 포함했습니다."

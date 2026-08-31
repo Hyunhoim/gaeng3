@@ -40,7 +40,6 @@ def test_lexical_hints_preserve_explicit_status_and_sort() -> None:
         },
         {"field": "trading_suspended", "operator": "eq", "value": False},
         {"field": "sellable", "operator": "eq", "value": True},
-        {"field": "trading_currency", "operator": "eq", "value": "USD"},
     ]
     assert hints["required_rankings"] == [{"field": "aum", "direction": "desc", "nulls": "last"}]
 

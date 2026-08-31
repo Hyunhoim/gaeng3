@@ -5,12 +5,29 @@ import hashlib
 import json
 import math
 import os
+import re
 from collections import Counter, defaultdict
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
 from finance_agent_core.config import load_field_registry
+
+_SUPPORTED_SUITES = {
+    "finance-agent-independent-holdout-v2-300": ("IH", 300, "phase1"),
+    "finance-agent-independent-holdout-phase2-v1-300": ("P2", 300, "phase2"),
+    "finance-agent-development-phase3-v1-600": ("P3", 600, "phase2_style"),
+    "finance-agent-independent-holdout-phase4-v1-1000": ("P4", 1000, "phase2_style"),
+}
+
+_SUITE_ID_WIDTHS = {
+    "finance-agent-independent-holdout-phase4-v1-1000": 4,
+}
+
+
+def _expected_ids(suite_id: str, prefix: str, case_count: int) -> set[str]:
+    width = _SUITE_ID_WIDTHS.get(suite_id, 3)
+    return {f"{prefix}-{index:0{width}d}" for index in range(1, case_count + 1)}
 
 
 def _sha256(path: Path) -> str:
@@ -107,6 +124,10 @@ def _source_field_map() -> dict[tuple[str, str], str]:
             result[key] = field_ids[0]
         else:
             raise RuntimeError(f"ambiguous source field mapping: {key} -> {field_ids}")
+    # The public-fund normalizer uses the human-readable official risk label
+    # when present and falls back to the numeric code.  Gold may therefore name
+    # either source column, but both represent one canonical QueryPlan field.
+    result[("fund", "zrin_fd_ivst_risk_grd_nm")] = "risk_level"
     return result
 
 
@@ -153,15 +174,42 @@ def _normalize_filter(
             "company_sellable": {"판매중": True, "판매가능": True, "판매불가": False},
         }.get(field_id, {})
         value = semantic_boolean.get(value.strip(), value)
+
+    def normalize_identity(entry: Any) -> Any:
+        if field_id != "product_identity" or not isinstance(entry, str) or ":" not in entry:
+            return entry
+        if family == "bond":
+            # Runtime bond IDs include market/date/sequence after the public
+            # pd_no. Gold is intentionally keyed by that official pd_no.
+            return entry.split(":", maxsplit=1)[0]
+        if family == "overseas_etp":
+            # Runtime overseas IDs prefix the official ticker with market.
+            return entry.rsplit(":", maxsplit=1)[1]
+        return entry
+
+    def normalize_date(entry: Any) -> Any:
+        if (
+            definition is not None
+            and definition.unit == "date"
+            and isinstance(entry, str)
+            and re.fullmatch(r"\d{8}", entry.strip())
+        ):
+            raw = entry.strip()
+            return f"{raw[:4]}-{raw[4:6]}-{raw[6:]}"
+        return entry
+
+    def normalize_value(entry: Any) -> Any:
+        return normalize_date(normalize_identity(entry))
+
     if isinstance(value, list):
         normalized: object = tuple(
             sorted(
-                (_normalize_scalar(entry, boolean=boolean) for entry in value),
+                (_normalize_scalar(normalize_value(entry), boolean=boolean) for entry in value),
                 key=str,
             )
         )
     else:
-        normalized = _normalize_scalar(value, boolean=boolean)
+        normalized = _normalize_scalar(normalize_value(value), boolean=boolean)
     return field_id, operator, normalized
 
 
@@ -179,6 +227,17 @@ def _gold_product_identity(product: dict[str, Any], family: str) -> str:
     # and duplicate bond lots, so compare those families by their public ticker.
     if family in {"bond", "overseas_etp"}:
         value = product.get("ticker")
+        if value is None:
+            fields = product.get("fields", ())
+            if isinstance(fields, list):
+                value = next(
+                    (
+                        item.get("normalized_value")
+                        for item in fields
+                        if isinstance(item, dict) and item.get("canonical_field") == "ticker"
+                    ),
+                    None,
+                )
     else:
         value = product.get("product_id")
     return "" if value is None else str(value)
@@ -190,6 +249,434 @@ def _percentile(values: list[float], quantile: float) -> float:
     ordered = sorted(values)
     index = min(len(ordered) - 1, max(0, math.ceil(quantile * len(ordered)) - 1))
     return round(ordered[index], 3)
+
+
+def _observed_product_key(product: dict[str, Any]) -> tuple[str, str]:
+    fields = product.get("fields", ())
+    family = ""
+    if isinstance(fields, list) and fields and isinstance(fields[0], dict):
+        family = str(fields[0].get("source_dataset", ""))
+    return family, _gold_product_identity(product, family)
+
+
+def _phase2_plan_metrics(
+    expected: dict[str, Any],
+    response: dict[str, Any],
+    *,
+    source_fields: dict[tuple[str, str], str],
+) -> dict[str, bool | None]:
+    subqueries = expected.get("expected_subqueries", ())
+    if expected.get("expected_disposition") != "execute" or not isinstance(subqueries, list):
+        return {
+            "family_exact": None,
+            "filters_exact": None,
+            "ranking_exact": None,
+            "limit_exact": None,
+        }
+    if len(subqueries) == 1:
+        plan = response.get("query_plan")
+        observed_plans = [
+            {
+                "plan": plan,
+                "candidate_count": response.get("candidate_count"),
+                "returned_product_ids": [
+                    product.get("product_id") for product in response.get("products", ())
+                ],
+            }
+        ]
+    else:
+        observed_plans = [
+            {
+                "plan": item.get("query_plan"),
+                "candidate_count": item.get("candidate_count"),
+                "returned_product_ids": item.get("returned_product_ids", ()),
+            }
+            for item in response.get("family_searches", ())
+            if isinstance(item, dict)
+        ]
+    if len(observed_plans) != len(subqueries) or any(
+        not isinstance(item["plan"], dict) for item in observed_plans
+    ):
+        return {
+            "family_exact": False,
+            "filters_exact": False,
+            "ranking_exact": False,
+            "limit_exact": False,
+        }
+
+    family_exact = True
+    filters_exact = True
+    ranking_exact = True
+    limit_exact = True
+    identity_fields = {"product_identity", "product_name", "short_name", "ticker", "isin"}
+    for expected_plan, observed in zip(subqueries, observed_plans, strict=True):
+        plan = observed["plan"]
+        assert isinstance(plan, dict)
+        family = str(expected_plan["product_family"])
+        family_exact = family_exact and plan.get("product_families") == [family]
+        expected_filters = tuple(
+            sorted(
+                (
+                    _normalize_filter(item, family=family, source_fields=source_fields)
+                    for item in expected_plan.get("filters", ())
+                ),
+                key=str,
+            )
+        )
+        observed_filters = tuple(
+            sorted(
+                (
+                    _normalize_filter(item, family=family, source_fields=source_fields)
+                    for item in plan.get("constraints", ())
+                ),
+                key=str,
+            )
+        )
+        expected_identity = tuple(item for item in expected_filters if item[0] in identity_fields)
+        observed_identity = tuple(item for item in observed_filters if item[0] in identity_fields)
+        exact_single_identity = (
+            len(expected_identity) == 1
+            and len(observed_identity) == 1
+            and expected_identity[0][1] == "eq"
+            and observed_identity[0][1] == "eq"
+            and observed.get("candidate_count") == 1
+            and len(observed.get("returned_product_ids", ())) == 1
+        )
+        if exact_single_identity:
+            expected_filters = tuple(
+                item for item in expected_filters if item not in expected_identity
+            )
+            observed_filters = tuple(
+                item for item in observed_filters if item not in observed_identity
+            )
+        if expected_identity or observed_identity:
+            redundant_type = ("product_type", "eq", "etf")
+            expected_filters = tuple(item for item in expected_filters if item != redundant_type)
+            observed_filters = tuple(item for item in observed_filters if item != redundant_type)
+        filters_exact = filters_exact and observed_filters == expected_filters
+
+        ranking = plan.get("ranking", ())
+        expected_raw_ranking = expected_plan.get("ranking_field")
+        expected_ranking = (
+            None
+            if expected_raw_ranking is None
+            else source_fields.get(
+                (family, str(expected_raw_ranking).casefold()), expected_raw_ranking
+            )
+        )
+        observed_ranking = None
+        observed_direction = None
+        if isinstance(ranking, list) and len(ranking) == 1 and isinstance(ranking[0], dict):
+            observed_ranking = ranking[0].get("field")
+            observed_direction = ranking[0].get("direction")
+        ranking_exact = ranking_exact and (
+            observed_ranking == expected_ranking
+            and observed_direction == expected_plan.get("direction")
+        )
+        limit_exact = limit_exact and plan.get("limit") == expected_plan.get("limit")
+    return {
+        "family_exact": family_exact,
+        "filters_exact": filters_exact,
+        "ranking_exact": ranking_exact,
+        "limit_exact": limit_exact,
+    }
+
+
+def _compare_phase2(
+    predictions: dict[str, Any],
+    gold: dict[str, Any],
+    *,
+    allow_post_gold_development: bool = False,
+) -> dict[str, Any]:
+    suite_id = str(predictions["suite_id"])
+    suite_contract = _SUPPORTED_SUITES.get(suite_id)
+    if suite_contract is None or suite_contract[2] not in {"phase2", "phase2_style"}:
+        raise RuntimeError("prediction suite is not a registered Phase 2-style contract")
+    id_prefix, case_count, _ = suite_contract
+    expected_ids = _expected_ids(suite_id, id_prefix, case_count)
+    prediction_by_id = {item["id"]: item for item in predictions["results"]}
+    gold_by_id = {item["id"]: item for item in gold.get("cases", ())}
+    if set(prediction_by_id) != expected_ids or set(gold_by_id) != expected_ids:
+        raise RuntimeError("Phase 2 Gold or prediction IDs differ")
+
+    source_fields = _source_field_map()
+    backend_disposition = {
+        "success": "execute",
+        "clarification": "clarify",
+        "not_found": "not_found",
+        "unsupported": "unsupported",
+        "cannot_verify": "cannot_verify",
+        "error": "error",
+    }
+    backend_result_status = {
+        "success": "SUCCESS",
+        "clarification": "CLARIFY",
+        "not_found": "NOT_FOUND",
+        "cannot_verify": "CANNOT_VERIFY",
+    }
+    totals = Counter()
+    by_category: dict[str, Counter[str]] = defaultdict(Counter)
+    by_scope: dict[str, Counter[str]] = defaultdict(Counter)
+    product_tp = product_fp = product_fn = 0
+    macro_precision: list[float] = []
+    macro_recall: list[float] = []
+    macro_f1: list[float] = []
+    latencies: list[float] = []
+    operation_counts = Counter()
+    provider_outcomes = Counter()
+    cases: list[dict[str, Any]] = []
+
+    for case_id in sorted(expected_ids):
+        expected = gold_by_id[case_id]
+        observed = prediction_by_id[case_id]
+        response = observed["backend_response"]
+        status = response["status"]
+        predicted_disposition = backend_disposition.get(status, "error")
+        expected_disposition = expected["expected_disposition"]
+        disposition_exact = predicted_disposition == expected_disposition
+        expected_status = expected.get("expected_result_status")
+        result_status_exact = (
+            None
+            if expected_status is None
+            else backend_result_status.get(status) == expected_status
+        )
+
+        expected_products = [
+            (str(item["family"]), str(item["product_id"]))
+            for item in expected.get("expected_top_products", ())
+        ]
+        observed_products = [_observed_product_key(item) for item in response.get("products", ())]
+        expected_set = set(expected_products)
+        observed_set = set(observed_products)
+        tp = len(expected_set & observed_set)
+        fp = len(observed_set - expected_set)
+        fn = len(expected_set - observed_set)
+        precision = _safe_ratio(tp, tp + fp)
+        recall = _safe_ratio(tp, tp + fn)
+        case_f1 = _f1(precision, recall)
+        is_execute = expected_disposition == "execute"
+        if is_execute:
+            product_tp += tp
+            product_fp += fp
+            product_fn += fn
+            macro_precision.append(precision)
+            macro_recall.append(recall)
+            macro_f1.append(case_f1)
+
+        order_exact = observed_products == expected_products
+        candidate_count_exact = response.get("candidate_count") == expected.get(
+            "expected_candidate_count_total"
+        )
+        plan_metrics = _phase2_plan_metrics(
+            expected,
+            response,
+            source_fields=source_fields,
+        )
+        cross_family = expected.get("query_scope") == "cross_family"
+        cross_family_execute_success = (
+            None if not (cross_family and is_execute) else disposition_exact and order_exact
+        )
+        external_required = bool(
+            expected.get("expected_status_basis", {}).get("external_evidence_required")
+        )
+        external_documents_present = bool(response.get("documents"))
+        outcome_exact = disposition_exact and (not is_execute or order_exact)
+        applicable_plan_metrics = [value for value in plan_metrics.values() if value is not None]
+        strict_exact = outcome_exact and (
+            not is_execute
+            or (candidate_count_exact and all(value is True for value in applicable_plan_metrics))
+        )
+        false_execution = not is_execute and predicted_disposition == "execute"
+        false_block = is_execute and predicted_disposition != "execute"
+
+        totals.update(
+            {
+                "disposition_exact": disposition_exact,
+                "result_status_applicable": result_status_exact is not None,
+                "result_status_exact": result_status_exact is True,
+                "execute": is_execute,
+                "product_order_exact": is_execute and order_exact,
+                "candidate_count_exact": is_execute and candidate_count_exact,
+                "outcome_exact": outcome_exact,
+                "strict_exact": strict_exact,
+                "false_execution": false_execution,
+                "false_block": false_block,
+                "external_required": external_required,
+                "external_outcome_exact": external_required and outcome_exact,
+                "external_documents_present": (external_required and external_documents_present),
+                "cross_family_execute": cross_family and is_execute,
+                "cross_family_execute_success": cross_family_execute_success is True,
+                "http_200": observed["http_status"] == 200,
+            }
+        )
+        for key, value in plan_metrics.items():
+            if value is not None:
+                metric = key.removesuffix("_exact")
+                totals[f"plan_{metric}_applicable"] += 1
+                totals[f"plan_{key}"] += value is True
+        for group in (
+            by_category[str(expected["category"])],
+            by_scope[str(expected["query_scope"])],
+        ):
+            group["total"] += 1
+            group["disposition_exact"] += disposition_exact
+            group["outcome_exact"] += outcome_exact
+            group["strict_exact"] += strict_exact
+        duration_ms = float(observed["duration_ms"])
+        latencies.append(duration_ms)
+        for call in observed.get("provider_calls", ()):
+            operation_counts[str(call["operation"])] += 1
+            provider_outcomes[f"{call['operation']}:{call['outcome']}"] += 1
+        cases.append(
+            {
+                "id": case_id,
+                "category": expected["category"],
+                "query_scope": expected["query_scope"],
+                "expected_disposition": expected_disposition,
+                "predicted_disposition": predicted_disposition,
+                "disposition_exact": disposition_exact,
+                "result_status_exact": result_status_exact,
+                "expected_product_families": expected["expected_product_families"],
+                "observed_product_families": response.get("product_families", []),
+                "expected_products": expected_products,
+                "observed_products": observed_products,
+                "product_precision": precision,
+                "product_recall": recall,
+                "product_f1": case_f1,
+                "product_order_exact": order_exact,
+                "candidate_count_exact": candidate_count_exact,
+                **plan_metrics,
+                "external_evidence_required": external_required,
+                "external_documents_present": external_documents_present,
+                "false_execution": false_execution,
+                "false_block": false_block,
+                "outcome_exact": outcome_exact,
+                "strict_exact": strict_exact,
+                "http_status": observed["http_status"],
+                "duration_ms": duration_ms,
+            }
+        )
+
+    execute_total = totals["execute"]
+    micro_precision = _safe_ratio(product_tp, product_tp + product_fp)
+    micro_recall = _safe_ratio(product_tp, product_tp + product_fn)
+
+    def grouped(values: dict[str, Counter[str]]) -> dict[str, dict[str, float | int]]:
+        return {
+            key: {
+                "total": item["total"],
+                "disposition_accuracy": round(
+                    _safe_ratio(item["disposition_exact"], item["total"]), 6
+                ),
+                "outcome_exact_accuracy": round(
+                    _safe_ratio(item["outcome_exact"], item["total"]), 6
+                ),
+                "strict_exact_accuracy": round(_safe_ratio(item["strict_exact"], item["total"]), 6),
+            }
+            for key, item in sorted(values.items())
+        }
+
+    report: dict[str, Any] = {
+        "schema_version": "2.0",
+        "artifact_kind": (
+            "post_gold_development_regression_comparison"
+            if allow_post_gold_development
+            else "sealed_first_blind_gold_comparison"
+        ),
+        "evaluation_kind": (
+            "post_gold_development_regression"
+            if allow_post_gold_development
+            else "first_independent_blind"
+        ),
+        "suite_id": predictions["suite_id"],
+        "suite_phase": predictions.get("suite_phase"),
+        "prediction_canonical_sha256": predictions["canonical_prediction_sha256"],
+        "questions_sha256": predictions["questions_sha256"],
+        "implementation_commit": predictions["implementation_commit"],
+        "image_id": predictions["image_id"],
+        "counts": {
+            "cases": case_count,
+            "execute": execute_total,
+            "cross_family": sum(item["query_scope"] == "cross_family" for item in cases),
+            "cross_family_execute": totals["cross_family_execute"],
+            "external_evidence_required": totals["external_required"],
+            "http_200": totals["http_200"],
+        },
+        "metrics": {
+            "disposition_accuracy": round(totals["disposition_exact"] / case_count, 6),
+            "result_status_accuracy": round(
+                _safe_ratio(totals["result_status_exact"], totals["result_status_applicable"]), 6
+            ),
+            "outcome_exact_accuracy": round(totals["outcome_exact"] / case_count, 6),
+            "strict_exact_accuracy": round(totals["strict_exact"] / case_count, 6),
+            "product_micro_precision": round(micro_precision, 6),
+            "product_micro_recall": round(micro_recall, 6),
+            "product_micro_f1": round(_f1(micro_precision, micro_recall), 6),
+            "product_macro_precision": round(_safe_ratio(sum(macro_precision), execute_total), 6),
+            "product_macro_recall": round(_safe_ratio(sum(macro_recall), execute_total), 6),
+            "product_macro_f1": round(_safe_ratio(sum(macro_f1), execute_total), 6),
+            "product_order_exact_accuracy": round(
+                _safe_ratio(totals["product_order_exact"], execute_total), 6
+            ),
+            "candidate_count_exact_accuracy": round(
+                _safe_ratio(totals["candidate_count_exact"], execute_total), 6
+            ),
+            "single_plan_family_accuracy": round(
+                _safe_ratio(totals["plan_family_exact"], totals["plan_family_applicable"]), 6
+            ),
+            "single_plan_filter_accuracy": round(
+                _safe_ratio(totals["plan_filters_exact"], totals["plan_filters_applicable"]), 6
+            ),
+            "single_plan_ranking_accuracy": round(
+                _safe_ratio(totals["plan_ranking_exact"], totals["plan_ranking_applicable"]), 6
+            ),
+            "single_plan_limit_accuracy": round(
+                _safe_ratio(totals["plan_limit_exact"], totals["plan_limit_applicable"]), 6
+            ),
+            "cross_family_execute_exact_accuracy": round(
+                _safe_ratio(totals["cross_family_execute_success"], totals["cross_family_execute"]),
+                6,
+            ),
+            "external_outcome_exact_accuracy": round(
+                _safe_ratio(totals["external_outcome_exact"], totals["external_required"]), 6
+            ),
+            "external_evidence_presence_rate": round(
+                _safe_ratio(totals["external_documents_present"], totals["external_required"]), 6
+            ),
+            "false_execution_rate": round(totals["false_execution"] / case_count, 6),
+            "false_block_rate": round(totals["false_block"] / case_count, 6),
+            "latency_ms_p50": _percentile(latencies, 0.50),
+            "latency_ms_p95": _percentile(latencies, 0.95),
+            "latency_ms_p99": _percentile(latencies, 0.99),
+            "latency_ms_max": round(max(latencies), 3),
+        },
+        "by_category": grouped(by_category),
+        "by_scope": grouped(by_scope),
+        "provider_operations": dict(sorted(operation_counts.items())),
+        "provider_outcomes": dict(sorted(provider_outcomes.items())),
+        "failure_ids": {
+            "http_non_200": [item["id"] for item in cases if item["http_status"] != 200],
+            "disposition_mismatch": [item["id"] for item in cases if not item["disposition_exact"]],
+            "false_execution": [item["id"] for item in cases if item["false_execution"]],
+            "false_block": [item["id"] for item in cases if item["false_block"]],
+            "product_order_mismatch": [
+                item["id"]
+                for item in cases
+                if item["expected_disposition"] == "execute" and not item["product_order_exact"]
+            ],
+            "queryplan_filter_mismatch": [
+                item["id"] for item in cases if item["filters_exact"] is False
+            ],
+            "external_outcome_mismatch": [
+                item["id"]
+                for item in cases
+                if item["external_evidence_required"] and not item["outcome_exact"]
+            ],
+        },
+        "cases": cases,
+    }
+    report["report_sha256"] = _canonical_sha256(report)
+    return report
 
 
 def compare(
@@ -207,17 +694,30 @@ def compare(
             raise RuntimeError("prediction artifact is not an explicit post-Gold regression")
     elif predictions.get("answer_key_opened") is not False:
         raise RuntimeError("prediction artifact was not frozen before Gold reveal")
-    if predictions.get("question_count") != 300 or len(predictions.get("results", ())) != 300:
-        raise RuntimeError("prediction count differs")
-    if gold.get("suite_id") != "finance-agent-independent-holdout-v2-300":
+    suite_id = predictions.get("suite_id", "finance-agent-independent-holdout-v2-300")
+    suite_contract = _SUPPORTED_SUITES.get(suite_id)
+    if suite_contract is None or gold.get("suite_id") != suite_id:
         raise RuntimeError("Gold suite differs")
+    id_prefix, case_count, comparator = suite_contract
+    if (
+        predictions.get("question_count") != case_count
+        or len(predictions.get("results", ())) != case_count
+    ):
+        raise RuntimeError("prediction count differs")
     if gold.get("questions_sha256") != predictions.get("questions_sha256"):
         raise RuntimeError("Gold and prediction question hashes differ")
     prediction_by_id = {item["id"]: item for item in predictions["results"]}
     gold_by_id = {item["id"]: item for item in gold.get("cases", ())}
-    expected_ids = {f"IH-{index:03d}" for index in range(1, 301)}
+    expected_ids = _expected_ids(suite_id, id_prefix, case_count)
     if set(prediction_by_id) != expected_ids or set(gold_by_id) != expected_ids:
         raise RuntimeError("Gold or prediction IDs differ")
+
+    if comparator in {"phase2", "phase2_style"}:
+        return _compare_phase2(
+            predictions,
+            gold,
+            allow_post_gold_development=allow_post_gold_development,
+        )
 
     source_fields = _source_field_map()
     cases = []
@@ -439,22 +939,24 @@ def compare(
         ),
         "prediction_canonical_sha256": predictions["canonical_prediction_sha256"],
         "questions_sha256": predictions["questions_sha256"],
+        "suite_id": suite_id,
+        "suite_phase": predictions.get("suite_phase"),
         "gold_revision": gold.get("gold_revision"),
         "implementation_commit": predictions["implementation_commit"],
         "image_id": predictions["image_id"],
         "counts": {
-            "cases": 300,
+            "cases": case_count,
             "execute": execute_total,
             "external_evidence_required": totals["external_required"],
             "http_200": totals["http_200"],
         },
         "metrics": {
-            "disposition_accuracy": round(totals["disposition_exact"] / 300, 6),
+            "disposition_accuracy": round(totals["disposition_exact"] / case_count, 6),
             "result_status_accuracy": round(
                 _safe_ratio(totals["result_status_exact"], result_applicable), 6
             ),
-            "outcome_exact_accuracy": round(totals["outcome_exact"] / 300, 6),
-            "strict_exact_accuracy": round(totals["strict_exact"] / 300, 6),
+            "outcome_exact_accuracy": round(totals["outcome_exact"] / case_count, 6),
+            "strict_exact_accuracy": round(totals["strict_exact"] / case_count, 6),
             "product_micro_precision": round(micro_precision, 6),
             "product_micro_recall": round(micro_recall, 6),
             "product_micro_f1": round(_f1(micro_precision, micro_recall), 6),

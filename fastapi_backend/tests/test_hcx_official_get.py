@@ -509,7 +509,12 @@ def test_official_get_intent_failures_stop_before_data_execution(
     assert response.status_code == 503
     trace = _assert_official_contract(response, question_id=question_id)
     assert trace["status"] == "error"
-    assert transport.operations == ["intent_analysis"]
+    expected_operations = (
+        ["intent_analysis", "intent_analysis"]
+        if mode in {"response_error", "structured_response_error"}
+        else ["intent_analysis"]
+    )
+    assert transport.operations == expected_operations
     events = _events(audit_path)
     assert any(
         event.stage is AuditStage.HCLX
@@ -518,7 +523,7 @@ def test_official_get_intent_failures_stop_before_data_execution(
         for event in events
     )
     counters = application.state.audit_sink.metrics.snapshot().counters
-    assert counters[counter.value] == 1
+    assert counters[counter.value] == len(expected_operations)
     assert counters.get(MetricCounter.HCLX_SUCCESSES.value, 0) == 0
     assert not any(event.stage in {AuditStage.SQL, AuditStage.ORACLE} for event in events)
     serialized = audit_path.read_text(encoding="utf-8")

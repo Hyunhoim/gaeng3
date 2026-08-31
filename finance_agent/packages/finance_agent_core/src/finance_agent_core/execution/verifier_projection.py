@@ -10,6 +10,7 @@ from time import perf_counter
 
 from finance_agent_core.config import QualityStatus, ValueType, load_field_registry
 from finance_agent_core.contracts import QueryPlan
+from finance_agent_core.contracts.queryplan import ProductFamily
 from finance_agent_core.contracts.routing import RouteDisposition
 from finance_agent_core.deadline import raise_if_request_stopped
 from finance_agent_core.execution.authority import (
@@ -84,6 +85,10 @@ class ProjectedVerifierRecord:
 
 def verifier_projection_fields(plan: QueryPlan) -> tuple[str, ...]:
     fields: list[str] = ["product_id"]
+    if plan.product_families == [ProductFamily.BOND] and not any(
+        constraint.field == "product_id" for constraint in plan.constraints
+    ):
+        fields.append("maturity_date")
     for field_name in [
         *(constraint.field for constraint in plan.constraints),
         *(ranking.field for ranking in plan.ranking),

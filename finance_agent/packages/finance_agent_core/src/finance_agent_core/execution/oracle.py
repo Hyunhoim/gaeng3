@@ -97,8 +97,12 @@ def _constraint_sql(
     if spec.scale is not None or spec.usable_numeric:
         # Official 2026-08-26 evaluation rule: a numeric 0 or missing value is
         # not a usable filter/ranking basis.  Keep the source value intact in
-        # storage, but exclude it at deterministic query time.
-        clauses.extend((f"{column} IS NOT NULL", f"{column} <> 0"))
+        # storage, but exclude it at deterministic query time. ``remaining_days``
+        # is server-derived from two dates rather than a source numeric field;
+        # zero means "matures on the snapshot date" and is a real value.
+        clauses.append(f"{column} IS NOT NULL")
+        if constraint.field != "remaining_days":
+            clauses.append(f"{column} <> 0")
 
     operator = constraint.operator
     value = constraint.value
@@ -169,6 +173,16 @@ def compile_search_sql(
         raise ValueError(f"no deterministic SQL oracle for product family: {family}") from error
     where_clauses = ["is_quarantined = 0", logical_product_scope(family)]
     parameters: list[str | int | bool] = []
+    explicit_product_identity = any(
+        constraint.field == "product_id" for constraint in plan.constraints
+    )
+    if family == "bond" and not explicit_product_identity:
+        # BUYABLE_QUANTITY is invalid, but the organizer still excludes ended
+        # instruments. The official schema has no delisting flag, so maturity
+        # against the row's dynamic basis is the only deterministic end signal.
+        where_clauses.append(
+            "(maturity_date IS NULL OR dynamic_as_of IS NULL OR maturity_date > dynamic_as_of)"
+        )
     for constraint in plan.constraints:
         clause, values = _constraint_sql(constraint, sql_fields)
         where_clauses.append(f"({clause})")
@@ -179,7 +193,9 @@ def compile_search_sql(
         spec = sql_fields[ranking.field]
         if spec.quality_column is not None:
             where_clauses.append(f"{spec.quality_column} IN ('VALID', 'PARTIAL')")
-        where_clauses.extend((f"{spec.column} IS NOT NULL", f"{spec.column} <> 0"))
+        where_clauses.append(f"{spec.column} IS NOT NULL")
+        if ranking.field != "remaining_days":
+            where_clauses.append(f"{spec.column} <> 0")
     where_sql = " AND ".join(where_clauses)
 
     order_by: list[str] = []
@@ -191,7 +207,10 @@ def compile_search_sql(
             f"CASE WHEN {expression} IS NULL THEN {null_order} ELSE {nonnull_order} END ASC"
         )
         order_by.append(f"{expression} {ranking.direction.value.upper()}")
-    order_by.append("product_id ASC")
+    # Bond and overseas rows use an internal composite storage ID. Official
+    # evaluation tie-breaks by the public product identifier, not by exchange,
+    # market or snapshot suffixes embedded in that storage key.
+    order_by.append("ticker ASC" if family in {"bond", "overseas_etp"} else "product_id ASC")
 
     select_sql = f"SELECT * FROM {table} WHERE {where_sql} ORDER BY {', '.join(order_by)} LIMIT ?"
     count_sql = f"SELECT COUNT(*) AS candidate_count FROM {table} WHERE {where_sql}"

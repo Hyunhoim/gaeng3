@@ -61,6 +61,7 @@ finance-evaluate-approved-sql = "finance_agent_core.evaluation.approved_sql_base
 finance-benchmark-bm25-contract = "finance_agent_core.evaluation.bm25_contract_benchmark_cli:main"
 finance-corpus = "finance_agent_core.retrieval.corpus_cli:main"
 finance-collect-pending-corpus = "finance_agent_core.retrieval.pending_corpus_cli:main"
+finance-expand-pending-corpus = "finance_agent_core.retrieval.corpus_expansion_cli:main"
 finance-build-pending-document-dense = "finance_agent_core.retrieval.document_dense_cli:main"
 finance-check-external-preblind = "finance_agent_core.evaluation.external_knowledge_preblind:main"
 finance-relations = "finance_agent_core.retrieval.relation_cli:main"
@@ -78,6 +79,7 @@ where = ["src"]
     "approved_dataset_manifest.json",
     "approved_knowledge_coverage_manifest.json",
     "approved_source_registry.json",
+    "pending_source_registry_extension.json",
     "external_knowledge_source_catalog.json",
 ]
 "finance_agent_core.contracts" = ["queryplan.hcx.schema.json"]
