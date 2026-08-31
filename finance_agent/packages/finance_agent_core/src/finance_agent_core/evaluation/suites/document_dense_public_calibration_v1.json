@@ -18,6 +18,9 @@
     {"id": "DOC-PUB-013", "question": "연금에서 여러 종목에 나눠 투자하는 이유를 설명한 자료", "expected_document_id": "samsungfund-kodex-pension-guide-20260416"},
     {"id": "DOC-PUB-014", "question": "2026년 2분기 KODEX 연금투자 가이드북", "expected_document_id": "samsungfund-kodex-pension-guide-20260416"},
     {"id": "DOC-PUB-015", "question": "KODEX 2차전지산업 ETF 공식 상품 자료", "expected_document_id": "samsungfund-kodex-battery-industry-20260824"},
-    {"id": "DOC-PUB-016", "question": "KODEX 2차전지핵심소재10 ETF 공식 자료", "expected_document_id": "samsungfund-kodex-battery-materials-20260824"}
+    {"id": "DOC-PUB-016", "question": "KODEX 2차전지핵심소재10 ETF 공식 자료", "expected_document_id": "samsungfund-kodex-battery-materials-20260824"},
+    {"id": "DOC-PUB-017", "question": "Kimi K2 공식 발표 자료를 찾아줘", "expected_document_id": "moonshot-kimi-k2-release-20250801"},
+    {"id": "DOC-PUB-018", "question": "Moonshot AI가 공개한 Kimi 모델 동향", "expected_document_id": "moonshot-kimi-k2-release-20250801"},
+    {"id": "DOC-PUB-019", "question": "Kimi K2 고속 버전 출시 공식 자료", "expected_document_id": "moonshot-kimi-k2-release-20250801"}
   ]
 }

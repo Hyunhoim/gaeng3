@@ -124,12 +124,24 @@ def resolve_explicit_candidate_ids(
         for value in identity_surfaces
         if (core := normalized_product_surface_core(value)) is not None
     }
-    resolved: dict[ProductFamily, set[str]] = {}
+    # Identity strength is ordered. An exact DB identity must not be widened
+    # again by a generic programme surface in the same question. Multiple
+    # exact identities are retained for compare requests; weaker matches are
+    # used only when no stronger match exists in the authorized family scope.
+    exact_resolved: dict[ProductFamily, set[str]] = {}
+    contained_resolved: dict[ProductFamily, set[str]] = {}
+    core_resolved: dict[ProductFamily, set[str]] = {}
     for family, records in records_by_family.items():
         for record in records:
             if record.is_quarantined:
                 continue
-            exact_identities = (record.product_id, record.ticker, record.isin)
+            exact_identities = (
+                record.product_id,
+                record.ticker,
+                record.isin,
+                record.product_name,
+                record.short_name,
+            )
             name_identities = (record.product_name, record.short_name)
             exact_match = any(
                 value is not None and normalize_product_identity(value) in normalized_surfaces
@@ -149,9 +161,13 @@ def resolve_explicit_candidate_ids(
                 for value in name_identities
                 if value is not None
             )
-            if exact_match or contained_name_match or product_core_match:
-                resolved.setdefault(family, set()).add(record.product_id)
-    return resolved
+            if exact_match:
+                exact_resolved.setdefault(family, set()).add(record.product_id)
+            if contained_name_match:
+                contained_resolved.setdefault(family, set()).add(record.product_id)
+            if product_core_match:
+                core_resolved.setdefault(family, set()).add(record.product_id)
+    return exact_resolved or contained_resolved or core_resolved
 
 
 def build_provided_candidate_universe(
@@ -336,8 +352,57 @@ def intersect_evidence_with_provided_products(
 ) -> tuple[ProvidedProductCandidate, ...]:
     """Exact alias intersection; external documents cannot create a product."""
 
-    normalized_texts = tuple(normalize_product_identity(text) for text in evidence_texts)
-    folded_texts = tuple(unicodedata.normalize("NFKC", text).casefold() for text in evidence_texts)
+    source_texts = tuple(unicodedata.normalize("NFKC", text) for text in evidence_texts)
+    normalized_texts = tuple(normalize_product_identity(text) for text in source_texts)
+    folded_texts = tuple(text.casefold() for text in source_texts)
+    ascii_alnum_tokens = {
+        token for text in folded_texts for token in re.findall(r"[0-9a-z]+", text)
+    }
+    ric_bases_by_product: dict[str, set[str]] = {}
+    ric_base_owners: dict[str, set[str]] = {}
+    for candidate in universe.candidates:
+        for alias in candidate.aliases:
+            matched = re.fullmatch(r"(?P<base>[A-Z0-9]{2,15})\.[A-Z]{1,5}", alias)
+            if matched is None:
+                continue
+            base = matched.group("base")
+            ric_bases_by_product.setdefault(candidate.product_id, set()).add(base)
+            ric_base_owners.setdefault(base, set()).add(candidate.product_id)
+
+    product_context = re.compile(
+        r"\b(?:ETF|ETN|ETP|fund|performance|holdings|portfolio|investment\s+strategy)\b",
+        re.IGNORECASE,
+    )
+    # Do not uppercase prose before extracting ticker tokens. Otherwise words
+    # such as ``High``, ``Year`` or ``Aims`` become valid-looking RIC bases.
+    # A short base is accepted only when the official source wrote it in
+    # uppercase inside a product-context unit.
+    context_ticker_tokens = {
+        token
+        for text in source_texts
+        for unit in re.split(r"(?:\r?\n)+|(?<=[.!?])\s+", text)
+        if product_context.search(unit) is not None
+        for token in re.findall(r"(?<![A-Z0-9])[A-Z0-9]{2,15}(?![A-Z0-9])", unit)
+    }
+
+    def ascii_alias_matches(folded_alias: str) -> bool:
+        if folded_alias.isalnum():
+            return folded_alias in ascii_alnum_tokens
+        for text in folded_texts:
+            start = text.find(folded_alias)
+            while start >= 0:
+                end = start + len(folded_alias)
+                left_is_alnum = (
+                    start > 0 and text[start - 1] in "0123456789abcdefghijklmnopqrstuvwxyz"
+                )
+                right_is_alnum = (
+                    end < len(text) and text[end] in "0123456789abcdefghijklmnopqrstuvwxyz"
+                )
+                if not left_is_alnum and not right_is_alnum:
+                    return True
+                start = text.find(folded_alias, start + 1)
+        return False
+
     matches = []
     for candidate in universe.candidates:
         canonical = normalize_product_identity(candidate.product_name)
@@ -350,15 +415,18 @@ def intersect_evidence_with_provided_products(
             normalized_alias = normalize_product_identity(alias)
             if len(normalized_alias) < 4:
                 continue
-            if folded_alias.isascii() and folded_alias.isalnum():
-                pattern = re.compile(rf"(?<![0-9a-z]){re.escape(folded_alias)}(?![0-9a-z])")
-                if any(pattern.search(text) is not None for text in folded_texts):
+            if folded_alias.isascii() and re.fullmatch(r"[0-9a-z._:+-]+", folded_alias):
+                if ascii_alias_matches(folded_alias):
                     alias_match = True
                     break
             elif any(normalized_alias in text for text in normalized_texts):
                 alias_match = True
                 break
-        if canonical_match or alias_match:
+        unique_base_match = any(
+            len(ric_base_owners[base]) == 1 and base in context_ticker_tokens
+            for base in ric_bases_by_product.get(candidate.product_id, set())
+        )
+        if canonical_match or alias_match or unique_base_match:
             matches.append(candidate)
     return tuple(matches)
 

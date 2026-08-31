@@ -21,12 +21,16 @@ from finance_agent_core.config.source_registry import (
     OfficialSourceRegistry,
     OfficialSourceRegistryError,
     SourceConnectorKind,
+    SourceContentPlatform,
     load_official_source_registry,
 )
 
 _MAX_FETCH_BYTES = 16 * 1024 * 1024
+_CELERO_API_ORIGIN = "https://p2api.celero.io"
+_CELERO_SHORT_PATH = re.compile(r"^/s/(?P<short_hash>[0-9a-f]{8})(?:/.*)?$")
+_CELERO_CONTENT_UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
 _PUBLICATION_DATE_PATTERN = re.compile(
-    r"(?<!\d)(20\d{2})[-./]?(0[1-9]|1[0-2])[-./]?([0-2]\d|3[01])(?!\d)"
+    r"(?<!\d)(20\d{2})[-._/]?(0[1-9]|1[0-2])[-._/]?([0-2]\d|3[01])(?!\d)"
 )
 _PUBLICATION_META_KEYS = frozenset(
     {
@@ -48,6 +52,11 @@ _ENGLISH_EVIDENCE_DATE_PATTERN = re.compile(
     r"(?:as\s+of|holdings\s+(?:date|as\s+of))\s*[:：]?\s*"
     r"(January|February|March|April|May|June|July|August|September|October|November|December)"
     r"\s+(\d{1,2}),?\s+(20\d{2})",
+    re.IGNORECASE,
+)
+_ENGLISH_NUMERIC_EVIDENCE_DATE_PATTERN = re.compile(
+    r"(?:as\s+of|holdings\s+(?:date|as\s+of))\s*[:：]?\s*"
+    r"(\d{1,2})[./-](\d{1,2})[./-](20\d{2})",
     re.IGNORECASE,
 )
 _ENGLISH_MONTHS = {
@@ -108,6 +117,7 @@ class OfficialFetchRequest(OfficialConnectorModel):
     as_of: date | None = None
     timeout_seconds: float = Field(default=10.0, ge=0.1, le=30.0)
     max_bytes: int = Field(default=4 * 1024 * 1024, ge=1, le=_MAX_FETCH_BYTES)
+    allow_navigation_only: bool = False
 
     @model_validator(mode="after")
     def validate_dates(self) -> OfficialFetchRequest:
@@ -123,6 +133,7 @@ class OfficialHttpResponse:
     final_url: str
     content_type: str
     body: bytes
+    metadata_as_of: date | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -136,6 +147,25 @@ class OfficialSourceSnapshot:
     content_sha256: str
     published_at: date | None
     as_of: date
+
+
+@dataclass(frozen=True, slots=True)
+class OfficialNavigationSnapshot:
+    """Approved official HTML usable only to discover linked evidence.
+
+    It deliberately has no evidence date and therefore can never enter the
+    external evidence/result contract. Only the link resolver may consume it.
+    """
+
+    source: OfficialSourceEntry
+    capability: KnowledgeCapability
+    source_uri: str
+    title: str
+    content_type: str
+    content: bytes
+    content_sha256: str
+    published_at: None = None
+    as_of: None = None
 
 
 class OfficialHttpTransport(Protocol):
@@ -211,6 +241,134 @@ class UrllibOfficialHttpTransport:
             final_url=final_url,
             content_type=content_type,
             body=body,
+        )
+
+
+class CeleroShortLinkDocumentMaterializer:
+    """Resolve an approved Celero short link to its immutable original PDF.
+
+    Celero is a document-hosting platform rather than an evidence authority.
+    The caller must first authorize the public short URL through Source Registry.
+    This adapter accepts no arbitrary vendor URL: both API paths are constructed
+    locally from a bounded short hash and a server-returned canonical UUID.
+    """
+
+    def __init__(self, transport: OfficialHttpTransport) -> None:
+        self.transport = transport
+
+    @staticmethod
+    def is_thin_shell(response: OfficialHttpResponse) -> bool:
+        media_type = response.content_type.casefold().split(";", maxsplit=1)[0].strip()
+        if media_type not in {"text/html", "application/xhtml+xml"}:
+            return False
+        lowered = response.body.lower()
+        return b"/static/js/main-" in lowered and b'id="root"' in lowered
+
+    @staticmethod
+    def _require_response(
+        response: OfficialHttpResponse,
+        *,
+        expected_url: str,
+        expected_content_type: str,
+    ) -> bytes:
+        media_type = response.content_type.casefold().split(";", maxsplit=1)[0].strip()
+        if response.status_code != 200:
+            raise OfficialConnectorError("Celero document API did not return HTTP 200")
+        if response.final_url != expected_url:
+            raise OfficialConnectorError("Celero document API redirected unexpectedly")
+        if media_type != expected_content_type:
+            raise OfficialConnectorError("Celero document API returned an invalid content type")
+        if not response.body:
+            raise OfficialConnectorError("Celero document API returned an empty body")
+        return response.body
+
+    def materialize(
+        self,
+        official_url: str,
+        *,
+        timeout_seconds: float,
+        max_bytes: int,
+    ) -> OfficialHttpResponse:
+        parsed = urllib.parse.urlsplit(official_url)
+        matched = _CELERO_SHORT_PATH.fullmatch(parsed.path)
+        if matched is None or parsed.query or parsed.fragment:
+            raise OfficialConnectorError("Celero official URL is not a canonical short link")
+        short_hash = matched.group("short_hash")
+        metadata_url = f"{_CELERO_API_ORIGIN}/api/shorten/{short_hash}/?viewer=true"
+        metadata_response = self.transport.fetch(
+            metadata_url,
+            timeout_seconds=min(10.0, max(0.1, timeout_seconds / 3)),
+            max_bytes=min(512 * 1024, max_bytes),
+        )
+        metadata_bytes = self._require_response(
+            metadata_response,
+            expected_url=metadata_url,
+            expected_content_type="application/json",
+        )
+        try:
+            metadata = json.loads(metadata_bytes)
+        except (UnicodeDecodeError, json.JSONDecodeError) as error:
+            raise OfficialConnectorError("Celero document metadata is invalid JSON") from error
+        if not isinstance(metadata, dict) or metadata.get("hash") != short_hash:
+            raise OfficialConnectorError("Celero document metadata changed the short hash")
+        content_uuid = metadata.get("content_uuid")
+        if (
+            not isinstance(content_uuid, str)
+            or _CELERO_CONTENT_UUID.fullmatch(content_uuid) is None
+        ):
+            raise OfficialConnectorError("Celero document metadata has no canonical content UUID")
+        content_url = metadata.get("content_url")
+        if not isinstance(content_url, str):
+            raise OfficialConnectorError("Celero document metadata has no official content URL")
+        linked = urllib.parse.urlsplit(content_url)
+        linked_match = _CELERO_SHORT_PATH.fullmatch(linked.path)
+        if (
+            linked.scheme != parsed.scheme
+            or linked.hostname != parsed.hostname
+            or linked_match is None
+            or linked_match.group("short_hash") != short_hash
+        ):
+            raise OfficialConnectorError("Celero metadata left the approved official short link")
+        content_metadata_url = f"{_CELERO_API_ORIGIN}/api/content/{content_uuid}/?viewer=true"
+        content_metadata_response = self.transport.fetch(
+            content_metadata_url,
+            timeout_seconds=min(10.0, max(0.1, timeout_seconds / 3)),
+            max_bytes=min(1024 * 1024, max_bytes),
+        )
+        content_metadata_bytes = self._require_response(
+            content_metadata_response,
+            expected_url=content_metadata_url,
+            expected_content_type="application/json",
+        )
+        try:
+            content_metadata = json.loads(content_metadata_bytes)
+        except (UnicodeDecodeError, json.JSONDecodeError) as error:
+            raise OfficialConnectorError("Celero content metadata is invalid JSON") from error
+        if not isinstance(content_metadata, dict) or content_metadata.get("uuid") != content_uuid:
+            raise OfficialConnectorError("Celero content metadata changed the content UUID")
+        original_name = content_metadata.get("original_name")
+        if not isinstance(original_name, str) or not original_name.strip():
+            raise OfficialConnectorError("Celero content metadata has no original filename")
+        metadata_as_of = _parse_publication_date(original_name)
+        download_url = f"{_CELERO_API_ORIGIN}/api/content/{content_uuid}/download/"
+        pdf_response = self.transport.fetch(
+            download_url,
+            timeout_seconds=min(20.0, max(0.1, timeout_seconds * 2 / 3)),
+            max_bytes=max_bytes,
+        )
+        pdf_bytes = self._require_response(
+            pdf_response,
+            expected_url=download_url,
+            expected_content_type="application/pdf",
+        )
+        if len(pdf_bytes) > max_bytes or not pdf_bytes.startswith(b"%PDF-"):
+            raise OfficialConnectorError("Celero original document is oversized or not a PDF")
+        return OfficialHttpResponse(
+            status_code=200,
+            final_url=official_url,
+            content_type="application/pdf",
+            body=pdf_bytes,
+            metadata_as_of=metadata_as_of,
         )
 
 
@@ -388,6 +546,11 @@ def infer_official_evidence_date(content_type: str, body: bytes) -> date | None:
             candidates.add(date(int(year), _ENGLISH_MONTHS[month.casefold()], int(day)))
         except ValueError:
             continue
+    for month, day, year in _ENGLISH_NUMERIC_EVIDENCE_DATE_PATTERN.findall(text):
+        try:
+            candidates.add(date(int(year), int(month), int(day)))
+        except ValueError:
+            continue
     return next(iter(candidates)) if len(candidates) == 1 else None
 
 
@@ -399,7 +562,7 @@ class OfficialDocumentLinkResolver:
 
     def resolve(
         self,
-        snapshot: OfficialSourceSnapshot,
+        snapshot: OfficialSourceSnapshot | OfficialNavigationSnapshot,
         *,
         max_links: int = 8,
         evidence_as_of: date | None = None,
@@ -461,7 +624,13 @@ class OfficialDocumentLinkResolver:
                 source = self.registry.authorize_url(url, snapshot.capability)
             except OfficialSourceRegistryError:
                 continue
-            if source.source_id != snapshot.source.source_id:
+            if source.source_id != snapshot.source.source_id and (
+                source.publisher != snapshot.source.publisher
+                or source.authority != snapshot.source.authority
+            ):
+                # One approved publisher may split product pages and documents
+                # across registered official hosts. Crossing to another
+                # publisher or authority remains forbidden.
                 continue
             is_pdf = urllib.parse.urlsplit(url).path.casefold().endswith(".pdf")
             if (is_pdf and source.connector_kind is SourceConnectorKind.HTML) or (
@@ -572,6 +741,7 @@ class OfficialSourceConnector:
     ) -> None:
         self.transport = transport
         self.registry = registry or load_official_source_registry()
+        self._celero_materializer = CeleroShortLinkDocumentMaterializer(transport)
 
     @staticmethod
     def _content_type_allowed(entry: OfficialSourceEntry, content_type: str) -> bool:
@@ -593,7 +763,7 @@ class OfficialSourceConnector:
         self,
         candidate: OfficialDiscoveryCandidate,
         request: OfficialFetchRequest,
-    ) -> OfficialSourceSnapshot:
+    ) -> OfficialSourceSnapshot | OfficialNavigationSnapshot:
         if candidate.url != request.url:
             raise OfficialConnectorError("fetch request differs from its discovered candidate")
         source = self.registry.authorize_url(request.url, request.capability)
@@ -610,6 +780,15 @@ class OfficialSourceConnector:
             timeout_seconds=request.timeout_seconds,
             max_bytes=request.max_bytes,
         )
+        if (
+            source.content_platform is SourceContentPlatform.CELERO_SHORT_LINK
+            and self._celero_materializer.is_thin_shell(response)
+        ):
+            response = self._celero_materializer.materialize(
+                request.url,
+                timeout_seconds=request.timeout_seconds,
+                max_bytes=request.max_bytes,
+            )
         if response.status_code != 200:
             raise OfficialConnectorError("official source did not return HTTP 200")
         # Redirects are disabled in the production transport.  Rechecking the final
@@ -629,10 +808,32 @@ class OfficialSourceConnector:
         if source.publication_date_required and published_at is None:
             raise OfficialConnectorError("official source requires an explicit publication date")
         evidence_at = infer_official_evidence_date(response.content_type, response.body)
-        if request.as_of is not None and evidence_at is not None and request.as_of != evidence_at:
-            raise OfficialConnectorError("official source evidence date conflicts with the request")
+        if (
+            evidence_at is not None
+            and response.metadata_as_of is not None
+            and evidence_at != response.metadata_as_of
+        ):
+            raise OfficialConnectorError(
+                "official source body conflicts with platform metadata date"
+            )
+        evidence_at = evidence_at or response.metadata_as_of
+        if request.as_of is not None:
+            if evidence_at is not None and request.as_of != evidence_at:
+                raise OfficialConnectorError(
+                    "official source evidence date conflicts with the request"
+                )
         effective_as_of = request.as_of or evidence_at or published_at
         if effective_as_of is None:
+            if request.allow_navigation_only and not source.publication_date_required:
+                return OfficialNavigationSnapshot(
+                    source=source,
+                    capability=request.capability,
+                    source_uri=response.final_url,
+                    title=candidate.title,
+                    content_type=response.content_type,
+                    content=response.body,
+                    content_sha256=hashlib.sha256(response.body).hexdigest(),
+                )
             raise OfficialConnectorError("official source requires an explicit evidence date")
         if published_at is not None and published_at > self.registry.evidence_cutoff:
             raise OfficialConnectorError("source was published after the evaluation cutoff")
@@ -653,9 +854,11 @@ class OfficialSourceConnector:
 
 __all__ = [
     "BoundedOfficialDiscovery",
+    "CeleroShortLinkDocumentMaterializer",
     "OfficialConnectorError",
     "OfficialDiscoveryCandidate",
     "OfficialFetchRequest",
+    "OfficialNavigationSnapshot",
     "OfficialHttpResponse",
     "OfficialHttpTransport",
     "infer_official_publication_date",

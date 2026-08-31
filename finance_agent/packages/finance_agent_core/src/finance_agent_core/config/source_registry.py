@@ -33,6 +33,11 @@ class SourceConnectorKind(StrEnum):
     HTML_PDF_OR_JSON = "html_pdf_or_json"
 
 
+class SourceContentPlatform(StrEnum):
+    DIRECT = "direct"
+    CELERO_SHORT_LINK = "celero_short_link"
+
+
 class SourceRegistryModel(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -62,8 +67,10 @@ class OfficialSourceEntry(SourceRegistryModel):
     hostname: str = Field(pattern=r"^[a-z0-9.-]+$")
     path_prefixes: tuple[str, ...] = Field(min_length=1, max_length=20)
     connector_kind: SourceConnectorKind
+    content_platform: SourceContentPlatform = SourceContentPlatform.DIRECT
     capabilities: tuple[KnowledgeCapability, ...] = Field(min_length=1)
     selection_aliases: tuple[str, ...] = Field(default=(), max_length=30)
+    discovery_urls: tuple[str, ...] = Field(default=(), max_length=20)
     product_families: tuple[ProductFamily, ...] = Field(default=(), max_length=4)
     historical_link_capabilities: tuple[KnowledgeCapability, ...] = Field(
         default=(),
@@ -145,6 +152,35 @@ class OfficialSourceEntry(SourceRegistryModel):
         if serialized != sorted(serialized) or len(serialized) != len(set(serialized)):
             raise ValueError("source product families must be unique and sorted")
         return values
+
+    @field_validator("discovery_urls")
+    @classmethod
+    def validate_discovery_urls(cls, values: tuple[str, ...]) -> tuple[str, ...]:
+        if values != tuple(sorted(values)) or len(values) != len(set(values)):
+            raise ValueError("source discovery URLs must be unique and sorted")
+        for value in values:
+            parsed = urlsplit(value)
+            if (
+                value != value.strip()
+                or parsed.scheme != "https"
+                or parsed.hostname is None
+                or parsed.username is not None
+                or parsed.password is not None
+                or parsed.port is not None
+                or parsed.fragment
+            ):
+                raise ValueError("source discovery URLs must be canonical public HTTPS URLs")
+        return values
+
+    @model_validator(mode="after")
+    def validate_discovery_url_scope(self) -> OfficialSourceEntry:
+        for value in self.discovery_urls:
+            parsed = urlsplit(value)
+            if parsed.hostname != self.hostname or not any(
+                _path_is_in_scope(parsed.path or "/", prefix) for prefix in self.path_prefixes
+            ):
+                raise ValueError("source discovery URL is outside its domain/path scope")
+        return self
 
 
 class OfficialSourceRegistry(SourceRegistryModel):
@@ -249,5 +285,6 @@ __all__ = [
     "OfficialSourceRegistryError",
     "SourceAuthority",
     "SourceConnectorKind",
+    "SourceContentPlatform",
     "load_official_source_registry",
 ]

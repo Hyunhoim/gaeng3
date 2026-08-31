@@ -78,20 +78,59 @@ def external_knowledge_result_to_backend(
             source_manifest=None,
         )
     if status is ExternalKnowledgeOutcomeStatus.NOT_FOUND:
+        documents = [
+            DocumentEvidence(
+                evidence_id=evidence.evidence_id,
+                document_id=evidence.document_id,
+                chunk_ordinal=0,
+                title=evidence.title,
+                text=evidence.excerpt,
+                source_uri=evidence.source_uri,
+                source_kind=DocumentSourceKind.EXTERNAL_APPROVED,
+                as_of=evidence.as_of,
+                document_sha256=evidence.content_sha256,
+                metadata={
+                    "publisher": evidence.publisher,
+                    "source_registry_id": evidence.source_registry_id,
+                    "locator": evidence.locator,
+                    "evidence_scope": "external_entity_identity_only",
+                },
+                relevance_score=1.0,
+            )
+            for evidence in result.identity_evidence
+        ]
+        citations = [
+            SourceCitation(
+                citation_id=f"external-identity:{evidence.evidence_id}",
+                kind="relation_field",
+                label=evidence.title,
+                source_id=evidence.source_registry_id,
+                source_locator=f"{evidence.source_uri} · {evidence.locator}",
+                as_of=evidence.as_of,
+                evidence_refs=[evidence.evidence_id],
+            )
+            for evidence in result.identity_evidence
+        ]
+        answer_lines = ["찾으시는 상품은 제공 데이터 내에 존재하지 않습니다."]
+        answer_lines.extend(
+            f"- 외부 명칭 근거: {evidence.publisher} · {evidence.title} "
+            f"(기준일 {evidence.as_of.isoformat()}, {evidence.source_uri})"
+            for evidence in result.identity_evidence
+        )
         return BackendAgentResponse(
             request_id=plan.question_id,
             status=BackendStatus.NOT_FOUND,
             intent=plan.interaction_intent,
             product_families=families,
-            answer="찾으시는 상품은 제공 데이터 내에 존재하지 않습니다.",
+            answer="\n".join(answer_lines),
             query_plan=plan,
             candidate_count=0,
             products=[],
             comparisons=[],
             aggregates=[],
-            documents=[],
-            citations=[],
-            as_of_dates=[],
+            documents=documents,
+            citations=citations,
+            as_of_dates=sorted({item.as_of for item in documents}),
             warnings=[],
             answer_mode=BackendAnswerMode.DETERMINISTIC,
             fallback_used=False,

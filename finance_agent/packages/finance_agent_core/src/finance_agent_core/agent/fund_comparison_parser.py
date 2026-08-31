@@ -13,6 +13,7 @@ from finance_agent_core.agent.fund_resolver import (
     normalize_fund_mention,
     strip_fund_mention_quotes,
 )
+from finance_agent_core.agent.presentation import mask_response_presentation
 from finance_agent_core.agent.product_comparison import comparison_projection
 from finance_agent_core.config import load_field_registry
 from finance_agent_core.contracts import QueryPlan
@@ -29,6 +30,10 @@ type FundComparisonField = Literal[
     "three_month_return_pct",
     "six_month_return_pct",
     "one_year_return_pct",
+    "eighteen_month_return_pct",
+    "two_year_return_pct",
+    "three_year_return_pct",
+    "five_year_return_pct",
     "fund_geography_scope",
     "fund_management_attribute",
     "investment_region",
@@ -49,6 +54,10 @@ SUPPORTED_FUND_COMPARISON_FIELDS: tuple[FundComparisonField, ...] = (
     "three_month_return_pct",
     "six_month_return_pct",
     "one_year_return_pct",
+    "eighteen_month_return_pct",
+    "two_year_return_pct",
+    "three_year_return_pct",
+    "five_year_return_pct",
     "fund_geography_scope",
     "fund_management_attribute",
     "investment_region",
@@ -89,6 +98,22 @@ _FIELD_PATTERNS: tuple[tuple[FundComparisonField, tuple[str, ...]], ...] = (
         "one_year_return_pct",
         (r"1\s*년\s*(?:수익률|수익|성과)", r"1Y\s*수익률"),
     ),
+    (
+        "eighteen_month_return_pct",
+        (r"18\s*개월\s*(?:수익률|수익|성과)",),
+    ),
+    (
+        "two_year_return_pct",
+        (r"2\s*년\s*(?:수익률|수익|성과)", r"2Y\s*수익률"),
+    ),
+    (
+        "three_year_return_pct",
+        (r"3\s*년\s*(?:수익률|수익|성과)", r"3Y\s*수익률"),
+    ),
+    (
+        "five_year_return_pct",
+        (r"5\s*년\s*(?:수익률|수익|성과)", r"5Y\s*수익률"),
+    ),
     ("company_sellable", (r"당사\s*판매\s*여부", r"미래에셋(?:증권)?\s*판매\s*여부")),
     (
         "fund_geography_scope",
@@ -109,7 +134,6 @@ _FIELD_PATTERNS: tuple[tuple[FundComparisonField, tuple[str, ...]], ...] = (
 _UNSUPPORTED_PATTERNS: tuple[tuple[str, str], ...] = (
     (r"총\s*보수", "총보수"),
     (r"판매\s*수수료", "판매수수료"),
-    (r"(?:18\s*개월|2\s*년|3\s*년|5\s*년)\s*(?:수익률|수익|성과)", "미지원 장기 수익률"),
     (r"수익률\s*(?:전망|예측)", "수익률 전망"),
     (r"환\s*노출\s*여부", "환 노출 여부"),
     (r"(?:추천|매수할|사야\s*할|가장\s*좋은)", "단정적 투자 추천"),
@@ -660,7 +684,7 @@ def _mask_supported_question_language(masked_question: str) -> str:
 
 def _mask_supported_request_framing(question: str) -> str:
     """Mask only audited presentation framing while preserving character offsets."""
-    normalized = unicodedata.normalize("NFKC", question)
+    normalized = mask_response_presentation(unicodedata.normalize("NFKC", question))
     for pattern in _SUPPORTED_REQUEST_PREAMBLE_PATTERNS:
         if match := pattern.match(normalized):
             normalized = " " * match.end() + normalized[match.end() :]
@@ -923,6 +947,13 @@ def _audited_natural_id_comparison_surface(
             rf"^\s*<ID>\s*(?:vs|versus)\s*<ID>\s*[,，]\s*"
             rf"공모\s*펀드\s*[,，]\s*(?:상품\s*)?{field}\s*[,，]\s*"
             rf"(?:상품\s*)?{field}\s*비교\s*[.!?]?\s*$",
+            flags=re.IGNORECASE,
+        ),
+        re.compile(
+            rf"^\s*공모\s*펀드\s*(?:종목|상품)?\s*번호\s*<ID>\s*[,，、]\s*"
+            rf"<ID>\s*(?:가운데|중(?:에서)?)\s*{field}(?:이|가)?\s*더\s*"
+            rf"(?:높|낮|좋|나쁘)\w*\s*상품(?:을|이|은|는)?\s*"
+            r"(?:알려|보여|찾아)\s*(?:줘|주세요|주십시오)?\s*[.!?]?\s*$",
             flags=re.IGNORECASE,
         ),
     )

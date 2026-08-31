@@ -63,9 +63,9 @@ def _valid_input_arguments(output: Path) -> list[str]:
         "--fund-execution-policy",
         "public_fund_v1_approved",
         "--schema-dense-index-sha256",
-        "9055d4cc99f9ab75ab546f860e21380c5e586a55a35272d05cccda08b150efc3",
+        "465f8105d5f7b339b82068f67d8a75ceae63754f0bc8f232cacffed68b37cbc0",
         "--schema-dense-calibration-report-sha256",
-        "cb738558be71c9bd173504fa339302854bdd5fd6f6331143b0e87ae528fb7c47",
+        "2aabaf5bb7a2edd5947d102f0851f205d29e27918d69e37c812831d9994d14c1",
         "--schema-dense-min-score",
         "0.340015",
         "--schema-dense-hclx-candidate-min-score",
@@ -161,10 +161,10 @@ def test_release_ci_accepts_only_normalized_protected_main_inputs(tmp_path: Path
     assert values["adaptive_semantic_enabled"] == "true"
     assert values["fund_execution_policy"] == "public_fund_v1_approved"
     assert values["schema_dense_index_sha256"] == (
-        "9055d4cc99f9ab75ab546f860e21380c5e586a55a35272d05cccda08b150efc3"
+        "465f8105d5f7b339b82068f67d8a75ceae63754f0bc8f232cacffed68b37cbc0"
     )
     assert values["schema_dense_calibration_report_sha256"] == (
-        "cb738558be71c9bd173504fa339302854bdd5fd6f6331143b0e87ae528fb7c47"
+        "2aabaf5bb7a2edd5947d102f0851f205d29e27918d69e37c812831d9994d14c1"
     )
     assert values["schema_dense_min_score"] == "0.340015"
     assert values["schema_dense_hclx_candidate_min_score"] == "0.3"
@@ -818,10 +818,10 @@ def test_release_workflow_binds_exact_adaptive_runtime_artifacts() -> None:
     assert release["env"]["FINAL_HCX_SEMANTIC_RESOLVER_ENABLED"] == "false"
     assert release["env"]["FINAL_ADAPTIVE_SEMANTIC_ENABLED"] == "true"
     assert release["env"]["FINAL_SCHEMA_DENSE_CALIBRATION_REPORT_SHA256"] == (
-        "cb738558be71c9bd173504fa339302854bdd5fd6f6331143b0e87ae528fb7c47"
+        "2aabaf5bb7a2edd5947d102f0851f205d29e27918d69e37c812831d9994d14c1"
     )
     assert release["env"]["FINAL_SCHEMA_DENSE_CALIBRATION_ARTIFACT_SHA256"] == (
-        "8243fba9d219194bfb236b581d8a8a561f44b985f1572227493a135922c64f99"
+        "dba5fbfdafcce6d74bf03ba0ebb13b3a614061b511b174cf21e89d894ff4708d"
     )
     assert release["env"]["FINAL_SCHEMA_DENSE_MIN_SCORE"] == "0.340015"
     assert release["env"]["FINAL_SCHEMA_DENSE_HCLX_CANDIDATE_MIN_SCORE"] == "0.3"

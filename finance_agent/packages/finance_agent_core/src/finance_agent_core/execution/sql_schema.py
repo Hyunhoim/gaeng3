@@ -67,6 +67,19 @@ def _source_boolean(source_column: str) -> SqlField:
     )
 
 
+def _source_enum_boolean(
+    source_column: str,
+    *,
+    true_value: str,
+    false_value: str,
+) -> SqlField:
+    value = _json_value(source_column)
+    return SqlField(
+        f"CASE TRIM(CAST({value} AS TEXT)) "
+        f"WHEN '{true_value}' THEN 1 WHEN '{false_value}' THEN 0 ELSE NULL END"
+    )
+
+
 def _source_date(source_column: str) -> SqlField:
     value = f"CAST({_json_value(source_column)} AS TEXT)"
     normalized = (
@@ -274,7 +287,11 @@ BOND_SQL_FIELDS = {
         quality_column="bond_subclass_quality",
     ),
     "bond_type": SqlField("bond_type", quality_column="bond_type_quality"),
-    "public_offering": _source_boolean("bd_ofr_tcd"),
+    "public_offering": _source_enum_boolean(
+        "bd_ofr_tcd",
+        true_value="공모",
+        false_value="사모",
+    ),
     "pension_eligible": _source_boolean("pd_pen_tr_yn"),
     "sales_channel": _source_text("bdbns_abl_chnl_nm"),
     "risk_level": _source_text("pd_risk_nm"),

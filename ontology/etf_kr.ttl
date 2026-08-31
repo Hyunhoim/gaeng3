@@ -365,6 +365,7 @@ etfkr:field_asset_type
     ga:enumValue "단기자금" ;
     ga:enumValue "통화" ;
     ga:enumValue "부동산" ;
+    ga:enumValue "대체투자" ;
     ga:enumValue "기타" ;
     ga:asOfBasis "static" ;
     ga:sourceDataset "domestic_etp" ;

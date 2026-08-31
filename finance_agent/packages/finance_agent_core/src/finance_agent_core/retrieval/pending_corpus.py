@@ -113,8 +113,12 @@ class PendingCorpusSnapshot(PendingCorpusModel):
 class PendingCorpusFailure(PendingCorpusModel):
     document_id: str = Field(pattern=_DOCUMENT_ID_PATTERN)
     source_uri: str = Field(min_length=8, max_length=2000)
-    stage: Literal["fetch", "text_extraction"]
-    reason_code: Literal["official_fetch_failed", "text_extraction_failed"]
+    stage: Literal["fetch", "text_extraction", "deduplication"]
+    reason_code: Literal[
+        "official_fetch_failed",
+        "text_extraction_failed",
+        "duplicate_official_snapshot",
+    ]
 
 
 class PendingCorpusManifest(PendingCorpusModel):
@@ -361,6 +365,7 @@ def collect_pending_corpus(
         collected_at = datetime.now(UTC)
         snapshots: list[PendingCorpusSnapshot] = []
         failures: list[PendingCorpusFailure] = []
+        snapshot_index_by_raw_sha256: dict[str, int] = {}
         for source in active_catalog.documents:
             registry_entries = [
                 connector.registry.authorize_url(source.source_uri, capability)
@@ -413,30 +418,57 @@ def collect_pending_corpus(
                 )
                 continue
             text_bytes = (text + "\n").encode("utf-8")
+            raw_sha256 = hashlib.sha256(snapshot.content).hexdigest()
+            text_sha256 = hashlib.sha256(text_bytes).hexdigest()
+            pending_snapshot = PendingCorpusSnapshot(
+                document_id=source.document_id,
+                title=source.title,
+                publisher=registry_entry.publisher,
+                source_registry_id=registry_entry.source_id,
+                source_uri=snapshot.source_uri,
+                capabilities=source.capabilities,
+                collected_at_utc=collected_at,
+                published_at=source.published_at,
+                as_of=source.as_of,
+                language=source.language,
+                purposes=source.purposes,
+                raw_relative_path=raw_relative_path,
+                raw_media_type=media_type,
+                raw_size_bytes=len(snapshot.content),
+                raw_sha256=raw_sha256,
+                text_relative_path=text_relative_path,
+                text_size_bytes=len(text_bytes),
+                text_sha256=text_sha256,
+            )
+            duplicate_index = snapshot_index_by_raw_sha256.get(raw_sha256)
+            if duplicate_index is not None:
+                previous = snapshots[duplicate_index]
+                if previous.text_sha256 != text_sha256:
+                    raise PendingCorpusError("identical official bytes produced different text")
+                snapshots[duplicate_index] = previous.model_copy(
+                    update={
+                        "capabilities": tuple(
+                            sorted(
+                                {*previous.capabilities, *pending_snapshot.capabilities},
+                                key=lambda item: item.value,
+                            )
+                        ),
+                        "purposes": tuple(sorted({*previous.purposes, *pending_snapshot.purposes})),
+                    }
+                )
+                failures.append(
+                    PendingCorpusFailure(
+                        document_id=source.document_id,
+                        source_uri=source.source_uri,
+                        stage="deduplication",
+                        reason_code="duplicate_official_snapshot",
+                    )
+                )
+                continue
             _write_file(staging / raw_relative_path, snapshot.content)
             _write_file(staging / text_relative_path, text_bytes)
-            snapshots.append(
-                PendingCorpusSnapshot(
-                    document_id=source.document_id,
-                    title=source.title,
-                    publisher=registry_entry.publisher,
-                    source_registry_id=registry_entry.source_id,
-                    source_uri=snapshot.source_uri,
-                    capabilities=source.capabilities,
-                    collected_at_utc=collected_at,
-                    published_at=source.published_at,
-                    as_of=source.as_of,
-                    language=source.language,
-                    purposes=source.purposes,
-                    raw_relative_path=raw_relative_path,
-                    raw_media_type=media_type,
-                    raw_size_bytes=len(snapshot.content),
-                    raw_sha256=hashlib.sha256(snapshot.content).hexdigest(),
-                    text_relative_path=text_relative_path,
-                    text_size_bytes=len(text_bytes),
-                    text_sha256=hashlib.sha256(text_bytes).hexdigest(),
-                )
-            )
+            snapshot_index_by_raw_sha256[raw_sha256] = len(snapshots)
+            snapshots.append(pending_snapshot)
         documents = tuple(snapshots)
         manifest = PendingCorpusManifest(
             catalog_id=active_catalog.catalog_id,

@@ -115,6 +115,14 @@ def test_router_executes_only_independent_multi_family_search() -> None:
         "국내채권과 해외 ETF를 각각 3개 보여줘",
         "cross-route-004",
     )
+    ordinal = router.route(
+        "첫째, 국내 ETF를 1개월 수익률 순으로 2개 보여줘. 둘째, 해외 ETF를 AUM 순으로 3개 보여줘.",
+        "cross-route-005",
+    )
+    global_ranking = router.route(
+        "국내 ETF와 해외 ETF의 1일 수익률을 직접 비교해 낮은 순 4개를 보여줘.",
+        "cross-route-006",
+    )
 
     assert search.disposition is RouteDisposition.EXECUTE
     assert search.query_plan_intent is Intent.SEARCH
@@ -129,6 +137,10 @@ def test_router_executes_only_independent_multi_family_search() -> None:
         ProductFamily.BOND,
         ProductFamily.OVERSEAS_ETP,
     ]
+    assert ordinal.disposition is RouteDisposition.EXECUTE
+    assert ordinal.query_plan_intent is Intent.SEARCH
+    assert global_ranking.disposition is RouteDisposition.EXECUTE
+    assert global_ranking.query_plan_intent is Intent.SEARCH
 
 
 def test_cross_family_search_preserves_verified_family_boundaries_and_backend_dto(
@@ -204,17 +216,31 @@ def test_cross_family_global_top_k_uses_one_common_metric_and_unit(
         sample_database,
         domestic_sample_database,
     ).answer(
-        "국내 ETF와 해외 ETF 중 총보수율이 낮은 상위 3개를 보여줘",
+        "국내 ETF와 해외 ETF 가운데 1일 성과를 직접 비교하려고 합니다. "
+        "같은 퍼센트 단위로 낮은 순 3개를 보여줘",
         "cross-global-top-k-001",
     )
 
     assert result.status == "executed"
     assert len(result.products) == 3
     assert sum(len(item.products) for item in result.family_searches) == 3
+    ranking_values = [
+        next(
+            field.normalized_value
+            for field in product.fields
+            if field.canonical_field == "one_day_return_pct"
+        )
+        for product in result.products
+    ]
+    assert ranking_values == sorted(ranking_values)
     assert "통합 정렬했습니다" in result.answer
     assert "결측·UNKNOWN 값은 순위에서 제외했습니다" in result.answer
     assert "global TOP-K" in result.warnings[0]
-    assert routed_result_to_backend(result).status is BackendStatus.SUCCESS
+    response = routed_result_to_backend(result)
+    assert response.status is BackendStatus.SUCCESS
+    assert [product.product_id for product in response.products] == [
+        product.product_id for product in result.products
+    ]
 
 
 def test_cross_family_global_money_ranking_requires_one_currency(
@@ -364,7 +390,37 @@ def test_cross_family_search_fails_closed_before_execution_when_database_is_miss
     assert "database path is not configured" in result.answer
 
 
-def test_cross_family_search_clarifies_asymmetric_family_conditions(
+def test_cross_family_search_executes_explicit_ordinal_family_conditions(
+    sample_database: tuple[
+        Path,
+        list[NormalizedOverseasEtpRecord],
+        DatabaseManifest,
+    ],
+    domestic_sample_database: tuple[
+        Path,
+        list[NormalizedDomesticEtpRecord],
+        DatabaseManifest,
+    ],
+) -> None:
+    result = _cross_family_agent(
+        sample_database,
+        domestic_sample_database,
+    ).answer(
+        "첫째, 국내 ETF는 1개월 수익률 높은 순으로 2개 보여줘. "
+        "둘째, 해외 ETF는 AUM 높은 순으로 3개 보여줘.",
+        "cross-search-006",
+    )
+
+    assert result.status == "executed"
+    assert [len(item.products) for item in result.family_searches] == [2, 3]
+    assert [item.query_plan.limit for item in result.family_searches] == [2, 3]
+    assert [item.query_plan.ranking[0].field for item in result.family_searches] == [
+        "one_month_return_pct",
+        "aum",
+    ]
+
+
+def test_cross_family_search_executes_family_topic_asymmetric_conditions(
     sample_database: tuple[
         Path,
         list[NormalizedOverseasEtpRecord],
@@ -381,13 +437,42 @@ def test_cross_family_search_clarifies_asymmetric_family_conditions(
         domestic_sample_database,
     ).answer(
         "국내 ETF는 1개월 수익률 높은 순, 해외 ETF는 AUM 높은 순으로 보여줘",
-        "cross-search-006",
+        "cross-search-unscoped-asymmetric",
     )
 
-    assert result.status == "clarify"
-    assert result.family_searches == []
-    assert result.products == []
-    assert "서로 다른 조건은 아직 지원하지 않습니다" in result.answer
+    assert result.status == "executed"
+    assert [item.query_plan.ranking[0].field for item in result.family_searches] == [
+        "one_month_return_pct",
+        "aum",
+    ]
+
+
+def test_cross_family_search_executes_family_suffix_asymmetric_conditions(
+    sample_database: tuple[
+        Path,
+        list[NormalizedOverseasEtpRecord],
+        DatabaseManifest,
+    ],
+    domestic_sample_database: tuple[
+        Path,
+        list[NormalizedDomesticEtpRecord],
+        DatabaseManifest,
+    ],
+) -> None:
+    result = _cross_family_agent(
+        sample_database,
+        domestic_sample_database,
+    ).answer(
+        "1개월 수익률 높은 국내 ETF와 AUM이 큰 해외 ETF를 각각 2개 보여줘",
+        "cross-search-family-suffix",
+    )
+
+    assert result.status == "executed"
+    assert [item.query_plan.ranking[0].field for item in result.family_searches] == [
+        "one_month_return_pct",
+        "aum",
+    ]
+    assert [item.query_plan.limit for item in result.family_searches] == [2, 2]
 
 
 def test_cross_family_authorizes_the_whole_batch_before_any_oracle_call(

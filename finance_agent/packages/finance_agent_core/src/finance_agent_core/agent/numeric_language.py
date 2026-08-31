@@ -18,7 +18,7 @@ _KOREAN_CARDINALS = {
     "아홉": 9,
     "열": 10,
 }
-_COUNTER = r"(?:개(?!월)|건|종목|상품)"
+_COUNTER = r"(?:개(?!월)|건|종목|상품(?!군))"
 
 
 def requested_result_limit(question: str) -> int | None:
@@ -56,6 +56,7 @@ def requested_result_limit(question: str) -> int | None:
         return value if 1 <= value <= 100 else None
 
     korean = re.findall(
+        rf"(?<![0-9A-Za-z가-힣])"
         rf"({'|'.join(sorted(_KOREAN_CARDINALS, key=len, reverse=True))})\s*{_COUNTER}",
         question,
     )

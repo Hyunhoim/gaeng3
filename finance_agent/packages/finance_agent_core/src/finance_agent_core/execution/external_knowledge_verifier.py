@@ -105,9 +105,14 @@ class ExternalKnowledgeEvidenceVerifier:
                     checks["requirement_scope"] = False
                     violations.append(f"{requirement_id} relation exceeds its predicate scope")
                 labels = {*relation.subject.labels(), *relation.object.labels()}
-                if not requirement.depends_on and _normalized(requirement.subject) not in {
-                    _normalized(label) for label in labels
-                }:
+                allowed_subjects = {
+                    _normalized(value)
+                    for value in (requirement.subject, *requirement.search_aliases)
+                    if _normalized(value)
+                }
+                if not requirement.depends_on and not allowed_subjects.intersection(
+                    {_normalized(label) for label in labels}
+                ):
                     checks["requirement_scope"] = False
                     violations.append(f"{requirement_id} relation does not bind its subject")
                 if (

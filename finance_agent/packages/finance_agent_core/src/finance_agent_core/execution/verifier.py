@@ -11,6 +11,7 @@ from finance_agent_core.contracts.queryplan import (
     ConstraintOperator,
     Intent,
     NullPlacement,
+    ProductFamily,
     QueryPlan,
     Ranking,
     SortDirection,
@@ -85,9 +86,31 @@ def _query_metric_value(record: VerifierRecord, field_name: str) -> object | Non
     if value is None:
         return None
     definition = load_field_registry().require_field(field_name, [record.product_family])
-    if definition.value_type.value == "number" and not isinstance(value, bool) and value == 0:
+    if (
+        definition.value_type.value == "number"
+        and not isinstance(value, bool)
+        and value == 0
+        and field_name != "remaining_days"
+    ):
         return None
     return value
+
+
+def _public_product_id(record: VerifierRecord) -> str:
+    if record.product_family == "bond":
+        return record.product_id.split(":", 1)[0]
+    if record.product_family == "overseas_etp":
+        return record.product_id.split(":", 1)[-1]
+    return record.product_id
+
+
+def _inside_current_product_scope(plan: QueryPlan, record: VerifierRecord) -> bool:
+    if plan.product_families != [ProductFamily.BOND] or any(
+        constraint.field == "product_id" for constraint in plan.constraints
+    ):
+        return True
+    maturity = _comparable_value(record, "maturity_date")
+    return maturity is None or (isinstance(maturity, date) and maturity > record.dynamic_as_of)
 
 
 def _expected_value(record_value: object, query_value: object) -> object:
@@ -189,7 +212,9 @@ def _record_comparator(plan: QueryPlan):
             )
             if comparison:
                 return comparison
-        return (left.product_id > right.product_id) - (left.product_id < right.product_id)
+        left_id = _public_product_id(left)
+        right_id = _public_product_id(right)
+        return (left_id > right_id) - (left_id < right_id)
 
     return compare
 
@@ -219,7 +244,17 @@ class ResultVerifier:
             if (
                 len(actual_ids) != len(set(actual_ids))
                 or not set(actual_ids).issubset(requested_ids)
-                or actual_ids != sorted(actual_ids)
+                or actual_ids
+                != sorted(
+                    actual_ids,
+                    key=lambda value: (
+                        value.split(":", 1)[-1]
+                        if plan.product_families == [ProductFamily.OVERSEAS_ETP]
+                        else value.split(":", 1)[0]
+                        if plan.product_families == [ProductFamily.BOND]
+                        else value
+                    ),
+                )
             ):
                 raise ResultVerificationError(
                     f"comparison results mismatch: SQL={actual_ids}, "
@@ -248,6 +283,7 @@ class ResultVerifier:
             _periodic_deadline_check(index)
             if (
                 not record.is_quarantined
+                and _inside_current_product_scope(plan, record)
                 and all(_matches_constraint(record, item) for item in plan.constraints)
                 and all(
                     not ranking_requires_usable_value(plan, ranking.field)

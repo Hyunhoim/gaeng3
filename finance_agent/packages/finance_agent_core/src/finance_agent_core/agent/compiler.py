@@ -15,6 +15,8 @@ from finance_agent_core.agent.fund_comparison_parser import (
 )
 from finance_agent_core.agent.fund_resolver import FundProductResolver
 from finance_agent_core.agent.linker import canonicalize_query_plan_payload
+from finance_agent_core.agent.numeric_language import requested_result_limit
+from finance_agent_core.agent.presentation import semantic_query_surface
 from finance_agent_core.agent.product_comparison import (
     ProductComparisonParseError,
     ProductIdentityNotFoundError,
@@ -62,6 +64,36 @@ class PlanCompilationBlockedError(ValueError):
 
 def _normalize_identity_ambiguity_surface(value: object) -> str:
     return " ".join(str(value).strip().strip("\"'“”‘’").casefold().split())
+
+
+def _mask_bound_product_mentions(question: str, mentions: list[str]) -> str:
+    """Hide DB-resolved identities from field linking while preserving the request.
+
+    Product names may legitimately contain schema-looking words such as
+    ``혼합자산`` or ``재간접``. Once the exact identity has been bound against
+    the approved DB, those words are part of the name rather than additional
+    filters. The server still keeps the original question for audit and safety.
+    """
+
+    masked = question
+    for mention in sorted(mentions, key=len, reverse=True):
+        masked = re.sub(re.escape(mention), " ", masked, flags=re.IGNORECASE)
+    return masked
+
+
+def _ranked_identity_requests_single_winner(question: str) -> bool:
+    """Return whether an explicit candidate set asks for only its winner."""
+
+    return (
+        re.search(
+            r"(?:1\s*위|가장|제일|어느\s*(?:것|쪽)|하나|"
+            r"더\s*(?:높|낮|크|큰|작|많|적)|"
+            r"(?:높은|낮은|큰|작은|긴|짧은|먼저\s*오는)\s*(?:쪽|상품|종목)?)",
+            question,
+            re.IGNORECASE,
+        )
+        is not None
+    )
 
 
 def _provided_fund_group_alias(
@@ -156,38 +188,73 @@ class ServerQueryPlanCompiler:
             raise PlanCompilationBlockedError(
                 "compile_search_plans() requires an executable multi-family SEARCH route"
             )
-        _validate_cross_family_scope(
-            decision.draft.question,
-            decision.draft.product_families,
-        )
-        grounded_questions = _scope_grounded_answer_questions(
+        scoped_questions = _cross_family_scoped_questions(
             decision.draft.question,
             decision.draft.product_families,
         )
         searches: list[CompiledFamilySearch] = []
         for family in decision.draft.product_families:
-            scoped_question = _scope_cross_family_question(
-                decision.draft.question,
-                family,
-            )
+            scoped_question = scoped_questions[family]
+            # Import locally so the deterministic Router remains independent
+            # from the compiler module during package initialization.  Exact
+            # identifiers and per-clause limits must be rebound to the isolated
+            # family question; retaining the full-request values would allow one
+            # clause to leak identities or limits into another family plan.
+            from finance_agent_core.agent.router import extract_product_routing_hints
+
+            _, scoped_mentions = extract_product_routing_hints(scoped_question)
+            scoped_limit = requested_result_limit(scoped_question)
+            if scoped_limit is None and _PER_FAMILY.search(decision.draft.question) is not None:
+                scoped_limit = decision.draft.requested_limit
             single_draft = decision.draft.model_copy(
                 update={
                     "question": scoped_question,
                     "product_families": [family],
+                    "product_mentions": list(scoped_mentions),
+                    "requested_limit": scoped_limit,
                 }
             )
             single_decision = decision.model_copy(update={"draft": single_draft})
             searches.append(
                 CompiledFamilySearch(
-                    grounded_question=grounded_questions[family],
+                    grounded_question=scoped_question,
                     plan=self._compile_search_lowering(single_decision),
                 )
+            )
+        if (
+            _ordinal_family_questions(
+                decision.draft.question,
+                decision.draft.product_families,
+            )
+            is None
+            and _explicit_family_clause_questions(
+                decision.draft.question,
+                decision.draft.product_families,
+            )
+            is None
+            and len(
+                {
+                    (ranking.field, ranking.direction)
+                    for search in searches
+                    for ranking in search.plan.ranking
+                }
+            )
+            > 1
+        ):
+            raise PlanCompilationBlockedError(
+                "복수 정렬 기준이 어느 상품군에 속하는지 확정할 수 없습니다. "
+                "각 상품군에 기준을 명시해 주세요."
             )
         resolve_cross_family_global_ranking(decision.draft.question, searches)
         return searches
 
     def _compile_search_lowering(self, decision: RouteDecision) -> QueryPlan:
         family = decision.draft.product_families[0]
+        exact_identity_lookup = (
+            decision.draft.intent is InteractionIntent.SEARCH
+            and len(decision.draft.product_mentions) == 1
+            and decision.draft.product_mentions[0].casefold() in decision.draft.question.casefold()
+        )
         ranked_identity_set = (
             decision.draft.intent is InteractionIntent.SEARCH
             and 2 <= len(decision.draft.product_mentions) <= 20
@@ -195,6 +262,7 @@ class ServerQueryPlanCompiler:
         )
         if (
             decision.draft.product_mentions
+            and not exact_identity_lookup
             and not ranked_identity_set
             and decision.draft.intent
             not in {
@@ -205,17 +273,44 @@ class ServerQueryPlanCompiler:
             raise PlanCompilationBlockedError(
                 "search contains product identities that were not bound to an exact lookup"
             )
-        payload = canonicalize_query_plan_payload(
-            decision.draft.question,
-            {
-                "question_id": decision.draft.request_id,
-                "product_families": [family.value],
-            },
-            force_product_family_hint=True,
+        identity_bound_intent = decision.draft.intent in {
+            InteractionIntent.DETAIL,
+            InteractionIntent.EXPLAIN,
+        }
+        linking_question = (
+            _mask_bound_product_mentions(
+                decision.draft.question,
+                decision.draft.product_mentions,
+            )
+            if exact_identity_lookup or ranked_identity_set or identity_bound_intent
+            else decision.draft.question
         )
-        if decision.draft.requested_limit is not None:
+        semantic_question = semantic_query_surface(linking_question)
+        try:
+            payload = canonicalize_query_plan_payload(
+                semantic_question,
+                {
+                    "question_id": decision.draft.request_id,
+                    "product_families": [family.value],
+                },
+                force_product_family_hint=True,
+            )
+        except ValueError as error:
+            # Field hints are inferred from natural-language surfaces before
+            # the family-specific registry check.  A heterogeneous request can
+            # therefore contain a valid hint for one family that is not a
+            # supported field of another family (for example ``채권`` beside
+            # ``공모펀드``).  This is a planning ambiguity, never an HTTP 5xx.
+            raise PlanCompilationBlockedError(str(error)) from error
+        # ``두 상품 중 어느 쪽`` names the comparison candidate set; it is
+        # not a request to return two results.  A single-winner comparative
+        # therefore outranks the generic Korean counter parser.
+        if ranked_identity_set and _ranked_identity_requests_single_winner(decision.draft.question):
+            payload["limit"] = 1
+        elif decision.draft.requested_limit is not None:
             payload["limit"] = decision.draft.requested_limit
-        if ranked_identity_set:
+        if exact_identity_lookup or ranked_identity_set:
+            identity_name_fallback: str | None = None
             try:
                 database_path = self.database_paths[family]
                 product_ids = resolve_exact_product_ids(
@@ -223,6 +318,15 @@ class ServerQueryPlanCompiler:
                     decision.draft.product_mentions,
                     self.identity_cache.get(database_path).records,
                 )
+            except ProductIdentityNotFoundError as error:
+                identity_surface = decision.draft.product_mentions[0]
+                if not exact_identity_lookup or not (
+                    is_named_product_mention(identity_surface)
+                    or is_quoted_product_mention(decision.draft.question, identity_surface)
+                ):
+                    raise PlanCompilationBlockedError(str(error)) from error
+                identity_name_fallback = identity_surface
+                product_ids = []
             except (KeyError, ProductComparisonParseError, ValueError) as error:
                 raise PlanCompilationBlockedError(str(error)) from error
             payload["constraints"] = [
@@ -231,15 +335,41 @@ class ServerQueryPlanCompiler:
                 if constraint["field"]
                 not in {"product_id", "product_name", "short_name", "ticker", "isin"}
             ]
-            payload["constraints"].append(
-                {
-                    "field": "product_id",
-                    "operator": "in",
-                    "value": product_ids,
-                    "unit": "code",
-                    "strength": "locked",
-                }
-            )
+            if identity_name_fallback is None:
+                payload["constraints"].append(
+                    {
+                        "field": "product_id",
+                        "operator": "eq" if exact_identity_lookup else "in",
+                        "value": product_ids[0] if exact_identity_lookup else product_ids,
+                        "unit": "code",
+                        "strength": "locked",
+                    }
+                )
+            else:
+                payload["constraints"].append(
+                    {
+                        "field": "product_name",
+                        "operator": "eq",
+                        "value": identity_name_fallback,
+                        "unit": "none",
+                        "strength": "locked",
+                    }
+                )
+            if exact_identity_lookup:
+                payload["limit"] = 1
+                payload["ranking"] = []
+            normalized_mentions = {
+                _normalize_identity_ambiguity_surface(mention)
+                for mention in decision.draft.product_mentions
+            }
+            payload["ambiguities"] = [
+                ambiguity
+                for ambiguity in payload["ambiguities"]
+                if _normalize_identity_ambiguity_surface(
+                    ambiguity.get("span", "") if isinstance(ambiguity, dict) else ambiguity
+                )
+                not in normalized_mentions
+            ]
         if decision.draft.intent in {
             InteractionIntent.DETAIL,
             InteractionIntent.EXPLAIN,
@@ -319,8 +449,10 @@ class ServerQueryPlanCompiler:
         plan = QueryPlan.model_validate(payload)
         if plan.product_families != [family]:
             raise PlanCompilationBlockedError("compiler changed the routed product family")
-        if decision.draft.intent is InteractionIntent.SEARCH and ranking_intent_present(
-            decision.draft.question
+        if (
+            decision.draft.intent is InteractionIntent.SEARCH
+            and ranking_intent_present(decision.draft.question)
+            and not exact_identity_lookup
         ):
             if not plan.ranking:
                 raise PlanCompilationBlockedError(
@@ -377,8 +509,9 @@ class ServerQueryPlanCompiler:
             for receipt in receipts
         ):
             raise PlanCompilationBlockedError("semantic receipt differs from its hard-filter lock")
+        semantic_question = semantic_query_surface(decision.draft.question)
         payload = canonicalize_query_plan_payload(
-            decision.draft.question,
+            semantic_question,
             {
                 "question_id": decision.draft.request_id,
                 "product_families": [family.value],
@@ -446,6 +579,7 @@ class ServerQueryPlanCompiler:
 
     def _compile_comparison(self, decision: RouteDecision) -> QueryPlan:
         family = decision.draft.product_families[0]
+        comparison_question = _strip_presentation_sentences(decision.draft.question)
         try:
             database_path = self.database_paths[family]
         except KeyError as error:
@@ -459,7 +593,7 @@ class ServerQueryPlanCompiler:
                 FundProductResolver(identities),
             )
             plan = provider.generate_query_plan(
-                decision.draft.question,
+                comparison_question,
                 decision.draft.request_id,
             )
             if plan.intent is not Intent.COMPARE:
@@ -467,7 +601,7 @@ class ServerQueryPlanCompiler:
             return plan
         try:
             return compile_product_comparison_plan(
-                question=decision.draft.question,
+                question=comparison_question,
                 question_id=decision.draft.request_id,
                 family=family,
                 mentions=decision.draft.product_mentions,
@@ -517,12 +651,19 @@ _ETP_FAMILY_MENTIONS: tuple[tuple[ProductFamily, re.Pattern[str]], ...] = (
 )
 _FUND_MENTION = re.compile(r"공모\s*펀드|공모펀드", re.IGNORECASE)
 _BOND_MENTION = re.compile(
-    r"국내\s*채권|국내채권|회사채|국채|국공채|국고채|특수채|금융채|"
-    r"지역개발채|도시철도공채|채권\s*상품"
+    r"국내\s*채권|국내채권|회사채|일반사채|국채|국공채|국고채|특수채|"
+    r"특수은행채|금융채|은행채|신용카드채|시설대여채|MBS|"
+    r"지역개발채|도시철도공채|채권\s*상품|채권(?!형)",
+    re.IGNORECASE,
+)
+_DOMESTIC_BRANDED_FAMILY_PATTERN = (
+    r"\b(?:TIGER|KODEX|ACE|RISE|SOL|HANARO|TIMEFOLIO|ARIRANG|KBSTAR)\b"
+    r"(?:\s+[0-9A-Za-z가-힣&·+._/-]+){1,10}?"
+    r"(?=\s*(?:,|및|와|과|이랑|하고|의|을|를|은|는|이|가|인|$))"
 )
 _SIMPLE_FAMILY_MENTIONS: dict[ProductFamily, re.Pattern[str]] = {
     ProductFamily.DOMESTIC_ETP: re.compile(
-        r"(?:국내|한국)\s*(?<![A-Z])(?:ETF|ETN|ETP)(?![A-Z])",
+        r"(?:국내|한국)\s*(?<![A-Z])(?:ETF|ETN|ETP)(?![A-Z])|" + _DOMESTIC_BRANDED_FAMILY_PATTERN,
         re.IGNORECASE,
     ),
     ProductFamily.OVERSEAS_ETP: re.compile(
@@ -532,12 +673,84 @@ _SIMPLE_FAMILY_MENTIONS: dict[ProductFamily, re.Pattern[str]] = {
     ProductFamily.BOND: _BOND_MENTION,
     ProductFamily.FUND: _FUND_MENTION,
 }
+_DOMESTIC_BRAND_MENTION = re.compile(
+    r"\b(?:TIGER|KODEX|ACE|RISE|SOL|HANARO|TIMEFOLIO|ARIRANG|KBSTAR)\b",
+    re.IGNORECASE,
+)
 _FAMILY_CONNECTOR = re.compile(r"^[\s,·/&]*(?:(?:및|와|과|또는|이랑|하고)[\s,·/&]*)*$")
+_FAMILY_TOPIC_PARTICLE = re.compile(r"^\s*(?:은|는)\s*")
+_FAMILY_SUFFIX_CONNECTOR = re.compile(r"^\s*(?:(?:및|와|과|이랑|하고)\s+|,\s*)")
 _GLOBAL_TOP_K = re.compile(
     r"(?:TOP\s*\d+|상위\s*\d+|하위\s*\d+|통틀어|합쳐서|전체\s*순위)",
     re.IGNORECASE,
 )
-_PER_FAMILY = re.compile(r"각각|상품군\s*별|종류\s*별", re.IGNORECASE)
+_GLOBAL_RANKING_SCOPE = re.compile(
+    r"통합\s*(?:비교|정렬|순위)|한\s*줄\s*순위|(?:한\s*순위에\s*)?합쳐|"
+    r"통합\s*(?:높은|낮은)\s*순|함께\s*(?:비교|정렬|순위)|"
+    r"한\s*(?:목록|리스트)(?:으로|에)?|따로\s*나누지\s*말고|"
+    r"직접\s*비교|통틀어|전체\s*순위",
+    re.IGNORECASE,
+)
+_PER_FAMILY = re.compile(
+    r"각각|상품군\s*(?:마다|별로)\s*(?:따로|별도|독립|나눠)|"
+    r"종류\s*별로\s*(?:따로|별도|독립|나눠)|"
+    r"(?:서로\s*다른\s*지표|조건과\s*정렬).{0,30}?(?:상품군마다|각각|별도)",
+    re.IGNORECASE,
+)
+_ORDINAL_CLAUSE = re.compile(
+    r"(?<![0-9A-Za-z가-힣])(?:첫째|둘째|셋째|넷째)(?:\s*[,.:：])?\s*",
+    re.IGNORECASE,
+)
+_GENERIC_ETP = re.compile(r"(?<![A-Z])(?:ETF|ETN|ETP)(?![A-Z])", re.IGNORECASE)
+_BOND_SCHEMA_CUE = re.compile(
+    r"경과이자(?:를)?\s*포함(?:한)?\s*(?:단가|가격)|이자부단가|"
+    r"이자\s*제외\s*평가(?:단가|가격)|평가일단가|민평(?:수익률|금리)|"
+    r"표면(?:이자율|이율|금리)|쿠폰(?:금리)?|듀레이션|금리\s*민감도|"
+    r"잔존(?:일수|기간)|상환까지\s*남은",
+    re.IGNORECASE,
+)
+_DOMESTIC_ETP_IDENTITY_CUE = re.compile(
+    r"(?<![A-Z0-9])KR\d{10}(?![A-Z0-9])|상장\s*지수\s*펀드",
+    re.IGNORECASE,
+)
+_OVERSEAS_ETP_IDENTITY_CUE = re.compile(
+    r"(?:RIC\s*)?(?<![A-Z0-9])[A-Z][A-Z0-9]{0,9}\.[A-Z0-9]{1,5}(?![A-Z0-9])",
+    re.IGNORECASE,
+)
+_PRESENTATION_SENTENCE = re.compile(
+    r"^(?:각\s*(?:조건|목록|상품군)|결과(?:에는|는|를|\s*뒤에)|"
+    r"조건과\s*정렬|"
+    r"조건에\s*(?:맞는|부합하는)\s*전체|조회된\s*전체|상위\s*목록과|"
+    r"순위\s*결과와|순위값의\s*방향|상품군별\s*후보|결측값|0을\s*순위값|"
+    r"단위가\s*다른|서로\s*다른|국내채권\s*,|요청한\s*개수|동률이|"
+    r"필터에\s*사용한|어떤\s*정렬|상품명만\s*쓰지|"
+    r"상품군\s*이름을|조건을\s*통과한)",
+    re.IGNORECASE,
+)
+
+
+def _strip_presentation_sentences(question: str) -> str:
+    """Remove response-format instructions without changing query semantics."""
+
+    return semantic_query_surface(question)
+
+
+def _clause_has_family_grounding(family: ProductFamily, clause: str) -> bool:
+    if family is ProductFamily.BOND:
+        return (
+            _BOND_MENTION.search(clause) is not None or _BOND_SCHEMA_CUE.search(clause) is not None
+        )
+    if family is ProductFamily.DOMESTIC_ETP:
+        return (
+            _GENERIC_ETP.search(clause) is not None
+            or _DOMESTIC_ETP_IDENTITY_CUE.search(clause) is not None
+        )
+    if family is ProductFamily.OVERSEAS_ETP:
+        return (
+            _GENERIC_ETP.search(clause) is not None
+            or _OVERSEAS_ETP_IDENTITY_CUE.search(clause) is not None
+        )
+    return _FUND_MENTION.search(clause) is not None
 
 
 def _shared_currency_constraint(searches: list[CompiledFamilySearch]) -> bool:
@@ -562,7 +775,12 @@ def resolve_cross_family_global_ranking(
 ) -> CrossFamilyGlobalRanking | None:
     """Authorize global TOP-K only for one identical, unit-compatible numeric field."""
 
-    if _PER_FAMILY.search(question) is not None or _GLOBAL_TOP_K.search(question) is None:
+    if len(_ORDINAL_CLAUSE.findall(question)) >= 2:
+        return None
+    global_scope = _GLOBAL_RANKING_SCOPE.search(question) is not None
+    if _PER_FAMILY.search(question) is not None or (
+        not global_scope and _GLOBAL_TOP_K.search(question) is None
+    ):
         return None
     if len(searches) < 2:
         return None
@@ -626,6 +844,165 @@ def _scope_cross_family_question(
     return " ".join(scoped.split())
 
 
+def _ordinal_family_questions(
+    question: str,
+    families: list[ProductFamily],
+) -> dict[ProductFamily, str] | None:
+    """Split an explicit first/second/... request into isolated family clauses.
+
+    This grammar deliberately requires the number and order of clauses to match
+    the server-routed family order.  It supports independent family searches
+    without letting a model decide which filter belongs to which family.
+    """
+
+    markers = list(_ORDINAL_CLAUSE.finditer(question))
+    if not markers:
+        return None
+    if len(markers) != len(families):
+        raise PlanCompilationBlockedError(
+            "순서형 교차 조회의 조건 절 수와 상품군 수가 일치하지 않습니다."
+        )
+    clauses = []
+    for index, marker in enumerate(markers):
+        clause_end = markers[index + 1].start() if index + 1 < len(markers) else len(question)
+        raw_clause = question[marker.end() : clause_end].strip(" \t\r\n,.;:：")
+        clauses.append(_strip_presentation_sentences(raw_clause))
+    scoped: dict[ProductFamily, str] = {}
+    for family, clause in zip(families, clauses, strict=True):
+        if not clause:
+            raise PlanCompilationBlockedError("순서형 교차 조회에 비어 있는 조건 절이 있습니다.")
+        explicitly_named = {
+            candidate
+            for candidate, pattern in _SIMPLE_FAMILY_MENTIONS.items()
+            if pattern.search(clause) is not None
+        }
+        if explicitly_named and family not in explicitly_named:
+            raise PlanCompilationBlockedError(
+                "순서형 교차 조회의 상품군 순서와 조건 절이 일치하지 않습니다."
+            )
+        if not explicitly_named and not _clause_has_family_grounding(family, clause):
+            raise PlanCompilationBlockedError(
+                "순서형 교차 조회의 각 조건 절에 상품군 또는 전용 식별자·필드를 명시해 주세요."
+            )
+        scoped[family] = " ".join(clause.split())
+    return scoped
+
+
+def _explicit_family_clause_questions(
+    question: str,
+    families: list[ProductFamily],
+) -> dict[ProductFamily, str] | None:
+    """Split only grammar-bound family clauses without model inference.
+
+    Two deterministic forms are accepted:
+
+    * ``국내 ETF는 ... , 해외 ETF는 ...`` (family topic clauses)
+    * ``... 해외 ETF와 ... 국내채권을 각각 ...`` (a connector directly
+      attached to the preceding family label)
+
+    Every resulting clause must contain exactly one routed family. Ambiguous
+    prose continues through the older shared-condition validator and fails
+    closed there.
+    """
+
+    matches: list[tuple[int, int, ProductFamily]] = []
+    for family in families:
+        found = list(_SIMPLE_FAMILY_MENTIONS[family].finditer(question))
+        if len(found) != 1:
+            return None
+        match = found[0]
+        matches.append((match.start(), match.end(), family))
+    matches.sort(key=lambda item: item[0])
+    if [family for _, _, family in matches] != families:
+        return None
+
+    def validate(raw_clauses: list[tuple[ProductFamily, str]]) -> dict[ProductFamily, str] | None:
+        if len(raw_clauses) != len(families):
+            return None
+        scoped: dict[ProductFamily, str] = {}
+        for family, raw_clause in raw_clauses:
+            clause = _strip_presentation_sentences(raw_clause.strip(" \t\r\n,.;:：·/&"))
+            named = {
+                candidate
+                for candidate, pattern in _SIMPLE_FAMILY_MENTIONS.items()
+                if pattern.search(clause) is not None
+            }
+            if named != {family} or not clause:
+                return None
+            scoped[family] = " ".join(clause.split())
+        return scoped
+
+    # Topic form: no condition may float before the first family label.
+    if not question[: matches[0][0]].strip(" \t\r\n,.;:：") and all(
+        _FAMILY_TOPIC_PARTICLE.match(question[end:]) is not None for _, end, _ in matches
+    ):
+
+        def topic_clause_end(index: int) -> int:
+            return matches[index + 1][0] if index + 1 < len(matches) else len(question)
+
+        topic_clauses = [
+            (
+                family,
+                question[start : topic_clause_end(index)],
+            )
+            for index, (start, _, family) in enumerate(matches)
+        ]
+        validated = validate(topic_clauses)
+        if validated is not None:
+            return validated
+
+    # Suffix form: a connector must start immediately after every family label
+    # except the last. This makes ownership of the preceding condition explicit.
+    boundaries: list[tuple[int, int]] = []
+    for _, end, _ in matches[:-1]:
+        connector = _FAMILY_SUFFIX_CONNECTOR.match(question[end:])
+        if connector is None:
+            boundaries = []
+            break
+        boundaries.append((end, end + connector.end()))
+    has_owned_prefixes = (
+        len(boundaries) == len(matches) - 1
+        and bool(question[: matches[0][0]].strip())
+        and all(
+            question[connector_end:next_start].strip()
+            or (
+                next_family is ProductFamily.DOMESTIC_ETP
+                and _DOMESTIC_BRAND_MENTION.match(question[next_start:]) is not None
+            )
+            for (_, connector_end), (next_start, _, next_family) in zip(
+                boundaries,
+                matches[1:],
+                strict=True,
+            )
+        )
+    )
+    if boundaries and has_owned_prefixes:
+        clause_starts = [0, *(connector_end for _, connector_end in boundaries)]
+        clause_ends = [*(family_end for family_end, _ in boundaries), len(question)]
+        suffix_clauses = [
+            (family, question[start:end])
+            for family, start, end in zip(families, clause_starts, clause_ends, strict=True)
+        ]
+        return validate(suffix_clauses)
+    return None
+
+
+def _cross_family_scoped_questions(
+    question: str,
+    families: list[ProductFamily],
+) -> dict[ProductFamily, str]:
+    ordinal = _ordinal_family_questions(question, families)
+    if ordinal is not None:
+        return ordinal
+    explicit = _explicit_family_clause_questions(question, families)
+    if explicit is not None:
+        return explicit
+    semantic_question = _strip_presentation_sentences(question)
+    _validate_cross_family_scope(semantic_question, families)
+    grounded = _scope_grounded_answer_questions(semantic_question, families)
+    return {family: _scope_cross_family_question(grounded[family], family) for family in families}
+
+
 def _scope_grounded_answer_questions(
     question: str,
     families: list[ProductFamily],
@@ -640,10 +1017,13 @@ def _scope_grounded_answer_questions(
             "교차 상품군 grounded answer 질문을 상품군별로 분리할 수 없습니다."
         )
     resolved = {family: match for family, match in mentions.items() if match is not None}
+    shared_prefix = question[: min(match.start() for match in resolved.values())]
     shared_suffix = question[max(match.end() for match in resolved.values()) :]
     shared_suffix = re.sub(r"\b각각\b", "", shared_suffix)
     return {
-        family: " ".join(f"{question[match.start() : match.end()]}{shared_suffix}".split())
+        family: " ".join(
+            f"{shared_prefix}{question[match.start() : match.end()]}{shared_suffix}".split()
+        )
         for family, match in resolved.items()
     }
 

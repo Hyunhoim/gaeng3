@@ -27,6 +27,7 @@ from finance_agent_core.retrieval.official_connector import OfficialDiscoveryCan
 _MAX_SECRET_BYTES = 4096
 _API_URL = "https://naverapihub.apigw.ntruss.com/search/v1/webkr"
 _URL_DATE = re.compile(r"(?<!\d)(20\d{2})[_-]?(0[1-9]|1[0-2])[_-]?([0-2]\d|3[01])")
+_SEARCH_MARKUP = re.compile(r"<[^>]{1,200}>")
 
 
 def _canonical_candidate_url(url: str) -> str:
@@ -53,6 +54,12 @@ def _candidate_specificity(url: str) -> int:
     if path in {"", "/"} or any(token in path for token in ("/index", "/list")):
         score -= 5
     return score
+
+
+def _clean_search_title(value: object, fallback: str) -> str:
+    title = html.unescape(str(value or fallback))
+    title = _SEARCH_MARKUP.sub("", title)
+    return " ".join(title.split())[:500] or fallback[:500]
 
 
 def _bounded_registry_terms(entry: OfficialSourceEntry, query: str) -> tuple[str, ...]:
@@ -187,7 +194,7 @@ class NaverApiHubWebSearchTransport:
             items = tuple(
                 OfficialDiscoveryCandidate(
                     url=html.unescape(str(item["link"])),
-                    title=html.unescape(str(item.get("title") or item["link"])),
+                    title=_clean_search_title(item.get("title"), str(item["link"])),
                 )
                 for item in payload.get("items", [])
             )
@@ -245,6 +252,21 @@ class BoundedOfficialDiscoveryProvider:
         failures: list[DiscoveryFailureCode] = []
         seen: set[str] = set()
         requested_source_ids = {entry.source_id for entry in entries}
+        # Some official pages are intentionally registered as bounded
+        # discovery seeds because general web indexes do not reliably expose
+        # dynamic forums or document endpoints.  A seed is candidate metadata
+        # only: the connector still fetches it and the exact-span/date verifier
+        # must approve the original bytes before it can become evidence.
+        for entry in entries:
+            for seed_url in entry.discovery_urls:
+                candidate = OfficialDiscoveryCandidate(
+                    url=seed_url,
+                    title=f"{entry.publisher} official source",
+                )
+                candidate_buckets[entry.source_id].append(
+                    (-_candidate_specificity(seed_url), -1, candidate)
+                )
+                seen.add(seed_url)
         for entry in entries[:query_budget]:
             queried.append(entry.source_id)
             # ``query`` already contains the server-validated subject and at
@@ -252,14 +274,17 @@ class BoundedOfficialDiscoveryProvider:
             # once caused NAVER Web Search to return no result for valid
             # official documents. Relation semantics remain locked by the
             # Typed QueryPlan and exact-span extractor, not by search keywords.
-            path_scope = entry.path_prefixes[0] if len(entry.path_prefixes) == 1 else ""
             registry_terms = _bounded_registry_terms(entry, query)
             # Source metadata only ranks discovery candidates; it is never
             # admitted as answer evidence. Limit expansion to two bounded
             # registry terms so a long AND-like web query does not erase recall.
             search_query = " ".join(
                 (
-                    f"site:{entry.hostname}{path_scope}",
+                    # NAVER Web Search treats a path inside ``site:``
+                    # inconsistently and can return zero official hits even
+                    # when the exact product page is indexed. Authorization
+                    # still enforces the registry path after discovery.
+                    f"site:{entry.hostname}",
                     query.strip(),
                     *registry_terms[:2],
                 )

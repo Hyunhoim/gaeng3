@@ -16,6 +16,7 @@ from finance_agent_core.retrieval.official_connector import (
     OfficialDiscoveryCandidate,
     OfficialDocumentLinkResolver,
     OfficialFetchRequest,
+    OfficialNavigationSnapshot,
     OfficialSourceConnector,
     OfficialSourceSnapshot,
 )
@@ -325,11 +326,13 @@ class OfficialEvidenceAcquisitionCoordinator:
                         as_of=candidate.as_of,
                         timeout_seconds=min(30.0, max(0.1, remaining_seconds)),
                         max_bytes=min(16 * 1024 * 1024, remaining_bytes),
+                        allow_navigation_only=True,
                     ),
                 )
-                snapshots.append(snapshot)
                 seen_snapshot_urls.add(snapshot.source_uri)
                 fetched_bytes += len(snapshot.content)
+                if not isinstance(snapshot, OfficialNavigationSnapshot):
+                    snapshots.append(snapshot)
                 remaining_link_fetches = max_fetches - fetch_attempt_count
                 if remaining_link_fetches <= 0:
                     continue
@@ -343,6 +346,17 @@ class OfficialEvidenceAcquisitionCoordinator:
                 for linked_candidate in linked:
                     if linked_candidate.url in seen_snapshot_urls:
                         continue
+                    try:
+                        linked_source = self.connector.registry.authorize_url(
+                            linked_candidate.url,
+                            requirement.capability,
+                        )
+                    except OfficialSourceRegistryError:
+                        fetch_failure_codes.add("linked_document_source_rejected")
+                        continue
+                    if linked_source.source_id not in requirement.source_registry_ids:
+                        fetch_failure_codes.add("linked_document_source_not_selected")
+                        continue
                     remaining_seconds = deadline - perf_counter()
                     remaining_bytes = max_total_bytes - fetched_bytes
                     if (
@@ -352,20 +366,33 @@ class OfficialEvidenceAcquisitionCoordinator:
                     ):
                         fetch_failure_codes.add("linked_document_budget_exhausted")
                         break
-                    try:
-                        fetch_attempt_count += 1
-                        linked_snapshot = self.connector.fetch(
-                            linked_candidate,
-                            OfficialFetchRequest(
-                                url=linked_candidate.url,
-                                capability=requirement.capability,
-                                published_at=linked_candidate.published_at,
-                                as_of=linked_candidate.as_of,
-                                timeout_seconds=min(30.0, max(0.1, remaining_seconds)),
-                                max_bytes=min(16 * 1024 * 1024, remaining_bytes),
-                            ),
-                        )
-                    except (OfficialConnectorError, OfficialSourceRegistryError):
+                    linked_snapshot = None
+                    for _linked_attempt in range(2):
+                        remaining_seconds = deadline - perf_counter()
+                        remaining_bytes = max_total_bytes - fetched_bytes
+                        if (
+                            fetch_attempt_count >= max_fetches
+                            or remaining_seconds <= 0
+                            or remaining_bytes <= 0
+                        ):
+                            break
+                        try:
+                            fetch_attempt_count += 1
+                            linked_snapshot = self.connector.fetch(
+                                linked_candidate,
+                                OfficialFetchRequest(
+                                    url=linked_candidate.url,
+                                    capability=requirement.capability,
+                                    published_at=linked_candidate.published_at,
+                                    as_of=linked_candidate.as_of,
+                                    timeout_seconds=min(30.0, max(0.1, remaining_seconds)),
+                                    max_bytes=min(16 * 1024 * 1024, remaining_bytes),
+                                ),
+                            )
+                            break
+                        except (OfficialConnectorError, OfficialSourceRegistryError):
+                            continue
+                    if linked_snapshot is None:
                         fetch_failure_codes.add("linked_document_fetch_failed")
                         continue
                     snapshots.append(linked_snapshot)

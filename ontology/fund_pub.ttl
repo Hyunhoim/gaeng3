@@ -602,6 +602,8 @@ fund:field_fund_management_attribute
     ga:allowedOperator "eq" ;
     ga:allowedOperator "in" ;
     ga:enumValue "MMF" ;
+    ga:enumValue "개발형" ;
+    ga:enumValue "기타" ;
     ga:enumValue "대출형" ;
     ga:enumValue "임대형" ;
     ga:enumValue "재간접" ;
@@ -610,6 +612,7 @@ fund:field_fund_management_attribute
     ga:enumValue "채권형" ;
     ga:enumValue "채권혼합" ;
     ga:enumValue "특별자산" ;
+    ga:enumValue "파생상품" ;
     ga:enumValue "혼합자산" ;
     ga:asOfBasis "static" ;
     ga:sourceDataset "fund" ;

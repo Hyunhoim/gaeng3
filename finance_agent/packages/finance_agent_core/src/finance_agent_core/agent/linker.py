@@ -6,9 +6,11 @@ from decimal import Decimal
 from typing import Any
 
 from finance_agent_core.agent.numeric_language import requested_result_limit
+from finance_agent_core.agent.presentation import semantic_query_surface
 from finance_agent_core.agent.safety import normalize_user_question
 from finance_agent_core.agent.semantic_aliases import (
     explicit_product_name_order,
+    filter_alias_matches,
     rank_alias_matches,
     ranking_cue_spans,
     ranking_intent_present,
@@ -146,8 +148,8 @@ def _numeric_hint(
 ) -> dict[str, Any] | None:
     alias_pattern = "|".join(re.escape(alias) for alias in aliases)
     between = re.search(
-        rf"(?:{alias_pattern}).{{0,12}}?({SCALED_NUMBER})\s*(?:%|배|일|년)?\s*"
-        rf"(?:달러|USD|KRW)?\s*에서\s*({SCALED_NUMBER})\s*(?:%|배|일|년)?\s*"
+        rf"(?:{alias_pattern}).{{0,12}}?({SCALED_NUMBER})\s*(?:%|배|일|년|주)?\s*"
+        rf"(?:달러|USD|KRW)?\s*에서\s*({SCALED_NUMBER})\s*(?:%|배|일|년|주)?\s*"
         rf"(?:달러|USD|KRW)?\s*사이",
         question,
         flags=re.IGNORECASE,
@@ -159,9 +161,9 @@ def _numeric_hint(
             "value": [_scaled_number(between.group(1)), _scaled_number(between.group(2))],
         }
     bounded = re.search(
-        rf"(?:{alias_pattern}).{{0,12}}?({SCALED_NUMBER})\s*(?:%|배|일|년)?\s*"
+        rf"(?:{alias_pattern}).{{0,12}}?({SCALED_NUMBER})\s*(?:%|배|일|년|주)?\s*"
         r"이상\s*(?:이고|이면서|,|부터)?\s*"
-        rf"({SCALED_NUMBER})\s*(?:%|배|일|년)?\s*이하",
+        rf"({SCALED_NUMBER})\s*(?:%|배|일|년|주)?\s*이하",
         question,
         flags=re.IGNORECASE,
     )
@@ -172,7 +174,7 @@ def _numeric_hint(
             "value": [_scaled_number(bounded.group(1)), _scaled_number(bounded.group(2))],
         }
     comparison = re.search(
-        rf"(?:{alias_pattern}).{{0,16}}?({SCALED_NUMBER})\s*(?:%|배|일|년)?\s*"
+        rf"(?:{alias_pattern}).{{0,16}}?({SCALED_NUMBER})\s*(?:%|배|일|년|주)?\s*"
         r"(?:달러|USD|KRW)?(?:을|를)?\s*"
         r"(이하|미만|이상|초과|정확히|넘는|넘은|넘게|넘지\s*않는|"
         r"초과하지\s*않는)",
@@ -291,7 +293,15 @@ def build_lexical_hints(
     *,
     force_product_family_hint: bool = False,
 ) -> dict[str, Any]:
-    question = normalize_user_question(question)
+    question = semantic_query_surface(normalize_user_question(question))
+    question = re.sub(
+        r"(?m)(?:^|(?<=[.!?])\s+)"
+        r"순위값의\s*방향이\s*높은\s*순인지\s*낮은\s*순인지"
+        r"[^.!?]*(?:[.!?]|$)",
+        " ",
+        question,
+        flags=re.IGNORECASE,
+    ).strip()
     family = (
         product_family_hint
         if force_product_family_hint and product_family_hint in SEARCH_PROJECTION_BY_FAMILY
@@ -394,6 +404,14 @@ def build_lexical_hints(
                     "product_id" if family == "fund" and field == "ticker" else field
                 )
                 add(canonical_identity_field, identity, "eq")
+    explicit_name_contains = re.search(
+        r"(?P<value>[0-9A-Za-z가-힣&·+._/-]{2,80})\s*"
+        r"(?:이름|상품명)(?:이|에)?\s*(?:들어간|붙은|포함된)",
+        question,
+        flags=re.IGNORECASE,
+    )
+    if explicit_name_contains is not None:
+        add("product_name", explicit_name_contains.group("value").strip(), "contains")
     for match in re.finditer(
         r"(?<![A-Z0-9])([A-Z0-9][A-Z0-9._:-]{1,29})"
         r"\s*(?:을|를|은|는)?\s*(?:제외|이외|말고|빼고|외(?:에는|의)?)",
@@ -404,36 +422,27 @@ def build_lexical_hints(
             continue
         semantic_ambiguity_spans.append(match.group(0))
 
+    explicit_fund_scope: re.Match[str] | None = None
+    explicit_fund_currency: re.Match[str] | None = None
+    if family == "overseas_etp":
+        explicit_fund_currency = re.search(
+            r"(?:펀드|상품)\s*통화\s*코드(?:가|는|은|이)?\s*([A-Z]{3})",
+            question,
+            flags=re.IGNORECASE,
+        )
     if family == "domestic_etp":
         if re.search(r"상장\s*지수\s*펀드", question):
             add("product_type", "ETF")
-        phrase_mappings = [
-            ("혼합자산형", "asset_type", "혼합자산"),
-            ("단기자금형", "asset_type", "단기자금"),
-            ("원자재형", "asset_type", "원자재"),
-            ("부동산형", "asset_type", "부동산"),
-            ("주식형", "asset_type", "주식"),
-            ("채권형", "asset_type", "채권"),
-            ("통화형", "asset_type", "통화"),
-            ("이머징/브릭스", "investment_region", "이머징/브릭스"),
-            ("남미/북미", "investment_region", "남미/북미"),
-            ("글로벌", "investment_region", "글로벌"),
-            ("아시아", "investment_region", "아시아"),
-            ("베트남", "investment_region", "베트남"),
-            ("미국", "investment_region", "미국"),
-            ("일본", "investment_region", "일본"),
-            ("중국", "investment_region", "중국"),
-            ("유럽", "investment_region", "유럽"),
-            ("인도", "investment_region", "인도"),
-            ("원화", "trading_currency", "KRW"),
-            ("KRW", "trading_currency", "KRW"),
-        ]
         if re.search(r"투자\s*지역(?:이|은|가)?\s*국내|국내(?:에|로)\s*투자", question):
+            add("investment_region", "국내")
+        if re.search(r"국내\s*지역(?:에|으로)\s*투자", question):
             add("investment_region", "국내")
         if re.search(r"주식(?:에|으로|을)\s*투자(?:하는|한)", question):
             add("asset_type", "주식")
         if re.search(r"채권(?:에|으로|을)\s*투자(?:하는|한)", question):
             add("asset_type", "채권")
+        if re.search(r"단기\s*자금(?:에|으로|을)\s*투자(?:하는|한)", question):
+            add("asset_type", "단기자금")
         for surface, value in (
             ("주식", "주식"),
             ("채권", "채권"),
@@ -448,6 +457,13 @@ def build_lexical_hints(
         if re.search(r"^국내\s+(?:채권형|혼합자산형)", question):
             add("investment_region", "국내")
     elif family == "fund":
+        explicit_fund_scope = re.search(
+            r"해외\s*펀드\s*구분(?:이|은|가)?\s*(국내|해외)",
+            question,
+            flags=re.IGNORECASE,
+        )
+        if explicit_fund_scope is not None:
+            add("fund_geography_scope", explicit_fund_scope.group(1))
         domestic_investment = re.search(
             r"국내(?:에|로)?\s*투자",
             question,
@@ -455,77 +471,7 @@ def build_lexical_hints(
         )
         if domestic_investment is not None:
             add("investment_region", "국내")
-        phrase_mappings = [
-            ("국내외 혼합", "fund_geography_scope", "국내외혼합"),
-            ("국내외혼합", "fund_geography_scope", "국내외혼합"),
-            ("해외", "fund_geography_scope", "해외"),
-            ("국내", "fund_geography_scope", "국내"),
-            ("주식혼합", "fund_management_attribute", "주식혼합"),
-            ("채권혼합", "fund_management_attribute", "채권혼합"),
-            ("혼합자산", "fund_management_attribute", "혼합자산"),
-            ("특별자산", "fund_management_attribute", "특별자산"),
-            ("재간접", "fund_management_attribute", "재간접"),
-            ("주식형", "fund_management_attribute", "주식형"),
-            ("채권형", "fund_management_attribute", "채권형"),
-            ("대출형", "fund_management_attribute", "대출형"),
-            ("임대형", "fund_management_attribute", "임대형"),
-            ("MMF", "fund_management_attribute", "MMF"),
-            ("글로벌", "investment_region", "글로벌"),
-            ("아시아", "investment_region", "아시아"),
-            ("남미/북미", "investment_region", "남미/북미"),
-            ("이머징/브릭스", "investment_region", "이머징/브릭스"),
-            ("유럽", "investment_region", "유럽"),
-            ("원화", "trading_currency", "KRW"),
-            ("KRW", "trading_currency", "KRW"),
-            ("달러", "trading_currency", "USD"),
-            ("USD", "trading_currency", "USD"),
-        ]
-    elif family == "bond":
-        phrase_mappings = [
-            ("개인투자용국채", "bond_major_class", "개인투자용국채"),
-            ("회사채", "bond_major_class", "회사채"),
-            ("특수채", "bond_major_class", "특수채"),
-            ("국공채", "bond_major_class", "국공채"),
-            ("국고채", "bond_subclass", "국고채"),
-            ("일반사채", "bond_subclass", "일반사채"),
-            ("특수은행채", "bond_subclass", "특수은행채"),
-            ("공사채", "bond_subclass", "공사채"),
-            ("은행채", "bond_subclass", "은행채"),
-            ("중앙은행채", "bond_subclass", "중앙은행채"),
-            ("MBS", "bond_type", "MBS"),
-            ("시설대여채", "bond_type", "시설대여채(리스)"),
-            ("지역개발채", "bond_type", "지역개발채"),
-            ("도시철도공채", "bond_type", "도시철도공채"),
-            ("금융지주회사채", "bond_type", "금융지주회사채"),
-            ("보험회사채", "bond_type", "보험회사채"),
-            ("일반회사채", "bond_type", "일반회사채"),
-            ("할부금융채", "bond_type", "할부금융채"),
-            ("장내", "bond_market", "장내"),
-            ("장외", "bond_market", "장외"),
-            ("원화", "trading_currency", "KRW"),
-            ("KRW", "trading_currency", "KRW"),
-            ("달러", "trading_currency", "USD"),
-        ]
-    else:
-        phrase_mappings = [
-            ("머니마켓", "asset_type", "Money Market"),
-            ("혼합자산형", "asset_type", "Mixed Assets"),
-            ("대체자산형", "asset_type", "Alternatives"),
-            ("원자재형", "asset_type", "Commodity"),
-            ("주식형", "asset_type", "Equity"),
-            ("채권", "asset_type", "Bond"),
-            ("글로벌 신흥국", "investment_region", "Global Emerging Markets"),
-            ("미국 제외 글로벌", "investment_region", "Global Ex US"),
-            ("미국", "investment_region", "United States of America"),
-            ("일본", "investment_region", "Japan"),
-            ("중국", "investment_region", "China"),
-            ("유럽", "investment_region", "Europe"),
-            ("NASDAQ", "exchange_code", "NAS"),
-            ("NYSE", "exchange_code", "NYS"),
-            ("AMEX", "exchange_code", "AMX"),
-            ("달러", "trading_currency", "USD"),
-            ("USD", "trading_currency", "USD"),
-        ]
+    elif family == "overseas_etp":
         for surface, value in (
             ("Equity", "Equity"),
             ("Bond", "Bond"),
@@ -541,6 +487,25 @@ def build_lexical_hints(
                 flags=re.IGNORECASE,
             ):
                 add("asset_type", value)
+            elif re.search(
+                rf"{re.escape(surface)}(?:로|으로)\s*(?:분류|표시|기재)(?:된|되어)",
+                question,
+                flags=re.IGNORECASE,
+            ):
+                add("asset_type", value)
+            elif re.search(
+                rf"{re.escape(surface)}\s*(?:투자\s*)?자산\s*군(?:의|에|인)?\s*"
+                r"(?:해외\s*)?(?:ETF|ETN|ETP)",
+                question,
+                flags=re.IGNORECASE,
+            ):
+                add("asset_type", value)
+            elif re.search(
+                rf"{re.escape(surface)}\s*(?:해외\s*)?(?:ETF|ETN|ETP)",
+                question,
+                flags=re.IGNORECASE,
+            ):
+                add("asset_type", value)
         for surface, value in (
             ("United States of America", "United States of America"),
             ("Global Emerging Markets", "Global Emerging Markets"),
@@ -548,15 +513,49 @@ def build_lexical_hints(
             ("Global", "Global"),
             ("China", "China"),
             ("Japan", "Japan"),
+            ("India", "India"),
             ("Europe", "Europe"),
         ):
             if re.search(
-                rf"투자\s*지역(?:이|은|가)?\s*{re.escape(surface)}"
-                r"(?=\s|인|이고|이며|$)",
+                rf"(?:투자\s*지역(?:이|은|가)?\s*{re.escape(surface)}"
+                r"(?=\s|인|이고|이며|$)|"
+                rf"{re.escape(surface)}(?:로|으로)\s*(?:표시|분류|기재)(?:된|되어))",
                 question,
                 flags=re.IGNORECASE,
             ):
                 add("investment_region", value)
+            elif re.search(
+                rf"{re.escape(surface)}\s*(?:투자\s*)?지역(?:의|에|인)?\s*"
+                r"(?:해외\s*)?(?:ETF|ETN|ETP)",
+                question,
+                flags=re.IGNORECASE,
+            ):
+                add("investment_region", value)
+            elif re.search(
+                rf"{re.escape(surface)}\s*(?:해외\s*)?(?:ETF|ETN|ETP)",
+                question,
+                flags=re.IGNORECASE,
+            ):
+                add("investment_region", value)
+        explicit_region_set = re.search(
+            r"투자\s*지역(?:이|은|가)?\s*"
+            r"((?:[A-Za-z ]+\s*[,·/]\s*)+[A-Za-z ]+)\s*중\s*하나",
+            question,
+            flags=re.IGNORECASE,
+        )
+        if explicit_region_set is not None:
+            allowed_regions = {
+                "china": "China",
+                "japan": "Japan",
+                "india": "India",
+                "europe": "Europe",
+                "global": "Global",
+            }
+            for token in re.split(r"\s*[,·/]\s*", explicit_region_set.group(1)):
+                if value := allowed_regions.get(token.strip().casefold()):
+                    add("investment_region", value)
+        if re.search(r"Global\s*Ex\s*US", question, flags=re.IGNORECASE):
+            add("investment_region", "Global Ex US")
         for surface, value in (("NAS", "NAS"), ("NYS", "NYS"), ("AMX", "AMX")):
             if re.search(
                 rf"거래소\s*코드(?:가|는|은|이)?\s*{surface}(?=\s|인|이고|이며|$)",
@@ -564,33 +563,35 @@ def build_lexical_hints(
                 flags=re.IGNORECASE,
             ):
                 add("exchange_code", value)
-        if re.search(r"글로벌\s*투자", question, flags=re.IGNORECASE):
-            add("investment_region", "Global")
-    for phrase, field, value in phrase_mappings:
-        if phrase not in question:
-            continue
-        if phrase == "미국" and "미국 제외 글로벌" in question:
-            continue
-        if family == "fund" and phrase == "국내" and "국내외" in question:
-            continue
-        if family == "fund" and phrase == "국내" and domestic_investment is not None:
-            continue
-        if (
-            family == "fund"
-            and phrase in {"국내", "해외"}
-            and re.search(
-                rf"{phrase}\s*(?:주식|채권)\s*(?:구성\s*비율|비중)",
+            elif re.search(
+                rf"{surface}\s*(?:거래소\s*코드|에서\s*거래)",
                 question,
                 flags=re.IGNORECASE,
-            )
-        ):
+            ):
+                add("exchange_code", value)
+        if re.search(r"글로벌\s*투자", question, flags=re.IGNORECASE):
+            add("investment_region", "Global")
+
+    # Static financial meanings are resolved by the one versioned Typed Alias
+    # Registry shared with Router, Compiler coverage and the span ledger.
+    # Dynamic values (numbers, dates, IDs and captured names) remain in their
+    # dedicated parsers above and below this boundary.
+    for alias in filter_alias_matches(question, family):
+        if negated_alias := _negated_literal_span(question, alias.text):
+            semantic_ambiguity_spans.append(negated_alias)
             continue
-        if negated_phrase := _negated_literal_span(question, phrase):
-            semantic_ambiguity_spans.append(negated_phrase)
-            continue
-        add(field, value)
+        add(alias.field_id, alias.value, alias.operator)
 
     etp_family = family in {"overseas_etp", "domestic_etp"}
+    if etp_family and (
+        leverage_factor := re.search(
+            r"(?:레버리지\s*)?배수(?:가|는|은|이)?\s*"
+            r"(-?\d+(?:\.\d+)?)\s*(?:인|로|배|$)",
+            question,
+            flags=re.IGNORECASE,
+        )
+    ):
+        add("leverage_factor", float(leverage_factor.group(1)), "eq")
     negated_trade_available = re.search(
         r"(?:현재\s*)?거래(?:가|는|이)?\s*가능.{0,8}"
         r"(?:하지\s*않|아닌|없)",
@@ -657,6 +658,16 @@ def build_lexical_hints(
             and re.search(r"연금.{0,16}?가능\s*여부", question) is None
         ):
             add("pension_eligible", True)
+        if (
+            negated_pension is None
+            and re.search(r"연금.{0,16}?가능\s*여부", question) is None
+            and re.search(
+                r"(?:퇴직\s*)?연금.{0,16}(?:편입|거래).{0,8}(?:가능|Y)",
+                question,
+            )
+        ):
+            required[:] = [item for item in required if item["field"] != "pension_eligible"]
+            add("pension_eligible", True)
         if re.search(r"주식(?:을|이)?\s*기초\s*자산", question):
             add("asset_type", "주식")
         if excluded_pension_ineligible is None and any(
@@ -721,6 +732,36 @@ def build_lexical_hints(
         )
         if manager is not None:
             add("manager", manager.group(1).strip(" '‘’\""), "eq")
+        bare_manager = re.search(
+            r"(?:^|[.!?。]\s*|(?:첫째|둘째|셋째|넷째),?\s*)"
+            r"([0-9A-Za-z가-힣&·+._ -]{2,60}?)\s+운용\s+(?:국내\s*)?(?:ETF|ETN)",
+            question,
+            flags=re.IGNORECASE,
+        )
+        if bare_manager is not None:
+            manager_value = bare_manager.group(1).strip(" '‘’\"")
+            if (
+                re.search(
+                    r"(?:상품\s*(?:ID|아이디|번호)|종목\s*코드|티커)$",
+                    manager_value,
+                    flags=re.IGNORECASE,
+                )
+                is None
+            ):
+                add("manager", manager_value, "eq")
+        stated_manager = re.search(
+            r"([0-9A-Za-z가-힣&·+._/-]{1,40})(?:가|이)\s*"
+            r"운용사(?:로)?\s*(?:적힌|표시|기재)(?:된|되어)?",
+            question,
+        )
+        if stated_manager is not None:
+            add("manager", stated_manager.group(1), "eq")
+        leverage_factor = re.search(
+            r"(?<!분)배수(?:\s*표기)?(?:가|는|은|이)?\s*([0-9]+(?:\.[0-9]+)?)",
+            question,
+        )
+        if leverage_factor is not None:
+            add("leverage_factor", float(leverage_factor.group(1)), "eq")
 
     if family == "fund":
         company_sale_context = re.search(
@@ -784,6 +825,16 @@ def build_lexical_hints(
                 explicit_fund_risk = risk
                 add("risk_level", risk)
                 break
+        exact_fund_risk_label = re.search(
+            r"(?:(높은\s*위험|낮은\s*위험)으로\s*(?:표기|기재|적힌)|"
+            r"위험\s*등급\s*명(?:이|은|가)?\s*(높은\s*위험|낮은\s*위험)(?:인|으로))",
+            question,
+        )
+        if explicit_fund_risk is None and exact_fund_risk_label is not None:
+            exact_label = next(
+                value for value in exact_fund_risk_label.groups() if value is not None
+            )
+            add("risk_level", re.sub(r"\s+", " ", exact_label), "eq")
         fund_risk_aliases = (
             (r"매우\s*높은\s*위험(?:\s*\(?1등급\)?)?", ["매우 높은 위험", "매우높은위험(1등급)"]),
             (r"다소\s*높은\s*위험(?:\s*\(?3등급\)?)?", ["다소 높은 위험", "다소높은위험(3등급)"]),
@@ -795,7 +846,7 @@ def build_lexical_hints(
             (r"매우\s*낮은\s*위험(?:\s*\(?6등급\)?)?", ["매우 낮은 위험", "매우낮은위험(6등급)"]),
             (r"(?<!매우\s)낮은\s*위험(?:\s*\(?5등급\)?)?", ["낮은 위험", "낮은위험(5등급)"]),
         )
-        if explicit_fund_risk is None:
+        if explicit_fund_risk is None and exact_fund_risk_label is None:
             for pattern, values in fund_risk_aliases:
                 if re.search(pattern, question):
                     add("risk_level", values, "in")
@@ -854,11 +905,20 @@ def build_lexical_hints(
         )
         if buy_unavailable is not None:
             semantic_unsupported_spans.append(buy_unavailable.group(0))
-        if re.search(r"(?:모집\s*구분(?:이|은|가)?\s*)?공모", question):
+        if re.search(
+            r"(?:모집\s*구분(?:이|은|가)?\s*)?공모|공개\s*모집(?:된|한)?",
+            question,
+        ):
             add("public_offering", True)
         if re.search(r"(?:모집\s*구분(?:이|은|가)?\s*)?사모", question):
             add("public_offering", False)
         if re.search(r"(?:퇴직\s*)?연금.{0,16}(?:편입|거래).{0,8}(?:가능|Y)", question):
+            add("pension_eligible", True)
+        if re.search(
+            r"(?:퇴직\s*)?연금(?:에|으로|계좌에)?\s*"
+            r"(?:담|편입).{0,12}?(?:수\s*있|가능)",
+            question,
+        ):
             add("pension_eligible", True)
         if re.search(r"(?:퇴직\s*)?연금.{0,16}(?:편입|거래).{0,8}(?:불가|N)", question):
             add("pension_eligible", False)
@@ -879,6 +939,11 @@ def build_lexical_hints(
         # schema has no delisting field, so positive buyability wording is an
         # understood scope phrase, not a row-level filter.
         lookup_patterns = [
+            (
+                r"([0-9A-Za-z가-힣&·+._ -]{2,60}?)(?:가|이)\s*발행한\s*(?:국내\s*)?채권",
+                "issuer",
+                "eq",
+            ),
             (r"발행(?:기관|사|자)에\s*(.+?)(?:가|이)?\s*포함", "issuer", "contains"),
             (r"발행(?:기관|사|자)\s*(.+?)의", "issuer", "contains"),
             (r"상품명에\s*(.+?)(?:가|이)?\s*포함", "product_name", "contains"),
@@ -897,7 +962,9 @@ def build_lexical_hints(
                 r"(AAA|AA\+|AA0|AA-|A\+|A0|A-|BBB\+|BBB0|BBB-|"
                 r"BB\+|BB0|BB-|B\+|B0|B-|CCC|CC0|C0|C)(?:인|$|\s)|"
                 r"(?<![A-Z])(AAA|AA\+|AA0|AA-|A\+|A0|A-|BBB\+|BBB0|BBB-|"
-                r"BB\+|BB0|BB-|B\+|B0|B-|CCC|CC0|C0|C)\s*등급)",
+                r"BB\+|BB0|BB-|B\+|B0|B-|CCC|CC0|C0|C)\s*등급|"
+                r"(?<![A-Z])(AAA|AA\+|AA0|AA-|A\+|A0|A-|BBB\+|BBB0|BBB-|"
+                r"BB\+|BB0|BB-|B\+|B0|B-|CCC|CC0|C0|C)(?:가|이)?\s*적용된)",
                 "credit_rating",
                 "eq",
             ),
@@ -910,6 +977,40 @@ def build_lexical_hints(
                     semantic_ambiguity_spans.append(negated_value)
                 else:
                     add(field, value, operator)
+        connected_ratings = re.findall(
+            r"(?<![A-Z])(AAA|AA\+|AA0|AA-|A\+|A0|A-|BBB\+|BBB0|BBB-|"
+            r"BB\+|BB0|BB-|B\+|B0|B-|CCC|CC0|C0|C)(?![A-Z])",
+            question,
+            flags=re.IGNORECASE,
+        )
+        if len(set(connected_ratings)) >= 2 and re.search(r"(?:또는|이나|나|혹은|,)", question):
+            required[:] = [item for item in required if item["field"] != "credit_rating"]
+            for rating in dict.fromkeys(value.upper() for value in connected_ratings):
+                add("credit_rating", rating, "eq")
+        elif bare_rating := re.search(
+            r"(?<![A-Z])(AAA|AA\+|AA0|AA-|A\+|A0|A-|BBB\+|BBB0|BBB-|"
+            r"BB\+|BB0|BB-|B\+|B0|B-|CCC|CC0|C0|C)\s*채권",
+            question,
+            flags=re.IGNORECASE,
+        ):
+            required[:] = [item for item in required if item["field"] != "credit_rating"]
+            add("credit_rating", bare_rating.group(1).upper(), "eq")
+        remaining_year_range = re.search(
+            r"(?:잔여|잔존)\s*기간(?:이|은|가|을|를)?\s*"
+            r"(\d+)\s*년\s*이상\s*(\d+)\s*년\s*이하",
+            question,
+        )
+        if remaining_year_range is not None:
+            lower, upper = map(int, remaining_year_range.groups())
+            add("remaining_days", [lower * 365, upper * 365], "between")
+        maturity_within_years = re.search(
+            r"(\d+)\s*년\s*(?:안|이내)에?.{0,24}?(?:만기|상환)|"
+            r"(?:만기|상환).{0,24}?(\d+)\s*년\s*(?:안|이내)",
+            question,
+        )
+        if maturity_within_years is not None:
+            years = next(int(value) for value in maturity_within_years.groups() if value)
+            add("remaining_days", years * 365, "lte")
         maturity_years = re.search(
             r"(?:잔존\s*)?만기(?:가|는|를|는\s*기간)?\s*(\d+)\s*년\s*"
             r"(이하|미만|이상|초과)",
@@ -933,7 +1034,11 @@ def build_lexical_hints(
             add("remaining_days", int(remaining_days.group(1)), "lte")
         if re.search(r"(?:앞으로\s*)?(?:반년|6\s*개월)\s*안(?:에)?", question):
             add("remaining_days", 180, "lte")
-        elif re.search(r"(?:앞으로\s*)?(?:1\s*년|일\s*년)\s*안(?:에)?", question):
+        elif re.search(
+            r"(?:앞으로\s*)?(?:1\s*년|일\s*년)\s*(?:안|내)(?:에)?"
+            r"(?:.{0,16}?(?:만기|상환))?",
+            question,
+        ):
             add("remaining_days", 365, "lte")
         elif re.search(r"만기까지\s*2\s*년(?:을)?\s*넘기지\s*않", question):
             add("remaining_days", 730, "lte")
@@ -991,17 +1096,30 @@ def build_lexical_hints(
         )
         if manager is not None:
             add("manager", manager.group(1).strip(" '‘’\""), "eq")
+        bare_manager = re.search(
+            r"(?:^|[.!?。]\s*|(?:첫째|둘째|셋째|넷째),?\s*)"
+            r"([0-9A-Za-z가-힣&·+._ -]{2,80}?)"
+            r"(?:의\s+(?:해외\s*)?|\s+운용\s+(?:해외\s*)?)(?:ETF|ETN)",
+            question,
+            flags=re.IGNORECASE,
+        )
+        if bare_manager is not None:
+            manager_value = bare_manager.group(1).strip(" '‘’\"")
+            if (
+                re.search(
+                    r"(?:상품\s*(?:ID|아이디|번호)|종목\s*코드|티커)$",
+                    manager_value,
+                    flags=re.IGNORECASE,
+                )
+                is None
+            ):
+                add("manager", manager_value, "eq")
         if re.search(r"인버스\s*(?:또는|·|/)?\s*숏\s*여부.{0,12}(?:Y|예)", question):
             add("inverse_short", True)
         if re.search(r"지수\s*추적\s*여부.{0,12}(?:Y|예)", question):
             add("index_tracking", True)
-        fund_currency = re.search(
-            r"(?:펀드|상품)\s*통화\s*코드(?:가|는|은|이)?\s*([A-Z]{3})",
-            question,
-            flags=re.IGNORECASE,
-        )
-        if fund_currency is not None:
-            add("fund_currency", fund_currency.group(1).upper())
+        if explicit_fund_currency is not None:
+            add("fund_currency", explicit_fund_currency.group(1).upper())
         listing_date = re.search(
             r"(?:설정일|상장일)(?:이|가)?\s*(\d{4})\s*년\s*(\d{1,2})\s*월\s*"
             r"(\d{1,2})\s*일\s*(이후|이상|초과|이전|이하|미만)",
@@ -1021,7 +1139,10 @@ def build_lexical_hints(
 
     if family == "bond":
         numeric_fields = [
-            ("issue_amount", ("발행잔액",)),
+            (
+                "issue_amount",
+                ("발행잔액", "남은 발행 물량", "남아 있는 발행 물량"),
+            ),
             ("total_issue_amount", ("총발행금액", "총 발행금액", "총 발행 규모", "총발행액")),
             ("coupon_rate_pct", ("표면이율", "표면이자율", "쿠폰금리", "표면금리", "액면 쿠폰")),
             ("buy_yield_pct", ("매수수익률", "매수 수익률")),
@@ -1094,7 +1215,10 @@ def build_lexical_hints(
             ("aum", ("AUM", "순자산", "일간 순자산총액", "최종 순자산")),
             ("close_price", ("종가", "마감 가격")),
             ("daily_trading_value", ("일 거래대금", "거래대금", "외화거래대금")),
-            ("daily_volume", ("일 거래량", "거래량", "일간 거래량", "하루 거래량")),
+            (
+                "daily_volume",
+                ("일 거래량", "일거래량", "거래량", "일간 거래량", "하루 거래량"),
+            ),
             ("discrepancy_pct", ("괴리율", "가격 괴리율", "NAV 괴리율")),
         ]
     if family == "domestic_etp":
@@ -1104,7 +1228,13 @@ def build_lexical_hints(
                 ("tracking_error_pct", ("추적오차율", "추적 오차율", "추적 오차")),
                 (
                     "twenty_day_volatility_pct",
-                    ("20거래일 변동성", "20일 변동성", "1개월 변동성", "20거래일 흔들림"),
+                    (
+                        "20거래일 연환산 변동성",
+                        "20거래일 변동성",
+                        "20일 변동성",
+                        "1개월 변동성",
+                        "20거래일 흔들림",
+                    ),
                 ),
                 (
                     "sixty_day_volatility_pct",
@@ -1133,18 +1263,31 @@ def build_lexical_hints(
                     ),
                 ),
                 ("one_day_return_pct", ("1일 수익률", "하루 수익률", "일간 수익률")),
-                ("one_month_return_pct", ("1개월 수익률", "1M 수익률")),
+                (
+                    "one_month_return_pct",
+                    ("1개월 수익률", "한 달 수익률", "한 달 성과", "1M 수익률"),
+                ),
                 ("three_month_return_pct", ("3개월 수익률", "3M 수익률")),
                 ("six_month_return_pct", ("6개월 수익률", "반년 수익률", "6M 수익률")),
                 ("one_year_return_pct", ("1년 수익률", "1Y 수익률")),
                 ("ytd_return_pct", ("YTD 수익률", "연초 이후 수익률")),
-                ("leverage_factor", ("배수", "레버리지")),
+                (
+                    "leverage_factor",
+                    ("레버리지 배수", "레버리지배수", "레버리지", "배율"),
+                ),
             ]
         )
     elif family == "overseas_etp":
         numeric_fields.extend(
             [
-                ("leverage_factor", ("배수", "레버리지")),
+                (
+                    "leverage_factor",
+                    ("레버리지 배수", "레버리지배수", "레버리지", "배율"),
+                ),
+                (
+                    "one_day_return_pct",
+                    ("1일 수익률", "하루 수익률", "당일 수익률", "일간 수익률"),
+                ),
                 ("base_price", ("기준가", "펀드 기준가")),
             ]
         )
@@ -1165,13 +1308,14 @@ def build_lexical_hints(
     if family == "domestic_etp" and (
         payment_count := re.search(
             r"(?:연(?:간)?\s*)?(?:분배\s*)?(?:지급\s*)?횟수(?:가|는|은|이)?\s*"
-            r"(\d+)\s*회|연(?:간)?\s*(\d+)\s*회\s*(?:분배|지급)",
+            r"(\d+)\s*회|연(?:간)?\s*(\d+)\s*회\s*(?:분배|지급)|"
+            r"(?:분배금을?\s*)?(?:해마다|매년|연간)\s*(\d+)\s*(?:번|회)\s*지급",
             question,
         )
     ):
         add(
             "distribution_payments_per_year",
-            int(payment_count.group(1) or payment_count.group(2)),
+            int(payment_count.group(1) or payment_count.group(2) or payment_count.group(3)),
             "eq",
         )
     if family == "fund" and re.search(
@@ -1190,6 +1334,32 @@ def build_lexical_hints(
             hint = _date_hint(question, field, aliases)
             if hint is not None:
                 add(hint["field"], hint["value"], hint["operator"])
+        issued_since_year = re.search(
+            r"(\d{4})\s*년\s*(?:이후|부터)\s*발행(?:된|한)?",
+            question,
+        )
+        if issued_since_year is not None:
+            add("issue_date", f"{issued_since_year.group(1)}-01-01", "gte")
+        maturity_year_end = re.search(
+            r"(?:상환|만기)(?:일자|일)?(?:가|는|은|이)?\s*"
+            r"(\d{4})\s*년\s*말(?:까지|이전|이하)",
+            question,
+        )
+        if maturity_year_end is not None:
+            add("maturity_date", f"{maturity_year_end.group(1)}-12-31", "lte")
+        remaining_years = re.search(
+            r"(?:(?:상환|만기)(?:까지)?\s*|(?:잔여|잔존)\s*기간(?:이|은|가)?\s*)"
+            r"(\d+)\s*년\s*(이상|초과|이하|미만)(?:\s*남(?:은|아|은\s*것))?",
+            question,
+        )
+        if remaining_years is not None:
+            operator = {
+                "이상": "gte",
+                "초과": "gt",
+                "이하": "lte",
+                "미만": "lt",
+            }[remaining_years.group(2)]
+            add("remaining_days", int(remaining_years.group(1)) * 365, operator)
 
     unsupported_patterns = [
         "배당수익률",
@@ -1279,16 +1449,26 @@ def build_lexical_hints(
         (r"(?:5\s*년|5Y)", "five_year_return_pct"),
         (r"(?:YTD|연초\s*이후)", "ytd_return_pct"),
     )
+    period_rank_gap = (
+        80
+        if re.search(
+            r"통합\s*(?:비교|정렬|순위)|직접\s*비교|한\s*줄\s*순위|"
+            r"(?:한\s*순위에\s*)?합쳐|따로\s*나누지\s*말고",
+            question,
+            re.IGNORECASE,
+        )
+        else 24
+    )
     for period, field_id in period_rank_fields:
         if re.search(
-            rf"{period}\s*(?:수익률|수익|성과).{{0,24}}"
+            rf"{period}\s*(?:수익률|수익|성과).{{0,{period_rank_gap}}}"
             r"(?:앞선|우수한|높은|낮은|상위|하위|좋은|순)",
             question,
             flags=re.IGNORECASE,
         ):
             explicit_rank_patterns.append(
                 (
-                    rf"{period}\s*(?:수익률|수익|성과).{{0,24}}"
+                    rf"{period}\s*(?:수익률|수익|성과).{{0,{period_rank_gap}}}"
                     r"(?:앞선|우수한|높은|낮은|상위|하위|좋은|순)",
                     field_id,
                 )
@@ -1317,7 +1497,7 @@ def build_lexical_hints(
                 ),
                 (
                     r"(?:민평\s*(?:(?:기준\s*)?수익률|금리)|민간평가\s*금리|평가기관\s*수익률|"
-                    r"민평에서\s*(?:계산|산출)된\s*(?:수익률|금리)).{0,30}"
+                    r"민평에서\s*(?:계산|산출)(?:된|한)\s*(?:수익률|금리)).{0,30}"
                     r"(?:센|큰|작은|높은|낮은|상위|하위|순)",
                     "applied_yield_pct",
                 ),
@@ -1429,47 +1609,47 @@ def build_lexical_hints(
                     "preservation_ratio_pct",
                 ),
                 (
-                    r"(?:1주|일주일)\s*(?:수익률|수익|성과).{0,24}"
+                    r"(?:1주|일주일)\s*(?:수익률|수익|성과).{0,120}"
                     r"(?:큰|작은|높은|낮은|좋은|상위|하위|성과순|순)",
                     "one_week_return_pct",
                 ),
                 (
-                    r"(?:1개월|한 달)\s*(?:수익률|수익|성과).{0,24}"
+                    r"(?:1개월|한 달)\s*(?:수익률|수익|성과).{0,120}"
                     r"(?:큰|작은|높은|낮은|좋은|상위|하위|성과순|순)",
                     "one_month_return_pct",
                 ),
                 (
-                    r"(?:3개월|3M|석 달)\s*(?:수익률|수익|성과|return).{0,24}"
+                    r"(?:3개월|3M|석 달)\s*(?:수익률|수익|성과|return).{0,120}"
                     r"(?:큰|작은|높은|낮은|좋은|상위|하위|성과순|순)",
                     "three_month_return_pct",
                 ),
                 (
-                    r"(?:6개월|반년)\s*(?:수익률|수익|성과).{0,24}"
+                    r"(?:6개월|반년)\s*(?:수익률|수익|성과).{0,120}"
                     r"(?:큰|작은|높은|낮은|좋은|상위|하위|성과순|순)",
                     "six_month_return_pct",
                 ),
                 (
-                    r"(?:1년|1Y)\s*(?:수익률|수익|성과).{0,24}"
+                    r"(?:1년|1Y)\s*(?:수익률|수익|성과).{0,120}"
                     r"(?:큰|작은|높은|낮은|좋은|상위|하위|성과순|순)",
                     "one_year_return_pct",
                 ),
                 (
-                    r"18\s*개월\s*(?:수익률|수익|성과).{0,24}"
+                    r"18\s*개월\s*(?:수익률|수익|성과).{0,120}"
                     r"(?:큰|작은|높은|낮은|좋은|상위|하위|성과순|순)",
                     "eighteen_month_return_pct",
                 ),
                 (
-                    r"2\s*년\s*(?:수익률|수익|성과).{0,24}"
+                    r"2\s*년\s*(?:수익률|수익|성과).{0,120}"
                     r"(?:큰|작은|높은|낮은|좋은|상위|하위|성과순|순)",
                     "two_year_return_pct",
                 ),
                 (
-                    r"3\s*년\s*(?:수익률|수익|성과).{0,24}"
+                    r"3\s*년\s*(?:수익률|수익|성과).{0,120}"
                     r"(?:큰|작은|높은|낮은|좋은|상위|하위|성과순|순)",
                     "three_year_return_pct",
                 ),
                 (
-                    r"5\s*년\s*(?:수익률|수익|성과).{0,24}"
+                    r"5\s*년\s*(?:수익률|수익|성과).{0,120}"
                     r"(?:큰|작은|높은|낮은|좋은|상위|하위|성과순|순)",
                     "five_year_return_pct",
                 ),
@@ -1535,31 +1715,31 @@ def build_lexical_hints(
                 ),
                 (
                     r"(?:1일|하루|당일|오늘|일간)\s*(?:수익률|수익|성과)"
-                    r".{0,24}(?:큰|작은|높은|낮은|상위|하위|순)",
+                    r".{0,120}(?:큰|작은|높은|낮은|상위|하위|순)",
                     "one_day_return_pct",
                 ),
                 (
-                    r"(?:1개월|한\s*달|1M)\s*(?:수익률|수익|성과).{0,24}"
+                    r"(?:1개월|한\s*달|1M)\s*(?:수익률|수익|성과).{0,120}"
                     r"(?:큰|작은|높은|낮은|상위|하위|순)",
                     "one_month_return_pct",
                 ),
                 (
-                    r"(?:3개월|석\s*달|3M)\s*(?:수익률|수익|성과).{0,24}"
+                    r"(?:3개월|석\s*달|3M)\s*(?:수익률|수익|성과).{0,120}"
                     r"(?:큰|작은|높은|낮은|상위|하위|순)",
                     "three_month_return_pct",
                 ),
                 (
-                    r"(?:6개월|반년|6M)\s*(?:수익률|수익|성과).{0,24}"
+                    r"(?:6개월|반년|6M)\s*(?:수익률|수익|성과).{0,120}"
                     r"(?:큰|작은|높은|낮은|상위|하위|순)",
                     "six_month_return_pct",
                 ),
                 (
-                    r"(?:1년|일\s*년|1Y)\s*(?:수익률|수익|성과).{0,24}"
+                    r"(?:1년|일\s*년|1Y)\s*(?:수익률|수익|성과).{0,120}"
                     r"(?:큰|작은|높은|낮은|상위|하위|순)",
                     "one_year_return_pct",
                 ),
                 (
-                    r"(?:YTD|연초\s*이후)\s*(?:수익률|수익|성과).{0,24}"
+                    r"(?:YTD|연초\s*이후)\s*(?:수익률|수익|성과).{0,120}"
                     r"(?:큰|작은|높은|낮은|상위|하위|순)",
                     "ytd_return_pct",
                 ),
@@ -1660,6 +1840,12 @@ def build_lexical_hints(
             direction = "asc"
         elif local_descending is not None:
             direction = "desc"
+        elif alias_resolution is not None and alias_resolution.field_id == ranking_field:
+            # The explicit pattern identifies the field, while the typed alias
+            # may carry the only unambiguous direction (for example
+            # ``상환이 먼저 오는``). Do not replace that evidence with the
+            # generic descending fallback.
+            direction = alias_resolution.direction.value
         elif ranking_field in {"product_name", "short_name", "ticker"} and not descending:
             direction = "asc"
         else:
@@ -1674,15 +1860,69 @@ def build_lexical_hints(
             }
         )
 
-    # Every row in the frozen overseas ETP snapshot is USD.  Amount rankings
-    # therefore acquire an explicit same-currency lock instead of relying on a
-    # hidden dataset invariant.  Other ratio/date rankings remain unaffected.
-    if (
-        family == "overseas_etp"
-        and any(item["field"] == "aum" for item in rankings)
-        and not any(item["field"] == "trading_currency" for item in required)
-    ):
-        add("trading_currency", "USD")
+    # When a shared cross-family sentence names the period once and then says
+    # only "수익률이 0보다 ...", bind the threshold to the already verified
+    # ranking field.  This avoids dropping a hard filter while still refusing
+    # to guess a period when no return ranking was resolved.
+    if rankings and rankings[0]["field"] in {
+        "one_day_return_pct",
+        "one_week_return_pct",
+        "one_month_return_pct",
+        "three_month_return_pct",
+        "six_month_return_pct",
+        "one_year_return_pct",
+        "eighteen_month_return_pct",
+        "two_year_return_pct",
+        "three_year_return_pct",
+        "five_year_return_pct",
+        "ytd_return_pct",
+    }:
+        generic_return_band = re.search(
+            rf"({NUMBER})\s*(?:%|퍼센트)?\s*이상\s*"
+            rf"({NUMBER})\s*(?:%|퍼센트)?\s*이하",
+            question,
+            flags=re.IGNORECASE,
+        )
+        if generic_return_band is not None:
+            add(
+                rankings[0]["field"],
+                [
+                    _scaled_number(generic_return_band.group(1)),
+                    _scaled_number(generic_return_band.group(2)),
+                ],
+                "between",
+            )
+        generic_return_comparison = re.search(
+            rf"({NUMBER})\s*(?:%|퍼센트)?(?:을|를)?\s*"
+            r"(이상|이하|초과|미만)",
+            question,
+            flags=re.IGNORECASE,
+        )
+        if generic_return_comparison is not None:
+            add(
+                rankings[0]["field"],
+                _scaled_number(generic_return_comparison.group(1)),
+                {
+                    "이상": "gte",
+                    "이하": "lte",
+                    "초과": "gt",
+                    "미만": "lt",
+                }[generic_return_comparison.group(2)],
+            )
+        generic_return_threshold = re.search(
+            rf"(?:(?:수익률|수익|성과)(?:이|가)?\s*)?"
+            rf"({NUMBER})\s*(?:%|퍼센트)?\s*보다\s*"
+            r"(큰|높은|작은|낮은)",
+            question,
+            flags=re.IGNORECASE,
+        )
+        if generic_return_threshold is not None:
+            operator = "gt" if generic_return_threshold.group(2) in {"큰", "높은"} else "lt"
+            add(
+                rankings[0]["field"],
+                _scaled_number(generic_return_threshold.group(1)),
+                operator,
+            )
 
     coverage = _SEMANTIC_COVERAGE_GATE.evaluate(
         question,
@@ -1705,6 +1945,31 @@ def build_lexical_hints(
         and not explicit_product_name_order(question)
     ):
         semantic_ambiguity_spans.extend(ranking_cue_spans(question) or ("ranking_metric",))
+
+    # A natural range expression can be observed twice by independent lexical
+    # rules (for example, ``1년 이상 5년 이하`` as both BETWEEN and GTE).
+    # Preserve the range and discard only an exactly duplicated inclusive
+    # endpoint; all genuinely narrower constraints remain intact.
+    between_endpoints = {
+        (item["field"], item["value"][0], item["value"][1])
+        for item in required
+        if item["operator"] == "between"
+        and isinstance(item["value"], list)
+        and len(item["value"]) == 2
+    }
+    if between_endpoints:
+        required[:] = [
+            item
+            for item in required
+            if not any(
+                item["field"] == field
+                and (
+                    (item["operator"] == "gte" and item["value"] == lower)
+                    or (item["operator"] == "lte" and item["value"] == upper)
+                )
+                for field, lower, upper in between_endpoints
+            )
+        ]
 
     exact_lookup = any(item["field"] in {"ticker", "product_id", "isin"} for item in required)
     if (
@@ -1729,15 +1994,28 @@ def build_lexical_hints(
         rankings = []
     if family == "bond":
         rating_token = re.search(
-            r"신용\s*등급(?:이|은)?\s*([A-Z]{1,5}(?:[+0-])?)(?=인|\s|$)",
+            r"(?:신용\s*등급(?:이|은)?\s*(?P<prefix>[A-Z]{1,5}(?:[+0-])?)"
+            r"(?=인|\s|$)|(?P<suffix>[A-Z]{1,5}(?:[+0-])?)\s*등급|"
+            r"(?P<label_first>[A-Z]{1,5}(?:[+0-])?)\s*신용\s*등급|"
+            r"(?<![A-Z])(?P<bare>[A-D]{1,5}(?:[+0-])?)\s*(?:국내\s*)?채권)",
             question,
         )
         valid_ratings = set(
             load_field_registry().require_field("credit_rating", ["bond"]).enum_values
         )
-        if rating_token and rating_token.group(1) not in valid_ratings:
+        rating_value = (
+            None
+            if rating_token is None
+            else (
+                rating_token.group("prefix")
+                or rating_token.group("suffix")
+                or rating_token.group("label_first")
+                or rating_token.group("bare")
+            )
+        )
+        if rating_value is not None and rating_value not in valid_ratings:
             required[:] = [item for item in required if item["field"] != "credit_rating"]
-            add("credit_rating", rating_token.group(1), "eq")
+            add("credit_rating", rating_value, "eq")
         ordered_rating = re.search(
             r"(?:신용\s*등급(?:이|은)?\s*)?"
             r"(AAA|AA\+|AA0|AA-|A\+|A0|A-|BBB\+|BBB0|BBB-|"

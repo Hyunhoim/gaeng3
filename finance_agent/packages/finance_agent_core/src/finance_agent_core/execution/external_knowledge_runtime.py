@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from time import perf_counter
 
 from pydantic import BaseModel, ConfigDict
 
+from finance_agent_core.agent.external_search_planning import normalize_product_identity
 from finance_agent_core.config.knowledge_coverage import KnowledgeCapability
 from finance_agent_core.contracts.external_knowledge import (
     ExternalKnowledgeOutcome,
@@ -30,6 +32,7 @@ from finance_agent_core.retrieval.official_live_evidence import (
     VerifiedLiveRelationExtractor,
 )
 from finance_agent_core.retrieval.temporal_relations import (
+    ExternalEvidenceReference,
     TemporalEntityKind,
     TemporalRelationStore,
     seal_temporal_relation_bundle,
@@ -44,6 +47,7 @@ class ExternalKnowledgeRuntimeResult(BaseModel):
     candidate_universe: ProvidedProductCandidateUniverse
     acquisitions: tuple[OfficialEvidenceAcquisitionResult, ...]
     execution: ExternalKnowledgeExecution | None = None
+    identity_evidence: tuple[ExternalEvidenceReference, ...] = ()
 
 
 class ExternalKnowledgeRuntime:
@@ -115,6 +119,47 @@ class ExternalKnowledgeRuntime:
                     )
         return tuple(targets[key] for key in sorted(targets))
 
+    @staticmethod
+    def _identity_only_empty_intersection_allowed(
+        requirement,
+        universe: ProvidedProductCandidateUniverse,
+    ) -> bool:
+        """Allow NOT_FOUND only for an exact external-name/product lookup.
+
+        ``Kimi related overseas ETF`` can be resolved as an empty provided-DB
+        intersection after an official source proves the Kimi identity and the
+        full overseas-ETF identity universe contains no such name.  A holdings,
+        risk, dated-history, or generic theme request still requires the full
+        relation extractor and therefore cannot use this shortcut.
+        """
+
+        if (
+            requirement.capability is not KnowledgeCapability.SECTOR_THEME_HISTORY
+            or requirement.time_range is not None
+            or re.search(
+                r"(?:관련\s*(?:된\s*)?)?(?:국내\s*|해외\s*)?(?:ETF|ETN|ETP)",
+                requirement.relation_evidence_span,
+                re.IGNORECASE,
+            )
+            is None
+        ):
+            return False
+        subject = normalize_product_identity(requirement.subject)
+        if not subject or any(
+            subject.endswith(normalize_product_identity(suffix))
+            for suffix in ("테마", "섹터", "산업")
+        ):
+            return False
+        for candidate in universe.candidates:
+            if candidate.product_family not in requirement.product_families:
+                continue
+            surfaces = (candidate.product_name, *candidate.aliases)
+            if any(
+                subject in normalize_product_identity(surface) for surface in surfaces if surface
+            ):
+                return False
+        return True
+
     def _execute_authorized_staged(
         self,
         search_plan: ExternalKnowledgeSearchPlan,
@@ -136,6 +181,8 @@ class ExternalKnowledgeRuntime:
         all_relations = {}
         all_snapshots = []
 
+        identity_evidence: dict[str, ExternalEvidenceReference] = {}
+
         def terminal(status, reasons, *, complete=False):
             return ExternalKnowledgeRuntimeResult(
                 outcome=ExternalKnowledgeOutcome(
@@ -146,6 +193,9 @@ class ExternalKnowledgeRuntime:
                 search_plan=search_plan,
                 candidate_universe=universe,
                 acquisitions=tuple(acquisitions),
+                identity_evidence=tuple(
+                    identity_evidence[key] for key in sorted(identity_evidence)
+                ),
             )
 
         requirements = search_plan.composite_plan.requirements
@@ -297,6 +347,18 @@ class ExternalKnowledgeRuntime:
                     except (OfficialLiveEvidenceError, ValueError):
                         extracted = ()
                 if not extracted:
+                    subject_evidence = self.live_relation_extractor.extract_subject_evidence(
+                        item.snapshots,
+                        effective,
+                    )
+                    if subject_evidence and self._identity_only_empty_intersection_allowed(
+                        effective, universe
+                    ):
+                        identity_evidence.update(
+                            {value.evidence_id: value for value in subject_evidence}
+                        )
+                        target_not_found += 1
+                        continue
                     target_incomplete = True
                     continue
                 requirement_relations.update(
