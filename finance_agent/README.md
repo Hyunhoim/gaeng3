@@ -63,7 +63,7 @@ LLM은 수치 계산, 필터, 정렬, 상품 순위와 출처를 직접 만들�
 | 해외 ETF·ETN | 검색·상세·비교·집계·교차 상품군 검색·근거 검증 |
 | 공모펀드 | 검색·비교·집계·grounded answer 내부 검증, 공식 실행은 정책상 비활성 |
 | 문서 검색 | BM25·SQLite FTS 최소 기능과 외부 문서 승인·권한·해시·변조 차단 반입 계약. 실제 corpus는 승인 대기 |
-| 관계 검색 | 국내채권·국내/해외 ETP 관계 58,005개, 공개 Router·Backend DTO·full-entity exact match·Release·Audit·Docker 연결 완료. 공모펀드·외부 문서·alias 의미 검색은 대기 |
+| 관계 검색 | 국내채권·국내/해외 ETP 관계 37,787개, 공개 Router·Backend DTO·full-entity exact match·Release·Audit·Docker 연결 완료. 공모펀드·외부 문서·alias 의미 검색은 대기 |
 | Backend 연동 | 요청·응답 DTO, 오류 adapter와 JSON Schema 제공 |
 
 세부 필드와 제한은 [Capability matrix](docs/capability-matrix.md), 최신 구현·평가 상태는

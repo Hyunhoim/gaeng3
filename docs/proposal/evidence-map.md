@@ -35,11 +35,11 @@
 
 | 주장 | 값 | 정본 | 해석 제한 |
 | --- | ---: | --- | --- |
-| 원천 감사 | 4종 145,393행, 65/65 | [데이터 감사](../../finance_agent/docs/data-audit.md) | 제공 스냅샷 기준 |
-| 전체 코드 회귀 | Agent Core 1,443 passed·2 skipped, Backend 358 passed·2 warnings | [Core 테스트](../../finance_agent/packages/finance_agent_core/tests)·[Backend 테스트](../../fastapi_backend/tests) | 2026-08-20 P0-10 작업 트리의 단위·계약 회귀이며 독립 성능 평가가 아님 |
+| 원천 감사 | 4종 53,375행, 55/55 | [데이터 감사](../../finance_agent/docs/data-audit.md) | 2026-08-24 공식 데이터 기준. 2026-08-31 재실행 확인 |
+| 전체 코드 회귀 | Agent Core 1,763 passed·2 skipped, Backend 451 passed | [Core 테스트](../../finance_agent/packages/finance_agent_core/tests)·[Backend 테스트](../../fastapi_backend/tests) | 2026-08-31 `15e1dd8`의 단위·계약 회귀이며 독립 성능 평가가 아님. Backend는 `umask 022` 필요 |
 | 평가기 retry·중복 실행 제어 | 정상 동일 요청 200·200/Agent 1회, dataset 장애 503·503/Agent 2회, 강제 timeout 504 | [P0-8 baseline](../../finance_agent/evaluation/baselines/retry-contract-p0-8-v1.json)·[인수인계](../../finance_agent/docs/p0-8-retry-contract-handover-2026-08-19.md) | 로컬 Docker fault injection, 실제 evaluator·HCLX·NCP 아님 |
 | 외부 문서 반입 게이트 | 승인·권한·출처·해시·변조 차단·BM25 build 합성 계약 24/24 | [P0-5 baseline](../../finance_agent/evaluation/baselines/external-corpus-intake-contract-v1.json)·[인수인계](../../finance_agent/docs/p0-5-external-corpus-intake-2026-08-19.md) | 실제 외부 문서 0건, 승인·검색 정확도·Release 활성화 아님 |
-| 제공 데이터 관계 검색 기반 | 승인 국내채권·국내/해외 ETP 관계 58,005개, 계약 14/14, 실제 검색 smoke 4/4, warm p50 4.846ms·p95 5.960ms | [P0-6 baseline](../../finance_agent/evaluation/baselines/p0-6-provided-relation-retrieval-v1.json)·[인수인계](../../finance_agent/docs/p0-6-provided-relation-retrieval-handover-2026-08-19.md) | 당시 P0-6의 Agent 비활성 baseline으로, 공모펀드·외부 관계 없음, lexical 검색·단일 로컬 장비이며 관계 의미 정확도나 공식 성능이 아님 |
+| 제공 데이터 관계 검색 기반 | 승인 국내채권·국내/해외 ETP 관계 37,787개, 계약 14/14, 실제 검색 smoke 4/4, warm p50 4.846ms·p95 5.960ms | [P0-6 baseline](../../finance_agent/evaluation/baselines/p0-6-provided-relation-retrieval-v1.json)·[인수인계](../../finance_agent/docs/p0-6-provided-relation-retrieval-handover-2026-08-19.md) | 당시 P0-6의 Agent 비활성 baseline으로, 공모펀드·외부 관계 없음, lexical 검색·단일 로컬 장비이며 관계 의미 정확도나 공식 성능이 아님 |
 | 관계·문서 계획과 주장 검증 | Typed Plan·서버 exact gate·Claim Verifier·모델 오류/허위 주장 전체 fallback 22/22, 승인 관계 전체 경로 smoke 4/4 | [P0-7 baseline](../../finance_agent/evaluation/baselines/p0-7-knowledge-claim-contract-v1.json)·[인수인계](../../finance_agent/docs/p0-7-knowledge-claim-verifier-handover-2026-08-20.md) | 당시 P0-7의 내부 CLI 계약으로, 공개 Router·GET `/answer`·P0-10 Release·실제 문서·HCLX 결과를 검증한 baseline은 아님 |
 | P0-10 공개 관계 검색 릴리스 | P0-10 집중 522/522; clean Docker Backend smoke 8/8·공식 형식 GET 호환 smoke 8/8; 관계 질문 3 products/3 citations; 부분 표현 `not_found`; 변조 후 health·API 503 | [machine-readable baseline](../../finance_agent/evaluation/baselines/p0-10-public-relation-release-integration-v1.json)·[P0-10 인수인계](../../finance_agent/docs/p0-10-public-relation-release-integration-handover-2026-08-20.md)·[공개 관계 runtime 배선](../../fastapi_backend/tests/test_relation_runtime_wiring.py)·[release 배포 계약](../../fastapi_backend/tests/test_release_deployment_contract.py)·[관계 정확 검색](../../finance_agent/packages/finance_agent_core/tests/test_relation_retrieval.py) | `local implementation verified`; NCP 실제 서명 배포·공인 IP, signed two-release rollback, 관계 HCLX, alias·blind, 문서 corpus를 증명하지 않음 |
 | 교차 상품군 SEARCH | 국내·해외 ETP 4/4 | [교차 SEARCH](../../finance_agent/docs/cross-family-search.md) | 공개 회귀, not blind |
@@ -60,12 +60,37 @@
 | Docker HTTP 확장 smoke | 기본 14/14, Qwen 14/14, Qwen 장애 fallback 14/14 | [Backend README](../../fastapi_backend/README.md)·[기본 baseline](../../finance_agent/evaluation/baselines/docker-http-smoke-v2.json)·[Qwen baseline](../../finance_agent/evaluation/baselines/docker-http-smoke-qwen-v2.json) | 공개 개발 스모크, 보안 침투·운영 SLO 아님 |
 | 제출 모델 경계 | development 통과·submission 차단 자동 검사 | [제출 경계](../../finance_agent/docs/submission-model-boundary.md) | 현재는 개발 저장소라 제출 차단이 정상, 공식 범위 확인 후 cleanup 필요 |
 
+## 2026-08-31 갱신 증거
+
+2026-08-24 공식 데이터로 전환한 뒤 이 저장소에서 직접 실행해 확인한 값이다.
+
+| 주장 | 값 | 정본 | 해석 제한 |
+| --- | ---: | --- | --- |
+| 공식 데이터 전환 | 4종 53,375행, 원천 8개 SHA-256 8/8 일치, 감사 expectation 55/55 | [데이터 배포 README](<../../../2. Data/1. Raw/2.금융상품_20260824/README.md>)·[승인 manifest](../../finance_agent/packages/finance_agent_core/src/finance_agent_core/config/approved_dataset_manifest.json) | 2026-08-31 재실행. 2026-07-11 배포본(145,393행)은 주최 측 교체 지시로 폐기 |
+| 관계 색인 | 37,787개 | data-init 실행 산출물 | 2026-08-24 데이터·registry 1.5 기준. 2026-07-11 데이터에서는 58,005개였다 |
+| 전체 코드 회귀 | Agent Core 1,763 passed·2 skipped, Backend 451 passed | [Core 테스트](../../finance_agent/packages/finance_agent_core/tests)·[Backend 테스트](../../fastapi_backend/tests) | 2026-08-31 `15e1dd8`. Backend는 `umask 022` 필요 |
+| clean checkout 재현 | `./compose.sh up --detach --wait`로 data-init·Backend 기동, `/health` 네 상품군 ready | [루트 README](../../README.md) | 개발 profile. 공모펀드는 `locked` |
+| 공개 NCP endpoint | `GET /health` 200, 공식 `GET /answer` 200·다섯 문자열, `answer_mode=llm_grounded`, 2.9~4.4초 | 2026-08-31 공인 IP 직접 호출 | 단일 순차 호출 관측이며 부하·SLO·quota 측정이 아니다. 배포본은 2026-08-31 수정 이전 코드다 |
+| HCLX 두-operation 실호출 | HCX Intent 304회, grounded answer 298회, 480,016 token, HTTP non-200 2건 | [All-ON 300문항 보고서](../../finance_agent/reports/independent-holdout-v2.2.1-all-on-20260829.html) | 2026-08-29 연구실 격리 Docker. NCP 경로·quota·429는 별도 |
+| All-ON 300문항 결과 | 상태 정확도 93.33%, 상품 micro F1 73.93%, 상태+상품 순서 일치 69.00%, p95 7.038초 | 위 보고서 | **Gold 공개 후 수행한 post-Gold development regression이며 독립 blind가 아니다.** 최초 blind는 상태 75.67%·F1 56.78%였다 |
+
+### 2026-08-31에 확인한 미해결 병목
+
+| 항목 | 관측 | 상태 |
+| --- | --- | --- |
+| COMPARE 순서 완전 일치 | 24건 중 3건 | 원인이 국내 ETP 종목코드 미인식임을 확인하고 수정. **재측정 전** |
+| 필터 보존 | 실행 230건 중 102건 불일치 | 만기 표현 일반화로 일부 해소. `인버스` 등 잔여. **재측정 전** |
+| 구성종목 질문 | 승인 관계 색인에 회사 엔터티 0건 | 표현별 불일치를 fail-closed로 정합화. 데이터 확보는 미착수 |
+| 공식 외부 결과 완전 일치 | 요구 7건 중 3건 | 미착수 |
+
 ## 완료되지 않은 주장
 
 다음 표현은 근거가 생기기 전까지 기술 제안서에서 완료형으로 사용하지 않는다.
 
-- HyperCLOVA X 연결·성능·비용 검증 완료
-- 공식 `GET /answer` 공개 평가 서버 재현 완료
+- HyperCLOVA X의 NCP quota·429·5xx·비용 한도 검증 완료
+  (연결과 두-operation 실호출 자체는 2026-08-29 연구실 실행으로 확인됨)
+- 공개 평가 서버에서 2026-08-31 수정본이 반영된 상태로 재현 완료
+  (2026-08-31 시점 배포본은 그 이전 코드다)
 - Ontology 용어의 금융 도메인 검수와 주최 측 최종 형식 승인 완료
 - 독립 blind 일반화 성능 100%
 - 실제 투자설명서·약관 기반 문서 RAG 완료
