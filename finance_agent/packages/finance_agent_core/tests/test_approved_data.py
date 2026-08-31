@@ -64,8 +64,8 @@ def test_source_approval_checks_both_data_and_schema_workbooks(tmp_path: Path) -
     release = load_approved_dataset_manifest()
     data_payload = b"approved-data"
     schema_payload = b"approved-schema"
-    data_path = tmp_path / "PRBD01N001_fixture_datarows.xlsx"
-    schema_path = tmp_path / "PRBD01N001_fixture_schema.xlsx"
+    data_path = tmp_path / "prbd01n001_data.xlsx"
+    schema_path = tmp_path / "prbd01n001_schema.xlsx"
     data_path.write_bytes(data_payload)
     schema_path.write_bytes(schema_payload)
     release = _release_with(

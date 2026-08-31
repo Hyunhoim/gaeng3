@@ -268,6 +268,27 @@ def _comparison_delta(field: FieldComparison) -> str:
     return "숫자 순서를 부여하지 않고 원천값만 대조"
 
 
+def _comparison_ranking(field: FieldComparison) -> str | None:
+    """Name the higher and lower side of a comparable field.
+
+    A "which one is cheaper/higher" question needs the winner stated, not only
+    the two values and their signed difference. The ordering is derived from the
+    verified delta, so it adds no value the comparison did not already prove.
+    """
+
+    if field.status not in {"numeric_delta", "stale_input"} or field.delta is None:
+        return None
+
+    def label(cell: ComparisonCell) -> str:
+        return cell.product_name or cell.product_id
+
+    first, second = field.cells
+    if field.delta == 0:
+        return f"  - 두 상품의 {field.label}이(가) 같습니다"
+    higher, lower = (second, first) if field.delta > 0 else (first, second)
+    return f"  - 더 높음: {label(higher)} / 더 낮음: {label(lower)}"
+
+
 def render_verified_comparison(
     plan: QueryPlan,
     verified: VerifiedSearch,
@@ -314,6 +335,9 @@ def render_verified_comparison(
                 ),
             ]
         )
+        ranking = _comparison_ranking(field)
+        if ranking is not None:
+            lines.insert(len(lines) - 1, ranking)
     lines.append(
         "원천: "
         f"{verified.manifest.source_file_name} "

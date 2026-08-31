@@ -78,12 +78,12 @@ flowchart LR
 - Ubuntu SSH Docker build·데이터 준비·Backend HTTP smoke
 - HyperCLOVA X fake transport·오류 계약
 - P0-5 외부 문서 독립 승인·사용 권한·해시·변조 차단·BM25 색인 build 계약
-- P0-6 승인 상품 DB 관계 58,005개·공식 상품 ID 재검증·출처·기준일·변조 차단 계약
+- P0-6 승인 상품 DB 관계 37,787개·공식 상품 ID 재검증·출처·기준일·변조 차단 계약
 - P0-7 관계·문서 Typed Plan·서버 exact 권한·evidence Claim Verifier·전체 fallback 내부 계약
 - P0-10 결정론적 관계 Router·manifest에 해시로 고정된 public release 결속·exact FTS 후보·canonical
   전체 일치·공식 DB identity 재검증·field evidence·결정론적 답변·인과적 Audit
-- P0-10 집중 회귀 522/522, Agent Core 1,443 passed·2 skipped,
-  Backend 358 passed·2 warnings
+- P0-10 집중 회귀 522/522(2026-08-20, 2026-07-11 데이터), Agent Core 1,763 passed·2 skipped,
+  Backend 451 passed(2026-08-31 `15e1dd8`, 2026-08-24 데이터)
 - clean Docker Backend smoke 8/8·공식 형식 GET 호환 smoke 8/8, 관계 3 products/3 citations,
   부분 표현 `not_found`, 변조 후 health·API 503
 - 수치·실행 범위·한계의 정본은 [P0-10 machine-readable baseline](../../../finance_agent/evaluation/baselines/p0-10-public-relation-release-integration-v1.json)

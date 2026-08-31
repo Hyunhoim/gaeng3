@@ -10,22 +10,32 @@ services:
     # The one-shot initializer needs ownership privileges only for the private
     # named volume. Raw competition workbooks remain read-only.
     user: "0:0"
+    # The evaluation runtime image deliberately excludes storage/prepare.py so
+    # a submitted image can verify approved databases but never rebuild them.
+    # Development still has to build them, so this profile runs the preparer
+    # from the read-only source mount below. Both the command and the volumes
+    # are replaced wholesale by docker-compose.release.yml, so nothing here
+    # reaches an evaluation or production deployment.
     command:
-      - python
-      - -m
-      - finance_agent_core.storage.prepare
-      - --data-dir
-      - /raw
-      - --output-dir
-      - /data
-      - --owner-uid
-      - "${BACKEND_HOST_UID:-10001}"
-      - --owner-gid
-      - "${BACKEND_HOST_GID:-10001}"
+      - sh
+      - -c
+      - >-
+        PYTHONPATH=/opt/finance-agent-core-src
+        exec python -m finance_agent_core.storage.prepare
+        --data-dir /raw
+        --output-dir /data
+        --owner-uid "${BACKEND_HOST_UID:-10001}"
+        --owner-gid "${BACKEND_HOST_GID:-10001}"
     volumes:
       - type: bind
-        source: ${FINANCE_RAW_DATA_DIR:-../../2. Data/1. Raw/1.금융상품}
+        source: ${FINANCE_RAW_DATA_DIR:-../../2. Data/1. Raw/2.금융상품_20260824}
         target: /raw
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ./finance_agent/packages/finance_agent_core/src
+        target: /opt/finance-agent-core-src
         read_only: true
         bind:
           create_host_path: false

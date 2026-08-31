@@ -35,12 +35,12 @@
 - [ ] Git 이력을 재작성하지 않고 개발 이력과 제출 경로를 투명하게 분리
 - [x] 외부 문서의 금융·데이터 권한 독립 review·HTTPS 출처·본문 hash·변조 차단 계약
 - [x] 승인된 실제 외부 corpus가 없으므로 최종 평가 Release에서 문서 BM25를 OFF로 동결
-- [x] 승인 상품 DB 제공 관계 58,005개 색인·상품 ID 재검증·출처·해시 계약
+- [x] 승인 상품 DB 제공 관계 37,787개 색인·상품 ID 재검증·출처·해시 계약
 - [ ] 관계 값·한영 표기·동의어의 금융 도메인 검수
 - [x] P0-7 관계·문서 Typed Plan·Claim Verifier·결정론적 fallback 내부 계약
 - [x] P0-10 공개 Router·Backend adapter와 manifest에 해시로 고정된 Agent Release 계약 연결을 로컬에서 검증
 - [x] 관계 검색의 exact FTS 후보·canonical full match·공식 DB identity 재검증·field evidence·인과적 Audit 계약
-- [x] 2026-08-25 계약 회귀 Agent Core 1,612 passed·1 skipped, Backend 453 passed·1 skipped
+- [x] 2026-08-31 계약 회귀 Agent Core 1,763 passed·2 skipped, Backend 451 passed
 - [x] multi-stage runtime image와 exact-image boundary 검사로 builder 원본·local-model
   dependency·weight·inline credential의 평가 image 혼입 차단
 - [x] 서명 Manifest와 실제 release 환경의 exact-match를 Docker 교체 전에 검증
@@ -72,6 +72,8 @@
 
 - [x] public 전환, `main` protection, `evaluation`·`production` Environment 구성
 - [ ] Public 통신 가능한 endpoint
+- [x] 공식 제출물인 API 명세서 작성 ([평가용 API 명세서](../submission/api-specification.md))
+- [ ] 명세서의 공인 IP를 제출 시점 값으로 확정
 - [x] `GET /answer` route와 다섯 문자열 response model
 - [x] `question_id`, `question` 필수 query parameter 규격 확인
 - [x] 다섯 필수 응답 필드가 모두 문자열인 규격 확인

@@ -53,6 +53,11 @@ def _explicit_projection_fields(question: str, family: str) -> list[str]:
     return requested
 
 
+# A calendar month is treated as 30 days so that "6개월 이내" keeps matching the
+# 180-day bound the deterministic planner already used for "반년 안".
+_MATURITY_UNIT_DAYS = {"년": 365, "개월": 30, "일": 1}
+
+
 def _negated_literal_span(question: str, literal: str) -> str | None:
     """Return local text when an identical literal is semantically negated.
 
@@ -1011,15 +1016,15 @@ def build_lexical_hints(
         if maturity_within_years is not None:
             years = next(int(value) for value in maturity_within_years.groups() if value)
             add("remaining_days", years * 365, "lte")
-        maturity_years = re.search(
-            r"(?:잔존\s*)?만기(?:가|는|를|는\s*기간)?\s*(\d+)\s*년\s*"
-            r"(이하|미만|이상|초과)",
+        maturity_bounded = re.search(
+            r"(?:잔존\s*)?만기(?:일)?(?:가|는|를|까지|는\s*기간)?\s*(\d+)\s*"
+            r"(년|개월|일)\s*(이하|미만|이내|이상|초과)",
             question,
         )
-        if maturity_years:
-            days = int(maturity_years.group(1)) * 365
-            boundary = maturity_years.group(2)
-            if boundary == "이하":
+        if maturity_bounded:
+            days = int(maturity_bounded.group(1)) * _MATURITY_UNIT_DAYS[maturity_bounded.group(2)]
+            boundary = maturity_bounded.group(3)
+            if boundary in {"이하", "이내"}:
                 add("remaining_days", [0, days], "between")
             elif boundary == "미만":
                 add("remaining_days", [0, max(0, days - 1)], "between")
@@ -1027,6 +1032,18 @@ def build_lexical_hints(
                 add("remaining_days", days, "gte")
             else:
                 add("remaining_days", days, "gt")
+        # "만기가 1년도 안 남은" states the same bound as "만기 1년 미만" but was
+        # previously dropped, so the whole maturity condition disappeared from the
+        # plan and every bond was returned as a candidate.
+        elif maturity_remaining := re.search(
+            r"(?:만기|잔존)[^.?!]{0,16}?(\d+)\s*(년|개월|일)\s*(?:도|은|는)?\s*"
+            r"(?:안|못)\s*(?:남|되)",
+            question,
+        ):
+            days = (
+                int(maturity_remaining.group(1)) * _MATURITY_UNIT_DAYS[maturity_remaining.group(2)]
+            )
+            add("remaining_days", [0, max(0, days - 1)], "between")
         if remaining_days := re.search(
             r"(\d+)\s*일\s*(?:안|이내)에?.{0,24}?(?:만기|상환)",
             question,

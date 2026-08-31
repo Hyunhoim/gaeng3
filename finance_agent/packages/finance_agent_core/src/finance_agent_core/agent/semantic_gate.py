@@ -90,6 +90,14 @@ _UNAPPROVED_RELATION_FILTER = re.compile(
     r"(?:편입|보유|구성)(?:한|하는|하고\s*있는|된|된\s*종목|\s*종목|\s*자산)|"
     r"(?:구성\s*종목|보유\s*종목|편입\s*종목)|"
     r"(?:연결|연관)\s*이력|자회사.{0,24}?(?:편입|보유|구성)|"
+    # "X를 담은 ETF" names a constituent holding, which the approved relation
+    # index does not carry. Requiring the object marker keeps this apart from the
+    # supported text search "이름에 X가 포함된", and requiring a product noun after
+    # the verb keeps metric definitions such as "경과이자를 포함한 단가" executable.
+    r"[0-9A-Za-z가-힣&·+._-]{2,40}(?:을|를)\s*"
+    r"(?:담(?:은|고\s*있는|긴)|포함(?:한|하는)|들고\s*있는)\s*"
+    r"(?:국내\s*|해외\s*)?(?:ETF|ETN|ETP|공모\s*펀드|펀드|채권|상품|종목)|"
+    r"[0-9A-Za-z가-힣&·+._-]{2,40}\s*비중(?:이|을)?\s*(?:높은|큰|많은)|"
     r"[0-9A-Za-z가-힣&·+._/-]{2,60}\s*관련\s*(?:된\s*)?"
     r"(?:(?:국내|해외)\s*)?(?:투자\s*)?"
     r"(?:상품|ETF|ETN|ETP)",

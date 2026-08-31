@@ -13,7 +13,7 @@
 | --- | --- | --- | --- |
 | 제안 요약 | LLM과 결정론적 검색·검증을 분리한 Evidence-Compiled Hybrid SQL Agent | [프로젝트 기준](../../finance_agent/docs/project-baseline.md) | 검증 완료 |
 | 문제 정의 | 네 상품군의 grain·필드·결측·기준일이 서로 다름 | [데이터 감사](../../finance_agent/docs/data-audit.md) | 검증 완료 |
-| 제안 방법 | typed QueryPlan·Oracle·Verifier·field evidence·Answer Verifier와, 결정론적 관계 Router·정확 검색·공식 DB 재검증·인과적 Audit | [계약](../../finance_agent/docs/contracts.md)·[P0-7 인수인계](../../finance_agent/docs/p0-7-knowledge-claim-verifier-handover-2026-08-20.md)·[P0-10 인수인계](../../finance_agent/docs/p0-10-public-relation-release-integration-handover-2026-08-20.md) | P0-10 로컬 구현 검증·실제 NCP 배포 대기 |
+| 제안 방법 | 런타임 통제 계층으로서의 온톨로지(Turtle 5종이 field registry의 직렬화이며 `sync-ontology.py`가 동일성 검사), 성격별 저장소 라우팅, typed QueryPlan·Oracle·Verifier·field evidence·Answer Verifier와, 결정론적 관계 Router·정확 검색·공식 DB 재검증·인과적 Audit | [계약](../../finance_agent/docs/contracts.md)·[P0-7 인수인계](../../finance_agent/docs/p0-7-knowledge-claim-verifier-handover-2026-08-20.md)·[P0-10 인수인계](../../finance_agent/docs/p0-10-public-relation-release-integration-handover-2026-08-20.md) | P0-10 로컬 구현 검증·실제 NCP 배포 대기 |
 | 연구 근거 | 행동 기능 검사·구조화 출력 제약·단계별 진단·paired 통계 비교를 실제 구현과 연결 | [연구 근거](research-basis.md) | 적용 범위 기록 완료 |
 | 시스템 구성도 | Agent Core·FastAPI·공식 형식 GET 호환 계약·Docker에 manifest 해시로 고정된 공개 관계 검색 계약까지 로컬 통합, Next.js·NCP 공인 IP·관계 HCLX는 대기 | [연결 전 readiness](../../finance_agent/docs/pre-hcx-readiness.md)·[release 배포 계약 테스트](../../fastapi_backend/tests/test_release_deployment_contract.py) | P0-10 로컬 구현 검증 |
 | 주요 기능 흐름 | SEARCH·교차 상품군 독립 검색·family별 grounded answer·교차 검증·전체 fallback·COMPARE·AGGREGATE·공개 관계 검색·제어 응답 | [교차 SEARCH](../../finance_agent/docs/cross-family-search.md)·[관계 검색 계약 테스트](../../finance_agent/packages/finance_agent_core/tests/test_relation_retrieval.py) | 제한된 로컬 경로 검증 완료 |
@@ -35,37 +35,60 @@
 
 | 주장 | 값 | 정본 | 해석 제한 |
 | --- | ---: | --- | --- |
-| 원천 감사 | 4종 145,393행, 65/65 | [데이터 감사](../../finance_agent/docs/data-audit.md) | 제공 스냅샷 기준 |
-| 전체 코드 회귀 | Agent Core 1,443 passed·2 skipped, Backend 358 passed·2 warnings | [Core 테스트](../../finance_agent/packages/finance_agent_core/tests)·[Backend 테스트](../../fastapi_backend/tests) | 2026-08-20 P0-10 작업 트리의 단위·계약 회귀이며 독립 성능 평가가 아님 |
+| 원천 감사 | 4종 53,375행, 55/55 | [데이터 감사](../../finance_agent/docs/data-audit.md) | 2026-08-24 공식 데이터 기준. 2026-08-31 재실행 확인 |
+| 전체 코드 회귀 | Agent Core 1,763 passed·2 skipped, Backend 451 passed | [Core 테스트](../../finance_agent/packages/finance_agent_core/tests)·[Backend 테스트](../../fastapi_backend/tests) | 2026-08-31 `15e1dd8`의 단위·계약 회귀이며 독립 성능 평가가 아님. Backend는 `umask 022` 필요 |
 | 평가기 retry·중복 실행 제어 | 정상 동일 요청 200·200/Agent 1회, dataset 장애 503·503/Agent 2회, 강제 timeout 504 | [P0-8 baseline](../../finance_agent/evaluation/baselines/retry-contract-p0-8-v1.json)·[인수인계](../../finance_agent/docs/p0-8-retry-contract-handover-2026-08-19.md) | 로컬 Docker fault injection, 실제 evaluator·HCLX·NCP 아님 |
 | 외부 문서 반입 게이트 | 승인·권한·출처·해시·변조 차단·BM25 build 합성 계약 24/24 | [P0-5 baseline](../../finance_agent/evaluation/baselines/external-corpus-intake-contract-v1.json)·[인수인계](../../finance_agent/docs/p0-5-external-corpus-intake-2026-08-19.md) | 실제 외부 문서 0건, 승인·검색 정확도·Release 활성화 아님 |
-| 제공 데이터 관계 검색 기반 | 승인 국내채권·국내/해외 ETP 관계 58,005개, 계약 14/14, 실제 검색 smoke 4/4, warm p50 4.846ms·p95 5.960ms | [P0-6 baseline](../../finance_agent/evaluation/baselines/p0-6-provided-relation-retrieval-v1.json)·[인수인계](../../finance_agent/docs/p0-6-provided-relation-retrieval-handover-2026-08-19.md) | 당시 P0-6의 Agent 비활성 baseline으로, 공모펀드·외부 관계 없음, lexical 검색·단일 로컬 장비이며 관계 의미 정확도나 공식 성능이 아님 |
+| 제공 데이터 관계 검색 기반 | 승인 국내채권·국내/해외 ETP 관계 37,787개, 계약 14/14, 실제 검색 smoke 4/4, warm p50 4.846ms·p95 5.960ms | [P0-6 baseline](../../finance_agent/evaluation/baselines/p0-6-provided-relation-retrieval-v1.json)·[인수인계](../../finance_agent/docs/p0-6-provided-relation-retrieval-handover-2026-08-19.md) | 당시 P0-6의 Agent 비활성 baseline으로, 공모펀드·외부 관계 없음, lexical 검색·단일 로컬 장비이며 관계 의미 정확도나 공식 성능이 아님 |
 | 관계·문서 계획과 주장 검증 | Typed Plan·서버 exact gate·Claim Verifier·모델 오류/허위 주장 전체 fallback 22/22, 승인 관계 전체 경로 smoke 4/4 | [P0-7 baseline](../../finance_agent/evaluation/baselines/p0-7-knowledge-claim-contract-v1.json)·[인수인계](../../finance_agent/docs/p0-7-knowledge-claim-verifier-handover-2026-08-20.md) | 당시 P0-7의 내부 CLI 계약으로, 공개 Router·GET `/answer`·P0-10 Release·실제 문서·HCLX 결과를 검증한 baseline은 아님 |
 | P0-10 공개 관계 검색 릴리스 | P0-10 집중 522/522; clean Docker Backend smoke 8/8·공식 형식 GET 호환 smoke 8/8; 관계 질문 3 products/3 citations; 부분 표현 `not_found`; 변조 후 health·API 503 | [machine-readable baseline](../../finance_agent/evaluation/baselines/p0-10-public-relation-release-integration-v1.json)·[P0-10 인수인계](../../finance_agent/docs/p0-10-public-relation-release-integration-handover-2026-08-20.md)·[공개 관계 runtime 배선](../../fastapi_backend/tests/test_relation_runtime_wiring.py)·[release 배포 계약](../../fastapi_backend/tests/test_release_deployment_contract.py)·[관계 정확 검색](../../finance_agent/packages/finance_agent_core/tests/test_relation_retrieval.py) | `local implementation verified`; NCP 실제 서명 배포·공인 IP, signed two-release rollback, 관계 HCLX, alias·blind, 문서 corpus를 증명하지 않음 |
 | 교차 상품군 SEARCH | 국내·해외 ETP 4/4 | [교차 SEARCH](../../finance_agent/docs/cross-family-search.md) | 공개 회귀, not blind |
-| 교차 상품군 grounded answer | expected·로컬 Qwen 각각 4/4; 생성 대상 2문항 모두 grounded; 실제 모델 호출 3회; fallback 0 | [교차 SEARCH](../../finance_agent/docs/cross-family-search.md)·[baseline](../../finance_agent/evaluation/baselines/cross-family-answer-v1.json) | 공개 4문항, not blind; 로컬 Qwen은 개발 전용 |
+| 교차 상품군 grounded answer | 공개 회귀 4/4; 생성 대상 2문항 모두 grounded; fallback 0 | [교차 SEARCH](../../finance_agent/docs/cross-family-search.md)·[baseline](../../finance_agent/evaluation/baselines/cross-family-answer-v1.json) | 공개 4문항, not blind |
 | 내부 red-team | 수정 후 40/40 | [red-team 평가](../../finance_agent/docs/evaluation-internal-red-team.md) | self-authored, not blind |
-| 공식 형식 공개 모의평가 | 전체 계약 30/30, 답변 불가 5/5, Qwen 생성 16/17, fallback 1 | [모의평가](../../finance_agent/docs/evaluation-official-mock.md)·[baseline](../../finance_agent/evaluation/baselines/official-mock-v1-30.json) | 설명회 분포 모사, self-authored, not blind |
-| Qwen 표현 강건성·역할 ablation | 의미 보존 변형 네 실행 profile 모두 77/77, 의미·safety·evidence 100%, 답변 fallback 3/61→0/61; plan+answer p95 4,096.584ms | [변형 평가](../../finance_agent/docs/evaluation-qwen-metamorphic.md)·[baseline](../../finance_agent/evaluation/baselines/qwen-eval-lab-v1.json) | 공개 원문 파생·사후 수정, 생성 90개 중 13개 실행 전 폐기, 단일 순차 장비, not blind |
-| 원문 비공개 의미 재구성·모델 계획 gate | 생성 75·선별 64, 최초 결정론적 15/64→출력·QueryPlan 의미 64/64; grounded-plan 최초 28/64, gate 구제 9건 | [변형 평가 9절](../../finance_agent/docs/evaluation-qwen-metamorphic.md#9-원문-표현을-숨긴-semantic-round-trip)·[baseline](../../finance_agent/evaluation/baselines/semantic-roundtrip-v1.json) | 공개 정답 의미 파생·사후 수정, 강화된 Qwen prompt·gate 재실행 대기, not blind |
-| registry 기반 자동 커버리지·Qwen 역할 비교 | 대표 좌표 305개 중 정답 계획 299개 직접 실행; canonical 최초 37/299; Qwen 질문 897개 생성·391개 선별; 네 구성 최초 strict 65/391; 같은 공개 질문에서 비교 94/391·검색 153/391→170/391, 최신 실행 의미 보조 strict 242/391 | [자동 커버리지 평가](../../finance_agent/docs/evaluation-coverage-guided.md)·[baseline](../../finance_agent/evaluation/baselines/coverage-guided-v1.json) | 최초 관측과 사후 회귀를 분리해 보존하며, 실제 사용자 분포·독립 blind·공식 점수 아님 |
-| 공식 GET Docker 30문항 | 형식·60초 30/30, 의미 24/30, 공모펀드 정책 잠금 6건 | [모의평가](../../finance_agent/docs/evaluation-official-mock.md)·[HTTP baseline](../../finance_agent/evaluation/baselines/official-mock-http-v1-30.json) | 개발 서버 순차 1회, local Qwen 답변 전용, not blind |
-| 공식 GET 공모펀드 명시적 승인 | 의미·형식·60초 30/30, Qwen 17/17, fallback 0 | [모의평가](../../finance_agent/docs/evaluation-official-mock.md)·[승인 baseline](../../finance_agent/evaluation/baselines/official-mock-http-fund-approved-v1-30.json) | 최초 24/30 보존 후 팀 배포 정책 재평가, 주최 승인 아님, not blind |
-| 공식 GET 제한 동시성 | 결정론적 동시성 1·2·4 각 30/30, Qwen 동시성 2에서 30/30·fallback 0 | [모의평가](../../finance_agent/docs/evaluation-official-mock.md)·[결정론적 baseline](../../finance_agent/evaluation/baselines/official-mock-http-concurrency-v1.json)·[Qwen baseline](../../finance_agent/evaluation/baselines/official-mock-http-qwen-approved-c2-v1.json) | 단일 worker·프로필별 1회, 부하·SLO 아님 |
+| 공식 형식 공개 모의평가 | 전체 계약 30/30, 답변 불가 5/5 | [모의평가](../../finance_agent/docs/evaluation-official-mock.md)·[baseline](../../finance_agent/evaluation/baselines/official-mock-v1-30.json) | 설명회 분포 모사, self-authored, not blind |
+| registry 기반 자동 커버리지 | 대표 좌표 305개 중 정답 계획 299개 직접 실행; canonical 최초 strict 37/299; 실패 시작점을 질문 분류 45건·작업 계획 210건·근거 7건으로 분해 | [자동 커버리지 평가](../../finance_agent/docs/evaluation-coverage-guided.md)·[baseline](../../finance_agent/evaluation/baselines/coverage-guided-v1.json) | 최초 관측과 사후 회귀를 분리해 보존하며, 실제 사용자 분포·독립 blind·공식 점수 아님 |
+| 공식 GET Docker 30문항 | 형식·60초 30/30, 공모펀드 정책 잠금 6건 | [모의평가](../../finance_agent/docs/evaluation-official-mock.md)·[HTTP baseline](../../finance_agent/evaluation/baselines/official-mock-http-v1-30.json) | 개발 서버 순차 1회, not blind |
+| 공식 GET 공모펀드 명시적 승인 | 의미·형식·60초 30/30, fallback 0 | [모의평가](../../finance_agent/docs/evaluation-official-mock.md)·[승인 baseline](../../finance_agent/evaluation/baselines/official-mock-http-fund-approved-v1-30.json) | 최초 24/30 보존 후 팀 배포 정책 재평가, 주최 승인 아님, not blind |
+| 공식 GET 제한 동시성 | 결정론적 동시성 1·2·4 각 30/30 | [모의평가](../../finance_agent/docs/evaluation-official-mock.md)·[결정론적 baseline](../../finance_agent/evaluation/baselines/official-mock-http-concurrency-v1.json) | 단일 worker·프로필별 1회, 부하·SLO 아님 |
 | 금융 도메인 QA Router 회귀 | 40/40, 잘못된 실행·오류 0건 | [도메인 QA 평가](../../finance_agent/docs/evaluation-domain-qa.md)·[baseline](../../finance_agent/evaluation/baselines/domain-qa-e2e-v1.2-router.json) | 개선에 사용한 개발 세트, not blind |
 | 네 상품군 자연어 비교 공개 회귀 | 54문항 | [비교 평가](../../finance_agent/docs/evaluation-product-comparison.md) | 공개 회귀 |
 | SEARCH·AGGREGATE 결과 지문 | 8/8 | [성능 기준선](../../finance_agent/docs/evaluation-search-aggregate-performance.md) | 단일 개발 장비 |
 | HCX API 없는 전체 계약 | 8/8 | [HCX provider](../../finance_agent/docs/hyperclova-provider.md) | 실제 API 성능 아님 |
 | Backend service adapter | 12/12 | [Backend 계약](../../finance_agent/docs/backend-contract.md) | 실제 HTTP route 아님 |
-| Docker HTTP 확장 smoke | 기본 14/14, Qwen 14/14, Qwen 장애 fallback 14/14 | [Backend README](../../fastapi_backend/README.md)·[기본 baseline](../../finance_agent/evaluation/baselines/docker-http-smoke-v2.json)·[Qwen baseline](../../finance_agent/evaluation/baselines/docker-http-smoke-qwen-v2.json) | 공개 개발 스모크, 보안 침투·운영 SLO 아님 |
+| Docker HTTP 확장 smoke | 기본 14/14 | [Backend README](../../fastapi_backend/README.md)·[기본 baseline](../../finance_agent/evaluation/baselines/docker-http-smoke-v2.json) | 공개 개발 스모크, 보안 침투·운영 SLO 아님 |
 | 제출 모델 경계 | development 통과·submission 차단 자동 검사 | [제출 경계](../../finance_agent/docs/submission-model-boundary.md) | 현재는 개발 저장소라 제출 차단이 정상, 공식 범위 확인 후 cleanup 필요 |
+
+## 2026-08-31 갱신 증거
+
+2026-08-24 공식 데이터로 전환한 뒤 이 저장소에서 직접 실행해 확인한 값이다.
+
+| 주장 | 값 | 정본 | 해석 제한 |
+| --- | ---: | --- | --- |
+| 공식 데이터 전환 | 4종 53,375행, 원천 8개 SHA-256 8/8 일치, 감사 expectation 55/55 | [데이터 배포 README](<../../../2. Data/1. Raw/2.금융상품_20260824/README.md>)·[승인 manifest](../../finance_agent/packages/finance_agent_core/src/finance_agent_core/config/approved_dataset_manifest.json) | 2026-08-31 재실행. 2026-07-11 배포본(145,393행)은 주최 측 교체 지시로 폐기 |
+| 관계 색인 | 37,787개 | data-init 실행 산출물 | 2026-08-24 데이터·registry 1.5 기준. 2026-07-11 데이터에서는 58,005개였다 |
+| 전체 코드 회귀 | Agent Core 1,763 passed·2 skipped, Backend 451 passed | [Core 테스트](../../finance_agent/packages/finance_agent_core/tests)·[Backend 테스트](../../fastapi_backend/tests) | 2026-08-31 `15e1dd8`. Backend는 `umask 022` 필요 |
+| clean checkout 재현 | `./compose.sh up --detach --wait`로 data-init·Backend 기동, `/health` 네 상품군 ready | [루트 README](../../README.md) | 개발 profile. 공모펀드는 `locked` |
+| 공개 NCP endpoint | `GET /health` 200, 공식 `GET /answer` 200·다섯 문자열, `answer_mode=llm_grounded`, 2.9~4.4초 | 2026-08-31 공인 IP 직접 호출 | 단일 순차 호출 관측이며 부하·SLO·quota 측정이 아니다. 배포본은 2026-08-31 수정 이전 코드다 |
+| HCLX 두-operation 실호출 | HCX Intent 304회, grounded answer 298회, 480,016 token, HTTP non-200 2건 | [All-ON 300문항 보고서](../../finance_agent/reports/independent-holdout-v2.2.1-all-on-20260829.html) | 2026-08-29 연구실 격리 Docker. NCP 경로·quota·429는 별도 |
+| All-ON 300문항 결과 | 상태 정확도 93.33%, 상품 micro F1 73.93%, 상태+상품 순서 일치 69.00%, p95 7.038초 | 위 보고서 | **Gold 공개 후 수행한 post-Gold development regression이며 독립 blind가 아니다.** 최초 blind는 상태 75.67%·F1 56.78%였다 |
+
+### 2026-08-31에 확인한 미해결 병목
+
+| 항목 | 관측 | 상태 |
+| --- | --- | --- |
+| COMPARE 순서 완전 일치 | 24건 중 3건 | 원인이 국내 ETP 종목코드 미인식임을 확인하고 수정. **재측정 전** |
+| 필터 보존 | 실행 230건 중 102건 불일치 | 만기 표현 일반화로 일부 해소. `인버스` 등 잔여. **재측정 전** |
+| 구성종목 질문 | 승인 관계 색인에 회사 엔터티 0건 | 표현별 불일치를 fail-closed로 정합화. 데이터 확보는 미착수 |
+| 공식 외부 결과 완전 일치 | 요구 7건 중 3건 | 미착수 |
 
 ## 완료되지 않은 주장
 
 다음 표현은 근거가 생기기 전까지 기술 제안서에서 완료형으로 사용하지 않는다.
 
-- HyperCLOVA X 연결·성능·비용 검증 완료
-- 공식 `GET /answer` 공개 평가 서버 재현 완료
+- HyperCLOVA X의 NCP quota·429·5xx·비용 한도 검증 완료
+  (연결과 두-operation 실호출 자체는 2026-08-29 연구실 실행으로 확인됨)
+- 공개 평가 서버에서 2026-08-31 수정본이 반영된 상태로 재현 완료
+  (2026-08-31 시점 배포본은 그 이전 코드다)
 - Ontology 용어의 금융 도메인 검수와 주최 측 최종 형식 승인 완료
 - 독립 blind 일반화 성능 100%
 - 실제 투자설명서·약관 기반 문서 RAG 완료
