@@ -258,47 +258,45 @@ Release에 연결한다.
   8/8·공식 형식 GET 호환 smoke 8/8, 관계 질문 3 products/3 citations, 부분 표현 `not_found`,
   변조 후 health·API 503 ([machine-readable baseline](../../finance_agent/evaluation/baselines/p0-10-public-relation-release-integration-v1.json)·[P0-10 인수인계](../../finance_agent/docs/p0-10-public-relation-release-integration-handover-2026-08-20.md))
 - 국내·해외 ETP 교차 SEARCH 공개 실제 데이터 회귀 4/4
-- 교차 상품군 grounded answer 공개 회귀 expected·로컬 Qwen 각각 4/4, 생성 대상 2문항 모두 grounded, 모델 호출 3회, fallback 0
+- 국내·해외 ETP 교차 상품군 grounded answer 공개 회귀 4/4, 생성 대상 2문항 모두
+  grounded, fallback 0
 - 내부 red-team 40문항 수정 후 strict·safety·evidence 40/40
-- 공개 원문 30개에서 Qwen으로 세 표현 축 90개를 만들고 의미 보존 77개를
-  선별한 스트레스 회귀에서 결정론적·Qwen 전체 Agent 각각 77/77,
-  의미·safety·evidence 100%, 안전 설명문 개선 후 fallback 0/61
 - 변형 질문으로 기존 `낮은 순`·`짧은 순` gold 오류 2건을 발견하고 원본을
   바꾸지 않는 hash-pinned 교정 overlay로 평가 정답 자체도 감사
-- 같은 77개를 모델 없음·Qwen 계획만·Qwen 답변만·둘 다 사용으로 나눈 ablation에서
-  모두 77/77을 확인하고, 전체 Qwen p95 4,096.584ms를 역할별 비용 기준선으로 확보
-- Qwen에 원문 문장을 숨기고 실행 의미만 주어 75개를 재생성한 더 어려운
-  semantic round-trip에서 64개를 선별하고, 최초 15/64에서 출력과 QueryPlan
-  의미까지 64/64로 개선
-- Qwen grounded-plan을 단순 JSON 정답이 아닌 원문 근거 첨부 제안으로 바꾸고,
-  registry·유일 식별자·서버 고정 조건 gate를 통과한 항목만 실행하는 계약 구현
 - 실재하지만 원문에 없는 상품 ID, 부정된 ID·필드·정렬, 서버 조건 누락,
   malformed provider 응답이 실행 권한을 얻지 못하도록 공격 회귀로 고정
 - registry와 실제 DB에서 대표 기능 좌표 305개를 자동 구성하고 정답 계획
   299개를 직접 실행해 검색·계산·근거 엔진의 넓은 실행 범위를 확인
 - 같은 299개 계획의 canonical 자연어 최초 strict 37/299를 보존하고,
   질문 분류 45건·작업 계획 210건·근거 7건으로 실패 시작점을 분해해
-  다음 Qwen 자연화 897문항과 공통 문법 개선의 우선순위를 확보
-- Qwen 자연화 중 의미 선별을 통과한 공개 391문항의 최초 exact 65를 보존하고,
-  공통 비교·검색 문법을 단계적으로 개선해 94→153→170, 최신 실행 의미 보조
-  strict 242/391을 기록. 두 검색 단계는 각각 구제 59·17건, 퇴행 0건
-- 공식 예상 분포 공개 모의평가 30/30, 답변 불가 5/5 안전 처리,
-  로컬 Qwen 생성 16/17·검증 fallback 1건
-- 같은 30문항의 실제 Docker GET은 공식 형식·60초 30/30, 의미 24/30이며
-  공모펀드 공식 실행 잠금 6건을 배포 차이로 확인해 최초 결과로 보존
-- 공모펀드만 여는 명시적 v1 배포 정책을 적용한 재평가는 동일 30문항 의미·형식·
-  60초 30/30, Qwen 문장 검증 17/17, fallback 0건
+  공통 문법 개선의 우선순위를 확보
+- 공식 예상 분포 공개 모의평가에서 계약 30/30, 답변 불가 5/5 안전 처리
+- 같은 30문항의 실제 Docker GET에서 공식 형식·60초 30/30
 - 금융 도메인 개발 QA 40문항 Router 사후 회귀 40/40,
   잘못된 control 실행·오류 0건
-- HyperCLOVA X API 없는 provider·Agent 계약 8/8
 - Backend service adapter 오류·fallback·비노출 계약 12/12
 - 새 Docker 이미지의 Backend 7건·공식 GET 정상/예외 7건 14/14
-- 로컬 Qwen·공모펀드 승인 14/14, Qwen 중단 fallback 14/14,
-  공식 모의 30문항 동시성 2에서 30/30·fallback 0
-- 제출 경계 자동 검사로 개발용 로컬 LLM의 운영 파일 혼입과 제출 후보 잔존을
-  서로 다른 프로필로 차단
+- 평가·production mode에서 HyperCLOVA X 외 provider가 선택될 수 없음을
+  시작 단계 거부와 이미지 경계 검사로 이중 확인
 - 설명회 현장 자료에서 평가 API 다섯 문자열 필드·미응답 HTTP 200·60초 권장과
   도메인별 Ontology 제출 요구 확인
+
+### HyperCLOVA X 실행 근거
+
+평가·제출 경로의 생성은 HyperCLOVA X만 사용한다. 아래는 HCX-007 실호출 결과다.
+
+- 2026-08-29 All-ON 300문항 실행에서 HCX Intent 304회, grounded answer 298회,
+  총 480,016 token을 사용하고 HTTP non-200 2건을 기록
+- 같은 실행의 상태 정확도 93.33%, 상품 micro F1 73.93%, 상태+상품 순서 결과
+  일치 69.00%, p50 3.763초·p95 7.038초
+- 실제 복수 해석 40문항 전부 역질문, 답변 불가·정책 30문항 중 29문항 상태 일치
+- 2026-08-31 공개 endpoint에서 공식 `GET /answer`가 다섯 문자열과
+  `answer_mode=llm_grounded`로 2.9~4.4초에 응답
+
+**해석 제한.** 위 300문항 수치는 Gold를 공개한 뒤 일반화 가능한 병목을 수정하고
+같은 문항을 다시 실행한 post-Gold development regression이며 독립 blind가 아니다.
+같은 Gold의 최초 blind 실행은 상태 정확도 75.67%·상품 micro F1 56.78%였다.
+2026-08-31에 수정한 병목은 아직 재측정하지 않았다.
 
 내부 공개 평가의 100%는 배선·회귀 안정성이지 독립 blind 일반화 성능이 아니다.
 P0-10 수치도 로컬 구현·계약 검증이며 NCP 실제 배포, 서명된 두 release
