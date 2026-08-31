@@ -72,6 +72,8 @@
 
 - [x] public 전환, `main` protection, `evaluation`·`production` Environment 구성
 - [ ] Public 통신 가능한 endpoint
+- [x] 공식 제출물인 API 명세서 작성 ([평가용 API 명세서](../submission/api-specification.md))
+- [ ] 명세서의 공인 IP를 제출 시점 값으로 확정
 - [x] `GET /answer` route와 다섯 문자열 response model
 - [x] `question_id`, `question` 필수 query parameter 규격 확인
 - [x] 다섯 필수 응답 필드가 모두 문자열인 규격 확인
