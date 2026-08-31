@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from importlib.resources import files
 
+import pytest
+
 from finance_agent_core.agent import RoutedFinanceAgent, execute_answer_request
 from finance_agent_core.agent.backend_adapter import _finalize_with_official_hclx
 from finance_agent_core.agent.external_knowledge_router import ExternalKnowledgeRouter
@@ -16,7 +18,10 @@ from finance_agent_core.agent.providers import (
     HyperClovaXSettings,
     HyperClovaXStructuredRequest,
 )
-from finance_agent_core.agent.providers.hyperclova import build_intent_analysis_system_prompt
+from finance_agent_core.agent.providers.hyperclova import (
+    HyperClovaXResponseError,
+    build_intent_analysis_system_prompt,
+)
 from finance_agent_core.config.knowledge_coverage import (
     ApprovedKnowledgeCoverageManifest,
     KnowledgeCapability,
@@ -105,6 +110,14 @@ class _ExternalKnowledgeTransport:
                 },
                 ensure_ascii=False,
             )
+        elif request.operation == "semantic_resolver":
+            content = json.dumps(
+                {
+                    "schema_version": "1.0",
+                    "aliases": [{"subject_span": "캠브리콘", "search_aliases": ["Cambricon"]}],
+                },
+                ensure_ascii=False,
+            )
         elif request.operation == "final_answer":
             properties = request.response_schema["properties"]
             content = json.dumps(
@@ -129,6 +142,130 @@ class _ExternalKnowledgeTransport:
         }
 
 
+class _MissingOverseasEntityAliasTransport:
+    def __init__(self) -> None:
+        self.requests: list[HyperClovaXStructuredRequest] = []
+
+    def complete(self, request: HyperClovaXStructuredRequest) -> object:
+        self.requests.append(request)
+        if request.operation == "intent_analysis":
+            content = json.dumps(
+                {
+                    "schema_version": "1.0",
+                    "intent": "search",
+                    "product_families": ["overseas_etp"],
+                    "evidence_spans": ["캠브리콘", "해외 ETF"],
+                    "needs_clarification": False,
+                    "knowledge_requirements": [
+                        {
+                            "capability": "portfolio_holdings",
+                            "subject_span": "캠브리콘",
+                            "relation_span": "편입이 확인되는",
+                            "search_aliases": [],
+                        }
+                    ],
+                },
+                ensure_ascii=False,
+            )
+        elif request.operation == "semantic_resolver":
+            content = json.dumps(
+                {
+                    "schema_version": "1.0",
+                    "aliases": [{"subject_span": "캠브리콘", "search_aliases": ["Cambricon"]}],
+                },
+                ensure_ascii=False,
+            )
+        else:
+            raise AssertionError(f"unexpected operation: {request.operation}")
+        return {
+            "status_code": 200,
+            "content": content,
+            "request_id": f"entity-alias-{len(self.requests)}",
+            "usage": {"input_tokens": 10, "output_tokens": 5, "total_tokens": 15},
+        }
+
+
+class _OmittedOverseasRelationTransport(_MissingOverseasEntityAliasTransport):
+    def complete(self, request: HyperClovaXStructuredRequest) -> object:
+        if request.operation == "intent_analysis":
+            self.requests.append(request)
+            return {
+                "status_code": 200,
+                "content": json.dumps(
+                    {
+                        "schema_version": "1.0",
+                        "intent": "search",
+                        "product_families": ["overseas_etp"],
+                        "evidence_spans": ["캠브리콘", "해외 ETF"],
+                        "needs_clarification": False,
+                        "knowledge_requirements": [],
+                    },
+                    ensure_ascii=False,
+                ),
+                "request_id": f"omitted-relation-{len(self.requests)}",
+                "usage": {"input_tokens": 10, "output_tokens": 5, "total_tokens": 15},
+            }
+        return super().complete(request)
+
+
+class _EmptyThenRepairedAliasTransport(_OmittedOverseasRelationTransport):
+    def __init__(self) -> None:
+        super().__init__()
+        self.alias_attempts = 0
+
+    def complete(self, request: HyperClovaXStructuredRequest) -> object:
+        if request.operation == "semantic_resolver":
+            self.alias_attempts += 1
+            if self.alias_attempts == 1:
+                self.requests.append(request)
+                return {
+                    "status_code": 200,
+                    "content": json.dumps(
+                        {
+                            "schema_version": "1.0",
+                            "aliases": [{"subject_span": "캠브리콘", "search_aliases": ["ETF"]}],
+                        },
+                        ensure_ascii=False,
+                    ),
+                    "request_id": "empty-alias-first-attempt",
+                    "usage": {"input_tokens": 10, "output_tokens": 5, "total_tokens": 15},
+                }
+        return super().complete(request)
+
+
+class _FalseDatabaseRelationTransport:
+    def __init__(self) -> None:
+        self.requests: list[HyperClovaXStructuredRequest] = []
+
+    def complete(self, request: HyperClovaXStructuredRequest) -> object:
+        self.requests.append(request)
+        if request.operation != "intent_analysis":
+            raise AssertionError(f"unexpected operation: {request.operation}")
+        return {
+            "status_code": 200,
+            "content": json.dumps(
+                {
+                    "schema_version": "1.0",
+                    "intent": "search",
+                    "product_families": ["bond", "overseas_etp"],
+                    "evidence_spans": ["AAA 채권", "Europe 해외 ETF"],
+                    "needs_clarification": False,
+                    "knowledge_requirements": [
+                        {
+                            "capability": "portfolio_holdings",
+                            "subject_span": "Europe 해외 ETF",
+                            "relation_span": "연간보수율 오름차순",
+                            "search_aliases": [],
+                        }
+                    ],
+                },
+                ensure_ascii=False,
+            ),
+            "request_id": "false-database-relation",
+            "usage": {"input_tokens": 10, "output_tokens": 5, "total_tokens": 15},
+        }
+
+
 class _HarmlessIntentDriftTransport:
     def complete(self, request: HyperClovaXStructuredRequest) -> object:
         assert request.operation == "intent_analysis"
@@ -150,6 +287,90 @@ class _HarmlessIntentDriftTransport:
         }
 
 
+class _ParaphrasedIntentEvidenceTransport:
+    def complete(self, request: HyperClovaXStructuredRequest) -> object:
+        assert request.operation == "intent_analysis"
+        return {
+            "status_code": 200,
+            "content": json.dumps(
+                {
+                    "schema_version": "1.0",
+                    "intent": "search",
+                    "product_families": ["domestic_etp"],
+                    "evidence_spans": ["국내 ETF", "질문에 없는 반년 성과 표현"],
+                    "needs_clarification": False,
+                },
+                ensure_ascii=False,
+            ),
+            "request_id": "paraphrased-intent-evidence",
+            "usage": {"input_tokens": 10, "output_tokens": 5, "total_tokens": 15},
+        }
+
+
+class _RepairingIntentTransport:
+    def __init__(self, *, second_valid: bool) -> None:
+        self.second_valid = second_valid
+        self.requests: list[HyperClovaXStructuredRequest] = []
+
+    def complete(self, request: HyperClovaXStructuredRequest) -> object:
+        self.requests.append(request)
+        if len(self.requests) == 1 or not self.second_valid:
+            content = '{"schema_version":"1.0","intent":"search"}'
+        else:
+            content = json.dumps(
+                {
+                    "schema_version": "1.0",
+                    "intent": "search",
+                    "product_families": ["bond", "domestic_etp"],
+                    "evidence_spans": ["채권", "국내 ETF"],
+                    "needs_clarification": False,
+                    "knowledge_requirements": [],
+                },
+                ensure_ascii=False,
+            )
+        return {
+            "status_code": 200,
+            "content": content,
+            "request_id": f"intent-repair-{len(self.requests)}",
+            "usage": {"input_tokens": 10, "output_tokens": 5, "total_tokens": 15},
+        }
+
+
+class _NestedAdvisoryDriftTransport:
+    def complete(self, request: HyperClovaXStructuredRequest) -> object:
+        assert request.operation == "intent_analysis"
+        return {
+            "status_code": 200,
+            "content": json.dumps(
+                {
+                    "schema_version": "1.0",
+                    "intent": "search",
+                    "product_families": ["overseas_etp"],
+                    "evidence_spans": ["Kimi", "Kimi"],
+                    "needs_clarification": True,
+                    "knowledge_requirements": [
+                        {
+                            "capability": "sector_theme_history",
+                            "subject_span": "Kimi",
+                            "relation_span": "Kimi ETF",
+                            "extra_explanation": "must be projected away",
+                        },
+                        {
+                            "capability": "sector_theme_history",
+                            "subject_span": "Kimi",
+                            "relation_span": "Kimi ETF",
+                            "search_aliases": [],
+                        },
+                        {"capability": "invented", "subject_span": "Kimi"},
+                    ],
+                },
+                ensure_ascii=False,
+            ),
+            "request_id": "nested-advisory-drift",
+            "usage": {"input_tokens": 10, "output_tokens": 5, "total_tokens": 15},
+        }
+
+
 def test_intent_provider_projects_harmless_shape_drift_to_closed_dto() -> None:
     provider = HyperClovaXIntentAnalysisProvider(
         HyperClovaXSettings(model="HCX-007", timeout_seconds=10),
@@ -164,6 +385,149 @@ def test_intent_provider_projects_harmless_shape_drift_to_closed_dto() -> None:
     assert draft.intent.value == "compare"
     assert [family.value for family in draft.product_families] == ["domestic_etp"]
     assert draft.evidence_spans == ["ETF"]
+
+
+def test_official_intent_provider_discards_only_ungrounded_advisory_spans() -> None:
+    provider = HyperClovaXIntentAnalysisProvider(
+        HyperClovaXSettings(model="HCX-007", timeout_seconds=10),
+        _ParaphrasedIntentEvidenceTransport(),
+    )
+
+    draft = provider.analyze_intent(
+        "국내 ETF를 반년 수익률 순으로 보여 주세요.",
+        "intent-grounded-span-filter",
+    )
+
+    assert draft.evidence_spans == ["국내 ETF"]
+
+
+def test_official_intent_provider_uses_one_hcx_repair_for_invalid_shape() -> None:
+    transport = _RepairingIntentTransport(second_valid=True)
+    provider = HyperClovaXIntentAnalysisProvider(
+        HyperClovaXSettings(model="HCX-007", timeout_seconds=10),
+        transport,
+    )
+
+    draft = provider.analyze_intent(
+        "AAAA 채권과 국내 ETF를 함께 찾아줘.",
+        "intent-repair-once",
+    )
+
+    assert draft.intent.value == "search"
+    assert {family.value for family in draft.product_families} == {"bond", "domestic_etp"}
+    assert [request.operation for request in transport.requests] == [
+        "intent_analysis",
+        "intent_analysis",
+    ]
+    assert transport.requests[1].schema_name == "finance_intent_analysis_repair"
+
+
+def test_official_intent_provider_projects_optional_nested_advisory_drift() -> None:
+    provider = HyperClovaXIntentAnalysisProvider(
+        HyperClovaXSettings(model="HCX-007", timeout_seconds=10),
+        _NestedAdvisoryDriftTransport(),
+    )
+
+    draft = provider.analyze_intent(
+        "Kimi ETF를 제공 데이터에서 찾아줘.",
+        "intent-nested-advisory-drift",
+    )
+
+    assert draft.intent.value == "search"
+    assert draft.needs_clarification is False
+    assert draft.evidence_spans == ["Kimi"]
+    assert len(draft.knowledge_requirements) == 1
+    assert draft.knowledge_requirements[0].subject_span == "Kimi"
+
+
+def test_official_intent_provider_remains_fail_closed_after_one_invalid_repair() -> None:
+    transport = _RepairingIntentTransport(second_valid=False)
+    provider = HyperClovaXIntentAnalysisProvider(
+        HyperClovaXSettings(model="HCX-007", timeout_seconds=10),
+        transport,
+    )
+
+    with pytest.raises(HyperClovaXResponseError):
+        provider.analyze_intent("AAAA 채권과 국내 ETF를 함께 찾아줘.", "intent-repair-fails")
+
+    assert len(transport.requests) == 2
+
+
+def test_official_intent_provider_repairs_only_missing_overseas_entity_alias() -> None:
+    transport = _MissingOverseasEntityAliasTransport()
+    provider = HyperClovaXIntentAnalysisProvider(
+        HyperClovaXSettings(model="HCX-007", timeout_seconds=10),
+        transport,
+    )
+
+    draft = provider.analyze_intent(
+        "KraneShares 공식 보유내역에서 캠브리콘 편입이 확인되는 해외 ETF를 알려줘.",
+        "intent-entity-alias-repair",
+    )
+
+    assert [request.operation for request in transport.requests] == [
+        "intent_analysis",
+        "semantic_resolver",
+    ]
+    assert draft.knowledge_requirements[0].subject_span == "캠브리콘"
+    assert draft.knowledge_requirements[0].search_aliases == ("Cambricon",)
+
+
+def test_official_intent_provider_repairs_server_relation_when_hcx_omits_it() -> None:
+    transport = _OmittedOverseasRelationTransport()
+    provider = HyperClovaXIntentAnalysisProvider(
+        HyperClovaXSettings(model="HCX-007", timeout_seconds=10),
+        transport,
+    )
+
+    draft = provider.analyze_intent(
+        "KraneShares 공식 보유내역에서 캠브리콘 편입이 확인되는 해외 ETF를 알려줘.",
+        "intent-omitted-relation-alias-repair",
+    )
+
+    assert [request.operation for request in transport.requests] == [
+        "intent_analysis",
+        "semantic_resolver",
+    ]
+    assert draft.knowledge_requirements[0].subject_span == "캠브리콘"
+    assert draft.knowledge_requirements[0].search_aliases == ("Cambricon",)
+
+
+def test_official_intent_provider_retries_one_empty_entity_alias_proposal() -> None:
+    transport = _EmptyThenRepairedAliasTransport()
+    provider = HyperClovaXIntentAnalysisProvider(
+        HyperClovaXSettings(model="HCX-007", timeout_seconds=10),
+        transport,
+    )
+
+    draft = provider.analyze_intent(
+        "KraneShares 공식 보유내역에서 캠브리콘 편입이 확인되는 해외 ETF를 알려줘.",
+        "intent-empty-alias-retry",
+    )
+
+    assert [request.operation for request in transport.requests] == [
+        "intent_analysis",
+        "semantic_resolver",
+        "semantic_resolver",
+    ]
+    assert draft.knowledge_requirements[0].search_aliases == ("Cambricon",)
+
+
+def test_official_intent_provider_does_not_repair_false_database_relation() -> None:
+    transport = _FalseDatabaseRelationTransport()
+    provider = HyperClovaXIntentAnalysisProvider(
+        HyperClovaXSettings(model="HCX-007", timeout_seconds=10),
+        transport,
+    )
+
+    draft = provider.analyze_intent(
+        "AAA 채권과 Europe 해외 ETF를 연간보수율 오름차순으로 찾아줘.",
+        "intent-no-false-alias-repair",
+    )
+
+    assert len(transport.requests) == 1
+    assert transport.requests[0].max_output_tokens == 640
+    assert draft.intent.value == "search"
 
 
 def _disabled_external_coverage() -> ApprovedKnowledgeCoverageManifest:
@@ -265,6 +629,7 @@ def test_official_external_knowledge_miss_uses_hclx_intent_and_final_answer() ->
     assert result.response.citations == []
     assert [request.operation for request in transport.requests] == [
         "intent_analysis",
+        "semantic_resolver",
         "final_answer",
     ]
 
@@ -319,6 +684,7 @@ def test_intent_prompt_defines_korean_product_family_mapping_and_search_boundary
     assert "fund: 공모펀드" in prompt
     assert "not_found 여부는" in prompt
     assert "상품군과 정렬 기준" in prompt
+    assert "search_aliases는 같은 entity의 영문명" in prompt
 
 
 def test_intent_verifier_treats_multi_family_order_as_semantically_irrelevant() -> None:

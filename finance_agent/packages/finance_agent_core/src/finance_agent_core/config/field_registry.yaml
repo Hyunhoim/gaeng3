@@ -10,7 +10,7 @@ datasets:
       - pd_itm_no
     row_count: 6037
     snapshot_date: "2026-08-24"
-    quarantined_rows: 14
+    quarantined_rows: 0
     provenance:
       raw_file_pattern: PREF02N001*_datarows*.xlsx
       schema_file_pattern: PREF02N001*_schema*.xlsx
@@ -376,6 +376,7 @@ fields:
       - 단기자금
       - 통화
       - 부동산
+      - 대체투자
       - 기타
     notes: 11행이 결측·격리된다. 채권형은 정확히 Bond 값으로 매핑한다.
     dataset_overrides:
@@ -1023,7 +1024,7 @@ fields:
     coverage_pct: 96.1587
     queryable: true
     allowed_operators: [eq, in]
-    enum_values: [MMF, 대출형, 임대형, 재간접, 주식형, 주식혼합, 채권형, 채권혼합, 특별자산, 혼합자산]
+    enum_values: [MMF, 개발형, 기타, 대출형, 임대형, 재간접, 주식형, 주식혼합, 채권형, 채권혼합, 특별자산, 파생상품, 혼합자산]
     sentinel_values:
       "06": UNKNOWN
     notes: 의미 미확인 코드 06 또는 결측에 해당하는 905개를 UNKNOWN으로 제외한 의미상 coverage다.

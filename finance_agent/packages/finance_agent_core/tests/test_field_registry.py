@@ -9,7 +9,7 @@ def test_overseas_etp_dataset_contract_matches_audit() -> None:
 
     assert dataset.primary_key == ["pd_exg_mkt_cd", "pd_itm_no"]
     assert dataset.row_count == 6_037
-    assert dataset.quarantined_rows == 14
+    assert dataset.quarantined_rows == 0
     assert dataset.snapshot_date.isoformat() == "2026-08-24"
 
 

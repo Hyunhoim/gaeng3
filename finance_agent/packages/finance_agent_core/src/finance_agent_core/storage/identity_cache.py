@@ -54,7 +54,7 @@ _OPTIONAL_COLUMNS_BY_DATASET = {
         "ticker": "ticker",
         "isin": "isin",
         "short_name": "NULL",
-        "source_owner": "NULL",
+        "source_owner": "manager",
         "public_offering": "NULL",
     },
     "domestic_etp": {
@@ -103,6 +103,15 @@ def load_product_identities(
             optional = _OPTIONAL_COLUMNS_BY_DATASET[manifest.dataset]
         except KeyError as error:
             raise ValueError(f"unsupported identity dataset: {manifest.dataset}") from error
+        available_columns = {
+            str(row["name"]) for row in connection.execute(f"PRAGMA table_info({table})").fetchall()
+        }
+        optional_select = {
+            name: (
+                expression if expression == "NULL" or expression in available_columns else "NULL"
+            )
+            for name, expression in optional.items()
+        }
         canonical_scope = (
             "WHERE is_quarantined = 0 AND source_row IN "
             "(SELECT MIN(source_row) FROM bond_products "
@@ -116,11 +125,11 @@ def load_product_identities(
                 product_family,
                 product_id,
                 product_name,
-                {optional["ticker"]} AS ticker,
-                {optional["isin"]} AS isin,
-                {optional["short_name"]} AS short_name,
-                {optional["source_owner"]} AS source_owner,
-                {optional["public_offering"]} AS public_offering,
+                {optional_select["ticker"]} AS ticker,
+                {optional_select["isin"]} AS isin,
+                {optional_select["short_name"]} AS short_name,
+                {optional_select["source_owner"]} AS source_owner,
+                {optional_select["public_offering"]} AS public_offering,
                 is_quarantined
             FROM {table}
             {canonical_scope}

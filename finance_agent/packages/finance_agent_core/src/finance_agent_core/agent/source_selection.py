@@ -70,6 +70,7 @@ class GeneralizedOfficialSourceSelector:
             raise ValueError(f"no approved official source for {capability.value}")
 
         question_surface = normalize_selection_surface(f"{question} {subject}")
+        subject_surface = normalize_selection_surface(subject)
         confirmed_aliases = {
             normalize_selection_surface(value)
             for value in (() if signals is None else signals.db_confirmed_aliases)
@@ -92,7 +93,15 @@ class GeneralizedOfficialSourceSelector:
                 for value in (entry.publisher, *entry.selection_aliases)
                 if normalize_selection_surface(value)
             }
-            question_matches = {alias for alias in aliases if alias and alias in question_surface}
+            question_matches = {
+                alias
+                for alias in aliases
+                if alias
+                and (
+                    alias in question_surface
+                    or (len(subject_surface) >= 4 and subject_surface in alias)
+                )
+            }
             db_matches = {
                 alias
                 for alias in aliases

@@ -5,13 +5,17 @@ import math
 import os
 import re
 import time
+import unicodedata
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any, Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from finance_agent_core.agent.intent_analysis import IntentAnalysisDraft
+from finance_agent_core.agent.intent_analysis import (
+    IntentAnalysisDraft,
+    sanitize_server_authorized_knowledge_draft,
+)
 from finance_agent_core.agent.semantic_resolution import (
     ResolutionDecision,
     SemanticResolutionDraft,
@@ -23,10 +27,12 @@ from finance_agent_core.answering.final_generation import (
     allowed_final_answer_leads,
 )
 from finance_agent_core.config import load_field_registry
+from finance_agent_core.contracts.external_knowledge import KnowledgeIntentRequirement
 from finance_agent_core.contracts.hcx_schema import (
     validate_hcx_payload,
     validate_hcx_schema,
 )
+from finance_agent_core.contracts.queryplan import ProductFamily
 from finance_agent_core.deadline import (
     RequestDeadlineExceeded,
     remaining_request_timeout,
@@ -392,6 +398,40 @@ def _intent_analysis_schema() -> dict[str, Any]:
                 "maxItems": 8,
             },
             "needs_clarification": {"type": "boolean"},
+            "knowledge_requirements": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "capability": {
+                            "type": "string",
+                            "enum": [
+                                "portfolio_holdings",
+                                "corporate_subsidiary",
+                                "sector_theme_history",
+                                "fund_structure_strategy_trend",
+                                "product_risk_factors",
+                            ],
+                        },
+                        "subject_span": {"type": "string"},
+                        "relation_span": {"type": "string"},
+                        "search_aliases": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "minItems": 0,
+                            "maxItems": 3,
+                        },
+                    },
+                    "required": [
+                        "capability",
+                        "subject_span",
+                        "relation_span",
+                        "search_aliases",
+                    ],
+                },
+                "minItems": 0,
+                "maxItems": 8,
+            },
         },
         "required": [
             "schema_version",
@@ -399,7 +439,36 @@ def _intent_analysis_schema() -> dict[str, Any]:
             "product_families",
             "evidence_spans",
             "needs_clarification",
+            "knowledge_requirements",
         ],
+    }
+
+
+def _entity_alias_repair_schema(subjects: tuple[str, ...]) -> dict[str, Any]:
+    return {
+        "type": "object",
+        "properties": {
+            "schema_version": {"type": "string", "enum": ["1.0"]},
+            "aliases": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "subject_span": {"type": "string", "enum": list(subjects)},
+                        "search_aliases": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "minItems": 1,
+                            "maxItems": 3,
+                        },
+                    },
+                    "required": ["subject_span", "search_aliases"],
+                },
+                "minItems": 1,
+                "maxItems": len(subjects),
+            },
+        },
+        "required": ["schema_version", "aliases"],
     }
 
 
@@ -426,8 +495,28 @@ def build_intent_analysis_system_prompt() -> str:
 
 외부 공식 근거가 필요한 관계·구성종목·섹터·동향 질문도 unsupported로 바꾸지 말고,
 상품을 찾으면 search, 특정 상품 하나의 정보면 detail, 둘 이상 비교면 compare,
-금융 개념·정책 설명만 요청하면 explain으로 분류한다. 외부 검색 capability·entity·별칭은
-별도의 결정론적 서버가 질문 원문에서 추출하므로 만들지 않는다.
+금융 개념·정책 설명만 요청하면 explain으로 분류한다.
+- knowledge_requirements의 capability·subject_span·relation_span은 질문 원문에 실제로
+  연속해서 존재하는 표현만 복사한다. 관계가 명시되지 않으면 만들지 않는다.
+- 신용등급·지역·자산군·수익률·보수·AUM·거래량·가격·만기·위험등급 같은 제공 데이터의
+  필터·정렬·상세조회만 묻는 질문은 외부 관계 질문이 아니다. 이 경우
+  knowledge_requirements는 반드시 빈 배열이다.
+- portfolio_holdings는 질문에 편입·보유·구성종목·담은 관계가 명시된 경우에만 쓴다.
+  단순히 "포트폴리오 후보"라고 표현했거나 상품을 나열해 달라는 요청에는 쓰지 않는다.
+- 구성종목·보유 질문의 subject_span은 편입·보유되는 회사/종목 이름이다. 운용사,
+  "공식 보유내역", ETF 상품군을 subject로 선택하지 않는다.
+- search_aliases는 같은 entity의 영문명·로마자 표기처럼 공식 원문 검색에 필요한
+  철자 후보만 최대 3개 제안한다. 상품, 관계, 수치, 사실을 별칭으로 만들지 않는다.
+- subject_span이 한글 고유명사이고 널리 쓰이는 알파벳 표기가 명백하면 그 표기를
+  search_aliases에 반드시 제안한다. 번역 설명이나 관계 추론은 넣지 않는다.
+- 질문의 다른 고유명사, 운용사·발행사·출처명, 상품명을 search_aliases에 복사하지
+  않는다. search_aliases는 오직 subject_span 자체의 다른 철자여야 한다.
+- 별칭은 검색 후보일 뿐이며 서버가 공식 원문 exact span과 제공 DB 교집합을 별도로
+  검증한다. 해외 상품의 영문 공식문서에서 한글 entity를 확인해야 하는 경우에는
+  널리 쓰이는 영문명 또는 가장 보수적인 로마자 철자 후보를 반드시 제안한다.
+  운용사·출처·상품명으로 대신 채우지 않는다.
+예: "공식 보유내역에서 애플 편입이 확인되는 ETF"는 subject_span="애플",
+relation_span="편입이 확인되는", search_aliases=["Apple"]이다.
 
 상품군 대응:
 - bond: 국내채권, 채권
@@ -446,6 +535,56 @@ def build_intent_analysis_system_prompt() -> str:
 상품군 값은 bond, domestic_etp, overseas_etp, fund만 허용한다.
 명시되지 않은 상품군을 임의로 추가하지 않는다.
 """.strip()
+
+
+def _grounded_intent_evidence_span(question: str, value: object) -> bool:
+    """Accept only literal question spans from the real HCX response.
+
+    The server verifier remains fail-closed for injected/fake providers.  The
+    official provider adapter, however, may safely discard a presentation-only
+    span that HCX paraphrased instead of letting advisory metadata veto an
+    otherwise valid deterministic QueryPlan.
+    """
+
+    if not isinstance(value, str) or not value.strip():
+        return False
+    if value in question:
+        return True
+    normalized_question = "".join(
+        character
+        for character in unicodedata.normalize("NFKC", question).casefold()
+        if character.isalnum()
+    )
+    normalized_value = "".join(
+        character
+        for character in unicodedata.normalize("NFKC", value).casefold()
+        if character.isalnum()
+    )
+    return bool(normalized_value) and normalized_value in normalized_question
+
+
+_ALIAS_REPAIR_RELATION_CUES: dict[str, re.Pattern[str]] = {
+    "portfolio_holdings": re.compile(r"편입|보유|구성\s*종목|담은", re.IGNORECASE),
+    "corporate_subsidiary": re.compile(
+        r"자회사|계열사|모회사|관계사|가족사",
+        re.IGNORECASE,
+    ),
+    "sector_theme_history": re.compile(
+        r"섹터|테마|산업|관련\s*(?:된\s*)?(?:ETF|ETN|ETP)",
+        re.IGNORECASE,
+    ),
+    "fund_structure_strategy_trend": re.compile(
+        r"구조|투자\s*전략|운용\s*전략|판매\s*동향|운용\s*동향|향후\s*일정",
+        re.IGNORECASE,
+    ),
+    "product_risk_factors": re.compile(r"위험\s*요인|리스크\s*요인", re.IGNORECASE),
+}
+
+
+def _relation_can_request_alias_repair(capability: object, relation_span: str) -> bool:
+    capability_value = getattr(capability, "value", capability)
+    cue = _ALIAS_REPAIR_RELATION_CUES.get(str(capability_value))
+    return cue is not None and cue.search(relation_span) is not None
 
 
 class HyperClovaXIntentAnalysisProvider:
@@ -486,6 +625,7 @@ class HyperClovaXIntentAnalysisProvider:
                     "product_families",
                     "evidence_spans",
                     "needs_clarification",
+                    "knowledge_requirements",
                 )
                 if key in payload
             }
@@ -493,6 +633,81 @@ class HyperClovaXIntentAnalysisProvider:
                 values = payload.get(key)
                 if isinstance(values, list):
                     payload[key] = list(dict.fromkeys(values))
+            if isinstance(payload.get("evidence_spans"), list):
+                payload["evidence_spans"] = [
+                    value
+                    for value in payload["evidence_spans"]
+                    if _grounded_intent_evidence_span(question, value)
+                ][:8]
+            # Nested relation hints are advisory: the server independently
+            # extracts every executable relation from literal question spans.
+            # HCX may still help with cross-script aliases, but harmless nested
+            # shape drift must not make mandatory Intent analysis return 5xx.
+            # Keep only closed, grounded requirements and discard malformed
+            # optional hints; core intent/family values remain strictly checked.
+            knowledge_requirements = payload.get("knowledge_requirements", [])
+            normalized_requirements: list[dict[str, Any]] = []
+            seen_requirements: set[tuple[str, str, str]] = set()
+            if isinstance(knowledge_requirements, list):
+                for item in knowledge_requirements:
+                    if not isinstance(item, dict):
+                        continue
+                    capability = item.get("capability")
+                    subject_span = item.get("subject_span")
+                    relation_span = item.get("relation_span")
+                    if (
+                        capability
+                        not in {
+                            "portfolio_holdings",
+                            "corporate_subsidiary",
+                            "sector_theme_history",
+                            "fund_structure_strategy_trend",
+                            "product_risk_factors",
+                        }
+                        or not _grounded_intent_evidence_span(question, subject_span)
+                        or not _grounded_intent_evidence_span(question, relation_span)
+                    ):
+                        continue
+                    aliases = item.get("search_aliases", [])
+                    if not isinstance(aliases, list):
+                        aliases = []
+                    aliases = list(
+                        dict.fromkeys(
+                            value
+                            for value in aliases
+                            if isinstance(value, str)
+                            and 2 <= len(value) <= 80
+                            and value == value.strip()
+                            and "http://" not in value.casefold()
+                            and "https://" not in value.casefold()
+                            and not any(ord(character) < 0x20 for character in value)
+                        )
+                    )[:3]
+                    key = (capability, subject_span, relation_span)
+                    if key in seen_requirements:
+                        continue
+                    seen_requirements.add(key)
+                    normalized_requirements.append(
+                        {
+                            "capability": capability,
+                            "subject_span": subject_span,
+                            "relation_span": relation_span,
+                            "search_aliases": aliases,
+                        }
+                    )
+            payload["knowledge_requirements"] = normalized_requirements[:8]
+            intent = payload.get("intent")
+            if intent == "clarify":
+                payload["needs_clarification"] = True
+                payload["knowledge_requirements"] = []
+            elif intent in {
+                "search",
+                "detail",
+                "compare",
+                "aggregate",
+                "explain",
+            }:
+                payload["needs_clarification"] = False
             try:
                 validate_hcx_payload(response_schema, payload)
                 return IntentAnalysisDraft.model_validate(payload)
@@ -501,15 +716,182 @@ class HyperClovaXIntentAnalysisProvider:
                     "HyperCLOVA X returned an invalid Intent analysis"
                 ) from None
 
-        return self._client.complete(
-            operation="intent_analysis",
-            system_prompt=build_intent_analysis_system_prompt(),
-            user_prompt=question,
-            schema_name="finance_intent_analysis",
-            response_schema=response_schema,
-            max_output_tokens=384,
-            response_parser=parse_response,
+        try:
+            draft = self._client.complete(
+                operation="intent_analysis",
+                system_prompt=build_intent_analysis_system_prompt(),
+                user_prompt=question,
+                schema_name="finance_intent_analysis",
+                response_schema=response_schema,
+                max_output_tokens=640,
+                response_parser=parse_response,
+            )
+        except HyperClovaXResponseError:
+            # HCX-007 can rarely return a syntactically successful response whose
+            # value shape still violates the closed Intent DTO.  Intent analysis is
+            # mandatory for the official runtime, so never replace it with a local
+            # heuristic.  Permit exactly one bounded HCX repair attempt and keep the
+            # same closed schema/parser; a second invalid response remains fail-closed.
+            draft = self._client.complete(
+                operation="intent_analysis",
+                system_prompt=(
+                    build_intent_analysis_system_prompt()
+                    + "\n\n직전 출력은 서버의 닫힌 Intent DTO 검증을 통과하지 못했다. "
+                    "이번에는 response schema의 required key를 모두 정확히 한 번씩 포함한 "
+                    "JSON object 하나만 출력한다. 여러 상품군이 함께 있어도 intent는 하나만 "
+                    "선택하고, 데이터 존재 여부를 추측해 clarify로 바꾸지 않는다."
+                ),
+                user_prompt=json.dumps(
+                    {"question": question, "repair_attempt": 1},
+                    ensure_ascii=False,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ),
+                schema_name="finance_intent_analysis_repair",
+                response_schema=response_schema,
+                max_output_tokens=640,
+                response_parser=parse_response,
+            )
+        # The model may omit an otherwise explicit relation hint.  Alias repair
+        # authority therefore starts from the server's deterministic relation
+        # extraction, never from HCX's optional knowledge_requirements list.
+        # HCX still proposes spelling candidates only; the official exact-span
+        # and provided-DB intersection path remains independently authoritative.
+        server_authorized_draft = sanitize_server_authorized_knowledge_draft(
+            question,
+            draft,
         )
+        repair_subjects = tuple(
+            dict.fromkeys(
+                requirement.subject_span
+                for requirement in server_authorized_draft.knowledge_requirements
+                if ProductFamily.OVERSEAS_ETP in server_authorized_draft.product_families
+                and not requirement.search_aliases
+                and _relation_can_request_alias_repair(
+                    requirement.capability,
+                    requirement.relation_span,
+                )
+                and re.search(r"[가-힣]", requirement.subject_span) is not None
+            )
+        )
+        if not repair_subjects:
+            return draft
+        repair_schema = _entity_alias_repair_schema(repair_subjects)
+
+        def parse_alias_repair(content: str) -> dict[str, tuple[str, ...]]:
+            payload = parse_hcx_json_object(content, "entity alias resolution")
+            projected = {
+                key: payload[key] for key in ("schema_version", "aliases") if key in payload
+            }
+            try:
+                validate_hcx_payload(repair_schema, projected)
+            except ValueError:
+                raise HyperClovaXResponseError(
+                    "HyperCLOVA X returned an invalid entity alias resolution"
+                ) from None
+            repaired: dict[str, tuple[str, ...]] = {}
+            for item in projected["aliases"]:
+                subject = item["subject_span"]
+                aliases = tuple(dict.fromkeys(item["search_aliases"]))
+                if subject in repaired:
+                    raise HyperClovaXResponseError(
+                        "HyperCLOVA X duplicated an entity alias subject"
+                    )
+                repaired[subject] = aliases
+            return repaired
+
+        try:
+            repaired = self._client.complete(
+                operation="semantic_resolver",
+                system_prompt=(
+                    "당신은 금융상품 Agent의 제한된 entity 철자 Resolver다. JSON 하나만 "
+                    "출력한다. subject_span은 입력 목록에서 그대로 복사하고, 그 entity "
+                    "자체의 공식 영문명 또는 보수적인 로마자 철자만 search_aliases에 "
+                    "1~3개 제안한다. 운용사, 출처, 상품명, 관계, 설명은 절대 넣지 않는다. "
+                    "별칭은 후보일 뿐이며 서버가 공식 원문 exact span과 제공 DB 교집합을 "
+                    "독립 검증한다."
+                ),
+                user_prompt=json.dumps(
+                    {"question": question, "subject_spans": repair_subjects},
+                    ensure_ascii=False,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ),
+                schema_name="finance_external_entity_alias_resolution",
+                response_schema=repair_schema,
+                max_output_tokens=192,
+                response_parser=parse_alias_repair,
+            )
+        except HyperClovaXProviderError:
+            # Alias repair is an optional candidate proposal. The primary HCX
+            # Intent result remains valid and the evidence path safely abstains.
+            return draft
+
+        def validated_requirements(
+            proposals: Mapping[str, tuple[str, ...]],
+        ) -> list[KnowledgeIntentRequirement]:
+            proposed_requirements = [
+                requirement.model_copy(
+                    update={"search_aliases": proposals.get(requirement.subject_span, ())}
+                )
+                if requirement.subject_span in repair_subjects
+                else requirement
+                for requirement in server_authorized_draft.knowledge_requirements
+            ]
+            proposed_draft = draft.model_copy(
+                update={"knowledge_requirements": proposed_requirements}
+            )
+            return list(
+                sanitize_server_authorized_knowledge_draft(
+                    question,
+                    proposed_draft,
+                ).knowledge_requirements
+            )
+
+        accepted_requirements = validated_requirements(repaired)
+        accepted_aliases = {
+            requirement.subject_span: requirement.search_aliases
+            for requirement in accepted_requirements
+        }
+        if any(not accepted_aliases.get(subject) for subject in repair_subjects):
+            # A syntactically valid empty answer is still an abstention.  Permit
+            # one bounded HCX retry because a cross-script spelling is often
+            # required to verify an English official document.  The retry gains
+            # no relation or retrieval authority and remains subject to exact
+            # official-span and provided-DB intersection verification.
+            try:
+                retry = self._client.complete(
+                    operation="semantic_resolver",
+                    system_prompt=(
+                        "당신은 한국어 고유명사의 공식 영문 철자 후보만 제안하는 제한된 "
+                        "Resolver다. 직전 응답에서 일부 subject의 후보가 비어 있었다. "
+                        "subject_span은 입력 그대로 복사하고, 동일 entity의 공식 영문명이나 "
+                        "보수적인 로마자 철자를 아는 경우 1~3개를 제안한다. 상품명·운용사·"
+                        "출처명·관계·설명은 넣지 않는다. 확실하지 않으면 빈 배열을 유지한다."
+                    ),
+                    user_prompt=json.dumps(
+                        {
+                            "question": question,
+                            "subject_spans": repair_subjects,
+                            "empty_alias_repair_attempt": 1,
+                        },
+                        ensure_ascii=False,
+                        sort_keys=True,
+                        separators=(",", ":"),
+                    ),
+                    schema_name="finance_external_entity_alias_resolution_retry",
+                    response_schema=repair_schema,
+                    max_output_tokens=192,
+                    response_parser=parse_alias_repair,
+                )
+            except HyperClovaXProviderError:
+                retry = {}
+            repaired = {
+                subject: accepted_aliases.get(subject) or retry.get(subject, ())
+                for subject in repair_subjects
+            }
+            accepted_requirements = validated_requirements(repaired)
+        return draft.model_copy(update={"knowledge_requirements": accepted_requirements})
 
 
 def _final_answer_schema(context: FinalAnswerContext) -> dict[str, Any]:

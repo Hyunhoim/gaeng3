@@ -75,7 +75,10 @@ _KNOWLEDGE_CAPABILITY_CUES: dict[KnowledgeCapability, re.Pattern[str]] = {
         re.IGNORECASE,
     ),
     KnowledgeCapability.SECTOR_THEME_HISTORY: re.compile(
-        r"섹터|테마|산업.{0,12}(?:관련|연결|투자)|(?:관련|연결).{0,12}(?:섹터|테마|산업)",
+        r"섹터|테마|산업.{0,12}(?:관련|연결|투자)|"
+        r"(?:관련|연결).{0,12}(?:섹터|테마|산업)|"
+        r"관련\s*(?:된\s*)?(?:국내\s*|해외\s*)?(?:ETF|ETN|ETP)|"
+        r"[A-Za-z][A-Za-z0-9._-]{2,40}\s+(?:국내\s*|해외\s*)?(?:ETF|ETN|ETP)",
         re.IGNORECASE,
     ),
     KnowledgeCapability.FUND_STRUCTURE_STRATEGY_TREND: re.compile(
@@ -109,6 +112,20 @@ _EXTERNAL_THEME_SUBJECT = re.compile(
     r"(?P<subject>[0-9A-Za-z가-힣&·+._/-]{2,40}\s*(?:섹터|테마|산업))",
     re.IGNORECASE,
 )
+_EXTERNAL_RELATED_ETP_SUBJECT = re.compile(
+    r"(?P<subject>[0-9A-Za-z가-힣&·+._/-]{2,60})\s*"
+    r"(?P<relation>관련\s*(?:된\s*)?(?:국내\s*|해외\s*)?(?:ETF|ETN|ETP))",
+    re.IGNORECASE,
+)
+_EXTERNAL_NAMED_ETP_SUBJECT = re.compile(
+    r"(?P<subject>[A-Za-z][A-Za-z0-9._-]{1,40}"
+    r"(?:\s+[A-Za-z][A-Za-z0-9._-]{1,40}){0,3})\s+"
+    r"(?P<relation>(?:국내\s*|해외\s*)?(?:ETF|ETN|ETP))",
+    re.IGNORECASE,
+)
+_GENERIC_ASCII_ETP_SUBJECTS = frozenset(
+    {"ai", "esg", "global", "korea", "us", "usa", "usd", "world"}
+)
 _EXTERNAL_FUND_SUBJECT = re.compile(
     r"(?P<subject>[0-9A-Za-z가-힣&·+._/-]+(?:\s+[0-9A-Za-z가-힣&·+._/-]+){0,4}"
     r"\s*펀드)(?:의)?\s*(?P<relation>구조|투자\s*전략|운용\s*동향|판매\s*동향)",
@@ -127,7 +144,7 @@ _PRODUCT_LIKE_EXTERNAL_SUBJECT = re.compile(
     r"ETF|ETN|KODEX|TIGER|ACE|SOL|RISE|PLUS|KIWOOM|WON|TIME",
     re.IGNORECASE,
 )
-_PORTFOLIO_ELIGIBILITY = re.compile(r"편입\s*가능", re.IGNORECASE)
+_PORTFOLIO_ELIGIBILITY = re.compile(r"편입(?:이|가)?\s*가능", re.IGNORECASE)
 _GENERIC_ETP_SURFACE = re.compile(r"(?<![A-Za-z])(?:ETF|ETN|ETP)(?![A-Za-z])", re.IGNORECASE)
 _NON_ENTITY_HOLDING_SUBJECTS = frozenset(
     {
@@ -167,6 +184,57 @@ def _evidence_span_is_grounded(question: str, span: str) -> bool:
     return bool(normalized_span) and normalized_span in _literal_evidence_key(question)
 
 
+_SAFE_CROSS_SCRIPT_ALIAS = re.compile(r"[A-Za-z][A-Za-z0-9&+._' -]{1,78}")
+_GENERIC_SEARCH_ALIASES = frozenset(
+    {
+        "asset manager",
+        "bond",
+        "company",
+        "etf",
+        "etn",
+        "etp",
+        "fund",
+        "holding",
+        "holdings",
+        "official",
+        "product",
+        "theme",
+    }
+)
+
+
+def _safe_entity_search_alias(question: str, subject: str, alias: str) -> bool:
+    """Admit only a bounded spelling candidate, never new retrieval authority.
+
+    A literal alias is already grounded. A non-literal alias must be an ASCII
+    cross-script spelling of a Hangul subject. The candidate still has no
+    evidentiary value: live extraction requires its exact span, the relation
+    signal and one provided-DB product identity in the same official excerpt.
+    """
+
+    normalized = " ".join(alias.casefold().split())
+    if normalized in _GENERIC_SEARCH_ALIASES:
+        return False
+    if _evidence_span_is_grounded(question, alias):
+        subject_key = _literal_evidence_key(subject)
+        alias_key = _literal_evidence_key(alias)
+        if subject_key == alias_key:
+            return True
+        # A user-supplied bilingual spelling must be locally attached to the
+        # subject. Another English publisher/product token elsewhere in the
+        # question is not an alias of the subject.
+        bilingual = (
+            rf"(?:{re.escape(subject)})\s*[(/·]\s*(?:{re.escape(alias)})"
+            rf"|(?:{re.escape(alias)})\s*[(/·]\s*(?:{re.escape(subject)})"
+        )
+        return re.search(bilingual, question, re.IGNORECASE) is not None
+    if re.search(r"[가-힣]", subject) is None or _SAFE_CROSS_SCRIPT_ALIAS.fullmatch(alias) is None:
+        return False
+    if len(normalized.split()) > 5:
+        return False
+    return any(character.isalpha() for character in alias)
+
+
 def _explicit_industry_relation(question: str, subject: str) -> bool:
     """Distinguish a real industry relation from an ETF name suffix."""
 
@@ -179,6 +247,42 @@ def _explicit_industry_relation(question: str, subject: str) -> bool:
         )
         is not None
     )
+
+
+def _subject_is_locked_schema_value(
+    question: str,
+    subject: str,
+    families: tuple[ProductFamily, ...],
+) -> bool:
+    """Return whether Lexical already binds the apparent entity to a DB field.
+
+    English enum labels such as ``Money Market``, ``Mixed Assets`` and
+    ``Global Emerging Markets`` are valid provided-data values. They must not
+    be reinterpreted as organizations merely because they precede ``ETF``.
+    """
+
+    from finance_agent_core.agent.linker import build_lexical_hints
+
+    target = _literal_evidence_key(subject)
+    search_families = families or tuple(ProductFamily)
+    for family in search_families:
+        hints = build_lexical_hints(
+            question,
+            family.value,
+            force_product_family_hint=True,
+        )
+        for constraint in hints["required_constraints"]:
+            values = (
+                constraint["value"]
+                if isinstance(constraint["value"], list)
+                else [constraint["value"]]
+            )
+            if any(
+                isinstance(value, str) and _literal_evidence_key(value) == target
+                for value in values
+            ):
+                return True
+    return False
 
 
 def has_server_authorized_knowledge_requirements(
@@ -199,7 +303,7 @@ def has_server_authorized_knowledge_requirements(
         if cue.search(question) is None or cue.search(requirement.relation_span) is None:
             return False
         if requirement.capability is KnowledgeCapability.PORTFOLIO_HOLDINGS and re.search(
-            r"편입\s*가능", requirement.relation_span, re.IGNORECASE
+            r"편입(?:이|가)?\s*가능", requirement.relation_span, re.IGNORECASE
         ):
             return False
     return True
@@ -244,14 +348,15 @@ def sanitize_server_authorized_knowledge_draft(
             proposed_aliases.setdefault(key, set()).update(requirement.search_aliases)
 
     def aliases_for(capability: KnowledgeCapability, subject: str) -> tuple[str, ...]:
-        # HCX may copy aliases that the user explicitly supplied, but it cannot
-        # establish a cross-language company identity from pretrained memory.
-        # Official-document alias verification belongs to the evidence path.
+        # HCX has candidate authority only. The deterministic capability and
+        # subject must already exist in the question, source selection does not
+        # use these aliases, and the official exact-span/DB-intersection path
+        # independently verifies every admitted relation.
         return tuple(
             sorted(
                 alias
                 for alias in proposed_aliases.get((capability, _entity_surface_key(subject)), set())
-                if alias in question
+                if _safe_entity_search_alias(question, subject, alias)
             )
         )
 
@@ -331,6 +436,44 @@ def sanitize_server_authorized_knowledge_draft(
                     ),
                 )
             )
+    related_etp = _EXTERNAL_RELATED_ETP_SUBJECT.search(question)
+    if related_etp is not None:
+        subject = related_etp.group("subject")
+        append(
+            KnowledgeIntentRequirement(
+                capability=KnowledgeCapability.SECTOR_THEME_HISTORY,
+                subject_span=subject,
+                relation_span=related_etp.group("relation"),
+                search_aliases=aliases_for(
+                    KnowledgeCapability.SECTOR_THEME_HISTORY,
+                    subject,
+                ),
+            )
+        )
+    else:
+        named_etp = next(
+            (
+                match
+                for match in _EXTERNAL_NAMED_ETP_SUBJECT.finditer(question)
+                if match.group("subject").casefold() not in _GENERIC_ASCII_ETP_SUBJECTS
+                and not match.group("subject").isupper()
+            ),
+            None,
+        )
+        if named_etp is not None:
+            subject = named_etp.group("subject")
+            if not _subject_is_locked_schema_value(question, subject, fallback_families):
+                append(
+                    KnowledgeIntentRequirement(
+                        capability=KnowledgeCapability.SECTOR_THEME_HISTORY,
+                        subject_span=subject,
+                        relation_span=named_etp.group(0),
+                        search_aliases=aliases_for(
+                            KnowledgeCapability.SECTOR_THEME_HISTORY,
+                            subject,
+                        ),
+                    )
+                )
     fund = _EXTERNAL_FUND_SUBJECT.search(question)
     if fund is not None:
         append(
@@ -382,6 +525,23 @@ def sanitize_server_authorized_knowledge_draft(
         families = (ProductFamily.DOMESTIC_ETP, ProductFamily.OVERSEAS_ETP)
     else:
         families = tuple(sorted(set(draft.product_families), key=lambda item: item.value))
+    if any(
+        item.capability is KnowledgeCapability.SECTOR_THEME_HISTORY
+        and re.search(
+            rf"{re.escape(item.subject_span)}\s+(?:ETF|ETN|ETP)",
+            item.relation_span,
+            re.IGNORECASE,
+        )
+        for item in authorized
+    ):
+        # A bare ETP label has no domestic/overseas authority. Preserve any
+        # exact DB-resolved family and add both ETP universes for intersection.
+        families = tuple(
+            sorted(
+                {*families, ProductFamily.DOMESTIC_ETP, ProductFamily.OVERSEAS_ETP},
+                key=lambda item: item.value,
+            )
+        )
     intent = draft.intent
     if authorized and intent in {InteractionIntent.CLARIFY, InteractionIntent.UNSUPPORTED}:
         intent = InteractionIntent.SEARCH

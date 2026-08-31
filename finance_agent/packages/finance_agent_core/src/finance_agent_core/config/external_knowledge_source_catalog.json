@@ -44,6 +44,16 @@
       "purposes": ["holdings", "product_structure", "risk", "theme"]
     },
     {
+      "document_id": "moonshot-kimi-k2-release-20250801",
+      "title": "Kimi K2 High-Speed Model Released",
+      "source_uri": "https://forum.moonshot.ai/t/kimi-k2-high-speed-model-released/25",
+      "capabilities": ["sector_theme_history"],
+      "published_at": "2025-08-01",
+      "as_of": "2025-08-01",
+      "language": "en",
+      "purposes": ["theme", "trend"]
+    },
+    {
       "document_id": "samsungfund-kodex-battery-industry-20260824",
       "title": "KODEX 2차전지산업 ETF",
       "source_uri": "https://www.samsungfund.com/etf/product/view.do?id=2ETFB1",

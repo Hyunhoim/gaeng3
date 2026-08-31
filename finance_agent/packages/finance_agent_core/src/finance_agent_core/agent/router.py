@@ -12,6 +12,7 @@ from finance_agent_core.agent.planning_policy import (
     PlanningPolicy,
     PlanningTrace,
 )
+from finance_agent_core.agent.presentation import semantic_query_surface
 from finance_agent_core.agent.product_identity import (
     extract_named_product_mentions,
     is_domestic_etp_brand_question,
@@ -21,7 +22,10 @@ from finance_agent_core.agent.safety import (
     SafetyEnvelope,
     safety_policy_surface,
 )
-from finance_agent_core.agent.semantic_aliases import rank_alias_matches, ranking_intent_present
+from finance_agent_core.agent.semantic_aliases import (
+    ranking_intent_present,
+    typed_alias_matches,
+)
 from finance_agent_core.agent.semantic_gate import (
     SemanticCoverageDecision,
     SemanticCoverageGate,
@@ -43,7 +47,7 @@ from finance_agent_core.observability import (
 )
 
 _COMPARE = re.compile(
-    r"비교|대조|차이|나란히|versus|\bvs\b|"
+    r"비교(?!\s*표)|대조|차이|나란히|versus|\bvs\b|"
     r"(?:둘|두\s*(?:개(?:의)?|상품|공모\s*펀드|펀드|채권|ETF|ETN))"
     r".{0,40}?중(?:에서)?|"
     r"어느\s*(?:게|것이).{0,40}?(?:높|낮|크|작|많|적|길|짧)",
@@ -79,7 +83,9 @@ _AMBIGUOUS = re.compile(
     r"적당한|적당히|괜찮은|안전한|좋은\s*상품|추천(?:해|하|받|할\s*만한)|"
     r"좀\s*낮아도|많이\s*주는|제일\s*수익률|리스크.*신경\s*안|"
     r"뭐가\s*더\s*좋|어느.*더\s*좋|(?:두\s*종목|둘)\s*중.{0,20}?나은|"
-    r"오래\s*들고.{0,20}?부담\s*없|잘\s*나가|거래가?\s*활발|"
+    r"오래\s*들고.{0,20}?부담\s*없|(?:보수|비용|매수)?.{0,12}?"
+    r"부담(?:이|가)?\s*(?:없|되지\s*않)|무난(?:한|하다)?|"
+    r"잘\s*나가|거래가?\s*활발|"
     r"분배(?:를|가)?\s*(?:많이|잘)|"
     r"(?:가격.*왜|왜.*가격)",
     re.IGNORECASE,
@@ -119,6 +125,40 @@ _RANKED_SET_SEARCH = re.compile(
     r"highest\s*[- ]to\s*[- ]lowest|lowest\s*[- ]to\s*[- ]highest)",
     re.IGNORECASE,
 )
+_ORDINAL_MULTI_SEARCH = re.compile(
+    r"(?<![0-9A-Za-z가-힣])(?:첫째|둘째|셋째|넷째)(?:\s*[,.:：])?",
+    re.IGNORECASE,
+)
+_EXPLICIT_PER_FAMILY_SEARCH = re.compile(
+    r"각각|나란히|한\s*답변에서|한\s*번에|모두\s*포함한\s*목록|"
+    r"상품군별로|종류별로",
+    re.IGNORECASE,
+)
+_CROSS_FAMILY_GLOBAL_SEARCH = re.compile(
+    r"통합\s*(?:비교|정렬|순위)|한\s*줄(?:에|로)?\s*(?:비교|정렬|순위)|"
+    r"통합\s*(?:높은|낮은)\s*순|함께\s*(?:비교|정렬|순위)|"
+    r"한\s*(?:목록|리스트)(?:으로|에)?|(?:한\s*순위에\s*)?합쳐|"
+    r"따로\s*나누지\s*말고|직접\s*비교",
+    re.IGNORECASE,
+)
+
+
+def _ordinal_query_clauses(question: str) -> tuple[str, ...]:
+    """Return only the query sentence from each explicit ordinal clause."""
+
+    markers = list(_ORDINAL_MULTI_SEARCH.finditer(question))
+    if len(markers) < 2:
+        return ()
+    clauses: list[str] = []
+    for index, marker in enumerate(markers):
+        clause_end = markers[index + 1].start() if index + 1 < len(markers) else len(question)
+        raw_clause = question[marker.end() : clause_end].strip()
+        query_sentence = re.split(r"(?<=[.!?])\s+", raw_clause, maxsplit=1)[0].strip()
+        if query_sentence:
+            clauses.append(query_sentence)
+    return tuple(clauses)
+
+
 _EXPLICIT_ETP_TYPE = re.compile(
     r"(?:ETP\s*유형|ETF\s*여부|상품\s*유형)(?:이|가|은|는)?\s*[:：]?\s*(?:ETF|ETN)|"
     r"(?<![A-Z])(?:ETF|ETN)(?:인(?!지)|이며|이고|인데|에\s*해당|로\s*되어)",
@@ -175,6 +215,16 @@ _RESERVED_OVERSEAS_TICKER_TOKENS = frozenset(
         "NYSE",
         "NASDAQ",
         "AMEX",
+        "AI",
+        "ACE",
+        "ARIRANG",
+        "HANARO",
+        "KBSTAR",
+        "KODEX",
+        "RISE",
+        "SOL",
+        "TIGER",
+        "TIMEFOLIO",
     }
 )
 _LABELED_ID = re.compile(
@@ -325,6 +375,15 @@ def _bind_product_identity_intent(
 
     if not mentions:
         return intent, None
+    if len(_product_families(question)) > 1 and (
+        intent is InteractionIntent.SEARCH
+        or len(_ORDINAL_MULTI_SEARCH.findall(question)) >= 2
+        or _EXPLICIT_PER_FAMILY_SEARCH.search(question) is not None
+    ):
+        # A single identity cannot turn a multi-family request into DETAIL.
+        # Every identity is rebound inside a compiler-validated family clause;
+        # unscoped prose still fails closed before Oracle execution.
+        return InteractionIntent.SEARCH, None
     if intent is InteractionIntent.SEARCH:
         if len(mentions) == 1:
             return InteractionIntent.DETAIL, None
@@ -332,6 +391,21 @@ def _bind_product_identity_intent(
             return InteractionIntent.SEARCH, None
         return InteractionIntent.CLARIFY, "multiple_product_identities_unbound"
     if intent is InteractionIntent.AGGREGATE:
+        if (
+            len(mentions) == 1
+            and re.search(
+                r"(?:알려|확인|보여|원천값|원천\s*데이터)",
+                question,
+                re.IGNORECASE,
+            )
+            and re.search(
+                r"(?:평균|합계|중앙값|최댓값|최솟값|최대값|최소값)",
+                question,
+                re.IGNORECASE,
+            )
+            is None
+        ):
+            return InteractionIntent.DETAIL, None
         return InteractionIntent.CLARIFY, "aggregate_product_identity_unbound"
     if intent in {InteractionIntent.DETAIL, InteractionIntent.EXPLAIN} and len(mentions) != 1:
         return InteractionIntent.CLARIFY, "multiple_product_identities_unbound"
@@ -339,6 +413,28 @@ def _bind_product_identity_intent(
 
 
 def _product_families(question: str) -> list[ProductFamily]:
+    semantic_question = re.sub(
+        r"(?m)(?:^|(?<=[.!?])\s+)"
+        r"국내채권\s*,\s*국내\s*ETF\s*,\s*해외\s*ETF\s*,\s*공모펀드\s*"
+        r"순서[^.!?]*(?:[.!?]|$)",
+        " ",
+        question,
+        flags=re.IGNORECASE,
+    ).strip()
+    if semantic_question and semantic_question != question:
+        return _product_families(semantic_question)
+    ordinal_clauses = _ordinal_query_clauses(question)
+    if ordinal_clauses:
+        # Presentation instructions after the final clause often list all four
+        # families only to prescribe answer order.  Family authority must come
+        # from the actual first/second/... query clauses, never that formatting
+        # sentence.
+        clause_families = [
+            family for clause in ordinal_clauses for family in _product_families(clause)
+        ]
+        if clause_families:
+            return list(dict.fromkeys(clause_families))
+
     mentions: list[tuple[int, ProductFamily]] = []
 
     def add_matches(pattern: str, family: ProductFamily, *, flags: int = 0) -> None:
@@ -493,6 +589,24 @@ def _product_families(question: str) -> list[ProductFamily]:
         ):
             mentions.append((match.start(), ProductFamily.OVERSEAS_ETP))
 
+    # A full multi-clause request can contain one explicitly overseas ETF and a
+    # separate bare ``ETF`` whose domestic-only fields identify the domestic
+    # schema.  Looking only at the whole sentence suppresses that inference
+    # because an explicit ETP family exists somewhere else.  Re-evaluate each
+    # ordinal clause in isolation and add only families the deterministic
+    # single-clause grammar can resolve.
+    ordinal_markers = list(_ORDINAL_MULTI_SEARCH.finditer(question))
+    for index, marker in enumerate(ordinal_markers):
+        clause_end = (
+            ordinal_markers[index + 1].start()
+            if index + 1 < len(ordinal_markers)
+            else len(question)
+        )
+        clause = question[marker.end() : clause_end].strip()
+        if clause:
+            for family in _product_families(clause):
+                mentions.append((marker.end(), family))
+
     ordered = [family for _, family in sorted(mentions, key=lambda item: item[0])]
     return list(dict.fromkeys(ordered))
 
@@ -502,64 +616,106 @@ def _requested_limit(question: str) -> int | None:
 
 
 def _intent(question: str, families: list[ProductFamily]) -> InteractionIntent:
-    policy_surface = safety_policy_surface(question)
+    semantic_question = semantic_query_surface(question)
+    policy_surface = safety_policy_surface(semantic_question)
     after_tax_yield_alias = any(
         item.field_id == "after_tax_yield_pct"
         for family in families
-        for item in rank_alias_matches(question, family)
+        for item in typed_alias_matches(semantic_question, family)
+        if item.operation == "rank"
     )
     if (
         _UNSUPPORTED.search(policy_surface)
-        or (_EXTERNAL_POLICY.search(question) and not after_tax_yield_alias)
-        or _UNAVAILABLE_MARKET_DATA.search(question)
+        or (_EXTERNAL_POLICY.search(semantic_question) and not after_tax_yield_alias)
+        or _UNAVAILABLE_MARKET_DATA.search(semantic_question)
         or (
             families == [ProductFamily.OVERSEAS_ETP]
-            and _OVERSEAS_UNAVAILABLE_METRIC.search(question)
-            and not _COMPARE.search(question)
+            and _OVERSEAS_UNAVAILABLE_METRIC.search(semantic_question)
+            and not _COMPARE.search(semantic_question)
         )
-        or (ProductFamily.FUND in families and _FUND_UNAVAILABLE_DETAIL.search(question))
+        or (ProductFamily.FUND in families and _FUND_UNAVAILABLE_DETAIL.search(semantic_question))
     ):
         return InteractionIntent.UNSUPPORTED
     product_mentions = _product_mentions(question)
     exact_two_product_comparison = bool(
         len(product_mentions) == 2
-        and (_COMPARE.search(question) or _TWO_ID_COMPARATIVE.search(question))
+        and (_COMPARE.search(semantic_question) or _TWO_ID_COMPARATIVE.search(semantic_question))
     )
-    resolved_rank_alias = any(rank_alias_matches(question, family) for family in families)
+    resolved_rank_alias = any(
+        item.operation == "rank"
+        for family in families
+        for item in typed_alias_matches(semantic_question, family)
+    )
     if (_AMBIGUOUS.search(policy_surface) and not resolved_rank_alias) or (
-        _MIXED_ETP_COST.search(question)
-        and _EXPLICIT_ETP_TYPE.search(question) is None
-        and _EXPLICIT_TOTAL_EXPENSE_RATIO.search(question) is None
+        _MIXED_ETP_COST.search(semantic_question)
+        and _EXPLICIT_ETP_TYPE.search(semantic_question) is None
+        and _EXPLICIT_TOTAL_EXPENSE_RATIO.search(semantic_question) is None
         and not exact_two_product_comparison
     ):
         return InteractionIntent.CLARIFY
-    if _DEFINITION.search(question):
+    if _DEFINITION.search(semantic_question):
         return InteractionIntent.EXPLAIN
-    if _RANKED_SET_SEARCH.search(question) and len(_product_mentions(question)) != 2:
+    if len(families) > 1 and (
+        len(_ORDINAL_MULTI_SEARCH.findall(semantic_question)) >= 2
+        or (
+            _CROSS_FAMILY_GLOBAL_SEARCH.search(semantic_question) is not None
+            and ranking_intent_present(semantic_question)
+        )
+    ):
+        # An explicit multi-clause request or a global TOP-K is a SEARCH batch,
+        # not an unconstrained product-to-product comparison.  The compiler
+        # still has to isolate every clause and prove common metric/unit safety.
         return InteractionIntent.SEARCH
-    if _COMPARE.search(question) or (
-        len(product_mentions) == 2 and _TWO_ID_COMPARATIVE.search(question)
+    if _RANKED_SET_SEARCH.search(semantic_question) and len(product_mentions) != 2:
+        return InteractionIntent.SEARCH
+    if len(product_mentions) >= 3 and ranking_intent_present(semantic_question):
+        return InteractionIntent.SEARCH
+    if not product_mentions and ranking_intent_present(semantic_question):
+        # A metric-ranked universe query remains SEARCH even when its
+        # conversational preamble says "대조" or "비교표".  Exact two-product
+        # comparisons are handled above and retain their dedicated contract.
+        return InteractionIntent.SEARCH
+    if ranking_intent_present(semantic_question) and re.search(
+        r"(?:상위\s*목록과\s*필터\s*통과\s*건수|"
+        r"(?:전체|총)\s*(?:후보|개수|건수)|후보(?:가|는|를)?\s*(?:총|몇)|"
+        r"조건(?:에\s*부합하|을\s*통과하)는?\s*(?:전체\s*)?(?:개수|건수|상품\s*수)|"
+        r"조건을\s*통과한\s*상품\s*수)",
+        semantic_question,
+        re.IGNORECASE,
+    ):
+        return InteractionIntent.SEARCH
+    if (
+        len(product_mentions) == 1
+        and _DETAIL.search(semantic_question)
+        and _EXPLAIN.search(semantic_question) is None
+    ):
+        return InteractionIntent.DETAIL
+    if _COMPARE.search(semantic_question) or (
+        len(product_mentions) == 2 and _TWO_ID_COMPARATIVE.search(semantic_question)
     ):
         return InteractionIntent.COMPARE
     # In the official fund schema, "해외채권 비중" is a row-level numeric
     # field.  The bare word "비중" must not turn a filtered/ranked product
     # search into a distribution aggregate.
-    if _PORTFOLIO_RATIO_FIELD.search(question) and (
-        ranking_intent_present(question)
-        or re.search(r"(?:이상|이하|초과|미만|넘|보다\s*(?:크|작))", question)
+    if _PORTFOLIO_RATIO_FIELD.search(semantic_question) and (
+        ranking_intent_present(semantic_question)
+        or re.search(
+            r"(?:이상|이하|초과|미만|넘|보다\s*(?:크|작))",
+            semantic_question,
+        )
     ):
         return InteractionIntent.SEARCH
-    if _AGGREGATE.search(question):
+    if _AGGREGATE.search(semantic_question):
         return InteractionIntent.AGGREGATE
-    if _TICKER_ORDERING.search(question):
+    if _TICKER_ORDERING.search(semantic_question):
         return InteractionIntent.SEARCH
     if (
-        _EXPLAIN.search(question)
+        _EXPLAIN.search(semantic_question)
         and not resolved_rank_alias
-        and not ranking_intent_present(question)
+        and not ranking_intent_present(semantic_question)
     ):
         return InteractionIntent.EXPLAIN
-    if _DETAIL.search(question):
+    if _DETAIL.search(semantic_question):
         return InteractionIntent.DETAIL
     return InteractionIntent.SEARCH
 
@@ -824,11 +980,50 @@ class IntentRouter:
                 product_families=families,
             )
         cross_family_control = len(families) > 1 and intent is not InteractionIntent.SEARCH
-        coverage = self.semantic_coverage_gate.evaluate(
-            stripped,
-            interaction_intent=coverage_intent.value,
-            check_exclusions=False,
+        ordinal_clauses = (
+            _ordinal_query_clauses(stripped)
+            if len(families) > 1 and intent is InteractionIntent.SEARCH
+            else ()
         )
+        if ordinal_clauses:
+            clause_coverage = []
+            for clause in ordinal_clauses:
+                clause_mentions = _product_mentions(clause)
+                clause_intent, _ = _bind_product_identity_intent(
+                    _intent(clause, _product_families(clause)),
+                    clause_mentions,
+                    clause,
+                )
+                clause_coverage.append(
+                    self.semantic_coverage_gate.evaluate(
+                        clause,
+                        interaction_intent=clause_intent.value,
+                        check_exclusions=False,
+                    )
+                )
+            coverage = SemanticCoverageDecision(
+                ambiguity_spans=tuple(
+                    _ordered_unique(
+                        span for item in clause_coverage for span in item.ambiguity_spans
+                    )
+                ),
+                unsupported_spans=tuple(
+                    _ordered_unique(
+                        span for item in clause_coverage for span in item.unsupported_spans
+                    )
+                ),
+                schema_link_gap_spans=tuple(
+                    _ordered_unique(
+                        span for item in clause_coverage for span in item.schema_link_gap_spans
+                    )
+                ),
+            )
+        else:
+            coverage = self.semantic_coverage_gate.evaluate(
+                stripped,
+                interaction_intent=coverage_intent.value,
+                check_exclusions=False,
+            )
         if safety.disposition is SafetyDisposition.UNSUPPORTED or coverage.unsupported_spans:
             intent = InteractionIntent.UNSUPPORTED
         elif safety.disposition is SafetyDisposition.CLARIFY or (

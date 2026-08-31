@@ -5,7 +5,7 @@ from finance_agent_core.config import QualityStatus
 from finance_agent_core.normalization import normalize_overseas_etp_row
 
 
-def test_zero_sentinels_and_sparse_rows_remain_explicit() -> None:
+def test_zero_sentinels_and_sparse_rows_remain_field_level_explicit() -> None:
     record = normalize_overseas_etp_row(
         source_row=1956,
         present_source_fields=20,
@@ -30,8 +30,9 @@ def test_zero_sentinels_and_sparse_rows_remain_explicit() -> None:
     )
 
     assert record.product_id == "AMX:ZERO"
-    assert record.is_quarantined
-    assert record.quarantine_reason == "sparse_source_row"
+    assert not record.is_quarantined
+    assert record.quarantine_reason is None
+    assert record.row_quality is QualityStatus.PARTIAL
     assert record.total_expense_ratio_quality is QualityStatus.UNKNOWN
     assert record.aum_quality is QualityStatus.UNKNOWN
     assert record.one_day_return_pct == Decimal("0.000000")

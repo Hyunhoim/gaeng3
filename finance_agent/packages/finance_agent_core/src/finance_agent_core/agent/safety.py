@@ -86,7 +86,11 @@ _SECURITY = re.compile(
     r"(?:개인\s*정보|보유\s*(?:내역|목록)|거래\s*내역|연락처|"
     r"계좌\s*(?:정보|번호))|"
     r"(?:개인\s*정보|보유\s*내역|거래\s*내역|연락처|계좌\s*정보)"
-    r".{0,40}?(?:가져|조회|출력|공개|보여)",
+    r".{0,40}?(?:가져|조회|출력|공개|보여)|"
+    r"(?:내부\s*)?(?:alias|별칭|동의어)\s*(?:사전|목록|원문)"
+    r".{0,32}?(?:다운로드|내려받|반출|출력|공개|보여)|"
+    r"(?:벡터|임베딩|embedding)\s*(?:원문|코퍼스|index|인덱스|데이터)"
+    r".{0,32}?(?:다운로드|내려받|반출|출력|공개|보여)",
     re.IGNORECASE,
 )
 _PROTECTED_MARKER = re.compile(
@@ -114,11 +118,18 @@ _DATA_INTEGRITY = re.compile(
     r"(?:임의로|마음대로).{0,16}?(?:높여|낮춰|부풀려|줄여)|"
     r"(?:조건|필터).{0,24}?(?:무시|빼고|제외).{0,40}?"
     r"(?:원천|공식|제공).{0,20}?(?:값|수치|데이터|자료).{0,24}?"
-    r"(?:바꿔|변경|수정|조작)",
+    r"(?:바꿔|변경|수정|조작)|"
+    r"(?:검색\s*)?(?:조건|필터).{0,32}?(?:무시|숨기|은폐|빼고|제외)"
+    r".{0,64}?(?:특정|우리\s*회사|원하는)?.{0,24}?(?:1\s*위|상위)"
+    r".{0,24}?(?:만들|나오게|조작)|"
+    r"(?:보수율|수익률|수치|조건|필터).{0,24}?(?:숨기|은폐)"
+    r".{0,48}?(?:특정\s*)?(?:티커|상품|종목).{0,24}?(?:1\s*위|상위)"
+    r".{0,16}?(?:만들|조작)",
     re.IGNORECASE,
 )
 _UNVERIFIABLE_FRESHNESS = re.compile(
-    r"(?:현재\s*)?실시간\s*(?:호가|가격|시세|뉴스|공시|거래량)|"
+    r"(?:현재\s*)?실시간\s*(?:호가|가격|체결가|시세|뉴스|공시|거래량)|"
+    r"(?:실시간|초\s*단위).{0,24}?(?:체결가|호가|가격|시세|거래량)|"
     r"실시간.{0,32}?(?:가입|판매|거래)\s*가능.{0,32}?(?:외부\s*시스템|확인|조회)|"
     r"(?:오늘\s*)?방금\s*(?:발표|공개|보도)(?:된)?\s*(?:뉴스|공시|정보)|"
     r"(?:오늘|최신).{0,20}?(?:뉴스|공시|호가|시세)"
@@ -170,6 +181,7 @@ _FORECAST = re.compile(
     r"(?:오를|내릴|상승|하락|수익|가격)|"
     r"(?:오를|내릴|상승할|하락할)\s*(?:까|것|상품)|"
     r"(?:오를|내릴)\s*가능성|(?:곧\s*)?떡상|폭등|폭락|유망한|대박날|담아야\s*할|"
+    r"(?:오늘(?:\s*밤)?|금일).{0,28}?(?:급등|급락|오를|내릴|상승|하락)(?:할|하겠|할\s*것)?|"
     r"(?:호재|악재).{0,20}?(?:반영|전망|예상)|"
     r"(?:전\s*재산|은퇴\s*자금|대출\s*받아|빚을?\s*내).{0,36}?"
     r"(?:넣|투자|살|사야|매수|골라|정해|추천|지시)|"
@@ -237,7 +249,10 @@ _DATA_SCOPE_BYPASS = re.compile(
     r"상품(?:을|를)?\s*(?:지어내|만들어|창작)|가상(?:의)?\s*상품|"
     r"(?:없는|존재하지\s*않는|가짜|허구|KR-(?:FAKE|UNICORN)[A-Z0-9-]*)"
     r".{0,48}?(?:실제.{0,20}?처럼|가정|포함)|"
-    r"(?:수익률|가격|수치|근거|인용).{0,20}?(?:만들|지어내|생성)|"
+    r"(?:수익률|가격|수치)(?:을|를)?\s*(?:임의로|마음대로|가짜로)?\s*"
+    r"(?:만들|지어내|생성)|"
+    r"(?:근거|인용)(?:을|를)?\s*(?:임의로|마음대로|가짜로)?\s*"
+    r"(?:만들|지어내|생성)|"
     r"(?:외부|개별|[A-Za-z0-9가-힣._-]{2,30}\s*주식).{0,36}?"
     r"(?:ETF|ETN|ETP|국내채권|공모펀드|ID).{0,28}?(?:바꿔|삽입|포함)|"
     r"(?:외부|개별).{0,12}?주식.{0,24}?(?:삽입|포함|섞)|"
@@ -252,6 +267,15 @@ _DATA_SCOPE_BYPASS = re.compile(
 _NEGATED_EXTERNAL_SOURCE = re.compile(
     r"(?:인터넷|웹|온라인|외부\s*지식)(?:을|에서|으로)?\s*.{0,40}?"
     r"(?:검색|찾|조회|가져|사용|활용)?\s*(?:하지\s*말|하지\s*않|없이|제외)",
+    re.IGNORECASE,
+)
+_ONLINE_OFFLINE_TRADING_CHANNEL = re.compile(
+    r"(?:온라인(?:과|·|/|\s+및)\s*오프라인|오프라인(?:과|·|/|\s+및)\s*온라인)"
+    r"(?:에서|으로)?\s*(?:매매|거래|구매|매수)(?:가|는|이)?\s*가능(?:한|한지|여부)?",
+    re.IGNORECASE,
+)
+_STRUCTURED_SALES_CHANNEL = re.compile(
+    r"(?:클래스\s*)?판매\s*채널(?:이|은|가)?\s*(?:온라인|오프라인)",
     re.IGNORECASE,
 )
 _MULTITURN = re.compile(
@@ -356,7 +380,15 @@ def safety_policy_surface(question: str) -> str:
 def data_scope_policy_surface(question: str) -> str:
     """Mask an explicit refusal to use external sources before scope checks."""
 
-    return _NEGATED_EXTERNAL_SOURCE.sub(" ", normalize_user_question(question))
+    normalized = normalize_user_question(question)
+    # "온라인과 오프라인에서 거래 가능한 채권" describes a transaction
+    # channel, not a request to search the public web. Mask only this bounded
+    # phrase; genuine requests such as "온라인에서 찾아줘" remain blocked.
+    normalized = _ONLINE_OFFLINE_TRADING_CHANNEL.sub("거래 가능", normalized)
+    # The official fund table contains a structured sales-channel field.
+    # "판매채널이 온라인" is a DB filter, not a request to search the web.
+    normalized = _STRUCTURED_SALES_CHANNEL.sub("판매채널", normalized)
+    return _NEGATED_EXTERNAL_SOURCE.sub(" ", normalized)
 
 
 _CLAUSE_BOUNDARY = re.compile(

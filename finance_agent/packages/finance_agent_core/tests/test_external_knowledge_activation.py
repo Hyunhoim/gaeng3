@@ -163,6 +163,12 @@ def test_server_drops_db_fields_and_repairs_only_explicit_theme_requirement() ->
             "편입",
         ),
         (
+            "연금 편입이 가능한 국내 ETF를 AUM 순으로 보여 주세요.",
+            KnowledgeCapability.PORTFOLIO_HOLDINGS,
+            "국내 ETF",
+            "편입이 가능",
+        ),
+        (
             "KODEX 2차전지산업의 AUM을 알려 주세요.",
             KnowledgeCapability.SECTOR_THEME_HISTORY,
             "2차전지산업",
@@ -368,7 +374,35 @@ def test_source_selection_uses_registry_and_db_signals_without_entity_policy() -
     )
 
 
-def test_hclx_cannot_invent_an_extra_holding_subject_or_cross_language_alias() -> None:
+def test_source_selection_accepts_bounded_subject_prefix_of_registry_alias() -> None:
+    question = "Moonshot 관련 해외 ETF를 찾아 주세요."
+    draft = IntentAnalysisDraft(
+        intent=InteractionIntent.SEARCH,
+        product_families=[ProductFamily.OVERSEAS_ETP],
+        evidence_spans=[],
+        needs_clarification=False,
+        knowledge_requirements=[
+            KnowledgeIntentRequirement(
+                capability=KnowledgeCapability.SECTOR_THEME_HISTORY,
+                subject_span="Moonshot",
+                relation_span="관련 해외 ETF",
+            )
+        ],
+    )
+
+    plan = CompositeKnowledgePlanCompiler().compile(
+        question,
+        "generalized-source-prefix",
+        draft,
+        source_selection_signals=SourceSelectionSignals(
+            product_families=(ProductFamily.OVERSEAS_ETP,),
+        ),
+    )
+
+    assert plan.requirements[0].source_registry_ids == ("moonshot-ai-official-forum",)
+
+
+def test_hclx_cannot_invent_subject_but_can_propose_bounded_cross_script_alias() -> None:
     question = (
         "2026년 6월 말 KraneShares 공식 보유내역에서 캠브리콘 편입이 확인되는 "
         "중국 반도체 해외 ETF를 찾아 주세요."
@@ -397,7 +431,29 @@ def test_hclx_cannot_invent_an_extra_holding_subject_or_cross_language_alias() -
 
     assert len(sanitized.knowledge_requirements) == 1
     assert sanitized.knowledge_requirements[0].subject_span == "캠브리콘"
-    assert sanitized.knowledge_requirements[0].search_aliases == ()
+    assert sanitized.knowledge_requirements[0].search_aliases == ("Cambricon",)
+
+
+def test_hclx_cross_script_alias_rejects_generic_or_non_ascii_fact_text() -> None:
+    question = "캠브리콘이 편입된 해외 ETF를 찾아 주세요."
+    draft = IntentAnalysisDraft(
+        intent=InteractionIntent.SEARCH,
+        product_families=[ProductFamily.OVERSEAS_ETP],
+        evidence_spans=[],
+        needs_clarification=False,
+        knowledge_requirements=[
+            KnowledgeIntentRequirement(
+                capability=KnowledgeCapability.PORTFOLIO_HOLDINGS,
+                subject_span="캠브리콘",
+                relation_span="편입된",
+                search_aliases=("ETF", "다른 회사", "Cambricon Technologies"),
+            )
+        ],
+    )
+
+    sanitized = sanitize_server_authorized_knowledge_draft(question, draft)
+
+    assert sanitized.knowledge_requirements[0].search_aliases == ("Cambricon Technologies",)
 
 
 def test_live_official_coverage_authorizes_external_execution_without_fake_index() -> None:
@@ -570,6 +626,38 @@ def test_generic_fund_surface_binds_only_db_names_with_the_same_long_core() -> N
     )
 
     assert resolved == {ProductFamily.FUND: {"FUND-C", "FUND-CE"}}
+
+
+def test_exact_fund_short_name_outranks_a_broader_programme_core() -> None:
+    records = (
+        ProductIdentityRecord(
+            product_family="fund",
+            product_id="FUND-C",
+            product_name="미래에셋국민참여형국민성장혼합자산투자신탁 종류C",
+            ticker=None,
+            isin=None,
+            short_name="미래에셋국민성장혼합자산-사모재간접C",
+            public_offering=True,
+            is_quarantined=False,
+        ),
+        ProductIdentityRecord(
+            product_family="fund",
+            product_id="FUND-CE",
+            product_name="미래에셋국민참여형국민성장혼합자산투자신탁 종류C-e",
+            ticker=None,
+            isin=None,
+            short_name="미래에셋국민성장혼합자산-사모재간접Ce",
+            public_offering=True,
+            is_quarantined=False,
+        ),
+    )
+
+    resolved = resolve_explicit_candidate_ids(
+        {ProductFamily.FUND: records},
+        ("미래에셋국민성장혼합자산-사모재간접C", "국민성장펀드"),
+    )
+
+    assert resolved == {ProductFamily.FUND: {"FUND-C"}}
 
 
 def test_company_surface_does_not_narrow_products_by_reverse_substring() -> None:

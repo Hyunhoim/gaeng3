@@ -187,10 +187,16 @@ _ADDITIONAL_PRODUCT_CONDITION = re.compile(
 )
 _PRODUCT_SEARCH_PRECEDENCE_CONDITION = re.compile(
     r"AUM|총\s*보수|보수율|(?:1\s*주|1\s*개월|3\s*개월|6\s*개월|1\s*년|YTD)"
-    r"\s*(?:수익률|수익|성과)|이율|금리|만기|신용\s*등급|거래\s*통화|"
+    r"\s*(?:수익률|수익|성과)|(?:반\s*년|연초\s*이후|올해\s*들어)\s*(?:수익률|수익|성과)?|"
+    r"이율|금리|만기|신용\s*등급|거래\s*통화|"
     r"가격|듀레이션|잔존\s*일수|위험|리스크|거래\s*(?:가능|중지|정지|량|대금)|"
     r"연금|환\s*헤지|제외|말고|빼고|오름차순|내림차순|정렬|상위|하위|"
     r"높은\s*순|낮은\s*순|큰\s*순|작은\s*순|많은\s*순|적은\s*순",
+    re.IGNORECASE,
+)
+_EXACT_PRODUCT_IDENTIFIER = re.compile(
+    r"(?<![0-9A-Za-z])(?:[A-Z]{2}[0-9A-Z]{10}|[0-9]{6}|[A-Z]{1,8}:[0-9A-Z._-]{1,24})"
+    r"(?![0-9A-Za-z])",
     re.IGNORECASE,
 )
 _COORDINATED_ENTITY = re.compile(r"(?:또는|혹은|및|와|과)\s+|[,/;]", re.IGNORECASE)
@@ -226,6 +232,16 @@ def product_search_has_precedence(question: str) -> bool:
     # request even when the requested DB fields are named 운용사·투자지역·자산군.
     # Entity-to-product relation searches do not have this exact-identity shape.
     if _QUOTED_PRODUCT_DETAIL.search(question):
+        return True
+    # Exact codes/ISINs bind the request to one provided-DB record.  Requested
+    # fields such as investment region and asset class are columns of that
+    # product, not multiple graph predicates.
+    if _EXACT_PRODUCT_IDENTIFIER.search(question):
+        return True
+    # One relation endpoint cannot preserve a region meaning shared across
+    # multiple product families. Let the product Router either compile each
+    # family independently or CLARIFY the family-specific semantics.
+    if _relation_signals(question) and len(_mentioned_families(question)) > 1:
         return True
     return bool(
         _relation_signals(question)

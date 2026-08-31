@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "release_id": "miraeasset-ai-festival-2026-20260824-v4",
+  "release_id": "miraeasset-ai-festival-2026-20260824-v5",
   "status": "official_competition_data_approved",
   "registry_schema_version": "1.5",
   "datasets": {
@@ -56,12 +56,12 @@
       "data_file_sha256": "ca6a274aeaf3f884f2f7635d7802558bc6dabf408871ecb1f71e5a50d9d34067",
       "schema_file_size_bytes": 7294,
       "schema_file_sha256": "32ac732f0501f4ab518682175fecc50756ee1eafde9296801f139d62559b5e64",
-      "database_file_size_bytes": 8314880,
-      "database_sha256": "c10df20f6762218eeee97b9b8a57abecfe5187d1fa6863b4465327175830a64b",
+      "database_file_size_bytes": 8888320,
+      "database_sha256": "26ca617ec64ef95fa9f475dca02f2c866141df68b07de2fccb4c05a4087419f2",
       "source_snapshot_date": "2026-08-24",
       "total_rows": 6037,
-      "searchable_rows": 6023,
-      "quarantined_rows": 14
+      "searchable_rows": 6037,
+      "quarantined_rows": 0
     }
   }
 }

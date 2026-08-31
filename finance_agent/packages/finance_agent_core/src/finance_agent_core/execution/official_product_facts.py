@@ -118,6 +118,13 @@ _PRODUCT_FIELD_QUERY = {
             False,
             "static_as_of",
         ),
+        ProductFamily.OVERSEAS_ETP: (
+            "manager",
+            1.0,
+            "text",
+            False,
+            "static_as_of",
+        ),
     },
     "investment_region": {
         ProductFamily.DOMESTIC_ETP: (

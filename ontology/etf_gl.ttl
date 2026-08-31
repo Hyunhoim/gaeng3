@@ -59,7 +59,7 @@ etfgl:Dataset
     ga:logicalGrain "거래소 코드와 종목 번호로 식별되는 해외 ETP 한 종목"@ko ;
     ga:snapshotDate "2026-08-24"^^xsd:date ;
     ga:rowCount 6037 ;
-    ga:quarantinedRows 14 ;
+    ga:quarantinedRows 0 ;
     ga:executionEnabled true ;
     ga:primaryKey "pd_exg_mkt_cd" ;
     ga:primaryKey "pd_itm_no" ;
@@ -354,6 +354,7 @@ etfgl:field_asset_type
     ga:enumValue "단기자금" ;
     ga:enumValue "통화" ;
     ga:enumValue "부동산" ;
+    ga:enumValue "대체투자" ;
     ga:enumValue "기타" ;
     ga:asOfBasis "static" ;
     ga:sourceDataset "overseas_etp" ;

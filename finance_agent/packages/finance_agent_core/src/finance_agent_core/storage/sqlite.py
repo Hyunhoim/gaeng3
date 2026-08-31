@@ -51,6 +51,7 @@ CREATE TABLE overseas_etp_products (
         CHECK (trading_suspended IN (0, 1) OR trading_suspended IS NULL),
     asset_type TEXT,
     investment_region TEXT,
+    manager TEXT,
     total_expense_ratio_micro_pct INTEGER NOT NULL,
     total_expense_ratio_quality TEXT NOT NULL,
     total_expense_ratio_quality_reason TEXT,
@@ -114,6 +115,7 @@ INSERT INTO overseas_etp_products (
     trading_suspended,
     asset_type,
     investment_region,
+    manager,
     total_expense_ratio_micro_pct,
     total_expense_ratio_quality,
     total_expense_ratio_quality_reason,
@@ -140,7 +142,7 @@ INSERT INTO overseas_etp_products (
     dynamic_as_of
 ) VALUES (
     ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
 )
 """
 
@@ -187,6 +189,7 @@ def _database_values(record: NormalizedOverseasEtpRecord) -> tuple[object, ...]:
         None if record.trading_suspended is None else int(record.trading_suspended),
         record.asset_type,
         record.investment_region,
+        record.manager,
         _scaled_integer(
             record.total_expense_ratio_pct,
             FEE_SCALE,
@@ -407,6 +410,7 @@ def row_to_record(
         else bool(row["trading_suspended"]),
         asset_type=row["asset_type"],
         investment_region=row["investment_region"],
+        manager=row["manager"],
         total_expense_ratio_pct=Decimal(row["total_expense_ratio_micro_pct"]) / FEE_SCALE,
         total_expense_ratio_quality=QualityStatus(row["total_expense_ratio_quality"]),
         total_expense_ratio_quality_reason=row["total_expense_ratio_quality_reason"],

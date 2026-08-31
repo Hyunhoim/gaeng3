@@ -110,6 +110,7 @@ class NormalizedOverseasEtpRecord(DomainModel):
     trading_suspended: bool | None
     asset_type: str | None
     investment_region: str | None
+    manager: str | None = None
     total_expense_ratio_pct: Decimal = Field(ge=0)
     total_expense_ratio_quality: QualityStatus
     total_expense_ratio_quality_reason: str | None

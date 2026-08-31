@@ -49,8 +49,9 @@
   `NAVER_API_HUB_CLIENT_ID_FILE`, `NAVER_API_HUB_CLIENT_SECRET_FILE`로 주입한다.
   인라인 환경변수 credential은 시작 단계에서 거부한다.
 - 검색·fetch·byte·deadline은 서버 budget으로 제한한다.
-- 현재 `verified_live_official` 모드는 빈 Temporal Relation cache, Source Registry, coverage,
-  Verifier contract, 제공 DB hash를 하나의 `AgentReleaseManifest`에 결합한다. BM25·Document
+- production/evaluation Release의 `verified_live_official` 모드는 빈 Temporal Relation cache,
+  Source Registry, coverage, Verifier contract, 제공 DB hash를 하나의
+  `AgentReleaseManifest`에 결합한다. 승인된 corpus가 없으므로 이 Release는 BM25·Document
   Dense를 사용한다고 표시하지 않는다.
 - 향후 `approved_corpus_cache_first` 모드는 corpus, BM25/Dense index, Temporal Relation Store를
   모두 SHA-256으로 결합해야만 실행할 수 있다.
@@ -58,10 +59,31 @@
 
 ## Document Dense
 
-KURE-v1 `Document Dense`는 향후 승인된 snapshot corpus에서 BM25가 놓친 문서 후보를 의미
-유사도로 보완한다. 현재 실제 실행은 NAVER API HUB로 공식 URL을 찾고 원문을 검증하는
-`verified_live_official` 경로이며, BM25·Document Dense index를 사용하거나 보유한다고
-주장하지 않는다. 기존 Dense artifact는 `offline_evaluation_only`이며 답변 권한이 없다.
+KURE-v1 `Document Dense`는 승인된 snapshot corpus에서 BM25가 놓친 문서 후보를 의미
+유사도로 보완한다. production/evaluation Release의 실제 실행은 NAVER API HUB로 공식 URL을
+찾고 원문을 검증하는 `verified_live_official` 경로이며, 승인 전 Dense artifact에는 답변
+권한이 없다.
+
+연구실의 post-Gold 개발 평가에서는 별도 `on_url_candidate_cache_only` 모드를 사용한다.
+이 모드는 독립 검토 전 pending corpus의 Dense 결과에서 공식 URL 후보만 재사용한다.
+pending text·chunk·추출 관계는 답변 근거로 사용하지 않으며, 선택된 URL의 원문을 매 요청
+다시 받아 Source Registry·발행일·exact evidence span·제공 DB 교집합을 검증한다. 따라서 이는
+승인된 문서 내용 cache나 production 활성화를 뜻하지 않는다.
+
+### 제출 전 pending corpus 확장
+
+- 운영 `approved_source_registry.json`은 실제 답변 근거 권한이 있는 출처만 유지한다.
+- 추가 운용사 공식 사이트는 `pending_source_registry_extension.json`에
+  `approved_for_snapshot_intake`로만 등록한다. 이 확장은 운영 Source Registry ID·SHA-256에
+  결합되며, 운영 Registry의 live 권한이나 Runtime 최대 출처 수를 변경할 수 없다.
+- `finance-expand-pending-corpus`는 제공 DB의 상품명·운용사와 수집 전용 Registry metadata로
+  bounded discovery query를 만든다. 기업·상품별 코드 분기는 두지 않는다.
+- 발견 URL은 공식 hostname·path·capability와 2026-08-24 cutoff를 원문에서 다시 검사한다.
+  검색 snippet과 날짜가 없는 navigation page는 corpus evidence가 아니다.
+- `finance-collect-pending-corpus --catalog ... --summary-only`는 원문·추출 text를 owner-only로
+  저장하고 raw/text SHA-256, 중복, 실패 사유를 `pending-manifest.json`에 기록한다.
+- 수집 산출물은 Git·Runtime image·Release에 포함하지 않으며, 독립 data-rights·금융 검토를
+  통과하기 전 상태는 계속 `not_authorized_for_retrieval_or_release`다.
 
 `finance-check-external-preblind`는 Blind 파일을 읽지 않고 다음을 검증한다.
 
@@ -74,13 +96,14 @@ KURE-v1 `Document Dense`는 향후 승인된 snapshot corpus에서 BM25가 놓�
 ## 활성화 경계
 
 - 다섯 capability는 `approved_live_official`이며, 정확한 signed Release와 owner-only NAVER
-  API HUB credential이 함께 있을 때만 실행한다.
+  API HUB credential이 함께 있을 때만 production/evaluation에서 실행한다.
 - 빈 cache bootstrap을 사용하므로 각 요청의 공식 원문 fetch, exact evidence span, 시점,
   제공 DB 교집합 검증을 생략할 수 없다.
 - 독립 평가에서는 question-only로 예측을 완성하고 결과 SHA-256을 봉인한 뒤에만 private
   Gold와 대조한다.
-- 향후 승인 corpus를 도입할 때에는 별도 평가·승인 후
-  `approved_corpus_cache_first` Release로 전환한다.
+- pending corpus를 실제 근거 cache로 승격하려면 data-rights와 finance-domain의 독립 검토,
+  corpus·BM25/Dense index·Temporal Relation Store SHA-256 봉인, 별도 회귀를 모두 통과한 뒤
+  `approved_corpus_cache_first` Release로 전환해야 한다.
 
 ## 현재의 보수적 제한
 

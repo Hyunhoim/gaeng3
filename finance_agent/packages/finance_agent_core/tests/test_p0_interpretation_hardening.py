@@ -362,7 +362,6 @@ def test_explicit_metric_context_is_not_blocked_as_generic_preference(
             {
                 ("product_type", "ETF"),
                 ("investment_region", "United States of America"),
-                ("trading_currency", "USD"),
             },
         ),
         (
@@ -370,7 +369,6 @@ def test_explicit_metric_context_is_not_blocked_as_generic_preference(
             {
                 ("product_type", "ETF"),
                 ("asset_type", "Bond"),
-                ("trading_currency", "USD"),
             },
         ),
         (
@@ -378,7 +376,6 @@ def test_explicit_metric_context_is_not_blocked_as_generic_preference(
             {
                 ("product_type", "ETF"),
                 ("investment_region", "Global"),
-                ("trading_currency", "USD"),
             },
         ),
         (
