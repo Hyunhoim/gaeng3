@@ -78,8 +78,8 @@ def _raw_directory(tmp_path: Path) -> Path:
     raw.mkdir()
     for dataset in prepare.DATASETS:
         spec = DATASET_BY_NAME[dataset]
-        (raw / f"{spec.prefix}_fixture_datarows.xlsx").write_bytes(f"{dataset}-source-v1".encode())
-        (raw / f"{spec.prefix}_fixture_schema.xlsx").write_bytes(b"schema")
+        (raw / f"{spec.prefix.lower()}_data.xlsx").write_bytes(f"{dataset}-source-v1".encode())
+        (raw / f"{spec.prefix.lower()}_schema.xlsx").write_bytes(b"schema")
     return raw
 
 

@@ -22,11 +22,11 @@ class DatasetSpec:
 
     @property
     def data_pattern(self) -> str:
-        return f"{self.prefix}_*datarows*.xlsx"
+        return f"{self.prefix.lower()}_data.xlsx"
 
     @property
     def schema_pattern(self) -> str:
-        return f"{self.prefix}_*schema*.xlsx"
+        return f"{self.prefix.lower()}_schema.xlsx"
 
 
 DATASET_SPECS: tuple[DatasetSpec, ...] = (
