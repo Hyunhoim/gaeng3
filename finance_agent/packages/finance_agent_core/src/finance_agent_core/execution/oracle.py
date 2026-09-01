@@ -143,6 +143,29 @@ def _constraint_sql(
     return " AND ".join(clauses), parameters
 
 
+def _live_instrument_clauses(family: str, plan: QueryPlan) -> list[str]:
+    """Drop instruments that have already ended, for every oracle that reads rows.
+
+    BUYABLE_QUANTITY is invalid, but the organizer still excludes ended
+    instruments. The official schema has no delisting flag, so maturity against
+    the snapshot the row was loaded from is the deterministic end signal, and it
+    must be the snapshot rather than the dynamic date because remaining_days is
+    stored as maturity minus the snapshot.
+
+    Search and aggregate share this so a count cannot report bonds that a search
+    for the same family would never return.
+    """
+
+    if family != "bond":
+        return []
+    if any(constraint.field == "product_id" for constraint in plan.constraints):
+        return []
+    return [
+        "(maturity_date IS NULL OR source_snapshot_date IS NULL "
+        "OR maturity_date >= source_snapshot_date)"
+    ]
+
+
 def _usable_value_sql(plan: QueryPlan, sql_fields: dict[str, SqlField]) -> str | None:
     """Spell out what makes a row usable for the metric this plan ranks by.
 
@@ -198,22 +221,7 @@ def compile_search_sql(
         logical_product_scope(family, usable_value_sql=_usable_value_sql(plan, sql_fields)),
     ]
     parameters: list[str | int | bool] = []
-    explicit_product_identity = any(
-        constraint.field == "product_id" for constraint in plan.constraints
-    )
-    if family == "bond" and not explicit_product_identity:
-        # BUYABLE_QUANTITY is invalid, but the organizer still excludes ended
-        # instruments. The official schema has no delisting flag, so maturity
-        # against the snapshot the row was loaded from is the deterministic end
-        # signal. The basis has to be the snapshot rather than the dynamic date:
-        # remaining_days is stored as maturity minus the snapshot date, so
-        # measuring the end against the earlier dynamic date let bonds that had
-        # already matured survive with a negative remaining_days and take the
-        # top of every "shortest remaining" answer.
-        where_clauses.append(
-            "(maturity_date IS NULL OR source_snapshot_date IS NULL "
-            "OR maturity_date >= source_snapshot_date)"
-        )
+    where_clauses.extend(_live_instrument_clauses(family, plan))
     for constraint in plan.constraints:
         clause, values = _constraint_sql(constraint, sql_fields)
         where_clauses.append(f"({clause})")
@@ -269,6 +277,7 @@ def compile_aggregate_sql(
     where_clauses = [
         "is_quarantined = 0",
         logical_product_scope(family, usable_value_sql=_usable_value_sql(plan, sql_fields)),
+        *_live_instrument_clauses(family, plan),
     ]
     parameters: list[str | int | bool] = []
     for constraint in plan.constraints:

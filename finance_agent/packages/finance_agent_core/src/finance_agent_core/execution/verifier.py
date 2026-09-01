@@ -57,13 +57,34 @@ def _logical_product_universe(
 
     if plan.product_families[0].value != "bond":
         return universe
+    ranked_field = next(
+        (
+            ranking.field
+            for ranking in plan.ranking
+            if ranking_requires_usable_value(plan, ranking.field)
+        ),
+        None,
+    )
+
+    def carries_the_metric(record: VerifierRecord) -> bool:
+        if ranked_field is None:
+            return False
+        return _query_metric_value(record, ranked_field) is not None
+
     canonical: dict[str, VerifierRecord] = {}
     for record in universe:
         if record.is_quarantined:
             continue
         logical_id = record.product_id.split(":", 1)[0]
         previous = canonical.get(logical_id)
-        if previous is None or record.source_row < previous.source_row:
+        if previous is None:
+            canonical[logical_id] = record
+            continue
+        # Mirror the SQL rank: a row that carries the ranked metric wins, and
+        # source_row still breaks the tie so the choice stays deterministic.
+        current_key = (not carries_the_metric(record), record.source_row)
+        previous_key = (not carries_the_metric(previous), previous.source_row)
+        if current_key < previous_key:
             canonical[logical_id] = record
     return list(canonical.values())
 
@@ -110,7 +131,12 @@ def _inside_current_product_scope(plan: QueryPlan, record: VerifierRecord) -> bo
     ):
         return True
     maturity = _comparable_value(record, "maturity_date")
-    return maturity is None or (isinstance(maturity, date) and maturity > record.dynamic_as_of)
+    # The end signal uses the snapshot the row was loaded from, because
+    # remaining_days is stored as maturity minus that snapshot. Measuring it
+    # against the earlier dynamic date left already matured bonds in scope.
+    return maturity is None or (
+        isinstance(maturity, date) and maturity >= record.source_snapshot_date
+    )
 
 
 def _expected_value(record_value: object, query_value: object) -> object:
@@ -600,8 +626,12 @@ class AggregateResultVerifier:
         candidates: list[VerifierRecord] = []
         for index, record in enumerate(universe):
             _periodic_deadline_check(index)
-            if not record.is_quarantined and all(
-                _matches_constraint(record, item) for item in plan.constraints
+            if (
+                not record.is_quarantined
+                # Aggregates count the same universe a search would return, so
+                # a count cannot report bonds no search could ever reach.
+                and _inside_current_product_scope(plan, record)
+                and all(_matches_constraint(record, item) for item in plan.constraints)
             ):
                 candidates.append(record)
         raise_if_request_stopped()

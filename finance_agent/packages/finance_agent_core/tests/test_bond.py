@@ -282,9 +282,12 @@ def test_bond_aggregate_uses_only_currently_buyable_yields(tmp_path: Path) -> No
     )
 
     assert result.status == "executed"
-    assert result.candidate_count == 6
+    # KRTEST000004 matured on 2026-01-01, 235 days before the snapshot, so a
+    # search never returns it. The aggregate used to count it anyway and
+    # reported an average over six bonds that only five could be found for.
+    assert result.candidate_count == 5
     assert [(item.function.value, item.value) for item in result.aggregates] == [
-        ("avg", "5.416666666667"),
+        ("avg", "5.2"),
         ("max", "7.5"),
     ]
     assert all(item.as_of_start.isoformat() == "2026-02-24" for item in result.aggregates)
@@ -336,7 +339,9 @@ def test_bond_amount_aggregate_requires_currency_scope(tmp_path: Path) -> None:
     assert blocked.status == "clarify"
     assert "trading_currency" in blocked.answer
     assert executed.status == "executed"
-    assert executed.aggregates[0].value == "6000000000"
+    # Five live bonds at 1,000,000,000 each. The matured KRTEST000004 is out of
+    # scope for search and therefore out of scope for the sum as well.
+    assert executed.aggregates[0].value == "5000000000"
     assert "KRW" in executed.answer
 
 

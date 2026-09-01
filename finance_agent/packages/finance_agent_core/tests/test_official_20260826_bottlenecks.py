@@ -25,7 +25,10 @@ from finance_agent_core.agent.semantic_gate import SemanticCoverageGate
 from finance_agent_core.config import load_field_registry
 from finance_agent_core.contracts.queryplan import ProductFamily, QueryPlan
 from finance_agent_core.contracts.routing import InteractionIntent
-from finance_agent_core.execution.oracle import compile_search_sql
+from finance_agent_core.execution.oracle import (
+    compile_aggregate_sql,
+    compile_search_sql,
+)
 from finance_agent_core.execution.sql_schema import SQL_FIELDS_BY_FAMILY, logical_product_scope
 
 
@@ -520,6 +523,27 @@ def test_bond_scope_without_a_ranked_metric_keeps_the_stable_row() -> None:
         "WHERE is_quarantined = 0 GROUP BY ticker)"
     )
     assert logical_product_scope("fund") == "1 = 1"
+
+
+def test_aggregate_and_search_share_the_ended_instrument_rule() -> None:
+    """A count must not report bonds a search for the same family would drop.
+
+    The end-of-life exclusion lived only in the search builder, so
+    "국내채권은 몇 개야" answered 20,497 while every search excluded 61 matured
+    bonds and could only ever reach 20,436.
+    """
+
+    search_plan = bond_vertical_slice_plan("official-bond-live-search")
+    aggregate_plan = ServerQueryPlanCompiler({}).compile(
+        IntentRouter().route("국내채권은 몇 개야", "official-bond-live-count")
+    )
+
+    search_sql, search_count_sql, _ = compile_search_sql(search_plan)
+    aggregate_sql, _ = compile_aggregate_sql(aggregate_plan)
+
+    clause = "maturity_date >= source_snapshot_date"
+    for sql in (search_sql, search_count_sql, aggregate_sql):
+        assert clause in sql
 
 
 def test_derived_remaining_days_zero_is_a_real_temporal_value() -> None:
