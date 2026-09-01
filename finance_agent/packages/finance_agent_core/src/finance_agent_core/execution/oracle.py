@@ -143,6 +143,28 @@ def _constraint_sql(
     return " AND ".join(clauses), parameters
 
 
+def _usable_value_sql(plan: QueryPlan, sql_fields: dict[str, SqlField]) -> str | None:
+    """Spell out what makes a row usable for the metric this plan ranks by.
+
+    Mirrors the WHERE clauses added for the ranked field below, so the row kept
+    for each bond is one that can actually answer the question.
+    """
+
+    for ranking in plan.ranking:
+        if not ranking_requires_usable_value(plan, ranking.field):
+            continue
+        spec = sql_fields.get(ranking.field)
+        if spec is None:
+            continue
+        parts = [f"{spec.column} IS NOT NULL"]
+        if spec.quality_column is not None:
+            parts.append(f"{spec.quality_column} IN ('VALID', 'PARTIAL')")
+        if ranking.field != "remaining_days":
+            parts.append(f"{spec.column} <> 0")
+        return " AND ".join(parts)
+    return None
+
+
 def _ranking_expression(field_name: str, sql_fields: dict[str, SqlField]) -> str:
     spec = sql_fields[field_name]
     if spec.quality_column is None:
@@ -171,7 +193,10 @@ def compile_search_sql(
         table = TABLE_BY_FAMILY[family]
     except KeyError as error:
         raise ValueError(f"no deterministic SQL oracle for product family: {family}") from error
-    where_clauses = ["is_quarantined = 0", logical_product_scope(family)]
+    where_clauses = [
+        "is_quarantined = 0",
+        logical_product_scope(family, usable_value_sql=_usable_value_sql(plan, sql_fields)),
+    ]
     parameters: list[str | int | bool] = []
     explicit_product_identity = any(
         constraint.field == "product_id" for constraint in plan.constraints
@@ -241,7 +266,10 @@ def compile_aggregate_sql(
         raise ValueError(
             f"no deterministic aggregate Oracle for product family: {family}"
         ) from error
-    where_clauses = ["is_quarantined = 0", logical_product_scope(family)]
+    where_clauses = [
+        "is_quarantined = 0",
+        logical_product_scope(family, usable_value_sql=_usable_value_sql(plan, sql_fields)),
+    ]
     parameters: list[str | int | bool] = []
     for constraint in plan.constraints:
         clause, values = _constraint_sql(constraint, sql_fields)

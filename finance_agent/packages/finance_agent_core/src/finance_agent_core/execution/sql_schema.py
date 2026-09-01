@@ -528,12 +528,31 @@ TABLE_BY_FAMILY = {
 }
 
 
-def logical_product_scope(family: str) -> str:
-    """Restrict SQL execution to one stable row per organizer product ID."""
+def logical_product_scope(family: str, *, usable_value_sql: str | None = None) -> str:
+    """Restrict SQL execution to one stable row per organizer product ID.
 
-    if family == "bond":
+    A bond is quoted on more than one market, so the same organizer product ID
+    arrives as several rows. Collapsing to the lowest ``source_row`` keeps one
+    row per bond, but that row is chosen without regard to the question: when a
+    metric is only carried on the over-the-counter row, picking the exchange row
+    drops the bond from the answer even though the value exists.
+
+    ``usable_value_sql`` names the condition that makes a row usable for the
+    metric being ranked. Rows that satisfy it are preferred, and ``source_row``
+    still breaks the tie so the choice stays deterministic.
+    """
+
+    if family != "bond":
+        return "1 = 1"
+    if usable_value_sql is None:
         return (
             "source_row IN (SELECT MIN(source_row) FROM bond_products "
             "WHERE is_quarantined = 0 GROUP BY ticker)"
         )
-    return "1 = 1"
+    return (
+        "source_row IN (SELECT source_row FROM (SELECT source_row, ROW_NUMBER() OVER ("
+        "PARTITION BY ticker ORDER BY "
+        f"CASE WHEN {usable_value_sql} THEN 0 ELSE 1 END, source_row"
+        ") AS logical_rank FROM bond_products WHERE is_quarantined = 0"
+        ") WHERE logical_rank = 1)"
+    )

@@ -26,7 +26,7 @@ from finance_agent_core.config import load_field_registry
 from finance_agent_core.contracts.queryplan import ProductFamily, QueryPlan
 from finance_agent_core.contracts.routing import InteractionIntent
 from finance_agent_core.execution.oracle import compile_search_sql
-from finance_agent_core.execution.sql_schema import SQL_FIELDS_BY_FAMILY
+from finance_agent_core.execution.sql_schema import SQL_FIELDS_BY_FAMILY, logical_product_scope
 
 
 @pytest.mark.parametrize(
@@ -490,6 +490,36 @@ def test_bond_ranked_search_excludes_ended_maturities_and_uses_public_id_tie_bre
         assert "maturity_date > dynamic_as_of" not in sql
     assert "buy_yield_micro_pct ELSE NULL END DESC" in select_sql
     assert select_sql.endswith("ticker ASC LIMIT ?")
+
+
+def test_bond_representative_row_prefers_one_that_carries_the_ranked_metric() -> None:
+    """A bond quoted on two markets must not vanish because of which row is kept.
+
+    The same organizer product ID arrives as several rows. Collapsing to the
+    lowest source_row picked a row without regard to the question, so a bond
+    whose buy yield is only carried on the over-the-counter row was dropped from
+    the ranking even though the value existed. 228 of 20,497 bonds were lost
+    that way, and they included the highest-yielding one.
+    """
+
+    plan = bond_vertical_slice_plan("official-bond-representative-row")
+
+    select_sql, count_sql, _ = compile_search_sql(plan)
+
+    for sql in (select_sql, count_sql):
+        assert "ROW_NUMBER() OVER (PARTITION BY ticker" in sql
+        assert "buy_yield_micro_pct IS NOT NULL" in sql
+        assert "MIN(source_row)" not in sql
+
+
+def test_bond_scope_without_a_ranked_metric_keeps_the_stable_row() -> None:
+    """With nothing to rank by there is no metric to prefer, so the rule stands."""
+
+    assert logical_product_scope("bond") == (
+        "source_row IN (SELECT MIN(source_row) FROM bond_products "
+        "WHERE is_quarantined = 0 GROUP BY ticker)"
+    )
+    assert logical_product_scope("fund") == "1 = 1"
 
 
 def test_derived_remaining_days_zero_is_a_real_temporal_value() -> None:
