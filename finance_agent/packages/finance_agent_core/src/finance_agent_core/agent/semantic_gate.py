@@ -117,9 +117,9 @@ _UNAPPROVED_DOCUMENT_KNOWLEDGE = re.compile(
 _EXPLICIT_RETURN = re.compile(
     r"(?:1\s*일|하루|당일|오늘|일간|1D|1\s*주|일주일|주간|1W|"
     r"1\s*개월|한\s*달|월간|1M|3\s*개월|석\s*달|3M|6\s*개월|반년|6M|"
-    r"18\s*개월|1\s*년|연간|1Y|2\s*년|3\s*년|5\s*년|YTD|"
+    r"18\s*개월|18M|1\s*년|연간|1Y|2\s*년|2Y|3\s*년|3Y|5\s*년|5Y|YTD|"
     r"연초\s*(?:이후|대비))\s*(?:수익률|수익|성과|return)|"
-    r"(?:매수|세후|세전)\s*수익률|민평\s*(?:(?:기준\s*)?수익률|금리)|"
+    r"(?:매수|세후|세전)\s*수익률|민평\s*(?:(?:기준|산출)\s*)?(?:수익률|금리)|"
     r"민평에서\s*(?:계산|산출)(?:된|한)?\s*(?:수익률|금리)|"
     r"(?:민간평가\s*금리|평가기관\s*수익률)|(?:연환산\s*)?분배\s*수익률|"
     r"(?:표면\s*(?:이율|금리)|쿠폰\s*금리)",
@@ -128,7 +128,7 @@ _EXPLICIT_RETURN = re.compile(
 _EXPLICIT_PERIOD_RETURN = re.compile(
     r"(?:1\s*일|하루|당일|오늘|일간|1D|1\s*주|일주일|주간|1W|"
     r"1\s*개월|한\s*달|월간|1M|3\s*개월|석\s*달|3M|6\s*개월|반년|6M|"
-    r"18\s*개월|1\s*년|연간|1Y|2\s*년|3\s*년|5\s*년|YTD|"
+    r"18\s*개월|18M|1\s*년|연간|1Y|2\s*년|2Y|3\s*년|3Y|5\s*년|5Y|YTD|"
     r"연초\s*(?:이후|대비))\s*(?:수익률|수익|성과|return)",
     re.IGNORECASE,
 )
@@ -177,6 +177,9 @@ _GENERIC_PREFERENCE = re.compile(
     r"조건(?:이|가)?\s*(?:괜찮|좋)|비용\s*대비\s*괜찮(?:은|다)?|"
     r"추천할\s*만한|(?<!않은\s)좋은|괜찮은|싼",
     re.IGNORECASE,
+)
+_TRAILING_DIRECTION = re.compile(
+    r"(?:이|가|은|는|을|를)?\s*(?:높|낮|크|작|많|적|길|짧|저렴|비싸)\S*$"
 )
 _UNMAPPED_METRIC = re.compile(
     r"(?P<metric>가격|비용|변동성|테마|섹터|산업|ESG|친환경|금리|이율|기간|수량)"
@@ -228,8 +231,8 @@ _DIRECTION_METRIC_PATTERN = (
     r"(?:20|60|120|252)\s*(?:거래일|일)(?:\s*연환산)?\s*(?:변동성|흔들림)|"
     r"(?:1\s*개월|3\s*개월|6\s*개월|1\s*년)\s*(?:변동성|흔들림)|"
     r"(?:1\s*일|하루|당일|오늘|1D|1\s*주|한\s*주|1W|1\s*개월|한\s*달|1M|"
-    r"3\s*개월|석\s*달|3M|6\s*개월|반년|6M|18\s*개월|"
-    r"1\s*년|일\s*년|1Y|2\s*년|3\s*년|5\s*년|YTD|"
+    r"3\s*개월|석\s*달|3M|6\s*개월|반년|6M|18\s*개월|18M|"
+    r"1\s*년|일\s*년|1Y|2\s*년|2Y|3\s*년|3Y|5\s*년|5Y|YTD|"
     r"연초\s*이후)\s*(?:수익률|수익|성과|return)|"
     r"매수\s*수익률|세후\s*수익률|표면\s*(?:이자율|이율|금리)|"
     r"쿠폰(?:\s*금리)?|액면\s*쿠폰|액면에?\s*붙은\s*이자율|"
@@ -315,8 +318,8 @@ _NUMERIC_SORT_METRIC_PATTERN = (
     r"(?:20|60|120|252)\s*(?:거래일|일)(?:\s*연환산)?\s*(?:변동성|흔들림)|"
     r"(?:1\s*개월|3\s*개월|6\s*개월|1\s*년)\s*(?:변동성|흔들림)|"
     r"(?:1\s*일|하루|당일|오늘|1D|1\s*주|한\s*주|1W|1\s*개월|한\s*달|1M|"
-    r"3\s*개월|석\s*달|3M|6\s*개월|반년|6M|18\s*개월|"
-    r"1\s*년|일\s*년|1Y|2\s*년|3\s*년|5\s*년|YTD|"
+    r"3\s*개월|석\s*달|3M|6\s*개월|반년|6M|18\s*개월|18M|"
+    r"1\s*년|일\s*년|1Y|2\s*년|2Y|3\s*년|3Y|5\s*년|5Y|YTD|"
     r"연초\s*이후)\s*(?:수익률|수익|성과|return)|"
     r"매수\s*수익률|세후\s*수익률|표면\s*(?:이자율|이율)|"
     r"쿠폰(?:\s*금리)?|액면\s*쿠폰|액면에?\s*붙은\s*이자율|"
@@ -370,6 +373,13 @@ def _metric_has_explicit_mapping(question: str, match: re.Match[str]) -> bool:
     field_surface = question[max(0, match.start() - 40) : match.end()]
     if _known_field_surface(field_surface):
         return True
+    # "가격 괴리율이 높은" names a registry field even though it opens with the
+    # vague token "가격". Drop the trailing direction word and accept only when
+    # what remains says more than the vague token by itself, so a bare
+    # "가격이 높은" stays ambiguous.
+    trimmed = _TRAILING_DIRECTION.sub("", field_surface).strip()
+    if len(trimmed) > len(match.group("metric")) and _known_field_surface(trimmed):
+        return True
     prefix = question[max(0, match.start() - 24) : match.start()]
     metric = match.group("metric").casefold()
     known_prefixes = {
@@ -409,10 +419,36 @@ def _direction_has_metric(question: str, match: re.Match[str]) -> bool:
         return True
     if _DIRECTION_METRIC_PREFIX.search(prefix) is not None:
         return True
+    # The frozen registry is the control layer, so a label or alias it declares
+    # grounds the direction even when no hand written pattern spells it out.
+    # Without this, adding an alias to the registry silently fails to work.
+    if _known_field_surface(prefix):
+        return True
     # A trailing "높은 순" can refer back to one and only one explicit metric
     # used earlier as a threshold (for example, "1주 수익률 5% 이상 ... 높은
     # 순"). Multiple possible metric antecedents remain ambiguous.
     return len(list(_DIRECTION_METRIC.finditer(question))) == 1
+
+
+def _opens_known_field_surface(value: str) -> bool:
+    """Return whether the text starts with a registry label or alias.
+
+    "최신" is a direction word on its own but also opens the declared surface
+    "최신 분배율". Reading forward keeps the metric from being mistaken for a
+    bare direction with nothing to sort by.
+    """
+
+    normalized = re.sub(r"\s+", "", value).casefold()
+    if not normalized:
+        return False
+    from finance_agent_core.config import load_field_registry
+
+    for definition in load_field_registry().fields.values():
+        for phrase in (definition.label, *definition.aliases):
+            candidate = re.sub(r"\s+", "", phrase).casefold()
+            if len(candidate) >= 3 and normalized.startswith(candidate):
+                return True
+    return False
 
 
 def _known_field_surface(value: str) -> bool:
@@ -549,6 +585,12 @@ def _schema_link_gap_matches(
             is not None
             or _DIRECTION_METRIC.fullmatch(span) is not None
             or _known_field_surface(span)
+            # The span stops at the first word, so "2Y 수익률" arrives as "수익률".
+            # Re-read it with the text in front so a registry surface whose
+            # leading token is a number or a code still counts as mapped.
+            or _known_field_surface(
+                question[max(0, match.start() - 40) : match.start() + len(span)]
+            )
         ):
             continue
         matches.append(match)
@@ -741,6 +783,8 @@ class SemanticCoverageGate:
                 candidate.start() <= match.start() <= candidate.end() + 8
                 for candidate in schema_gap_matches
             ):
+                continue
+            if _opens_known_field_surface(normalized[match.start() : match.start() + 40]):
                 continue
             if not _direction_has_metric(normalized, match):
                 ambiguities.append(match.group(0))
