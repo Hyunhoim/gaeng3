@@ -1,11 +1,24 @@
 # 금융상품 Agent 기술 제안서
 
-상태: 팀 검토 전 초안 v0.5 · P0-10 공개 관계 검색 릴리스 로컬 검증 반영
+상태: 팀 검토 전 초안 v0.6 · 2026-08-24 공식 데이터 기준 재작성
 
-기준일: 2026-08-20
+기준일: 2026-09-01
 
 이 문서는 최종 PDF 또는 발표자료를 만들기 위한 내용 정본이다. 구현되지 않은
 기능과 외부 확인이 필요한 항목은 완료된 기능처럼 표현하지 않는다.
+
+### 권장 목차 대응
+
+주최 측 권장 목차와 이 문서의 절 번호는 다음과 같이 대응한다.
+
+| 권장 목차 | 이 문서 |
+| --- | --- |
+| 01 전체 아키텍처 및 특화기능 | §1 제안 요약 · **§1.1 특화기능과 차별화 포인트** |
+| 02 제안 방법 (세 질문) | §3 — 수집·정제 §3.1.1~3.1.2, 온톨로지 §3.1.4, 검색 방법론 §3.1.5 |
+| 03 시스템 구성도 (적재→색인→검색→생성) | §4 |
+| 04 주요 기능 흐름도 (수집→온톨로지→그래프→검색) | §5 |
+| 05 기대효과·확장성 | §7 |
+| 06 부록 (온톨로지 스키마·평가 재현 절차) | **§11** |
 
 ## 1. 제안 요약
 
@@ -22,6 +35,57 @@ field-level evidence와 기준일을 갖추며, 검증에 실패하면 근거 �
 경로에 연결했다. 단, 현재 증거는 manifest에 해시로 고정된 릴리스 계약과 clean Docker에서
 수행한 `local implementation verified`이며, NCP 실제 배포나 공식 정확도를 입증한
 결과는 아니다.
+
+### 1.1 특화기능과 차별화 포인트
+
+주최 측 설명회는 온톨로지를 문서가 아니라 AI의 Semantic Layer로 제시하고,
+스키마 설명만 프롬프트에 넣은 경우보다 업무 의미를 런타임에 결합한 경우
+정확도가 크게 올랐다는 자체 실험을 공개했다.
+
+이 제안의 차별점은 그 결합을 **설명이 아니라 실행 권한으로** 구현했다는 데 있다.
+
+#### 1) 온톨로지가 런타임 통제 계층이다
+
+`field_registry.yaml`(schema_version 1.5, field 92개)이 정본이고 Turtle 5개는
+여기서 생성된다. 이 파일은 문서가 아니라 실행 시점에 다음을 확정한다.
+
+- 어떤 field가 질의·정렬·집계 가능한가 (`queryable`·`sortable`·`aggregatable`)
+- field마다 허용되는 연산자는 무엇인가 (`allowed_operators`)
+- 값의 품질 등급과 커버리지는 얼마인가 (`quality`·`coverage_pct`)
+- 어떤 표현이 그 field를 가리키는가 (`label`·`aliases`)
+
+registry에 없는 field·연산자·정렬은 실행 계획 단계에서 만들어질 수 없다.
+온톨로지를 바꾸면 답변 가능 범위가 바뀐다.
+
+#### 2) LLM은 계획을 제안할 뿐 실행을 바꾸지 못한다
+
+HyperCLOVA X는 의도 분석과 최종 문장 작성을 맡는다. 그러나 서버가 만든
+Typed QueryPlan의 field·filter·정렬 방향·limit은 **변경할 수 없다.**
+LLM 출력은 서버 계획과 exact-match gate로 대조되고, 어긋나면 LLM 쪽이 버려진다.
+
+수치·순위·집계는 SQLite Oracle이 계산하고 독립 Verifier가 재계산해 대조한다.
+생성 모델이 숫자를 만들어내는 경로가 구조적으로 없다.
+
+#### 3) 데이터 신뢰의 기준점이 해시로 고정되어 있다
+
+`approved_dataset_manifest.json`이 네 상품군 DB의 SHA-256을 담는다. 실행 시점의
+DB가 이 지문과 다르면 질문 API가 503으로 멈춘다. 조용히 다른 데이터로 답하는
+경우가 없다는 뜻이다.
+
+#### 4) 답할 수 없음을 상태로 구분한다
+
+승인되지 않은 관계를 요구하는 질문(예: 특정 종목을 편입한 ETF)은 실행 전에
+차단된다. 근거를 찾지 못하면 `CANNOT_VERIFY`, 실행 범위 밖이면 `UNSUPPORTED`,
+조건이 모자라면 역질문으로 끝난다. 이 셋은 실패가 아니라 설계된 종료 상태다.
+
+주최 측 평가에 답변 불가 문항이 포함된다는 점에서, 근거 없는 답을 만들지 않는
+것 자체가 득점 요소다.
+
+#### 5) 모든 수치에 field 단위 근거와 기준일이 붙는다
+
+답변의 각 수치는 어느 상품의 어느 field에서 왔는지, 정적·동적 기준일이
+언제인지를 함께 제시한다. 외부 근거를 쓴 경우 출처·게시일·수집일·본문 해시를
+보존한다.
 
 ## 2. 문제 정의
 
@@ -402,3 +466,91 @@ rollback, 관계 HyperCLOVA X 답변 품질을 의미하지 않는다.
 - Ontology 용어의 금융 도메인 검수와 주최 측 최종 형식 확인
 - `think_trace`의 구조화 실행 기록에 대한 세부 평가 방식 확인
 - 크레딧 승인과 HyperCLOVA X 적용 서비스 확인
+
+## 11. 부록
+
+### 11.1 온톨로지 스키마
+
+정본은 `field_registry.yaml`(schema_version 1.5)이고, Turtle 5개는 여기서
+생성된다. `finance_agent/scripts/sync-ontology.py --check`가 둘의 일치를 검사하며
+어긋나면 실패한다.
+
+| 파일 | 줄 수 | 범위 |
+| --- | --- | --- |
+| `ontology/common.ttl` | 193 | 공통 어휘. class 4개, datatype property 38개, object property 3개 |
+| `ontology/bond_kr.ttl` | 1,121 | 국내채권 |
+| `ontology/etf_kr.ttl` | 1,430 | 국내 ETF·ETN |
+| `ontology/etf_gl.ttl` | 1,009 | 해외 ETF·ETN |
+| `ontology/fund_pub.ttl` | 1,313 | 공모펀드 |
+
+상품군 Turtle은 `owl:imports`로 `common`을 가져오고, `ga:ProductFamily`에
+`ga:hasCanonicalField`로 그 상품군이 실제로 답할 수 있는 field를 나열한다.
+`ga:registryVersion`이 registry 판번호를 고정한다.
+
+field 92개의 분포는 다음과 같다.
+
+| 상품군 | field 수 |
+| --- | --- |
+| 국내 ETF·ETN | 42 |
+| 공모펀드 | 39 |
+| 국내채권 | 34 |
+| 해외 ETF·ETN | 29 |
+
+품질 등급은 `VALID` 31개, `PARTIAL` 59개, `UNKNOWN` 2개다. `PARTIAL`은 원천
+데이터에 결측이 있는 field로, 커버리지를 `coverage_pct`에 기록하고 답변에서
+그 사실을 숨기지 않는다.
+
+### 11.2 평가 재현 절차
+
+#### 실행
+
+```bash
+./compose.sh up --detach --wait
+```
+
+이 한 명령이 이미지 빌드, 공식 XLSX에서 네 상품군 SQLite 생성, 관계 artifact와
+SHA sidecar 생성, 승인 manifest 대조, Backend 기동, 정상 상태 대기를 수행한다.
+원천 데이터 경로 기본값은 `2. Data/1. Raw/2.금융상품_20260824`이며
+`fastapi_backend/.env`의 `FINANCE_RAW_DATA_DIR`로 바꾼다.
+
+#### 질의
+
+```bash
+curl --get "http://{endpoint}/answer" \
+  --data-urlencode "question_id=Q-001" \
+  --data-urlencode "question=국내 ETF를 순자산 큰 순으로 5개 보여줘"
+```
+
+응답 형식은 [API 명세서](../submission/api-specification.md)를 따른다.
+
+#### 테스트
+
+```bash
+umask 022 && python -m pytest finance_agent/packages/finance_agent_core -q
+umask 022 && PYTHONPATH=. python -m pytest fastapi_backend -q
+```
+
+`umask 022`가 필요하다. 서버 기본값 `umask 002`에서는 릴리스 보안 검사가 테스트
+fixture를 group-writable로 판정해 실패한다. Backend는 저장소 루트에서 실행해야
+한다.
+
+commit `f049c26` 기준 측정값은 Agent Core 1,936 passed·2 skipped, Backend
+466 passed다. skip 2건은 봉인된 로컬 키와 선택적 승인 DB 경로 환경변수를
+요구하는 opt-in 테스트다.
+
+#### 온톨로지 일치 검사
+
+```bash
+python finance_agent/scripts/sync-ontology.py --check
+```
+
+Turtle 5개가 `field_registry.yaml`과 일치하면 통과한다.
+
+#### 데이터 지문 확인
+
+`approved_dataset_manifest.json`이 네 상품군 DB의 SHA-256을 고정한다. 실행
+시점 DB가 이 값과 다르면 질문 API가 503으로 중단된다.
+
+원천 파일 이름이 DB `metadata` 테이블의 `source_file_name`에 기록되므로,
+같은 내용이라도 파일명이 다르면 지문이 달라진다. 재현 시 공식 배포본의
+파일명을 그대로 사용해야 한다.
