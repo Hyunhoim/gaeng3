@@ -48,7 +48,7 @@ Router → Linker → Compiler → Oracle → Verifier → Renderer 전 구간�
 | 전체 응답 | `OFFICIAL_ANSWER_TIMEOUT_SECONDS` | **270초** |
 | HCLX 1회 호출 | `HCX_TIMEOUT_SECONDS` | **45초** |
 | 외부 탐색 전체 | `ExternalSearchBudget.deadline_ms` | **60초** |
-| 개별 fetch | `official_acquisition.py:327` | **30초** |
+| 개별 fetch | `official_acquisition.py` `_MAX_FETCH_TIMEOUT_SECONDS` | **10초** (2026-09-01 이전 30초) |
 | 검색 질의 수 | `max_search_queries` | 40회 |
 | fetch 수 | `max_fetches` | 32회 |
 
@@ -99,7 +99,7 @@ timeout_seconds=min(30.0, max(0.1, remaining_seconds))
 | 구간 | 현재 | 제안 | 근거 |
 | --- | --- | --- | --- |
 | 외부 탐색 전체 | 60초 | **25초** | fetch 실측 12초 + 여유 |
-| 개별 fetch | 30초 | **10초** | 실측 최대 2.23초의 약 4.5배 |
+| 개별 fetch | 30초 | **10초** (적용함) | 실측 최대 2.23초의 약 4.5배 |
 | HCLX 1회 | 45초 | 유지 | 생성 시간은 우리가 통제하지 못함 |
 | 전체 응답 | 270초 | 유지 | 상한은 상한대로 둔다 |
 
@@ -125,3 +125,21 @@ timeout_seconds=min(30.0, max(0.1, remaining_seconds))
 `remaining_fetches`·`remaining_bytes`·deadline을 차례로 깎는다. 병렬화하면
 예산 회계와 audit 순서를 다시 설계해야 한다. 실측상 fetch는 12초 수준이라
 얻는 것보다 위험이 크다. 제출 이후 과제로 남긴다.
+
+## 7. 적용 내역
+
+### 2026-09-01 — 개별 fetch 상한 30초 → 10초
+
+`official_acquisition.py`에 `_MAX_FETCH_TIMEOUT_SECONDS = 10.0`을 두고 두 호출부가
+이를 쓰게 했다. 5절에서 이 항목은 탐색 범위를 줄이지 않으므로 분포 확인 전에
+적용해도 근거 손실이 없다고 판단했다.
+
+`pending_corpus.py`의 30초는 그대로 두었다. 이 경로는 오프라인 말뭉치 수집
+도구이며 응답 경로가 아니다. 배치 수집은 지연에 민감하지 않다.
+
+회귀 검사는 상수를 비교하지 않고 리터럴 `10.0`으로 고정했다. 상수끼리 비교하면
+상한을 올려도 검사가 통과해 회귀를 놓친다. 실제로 상수를 30으로 되돌려 검사가
+실패하는 것을 확인했다.
+
+**아직 적용하지 않은 것**: 외부 탐색 전체 예산 60초 → 25초. 4절의 audit 로그로
+실제 소요 분포를 본 뒤에 정한다.
