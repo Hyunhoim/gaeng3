@@ -118,3 +118,65 @@ def test_a_vague_metric_still_fails_closed(question: str) -> None:
     decision = IntentRouter().route(question, "surface-vague")
 
     assert decision.disposition.value != "execute", question
+
+
+# A missed threshold is worse than a missed sort: the question still runs and the
+# condition silently disappears, so the answer lists products that do not meet it.
+_FILTER_CROSS_FAMILY = frozenset(
+    {
+        ("domestic_bond_ratio_pct", "국내 채권 구성비"),
+        ("overseas_bond_ratio_pct", "해외 채권 구성비"),
+        ("base_price", "펀드 기준가"),
+    }
+)
+
+
+def _threshold_surfaces() -> list[tuple[str, str, str, str]]:
+    registry = load_field_registry()
+    cases: list[tuple[str, str, str, str]] = []
+    for field_id, definition in registry.fields.items():
+        if definition.value_type is not ValueType.NUMBER or not definition.queryable:
+            continue
+        if not definition.datasets:
+            continue
+        if not {"gte", "lte"} & set(definition.allowed_operators):
+            continue
+        noun = _FAMILY_NOUN.get(definition.datasets[0])
+        if noun is None:
+            continue
+        amount = "0.5%" if (definition.unit or "").startswith("pct") else "100"
+        for surface in (definition.label, *definition.aliases):
+            if not surface or _HANGUL.search(surface) is None:
+                continue
+            if (field_id, surface) in _FILTER_CROSS_FAMILY:
+                continue
+            cases.append((field_id, surface, noun, amount))
+    return cases
+
+
+_THRESHOLD_CASES = _threshold_surfaces()
+
+
+def test_the_registry_declares_threshold_surfaces() -> None:
+    assert len(_THRESHOLD_CASES) >= 120
+
+
+@pytest.mark.parametrize(("field_id", "surface", "noun", "amount"), _THRESHOLD_CASES)
+def test_declared_surface_carries_its_threshold(
+    field_id: str,
+    surface: str,
+    noun: str,
+    amount: str,
+) -> None:
+    for phrase, operator in (("이상", "gte"), ("이하", "lte")):
+        question = f"{surface} {amount} {phrase}인 {noun} 3개"
+
+        decision = IntentRouter().route(question, f"threshold-{field_id}")
+
+        assert decision.disposition.value == "execute", question
+        plan = ServerQueryPlanCompiler({}).compile(decision)
+        applied = {
+            (item.field, getattr(item.operator, "value", item.operator))
+            for item in plan.constraints
+        }
+        assert (field_id, operator) in applied, question

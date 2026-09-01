@@ -61,6 +61,37 @@ def _registry_surface_pattern(surface: str) -> str:
     return r"(?<![0-9A-Za-z가-힣])" + r"\s*".join(parts)
 
 
+def registry_numeric_aliases(family: str) -> tuple[tuple[str, tuple[str, ...]], ...]:
+    """Derive numeric filter aliases from the registry for one family.
+
+    A missed filter surface is worse than a missed sort: the question still runs
+    but the threshold silently disappears, so the answer lists products that do
+    not meet the stated condition. Longer surfaces come first for the same
+    reason as in :func:`registry_rank_patterns`.
+    """
+
+    registry = load_field_registry()
+    entries: list[tuple[int, str, tuple[str, ...]]] = []
+    for field_id, definition in registry.fields.items():
+        if definition.value_type is not ValueType.NUMBER or not definition.queryable:
+            continue
+        try:
+            resolved = registry.require_field(field_id, [family])
+        except ValueError:
+            continue
+        if not {"gte", "lte", "gt", "lt"} & set(resolved.allowed_operators):
+            continue
+        surfaces = tuple(
+            surface
+            for surface in (resolved.label, *resolved.aliases)
+            if surface and _HANGUL.search(surface) is not None
+        )
+        if surfaces:
+            entries.append((max(len(item) for item in surfaces), field_id, surfaces))
+    entries.sort(key=lambda item: (-item[0], item[1]))
+    return tuple((field_id, surfaces) for _, field_id, surfaces in entries)
+
+
 def registry_rank_patterns(family: str) -> tuple[tuple[str, str], ...]:
     """Derive ranking patterns from every numeric sortable field of a family.
 
@@ -134,11 +165,23 @@ def _negated_literal_span(question: str, literal: str) -> str | None:
         start = index + max(len(literal), 1)
 
 
+def _alias_group(aliases: tuple[str, ...]) -> str:
+    """Join field aliases so a short one cannot match inside a longer word.
+
+    Without the left boundary the leverage alias ``배수`` matches inside
+    ``분배수익률`` and attaches a leverage threshold to a distribution-yield
+    question. Longer aliases go first so the most specific one wins.
+    """
+
+    ordered = sorted(aliases, key=len, reverse=True)
+    return r"(?<![0-9A-Za-z가-힣])(?:" + "|".join(re.escape(alias) for alias in ordered) + ")"
+
+
 def _negated_comparison_span(
     question: str,
     aliases: tuple[str, ...],
 ) -> str | None:
-    alias_pattern = "|".join(re.escape(alias) for alias in aliases)
+    alias_pattern = _alias_group(aliases)
     match = re.search(
         rf"(?:{alias_pattern}).{{0,30}}?"
         r"(?:이하|미만|이상|초과|정확히|이전|이후|까지)"
@@ -206,7 +249,7 @@ def _numeric_hint(
     field: str,
     aliases: tuple[str, ...],
 ) -> dict[str, Any] | None:
-    alias_pattern = "|".join(re.escape(alias) for alias in aliases)
+    alias_pattern = _alias_group(aliases)
     between = re.search(
         rf"(?:{alias_pattern}).{{0,12}}?({SCALED_NUMBER})\s*(?:%|배|일|년|주)?\s*"
         rf"(?:달러|USD|KRW)?\s*에서\s*({SCALED_NUMBER})\s*(?:%|배|일|년|주)?\s*"
@@ -283,7 +326,7 @@ def _excluded_numeric_hint(
     the request, so only this small, explicit exclusion grammar is lowered.
     """
 
-    alias_pattern = "|".join(re.escape(alias) for alias in aliases)
+    alias_pattern = _alias_group(aliases)
     comparison = re.search(
         rf"(?:{alias_pattern}).{{0,16}}?({SCALED_NUMBER})\s*(?:%|배|일|년)?\s*"
         r"(?:달러|USD|KRW)?\s*(이하|미만|이상|초과)"
@@ -311,7 +354,7 @@ def _date_hint(
     field: str,
     aliases: tuple[str, ...],
 ) -> dict[str, Any] | None:
-    alias_pattern = "|".join(re.escape(alias) for alias in aliases)
+    alias_pattern = _alias_group(aliases)
     iso_date = r"\d{4}-\d{2}-\d{2}"
     between = re.search(
         rf"(?:{alias_pattern}).{{0,12}}?({iso_date})\s*에서\s*"
@@ -1395,6 +1438,22 @@ def build_lexical_hints(
                 ("base_price", ("기준가", "펀드 기준가")),
             ]
         )
+    if family is not None:
+        # The registry declares which fields take a threshold and how they are
+        # written. Merge those surfaces into the hand written lists rather than
+        # skipping a field that already appears: a field usually arrives with
+        # only some of its declared wordings, and the missing ones are exactly
+        # the thresholds that vanish from the answer.
+        merged: dict[str, list[str]] = {}
+        order: list[str] = []
+        for field, aliases in [*numeric_fields, *registry_numeric_aliases(family)]:
+            if field not in merged:
+                merged[field] = []
+                order.append(field)
+            merged[field].extend(alias for alias in aliases if alias not in merged[field])
+        numeric_fields = [
+            (field, tuple(sorted(merged[field], key=len, reverse=True))) for field in order
+        ]
     for field, aliases in numeric_fields:
         if excluded_hint := _excluded_numeric_hint(question, field, aliases):
             add(
@@ -1882,7 +1941,7 @@ def build_lexical_hints(
         explicit_rank_patterns.extend(registry_rank_patterns(family))
     if re.search(r"\d+\s*(?:등(?!급)|위(?!험))", question):
         for field, aliases in numeric_fields:
-            alias_pattern = "|".join(re.escape(alias) for alias in aliases)
+            alias_pattern = _alias_group(aliases)
             explicit_rank_patterns.append(
                 (rf"(?:{alias_pattern}).{{0,24}}?\d+\s*(?:등(?!급)|위(?!험))", field)
             )
