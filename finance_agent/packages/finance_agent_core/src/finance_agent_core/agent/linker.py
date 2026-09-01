@@ -894,10 +894,10 @@ def build_lexical_hints(
         if re.search(r"(?:수수료\s*선취|선취\s*수수료)", question):
             add("fee_type", "수수료선취")
         for field, aliases in (
-            ("domestic_stock_ratio_pct", r"국내주식\s*(?:구성비율|비중)"),
-            ("domestic_bond_ratio_pct", r"국내채권\s*(?:구성비율|비중)"),
-            ("overseas_stock_ratio_pct", r"해외주식\s*(?:구성비율|비중)"),
-            ("overseas_bond_ratio_pct", r"해외채권\s*(?:구성비율|비중)"),
+            ("domestic_stock_ratio_pct", r"국내\s*주식\s*(?:구성비율|비중)"),
+            ("domestic_bond_ratio_pct", r"국내\s*채권\s*(?:구성비율|비중)"),
+            ("overseas_stock_ratio_pct", r"해외\s*주식\s*(?:구성비율|비중)"),
+            ("overseas_bond_ratio_pct", r"해외\s*채권\s*(?:구성비율|비중)"),
         ):
             if re.search(rf"{aliases}.{{0,16}}절반(?:을|보다)?\s*(?:넘|초과)", question):
                 add(field, 50, "gt")
@@ -1207,10 +1207,42 @@ def build_lexical_hints(
                 ("집합투자업자보수", "집합 투자 업자 보수", "운용사보수"),
             ),
             ("trustee_fee_pct", ("신탁업자보수", "신탁 업자 보수", "수탁보수")),
-            ("domestic_stock_ratio_pct", ("국내주식 구성비율", "국내주식 비중")),
-            ("domestic_bond_ratio_pct", ("국내채권 구성비율", "국내채권 비중")),
-            ("overseas_stock_ratio_pct", ("해외주식 구성비율", "해외주식 비중")),
-            ("overseas_bond_ratio_pct", ("해외채권 구성비율", "해외채권 비중")),
+            (
+                "domestic_stock_ratio_pct",
+                (
+                    "국내주식 구성비율",
+                    "국내주식 비중",
+                    "국내 주식 구성비율",
+                    "국내 주식 비중",
+                ),
+            ),
+            (
+                "domestic_bond_ratio_pct",
+                (
+                    "국내채권 구성비율",
+                    "국내채권 비중",
+                    "국내 채권 구성비율",
+                    "국내 채권 비중",
+                ),
+            ),
+            (
+                "overseas_stock_ratio_pct",
+                (
+                    "해외주식 구성비율",
+                    "해외주식 비중",
+                    "해외 주식 구성비율",
+                    "해외 주식 비중",
+                ),
+            ),
+            (
+                "overseas_bond_ratio_pct",
+                (
+                    "해외채권 구성비율",
+                    "해외채권 비중",
+                    "해외 채권 구성비율",
+                    "해외 채권 비중",
+                ),
+            ),
             ("latest_distribution_pct", ("최근 분배율", "최신 분배율")),
             ("preservation_ratio_pct", ("보전율", "보전 비율")),
             ("one_week_return_pct", ("1주 수익률", "일주일 수익률", "1주 성과")),
@@ -1596,22 +1628,22 @@ def build_lexical_hints(
                     "trustee_fee_pct",
                 ),
                 (
-                    r"(?:국내주식\s*(?:구성비율|비중)).{0,24}"
+                    r"(?:국내\s*주식\s*(?:구성비율|비중)).{0,24}"
                     r"(?:큰|작은|높은|낮은|많은|적은|상위|하위|순)",
                     "domestic_stock_ratio_pct",
                 ),
                 (
-                    r"(?:국내채권\s*(?:구성비율|비중)).{0,24}"
+                    r"(?:국내\s*채권\s*(?:구성비율|비중)).{0,24}"
                     r"(?:큰|작은|높은|낮은|많은|적은|상위|하위|순)",
                     "domestic_bond_ratio_pct",
                 ),
                 (
-                    r"(?:해외주식\s*(?:구성비율|비중)).{0,24}"
+                    r"(?:해외\s*주식\s*(?:구성비율|비중)).{0,24}"
                     r"(?:큰|작은|높은|낮은|많은|적은|상위|하위|순)",
                     "overseas_stock_ratio_pct",
                 ),
                 (
-                    r"(?:해외채권\s*(?:구성비율|비중)).{0,24}"
+                    r"(?:해외\s*채권\s*(?:구성비율|비중)).{0,24}"
                     r"(?:큰|작은|높은|낮은|많은|적은|상위|하위|순)",
                     "overseas_bond_ratio_pct",
                 ),
