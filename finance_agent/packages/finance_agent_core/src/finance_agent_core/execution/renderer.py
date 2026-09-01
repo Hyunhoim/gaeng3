@@ -83,6 +83,27 @@ WARNING_MESSAGES = {
 }
 
 
+def _subject_particle(word: str) -> str:
+    """Pick 이/가 for a Korean word, so "국내채권이" does not read as "국내채권가"."""
+
+    return "이" if _has_final_consonant(word) else "가"
+
+
+def _object_particle(word: str) -> str:
+    """Pick 을/를 for a Korean word."""
+
+    return "을" if _has_final_consonant(word) else "를"
+
+
+def _has_final_consonant(word: str) -> bool:
+    last = word.strip()[-1]
+    if "가" <= last <= "힣":
+        return (ord(last) - 0xAC00) % 28 != 0
+    # Product family labels end in Latin letters such as "국내 ETP". Korean reads
+    # those letter names aloud, so P is 피 and has no final consonant.
+    return last.upper() in {"L", "M", "N", "R", "NG"}
+
+
 def _format_decimal(value: Decimal, places: int = 6) -> str:
     rendered = f"{value:.{places}f}".rstrip("0").rstrip(".")
     return rendered or "0"
@@ -520,7 +541,8 @@ def render_verified_aggregation(
     }[verified.manifest.dataset]
     if verified.candidate_count == 0:
         answer = (
-            f"잠긴 조건을 모두 만족하고 품질 검증을 통과한 {family_label}가 없어 "
+            f"잠긴 조건을 모두 만족하고 품질 검증을 통과한 "
+            f"{family_label}{_subject_particle(family_label)} 없어 "
             "집계값을 계산하지 않았습니다. 조건을 자동으로 완화하지 않았습니다."
         )
     else:
@@ -638,7 +660,8 @@ def render_verified_search(
             "공모펀드" if fund else "국내채권" if bond else "국내 ETP" if domestic else "해외 ETP"
         )
         answer = (
-            f"잠긴 조건을 모두 만족하고 품질 검증을 통과한 {family_label}를 찾지 "
+            f"잠긴 조건을 모두 만족하고 품질 검증을 통과한 "
+            f"{family_label}{_object_particle(family_label)} 찾지 "
             "못했습니다. 조건을 자동으로 완화하지 않았습니다."
         )
     else:
