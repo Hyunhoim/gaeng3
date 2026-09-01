@@ -40,7 +40,7 @@
 - [x] P0-7 관계·문서 Typed Plan·Claim Verifier·결정론적 fallback 내부 계약
 - [x] P0-10 공개 Router·Backend adapter와 manifest에 해시로 고정된 Agent Release 계약 연결을 로컬에서 검증
 - [x] 관계 검색의 exact FTS 후보·canonical full match·공식 DB identity 재검증·field evidence·인과적 Audit 계약
-- [x] 2026-08-31 계약 회귀 Agent Core 1,763 passed·2 skipped, Backend 451 passed
+- [x] 2026-09-01 계약 회귀 Agent Core 2,232 passed·2 skipped, Backend 466 passed
 - [x] multi-stage runtime image와 exact-image boundary 검사로 builder 원본·local-model
   dependency·weight·inline credential의 평가 image 혼입 차단
 - [x] 서명 Manifest와 실제 release 환경의 exact-match를 Docker 교체 전에 검증

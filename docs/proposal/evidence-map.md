@@ -36,7 +36,7 @@
 | 주장 | 값 | 정본 | 해석 제한 |
 | --- | ---: | --- | --- |
 | 원천 감사 | 4종 53,375행, 55/55 | [데이터 감사](../../finance_agent/docs/data-audit.md) | 2026-08-24 공식 데이터 기준. 2026-08-31 재실행 확인 |
-| 전체 코드 회귀 | Agent Core 1,763 passed·2 skipped, Backend 451 passed | [Core 테스트](../../finance_agent/packages/finance_agent_core/tests)·[Backend 테스트](../../fastapi_backend/tests) | 2026-08-31 `15e1dd8`의 단위·계약 회귀이며 독립 성능 평가가 아님. Backend는 `umask 022` 필요 |
+| 전체 코드 회귀 | Agent Core 2,232 passed·2 skipped, Backend 466 passed | [Core 테스트](../../finance_agent/packages/finance_agent_core/tests)·[Backend 테스트](../../fastapi_backend/tests) | 2026-09-01 `e58896f`의 단위·계약 회귀이며 독립 성능 평가가 아님. Backend는 저장소 루트에서 `umask 022`로 실행 |
 | 평가기 retry·중복 실행 제어 | 정상 동일 요청 200·200/Agent 1회, dataset 장애 503·503/Agent 2회, 강제 timeout 504 | [P0-8 baseline](../../finance_agent/evaluation/baselines/retry-contract-p0-8-v1.json)·[인수인계](../../finance_agent/docs/p0-8-retry-contract-handover-2026-08-19.md) | 로컬 Docker fault injection, 실제 evaluator·HCLX·NCP 아님 |
 | 외부 문서 반입 게이트 | 승인·권한·출처·해시·변조 차단·BM25 build 합성 계약 24/24 | [P0-5 baseline](../../finance_agent/evaluation/baselines/external-corpus-intake-contract-v1.json)·[인수인계](../../finance_agent/docs/p0-5-external-corpus-intake-2026-08-19.md) | 실제 외부 문서 0건, 승인·검색 정확도·Release 활성화 아님 |
 | 제공 데이터 관계 검색 기반 | 승인 국내채권·국내/해외 ETP 관계 37,793개, 계약 14/14, 실제 검색 smoke 4/4, warm p50 4.846ms·p95 5.960ms | [P0-6 baseline](../../finance_agent/evaluation/baselines/p0-6-provided-relation-retrieval-v1.json)·[인수인계](../../finance_agent/docs/p0-6-provided-relation-retrieval-handover-2026-08-19.md) | 당시 P0-6의 Agent 비활성 baseline으로, 공모펀드·외부 관계 없음, lexical 검색·단일 로컬 장비이며 관계 의미 정확도나 공식 성능이 아님 |
@@ -66,7 +66,7 @@
 | --- | ---: | --- | --- |
 | 공식 데이터 전환 | 4종 53,375행, 원천 8개 SHA-256 8/8 일치, 감사 expectation 55/55 | [데이터 배포 README](<../../../2. Data/1. Raw/2.금융상품_20260824/README.md>)·[승인 manifest](../../finance_agent/packages/finance_agent_core/src/finance_agent_core/config/approved_dataset_manifest.json) | 2026-08-31 재실행. 2026-07-11 배포본(145,393행)은 주최 측 교체 지시로 폐기 |
 | 관계 색인 | 37,793개 | data-init 실행 산출물 | 2026-08-24 데이터·registry 1.5 기준. 2026-07-11 데이터에서는 58,005개였다 |
-| 전체 코드 회귀 | Agent Core 1,763 passed·2 skipped, Backend 451 passed | [Core 테스트](../../finance_agent/packages/finance_agent_core/tests)·[Backend 테스트](../../fastapi_backend/tests) | 2026-08-31 `15e1dd8`. Backend는 `umask 022` 필요 |
+| 전체 코드 회귀 | Agent Core 2,232 passed·2 skipped, Backend 466 passed | [Core 테스트](../../finance_agent/packages/finance_agent_core/tests)·[Backend 테스트](../../fastapi_backend/tests) | 2026-09-01 `e58896f`. Backend는 저장소 루트에서 `umask 022`로 실행 |
 | clean checkout 재현 | `./compose.sh up --detach --wait`로 data-init·Backend 기동, `/health` 네 상품군 ready | [루트 README](../../README.md) | 개발 profile. 공모펀드는 `locked` |
 | 공개 NCP endpoint | `GET /health` 200, 공식 `GET /answer` 200·다섯 문자열, `answer_mode=llm_grounded`, 2.9~4.4초 | 2026-08-31 공인 IP 직접 호출 | 단일 순차 호출 관측이며 부하·SLO·quota 측정이 아니다. 배포본은 2026-08-31 수정 이전 코드다 |
 | HCLX 두-operation 실호출 | HCX Intent 304회, grounded answer 298회, 480,016 token, HTTP non-200 2건 | [All-ON 300문항 보고서](../../finance_agent/reports/independent-holdout-v2.2.1-all-on-20260829.html) | 2026-08-29 연구실 격리 Docker. NCP 경로·quota·429는 별도 |

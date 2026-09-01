@@ -451,7 +451,7 @@ capability별로 등록되어 있고, 출처·게시일·수집일·본문 해�
 현재 대표 근거:
 
 - 4종 원천 53,375행 감사, 핵심 expectation 55/55 (2026-08-24 공식 데이터)
-- Agent Core 1,763 passed·2 skipped, Backend 451 passed (2026-08-31 `15e1dd8`)
+- Agent Core 2,232 passed·2 skipped, Backend 466 passed (2026-09-01 `e58896f`)
 - 공식 XLSX에서 SQLite 4개를 자동 생성·검증한 뒤 Backend를 시작하는 Docker 경로 완료
 - 승인 상품 DB 관계 37,793개·관계 계약 14/14·실제 검색 smoke 4/4와 공식 상품 ID 재검증 완료
 - P0-7 관계·문서 계획·주장 검증 계약 22/22, 승인 관계 전체 경로 smoke 4/4
@@ -595,7 +595,7 @@ umask 022 && PYTHONPATH=. python -m pytest fastapi_backend -q
 fixture를 group-writable로 판정해 실패한다. Backend는 저장소 루트에서 실행해야
 한다.
 
-commit `f049c26` 기준 측정값은 Agent Core 1,936 passed·2 skipped, Backend
+commit `e58896f` 기준 측정값은 Agent Core 2,232 passed·2 skipped, Backend
 466 passed다. skip 2건은 봉인된 로컬 키와 선택적 승인 DB 경로 환경변수를
 요구하는 opt-in 테스트다.
 
