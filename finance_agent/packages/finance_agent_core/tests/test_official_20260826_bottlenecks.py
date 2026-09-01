@@ -482,7 +482,12 @@ def test_bond_ranked_search_excludes_ended_maturities_and_uses_public_id_tie_bre
     select_sql, count_sql, _ = compile_search_sql(plan)
 
     for sql in (select_sql, count_sql):
-        assert "maturity_date > dynamic_as_of" in sql
+        # The end signal has to use the same basis as remaining_days, which is
+        # stored as maturity minus the snapshot date. Measuring it against the
+        # earlier dynamic date let bonds that had already matured survive with a
+        # negative remaining_days and take the top of every ascending answer.
+        assert "maturity_date >= source_snapshot_date" in sql
+        assert "maturity_date > dynamic_as_of" not in sql
     assert "buy_yield_micro_pct ELSE NULL END DESC" in select_sql
     assert select_sql.endswith("ticker ASC LIMIT ?")
 

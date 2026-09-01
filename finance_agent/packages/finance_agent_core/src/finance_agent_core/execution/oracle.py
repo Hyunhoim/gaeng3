@@ -179,9 +179,15 @@ def compile_search_sql(
     if family == "bond" and not explicit_product_identity:
         # BUYABLE_QUANTITY is invalid, but the organizer still excludes ended
         # instruments. The official schema has no delisting flag, so maturity
-        # against the row's dynamic basis is the only deterministic end signal.
+        # against the snapshot the row was loaded from is the deterministic end
+        # signal. The basis has to be the snapshot rather than the dynamic date:
+        # remaining_days is stored as maturity minus the snapshot date, so
+        # measuring the end against the earlier dynamic date let bonds that had
+        # already matured survive with a negative remaining_days and take the
+        # top of every "shortest remaining" answer.
         where_clauses.append(
-            "(maturity_date IS NULL OR dynamic_as_of IS NULL OR maturity_date > dynamic_as_of)"
+            "(maturity_date IS NULL OR source_snapshot_date IS NULL "
+            "OR maturity_date >= source_snapshot_date)"
         )
     for constraint in plan.constraints:
         clause, values = _constraint_sql(constraint, sql_fields)
