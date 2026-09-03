@@ -937,6 +937,17 @@ def _intent(question: str, families: list[ProductFamily]) -> InteractionIntent:
             not ranking_intent_present(semantic_question)
             or _GROUP_LABEL_ORDER.search(semantic_question) is not None
         )
+        # The same allocation-field guard the later branch applies. "비중" is an
+        # aggregate cue but also the tail of 국내주식 비중 and its three siblings,
+        # so a plain threshold question reached this branch first and was refused
+        # for having no aggregate function.
+        and not (
+            _PORTFOLIO_RATIO_FIELD.search(semantic_question)
+            and re.search(
+                r"(?:이상|이하|초과|미만|넘|보다\s*(?:크|작))",
+                semantic_question,
+            )
+        )
     ):
         # An explicit aggregate function owns a bare metric mention.  Typed
         # aliases may recognize the metric phrase itself (for example

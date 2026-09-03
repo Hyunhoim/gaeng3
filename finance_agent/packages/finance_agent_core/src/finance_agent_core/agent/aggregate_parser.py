@@ -70,7 +70,12 @@ _FUNCTION_PATTERNS = {
         r"최대(?!\s*\d+\s*개)"
     ),
 }
-_DISTRIBUTION = re.compile(r"분포|비중")
+# "비중" is also the tail of four declared public-fund allocation fields
+# (국내주식 비중 …). Treating those as a distribution request routed a plain
+# threshold question such as "국내주식 비중 0.5% 이상인 공모펀드" to the aggregate
+# parser, which then refused it for having no group key — while the same
+# question written with "구성비율" executed normally.
+_DISTRIBUTION = re.compile(r"분포|(?<!주식)(?<!채권)(?<!주식\s)(?<!채권\s)비중")
 _AVAILABILITY_SURFACE = re.compile(
     r"유효|사용할\s*수\s*(?:있|없)|값이?\s*(?:있|없)|"
     r"기재|미기재|입력|미입력|누락|결측|"

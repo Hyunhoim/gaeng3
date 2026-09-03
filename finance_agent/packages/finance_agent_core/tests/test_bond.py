@@ -335,6 +335,9 @@ def test_bond_aggregate_uses_only_currently_buyable_yields(tmp_path: Path) -> No
     )
 
     assert result.status == "executed"
+    # Maturity is not an approved proxy for listing status, so a matured bond
+    # stays in scope: the organizer invalidated BUYABLE_QUANTITY and supplied no
+    # delisting field, and all such rows are still marked currently buyable.
     assert result.candidate_count == 6
     assert [(item.function.value, item.value) for item in result.aggregates] == [
         ("avg", "5.416666666667"),

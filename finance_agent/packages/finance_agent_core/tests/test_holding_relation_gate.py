@@ -17,6 +17,8 @@ from finance_agent_core.agent.semantic_gate import _UNAPPROVED_RELATION_FILTER
         "삼성전자를 포함한 국내 ETF 3개",
         "삼성전자 비중이 높은 국내 ETF 3개",
         "삼성전자 비중이 많은 국내 ETF 3개",
+        "삼성 주식 비중이 높은 국내 ETF 3개",
+        "주식 비중이 높은 공모펀드 3개",
         "SK하이닉스를 담은 해외 ETF를 AUM 큰 순으로 5개",
     ],
 )
@@ -54,9 +56,13 @@ def test_product_field_text_search_stays_executable(question: str) -> None:
     "question",
     [
         "국내주식 비중이 높은 공모펀드 3개",
+        "국내 주식 비중이 높은 공모펀드 3개",
         "국내채권 비중이 큰 공모펀드 3개",
+        "국내 채권 비중이 큰 공모펀드 3개",
         "해외주식 비중이 많은 공모펀드 3개",
+        "해외 주식 비중이 많은 공모펀드 3개",
         "해외채권 비중이 높은 공모펀드 3개",
+        "해외 채권 비중이 높은 공모펀드 3개",
     ],
 )
 def test_approved_public_fund_allocation_queries_stay_executable(
@@ -71,9 +77,14 @@ def test_approved_public_fund_allocation_queries_stay_executable(
     ("question", "ranking_field"),
     [
         ("국내주식 비중이 높은 공모펀드 3개", "domestic_stock_ratio_pct"),
+        ("국내 주식 비중이 높은 공모펀드 3개", "domestic_stock_ratio_pct"),
+        ("국내 주식 구성비율이 큰 공모펀드 3개", "domestic_stock_ratio_pct"),
         ("국내채권 비중이 큰 공모펀드 3개", "domestic_bond_ratio_pct"),
+        ("국내 채권 비중이 큰 공모펀드 3개", "domestic_bond_ratio_pct"),
         ("해외주식 비중이 많은 공모펀드 3개", "overseas_stock_ratio_pct"),
+        ("해외 주식 비중이 많은 공모펀드 3개", "overseas_stock_ratio_pct"),
         ("해외채권 비중이 높은 공모펀드 3개", "overseas_bond_ratio_pct"),
+        ("해외 채권 비중이 높은 공모펀드 3개", "overseas_bond_ratio_pct"),
     ],
 )
 def test_approved_public_fund_allocation_queries_compile_to_the_metric(

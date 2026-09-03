@@ -37,6 +37,13 @@ from finance_agent_core.retrieval.temporal_relations import (
     TemporalRelationStore,
 )
 
+# One unresponsive host must not consume the whole acquisition deadline. Approved
+# sources answered in 0.16s median and 2.23s worst case when every registry host was
+# probed on 2026-09-01, so ten seconds leaves a wide margin. This bounds a socket
+# read, not the whole transfer, so a large PDF that keeps delivering bytes still
+# completes; only a host that stops answering is abandoned.
+_MAX_FETCH_TIMEOUT_SECONDS = 10.0
+
 
 class OfficialEvidenceAcquisitionStatus(StrEnum):
     CACHE_HIT = "cache_hit"
@@ -143,15 +150,11 @@ def _snapshot_product_evidence_date(
             combined += title_tokens[end]
             if len(combined) >= 2:
                 title_identity_keys.add(combined)
-    ticker_dates = {
-        bound_date for key, bound_date in bindings if ticker_key and key == ticker_key
-    }
+    ticker_dates = {bound_date for key, bound_date in bindings if ticker_key and key == ticker_key}
     if ticker_dates:
         return (next(iter(ticker_dates)), True) if len(ticker_dates) == 1 else (None, True)
     title_dates = {
-        bound_date
-        for key, bound_date in bindings
-        if len(key) >= 2 and key in title_identity_keys
+        bound_date for key, bound_date in bindings if len(key) >= 2 and key in title_identity_keys
     }
     if title_dates:
         return (next(iter(title_dates)), True) if len(title_dates) == 1 else (None, True)
@@ -219,9 +222,7 @@ def _expand_globalx_product_roots(
     seen_urls: set[str] = set()
     for candidate in candidates:
         parsed = urllib.parse.urlsplit(candidate.url)
-        factsheet_match = _GLOBALX_FACTSHEET_PATH.fullmatch(
-            urllib.parse.unquote(parsed.path)
-        )
+        factsheet_match = _GLOBALX_FACTSHEET_PATH.fullmatch(urllib.parse.unquote(parsed.path))
         ticker: str | None = None
         source = None
         if factsheet_match is not None and not parsed.query and not parsed.fragment:
@@ -343,12 +344,9 @@ class OfficialEvidenceAcquisitionCoordinator:
             raise ValueError("provided product surfaces must be unique and bounded")
         if (
             len(provided_product_evidence_dates) > 5_000
-            or len(provided_product_evidence_dates)
-            != len(set(provided_product_evidence_dates))
+            or len(provided_product_evidence_dates) != len(set(provided_product_evidence_dates))
             or any(
-                not key
-                or len(key) > 500
-                or key != _identity_key(key)
+                not key or len(key) > 500 or key != _identity_key(key)
                 for key, bound_date in provided_product_evidence_dates
             )
         ):
@@ -674,7 +672,9 @@ class OfficialEvidenceAcquisitionCoordinator:
                                 capability=requirement.capability,
                                 published_at=candidate.published_at,
                                 as_of=candidate.as_of,
-                                timeout_seconds=min(30.0, max(0.1, remaining_seconds)),
+                                timeout_seconds=min(
+                                    _MAX_FETCH_TIMEOUT_SECONDS, max(0.1, remaining_seconds)
+                                ),
                                 max_bytes=min(16 * 1024 * 1024, remaining_bytes),
                                 # Every intermediate page is navigation-only
                                 # until it supplies an independently verified
@@ -718,8 +718,7 @@ class OfficialEvidenceAcquisitionCoordinator:
                     )
                     if (
                         provided_product_evidence_dates
-                        and requirement.capability
-                        is KnowledgeCapability.PORTFOLIO_HOLDINGS
+                        and requirement.capability is KnowledgeCapability.PORTFOLIO_HOLDINGS
                         and requirement.capability in source.historical_link_capabilities
                         and product_evidence_date is None
                     ):

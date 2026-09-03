@@ -1,11 +1,24 @@
 # 금융상품 Agent 기술 제안서
 
-상태: 팀 검토 전 초안 v0.5 · P0-10 공개 관계 검색 릴리스 로컬 검증 반영
+상태: 팀 검토 전 초안 v0.6 · 2026-08-24 공식 데이터 기준 재작성
 
-기준일: 2026-08-20
+기준일: 2026-09-01
 
 이 문서는 최종 PDF 또는 발표자료를 만들기 위한 내용 정본이다. 구현되지 않은
 기능과 외부 확인이 필요한 항목은 완료된 기능처럼 표현하지 않는다.
+
+### 권장 목차 대응
+
+주최 측 권장 목차와 이 문서의 절 번호는 다음과 같이 대응한다.
+
+| 권장 목차 | 이 문서 |
+| --- | --- |
+| 01 전체 아키텍처 및 특화기능 | §1 제안 요약 · **§1.1 특화기능과 차별화 포인트** |
+| 02 제안 방법 (세 질문) | §3 — 수집·정제 §3.1.1~3.1.2, 온톨로지 §3.1.4, 검색 방법론 §3.1.5 |
+| 03 시스템 구성도 (적재→색인→검색→생성) | §4 |
+| 04 주요 기능 흐름도 (수집→온톨로지→그래프→검색) | §5 |
+| 05 기대효과·확장성 | §7 |
+| 06 부록 (온톨로지 스키마·평가 재현 절차) | **§11** |
 
 ## 1. 제안 요약
 
@@ -22,6 +35,67 @@ field-level evidence와 기준일을 갖추며, 검증에 실패하면 근거 �
 경로에 연결했다. 단, 현재 증거는 manifest에 해시로 고정된 릴리스 계약과 clean Docker에서
 수행한 `local implementation verified`이며, NCP 실제 배포나 공식 정확도를 입증한
 결과는 아니다.
+
+### 1.1 특화기능과 차별화 포인트
+
+주최 측 설명회는 온톨로지를 문서가 아니라 AI의 Semantic Layer로 제시하고,
+스키마 설명만 프롬프트에 넣은 경우보다 업무 의미를 런타임에 결합한 경우
+정확도가 크게 올랐다는 자체 실험을 공개했다.
+
+이 제안의 차별점은 그 결합을 **설명이 아니라 실행 권한으로** 구현했다는 데 있다.
+
+이 설계는 우리만의 주장이 아니다. dbt Labs가 2026년에 공개한 대조 실험에서
+시맨틱 레이어를 붙이자 Claude Sonnet 4.6은 90.0%에서 98.2%로, GPT-5.3-Codex는
+84.1%에서 100%로 올랐다. 모델을 바꾸지 않고 의미 계층만 더한 결과다.
+
+#### 1) 온톨로지가 런타임 통제 계층이다
+
+`field_registry.yaml`(schema_version 1.5, field 92개)이 정본이고 Turtle 5개는
+여기서 생성된다. 이 파일은 문서가 아니라 실행 시점에 다음을 확정한다.
+
+- 어떤 field가 질의·정렬·집계 가능한가 (`queryable`·`sortable`·`aggregatable`)
+- field마다 허용되는 연산자는 무엇인가 (`allowed_operators`)
+- 값의 품질 등급과 커버리지는 얼마인가 (`quality`·`coverage_pct`)
+- 어떤 표현이 그 field를 가리키는가 (`label`·`aliases`)
+
+registry에 없는 field·연산자·정렬은 실행 계획 단계에서 만들어질 수 없다.
+온톨로지를 바꾸면 답변 가능 범위가 바뀐다.
+
+반대 방향도 성립해야 한다. registry가 선언한 표현은 반드시 답이 되어야 한다.
+2026-09-01에 선언된 표면형 140건을 전수 검사해 이를 확인했고, 실패 36건을
+25.7%에서 2.1%로 낮췄다. 정렬 패턴은 이제 registry에서 생성되므로 별칭을
+추가하는 것만으로 동작한다. 회귀는 registry를 읽어 테스트를 만드는 방식으로
+고정했다.
+
+#### 2) LLM은 계획을 제안할 뿐 실행을 바꾸지 못한다
+
+HyperCLOVA X는 의도 분석과 최종 문장 작성을 맡는다. 그러나 서버가 만든
+Typed QueryPlan의 field·filter·정렬 방향·limit은 **변경할 수 없다.**
+LLM 출력은 서버 계획과 exact-match gate로 대조되고, 어긋나면 LLM 쪽이 버려진다.
+
+수치·순위·집계는 SQLite Oracle이 계산하고 독립 Verifier가 재계산해 대조한다.
+생성 모델이 숫자를 만들어내는 경로가 구조적으로 없다.
+
+#### 3) 데이터 신뢰의 기준점이 해시로 고정되어 있다
+
+`approved_dataset_manifest.json`이 네 상품군 DB의 SHA-256을 담는다. 실행 시점의
+DB가 이 지문과 다르면 질문 API가 503으로 멈춘다. 조용히 다른 데이터로 답하는
+경우가 없다는 뜻이다.
+
+#### 4) 답할 수 없음을 상태로 구분한다
+
+승인되지 않은 관계를 요구하는 질문(예: 특정 종목을 편입한 ETF)은 실행 전에
+차단된다. 근거를 찾지 못하면 `CANNOT_VERIFY`, 실행 범위 밖이면 `UNSUPPORTED`,
+조건이 모자라면 역질문으로 끝난다. 이 셋은 실패가 아니라 설계된 종료 상태다.
+
+주최 측 평가에 답변 불가 문항이 포함된다는 점에서, 근거 없는 답을 만들지 않는
+것 자체가 득점 요소다.
+
+#### 5) 모든 수치에 field 단위 근거와 기준일이 붙는다
+
+답변의 각 수치는 어느 상품의 어느 field에서 왔는지, 정적·동적 기준일이
+언제인지를 함께 제시한다. 외부 근거를 쓴 경우 출처·게시일·수집일·본문 해시를
+보존한다.
 
 ## 2. 문제 정의
 
@@ -296,26 +370,77 @@ Release에 연결한다.
 
 ## 7. 기대효과·확장성
 
-### 기대효과
+### 7.1 현업 적용 지점
 
-- 상품 선택 근거를 dataset·row·column·기준일까지 추적 가능
-- 모델 오류가 곧바로 잘못된 SQL·답변으로 이어지지 않는 다중 검증 경계
-- 결측·stale·통화 불일치를 숨기지 않아 금융 답변의 리스크 감소
-- 복수 상품군에서도 다른 상품군의 근거가 섞이지 않고, 검증 실패 시 전체를 안전하게 fallback
-- 새로운 모델을 연결해도 Oracle·Verifier·평가 기준을 재사용 가능
-- 로컬 개발 모델로 반복 검증하고 공식 경로는 HyperCLOVA X로 제한해 비용 통제
+이 Agent가 대체하는 것은 "검색"이 아니라 **답변에 근거를 붙이는 사람의 시간**이다.
 
-### 확장성
+| 업무 | 지금 방식 | 이 Agent를 붙였을 때 |
+| --- | --- | --- |
+| 상품 상담 | 담당자가 여러 화면을 조회해 조건에 맞는 상품을 추린 뒤 수치를 옮겨 적는다 | 조건 검색·정렬·집계를 실행하고 상품별로 어느 field·어느 기준일에서 온 값인지 함께 제시한다 |
+| 상품 기획·리서치 | 상품군마다 산식과 단위가 달라 비교 전 정규화를 반복한다 | field 92개의 단위·품질·커버리지가 registry에 고정되어 있어 같은 기준으로 비교한다 |
+| 컴플라이언스 | 응대 문구에 추천·전망이 섞였는지 사후 점검한다 | 전망·수익 보장·단정적 추천은 실행 전에 `UNSUPPORTED`로 차단된다 |
+| 신규 상품 온보딩 | 검색 화면과 질의 로직을 개별 수정한다 | registry에 field와 표현을 등록하면 질의·정렬·집계 경로가 그대로 동작한다 |
 
-- 상품군 adapter·registry를 추가해 데이터 schema 변화에 대응
-- 문서 corpus 승인 후 동일 citation 계약으로 비정형 설명 확장
-- compact identity cache와 필요한 필드만 읽는 projected verifier로 메모리 절감
-- Backend DTO와 공식 제출 schema를 분리해 UI·평가 API 변화에 대응
-- `GET /answer` 공식 다섯 문자열 필드는 별도 adapter로 고정해 내부 DTO 확장과 분리
-- 평가 suite·baseline·hash를 통해 기능 추가 후 회귀 여부를 자동 확인
+마지막 항목은 주장이 아니라 2026-09-01에 확인한 동작이다. registry가 선언한
+표면형 140건으로 질의를 만들어 전수 검사했고, 별칭을 추가하는 것만으로 정렬과
+임계값 조건이 동작하도록 실행 경로를 registry에서 파생시켰다.
 
-확장성은 “어떤 질문도 처리”한다는 뜻이 아니다. 새 필드·상품군·문서는 의미,
-단위, 기준일과 검증 방법이 승인된 뒤 capability matrix에 추가한다.
+### 7.2 금융 답변에서 무엇이 줄어드는가
+
+금융 답변의 위험은 "틀린 답"보다 **틀렸는지 알 수 없는 답**이다. 이 구조는 그
+경우를 상태로 분리한다.
+
+- 근거를 찾지 못하면 `CANNOT_VERIFY`, 실행 범위 밖이면 `UNSUPPORTED`, 조건이
+  모자라면 역질문으로 끝난다. 셋 다 설계된 종료 상태다
+- 승인 DB의 SHA-256이 실행 시점과 다르면 질문 API가 503으로 멈춘다. 조용히
+  다른 데이터로 답하는 경우가 없다
+- 수치·순위·집계는 SQLite가 계산하고 독립 Verifier가 **Python으로 다시 계산해**
+  대조한다. 두 구현이 어긋나면 답변이 나가지 않는다
+
+세 번째는 실제로 작동한다. 2026-09-01에 집계 SQL만 고치고 Python 쪽을 빠뜨리자
+`aggregate candidate_count mismatch: execution=5, Python=6`으로 즉시 막혔다.
+한쪽만 고치면 틀린 답이 나가는 대신 답이 막힌다.
+
+### 7.3 상품군 확장 방안
+
+새 상품군을 붙일 때 **바꾸는 것과 그대로 두는 것**이 분리되어 있다.
+
+바꾸는 것은 다섯 가지다.
+
+1. 원천 스키마를 읽는 normalization adapter. 결측·sentinel·0의 의미를 여기서
+   정하고 field별 품질 등급으로 남긴다
+2. `field_registry.yaml`에 field 등록. 질의·정렬·집계 가능 여부, 허용 연산자,
+   단위, 커버리지, 그 field를 가리키는 표현을 함께 적는다
+3. `sync-ontology.py`로 Turtle 생성. registry와 어긋나면 검사가 실패한다
+4. SQL 컬럼 매핑과 **Verifier의 Python 미러**. 이 둘은 반드시 함께 바꾼다
+5. 승인 manifest에 DB SHA-256 등록
+
+그대로 두는 것은 Router, QueryPlan 계약, Compiler, Oracle 골격, Verifier 뼈대,
+Renderer, 그리고 평가 API의 다섯 필드 계약이다. 질의 이해와 안전 경계를 다시
+만들 필요가 없다.
+
+현재 네 상품군이 이 절차로 붙어 있다. field는 국내 ETF·ETN 42, 공모펀드 39,
+국내채권 34, 해외 ETF·ETN 29개다.
+
+### 7.4 데이터가 넓어질 때
+
+외부 근거는 출처를 승인 목록으로 잠근 상태에서만 쓴다. 승인 출처 24곳이
+capability별로 등록되어 있고, 출처·게시일·수집일·본문 해시를 보존하며
+2026-08-24 상한을 지킨다.
+
+넓히는 방법은 출처를 추가하는 것이지 모델을 바꾸는 것이 아니다. 다만 커버리지를
+실측한 결과 국내 ETF·ETN은 77.3%, 국내채권 32.0%, 해외 ETF·ETN 0.6%다. 해외는
+운용사 382곳이 6,025개를 운용해 상위 20곳을 더해도 55.9%에 그친다. 그래서 근거가
+부실한 답을 만드는 대신 `CANNOT_VERIFY`로 끝내는 편을 택했다.
+
+이 판단 자체가 확장 방침이다. **덮는 범위를 넓히는 것과 답할 수 있다고 말하는
+것은 다르다.**
+
+### 7.5 확장성의 한계를 명시한다
+
+확장성은 "어떤 질문도 처리한다"는 뜻이 아니다. 새 필드·상품군·문서는 의미,
+단위, 기준일과 검증 방법이 승인된 뒤 capability matrix에 추가한다. 승인되지
+않은 관계를 묻는 질문은 데이터가 생기기 전까지 차단된 상태로 남는다.
 
 ## 8. 기술완성도·성능·정확성 근거
 
@@ -326,7 +451,7 @@ Release에 연결한다.
 현재 대표 근거:
 
 - 4종 원천 53,375행 감사, 핵심 expectation 55/55 (2026-08-24 공식 데이터)
-- Agent Core 1,763 passed·2 skipped, Backend 451 passed (2026-08-31 `15e1dd8`)
+- Agent Core 2,232 passed·2 skipped, Backend 466 passed (2026-09-01 `e58896f`)
 - 공식 XLSX에서 SQLite 4개를 자동 생성·검증한 뒤 Backend를 시작하는 Docker 경로 완료
 - 승인 상품 DB 관계 37,793개·관계 계약 14/14·실제 검색 smoke 4/4와 공식 상품 ID 재검증 완료
 - P0-7 관계·문서 계획·주장 검증 계약 22/22, 승인 관계 전체 경로 smoke 4/4
@@ -402,3 +527,91 @@ rollback, 관계 HyperCLOVA X 답변 품질을 의미하지 않는다.
 - Ontology 용어의 금융 도메인 검수와 주최 측 최종 형식 확인
 - `think_trace`의 구조화 실행 기록에 대한 세부 평가 방식 확인
 - 크레딧 승인과 HyperCLOVA X 적용 서비스 확인
+
+## 11. 부록
+
+### 11.1 온톨로지 스키마
+
+정본은 `field_registry.yaml`(schema_version 1.5)이고, Turtle 5개는 여기서
+생성된다. `finance_agent/scripts/sync-ontology.py --check`가 둘의 일치를 검사하며
+어긋나면 실패한다.
+
+| 파일 | 줄 수 | 범위 |
+| --- | --- | --- |
+| `ontology/common.ttl` | 193 | 공통 어휘. class 4개, datatype property 38개, object property 3개 |
+| `ontology/bond_kr.ttl` | 1,121 | 국내채권 |
+| `ontology/etf_kr.ttl` | 1,430 | 국내 ETF·ETN |
+| `ontology/etf_gl.ttl` | 1,009 | 해외 ETF·ETN |
+| `ontology/fund_pub.ttl` | 1,313 | 공모펀드 |
+
+상품군 Turtle은 `owl:imports`로 `common`을 가져오고, `ga:ProductFamily`에
+`ga:hasCanonicalField`로 그 상품군이 실제로 답할 수 있는 field를 나열한다.
+`ga:registryVersion`이 registry 판번호를 고정한다.
+
+field 92개의 분포는 다음과 같다.
+
+| 상품군 | field 수 |
+| --- | --- |
+| 국내 ETF·ETN | 42 |
+| 공모펀드 | 39 |
+| 국내채권 | 34 |
+| 해외 ETF·ETN | 29 |
+
+품질 등급은 `VALID` 31개, `PARTIAL` 59개, `UNKNOWN` 2개다. `PARTIAL`은 원천
+데이터에 결측이 있는 field로, 커버리지를 `coverage_pct`에 기록하고 답변에서
+그 사실을 숨기지 않는다.
+
+### 11.2 평가 재현 절차
+
+#### 실행
+
+```bash
+./compose.sh up --detach --wait
+```
+
+이 한 명령이 이미지 빌드, 공식 XLSX에서 네 상품군 SQLite 생성, 관계 artifact와
+SHA sidecar 생성, 승인 manifest 대조, Backend 기동, 정상 상태 대기를 수행한다.
+원천 데이터 경로 기본값은 `2. Data/1. Raw/2.금융상품_20260824`이며
+`fastapi_backend/.env`의 `FINANCE_RAW_DATA_DIR`로 바꾼다.
+
+#### 질의
+
+```bash
+curl --get "http://{endpoint}/answer" \
+  --data-urlencode "question_id=Q-001" \
+  --data-urlencode "question=국내 ETF를 순자산 큰 순으로 5개 보여줘"
+```
+
+응답 형식은 [API 명세서](../submission/api-specification.md)를 따른다.
+
+#### 테스트
+
+```bash
+umask 022 && python -m pytest finance_agent/packages/finance_agent_core -q
+umask 022 && PYTHONPATH=. python -m pytest fastapi_backend -q
+```
+
+`umask 022`가 필요하다. 서버 기본값 `umask 002`에서는 릴리스 보안 검사가 테스트
+fixture를 group-writable로 판정해 실패한다. Backend는 저장소 루트에서 실행해야
+한다.
+
+commit `e58896f` 기준 측정값은 Agent Core 2,232 passed·2 skipped, Backend
+466 passed다. skip 2건은 봉인된 로컬 키와 선택적 승인 DB 경로 환경변수를
+요구하는 opt-in 테스트다.
+
+#### 온톨로지 일치 검사
+
+```bash
+python finance_agent/scripts/sync-ontology.py --check
+```
+
+Turtle 5개가 `field_registry.yaml`과 일치하면 통과한다.
+
+#### 데이터 지문 확인
+
+`approved_dataset_manifest.json`이 네 상품군 DB의 SHA-256을 고정한다. 실행
+시점 DB가 이 값과 다르면 질문 API가 503으로 중단된다.
+
+원천 파일 이름이 DB `metadata` 테이블의 `source_file_name`에 기록되므로,
+같은 내용이라도 파일명이 다르면 지문이 달라진다. 재현 시 공식 배포본의
+파일명을 그대로 사용해야 한다.

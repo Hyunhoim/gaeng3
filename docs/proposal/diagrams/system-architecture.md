@@ -82,8 +82,8 @@ flowchart LR
 - P0-7 관계·문서 Typed Plan·서버 exact 권한·evidence Claim Verifier·전체 fallback 내부 계약
 - P0-10 결정론적 관계 Router·manifest에 해시로 고정된 public release 결속·exact FTS 후보·canonical
   전체 일치·공식 DB identity 재검증·field evidence·결정론적 답변·인과적 Audit
-- P0-10 집중 회귀 522/522(2026-08-20, 2026-07-11 데이터), Agent Core 1,763 passed·2 skipped,
-  Backend 451 passed(2026-08-31 `15e1dd8`, 2026-08-24 데이터)
+- P0-10 집중 회귀 522/522(2026-08-20, 2026-07-11 데이터), Agent Core 2,232 passed·2 skipped,
+  Backend 466 passed(2026-09-01 `e58896f`, 2026-08-24 데이터)
 - clean Docker Backend smoke 8/8·공식 형식 GET 호환 smoke 8/8, 관계 3 products/3 citations,
   부분 표현 `not_found`, 변조 후 health·API 503
 - 수치·실행 범위·한계의 정본은 [P0-10 machine-readable baseline](../../../finance_agent/evaluation/baselines/p0-10-public-relation-release-integration-v1.json)
