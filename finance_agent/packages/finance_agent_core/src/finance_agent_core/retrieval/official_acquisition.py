@@ -31,6 +31,13 @@ from finance_agent_core.retrieval.temporal_relations import (
     TemporalRelationStore,
 )
 
+# One unresponsive host must not consume the whole acquisition deadline. Approved
+# sources answered in 0.16s median and 2.23s worst case when every registry host was
+# probed on 2026-09-01, so ten seconds leaves a wide margin. This bounds a socket
+# read, not the whole transfer, so a large PDF that keeps delivering bytes still
+# completes; only a host that stops answering is abandoned.
+_MAX_FETCH_TIMEOUT_SECONDS = 10.0
+
 
 class OfficialEvidenceAcquisitionStatus(StrEnum):
     CACHE_HIT = "cache_hit"
@@ -324,7 +331,9 @@ class OfficialEvidenceAcquisitionCoordinator:
                         capability=requirement.capability,
                         published_at=candidate.published_at,
                         as_of=candidate.as_of,
-                        timeout_seconds=min(30.0, max(0.1, remaining_seconds)),
+                        timeout_seconds=min(
+                            _MAX_FETCH_TIMEOUT_SECONDS, max(0.1, remaining_seconds)
+                        ),
                         max_bytes=min(16 * 1024 * 1024, remaining_bytes),
                         allow_navigation_only=True,
                     ),
@@ -385,7 +394,9 @@ class OfficialEvidenceAcquisitionCoordinator:
                                     capability=requirement.capability,
                                     published_at=linked_candidate.published_at,
                                     as_of=linked_candidate.as_of,
-                                    timeout_seconds=min(30.0, max(0.1, remaining_seconds)),
+                                    timeout_seconds=min(
+                                        _MAX_FETCH_TIMEOUT_SECONDS, max(0.1, remaining_seconds)
+                                    ),
                                     max_bytes=min(16 * 1024 * 1024, remaining_bytes),
                                 ),
                             )

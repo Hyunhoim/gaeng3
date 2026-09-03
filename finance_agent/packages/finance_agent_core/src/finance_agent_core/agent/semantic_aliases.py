@@ -182,7 +182,7 @@ SEMANTIC_ALIAS_RULES: tuple[SemanticAliasRule, ...] = (
         (ProductFamily.BOND,),
         "duration_years",
         SortDirection.ASC,
-        r"금리\s*(?:(?:변화|변동)에\s*)?(?:덜|작게)\s*민감|"
+        r"금리\s*(?:(?:변화|변동)?에\s*)?(?:덜|작게)\s*민감|"
         r"금리\s*민감도(?:가|이)?\s*(?:작|낮)",
     ),
     _rule(
@@ -190,7 +190,7 @@ SEMANTIC_ALIAS_RULES: tuple[SemanticAliasRule, ...] = (
         (ProductFamily.BOND,),
         "duration_years",
         SortDirection.DESC,
-        r"금리\s*(?:(?:변화|변동)에\s*)?(?:더|크게)\s*민감|"
+        r"금리\s*(?:(?:변화|변동)?에\s*)?(?:더|크게)\s*민감|"
         r"금리\s*민감도(?:가|이)?\s*(?:크|높)",
     ),
     _rule(
@@ -538,7 +538,9 @@ _EXPLICIT_ORDER = re.compile(
 _COMPARATIVE_CUE = re.compile(
     r"(?:가장|제일)\s*(?:높|낮|크|작|많|적|길|짧|빠르|멀|좋|싸)|"
     r"(?:높은|낮은|큰|작은|많은|적은|긴|짧은|빠른|먼|좋은|싼)(?!\s*위험)|"
-    r"(?:넉넉|풍부|두드러|민감|가벼|저렴|잘\s*나간|활발하게\s*사고\s*팔|"
+    # "민감도" is the name of a field (duration), not a comparison cue. Only the
+    # adjectival "금리에 민감한" form asks for a ranking.
+    r"(?:넉넉|풍부|두드러|민감(?!도)|가벼|저렴|잘\s*나간|활발하게\s*사고\s*팔|"
     r"손바뀜|돈(?:이|가)?\s*많이\s*오가|인기|뜨거운|우수한|알짜|"
     r"안정적|안전한)",
     re.IGNORECASE,

@@ -17,6 +17,7 @@ from finance_agent_core.agent.semantic_aliases import (
 )
 from finance_agent_core.agent.semantic_gate import SemanticCoverageGate
 from finance_agent_core.config import load_field_registry
+from finance_agent_core.config.registry import ValueType
 from finance_agent_core.contracts import QueryPlan
 from finance_agent_core.contracts.queryplan import (
     SEARCH_PROJECTION_BY_FAMILY,
@@ -36,6 +37,91 @@ _NEGATED_LITERAL_SUFFIX = re.compile(
 )
 
 _SEMANTIC_COVERAGE_GATE = SemanticCoverageGate()
+
+# Direction words that turn a metric surface into a ranking request. Kept in one
+# place so registry-derived patterns speak the same language as the hand written
+# rules below.
+_RANK_DIRECTION_SUFFIX = (
+    r"(?:이|가|은|는|을|를)?\s*(?:더\s*|가장\s*|제일\s*)?"
+    r"(?:큰|크|작은|작|높은|높|낮은|낮|많은|많|적은|적|저렴한|비싼|우수한|좋은|"
+    r"상위|하위|순)"
+)
+_HANGUL = re.compile(r"[가-힣]")
+
+
+def _registry_surface_pattern(surface: str) -> str:
+    """Match one registry surface while tolerating the writer's spacing.
+
+    The left boundary stops a shorter surface from matching inside a longer one.
+    Without it ``20거래일 변동성`` matches inside ``120거래일 변동성`` and answers with
+    the wrong window, and ``발행금액`` matches inside ``총발행금액``.
+    """
+
+    parts = [re.escape(token) for token in surface.split() if token]
+    return r"(?<![0-9A-Za-z가-힣])" + r"\s*".join(parts)
+
+
+def registry_numeric_aliases(family: str) -> tuple[tuple[str, tuple[str, ...]], ...]:
+    """Derive numeric filter aliases from the registry for one family.
+
+    A missed filter surface is worse than a missed sort: the question still runs
+    but the threshold silently disappears, so the answer lists products that do
+    not meet the stated condition. Longer surfaces come first for the same
+    reason as in :func:`registry_rank_patterns`.
+    """
+
+    registry = load_field_registry()
+    entries: list[tuple[int, str, tuple[str, ...]]] = []
+    for field_id, definition in registry.fields.items():
+        if definition.value_type is not ValueType.NUMBER or not definition.queryable:
+            continue
+        try:
+            resolved = registry.require_field(field_id, [family])
+        except ValueError:
+            continue
+        if not {"gte", "lte", "gt", "lt"} & set(resolved.allowed_operators):
+            continue
+        surfaces = tuple(
+            surface
+            for surface in (resolved.label, *resolved.aliases)
+            if surface and _HANGUL.search(surface) is not None
+        )
+        if surfaces:
+            entries.append((max(len(item) for item in surfaces), field_id, surfaces))
+    entries.sort(key=lambda item: (-item[0], item[1]))
+    return tuple((field_id, surfaces) for _, field_id, surfaces in entries)
+
+
+def registry_rank_patterns(family: str) -> tuple[tuple[str, str], ...]:
+    """Derive ranking patterns from every numeric sortable field of a family.
+
+    ``field_registry.yaml`` is the runtime control layer, so a surface it
+    declares as a label or alias must be answerable. Hand written rules cover
+    the phrasings that need extra context; this fills the rest so that adding an
+    alias to the registry is enough to make it work.
+
+    Longer surfaces come first so a specific one (``순자산가치``) is preferred over
+    a shorter one it contains (``순자산``).
+    """
+
+    registry = load_field_registry()
+    entries: list[tuple[int, str, str]] = []
+    for field_id in registry.sortable_fields():
+        try:
+            definition = registry.require_field(field_id, [family])
+        except ValueError:
+            continue
+        if definition.value_type is not ValueType.NUMBER:
+            continue
+        for surface in (definition.label, *definition.aliases):
+            if not surface or _HANGUL.search(surface) is None:
+                continue
+            entries.append((len(surface), surface, field_id))
+    entries.sort(key=lambda item: (-item[0], item[1]))
+    return tuple(
+        (_registry_surface_pattern(surface) + _RANK_DIRECTION_SUFFIX, field_id)
+        for _, surface, field_id in entries
+    )
 
 
 def _explicit_projection_fields(question: str, family: str) -> list[str]:
@@ -79,11 +165,23 @@ def _negated_literal_span(question: str, literal: str) -> str | None:
         start = index + max(len(literal), 1)
 
 
+def _alias_group(aliases: tuple[str, ...]) -> str:
+    """Join field aliases so a short one cannot match inside a longer word.
+
+    Without the left boundary the leverage alias ``배수`` matches inside
+    ``분배수익률`` and attaches a leverage threshold to a distribution-yield
+    question. Longer aliases go first so the most specific one wins.
+    """
+
+    ordered = sorted(aliases, key=len, reverse=True)
+    return r"(?<![0-9A-Za-z가-힣])(?:" + "|".join(re.escape(alias) for alias in ordered) + ")"
+
+
 def _negated_comparison_span(
     question: str,
     aliases: tuple[str, ...],
 ) -> str | None:
-    alias_pattern = "|".join(re.escape(alias) for alias in aliases)
+    alias_pattern = _alias_group(aliases)
     match = re.search(
         rf"(?:{alias_pattern}).{{0,30}}?"
         r"(?:이하|미만|이상|초과|정확히|이전|이후|까지)"
@@ -151,7 +249,7 @@ def _numeric_hint(
     field: str,
     aliases: tuple[str, ...],
 ) -> dict[str, Any] | None:
-    alias_pattern = "|".join(re.escape(alias) for alias in aliases)
+    alias_pattern = _alias_group(aliases)
     between = re.search(
         rf"(?:{alias_pattern}).{{0,12}}?({SCALED_NUMBER})\s*(?:%|배|일|년|주)?\s*"
         rf"(?:달러|USD|KRW)?\s*에서\s*({SCALED_NUMBER})\s*(?:%|배|일|년|주)?\s*"
@@ -228,7 +326,7 @@ def _excluded_numeric_hint(
     the request, so only this small, explicit exclusion grammar is lowered.
     """
 
-    alias_pattern = "|".join(re.escape(alias) for alias in aliases)
+    alias_pattern = _alias_group(aliases)
     comparison = re.search(
         rf"(?:{alias_pattern}).{{0,16}}?({SCALED_NUMBER})\s*(?:%|배|일|년)?\s*"
         r"(?:달러|USD|KRW)?\s*(이하|미만|이상|초과)"
@@ -256,7 +354,7 @@ def _date_hint(
     field: str,
     aliases: tuple[str, ...],
 ) -> dict[str, Any] | None:
-    alias_pattern = "|".join(re.escape(alias) for alias in aliases)
+    alias_pattern = _alias_group(aliases)
     iso_date = r"\d{4}-\d{2}-\d{2}"
     between = re.search(
         rf"(?:{alias_pattern}).{{0,12}}?({iso_date})\s*에서\s*"
@@ -894,10 +992,10 @@ def build_lexical_hints(
         if re.search(r"(?:수수료\s*선취|선취\s*수수료)", question):
             add("fee_type", "수수료선취")
         for field, aliases in (
-            ("domestic_stock_ratio_pct", r"국내주식\s*(?:구성비율|비중)"),
-            ("domestic_bond_ratio_pct", r"국내채권\s*(?:구성비율|비중)"),
-            ("overseas_stock_ratio_pct", r"해외주식\s*(?:구성비율|비중)"),
-            ("overseas_bond_ratio_pct", r"해외채권\s*(?:구성비율|비중)"),
+            ("domestic_stock_ratio_pct", r"국내\s*주식\s*(?:구성비율|비중)"),
+            ("domestic_bond_ratio_pct", r"국내\s*채권\s*(?:구성비율|비중)"),
+            ("overseas_stock_ratio_pct", r"해외\s*주식\s*(?:구성비율|비중)"),
+            ("overseas_bond_ratio_pct", r"해외\s*채권\s*(?:구성비율|비중)"),
         ):
             if re.search(rf"{aliases}.{{0,16}}절반(?:을|보다)?\s*(?:넘|초과)", question):
                 add(field, 50, "gt")
@@ -1207,10 +1305,42 @@ def build_lexical_hints(
                 ("집합투자업자보수", "집합 투자 업자 보수", "운용사보수"),
             ),
             ("trustee_fee_pct", ("신탁업자보수", "신탁 업자 보수", "수탁보수")),
-            ("domestic_stock_ratio_pct", ("국내주식 구성비율", "국내주식 비중")),
-            ("domestic_bond_ratio_pct", ("국내채권 구성비율", "국내채권 비중")),
-            ("overseas_stock_ratio_pct", ("해외주식 구성비율", "해외주식 비중")),
-            ("overseas_bond_ratio_pct", ("해외채권 구성비율", "해외채권 비중")),
+            (
+                "domestic_stock_ratio_pct",
+                (
+                    "국내주식 구성비율",
+                    "국내주식 비중",
+                    "국내 주식 구성비율",
+                    "국내 주식 비중",
+                ),
+            ),
+            (
+                "domestic_bond_ratio_pct",
+                (
+                    "국내채권 구성비율",
+                    "국내채권 비중",
+                    "국내 채권 구성비율",
+                    "국내 채권 비중",
+                ),
+            ),
+            (
+                "overseas_stock_ratio_pct",
+                (
+                    "해외주식 구성비율",
+                    "해외주식 비중",
+                    "해외 주식 구성비율",
+                    "해외 주식 비중",
+                ),
+            ),
+            (
+                "overseas_bond_ratio_pct",
+                (
+                    "해외채권 구성비율",
+                    "해외채권 비중",
+                    "해외 채권 구성비율",
+                    "해외 채권 비중",
+                ),
+            ),
             ("latest_distribution_pct", ("최근 분배율", "최신 분배율")),
             ("preservation_ratio_pct", ("보전율", "보전 비율")),
             ("one_week_return_pct", ("1주 수익률", "일주일 수익률", "1주 성과")),
@@ -1308,6 +1438,22 @@ def build_lexical_hints(
                 ("base_price", ("기준가", "펀드 기준가")),
             ]
         )
+    if family is not None:
+        # The registry declares which fields take a threshold and how they are
+        # written. Merge those surfaces into the hand written lists rather than
+        # skipping a field that already appears: a field usually arrives with
+        # only some of its declared wordings, and the missing ones are exactly
+        # the thresholds that vanish from the answer.
+        merged: dict[str, list[str]] = {}
+        order: list[str] = []
+        for field, aliases in [*numeric_fields, *registry_numeric_aliases(family)]:
+            if field not in merged:
+                merged[field] = []
+                order.append(field)
+            merged[field].extend(alias for alias in aliases if alias not in merged[field])
+        numeric_fields = [
+            (field, tuple(sorted(merged[field], key=len, reverse=True))) for field in order
+        ]
     for field, aliases in numeric_fields:
         if excluded_hint := _excluded_numeric_hint(question, field, aliases):
             add(
@@ -1596,22 +1742,22 @@ def build_lexical_hints(
                     "trustee_fee_pct",
                 ),
                 (
-                    r"(?:국내주식\s*(?:구성비율|비중)).{0,24}"
+                    r"(?:국내\s*주식\s*(?:구성비율|비중)).{0,24}"
                     r"(?:큰|작은|높은|낮은|많은|적은|상위|하위|순)",
                     "domestic_stock_ratio_pct",
                 ),
                 (
-                    r"(?:국내채권\s*(?:구성비율|비중)).{0,24}"
+                    r"(?:국내\s*채권\s*(?:구성비율|비중)).{0,24}"
                     r"(?:큰|작은|높은|낮은|많은|적은|상위|하위|순)",
                     "domestic_bond_ratio_pct",
                 ),
                 (
-                    r"(?:해외주식\s*(?:구성비율|비중)).{0,24}"
+                    r"(?:해외\s*주식\s*(?:구성비율|비중)).{0,24}"
                     r"(?:큰|작은|높은|낮은|많은|적은|상위|하위|순)",
                     "overseas_stock_ratio_pct",
                 ),
                 (
-                    r"(?:해외채권\s*(?:구성비율|비중)).{0,24}"
+                    r"(?:해외\s*채권\s*(?:구성비율|비중)).{0,24}"
                     r"(?:큰|작은|높은|낮은|많은|적은|상위|하위|순)",
                     "overseas_bond_ratio_pct",
                 ),
@@ -1765,7 +1911,7 @@ def build_lexical_hints(
                     "close_price",
                 ),
                 (
-                    r"(?:AUM|순자산|일간\s*순자산총액|최종\s*(?:AUM|순자산)|"
+                    r"(?:AUM|순자산(?!가치)|일간\s*순자산총액|최종\s*(?:AUM|순자산)|"
                     r"운용\s*(?:자산|규모)).{0,20}"
                     r"(?:큰|작은|높은|낮은|많은|적은|상위|제일\s*큰|순|"
                     r"highest\s*[- ]to\s*[- ]lowest|lowest\s*[- ]to\s*[- ]highest|"
@@ -1788,9 +1934,14 @@ def build_lexical_hints(
                 ),
             ]
         )
+    if family is not None:
+        # The registry is the control layer: every numeric sortable surface it
+        # declares must resolve. These come last so the hand written rules above
+        # keep priority where they encode extra context.
+        explicit_rank_patterns.extend(registry_rank_patterns(family))
     if re.search(r"\d+\s*(?:등(?!급)|위(?!험))", question):
         for field, aliases in numeric_fields:
-            alias_pattern = "|".join(re.escape(alias) for alias in aliases)
+            alias_pattern = _alias_group(aliases)
             explicit_rank_patterns.append(
                 (rf"(?:{alias_pattern}).{{0,24}}?\d+\s*(?:등(?!급)|위(?!험))", field)
             )

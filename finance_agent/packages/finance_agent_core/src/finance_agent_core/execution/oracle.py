@@ -143,6 +143,51 @@ def _constraint_sql(
     return " AND ".join(clauses), parameters
 
 
+def _live_instrument_clauses(family: str, plan: QueryPlan) -> list[str]:
+    """Drop instruments that have already ended, for every oracle that reads rows.
+
+    BUYABLE_QUANTITY is invalid, but the organizer still excludes ended
+    instruments. The official schema has no delisting flag, so maturity against
+    the snapshot the row was loaded from is the deterministic end signal, and it
+    must be the snapshot rather than the dynamic date because remaining_days is
+    stored as maturity minus the snapshot.
+
+    Search and aggregate share this so a count cannot report bonds that a search
+    for the same family would never return.
+    """
+
+    if family != "bond":
+        return []
+    if any(constraint.field == "product_id" for constraint in plan.constraints):
+        return []
+    return [
+        "(maturity_date IS NULL OR source_snapshot_date IS NULL "
+        "OR maturity_date >= source_snapshot_date)"
+    ]
+
+
+def _usable_value_sql(plan: QueryPlan, sql_fields: dict[str, SqlField]) -> str | None:
+    """Spell out what makes a row usable for the metric this plan ranks by.
+
+    Mirrors the WHERE clauses added for the ranked field below, so the row kept
+    for each bond is one that can actually answer the question.
+    """
+
+    for ranking in plan.ranking:
+        if not ranking_requires_usable_value(plan, ranking.field):
+            continue
+        spec = sql_fields.get(ranking.field)
+        if spec is None:
+            continue
+        parts = [f"{spec.column} IS NOT NULL"]
+        if spec.quality_column is not None:
+            parts.append(f"{spec.quality_column} IN ('VALID', 'PARTIAL')")
+        if ranking.field != "remaining_days":
+            parts.append(f"{spec.column} <> 0")
+        return " AND ".join(parts)
+    return None
+
+
 def _ranking_expression(field_name: str, sql_fields: dict[str, SqlField]) -> str:
     spec = sql_fields[field_name]
     if spec.quality_column is None:
@@ -171,18 +216,12 @@ def compile_search_sql(
         table = TABLE_BY_FAMILY[family]
     except KeyError as error:
         raise ValueError(f"no deterministic SQL oracle for product family: {family}") from error
-    where_clauses = ["is_quarantined = 0", logical_product_scope(family)]
+    where_clauses = [
+        "is_quarantined = 0",
+        logical_product_scope(family, usable_value_sql=_usable_value_sql(plan, sql_fields)),
+    ]
     parameters: list[str | int | bool] = []
-    explicit_product_identity = any(
-        constraint.field == "product_id" for constraint in plan.constraints
-    )
-    if family == "bond" and not explicit_product_identity:
-        # BUYABLE_QUANTITY is invalid, but the organizer still excludes ended
-        # instruments. The official schema has no delisting flag, so maturity
-        # against the row's dynamic basis is the only deterministic end signal.
-        where_clauses.append(
-            "(maturity_date IS NULL OR dynamic_as_of IS NULL OR maturity_date > dynamic_as_of)"
-        )
+    where_clauses.extend(_live_instrument_clauses(family, plan))
     for constraint in plan.constraints:
         clause, values = _constraint_sql(constraint, sql_fields)
         where_clauses.append(f"({clause})")
@@ -235,7 +274,11 @@ def compile_aggregate_sql(
         raise ValueError(
             f"no deterministic aggregate Oracle for product family: {family}"
         ) from error
-    where_clauses = ["is_quarantined = 0", logical_product_scope(family)]
+    where_clauses = [
+        "is_quarantined = 0",
+        logical_product_scope(family, usable_value_sql=_usable_value_sql(plan, sql_fields)),
+        *_live_instrument_clauses(family, plan),
+    ]
     parameters: list[str | int | bool] = []
     for constraint in plan.constraints:
         clause, values = _constraint_sql(constraint, sql_fields)

@@ -35,6 +35,7 @@ from finance_agent_core.execution.external_knowledge_verifier import (
     OfficialProductFact,
 )
 from finance_agent_core.retrieval.official_acquisition import (
+    _MAX_FETCH_TIMEOUT_SECONDS,
     OfficialEvidenceAcquisitionCoordinator,
     OfficialEvidenceAcquisitionStatus,
 )
@@ -102,6 +103,7 @@ class _FixedIntentProvider:
 class _FakeTransport:
     def __init__(self, response: OfficialHttpResponse) -> None:
         self.response = response
+        self.timeouts: list[float] = []
 
     def fetch(
         self,
@@ -113,6 +115,7 @@ class _FakeTransport:
         assert url
         assert 0 < timeout_seconds <= 30
         assert max_bytes > 0
+        self.timeouts.append(timeout_seconds)
         return self.response
 
 
@@ -619,19 +622,18 @@ def test_cache_miss_fetches_only_official_snapshot_into_pending_intake() -> None
             ),
         )
     )
+    transport = _FakeTransport(
+        OfficialHttpResponse(
+            status_code=200,
+            final_url=source_url,
+            content_type="text/html",
+            body=b"official snapshot pending review",
+        )
+    )
     coordinator = OfficialEvidenceAcquisitionCoordinator(
         relation_store=store,
         discovery_provider=discovery,
-        connector=OfficialSourceConnector(
-            _FakeTransport(
-                OfficialHttpResponse(
-                    status_code=200,
-                    final_url=source_url,
-                    content_type="text/html",
-                    body=b"official snapshot pending review",
-                )
-            )
-        ),
+        connector=OfficialSourceConnector(transport),
     )
     question = "국민성장펀드의 구조와 투자 전략 및 운용 동향을 알려줘."
     plan = CompositeKnowledgePlanCompiler().compile(
@@ -658,6 +660,12 @@ def test_cache_miss_fetches_only_official_snapshot_into_pending_intake() -> None
     assert len(result.snapshots) == 1
     assert result.snapshots[0].source_uri == source_url
     assert result.rejected_candidate_count == 1
+    # One unresponsive host must not spend the acquisition deadline before the
+    # other candidates are tried. Approved registry hosts answered in 0.16s
+    # median and 2.23s worst case when probed on 2026-09-01.
+    assert transport.timeouts
+    assert _MAX_FETCH_TIMEOUT_SECONDS <= 10.0
+    assert max(transport.timeouts) <= 10.0
     assert discovery.calls == 1
 
 
