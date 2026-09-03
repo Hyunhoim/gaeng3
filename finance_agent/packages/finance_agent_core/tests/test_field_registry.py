@@ -117,7 +117,8 @@ def test_bond_dataset_contract_matches_audit_and_fails_closed() -> None:
     assert availability.source.columns == []
     assert availability.source.constant_value == "true"
     assert rating.allowed_operators == ["eq", "in"]
-    assert remaining.source.transform.value == "days_from_snapshot"
+    assert remaining.source.transform.value == "source_preferred_then_days_from_snapshot"
+    assert remaining.source.columns == ["remaining_days", "mat_dt"]
 
 
 def test_unknown_family_and_field_fail_closed() -> None:
@@ -127,3 +128,15 @@ def test_unknown_family_and_field_fail_closed() -> None:
         registry.require_dataset("imaginary_family")
     with pytest.raises(ValueError, match="unknown canonical field"):
         registry.require_field("imaginary_return", ["overseas_etp"])
+
+
+def test_dataset_override_resolution_is_cached_without_changing_registry_dump() -> None:
+    registry = load_field_registry()
+    before = registry.model_dump(mode="json")
+
+    first = registry.require_field("aum", ["domestic_etp"])
+    second = registry.require_field("aum", ["domestic_etp"])
+
+    assert first is second
+    assert first.datasets == ["domestic_etp"]
+    assert registry.model_dump(mode="json") == before

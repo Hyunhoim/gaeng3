@@ -57,6 +57,10 @@ from finance_agent_core.release import (
     load_relation_retrieval_artifact_release,
     resolve_agent_release,
 )
+from finance_agent_core.retrieval.document_discovery import (
+    CacheFirstOfficialDiscoveryProvider,
+    build_release_pinned_cache_first_discovery,
+)
 from finance_agent_core.retrieval.official_acquisition import (
     OfficialEvidenceAcquisitionCoordinator,
 )
@@ -72,6 +76,7 @@ from finance_agent_core.retrieval.schema_adaptive import ProductionHybridSchemaL
 from finance_agent_core.retrieval.schema_dense import (
     DenseSchemaIndex,
     DenseSchemaIndexArtifact,
+    EmbeddingProvider,
     SchemaDenseActivationPolicy,
     load_dense_schema_index_artifact,
     p1_precision_field_thresholds,
@@ -161,6 +166,7 @@ def _provider_assembly_matches(
             return False
         if (
             provider.model_name != settings.hcx_model
+            or not provider.require_execution_structure
             or provider._client.settings.timeout_seconds != settings.hcx_timeout_seconds
             or type(provider._client.on_call) is not HyperClovaXCallObserver
             or provider._client.on_call.expected_audit_sink is not audit_sink
@@ -295,6 +301,22 @@ def _external_assembly_matches(
             and service.external_universe_builder is None
             and service.external_search_plan_compiler is None
         )
+    if runtime is None:
+        return False
+    discovery = runtime.acquisition.discovery_provider
+    if signed.artifact is None:
+        return False
+    if signed.artifact.retrieval_mode == "approved_corpus_cache_first":
+        if (
+            type(discovery) is not CacheFirstOfficialDiscoveryProvider
+            or not discovery.production_approved
+            or discovery.activation_binding_sha256
+            != signed.artifact.document_activation_receipt_sha256
+            or not settings.document_cache_configured
+        ):
+            return False
+    elif type(discovery) is not BoundedOfficialDiscoveryProvider:
+        return False
     return (
         signed.status == "activated"
         and type(runtime) is ExternalKnowledgeRuntime
@@ -643,24 +665,16 @@ def _build_adaptive_semantic_resolver(
     settings: Settings,
     *,
     hclx_provider: HyperClovaXSemanticResolverProvider | None,
+    embedding_provider: EmbeddingProvider | None,
 ) -> AdaptiveSemanticResolver | None:
     binding = _load_schema_dense_release(settings)
     if binding is None:
         return None
     artifact, policy = binding
-    assert settings.kure_snapshot_dir is not None
-    assert settings.kure_snapshot_manifest_file is not None
-    assert settings.kure_trusted_cache_root is not None
-    provider = load_verified_schema_embedding_cpu_provider(
-        alias="kure-v1",
-        snapshot_dir=settings.kure_snapshot_dir,
-        manifest_path=settings.kure_snapshot_manifest_file,
-        trusted_cache_root=settings.kure_trusted_cache_root,
-        mode="production",
-        batch_size=settings.kure_batch_size,
-        cpu_threads=settings.kure_cpu_threads,
-    )
-    evidence = provider.artifact_gate_evidence
+    if embedding_provider is None:
+        raise RuntimeError("adaptive semantics requires the verified KURE provider")
+    provider = embedding_provider
+    evidence = getattr(provider, "artifact_gate_evidence", None)
     if (
         evidence.snapshot_file_manifest_sha256 != policy.snapshot_file_manifest_sha256
         or provider.metadata.model_id != policy.model_id
@@ -681,6 +695,8 @@ def _build_adaptive_semantic_resolver(
 def _build_external_knowledge_runtime(
     settings: Settings,
     release_guard: ResolvedAgentRelease | None,
+    *,
+    embedding_provider: EmbeddingProvider | None,
 ) -> tuple[
     ExternalKnowledgeRuntime | None,
     ProvidedProductUniverseBuilder | None,
@@ -729,13 +745,42 @@ def _build_external_knowledge_runtime(
     if artifact.retrieval_mode == "verified_live_official" and bundle.relations:
         raise RuntimeError("live-only external knowledge requires an empty relation cache")
     relation_store = TemporalRelationStore(bundle, registry)
-    discovery = BoundedOfficialDiscoveryProvider(
+    live_discovery = BoundedOfficialDiscoveryProvider(
         NaverApiHubWebSearchTransport(
             client_id_file=settings.naver_api_hub_client_id_file,
             client_secret_file=settings.naver_api_hub_client_secret_file,
         ),
         registry,
     )
+    if artifact.retrieval_mode == "approved_corpus_cache_first":
+        if not settings.document_cache_configured or embedding_provider is None:
+            raise RuntimeError("cache-first external knowledge requires approved Document Dense")
+        assert settings.external_document_dense_artifact_file is not None
+        assert settings.external_document_cache_activation_file is not None
+        assert artifact.document_activation_receipt_sha256 is not None
+        assert artifact.document_dense_sha256 is not None
+        assert artifact.document_bm25_sha256 is not None
+        assert artifact.embedding_model_revision is not None
+        discovery = build_release_pinned_cache_first_discovery(
+            activation_receipt_path=settings.external_document_cache_activation_file,
+            expected_activation_receipt_sha256=(
+                artifact.document_activation_receipt_sha256
+            ),
+            document_dense_artifact_path=(
+                settings.external_document_dense_artifact_file
+            ),
+            expected_document_dense_sha256=artifact.document_dense_sha256,
+            expected_corpus_manifest_sha256=artifact.corpus_manifest_sha256,
+            expected_document_bm25_sha256=artifact.document_bm25_sha256,
+            expected_embedding_model_revision=artifact.embedding_model_revision,
+            embedding=embedding_provider,
+            fallback=live_discovery,
+            registry=registry,
+        )
+    else:
+        if settings.document_cache_configured:
+            raise RuntimeError("live-only release cannot mount Document Dense cache artifacts")
+        discovery = live_discovery
     connector = OfficialSourceConnector(UrllibOfficialHttpTransport(), registry)
     acquisition = OfficialEvidenceAcquisitionCoordinator(
         relation_store=relation_store,
@@ -792,6 +837,7 @@ def build_agent(
                 hcx_settings,
                 transport,
                 on_call=call_observer,
+                require_execution_structure=True,
             )
         if settings.hcx_semantic_resolver_enabled:
             semantic_resolver_provider = HyperClovaXSemanticResolverProvider(
@@ -805,9 +851,24 @@ def build_agent(
                 transport,
                 on_call=call_observer,
             )
+    embedding_provider = None
+    if settings.adaptive_semantic_enabled:
+        assert settings.kure_snapshot_dir is not None
+        assert settings.kure_snapshot_manifest_file is not None
+        assert settings.kure_trusted_cache_root is not None
+        embedding_provider = load_verified_schema_embedding_cpu_provider(
+            alias="kure-v1",
+            snapshot_dir=settings.kure_snapshot_dir,
+            manifest_path=settings.kure_snapshot_manifest_file,
+            trusted_cache_root=settings.kure_trusted_cache_root,
+            mode="production",
+            batch_size=settings.kure_batch_size,
+            cpu_threads=settings.kure_cpu_threads,
+        )
     adaptive_semantic_resolver = _build_adaptive_semantic_resolver(
         settings,
         hclx_provider=semantic_resolver_provider,
+        embedding_provider=embedding_provider,
     )
     knowledge_agent = _build_knowledge_agent(settings, release_guard)
     knowledge_router = DeterministicKnowledgeRouter() if knowledge_agent is not None else None
@@ -816,7 +877,11 @@ def build_agent(
         external_knowledge_runtime,
         external_universe_builder,
         external_search_plan_compiler,
-    ) = _build_external_knowledge_runtime(settings, release_guard)
+    ) = _build_external_knowledge_runtime(
+        settings,
+        release_guard,
+        embedding_provider=embedding_provider,
+    )
     return RoutedFinanceAgent(
         settings.database_paths,
         intent_analysis_provider=intent_analysis_provider,

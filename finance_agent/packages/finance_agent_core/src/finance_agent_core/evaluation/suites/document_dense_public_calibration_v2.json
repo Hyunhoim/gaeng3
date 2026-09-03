@@ -1,0 +1,66 @@
+{
+  "schema_version": "1.0",
+  "suite_id": "document-dense-public-calibration-v2",
+  "suite_kind": "public_calibration_not_blind",
+  "cases": [
+    {"id": "DOC-PUB-020", "question": "Global X AIQ 인공지능 기술 ETF의 2025년 3월 말 공식 팩트시트", "expected_document_id": "phase4-globalx-aiq-20250331"},
+    {"id": "DOC-PUB-021", "question": "AIQ의 상위 보유 종목과 손실 위험을 확인할 공식 자료", "expected_document_id": "phase4-globalx-aiq-20250331"},
+    {"id": "DOC-PUB-022", "question": "Artificial Intelligence & Technology ETF AIQ fact sheet March 2025", "expected_document_id": "phase4-globalx-aiq-20250331"},
+
+    {"id": "DOC-PUB-023", "question": "Global X BOTZ 로봇 인공지능 ETF의 2025년 3월 공식 구성표", "expected_document_id": "phase4-globalx-botz-20250331"},
+    {"id": "DOC-PUB-024", "question": "BOTZ 상위 10개 보유 기업과 투자 위험 공식 자료", "expected_document_id": "phase4-globalx-botz-20250331"},
+    {"id": "DOC-PUB-025", "question": "Robotics & Artificial Intelligence ETF BOTZ fact sheet", "expected_document_id": "phase4-globalx-botz-20250331"},
+
+    {"id": "DOC-PUB-026", "question": "Global X BUG 사이버보안 ETF 2025년 3월 말 팩트시트", "expected_document_id": "phase4-globalx-bug-20250331"},
+    {"id": "DOC-PUB-027", "question": "BUG ETF의 보유 종목과 사이버보안 투자 위험 공식 자료", "expected_document_id": "phase4-globalx-bug-20250331"},
+    {"id": "DOC-PUB-028", "question": "Cybersecurity ETF BUG fact sheet top holdings", "expected_document_id": "phase4-globalx-bug-20250331"},
+
+    {"id": "DOC-PUB-029", "question": "Global X CLOU 클라우드 컴퓨팅 ETF 2025년 3월 팩트시트", "expected_document_id": "phase4-globalx-clou-20250331"},
+    {"id": "DOC-PUB-030", "question": "CLOU ETF 상위 보유 종목과 원금 손실 위험 자료", "expected_document_id": "phase4-globalx-clou-20250331"},
+    {"id": "DOC-PUB-031", "question": "Cloud Computing ETF CLOU official fact sheet", "expected_document_id": "phase4-globalx-clou-20250331"},
+
+    {"id": "DOC-PUB-032", "question": "Global X COPX 구리 광산 기업 ETF의 공식 팩트시트", "expected_document_id": "phase4-globalx-copx-20250331"},
+    {"id": "DOC-PUB-033", "question": "COPX의 2025년 3월 말 상위 구성 종목", "expected_document_id": "phase4-globalx-copx-20250331"},
+    {"id": "DOC-PUB-034", "question": "Copper Miners ETF COPX holdings and risk fact sheet", "expected_document_id": "phase4-globalx-copx-20250331"},
+
+    {"id": "DOC-PUB-035", "question": "Global X DRIV 자율주행 전기차 ETF 2025년 3월 공식 자료", "expected_document_id": "phase4-globalx-driv-20250331"},
+    {"id": "DOC-PUB-036", "question": "DRIV ETF의 상위 보유 회사와 투자 위험 팩트시트", "expected_document_id": "phase4-globalx-driv-20250331"},
+    {"id": "DOC-PUB-037", "question": "Autonomous & Electric Vehicles ETF DRIV fact sheet", "expected_document_id": "phase4-globalx-driv-20250331"},
+
+    {"id": "DOC-PUB-038", "question": "Global X FINX 핀테크 ETF의 2025년 3월 공식 팩트시트", "expected_document_id": "phase4-globalx-finx-20250331"},
+    {"id": "DOC-PUB-039", "question": "FINX ETF 상위 구성 회사와 위험요인 자료", "expected_document_id": "phase4-globalx-finx-20250331"},
+    {"id": "DOC-PUB-040", "question": "FinTech ETF FINX official holdings fact sheet", "expected_document_id": "phase4-globalx-finx-20250331"},
+
+    {"id": "DOC-PUB-041", "question": "Global X GNOM 유전체 바이오테크 ETF 공식 자료", "expected_document_id": "phase4-globalx-gnom-20250331"},
+    {"id": "DOC-PUB-042", "question": "GNOM의 2025년 3월 상위 보유 종목과 위험", "expected_document_id": "phase4-globalx-gnom-20250331"},
+    {"id": "DOC-PUB-043", "question": "Genomics & Biotechnology ETF GNOM fact sheet", "expected_document_id": "phase4-globalx-gnom-20250331"},
+
+    {"id": "DOC-PUB-044", "question": "Global X HERO 비디오게임 e스포츠 ETF 공식 팩트시트", "expected_document_id": "phase4-globalx-hero-20250331"},
+    {"id": "DOC-PUB-045", "question": "HERO ETF의 2025년 3월 상위 게임 기업 구성", "expected_document_id": "phase4-globalx-hero-20250331"},
+    {"id": "DOC-PUB-046", "question": "Video Games & Esports ETF HERO holdings and risks", "expected_document_id": "phase4-globalx-hero-20250331"},
+
+    {"id": "DOC-PUB-047", "question": "Global X LIT 리튬 배터리 기술 ETF 2025년 3월 자료", "expected_document_id": "phase4-globalx-lit-20250331"},
+    {"id": "DOC-PUB-048", "question": "LIT ETF의 상위 배터리 기업과 원금 손실 위험", "expected_document_id": "phase4-globalx-lit-20250331"},
+    {"id": "DOC-PUB-049", "question": "Lithium & Battery Tech ETF LIT fact sheet", "expected_document_id": "phase4-globalx-lit-20250331"},
+
+    {"id": "DOC-PUB-050", "question": "Global X SNSR 사물인터넷 ETF 공식 팩트시트", "expected_document_id": "phase4-globalx-snsr-20250331"},
+    {"id": "DOC-PUB-051", "question": "SNSR ETF 2025년 3월 말 상위 보유 기업", "expected_document_id": "phase4-globalx-snsr-20250331"},
+    {"id": "DOC-PUB-052", "question": "Internet of Things ETF SNSR holdings and risk fact sheet", "expected_document_id": "phase4-globalx-snsr-20250331"},
+
+    {"id": "DOC-PUB-053", "question": "Global X URA 우라늄 ETF의 2025년 3월 공식 자료", "expected_document_id": "phase4-globalx-ura-20250331"},
+    {"id": "DOC-PUB-054", "question": "URA ETF 상위 우라늄 기업과 투자 위험 팩트시트", "expected_document_id": "phase4-globalx-ura-20250331"},
+    {"id": "DOC-PUB-055", "question": "Uranium ETF URA official holdings fact sheet", "expected_document_id": "phase4-globalx-ura-20250331"},
+
+    {"id": "DOC-PUB-056", "question": "TIGER 2차전지TOP10레버리지 2024년 5월 말 월간 팩트시트", "expected_document_id": "phase4-tiger-battery-lev-20240531"},
+    {"id": "DOC-PUB-057", "question": "412570 ETF의 2024년 5월 구성 종목 자료", "expected_document_id": "phase4-tiger-battery-lev-20240531"},
+    {"id": "DOC-PUB-058", "question": "미래에셋 TIGER 2차전지TOP10레버리지 보유 종목과 위험", "expected_document_id": "phase4-tiger-battery-lev-20240531"},
+
+    {"id": "DOC-PUB-059", "question": "TIGER 반도체TOP10 2025년 6월 말 월간 팩트시트", "expected_document_id": "phase4-tiger-semi-20250630"},
+    {"id": "DOC-PUB-060", "question": "396500 ETF의 2025년 6월 상위 구성 종목", "expected_document_id": "phase4-tiger-semi-20250630"},
+    {"id": "DOC-PUB-061", "question": "미래에셋 TIGER 반도체TOP10 공식 보유내역 자료", "expected_document_id": "phase4-tiger-semi-20250630"},
+
+    {"id": "DOC-PUB-062", "question": "TIGER 반도체TOP10레버리지 2025년 5월 말 팩트시트", "expected_document_id": "phase4-tiger-semi-lev-20250530"},
+    {"id": "DOC-PUB-063", "question": "488080 ETF의 2025년 5월 상위 10개 구성 종목", "expected_document_id": "phase4-tiger-semi-lev-20250530"},
+    {"id": "DOC-PUB-064", "question": "미래에셋 TIGER 반도체 레버리지 ETF 공식 월간 자료", "expected_document_id": "phase4-tiger-semi-lev-20250530"}
+  ]
+}

@@ -266,10 +266,19 @@ class AdaptiveSemanticResolver:
                 supported.append((candidate, evidence.evidence_spans))
 
         # Dense proposes candidates; the server's versioned semantic rules grant
-        # authority only when exactly one candidate is grounded in the question.
-        # This is selective prediction: an unknown or conflicting expression
-        # abstains instead of being guessed from the largest cosine score.
-        if len(supported) == 1:
+        # automatic authority only when exactly one candidate is grounded and
+        # the family/field/operation tuple has an explicit calibrated policy.
+        # An otherwise eligible global-fallback candidate can only be reviewed
+        # by HCLX; an absent provider or a low score remains fail-closed.
+        calibrated_single = (
+            len(supported) == 1
+            and self.schema_linker.policy.has_explicit_threshold(
+                product_family=family,
+                field_id=supported[0][0].field_id,
+                operation="rank",
+            )
+        )
+        if calibrated_single:
             candidate, evidence_spans = supported[0]
             draft = SemanticResolutionDraft(
                 decision=ResolutionDecision.RESOLVE,
@@ -280,7 +289,11 @@ class AdaptiveSemanticResolver:
                 evidence_spans=evidence_spans,
             )
             source = SpanSource.SCHEMA_DENSE
-        elif len(supported) > 1 and self.hclx_provider is not None:
+        elif (
+            supported
+            and self.hclx_provider is not None
+            and (len(supported) > 1 or linked.hclx_eligible)
+        ):
             request = request.model_copy(
                 update={
                     "candidates": tuple(

@@ -98,7 +98,7 @@ def test_manifest_cli_binds_the_runtime_field_threshold_policy(
     assert runtime.schema_dense_policy is not None
     assert runtime.schema_dense_policy.field_thresholds == p1_precision_field_thresholds()
     assert runtime.schema_dense_policy.policy_sha256 == (
-        "0fcc4560dd5ef2944135907cbc0fa46b5446c7328bbf10657bb98eed81352c42"
+        "0d62754585aaa22e270343ae78322ee542df3a758b8af33abfa5174b29acccde"
     )
 
 

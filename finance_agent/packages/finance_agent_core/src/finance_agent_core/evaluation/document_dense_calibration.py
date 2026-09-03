@@ -30,7 +30,10 @@ class DocumentCalibrationCase(CalibrationModel):
 
 class DocumentCalibrationSuite(CalibrationModel):
     schema_version: Literal["1.0"] = "1.0"
-    suite_id: Literal["document-dense-public-calibration-v1"]
+    suite_id: Literal[
+        "document-dense-public-calibration-v1",
+        "document-dense-public-calibration-v2",
+    ]
     suite_kind: Literal["public_calibration_not_blind"]
     cases: tuple[DocumentCalibrationCase, ...] = Field(min_length=1, max_length=200)
 

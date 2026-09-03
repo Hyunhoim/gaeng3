@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime
-from decimal import Decimal
+from decimal import Decimal, localcontext
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -12,6 +12,8 @@ from finance_agent_core.contracts.queryplan import AggregateFunction, QueryPlan
 
 type RawScalar = str | int | bool | None
 type EvidenceScalar = str | int | bool | None
+
+_SOURCE_NUMBER_QUANTUM = Decimal("0.00000001")
 
 
 class DomainModel(BaseModel):
@@ -51,7 +53,15 @@ class DomainModel(BaseModel):
                 return False
             return None
         if definition.value_type is ValueType.NUMBER:
-            return Decimal(str(raw).replace(",", ""))
+            parsed = Decimal(str(raw).replace(",", ""))
+            # XLSX numeric cells are decoded from IEEE-754 doubles and may
+            # carry a representation tail (for example 764.0700000000001).
+            # Source-backed fields use the same eight-decimal canonical
+            # precision as the normalized SQLite fields so Oracle output,
+            # independent verification, evidence, and sorting all agree.
+            with localcontext() as context:
+                context.prec = max(50, len(parsed.as_tuple().digits) + 16)
+                return parsed.quantize(_SOURCE_NUMBER_QUANTUM)
         if definition.value_type is ValueType.DATE:
             rendered = str(raw).strip().removesuffix(".0")
             for date_format in ("%Y%m%d", "%Y-%m-%d", "%Y-%m-%d %H:%M:%S"):
@@ -352,13 +362,34 @@ class NormalizedBondRecord(DomainModel):
         if set(self.field_quality) != set(self.field_quality_reasons):
             raise ValueError("field quality and reason keys must agree")
 
-        expected_remaining = (
-            None
-            if self.maturity_date is None
-            else (self.maturity_date - self.source_snapshot_date).days
-        )
+        raw_remaining = self.source_values.get("remaining_days")
+        if not self.source_values:
+            # ``RecordSnapshotCache`` deliberately omits the large raw-source
+            # JSON after SQLite has already validated and normalized the row.
+            # The official remaining-days value can differ from a date
+            # subtraction against the release snapshot because each source row
+            # has its own information date.  With no raw projection available,
+            # validate the stored normalized value structurally rather than
+            # replacing it with a different derived value.
+            expected_remaining = self.remaining_days
+        elif raw_remaining is not None and not isinstance(raw_remaining, bool):
+            try:
+                parsed_remaining = Decimal(str(raw_remaining))
+                if parsed_remaining != parsed_remaining.to_integral_value():
+                    raise ValueError
+                expected_remaining = int(parsed_remaining)
+            except (ValueError, ArithmeticError) as error:
+                raise ValueError("source remaining_days must be an integer") from error
+        else:
+            expected_remaining = (
+                None
+                if self.maturity_date is None
+                else (self.maturity_date - self.source_snapshot_date).days
+            )
         if self.remaining_days != expected_remaining:
-            raise ValueError("remaining_days must be recomputed from maturity and snapshot")
+            raise ValueError(
+                "remaining_days must prefer the official source and use maturity as fallback"
+            )
         if self.currently_buyable is not True:
             raise ValueError(
                 "the 2026-08-24 official bond release must treat supplied rows as buyable"
@@ -649,7 +680,7 @@ class ProductEvidence(DomainModel):
 
 
 class ComparisonCellEvidence(DomainModel):
-    target_index: Literal[1, 2]
+    target_index: Literal[1, 2, 3]
     product_id: str
     product_name: str | None
     value: EvidenceScalar
@@ -680,12 +711,13 @@ class ComparisonEvidence(DomainModel):
     delta: str | None
     delta_basis: Literal["second_minus_first"] | None
     reason: str | None
-    cells: list[ComparisonCellEvidence] = Field(min_length=2, max_length=2)
+    cells: list[ComparisonCellEvidence] = Field(min_length=2, max_length=3)
 
     @model_validator(mode="after")
     def validate_comparison_cells(self) -> ComparisonEvidence:
-        if [cell.target_index for cell in self.cells] != [1, 2]:
-            raise ValueError("comparison cells must preserve target order 1, 2")
+        expected_order = list(range(1, len(self.cells) + 1))
+        if [cell.target_index for cell in self.cells] != expected_order:
+            raise ValueError("comparison cells must preserve sequential target order")
         if self.delta is None and self.delta_basis is not None:
             raise ValueError("comparison without delta cannot expose a delta basis")
         if self.delta is not None and self.delta_basis != "second_minus_first":

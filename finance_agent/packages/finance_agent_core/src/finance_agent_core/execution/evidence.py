@@ -104,7 +104,8 @@ def build_product_evidence(
             ProductEvidence(
                 product_id=(
                     record.ticker
-                    if record.product_family == "bond" and plan.intent.value != "compare"
+                    if record.product_family in {"bond", "overseas_etp"}
+                    and plan.intent.value != "compare"
                     else record.product_id
                 ),
                 product_name=record.product_name,

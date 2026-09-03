@@ -295,6 +295,11 @@ def test_bond_hints_lock_availability_remaining_days_and_yield_ranking() -> None
         (item["field"], item["operator"], item["value"]) for item in hints["required_constraints"]
     } == {
         ("bond_major_class", "eq", "회사채"),
+        # BUYABLE_QUANTITY itself is invalid, but the organizer's 2026-08-24
+        # rule makes buyability a source-independent constant for every
+        # supplied, non-delisted bond.  Keep the user's requested slot without
+        # filtering on the invalid raw quantity column.
+        ("currently_buyable", "eq", True),
         ("remaining_days", "lte", 365),
     }
     assert hints["required_rankings"] == [
@@ -316,7 +321,7 @@ def test_bond_plain_maturity_years_are_normalized_to_remaining_days() -> None:
 def test_bond_purchase_synonym_and_short_remaining_term_sort_are_normalized() -> None:
     hints = build_lexical_hints("현재 구매 가능한 국내 채권을 잔존 기일이 짧은 순서로 3건 검색해줘")
 
-    assert ("currently_buyable", "eq", True) not in {
+    assert ("currently_buyable", "eq", True) in {
         (item["field"], item["operator"], item["value"]) for item in hints["required_constraints"]
     }
     assert hints["required_rankings"] == [
@@ -438,6 +443,28 @@ def test_explicit_negative_boolean_filters_keep_their_polarity() -> None:
         (item["field"], item["value"]) for item in domestic["required_constraints"]
     }
     assert "매수가 가능하지 않" in bond["unsupported_spans"]
+
+
+@pytest.mark.parametrize(
+    ("question", "field", "value"),
+    [
+        ("판매 불가능한 상품은 빼고 해외 ETF를 보여줘", "sellable", True),
+        ("판매 가능한 상품은 제외하고 해외 ETF를 보여줘", "sellable", False),
+        ("거래정지 아닌 상품은 제외하고 해외 ETF를 보여줘", "trading_suspended", True),
+        ("거래정지 상품은 제외하고 해외 ETF를 보여줘", "trading_suspended", False),
+    ],
+)
+def test_boolean_exclusion_applies_double_negation_once(
+    question: str,
+    field: str,
+    value: bool,
+) -> None:
+    hints = build_lexical_hints(question)
+    constraints = [
+        item for item in hints["required_constraints"] if item["field"] == field
+    ]
+
+    assert constraints == [{"field": field, "operator": "eq", "value": value}]
 
 
 def test_bond_ordered_credit_rating_expands_from_registry_scale() -> None:

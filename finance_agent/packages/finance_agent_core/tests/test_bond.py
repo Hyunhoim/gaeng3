@@ -1,3 +1,4 @@
+import sqlite3
 from datetime import date
 from pathlib import Path
 
@@ -23,22 +24,29 @@ def make_bond_record(
     *,
     row: int,
     product_id: str,
-    buy_yield: str,
+    buy_yield: str | None,
     quantity: int | None,
     maturity: int,
+    remaining_days: int | None = 9999,
     major_class: str = "회사채",
     credit_rating: str = "AA-",
+    interest_rate_type: str = "고정금리",
+    interest_payment_type: str = "이표채",
+    bond_market: str = "장내",
+    info_sequence: int | None = None,
 ) -> NormalizedBondRecord:
     return normalize_bond_row(
         source_row=row,
         present_source_fields=40,
         values={
             "pd_no": product_id,
-            "pd_exg_mkt": "장내",
+            "pd_exg_mkt": bond_market,
             "info_base_dt": 20260824,
-            "info_seq": row - 1,
+            "info_seq": row - 1 if info_sequence is None else info_sequence,
             "pd_nm": f"테스트채권 {product_id}",
             "pd_abrv_nm": f"테스트 {product_id}",
+            "bd_inrt_tcd": interest_rate_type,
+            "bd_intp_tcd": interest_payment_type,
             "pd_pbcm": "테스트발행사",
             "std_pd_mcls_nm": major_class,
             "std_pd_scls_nm": "일반사채",
@@ -53,7 +61,7 @@ def make_bond_record(
             "buy_yield": buy_yield,
             "after_tax_yield": "3.0",
             "buyable_quantity": quantity,
-            "remaining_days": 9999,
+            "remaining_days": remaining_days,
             "dur": "0.5",
             "crd_grd": credit_rating,
         },
@@ -124,7 +132,7 @@ def make_bond_database(tmp_path: Path) -> tuple[Path, list[NormalizedBondRecord]
     return path, records
 
 
-def test_bond_normalization_recomputes_availability_and_remaining_days() -> None:
+def test_bond_normalization_prefers_official_remaining_days_and_falls_back() -> None:
     record = make_bond_record(
         row=2,
         product_id="KRTEST000001",
@@ -138,14 +146,57 @@ def test_bond_normalization_recomputes_availability_and_remaining_days() -> None
         buy_yield="3.5",
         quantity=None,
         maturity=20280101,
+        remaining_days=None,
     )
 
     assert record.currently_buyable is True
-    assert record.remaining_days == 130
+    assert record.remaining_days == 9999
     assert record.source_values["remaining_days"] == 9999
+    assert record.field_quality["remaining_days"] is QualityStatus.VALID
+    assert unknown.remaining_days == 495
+    assert unknown.field_quality["remaining_days"] is QualityStatus.PARTIAL
     assert record.field_quality["buy_yield_pct"] is QualityStatus.VALID
+    assert record.source_values["bd_inrt_tcd"] == "고정금리"
+    assert record.source_values["bd_intp_tcd"] == "이표채"
+    assert record.canonical_value("interest_rate_type") == "고정금리"
+    assert record.canonical_value("interest_payment_type") == "이표채"
     assert unknown.currently_buyable is True
     assert unknown.field_quality["currently_buyable"] is QualityStatus.VALID
+
+
+def test_bond_reader_migrates_legacy_derived_remaining_days_to_official_source(
+    tmp_path: Path,
+) -> None:
+    path, _ = make_bond_database(tmp_path)
+    with sqlite3.connect(path) as connection:
+        connection.execute(
+            "UPDATE bond_products SET remaining_days = ? WHERE ticker = ?",
+            (123, "KRTEST000001"),
+        )
+
+    with connect_read_only(path) as connection:
+        record = next(
+            item for item in load_all_records(connection) if item.ticker == "KRTEST000001"
+        )
+
+    assert record.source_values["remaining_days"] == 9999
+    assert record.remaining_days == 9999
+
+
+def test_bond_compact_reader_preserves_official_remaining_days_without_raw_json(
+    tmp_path: Path,
+) -> None:
+    path, _ = make_bond_database(tmp_path)
+
+    with connect_read_only(path) as connection:
+        record = next(
+            item
+            for item in load_all_records(connection, include_source_values=False)
+            if item.ticker == "KRTEST000001"
+        )
+
+    assert record.source_values == {}
+    assert record.remaining_days == 9999
 
 
 def test_bond_sqlite_oracle_verifier_and_evidence_agree(tmp_path: Path) -> None:
@@ -157,16 +208,17 @@ def test_bond_sqlite_oracle_verifier_and_evidence_agree(tmp_path: Path) -> None:
     verified = ResultVerifier().verify(plan, executed, universe)
     products = build_product_evidence(plan, verified)
 
-    # The default search scope excludes a bond whose maturity is on or before
-    # its own dynamic-as-of date; the organizer's buyability override does not
-    # make an already matured instrument active again.
-    assert verified.candidate_count == 5
+    # The organizer invalidated BUYABLE_QUANTITY and supplied no dedicated
+    # listing-end field. Maturity remains evidence, not an inferred
+    # availability filter, so every supplied non-quarantined product remains
+    # in the search universe.
+    assert verified.candidate_count == 6
     assert [record.product_id for record in verified.records] == [
         "KRTEST000005:장내:20260824:5",
+        "KRTEST000004:장내:20260824:4",
         "KRTEST000003:장내:20260824:3",
         "KRTEST000006:장내:20260824:6",
         "KRTEST000001:장내:20260824:1",
-        "KRTEST000002:장내:20260824:2",
     ]
     buy_yield = next(
         field for field in products[0].fields if field.canonical_field == "buy_yield_pct"
@@ -207,7 +259,7 @@ def test_bond_search_uses_first_source_row_per_official_product_id(tmp_path: Pat
     verified = ResultVerifier().verify(plan, executed, universe)
     products = build_product_evidence(plan, verified)
 
-    assert verified.candidate_count == 5
+    assert verified.candidate_count == 6
     assert all(record.source_row != 8 for record in verified.records)
     assert len({product.product_id for product in products}) == len(products)
     assert all(":" not in product.product_id for product in products)
@@ -224,7 +276,7 @@ def test_bond_mock_agent_completes_verified_vertical_slice(tmp_path: Path) -> No
         "bond-agent-001",
     )
 
-    assert response.candidate_count == 5
+    assert response.candidate_count == 6
     assert response.products[0].ticker == "KRTEST000005"
     assert "매수수익률 7.5%" in response.answer
     assert response.source_manifest.dataset == "bond"
@@ -241,10 +293,11 @@ def test_bond_briefing_query_executes_with_sellability_and_rating_threshold(
     )
 
     assert result.status == "executed"
-    assert result.candidate_count == 4
+    assert result.candidate_count == 5
     assert {product.ticker for product in result.products} == {
         "KRTEST000001",
         "KRTEST000003",
+        "KRTEST000004",
         "KRTEST000005",
         "KRTEST000006",
     }
@@ -364,3 +417,168 @@ def test_bond_comparison_runs_through_common_engine(tmp_path: Path) -> None:
     ]
     assert [item.delta for item in result.comparisons] == ["1.0", "0.0", None]
     assert "기준일 2026-02-24" in result.answer
+
+
+def test_bond_comparison_selects_metric_supported_logical_row(tmp_path: Path) -> None:
+    records = [
+        make_bond_record(
+            row=2,
+            product_id="KRTEST000011",
+            buy_yield=None,
+            quantity=None,
+            maturity=20290101,
+            bond_market="장내",
+            info_sequence=1,
+        ),
+        make_bond_record(
+            row=3,
+            product_id="KRTEST000011",
+            buy_yield="4.5",
+            quantity=None,
+            maturity=20290101,
+            bond_market="장외",
+            info_sequence=2,
+        ),
+        make_bond_record(
+            row=4,
+            product_id="KRTEST000011",
+            buy_yield="3.5",
+            quantity=None,
+            maturity=20290101,
+            bond_market="장외",
+            info_sequence=1,
+        ),
+        make_bond_record(
+            row=5,
+            product_id="KRTEST000012",
+            buy_yield="5.0",
+            quantity=None,
+            maturity=20300101,
+            bond_market="장외",
+            info_sequence=1,
+        ),
+    ]
+    path = tmp_path / "bond-logical-comparison.sqlite3"
+    write_bond_database(
+        path,
+        records,
+        DatabaseManifest(
+            dataset="bond",
+            registry_schema_version="1.7",
+            source_file_name="synthetic_bond.xlsx",
+            source_file_sha256="e" * 64,
+            source_file_size_bytes=1234,
+            source_snapshot_date=date(2026, 8, 24),
+            total_rows=len(records),
+            searchable_rows=len(records),
+            quarantined_rows=0,
+        ),
+    )
+
+    agent = RoutedFinanceAgent({"bond": path})
+    result = agent.answer(
+        "국내채권 KRTEST000011과 KRTEST000012의 매수수익률과 듀레이션을 비교해줘",
+        "compare-bond-logical-row",
+    )
+
+    assert result.status == "executed"
+    assert [product.product_id for product in result.products] == [
+        "KRTEST000011:장외:20260824:1",
+        "KRTEST000012:장외:20260824:1",
+    ]
+    buy_yield = next(
+        item for item in result.comparisons if item.canonical_field == "buy_yield_pct"
+    )
+    assert [cell.value for cell in buy_yield.cells] == ["3.5", "5"]
+    assert "제공 데이터에서 확인되지 않음" not in result.answer
+
+    aggregate = agent.answer(
+        "국내채권의 유효한 매수수익률 최저값과 최고값을 함께 계산해줘",
+        "aggregate-bond-logical-row",
+    )
+    assert aggregate.status == "executed"
+    assert aggregate.candidate_count == 2
+    assert [item.value for item in aggregate.aggregates] == ["3.5", "5"]
+
+
+def test_bond_official_rate_and_payment_types_drive_source_backed_search(
+    tmp_path: Path,
+) -> None:
+    records = [
+        make_bond_record(
+            row=2,
+            product_id="KRTEST000001",
+            buy_yield="4.5",
+            quantity=100,
+            maturity=20270101,
+            interest_rate_type="변동금리",
+            interest_payment_type="할인채",
+        ),
+        make_bond_record(
+            row=3,
+            product_id="KRTEST000002",
+            buy_yield="3.5",
+            quantity=100,
+            maturity=20280101,
+        ),
+    ]
+    path = tmp_path / "official-types-bond.sqlite3"
+    write_bond_database(
+        path,
+        records,
+        DatabaseManifest(
+            dataset="bond",
+            registry_schema_version="1.7",
+            source_file_name="synthetic_bond.xlsx",
+            source_file_sha256="d" * 64,
+            source_file_size_bytes=1234,
+            source_snapshot_date=date(2026, 8, 24),
+            total_rows=2,
+            searchable_rows=2,
+            quarantined_rows=0,
+        ),
+    )
+
+    result = RoutedFinanceAgent({"bond": path}).answer(
+        "변동금리 할인채 중 매수수익률 높은 순 1개 보여줘",
+        "bond-official-types-001",
+    )
+
+    assert result.status == "executed"
+    assert result.query_plan is not None
+    assert {(item.field, item.value) for item in result.query_plan.constraints} == {
+        ("interest_rate_type", "변동금리"),
+        ("interest_payment_type", "할인채"),
+    }
+    assert [item.ticker for item in result.products] == ["KRTEST000001"]
+
+
+def test_quoted_exact_bond_name_masks_physical_row_identity_and_detail_prose(
+    tmp_path: Path,
+) -> None:
+    path, _records = make_bond_database(tmp_path)
+    exact_name = "테스트캐피탈 42-7"
+    with sqlite3.connect(path) as connection:
+        connection.execute(
+            "UPDATE bond_products SET product_name = ?, short_name = ? WHERE ticker = ?",
+            (exact_name, exact_name, "KRTEST000001"),
+        )
+    agent = RoutedFinanceAgent({"bond": path})
+
+    questions = (
+        f"'{exact_name}'의 상품 상세정보를 보여줘.",
+        f"‘{exact_name}’ 상품 카드에 들어갈 상세 데이터를 보여줘.",
+        f'"{exact_name}"의 식별정보와 핵심 지표를 자세히 알려줘.',
+    )
+    for index, question in enumerate(questions):
+        result = agent.answer(question, f"bond-name-detail-{index}")
+        assert result.status == "executed", result.answer
+        assert result.candidate_count == 1
+        assert [item.ticker for item in result.products] == ["KRTEST000001"]
+
+    unknown = agent.answer(
+        "'존재하지않는채권 42-7'의 상세정보를 보여줘.",
+        "bond-name-detail-unknown",
+    )
+    assert unknown.status == "clarify"
+    assert unknown.products == []

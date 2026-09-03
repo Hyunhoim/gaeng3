@@ -77,7 +77,12 @@ def test_mixed_attack_clauses_are_terminally_unsupported(
             "issue_amount",
             "desc",
         ),
-        ("국내채권 중 발행 물량이 가장 넉넉한 것 3개를 찾아줘.", "bond", "issue_amount", "desc"),
+        (
+            "국내채권 중 발행 물량이 가장 넉넉한 것 3개를 찾아줘.",
+            "bond",
+            "total_issue_amount",
+            "desc",
+        ),
         (
             "국내채권을 지금 샀을 때 세전 보상이 큰 순서로 3개 알려줘.",
             "bond",
@@ -100,7 +105,7 @@ def test_mixed_attack_clauses_are_terminally_unsupported(
         (
             "회사채 중 발행 규모가 큰 종목 3개를 알려줘.",
             "bond",
-            "issue_amount",
+            "total_issue_amount",
             "desc",
         ),
         (
@@ -229,6 +234,17 @@ def test_unresolved_ranking_cannot_fall_back_to_a_generic_or_name_sorted_search(
 def test_structured_product_search_has_precedence_over_relation_routing(
     question: str,
 ) -> None:
+    assert product_search_has_precedence(question)
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        "한국산업은행이 발행한 국내채권을 상품명순으로 다섯 개 찾아 주세요.",
+        "발행사가 한국산업은행인 국내채권을 이름 가나다순으로 5개 보여 주세요.",
+    ],
+)
+def test_issuer_filter_with_name_order_precedes_relation_routing(question: str) -> None:
     assert product_search_has_precedence(question)
 
 

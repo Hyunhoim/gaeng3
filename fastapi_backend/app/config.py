@@ -261,6 +261,14 @@ class Settings(BaseSettings):
         pattern=r"^[0-9a-f]{64}$",
         validation_alias="FINANCE_EXTERNAL_TEMPORAL_RELATION_SHA256",
     )
+    external_document_dense_artifact_file: Path | None = Field(
+        default=None,
+        validation_alias="FINANCE_EXTERNAL_DOCUMENT_DENSE_ARTIFACT_FILE",
+    )
+    external_document_cache_activation_file: Path | None = Field(
+        default=None,
+        validation_alias="FINANCE_EXTERNAL_DOCUMENT_CACHE_ACTIVATION_FILE",
+    )
     naver_api_hub_client_id_file: Path | None = Field(
         default=None,
         validation_alias="NAVER_API_HUB_CLIENT_ID_FILE",
@@ -434,6 +442,10 @@ class Settings(BaseSettings):
             self.naver_api_hub_client_id_file,
             self.naver_api_hub_client_secret_file,
         )
+        document_cache_values = (
+            self.external_document_dense_artifact_file,
+            self.external_document_cache_activation_file,
+        )
         if self.external_knowledge_enabled:
             if any(value is None for value in external_values):
                 raise ValueError(
@@ -445,11 +457,22 @@ class Settings(BaseSettings):
             raise ValueError(
                 "external knowledge files cannot be configured while the feature is disabled"
             )
+        if any(value is not None for value in document_cache_values):
+            if not all(value is not None for value in document_cache_values):
+                raise ValueError(
+                    "Document Dense cache requires both index and activation receipt files"
+                )
+            if not self.external_knowledge_enabled:
+                raise ValueError("Document Dense cache requires external knowledge")
+            if not self.adaptive_semantic_enabled:
+                raise ValueError("Document Dense cache requires the shared verified KURE provider")
         external_paths = (
             self.external_knowledge_artifact_file,
             self.external_temporal_relation_file,
             self.naver_api_hub_client_id_file,
             self.naver_api_hub_client_secret_file,
+            self.external_document_dense_artifact_file,
+            self.external_document_cache_activation_file,
         )
         if any(path is not None and not path.is_absolute() for path in external_paths):
             raise ValueError("external knowledge files must use absolute paths")
@@ -516,6 +539,13 @@ class Settings(BaseSettings):
                 (self.relation_retrieval_artifact_sha256 is None)
                 != (self.relation_retrieval_artifact_sha256_file is None)
             )
+        )
+
+    @property
+    def document_cache_configured(self) -> bool:
+        return (
+            self.external_document_dense_artifact_file is not None
+            and self.external_document_cache_activation_file is not None
         )
 
     @property

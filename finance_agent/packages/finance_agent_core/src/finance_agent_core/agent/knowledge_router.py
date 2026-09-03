@@ -189,14 +189,33 @@ _PRODUCT_SEARCH_PRECEDENCE_CONDITION = re.compile(
     r"AUM|총\s*보수|보수율|(?:1\s*주|1\s*개월|3\s*개월|6\s*개월|1\s*년|YTD)"
     r"\s*(?:수익률|수익|성과)|(?:반\s*년|연초\s*이후|올해\s*들어)\s*(?:수익률|수익|성과)?|"
     r"이율|금리|만기|신용\s*등급|거래\s*통화|"
-    r"가격|듀레이션|잔존\s*일수|위험|리스크|거래\s*(?:가능|중지|정지|량|대금)|"
+    r"가격|시가|고가|저가|종가|추적\s*오차율|듀레이션|잔존\s*일수|위험|리스크|"
+    r"거래\s*(?:가능|중지|정지|량|대금)|"
+    r"(?:상품|종목|펀드)\s*명\s*(?:가나다|알파벳|오름|내림)?\s*순|"
+    r"이름\s*(?:가나다|알파벳|오름|내림)?\s*순|가나다\s*순|알파벳\s*순|"
     r"연금|환\s*헤지|제외|말고|빼고|오름차순|내림차순|정렬|상위|하위|"
     r"높은\s*순|낮은\s*순|큰\s*순|작은\s*순|많은\s*순|적은\s*순",
     re.IGNORECASE,
 )
 _EXACT_PRODUCT_IDENTIFIER = re.compile(
-    r"(?<![0-9A-Za-z])(?:[A-Z]{2}[0-9A-Z]{10}|[0-9]{6}|[A-Z]{1,8}:[0-9A-Z._-]{1,24})"
-    r"(?![0-9A-Za-z])",
+    r"(?:(?<![0-9A-Za-z])(?:[A-Z]{2}[0-9A-Z]{10}|[0-9]{6}|"
+    # The August domestic ETP source uses seven-character exchange codes such
+    # as A0023B0/Q1234AB in addition to six-digit tickers and KR ISINs.  These
+    # are exact provided-DB identities, so a DETAIL request for DB columns
+    # (for example manager/AUM) must precede the relation router.
+    r"[AQ][0-9]{4}[0-9A-Z]{2}|"
+    r"[A-Z]{1,8}:[0-9A-Z._-]{1,24}|[A-Z][0-9A-Z]{1,9}\.[0-9A-Z]{1,5})"
+    r"(?![0-9A-Za-z])|\([A-Z][0-9A-Z._-]{1,9}\))",
+    re.IGNORECASE,
+)
+_EXPLICIT_EXTERNAL_RELATION_ACTION = re.compile(
+    r"편입(?:한|하는|된|\s*(?:종목|자산))|"
+    r"보유(?:한|하는|하고\s*있는|된|\s*(?:종목|자산))|구성\s*종목|"
+    r"자회사|(?:연결|연관)\s*이력|"
+    r"(?:테마|섹터|산업).{0,16}?(?:관련|연결)|"
+    r"(?:관련|연결).{0,16}?(?:테마|섹터|산업)|"
+    r"관련\s*(?:된\s*)?(?:투자\s*)?상품|(?:위험|리스크)\s*요인|"
+    r"(?:펀드.{0,20})?(?:구조|투자\s*전략|운용\s*동향|판매\s*동향)",
     re.IGNORECASE,
 )
 _COORDINATED_ENTITY = re.compile(r"(?:또는|혹은|및|와|과)\s+|[,/;]", re.IGNORECASE)
@@ -226,13 +245,23 @@ _QUOTED_PRODUCT_DETAIL = re.compile(
 def product_search_has_precedence(question: str) -> bool:
     """Keep filter/ranking product searches out of the single-relation endpoint."""
 
-    if _UNSUPPORTED_RELATION_SCOPE.search(question):
-        return False
     # A quoted identity followed by the possessive marker is a product DETAIL
     # request even when the requested DB fields are named 운용사·투자지역·자산군.
     # Entity-to-product relation searches do not have this exact-identity shape.
     if _QUOTED_PRODUCT_DETAIL.search(question):
         return True
+    # An exact DB identity plus explicit DB fields is still a product query
+    # when a word inside the official product name happens to contain ``테마``
+    # or another relation-looking noun. Explicit holdings/theme actions retain
+    # external-search precedence.
+    if (
+        _EXACT_PRODUCT_IDENTIFIER.search(question)
+        and _PRODUCT_SEARCH_PRECEDENCE_CONDITION.search(question)
+        and _EXPLICIT_EXTERNAL_RELATION_ACTION.search(question) is None
+    ):
+        return True
+    if _UNSUPPORTED_RELATION_SCOPE.search(question):
+        return False
     # Exact codes/ISINs bind the request to one provided-DB record.  Requested
     # fields such as investment region and asset class are columns of that
     # product, not multiple graph predicates.

@@ -1,4 +1,4 @@
-schema_version: "1.5"
+schema_version: "1.8"
 
 datasets:
   overseas_etp:
@@ -369,15 +369,6 @@ fields:
       - Mixed Assets
       - Commodity
       - Money Market
-      - 주식
-      - 채권
-      - 원자재
-      - 혼합자산
-      - 단기자금
-      - 통화
-      - 부동산
-      - 대체투자
-      - 기타
     notes: 11행이 결측·격리된다. 채권형은 정확히 Bond 값으로 매핑한다.
     dataset_overrides:
       domestic_etp:
@@ -386,6 +377,7 @@ fields:
           columns: [wu_inv_ast_type]
         quality: VALID
         coverage_pct: 100.0
+        enum_values: [주식, 채권, 원자재, 혼합자산, 단기자금, 통화, 부동산, 대체투자, 기타]
         notes: 격리 행을 제외한 값은 8개 한국어 자산군 중 하나다.
 
   investment_region:
@@ -462,17 +454,6 @@ fields:
       - United Kingdom
       - United States of America
       - Vietnam
-      - 국내
-      - 미국
-      - 글로벌
-      - 중국
-      - 아시아
-      - 일본
-      - 인도
-      - 남미/북미
-      - 유럽
-      - 베트남
-      - 이머징/브릭스
     notes: 11행이 결측·격리된다. 미국은 정확히 United States of America 값으로 매핑한다.
     dataset_overrides:
       domestic_etp:
@@ -481,6 +462,7 @@ fields:
           columns: [wu_inv_rgn]
         quality: VALID
         coverage_pct: 100.0
+        enum_values: [국내, 미국, 글로벌, 중국, 아시아, 일본, 인도, 남미/북미, 유럽, 베트남, 이머징/브릭스]
         notes: 격리 행을 제외한 값은 11개 한국어 투자지역 중 하나다.
       fund:
         source:
@@ -488,11 +470,12 @@ fields:
           columns: [fd_ivst_rgn_desc]
         quality: VALID
         coverage_pct: 100.0
+        enum_values: [국내, 글로벌, 기타, 남미/북미, 아시아, 유럽, 이머징/브릭스, 중동/아프리카, 해당없음]
         notes: 정상 논리 상품 23,560개에서 공식 투자지역 설명값을 원문으로 보존한다.
 
   total_expense_ratio_pct:
     label: 총보수율
-    aliases: [총보수, 보수율, 연간보수, 연간보수율, expense ratio, fee]
+    aliases: [총보수, 보수율, 연간보수, 연간보수율, 운용비, 운영비, 관리비, 수수료 부담, expense ratio, fee]
     datasets: [overseas_etp, domestic_etp]
     value_type: number
     comparable: true
@@ -523,7 +506,7 @@ fields:
 
   aum:
     label: 최근 AUM
-    aliases: [순자산, 운용 자산, assets under management]
+    aliases: [AUM, 순자산, 운용 자산, assets under management]
     datasets: [overseas_etp, domestic_etp, fund]
     value_type: number
     comparable: true
@@ -655,7 +638,7 @@ fields:
 
   dynamic_as_of:
     label: 동적 지표 기준일
-    aliases: [AUM 업데이트일, dynamic as of]
+    aliases: [AUM 업데이트일, 최신 기준일, 동적 기준일, dynamic as of]
     datasets: [overseas_etp, domestic_etp, bond, fund]
     value_type: date
     unit: date
@@ -700,7 +683,7 @@ fields:
 
   one_day_return_pct:
     label: 1일 수익률
-    aliases: [하루 수익률, 일간 수익률, one day return]
+    aliases: [하루 수익률, 일간 수익률, 당일 수익률, 오늘 상승률, 하루 등락률, 하루 등락, 일간 등락률, 일간 등락, one day return]
     datasets: [overseas_etp, domestic_etp]
     value_type: number
     unit: pct_point
@@ -800,7 +783,7 @@ fields:
   base_index:
     label: 기초지수
     aliases: [추종 지수, benchmark, base index]
-    datasets: [domestic_etp, fund]
+    datasets: [domestic_etp, overseas_etp, fund]
     value_type: string
     comparable: true
     source:
@@ -812,6 +795,13 @@ fields:
     allowed_operators: [eq, contains]
     notes: 56행만 제공되므로 일치 상품 탐색에는 쓸 수 있지만 결측을 지수 부재로 해석하지 않는다.
     dataset_overrides:
+      overseas_etp:
+        source:
+          dataset: overseas_etp
+          columns: [cu_base_index]
+        quality: PARTIAL
+        coverage_pct: 51.4494
+        notes: 원천 6,026행에 값이 있지만 주요 제공 불가 placeholder 2,920행을 제외한 3,106행만 의미 있는 기초지수로 간주하며, 결측과 placeholder를 지수 부재로 해석하지 않는다.
       fund:
         source:
           dataset: fund
@@ -842,6 +832,38 @@ fields:
     allowed_operators: [eq, in]
     enum_values: [실물복제, C, 액티브, 합성복제]
     notes: C는 ETN에서 관측되는 원천 코드로 의미 확인 전 그대로 보존한다.
+
+  strategy_description:
+    label: 해외 ETP 운용 전략
+    aliases: [운용 전략, 운용전략, 운용 전략 설명, 투자 전략 설명, investment strategy]
+    datasets: [overseas_etp]
+    value_type: string
+    comparable: true
+    source:
+      dataset: overseas_etp
+      columns: [cu_strtegy]
+    quality: PARTIAL
+    coverage_pct: 99.8178
+    queryable: true
+    allowed_operators: [eq, contains]
+    notes: 공식 2026-08-24 원천 6,026행의 영문 운용전략 서술을 요약·추론하지 않고 그대로 보존하며, 명시적 문구 일치에만 사용한다.
+
+  index_replication_method:
+    label: 지수 복제방법
+    aliases: [지수복제방법, 지수 복제 방식, 지수복제방식, 복제 방식, 복제방식, index replication method]
+    datasets: [overseas_etp]
+    value_type: enum
+    comparable: true
+    unit: code
+    source:
+      dataset: overseas_etp
+      columns: [cu_index_repl_mthd]
+    quality: PARTIAL
+    coverage_pct: 39.8708
+    queryable: true
+    allowed_operators: [eq, in]
+    enum_values: [Optimized, Swap, Full, Other]
+    notes: 공식 2026-08-24 원천의 2,407행에서만 제공된 Optimized·Swap·Full·Other 코드를 그대로 보존하고 결측은 UNKNOWN으로 유지한다.
 
   leverage_factor:
     label: 레버리지 배수
@@ -883,6 +905,7 @@ fields:
     quality: VALID
     coverage_pct: 100.0
     queryable: true
+    sortable: true
     allowed_operators: [eq, in]
     enum_values:
       - 매우높은위험(1등급)
@@ -891,7 +914,7 @@ fields:
       - 보통위험(4등급)
       - 낮은위험(5등급)
       - 매우낮은위험(6등급)
-    notes: 원천 등급명을 그대로 보존하며 투자 적합성 판단을 대신하지 않는다.
+    notes: 원천 등급명을 그대로 보존한다. 정렬 시에만 매우낮은위험부터 매우높은위험까지 서버 고정 순서를 사용하며 투자 적합성 판단을 대신하지 않는다.
     dataset_overrides:
       fund:
         source:
@@ -1704,7 +1727,7 @@ fields:
 
   preservation_ratio_pct:
     label: 보전율
-    aliases: [보전 비율, preservation ratio]
+    aliases: [보전 비율, 원본 보존 비율, 원본을 남겨 둔 비율, preservation ratio]
     datasets: [fund]
     value_type: number
     comparable: true
@@ -1851,7 +1874,7 @@ fields:
     coverage_pct: 99.3191
     queryable: true
     sortable: true
-    allowed_operators: [eq, contains]
+    allowed_operators: [eq, neq, contains]
     notes: 149행이 결측이며 원천 표기를 그대로 보존한다.
 
   bond_major_class:
@@ -1907,6 +1930,40 @@ fields:
     sortable: true
     allowed_operators: [eq, contains]
     notes: 152행이 결측이고 32개 원천 유형이 있어 문자열 원문으로 보존한다.
+
+  interest_rate_type:
+    label: 금리구분
+    aliases: [금리 유형, 이자율 유형, 금리 적용 방식, 이자율 적용 방식, 고정금리 여부, interest rate type]
+    datasets: [bond]
+    value_type: enum
+    comparable: true
+    unit: code
+    source:
+      dataset: bond
+      columns: [bd_inrt_tcd]
+    quality: VALID
+    coverage_pct: 100.0
+    queryable: true
+    allowed_operators: [eq, in]
+    enum_values: [고정금리, 변동금리, 고정+변동금리]
+    notes: 공식 2026-08-24 원천의 금리구분을 그대로 보존한다. 고정금리 20,904행, 변동금리 830행, 고정+변동금리 148행이다.
+
+  interest_payment_type:
+    label: 이자지급구분
+    aliases: [이자 지급 방식, 이자 지급 유형, 채권 이자 방식, interest payment type]
+    datasets: [bond]
+    value_type: enum
+    comparable: true
+    unit: code
+    source:
+      dataset: bond
+      columns: [bd_intp_tcd]
+    quality: VALID
+    coverage_pct: 100.0
+    queryable: true
+    allowed_operators: [eq, in]
+    enum_values: [이표채, 복리채, 할인채, 단리채]
+    notes: 공식 2026-08-24 원천의 이자지급구분을 그대로 보존한다. 이표채 18,059행, 복리채 2,867행, 할인채 689행, 단리채 267행이다.
 
   issue_amount:
     label: 발행잔액
@@ -2040,7 +2097,7 @@ fields:
 
   applied_yield_pct:
     label: 민평수익률
-    aliases: [민평 수익률, 민평금리, 민평 기준 수익률, 민간평가 금리, 평가기관 수익률, 민평 산출 수익률]
+    aliases: [민평 수익률, 민평금리, 민평 기준 수익률, 민간평가 금리, 평가기관 수익률, 민평 산출 수익률, 적용수익률, 적용 수익률]
     datasets: [bond]
     value_type: number
     comparable: true
@@ -2116,7 +2173,7 @@ fields:
 
   after_tax_yield_pct:
     label: 세후수익률
-    aliases: [세후 수익률, after-tax yield]
+    aliases: [세후 수익률, 세후 매수수익률, 세후 매수 수익률, after-tax yield]
     datasets: [bond]
     value_type: number
     comparable: true
@@ -2139,8 +2196,9 @@ fields:
     aliases: [매수 가능 수량, 주문가능수량, buyable quantity]
     datasets: [bond]
     value_type: number
-    comparable: true
-    comparison_mode: numeric_delta
+    selectable: false
+    comparable: false
+    comparison_mode: value_only
     unit: source_quantity
     source:
       dataset: bond
@@ -2152,7 +2210,7 @@ fields:
     aggregatable: false
     allowed_operators: []
     as_of_basis: dynamic
-    notes: 2026-08-24 주최측 공지에 따라 값이 무효이므로 검색·정렬·집계에 사용하지 않는다.
+    notes: 2026-08-24 주최측 공지에 따라 값이 무효이므로 조회·검색·정렬·비교·집계에 사용하지 않는다.
 
   currently_buyable:
     label: 스냅샷 기준 매수 가능 여부
@@ -2174,7 +2232,7 @@ fields:
     notes: 주최측 공지에 따라 BUYABLE_QUANTITY는 무시하고 공식 파일에 포함된 채권을 모두 구매가능으로 간주한다.
 
   remaining_days:
-    label: 스냅샷 기준 잔존일수
+    label: 공식 잔존일수
     aliases: [잔존일, 만기까지 남은 일수, remaining days]
     datasets: [bond]
     value_type: number
@@ -2183,8 +2241,8 @@ fields:
     unit: day
     source:
       dataset: bond
-      columns: [mat_dt]
-      transform: days_from_snapshot
+      columns: [remaining_days, mat_dt]
+      transform: source_preferred_then_days_from_snapshot
     quality: PARTIAL
     coverage_pct: 99.9772
     queryable: true
@@ -2192,7 +2250,7 @@ fields:
     aggregatable: true
     allowed_operators: [eq, lt, lte, gt, gte, between]
     as_of_basis: snapshot
-    notes: 유효한 mat_dt와 공식 스냅샷일 2026-08-24의 차이를 재계산한다. 영구채 해석에는 사용하지 않는다.
+    notes: 원천 remaining_days를 우선 사용하고, 결측일 때만 mat_dt와 공식 스냅샷일 2026-08-24의 차이를 보조 계산한다. 영구채 해석에는 사용하지 않는다.
 
   duration_years:
     label: 듀레이션
@@ -2378,3 +2436,132 @@ fields:
     allowed_operators: [eq, lt, lte, gt, gte, between]
     sentinel_values: {"0": UNKNOWN}
     notes: 공식 집합투자업자보수 원천값을 사용하고 0·결측은 수치 실행에서 제외한다.
+
+  fund_major_type:
+    label: 제로인 대유형
+    aliases: [펀드 대유형, 제로인 분류]
+    datasets: [fund]
+    value_type: string
+    comparable: true
+    comparison_mode: value_only
+    unit: code
+    source: {dataset: fund, columns: [zrin_btyp_nm]}
+    quality: PARTIAL
+    coverage_pct: 47.8820
+    queryable: true
+    allowed_operators: [eq, in]
+    as_of_basis: snapshot
+    notes: 2026-08-24 공식 공모펀드 원천의 제로인 대유형명을 그대로 사용하며 결측 12,279행은 그룹·필터에서 제외한다.
+
+  office_administration_fee_pct:
+    label: 일반사무관리회사보수
+    aliases: [일반사무관리 보수, 일반사무관리회사 보수]
+    datasets: [fund]
+    value_type: number
+    comparable: true
+    comparison_mode: numeric_delta
+    unit: pct_point
+    source: {dataset: fund, columns: [ofwk_trus_rwrd_r]}
+    quality: PARTIAL
+    coverage_pct: 100.0
+    queryable: true
+    sortable: true
+    aggregatable: true
+    allowed_operators: [eq, lt, lte, gt, gte, between]
+    sentinel_values: {"0": UNKNOWN}
+    notes: 공식 원천값을 보존하고 0·결측은 수치 실행에서 제외한다.
+
+  net_asset_total:
+    label: 순자산총액
+    aliases: [국내 ETF 순자산총액]
+    datasets: [domestic_etp]
+    value_type: number
+    comparable: true
+    comparison_mode: numeric_delta
+    unit: source_currency_amount
+    source: {dataset: domestic_etp, columns: [pd_net_tamt]}
+    quality: PARTIAL
+    coverage_pct: 100.0
+    queryable: true
+    sortable: true
+    aggregatable: true
+    allowed_operators: [eq, lt, lte, gt, gte, between]
+    sentinel_values: {"0": UNKNOWN}
+    as_of_basis: dynamic
+    notes: 공식 국내 ETP 순자산총액을 보존하고 0·결측은 수치 실행에서 제외한다.
+
+  one_month_average_trading_value:
+    label: 1개월 평균 거래대금
+    aliases: [월평균 거래대금, 1개월 평균 거래대금]
+    datasets: [domestic_etp]
+    value_type: number
+    comparable: true
+    comparison_mode: numeric_delta
+    unit: source_currency_amount
+    source: {dataset: domestic_etp, columns: [du_val_1m]}
+    quality: PARTIAL
+    coverage_pct: 100.0
+    queryable: true
+    sortable: true
+    aggregatable: true
+    allowed_operators: [eq, lt, lte, gt, gte, between]
+    sentinel_values: {"0": UNKNOWN}
+    as_of_basis: dynamic
+    notes: 공식 국내 ETP 1개월 평균 거래대금을 보존하고 0·결측은 수치 실행에서 제외한다.
+
+  open_price:
+    label: 시가
+    aliases: [시가, open price]
+    datasets: [overseas_etp]
+    value_type: number
+    comparable: true
+    comparison_mode: numeric_delta
+    unit: source_currency_amount
+    source: {dataset: overseas_etp, columns: [du_opr]}
+    quality: PARTIAL
+    coverage_pct: 100.0
+    queryable: true
+    sortable: true
+    aggregatable: true
+    allowed_operators: [eq, lt, lte, gt, gte, between]
+    sentinel_values: {"0": UNKNOWN}
+    as_of_basis: dynamic
+    notes: 공식 해외 ETP 시가를 보존하고 0·결측은 수치 실행에서 제외한다.
+
+  high_price:
+    label: 고가
+    aliases: [고가, high price]
+    datasets: [overseas_etp]
+    value_type: number
+    comparable: true
+    comparison_mode: numeric_delta
+    unit: source_currency_amount
+    source: {dataset: overseas_etp, columns: [du_hpr]}
+    quality: PARTIAL
+    coverage_pct: 100.0
+    queryable: true
+    sortable: true
+    aggregatable: true
+    allowed_operators: [eq, lt, lte, gt, gte, between]
+    sentinel_values: {"0": UNKNOWN}
+    as_of_basis: dynamic
+    notes: 공식 해외 ETP 고가를 보존하고 0·결측은 수치 실행에서 제외한다.
+
+  low_price:
+    label: 저가
+    aliases: [저가, low price]
+    datasets: [overseas_etp]
+    value_type: number
+    comparable: true
+    comparison_mode: numeric_delta
+    unit: source_currency_amount
+    source: {dataset: overseas_etp, columns: [du_lpr]}
+    quality: PARTIAL
+    coverage_pct: 100.0
+    queryable: true
+    sortable: true
+    aggregatable: true
+    allowed_operators: [eq, lt, lte, gt, gte, between]
+    sentinel_values: {"0": UNKNOWN}
+    as_of_basis: dynamic
+    notes: 공식 해외 ETP 저가를 보존하고 0·결측은 수치 실행에서 제외한다.

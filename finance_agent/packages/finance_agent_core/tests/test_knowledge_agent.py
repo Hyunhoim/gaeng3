@@ -457,7 +457,6 @@ def test_relation_wiring_preserves_existing_product_intents(
     "question",
     [
         "미국에 투자하는 국내 ETF 중 위험이 낮은 상품을 보여줘",
-        "미국에 투자하는 국내 ETF 중 위험등급 2등급 이하 상품을 보여줘",
         "미국에 투자하는 국내 ETF 중 판매 가능한 상품을 보여줘",
         "테스트운용이 운용하는 매수 가능한 국내 ETF를 보여줘",
         "미국에 투자하는 국내 ETF 중 테스트운용 상품은 제외해줘",
@@ -517,6 +516,11 @@ def test_relation_mixed_conditions_stop_before_any_execution(
             "daily_volume",
             1_000_000,
         ),
+        (
+            "미국에 투자하는 국내 ETF 중 위험등급 2등급 이하 상품을 보여줘",
+            "risk_level",
+            ["매우높은위험(1등급)", "높은위험(2등급)"],
+        ),
     ],
 )
 def test_relation_surface_with_supported_product_conditions_uses_product_sql(
@@ -556,7 +560,7 @@ def test_relation_surface_with_supported_product_conditions_uses_product_sql(
             item.field == field and item.value is expected_value
             for item in result.response.query_plan.constraints
         )
-    elif field == "daily_volume":
+    elif field in {"daily_volume", "risk_level"}:
         assert any(
             item.field == field and item.value == expected_value
             for item in result.response.query_plan.constraints

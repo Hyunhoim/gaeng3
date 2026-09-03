@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping
+from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 
-from finance_agent_core.config import load_field_registry
+from finance_agent_core.config import QualityStatus, load_field_registry
 from finance_agent_core.contracts.external_knowledge import KnowledgeProductSelection
 from finance_agent_core.contracts.queryplan import ProductFamily, SortDirection
 from finance_agent_core.execution.external_knowledge_verifier import OfficialProductFact
@@ -37,141 +39,175 @@ _IDENTITY_QUERY = {
         "static_as_of",
     ),
 }
-_RANK_QUERY = {
+
+
+@dataclass(frozen=True)
+class _FactQuery:
+    source_column: str
+    scale: float
+    unit: str
+    quality_column: str | None = None
+    currency_required: bool = False
+    as_of_column: str = "dynamic_as_of"
+
+
+_RANK_QUERY: dict[str, dict[ProductFamily, _FactQuery]] = {
     "aum": {
-        ProductFamily.DOMESTIC_ETP: (
-            "aum_minor_units",
-            100.0,
-            "source_currency_amount",
-            True,
+        ProductFamily.DOMESTIC_ETP: _FactQuery(
+            "aum_minor_units", 100.0, "source_currency_amount", "aum_quality", True
         ),
-        ProductFamily.OVERSEAS_ETP: (
-            "aum_minor_units",
-            100.0,
-            "source_currency_amount",
-            True,
+        ProductFamily.OVERSEAS_ETP: _FactQuery(
+            "aum_minor_units", 100.0, "source_currency_amount", "aum_quality", True
         ),
-        ProductFamily.FUND: (
+        ProductFamily.FUND: _FactQuery(
             "aum_ten_thousandth_units",
             10_000.0,
             "source_currency_amount",
+            "aum_quality",
             True,
+        ),
+    },
+    "total_expense_ratio_pct": {
+        ProductFamily.DOMESTIC_ETP: _FactQuery(
+            "total_expense_ratio_micro_pct",
+            1_000_000.0,
+            "pct_point",
+            "total_expense_ratio_quality",
+        ),
+        ProductFamily.OVERSEAS_ETP: _FactQuery(
+            "total_expense_ratio_micro_pct",
+            1_000_000.0,
+            "pct_point",
+            "total_expense_ratio_quality",
+        ),
+    },
+    "one_day_return_pct": {
+        ProductFamily.DOMESTIC_ETP: _FactQuery(
+            "one_day_return_micro_pct", 1_000_000.0, "pct_point", "one_day_return_quality"
+        ),
+        ProductFamily.OVERSEAS_ETP: _FactQuery(
+            "one_day_return_micro_pct", 1_000_000.0, "pct_point", "one_day_return_quality"
+        ),
+    },
+    "one_month_return_pct": {
+        ProductFamily.DOMESTIC_ETP: _FactQuery(
+            "one_month_return_micro_pct",
+            1_000_000.0,
+            "pct_point",
+            "one_month_return_quality",
+        ),
+        ProductFamily.FUND: _FactQuery(
+            "one_month_return_micro_pct",
+            1_000_000.0,
+            "pct_point",
+            "one_month_return_quality",
+        ),
+    },
+    "three_month_return_pct": {
+        ProductFamily.DOMESTIC_ETP: _FactQuery(
+            "three_month_return_micro_pct",
+            1_000_000.0,
+            "pct_point",
+            "three_month_return_quality",
+        ),
+        ProductFamily.FUND: _FactQuery(
+            "three_month_return_micro_pct",
+            1_000_000.0,
+            "pct_point",
+            "three_month_return_quality",
         ),
     },
     "one_year_return_pct": {
-        ProductFamily.DOMESTIC_ETP: (
-            "one_year_return_pct",
-            1.0,
+        ProductFamily.DOMESTIC_ETP: _FactQuery(
+            "one_year_return_micro_pct",
+            1_000_000.0,
             "pct_point",
-            False,
+            "one_year_return_quality",
         ),
-        ProductFamily.FUND: (
-            "one_year_return_pct",
-            1.0,
+        ProductFamily.FUND: _FactQuery(
+            "one_year_return_micro_pct",
+            1_000_000.0,
             "pct_point",
-            False,
+            "one_year_return_quality",
+        ),
+    },
+    "daily_volume": {
+        ProductFamily.DOMESTIC_ETP: _FactQuery(
+            "daily_volume_hundredth_units",
+            100.0,
+            "source_quantity",
+            "daily_volume_quality",
+        ),
+        ProductFamily.OVERSEAS_ETP: _FactQuery(
+            "daily_volume_eight_decimals",
+            100_000_000.0,
+            "source_quantity",
+            "daily_volume_quality",
+        ),
+    },
+    "daily_trading_value": {
+        ProductFamily.DOMESTIC_ETP: _FactQuery(
+            "daily_trading_value_minor_units",
+            100.0,
+            "source_currency_amount",
+            "daily_trading_value_quality",
+            True,
+        ),
+        ProductFamily.OVERSEAS_ETP: _FactQuery(
+            "daily_trading_value_eight_decimals",
+            100_000_000.0,
+            "source_currency_amount",
+            "daily_trading_value_quality",
+            True,
+        ),
+    },
+    "twenty_day_volatility_pct": {
+        ProductFamily.DOMESTIC_ETP: _FactQuery(
+            "twenty_day_volatility_eight_decimal_pct",
+            100_000_000.0,
+            "pct_point",
+            "twenty_day_volatility_quality",
         ),
     },
 }
-_PRODUCT_FIELD_QUERY = {
+_PRODUCT_FIELD_QUERY: dict[str, dict[ProductFamily, _FactQuery]] = {
     "product_name": {
-        family: ("product_name", 1.0, "text", False, "static_as_of") for family in ProductFamily
+        family: _FactQuery("product_name", 1.0, "text", as_of_column="static_as_of")
+        for family in ProductFamily
     },
     "ticker": {
-        ProductFamily.BOND: ("ticker", 1.0, "text", False, "static_as_of"),
-        ProductFamily.DOMESTIC_ETP: (
-            "ticker",
-            1.0,
-            "text",
-            False,
-            "static_as_of",
-        ),
-        ProductFamily.OVERSEAS_ETP: (
-            "ticker",
-            1.0,
-            "text",
-            False,
-            "static_as_of",
-        ),
+        ProductFamily.BOND: _FactQuery("ticker", 1.0, "text", as_of_column="static_as_of"),
+        ProductFamily.DOMESTIC_ETP: _FactQuery("ticker", 1.0, "text", as_of_column="static_as_of"),
+        ProductFamily.OVERSEAS_ETP: _FactQuery("ticker", 1.0, "text", as_of_column="static_as_of"),
     },
     "risk_level": {
-        ProductFamily.DOMESTIC_ETP: (
-            "risk_level",
-            1.0,
-            "text",
-            False,
-            "static_as_of",
+        ProductFamily.DOMESTIC_ETP: _FactQuery(
+            "risk_level", 1.0, "text", as_of_column="static_as_of"
         ),
-        ProductFamily.FUND: (
-            "risk_level",
-            1.0,
-            "text",
-            False,
-            "static_as_of",
+        ProductFamily.FUND: _FactQuery(
+            "risk_level", 1.0, "text", "risk_level_quality", as_of_column="static_as_of"
         ),
     },
     "manager": {
-        ProductFamily.DOMESTIC_ETP: (
-            "manager",
-            1.0,
-            "text",
-            False,
-            "static_as_of",
-        ),
-        ProductFamily.OVERSEAS_ETP: (
-            "manager",
-            1.0,
-            "text",
-            False,
-            "static_as_of",
-        ),
+        ProductFamily.DOMESTIC_ETP: _FactQuery("manager", 1.0, "text", as_of_column="static_as_of"),
+        ProductFamily.OVERSEAS_ETP: _FactQuery("manager", 1.0, "text", as_of_column="static_as_of"),
     },
     "investment_region": {
-        ProductFamily.DOMESTIC_ETP: (
-            "investment_region",
-            1.0,
-            "text",
-            False,
-            "static_as_of",
+        ProductFamily.DOMESTIC_ETP: _FactQuery(
+            "investment_region", 1.0, "text", as_of_column="static_as_of"
         ),
-        ProductFamily.OVERSEAS_ETP: (
-            "investment_region",
-            1.0,
-            "text",
-            False,
-            "static_as_of",
+        ProductFamily.OVERSEAS_ETP: _FactQuery(
+            "investment_region", 1.0, "text", as_of_column="static_as_of"
         ),
-        ProductFamily.FUND: (
+        ProductFamily.FUND: _FactQuery(
             "investment_region",
             1.0,
             "text",
-            False,
-            "static_as_of",
+            "investment_region_quality",
+            as_of_column="static_as_of",
         ),
     },
-    "aum": {
-        ProductFamily.DOMESTIC_ETP: (
-            "aum_minor_units",
-            100.0,
-            "source_currency_amount",
-            True,
-            "dynamic_as_of",
-        ),
-        ProductFamily.OVERSEAS_ETP: (
-            "aum_minor_units",
-            100.0,
-            "source_currency_amount",
-            True,
-            "dynamic_as_of",
-        ),
-        ProductFamily.FUND: (
-            "aum_ten_thousandth_units",
-            10_000.0,
-            "source_currency_amount",
-            True,
-            "dynamic_as_of",
-        ),
-    },
+    **_RANK_QUERY,
 }
 
 
@@ -221,20 +257,31 @@ class SqliteOfficialProductFactProvider:
                 family_query = _RANK_QUERY[selection.rank_field]
                 if family not in family_query:
                     continue
-                value_column, scale, unit, currency_required = family_query[family]
+                query = family_query[family]
                 fact = self._fetch_field(
                     family,
                     product_id,
                     field=selection.rank_field,
-                    source_column=value_column,
-                    scale=scale,
-                    unit=unit,
-                    currency_required=currency_required,
-                    as_of_column="dynamic_as_of",
+                    query=query,
                     exclude_numeric_zero=True,
                 )
                 if fact is not None:
                     rank_facts.append(fact)
+            if keys and not rank_facts:
+                # A verified external relation still exists, but the provided
+                # DB cannot support the requested ordering.  This is an
+                # unavailable calculation, not an empty product intersection.
+                raise ValueError("requested ranking field has no usable provided-DB values")
+            if rank_facts and any(
+                _RANK_QUERY[selection.rank_field][item.product_family].currency_required
+                for item in rank_facts
+            ):
+                currencies = {item.trading_currency for item in rank_facts}
+                if None in currencies or len(currencies) != 1:
+                    raise ValueError("currency-valued ranking requires one provided DB currency")
+            # Preserve the canonical product-key order for equal values while
+            # applying the requested numeric direction as the stable primary key.
+            rank_facts.sort(key=lambda item: (item.product_family.value, item.product_id))
             rank_facts.sort(
                 key=lambda item: float(item.normalized_value),
                 reverse=selection.direction is SortDirection.DESC,
@@ -242,8 +289,13 @@ class SqliteOfficialProductFactProvider:
             rank_facts = rank_facts[: selection.limit]
             selected_keys = tuple((item.product_family, item.product_id) for item in rank_facts)
 
+        # Without ranking facts, product identity is the mandatory provided-DB
+        # fact.  Otherwise a valid relation whose optional requested field is
+        # absent can be mislabeled as NOT_FOUND downstream.  Ranking facts
+        # already carry canonical product identity, so avoid a duplicate name
+        # field on that path.
         requested = set(requested_fields)
-        if selection is None and not requested:
+        if selection is None:
             requested.add("product_name")
         if selection is not None:
             requested.discard(selection.rank_field)
@@ -253,17 +305,13 @@ class SqliteOfficialProductFactProvider:
                 family_query = _PRODUCT_FIELD_QUERY.get(field, {})
                 if family not in family_query:
                     continue
-                source_column, scale, unit, currency_required, as_of_column = family_query[family]
+                query = family_query[family]
                 fact = self._fetch_field(
                     family,
                     product_id,
                     field=field,
-                    source_column=source_column,
-                    scale=scale,
-                    unit=unit,
-                    currency_required=currency_required,
-                    as_of_column=as_of_column,
-                    exclude_numeric_zero=field == "aum",
+                    query=query,
+                    exclude_numeric_zero=query.unit != "text",
                 )
                 if fact is not None:
                     extra_facts.append(fact)
@@ -275,11 +323,7 @@ class SqliteOfficialProductFactProvider:
         product_id: str,
         *,
         field: str,
-        source_column: str,
-        scale: float,
-        unit: str,
-        currency_required: bool,
-        as_of_column: str,
+        query: _FactQuery,
         exclude_numeric_zero: bool,
     ) -> OfficialProductFact | None:
         if family not in self.database_paths:
@@ -287,29 +331,39 @@ class SqliteOfficialProductFactProvider:
         table, _, _ = _IDENTITY_QUERY[family]
         currency_sql = (
             "trading_currency AS trading_currency"
-            if currency_required
+            if query.currency_required
             else "NULL AS trading_currency"
+        )
+        quality_sql = (
+            f"{query.quality_column} AS field_quality"
+            if query.quality_column is not None
+            else "'VALID' AS field_quality"
         )
         with connect_read_only(self.database_paths[family]) as connection:
             row = connection.execute(
                 f"""
                 SELECT product_id, product_name, source_row,
-                       {source_column} AS value, {as_of_column} AS as_of,
-                       {currency_sql}
+                       {query.source_column} AS value, {query.as_of_column} AS as_of,
+                       {currency_sql}, {quality_sql}
                 FROM {table}
                 WHERE product_id = ? AND is_quarantined = 0
                 """,
                 (product_id,),
             ).fetchone()
-        if row is None or row["value"] is None:
+        if (
+            row is None
+            or row["value"] is None
+            or row["as_of"] is None
+            or row["field_quality"] not in {"VALID", "PARTIAL"}
+        ):
             return None
-        if unit == "text":
+        if query.unit == "text":
             value: str | float = str(row["value"])
             if not value.strip() or value.strip() == "0":
                 return None
         else:
-            value = float(row["value"]) / scale
-            if exclude_numeric_zero and value == 0:
+            value = float(row["value"]) / query.scale
+            if not math.isfinite(value) or (exclude_numeric_zero and value == 0):
                 return None
         return OfficialProductFact(
             evidence_id=f"provided:{family.value}:{product_id}:{field}",
@@ -322,8 +376,9 @@ class SqliteOfficialProductFactProvider:
             source_dataset=family.value,
             source_id=self.source_ids[family],
             source_row=int(row["source_row"]),
-            source_columns=(source_column,),
-            unit=unit,
+            source_columns=(query.source_column,),
+            unit=query.unit,
+            quality=QualityStatus(str(row["field_quality"])),
             trading_currency=(
                 None if row["trading_currency"] is None else str(row["trading_currency"])
             ),

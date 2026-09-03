@@ -9,7 +9,7 @@
     a owl:Ontology ;
     owl:imports <https://gaeng3.ai/ontology/common> ;
     rdfs:label "공모펀드 Ontology"@ko ;
-    ga:registryVersion "1.5" .
+    ga:registryVersion "1.8" .
 
 fund:PublicFundProduct
     a owl:Class ;
@@ -59,7 +59,9 @@ fund:Family
     ga:hasCanonicalField fund:field_three_year_return_pct ;
     ga:hasCanonicalField fund:field_five_year_return_pct ;
     ga:hasCanonicalField fund:field_fee_type ;
-    ga:hasCanonicalField fund:field_management_company_fee_pct .
+    ga:hasCanonicalField fund:field_management_company_fee_pct ;
+    ga:hasCanonicalField fund:field_fund_major_type ;
+    ga:hasCanonicalField fund:field_office_administration_fee_pct .
 
 fund:Dataset
     a ga:Dataset ;
@@ -210,76 +212,15 @@ fund:field_investment_region
     ga:comparisonScope "same_dataset" ;
     ga:allowedOperator "eq" ;
     ga:allowedOperator "in" ;
-    ga:enumValue "ASEAN" ;
-    ga:enumValue "Africa" ;
-    ga:enumValue "Argentina" ;
-    ga:enumValue "Asia Pacific" ;
-    ga:enumValue "Asia Pacific ex Japan" ;
-    ga:enumValue "Australia" ;
-    ga:enumValue "Austria" ;
-    ga:enumValue "BRIC" ;
-    ga:enumValue "Belgium" ;
-    ga:enumValue "Brazil" ;
-    ga:enumValue "Canada" ;
-    ga:enumValue "Chile" ;
-    ga:enumValue "China" ;
-    ga:enumValue "Colombia" ;
-    ga:enumValue "Denmark" ;
-    ga:enumValue "EuroZone" ;
-    ga:enumValue "Europe" ;
-    ga:enumValue "Finland" ;
-    ga:enumValue "France" ;
-    ga:enumValue "Germany" ;
-    ga:enumValue "Global" ;
-    ga:enumValue "Global Emerging Markets" ;
-    ga:enumValue "Global Ex US" ;
-    ga:enumValue "Greater China" ;
-    ga:enumValue "Greece" ;
-    ga:enumValue "Hong Kong" ;
-    ga:enumValue "Iceland" ;
-    ga:enumValue "India" ;
-    ga:enumValue "Indonesia" ;
-    ga:enumValue "Ireland" ;
-    ga:enumValue "Israel" ;
-    ga:enumValue "Italy" ;
-    ga:enumValue "Japan" ;
-    ga:enumValue "Korea" ;
-    ga:enumValue "Kuwait" ;
-    ga:enumValue "Latin America" ;
-    ga:enumValue "Malaysia" ;
-    ga:enumValue "Mexico" ;
-    ga:enumValue "Netherlands" ;
-    ga:enumValue "New Zealand" ;
-    ga:enumValue "North America" ;
-    ga:enumValue "Norway" ;
-    ga:enumValue "Peru" ;
-    ga:enumValue "Philippines" ;
-    ga:enumValue "Poland" ;
-    ga:enumValue "Qatar" ;
-    ga:enumValue "Saudi Arabia" ;
-    ga:enumValue "Singapore" ;
-    ga:enumValue "South Africa" ;
-    ga:enumValue "Spain" ;
-    ga:enumValue "Sweden" ;
-    ga:enumValue "Switzerland" ;
-    ga:enumValue "Taiwan" ;
-    ga:enumValue "Thailand" ;
-    ga:enumValue "Turkey" ;
-    ga:enumValue "United Arab Emirates" ;
-    ga:enumValue "United Kingdom" ;
-    ga:enumValue "United States of America" ;
-    ga:enumValue "Vietnam" ;
     ga:enumValue "국내" ;
-    ga:enumValue "미국" ;
     ga:enumValue "글로벌" ;
-    ga:enumValue "중국" ;
-    ga:enumValue "아시아" ;
-    ga:enumValue "일본" ;
-    ga:enumValue "인도" ;
+    ga:enumValue "기타" ;
     ga:enumValue "남미/북미" ;
+    ga:enumValue "아시아" ;
     ga:enumValue "유럽" ;
-    ga:enumValue "베트남" ;
     ga:enumValue "이머징/브릭스" ;
+    ga:enumValue "중동/아프리카" ;
+    ga:enumValue "해당없음" ;
     ga:asOfBasis "static" ;
     ga:sourceDataset "fund" ;
     ga:sourceColumn "fd_ivst_rgn_desc" ;
@@ -291,6 +232,7 @@ fund:field_aum
     ga:forFamily fund:Family ;
     ga:canonicalName "aum" ;
     rdfs:label "최근 AUM"@ko ;
+    skos:altLabel "AUM"@ko ;
     skos:altLabel "순자산"@ko ;
     skos:altLabel "운용 자산"@ko ;
     skos:altLabel "assets under management"@ko ;
@@ -388,6 +330,8 @@ fund:field_dynamic_as_of
     ga:canonicalName "dynamic_as_of" ;
     rdfs:label "동적 지표 기준일"@ko ;
     skos:altLabel "AUM 업데이트일"@ko ;
+    skos:altLabel "최신 기준일"@ko ;
+    skos:altLabel "동적 기준일"@ko ;
     skos:altLabel "dynamic as of"@ko ;
     ga:valueType "date" ;
     ga:unit "date" ;
@@ -472,7 +416,7 @@ fund:field_risk_level
     ga:coveragePct "36.8803"^^xsd:decimal ;
     ga:queryable true ;
     ga:selectable true ;
-    ga:sortable false ;
+    ga:sortable true ;
     ga:aggregatable false ;
     ga:comparable true ;
     ga:comparisonMode "value_only" ;
@@ -1080,6 +1024,8 @@ fund:field_preservation_ratio_pct
     ga:canonicalName "preservation_ratio_pct" ;
     rdfs:label "보전율"@ko ;
     skos:altLabel "보전 비율"@ko ;
+    skos:altLabel "원본 보존 비율"@ko ;
+    skos:altLabel "원본을 남겨 둔 비율"@ko ;
     skos:altLabel "preservation ratio"@ko ;
     ga:valueType "number" ;
     ga:unit "pct_point" ;
@@ -1311,3 +1257,60 @@ fund:field_management_company_fee_pct
     ga:sourceTransform "identity" ;
     ga:sentinelValuesJson "{\"0\":\"UNKNOWN\"}" ;
     ga:notes "공식 집합투자업자보수 원천값을 사용하고 0·결측은 수치 실행에서 제외한다."@ko .
+
+fund:field_fund_major_type
+    a ga:CanonicalField ;
+    ga:forFamily fund:Family ;
+    ga:canonicalName "fund_major_type" ;
+    rdfs:label "제로인 대유형"@ko ;
+    skos:altLabel "펀드 대유형"@ko ;
+    skos:altLabel "제로인 분류"@ko ;
+    ga:valueType "string" ;
+    ga:unit "code" ;
+    ga:quality "PARTIAL" ;
+    ga:coveragePct "47.882"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable false ;
+    ga:aggregatable false ;
+    ga:comparable true ;
+    ga:comparisonMode "value_only" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "in" ;
+    ga:asOfBasis "snapshot" ;
+    ga:sourceDataset "fund" ;
+    ga:sourceColumn "zrin_btyp_nm" ;
+    ga:sourceTransform "identity" ;
+    ga:notes "2026-08-24 공식 공모펀드 원천의 제로인 대유형명을 그대로 사용하며 결측 12,279행은 그룹·필터에서 제외한다."@ko .
+
+fund:field_office_administration_fee_pct
+    a ga:CanonicalField ;
+    ga:forFamily fund:Family ;
+    ga:canonicalName "office_administration_fee_pct" ;
+    rdfs:label "일반사무관리회사보수"@ko ;
+    skos:altLabel "일반사무관리 보수"@ko ;
+    skos:altLabel "일반사무관리회사 보수"@ko ;
+    ga:valueType "number" ;
+    ga:unit "pct_point" ;
+    ga:quality "PARTIAL" ;
+    ga:coveragePct "100"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable true ;
+    ga:aggregatable true ;
+    ga:comparable true ;
+    ga:comparisonMode "numeric_delta" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "lt" ;
+    ga:allowedOperator "lte" ;
+    ga:allowedOperator "gt" ;
+    ga:allowedOperator "gte" ;
+    ga:allowedOperator "between" ;
+    ga:asOfBasis "static" ;
+    ga:sourceDataset "fund" ;
+    ga:sourceColumn "ofwk_trus_rwrd_r" ;
+    ga:sourceTransform "identity" ;
+    ga:sentinelValuesJson "{\"0\":\"UNKNOWN\"}" ;
+    ga:notes "공식 원천값을 보존하고 0·결측은 수치 실행에서 제외한다."@ko .

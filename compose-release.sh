@@ -6,6 +6,7 @@ RELEASE_ENV_FILE="${RELEASE_ENV_FILE:-fastapi_backend/.env.release}"
 RELEASE_SNAPSHOT_DIR="$(mktemp -d "${TMPDIR:-/tmp}/finance-agent-release.XXXXXXXX")"
 RELEASE_ENV_SNAPSHOT="$RELEASE_SNAPSHOT_DIR/release.env"
 RELEASE_ADAPTIVE_MARKER="$RELEASE_SNAPSHOT_DIR/adaptive.enabled"
+RELEASE_DOCUMENT_CACHE_MARKER="$RELEASE_SNAPSHOT_DIR/document-cache.enabled"
 
 cleanup_release_snapshot() {
     chmod -R u+rwX -- "$RELEASE_SNAPSHOT_DIR" 2>/dev/null || true
@@ -113,6 +114,10 @@ allowed = {
     "FINANCE_EXTERNAL_TEMPORAL_RELATION_HOST_FILE",
     "FINANCE_EXTERNAL_TEMPORAL_RELATION_FILE",
     "FINANCE_EXTERNAL_TEMPORAL_RELATION_SHA256",
+    "FINANCE_EXTERNAL_DOCUMENT_DENSE_ARTIFACT_HOST_FILE",
+    "FINANCE_EXTERNAL_DOCUMENT_DENSE_ARTIFACT_FILE",
+    "FINANCE_EXTERNAL_DOCUMENT_CACHE_ACTIVATION_HOST_FILE",
+    "FINANCE_EXTERNAL_DOCUMENT_CACHE_ACTIVATION_FILE",
     "NAVER_API_HUB_CLIENT_ID_HOST_FILE",
     "NAVER_API_HUB_CLIENT_ID_FILE",
     "NAVER_API_HUB_CLIENT_SECRET_HOST_FILE",
@@ -173,6 +178,21 @@ external_required = {
     "NAVER_API_HUB_CLIENT_SECRET_HOST_FILE",
     "NAVER_API_HUB_CLIENT_SECRET_FILE",
 }
+document_cache_required = {
+    "FINANCE_EXTERNAL_DOCUMENT_DENSE_ARTIFACT_HOST_FILE",
+    "FINANCE_EXTERNAL_DOCUMENT_DENSE_ARTIFACT_FILE",
+    "FINANCE_EXTERNAL_DOCUMENT_CACHE_ACTIVATION_HOST_FILE",
+    "FINANCE_EXTERNAL_DOCUMENT_CACHE_ACTIVATION_FILE",
+}
+configured_document_cache = {
+    name for name in document_cache_required if environment.get(name)
+}
+if configured_document_cache and configured_document_cache != document_cache_required:
+    missing_document_cache = sorted(document_cache_required - configured_document_cache)
+    raise SystemExit(
+        "incomplete Document Dense release settings: "
+        + ", ".join(missing_document_cache)
+    )
 if external_knowledge_enabled == "true":
     missing_external = sorted(name for name in external_required if not environment.get(name))
     if missing_external:
@@ -196,7 +216,11 @@ if external_knowledge_enabled == "true":
         if re.fullmatch(r"[0-9a-f]{64}", environment[name]) is None:
             raise SystemExit(name + " is invalid")
 else:
-    unexpected_external = sorted(name for name in external_required if environment.get(name))
+    unexpected_external = sorted(
+        name
+        for name in external_required | document_cache_required
+        if environment.get(name)
+    )
     if unexpected_external:
         raise SystemExit(
             "disabled external knowledge cannot configure: "
@@ -396,7 +420,15 @@ if re.fullmatch(r"[0-9a-f]{64}", expected) is None:
     raise SystemExit("FINANCE_DEPLOYMENT_BINDING_SHA256 is invalid")
 binding_path = Path(environment["FINANCE_DEPLOYMENT_BINDING_HOST_FILE"])
 
-def read_secure(source, label):
+def strict_object(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("duplicate JSON key")
+        result[key] = value
+    return result
+
+def read_secure(source, label, *, max_bytes=2 * 1024 * 1024, immutable=False):
     try:
         before = source.stat(follow_symlinks=False)
     except OSError:
@@ -407,12 +439,21 @@ def read_secure(source, label):
         or before.st_uid not in {0, os.geteuid()}
         or before.st_nlink != 1
         or before.st_mode & 0o022
+        or (immutable and before.st_mode & stat.S_IWUSR)
     ):
         raise SystemExit(label + " is not a secure release artifact")
     descriptor = None
     try:
         descriptor = os.open(source, os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW)
-        payload = os.read(descriptor, 2 * 1024 * 1024 + 1)
+        chunks = []
+        remaining = min(before.st_size, max_bytes + 1)
+        while remaining:
+            chunk = os.read(descriptor, min(1024 * 1024, remaining))
+            if not chunk:
+                break
+            chunks.append(chunk)
+            remaining -= len(chunk)
+        payload = b"".join(chunks)
         after = os.fstat(descriptor)
         current = source.stat(follow_symlinks=False)
     except OSError:
@@ -434,25 +475,105 @@ def read_secure(source, label):
         fingerprint(before) != fingerprint(after)
         or fingerprint(after) != fingerprint(current)
         or not payload
-        or len(payload) > 2 * 1024 * 1024
+        or len(payload) > max_bytes
+        or len(payload) != before.st_size
     ):
         raise SystemExit(label + " changed while reading or has an invalid size")
     return payload
 
+document_cache_enabled = False
 if external_knowledge_enabled == "true":
-    for source_name, digest_name in (
-        (
-            "FINANCE_EXTERNAL_KNOWLEDGE_ARTIFACT_HOST_FILE",
-            "FINANCE_EXTERNAL_KNOWLEDGE_ARTIFACT_SHA256",
-        ),
-        (
-            "FINANCE_EXTERNAL_TEMPORAL_RELATION_HOST_FILE",
-            "FINANCE_EXTERNAL_TEMPORAL_RELATION_SHA256",
-        ),
-    ):
-        external_payload = read_secure(Path(environment[source_name]), source_name)
-        if hashlib.sha256(external_payload).hexdigest() != environment[digest_name]:
-            raise SystemExit(source_name + " differs from its trusted SHA-256")
+    external_payload = read_secure(
+        Path(environment["FINANCE_EXTERNAL_KNOWLEDGE_ARTIFACT_HOST_FILE"]),
+        "FINANCE_EXTERNAL_KNOWLEDGE_ARTIFACT_HOST_FILE",
+    )
+    if hashlib.sha256(external_payload).hexdigest() != environment[
+        "FINANCE_EXTERNAL_KNOWLEDGE_ARTIFACT_SHA256"
+    ]:
+        raise SystemExit(
+            "FINANCE_EXTERNAL_KNOWLEDGE_ARTIFACT_HOST_FILE differs from its trusted SHA-256"
+        )
+    relation_payload = read_secure(
+        Path(environment["FINANCE_EXTERNAL_TEMPORAL_RELATION_HOST_FILE"]),
+        "FINANCE_EXTERNAL_TEMPORAL_RELATION_HOST_FILE",
+        max_bytes=64 * 1024 * 1024,
+    )
+    if hashlib.sha256(relation_payload).hexdigest() != environment[
+        "FINANCE_EXTERNAL_TEMPORAL_RELATION_SHA256"
+    ]:
+        raise SystemExit(
+            "FINANCE_EXTERNAL_TEMPORAL_RELATION_HOST_FILE differs from its trusted SHA-256"
+        )
+    try:
+        external_artifact = json.loads(
+            external_payload,
+            object_pairs_hook=strict_object,
+        )
+    except (UnicodeError, json.JSONDecodeError, ValueError) as error:
+        raise SystemExit("external knowledge artifact is not strict JSON") from error
+    if not isinstance(external_artifact, dict):
+        raise SystemExit("external knowledge artifact must be a JSON object")
+    retrieval_mode = external_artifact.get("retrieval_mode")
+    if retrieval_mode not in {
+        "verified_live_official",
+        "approved_corpus_cache_first",
+    }:
+        raise SystemExit("external knowledge retrieval mode is invalid")
+    if retrieval_mode == "approved_corpus_cache_first":
+        if configured_document_cache != document_cache_required:
+            raise SystemExit(
+                "approved_corpus_cache_first requires complete Document Dense artifacts"
+            )
+        if adaptive_semantic != "true":
+            raise SystemExit("Document Dense release requires adaptive semantic mode")
+        expected_document_paths = {
+            "FINANCE_EXTERNAL_DOCUMENT_DENSE_ARTIFACT_FILE": (
+                "/models/document-dense-approved.json"
+            ),
+            "FINANCE_EXTERNAL_DOCUMENT_CACHE_ACTIVATION_FILE": (
+                "/run/finance-release/document-cache-activation.json"
+            ),
+        }
+        if any(
+            environment[name] != value
+            for name, value in expected_document_paths.items()
+        ):
+            raise SystemExit(
+                "Document Dense container paths differ from the release contract"
+            )
+        document_hashes = (
+            (
+                "FINANCE_EXTERNAL_DOCUMENT_DENSE_ARTIFACT_HOST_FILE",
+                "document_dense_sha256",
+                512 * 1024 * 1024,
+            ),
+            (
+                "FINANCE_EXTERNAL_DOCUMENT_CACHE_ACTIVATION_HOST_FILE",
+                "document_activation_receipt_sha256",
+                2 * 1024 * 1024,
+            ),
+        )
+        for source_name, artifact_hash_name, max_bytes in document_hashes:
+            expected_document_sha256 = external_artifact.get(artifact_hash_name)
+            if (
+                not isinstance(expected_document_sha256, str)
+                or re.fullmatch(r"[0-9a-f]{64}", expected_document_sha256) is None
+            ):
+                raise SystemExit(
+                    "external knowledge artifact lacks a Document Dense trust binding"
+                )
+            document_payload = read_secure(
+                Path(environment[source_name]),
+                source_name,
+                max_bytes=max_bytes,
+                immutable=True,
+            )
+            if hashlib.sha256(document_payload).hexdigest() != expected_document_sha256:
+                raise SystemExit(source_name + " differs from the signed external artifact")
+            del document_payload
+        document_cache_enabled = True
+    elif configured_document_cache:
+        raise SystemExit("live-only external knowledge rejects Document Dense artifacts")
 
     for secret_name in (
         "NAVER_API_HUB_CLIENT_ID_HOST_FILE",
@@ -477,13 +598,6 @@ if external_knowledge_enabled == "true":
 data = read_secure(binding_path, "FINANCE_DEPLOYMENT_BINDING_HOST_FILE")
 if hashlib.sha256(data).hexdigest() != expected:
     raise SystemExit("DeploymentBinding differs from its trusted SHA-256")
-def strict_object(pairs):
-    result = {}
-    for key, value in pairs:
-        if key in result:
-            raise ValueError("duplicate JSON key")
-        result[key] = value
-    return result
 
 try:
     binding = json.loads(data, object_pairs_hook=strict_object)
@@ -517,9 +631,30 @@ if adaptive_semantic == "true":
     )
     os.close(descriptor)
 
-def snapshot_file(source_name, target_name, mode=0o444):
+if document_cache_enabled:
+    marker = snapshot_root / "document-cache.enabled"
+    descriptor = os.open(
+        marker,
+        os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+        0o400,
+    )
+    os.close(descriptor)
+
+def snapshot_file(
+    source_name,
+    target_name,
+    mode=0o444,
+    *,
+    max_bytes=2 * 1024 * 1024,
+    immutable=False,
+):
     source = Path(environment[source_name])
-    payload = read_secure(source, source_name)
+    payload = read_secure(
+        source,
+        source_name,
+        max_bytes=max_bytes,
+        immutable=immutable,
+    )
     target = snapshot_root / target_name
     descriptor = os.open(
         target,
@@ -626,6 +761,19 @@ if external_knowledge_enabled == "true":
     snapshot_file(
         "FINANCE_EXTERNAL_TEMPORAL_RELATION_HOST_FILE",
         "external-temporal-relations.json",
+        max_bytes=64 * 1024 * 1024,
+    )
+if document_cache_enabled:
+    snapshot_file(
+        "FINANCE_EXTERNAL_DOCUMENT_DENSE_ARTIFACT_HOST_FILE",
+        "document-dense-approved.json",
+        max_bytes=512 * 1024 * 1024,
+        immutable=True,
+    )
+    snapshot_file(
+        "FINANCE_EXTERNAL_DOCUMENT_CACHE_ACTIVATION_HOST_FILE",
+        "document-cache-activation.json",
+        immutable=True,
     )
 
 output = Path(sys.argv[2])
@@ -694,6 +842,10 @@ unset APP_ENV \
     FINANCE_EXTERNAL_TEMPORAL_RELATION_HOST_FILE \
     FINANCE_EXTERNAL_TEMPORAL_RELATION_FILE \
     FINANCE_EXTERNAL_TEMPORAL_RELATION_SHA256 \
+    FINANCE_EXTERNAL_DOCUMENT_DENSE_ARTIFACT_HOST_FILE \
+    FINANCE_EXTERNAL_DOCUMENT_DENSE_ARTIFACT_FILE \
+    FINANCE_EXTERNAL_DOCUMENT_CACHE_ACTIVATION_HOST_FILE \
+    FINANCE_EXTERNAL_DOCUMENT_CACHE_ACTIVATION_FILE \
     NAVER_API_HUB_CLIENT_ID \
     NAVER_API_HUB_CLIENT_ID_HOST_FILE \
     NAVER_API_HUB_CLIENT_ID_FILE \
@@ -841,6 +993,9 @@ compose_files=(
 )
 if [ -f "$RELEASE_ADAPTIVE_MARKER" ]; then
     compose_files+=( -f fastapi_backend/docker-compose.adaptive.yml )
+fi
+if [ -f "$RELEASE_DOCUMENT_CACHE_MARKER" ]; then
+    compose_files+=( -f fastapi_backend/docker-compose.document-cache.yml )
 fi
 
 docker compose \

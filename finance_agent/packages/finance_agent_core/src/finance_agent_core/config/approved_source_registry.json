@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "registry_id": "official-external-sources-20260824-v8",
+  "registry_id": "official-external-sources-20260824-v13",
   "evidence_cutoff": "2026-08-24",
   "entries": [
     {
@@ -21,10 +21,11 @@
       "publisher": "에코프로",
       "authority": "corporate_official",
       "hostname": "www.ecopro.co.kr",
-      "path_prefixes": ["/sub010101/view"],
+      "path_prefixes": ["/sub010101/view", "/sub010302"],
       "connector_kind": "html",
       "capabilities": ["corporate_subsidiary"],
       "selection_aliases": ["EcoPro", "에코프로"],
+      "discovery_urls": ["https://www.ecopro.co.kr/sub010302"],
       "product_families": [],
       "status": "approved_for_live_evidence",
       "publication_date_required": false
@@ -41,6 +42,20 @@
       "product_families": [],
       "status": "approved_for_live_evidence",
       "publication_date_required": true
+    },
+    {
+      "source_id": "first-trust-etf-official",
+      "publisher": "First Trust",
+      "authority": "product_issuer",
+      "hostname": "www.ftportfolios.com",
+      "path_prefixes": ["/Retail/etf/", "/fund-documents/", "/retail/etf/"],
+      "connector_kind": "html_or_pdf",
+      "capabilities": ["portfolio_holdings", "product_risk_factors", "sector_theme_history"],
+      "selection_aliases": ["First Trust", "First Trust Advisors LP"],
+      "discovery_urls": ["https://www.ftportfolios.com/retail/etf/etflist.aspx"],
+      "product_families": ["overseas_etp"],
+      "status": "approved_for_live_evidence",
+      "publication_date_required": false
     },
     {
       "source_id": "fsc-policy",
@@ -65,6 +80,33 @@
       "capabilities": ["fund_structure_strategy_trend"],
       "selection_aliases": ["금융위원회"],
       "product_families": ["fund"],
+      "status": "approved_for_live_evidence",
+      "publication_date_required": false
+    },
+    {
+      "source_id": "globalx-etf-factsheets",
+      "publisher": "Global X",
+      "authority": "product_issuer",
+      "hostname": "assets.globalxetfs.com",
+      "path_prefixes": ["/dev/documents/", "/funds/documents/", "/funds/holdings/"],
+      "connector_kind": "pdf",
+      "capabilities": ["portfolio_holdings", "product_risk_factors", "sector_theme_history"],
+      "selection_aliases": ["Global X", "Global X Management Co LLC"],
+      "product_families": ["overseas_etp"],
+      "status": "approved_for_live_evidence",
+      "publication_date_required": false
+    },
+    {
+      "source_id": "globalx-etf-official",
+      "publisher": "Global X",
+      "authority": "product_issuer",
+      "hostname": "www.globalxetfs.com",
+      "path_prefixes": ["/content/files/", "/funds/"],
+      "connector_kind": "html_or_pdf",
+      "capabilities": ["portfolio_holdings", "product_risk_factors", "sector_theme_history"],
+      "selection_aliases": ["Global X", "Global X Management Co LLC"],
+      "discovery_urls": ["https://www.globalxetfs.com/funds/"],
+      "product_families": ["overseas_etp"],
       "status": "approved_for_live_evidence",
       "publication_date_required": false
     },
@@ -95,6 +137,20 @@
       "publication_date_required": false
     },
     {
+      "source_id": "ishares-etf-official",
+      "publisher": "iShares",
+      "authority": "product_issuer",
+      "hostname": "www.ishares.com",
+      "path_prefixes": ["/us/literature/", "/us/products/"],
+      "connector_kind": "html_or_pdf",
+      "capabilities": ["portfolio_holdings", "product_risk_factors", "sector_theme_history"],
+      "selection_aliases": ["BlackRock", "BlackRock Fund Advisors", "iShares"],
+      "discovery_urls": ["https://www.ishares.com/us/products/etf-investments"],
+      "product_families": ["overseas_etp"],
+      "status": "approved_for_live_evidence",
+      "publication_date_required": false
+    },
+    {
       "source_id": "kbam-official-reports",
       "publisher": "KB자산운용",
       "authority": "asset_manager",
@@ -112,7 +168,7 @@
       "publisher": "한국거래소 KIND",
       "authority": "regulator",
       "hostname": "kind.krx.co.kr",
-      "path_prefixes": ["/external/"],
+      "path_prefixes": ["/common/disclsviewer.do", "/external/"],
       "connector_kind": "html_or_pdf",
       "capabilities": ["corporate_subsidiary"],
       "selection_aliases": ["KIND", "한국거래소"],
@@ -213,6 +269,20 @@
       "publication_date_required": false
     },
     {
+      "source_id": "miraeasset-tiger-legacy-pdf",
+      "publisher": "미래에셋자산운용",
+      "authority": "asset_manager",
+      "hostname": "www.tigeretf.com",
+      "path_prefixes": ["/upload/etf/"],
+      "connector_kind": "pdf",
+      "capabilities": ["portfolio_holdings", "product_risk_factors"],
+      "selection_aliases": ["TIGER", "미래에셋자산운용"],
+      "product_families": ["domestic_etp"],
+      "trusted_redirect_source_ids": ["miraeasset-investments"],
+      "status": "approved_for_live_evidence",
+      "publication_date_required": false
+    },
+    {
       "source_id": "moonshot-ai-official-forum",
       "publisher": "Moonshot AI",
       "authority": "corporate_official",
@@ -236,6 +306,20 @@
       "capabilities": ["fund_structure_strategy_trend", "portfolio_holdings", "product_risk_factors", "sector_theme_history"],
       "selection_aliases": ["ARIRANG", "PLUS", "한화", "한화자산운용"],
       "product_families": ["domestic_etp", "fund"],
+      "status": "approved_for_live_evidence",
+      "publication_date_required": false
+    },
+    {
+      "source_id": "proshares-etf-official",
+      "publisher": "ProShares",
+      "authority": "product_issuer",
+      "hostname": "www.proshares.com",
+      "path_prefixes": ["/our-etfs/"],
+      "connector_kind": "html_or_pdf",
+      "capabilities": ["portfolio_holdings", "product_risk_factors", "sector_theme_history"],
+      "selection_aliases": ["ProShare Advisors LLC", "ProShares"],
+      "discovery_urls": ["https://www.proshares.com/our-etfs/find-proshares-etfs"],
+      "product_families": ["overseas_etp"],
       "status": "approved_for_live_evidence",
       "publication_date_required": false
     },
@@ -293,6 +377,20 @@
       "publication_date_required": false
     },
     {
+      "source_id": "state-street-etf-official",
+      "publisher": "State Street",
+      "authority": "product_issuer",
+      "hostname": "www.ssga.com",
+      "path_prefixes": ["/us/en/individual/etfs/", "/us/en/individual/fund-finder", "/us/en/individual/library-content/", "/us/en/intermediary/etfs/", "/us/en/intermediary/fund-finder", "/us/en/intermediary/library-content/"],
+      "connector_kind": "html_or_pdf",
+      "capabilities": ["portfolio_holdings", "product_risk_factors", "sector_theme_history"],
+      "selection_aliases": ["SPDR", "SSGA", "SSGA Funds Management Inc", "State Street"],
+      "discovery_urls": ["https://www.ssga.com/us/en/individual/fund-finder?type=etfs"],
+      "product_families": ["overseas_etp"],
+      "status": "approved_for_live_evidence",
+      "publication_date_required": false
+    },
+    {
       "source_id": "time-etf-official",
       "publisher": "타임폴리오자산운용",
       "authority": "asset_manager",
@@ -315,6 +413,48 @@
       "capabilities": ["fund_structure_strategy_trend", "portfolio_holdings", "product_risk_factors", "sector_theme_history"],
       "selection_aliases": ["TIME", "TIMEFOLIO", "타임폴리오", "타임폴리오자산운용"],
       "product_families": ["domestic_etp", "fund"],
+      "status": "approved_for_live_evidence",
+      "publication_date_required": false
+    },
+    {
+      "source_id": "vaneck-etf-official",
+      "publisher": "VanEck",
+      "authority": "product_issuer",
+      "hostname": "www.vaneck.com",
+      "path_prefixes": ["/us/en/etf-fund-finder/", "/us/en/etf-mutual-fund-finder/", "/us/en/investments/"],
+      "connector_kind": "html_or_pdf",
+      "capabilities": ["portfolio_holdings", "product_risk_factors", "sector_theme_history"],
+      "selection_aliases": ["Van Eck Associates Corp", "VanEck"],
+      "discovery_urls": ["https://www.vaneck.com/us/en/etf-fund-finder/"],
+      "product_families": ["overseas_etp"],
+      "status": "approved_for_live_evidence",
+      "publication_date_required": false
+    },
+    {
+      "source_id": "vanguard-etf-official",
+      "publisher": "Vanguard",
+      "authority": "product_issuer",
+      "hostname": "investor.vanguard.com",
+      "path_prefixes": ["/content/dam/retail/publicsite/en/documents/", "/investment-products/etfs", "/investment-products/list/etfs"],
+      "connector_kind": "html_or_pdf",
+      "capabilities": ["portfolio_holdings", "product_risk_factors", "sector_theme_history"],
+      "selection_aliases": ["Vanguard", "Vanguard Capital Management, LLC", "Vanguard Portfolio Management LLC"],
+      "discovery_urls": ["https://investor.vanguard.com/investment-products/list/etfs"],
+      "product_families": ["overseas_etp"],
+      "status": "approved_for_live_evidence",
+      "publication_date_required": false
+    },
+    {
+      "source_id": "wisdomtree-etf-official",
+      "publisher": "WisdomTree",
+      "authority": "product_issuer",
+      "hostname": "www.wisdomtree.com",
+      "path_prefixes": ["/-/media/", "/investments/", "/us/media/", "/us/products", "/us/resource-library/"],
+      "connector_kind": "html_or_pdf",
+      "capabilities": ["portfolio_holdings", "product_risk_factors", "sector_theme_history"],
+      "selection_aliases": ["WisdomTree", "WisdomTree Asset Management Inc"],
+      "discovery_urls": ["https://www.wisdomtree.com/us/products", "https://www.wisdomtree.com/us/resource-library/fact-sheets-and-reports"],
+      "product_families": ["overseas_etp"],
       "status": "approved_for_live_evidence",
       "publication_date_required": false
     }

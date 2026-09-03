@@ -117,6 +117,21 @@ class GeneralizedOfficialSourceSelector:
             elif question_matches:
                 selected.append(entry)
 
+        if (
+            capability is KnowledgeCapability.CORPORATE_SUBSIDIARY
+            and any(entry.authority is SourceAuthority.CORPORATE_OFFICIAL for entry in selected)
+        ):
+            # A company site is the primary authority for its group structure,
+            # while an approved regulator/exchange disclosure is a useful
+            # independent fallback when the corporate page is unavailable or
+            # not indexed.  This policy is authority-based: adding a new
+            # company requires Registry metadata, never an entity branch here.
+            selected.extend(
+                entry
+                for entry in eligible
+                if entry.authority is SourceAuthority.REGULATOR
+            )
+
         chosen = selected or list(eligible)
         return tuple(sorted({entry.source_id for entry in chosen}))
 

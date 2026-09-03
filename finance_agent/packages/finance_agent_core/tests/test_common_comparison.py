@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sqlite3
 from dataclasses import replace
 from datetime import date
 from pathlib import Path
@@ -90,6 +91,45 @@ def test_domestic_comparison_preserves_request_order(
     assert "요청한 국내 ETP 2개 중 2개를 확인했습니다" in result.answer
 
 
+def test_named_comparison_reorders_storage_rows_to_caller_order(
+    sample_database: tuple[Path, list[object], object],
+) -> None:
+    path, _, _ = sample_database
+    # Deliberately make SQL's valid ticker order the reverse of both the
+    # caller's product order and the canonical exchange:ticker ID order.
+    with sqlite3.connect(path) as connection:
+        connection.execute(
+            "UPDATE overseas_etp_products SET product_name = ?, ticker = ?, "
+            "product_id = ?, exchange_code = ? "
+            "WHERE product_id = ?",
+            ("Atlas Growth ETF", "Z1", "AMX:Z1", "AMX", "AMX:B1"),
+        )
+        connection.execute(
+            "UPDATE overseas_etp_products SET product_name = ?, ticker = ?, "
+            "product_id = ?, exchange_code = ? "
+            "WHERE product_id = ?",
+            ("Beacon Income ETF", "A2", "NAS:A2", "NAS", "AMX:B2"),
+        )
+
+    result = RoutedFinanceAgent({"overseas_etp": path}).answer(
+        "'Atlas Growth ETF'와 'Beacon Income ETF'를 AUM과 총보수율 기준으로 "
+        "입력한 순서대로 비교해 줘.",
+        "compare-name-storage-order",
+    )
+
+    assert result.status == "executed"
+    assert result.query_plan is not None
+    assert result.query_plan.intent_payload.comparison_fields == [
+        "aum",
+        "total_expense_ratio_pct",
+    ]
+    assert [item.product_id for item in result.products] == ["AMX:Z1", "NAS:A2"]
+    assert [item.canonical_field for item in result.comparisons] == [
+        "aum",
+        "total_expense_ratio_pct",
+    ]
+
+
 def test_domestic_comparison_accepts_standard_one_month_abbreviation(
     domestic_sample_database: tuple[Path, list[object], object],
 ) -> None:
@@ -135,6 +175,30 @@ def test_comparison_accepts_explicit_two_id_inclusion_grammar(
     assert result.status == "executed"
     assert result.query_plan is not None
     assert result.query_plan.intent_payload.comparison_fields == ["aum"]
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        "상품 번호가 AMX:B1 및 AMX:B2에 포함되는 두 해외 ETF의 AUM을 비교해줘",
+        "종목 코드가 AMX:B1과 AMX:B2에 포함되는 해외 ETF 두 개의 AUM을 대조해줘",
+        "식별자는 AMX:B1과 AMX:B2에 포함되는 두 해외 ETF의 AUM 차이를 알려줘",
+    ],
+)
+def test_comparison_accepts_canonicalized_two_id_set_variants(
+    sample_database: tuple[Path, list[object], object],
+    question: str,
+) -> None:
+    path, _, _ = sample_database
+    result = RoutedFinanceAgent({"overseas_etp": path}).answer(
+        question,
+        "compare-overseas-inclusion-variants",
+    )
+
+    assert result.status == "executed"
+    assert result.query_plan is not None
+    assert result.query_plan.intent_payload.comparison_fields == ["aum"]
+    assert [product.product_id for product in result.products] == ["AMX:B1", "AMX:B2"]
 
 
 def test_comparison_rejects_negated_or_additional_inclusion_role(

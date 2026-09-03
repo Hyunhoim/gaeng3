@@ -9,7 +9,7 @@
     a owl:Ontology ;
     owl:imports <https://gaeng3.ai/ontology/common> ;
     rdfs:label "국내채권 Ontology"@ko ;
-    ga:registryVersion "1.5" .
+    ga:registryVersion "1.8" .
 
 bond:KoreanBondProduct
     a owl:Class ;
@@ -38,6 +38,8 @@ bond:Family
     ga:hasCanonicalField bond:field_bond_major_class ;
     ga:hasCanonicalField bond:field_bond_subclass ;
     ga:hasCanonicalField bond:field_bond_type ;
+    ga:hasCanonicalField bond:field_interest_rate_type ;
+    ga:hasCanonicalField bond:field_interest_payment_type ;
     ga:hasCanonicalField bond:field_issue_amount ;
     ga:hasCanonicalField bond:field_issue_date ;
     ga:hasCanonicalField bond:field_maturity_date ;
@@ -258,6 +260,8 @@ bond:field_dynamic_as_of
     ga:canonicalName "dynamic_as_of" ;
     rdfs:label "동적 지표 기준일"@ko ;
     skos:altLabel "AUM 업데이트일"@ko ;
+    skos:altLabel "최신 기준일"@ko ;
+    skos:altLabel "동적 기준일"@ko ;
     skos:altLabel "dynamic as of"@ko ;
     ga:valueType "date" ;
     ga:unit "date" ;
@@ -323,7 +327,7 @@ bond:field_risk_level
     ga:coveragePct "100"^^xsd:decimal ;
     ga:queryable true ;
     ga:selectable true ;
-    ga:sortable false ;
+    ga:sortable true ;
     ga:aggregatable false ;
     ga:comparable true ;
     ga:comparisonMode "value_only" ;
@@ -473,6 +477,7 @@ bond:field_issuer
     ga:comparisonMode "value_only" ;
     ga:comparisonScope "same_dataset" ;
     ga:allowedOperator "eq" ;
+    ga:allowedOperator "neq" ;
     ga:allowedOperator "contains" ;
     ga:asOfBasis "static" ;
     ga:sourceDataset "bond" ;
@@ -580,6 +585,71 @@ bond:field_bond_type
     ga:sourceColumn "bd_knd" ;
     ga:sourceTransform "identity" ;
     ga:notes "152행이 결측이고 32개 원천 유형이 있어 문자열 원문으로 보존한다."@ko .
+
+bond:field_interest_rate_type
+    a ga:CanonicalField ;
+    ga:forFamily bond:Family ;
+    ga:canonicalName "interest_rate_type" ;
+    rdfs:label "금리구분"@ko ;
+    skos:altLabel "금리 유형"@ko ;
+    skos:altLabel "이자율 유형"@ko ;
+    skos:altLabel "금리 적용 방식"@ko ;
+    skos:altLabel "이자율 적용 방식"@ko ;
+    skos:altLabel "고정금리 여부"@ko ;
+    skos:altLabel "interest rate type"@ko ;
+    ga:valueType "enum" ;
+    ga:unit "code" ;
+    ga:quality "VALID" ;
+    ga:coveragePct "100"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable false ;
+    ga:aggregatable false ;
+    ga:comparable true ;
+    ga:comparisonMode "value_only" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "in" ;
+    ga:enumValue "고정금리" ;
+    ga:enumValue "변동금리" ;
+    ga:enumValue "고정+변동금리" ;
+    ga:asOfBasis "static" ;
+    ga:sourceDataset "bond" ;
+    ga:sourceColumn "bd_inrt_tcd" ;
+    ga:sourceTransform "identity" ;
+    ga:notes "공식 2026-08-24 원천의 금리구분을 그대로 보존한다. 고정금리 20,904행, 변동금리 830행, 고정+변동금리 148행이다."@ko .
+
+bond:field_interest_payment_type
+    a ga:CanonicalField ;
+    ga:forFamily bond:Family ;
+    ga:canonicalName "interest_payment_type" ;
+    rdfs:label "이자지급구분"@ko ;
+    skos:altLabel "이자 지급 방식"@ko ;
+    skos:altLabel "이자 지급 유형"@ko ;
+    skos:altLabel "채권 이자 방식"@ko ;
+    skos:altLabel "interest payment type"@ko ;
+    ga:valueType "enum" ;
+    ga:unit "code" ;
+    ga:quality "VALID" ;
+    ga:coveragePct "100"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable false ;
+    ga:aggregatable false ;
+    ga:comparable true ;
+    ga:comparisonMode "value_only" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "in" ;
+    ga:enumValue "이표채" ;
+    ga:enumValue "복리채" ;
+    ga:enumValue "할인채" ;
+    ga:enumValue "단리채" ;
+    ga:asOfBasis "static" ;
+    ga:sourceDataset "bond" ;
+    ga:sourceColumn "bd_intp_tcd" ;
+    ga:sourceTransform "identity" ;
+    ga:notes "공식 2026-08-24 원천의 이자지급구분을 그대로 보존한다. 이표채 18,059행, 복리채 2,867행, 할인채 689행, 단리채 267행이다."@ko .
 
 bond:field_issue_amount
     a ga:CanonicalField ;
@@ -824,6 +894,8 @@ bond:field_applied_yield_pct
     skos:altLabel "민간평가 금리"@ko ;
     skos:altLabel "평가기관 수익률"@ko ;
     skos:altLabel "민평 산출 수익률"@ko ;
+    skos:altLabel "적용수익률"@ko ;
+    skos:altLabel "적용 수익률"@ko ;
     ga:valueType "number" ;
     ga:unit "pct_point" ;
     ga:quality "VALID" ;
@@ -951,6 +1023,8 @@ bond:field_after_tax_yield_pct
     ga:canonicalName "after_tax_yield_pct" ;
     rdfs:label "세후수익률"@ko ;
     skos:altLabel "세후 수익률"@ko ;
+    skos:altLabel "세후 매수수익률"@ko ;
+    skos:altLabel "세후 매수 수익률"@ko ;
     skos:altLabel "after-tax yield"@ko ;
     ga:valueType "number" ;
     ga:unit "pct_point" ;
@@ -988,17 +1062,17 @@ bond:field_buyable_quantity
     ga:quality "UNKNOWN" ;
     ga:coveragePct "2.8974"^^xsd:decimal ;
     ga:queryable false ;
-    ga:selectable true ;
+    ga:selectable false ;
     ga:sortable false ;
     ga:aggregatable false ;
-    ga:comparable true ;
-    ga:comparisonMode "numeric_delta" ;
+    ga:comparable false ;
+    ga:comparisonMode "value_only" ;
     ga:comparisonScope "same_dataset" ;
     ga:asOfBasis "dynamic" ;
     ga:sourceDataset "bond" ;
     ga:sourceColumn "buyable_quantity" ;
     ga:sourceTransform "identity" ;
-    ga:notes "2026-08-24 주최측 공지에 따라 값이 무효이므로 검색·정렬·집계에 사용하지 않는다."@ko .
+    ga:notes "2026-08-24 주최측 공지에 따라 값이 무효이므로 조회·검색·정렬·비교·집계에 사용하지 않는다."@ko .
 
 bond:field_currently_buyable
     a ga:CanonicalField ;
@@ -1030,7 +1104,7 @@ bond:field_remaining_days
     a ga:CanonicalField ;
     ga:forFamily bond:Family ;
     ga:canonicalName "remaining_days" ;
-    rdfs:label "스냅샷 기준 잔존일수"@ko ;
+    rdfs:label "공식 잔존일수"@ko ;
     skos:altLabel "잔존일"@ko ;
     skos:altLabel "만기까지 남은 일수"@ko ;
     skos:altLabel "remaining days"@ko ;
@@ -1053,9 +1127,10 @@ bond:field_remaining_days
     ga:allowedOperator "between" ;
     ga:asOfBasis "snapshot" ;
     ga:sourceDataset "bond" ;
+    ga:sourceColumn "remaining_days" ;
     ga:sourceColumn "mat_dt" ;
-    ga:sourceTransform "days_from_snapshot" ;
-    ga:notes "유효한 mat_dt와 공식 스냅샷일 2026-08-24의 차이를 재계산한다. 영구채 해석에는 사용하지 않는다."@ko .
+    ga:sourceTransform "source_preferred_then_days_from_snapshot" ;
+    ga:notes "원천 remaining_days를 우선 사용하고, 결측일 때만 mat_dt와 공식 스냅샷일 2026-08-24의 차이를 보조 계산한다. 영구채 해석에는 사용하지 않는다."@ko .
 
 bond:field_duration_years
     a ga:CanonicalField ;

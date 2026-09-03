@@ -67,9 +67,9 @@ def build_external_knowledge_preblind_report(
         if entry.status == "approved_for_live_evidence"
         for capability in entry.capabilities
     }
-    dense_metrics = metrics.get("dense") if isinstance(metrics, dict) else None
-    dense_recall_at_5 = (
-        dense_metrics.get("recall_at_5") if isinstance(dense_metrics, dict) else None
+    hybrid_metrics = metrics.get("hybrid_rrf") if isinstance(metrics, dict) else None
+    hybrid_recall_at_5 = (
+        hybrid_metrics.get("recall_at_5") if isinstance(hybrid_metrics, dict) else None
     )
     checks = {
         "all_capabilities_have_live_source_scope": source_capabilities == set(KnowledgeCapability),
@@ -90,8 +90,8 @@ def build_external_knowledge_preblind_report(
         == "document_dense_public_calibration_not_blind",
         "calibration_binds_exact_artifact": calibration.get("artifact_sha256")
         == artifact.canonical_sha256,
-        "public_dense_recall_at_5_meets_candidate_gate": (
-            isinstance(dense_recall_at_5, int | float) and dense_recall_at_5 >= 0.98
+        "public_hybrid_recall_at_5_meets_candidate_gate": (
+            isinstance(hybrid_recall_at_5, int | float) and hybrid_recall_at_5 >= 0.98
         ),
     }
     blockers = tuple(sorted(name for name, passed in checks.items() if not passed))

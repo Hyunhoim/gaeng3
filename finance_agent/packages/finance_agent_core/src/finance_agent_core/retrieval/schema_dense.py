@@ -253,7 +253,23 @@ class SchemaDenseActivationPolicy(SchemaDenseModel):
             dense_min_score=self.dense_min_score,
             hclx_candidate_min_score=self.hclx_candidate_min_score,
             minimum_margin=self.minimum_margin,
-            auto_admit=True,
+            auto_admit=False,
+        )
+
+    def has_explicit_threshold(
+        self,
+        *,
+        product_family: ProductFamily,
+        field_id: str,
+        operation: Literal["rank", "project", "filter", "aggregate"],
+    ) -> bool:
+        """Return whether calibration explicitly covered this exact authority tuple."""
+
+        return any(
+            item.product_family is product_family
+            and item.field_id == field_id
+            and item.operation == operation
+            for item in self.field_thresholds
         )
 
     @property
@@ -266,7 +282,7 @@ _P1_FIELD_GROUPS: dict[str, tuple[str, frozenset[ProductFamily], bool]] = {
     "after_tax_yield_pct": ("bond_yield_tax_basis", frozenset({ProductFamily.BOND}), True),
     "coupon_rate_pct": ("bond_coupon", frozenset({ProductFamily.BOND}), False),
     "issue_amount": ("bond_quantity_basis", frozenset({ProductFamily.BOND}), False),
-    "buyable_quantity": ("bond_quantity_basis", frozenset({ProductFamily.BOND}), False),
+    "total_issue_amount": ("bond_quantity_basis", frozenset({ProductFamily.BOND}), False),
     "duration_years": ("bond_time_sensitivity", frozenset({ProductFamily.BOND}), False),
     "remaining_days": ("bond_maturity_basis", frozenset({ProductFamily.BOND}), False),
     "maturity_date": ("bond_maturity_basis", frozenset({ProductFamily.BOND}), False),
@@ -599,18 +615,20 @@ _FIELD_SEMANTIC_PROFILES: dict[str, dict[str, tuple[str, ...] | str]] = {
         "counterexamples": ("체급이 큰", "자금이 많이 모인"),
     },
     "issue_amount": {
-        "definition": "채권이 시장에 발행된 원천 금액 또는 발행 물량",
-        "expressions": ("발행 규모", "시장에 풀린 규모", "발행 물량", "찍어낸 금액"),
+        "definition": "채권의 총발행금액 중 현재 남아 있는 발행잔액",
+        "expressions": ("발행 잔액", "남은 발행 물량", "시장에 남은 발행액"),
         "contrasts": (
-            "buyable_quantity는 지금 매수 가능한 수량이고 issue_amount는 최초 발행 규모",
+            "total_issue_amount는 총발행금액이고 issue_amount는 현재 남은 발행잔액",
         ),
-        "counterexamples": ("지금 살 수 있는 물량",),
+        "counterexamples": ("총 발행 규모", "처음 발행한 금액", "지금 살 수 있는 수량"),
     },
-    "buyable_quantity": {
-        "definition": "현재 제공 데이터에서 매수 가능한 채권 수량",
-        "expressions": ("지금 살 수 있는 물량", "매수 가능 수량", "살 수 있는 양"),
-        "contrasts": ("issue_amount는 전체 발행 규모이고 buyable_quantity는 현재 매수 가능 수량",),
-        "counterexamples": ("전체 발행 물량",),
+    "total_issue_amount": {
+        "definition": "채권이 처음 발행된 전체 금액인 총발행금액",
+        "expressions": ("총 발행 규모", "전체 발행 물량", "처음 발행한 금액", "찍어낸 금액"),
+        "contrasts": (
+            "issue_amount는 현재 남은 발행잔액이고 total_issue_amount는 총발행금액",
+        ),
+        "counterexamples": ("남은 발행 물량", "발행 잔액", "지금 살 수 있는 수량"),
     },
     "buy_yield_pct": {
         "definition": "현재 가격으로 채권을 매수할 때의 세전 매수수익률",

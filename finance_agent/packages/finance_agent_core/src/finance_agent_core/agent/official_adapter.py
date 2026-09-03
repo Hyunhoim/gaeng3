@@ -264,6 +264,15 @@ def _think_trace(response: BackendAgentResponse) -> str:
             "execution_steps": execution_steps,
             "filters": filters,
             "ranking": ranking,
+            **(
+                {
+                    "constraint_expression": plan.constraint_expression.model_dump(
+                        mode="json"
+                    )
+                }
+                if getattr(plan, "constraint_expression", None) is not None
+                else {}
+            ),
             "candidate_count": response.candidate_count,
             "returned_evidence": {
                 "products": len(response.products),

@@ -5,6 +5,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
+from functools import lru_cache
 from pathlib import Path
 from time import perf_counter
 
@@ -13,6 +14,12 @@ from finance_agent_core.contracts import QueryPlan
 from finance_agent_core.contracts.queryplan import ProductFamily
 from finance_agent_core.contracts.routing import RouteDisposition
 from finance_agent_core.deadline import raise_if_request_stopped
+from finance_agent_core.domain import (
+    NormalizedBondRecord,
+    NormalizedDomesticEtpRecord,
+    NormalizedOverseasEtpRecord,
+    NormalizedPublicFundRecord,
+)
 from finance_agent_core.execution.authority import (
     ValidatedPlan,
     open_validated_database,
@@ -25,6 +32,12 @@ from finance_agent_core.execution.sql_schema import (
 from finance_agent_core.observability import AuditOutcome, AuditStage, current_request_audit
 
 _DEADLINE_CHECK_INTERVAL = 256
+_NORMALIZED_RECORD_TYPES = {
+    ProductFamily.OVERSEAS_ETP.value: NormalizedOverseasEtpRecord,
+    ProductFamily.DOMESTIC_ETP.value: NormalizedDomesticEtpRecord,
+    ProductFamily.BOND.value: NormalizedBondRecord,
+    ProductFamily.FUND.value: NormalizedPublicFundRecord,
+}
 
 
 def _validated_audit_fields(validated_plan: ValidatedPlan) -> dict[str, object]:
@@ -98,6 +111,42 @@ def verifier_projection_fields(plan: QueryPlan) -> tuple[str, ...]:
         if field_name not in fields:
             fields.append(field_name)
     return tuple(fields)
+
+
+@lru_cache(maxsize=len(_NORMALIZED_RECORD_TYPES))
+def source_only_registry_fields(family: str) -> frozenset[str]:
+    """Return Registry fields unavailable after the compact record-cache load.
+
+    ``RecordSnapshotCache`` deliberately omits ``source_values``.  A canonical
+    field that is exposed by the Registry but absent from the family's
+    normalized Pydantic model therefore cannot be verified from that cache; its
+    value must be projected from SQLite's frozen ``source_values_json`` instead.
+    Deriving the set from the Registry and model schema keeps newly approved
+    source-only fields on the same safe path without per-field routing rules.
+    """
+
+    try:
+        record_type = _NORMALIZED_RECORD_TYPES[family]
+    except KeyError as error:
+        raise ValueError(f"no normalized verifier record type for {family}") from error
+    registry = load_field_registry()
+    registry.require_dataset(family)
+    normalized_fields = frozenset(record_type.model_fields)
+    return frozenset(
+        field_name
+        for field_name, definition in registry.fields.items()
+        if family in definition.datasets and field_name not in normalized_fields
+    )
+
+
+def record_cache_covers_verifier_projection(plan: QueryPlan) -> bool:
+    """Whether compact cached records retain every field the verifier needs."""
+
+    if len(plan.product_families) != 1:
+        return False
+    family = plan.product_families[0].value
+    source_only = source_only_registry_fields(family)
+    return source_only.isdisjoint(verifier_projection_fields(plan))
 
 
 def _date_value(value: object) -> date:

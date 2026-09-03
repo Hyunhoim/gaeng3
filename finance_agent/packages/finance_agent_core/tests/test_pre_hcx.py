@@ -172,8 +172,8 @@ def test_router_generalizes_financial_safety_boundaries() -> None:
         ),
         (
             "미국 우주항공 ETF 중 수익률이 제일 높은 걸 찾아줘",
-            InteractionIntent.UNSUPPORTED,
-            RouteDisposition.UNSUPPORTED,
+            InteractionIntent.CLARIFY,
+            RouteDisposition.CLARIFY,
             [ProductFamily.OVERSEAS_ETP],
         ),
         (

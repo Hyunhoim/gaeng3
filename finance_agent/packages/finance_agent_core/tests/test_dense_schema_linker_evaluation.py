@@ -33,9 +33,9 @@ def test_fake_dense_schema_evaluation_is_safe_but_never_adoption_evidence() -> N
     # The legacy public component suite still contains those fields, so this
     # frozen wiring baseline intentionally records the policy migration rather
     # than treating obsolete fields as correct lexical links.
-    assert report.lexical.micro_precision_among_returned_at_5 == 0.983087
-    assert report.lexical.fixed_k_micro_precision_at_5 == 0.508197
-    assert report.hybrid.fixed_k_micro_precision_at_5 == 0.500546
+    assert report.lexical.micro_precision_among_returned_at_5 == 0.984615
+    assert report.lexical.fixed_k_micro_precision_at_5 == 0.559563
+    assert report.hybrid.fixed_k_micro_precision_at_5 == 0.544262
     assert set(report.metrics_by_family) == {
         "bond",
         "domestic_etp",

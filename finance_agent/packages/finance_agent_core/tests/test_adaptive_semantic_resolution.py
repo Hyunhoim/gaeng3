@@ -56,6 +56,7 @@ from finance_agent_core.retrieval.schema_dense import (
     build_schema_field_entries,
     dense_schema_index_file_bytes,
     load_dense_schema_index_artifact,
+    p1_precision_field_thresholds,
 )
 from finance_agent_core.retrieval.schema_dense_cli import _write_immutable
 
@@ -126,6 +127,7 @@ def _policy() -> SchemaDenseActivationPolicy:
         minimum_margin=0.1,
         top_k=5,
         calibration_report_sha256="a" * 64,
+        field_thresholds=p1_precision_field_thresholds(),
     )
 
 
@@ -139,6 +141,77 @@ def _production_linker(
     artifact = approve_schema_index_for_production(offline, active_policy)
     index = DenseSchemaIndex(artifact, active_provider)
     return ProductionHybridSchemaLinker(index, active_policy), active_provider
+
+
+@pytest.mark.parametrize(
+    ("family", "field_id"),
+    [
+        (ProductFamily.FUND, "risk_level"),
+        (ProductFamily.FUND, "office_administration_fee_pct"),
+        (ProductFamily.DOMESTIC_ETP, "net_asset_total"),
+        (ProductFamily.DOMESTIC_ETP, "one_month_average_trading_value"),
+        (ProductFamily.OVERSEAS_ETP, "open_price"),
+        (ProductFamily.OVERSEAS_ETP, "high_price"),
+        (ProductFamily.OVERSEAS_ETP, "low_price"),
+    ],
+)
+def test_uncalibrated_sortable_fields_never_receive_dense_auto_authority(
+    family: ProductFamily,
+    field_id: str,
+) -> None:
+    policy = _policy()
+    threshold = policy.threshold_for(
+        product_family=family,
+        field_id=field_id,
+        operation="rank",
+    )
+    linker, _ = _production_linker(
+        _KureContractProvider(query_target=field_id),
+        policy,
+    )
+
+    linked = linker.link(
+        residual_span="미해결척도",
+        product_family=family,
+        interaction_intent=InteractionIntent.SEARCH,
+        operation=ResolutionOperation.RANK,
+    )
+
+    assert policy.has_explicit_threshold(
+        product_family=family,
+        field_id=field_id,
+        operation="rank",
+    ) is False
+    assert threshold.semantic_group == "global_fallback"
+    assert threshold.auto_admit is False
+    assert linked.status.value == "abstain"
+    assert linked.reason_code != "dense_single_candidate"
+
+
+def test_calibration_gap_can_remain_hclx_candidate_only() -> None:
+    family = ProductFamily.OVERSEAS_ETP
+    field_id = "one_day_return_pct"
+    policy = _policy()
+    linker, _ = _production_linker(
+        _KureContractProvider(query_target=field_id),
+        policy,
+    )
+
+    linked = linker.link(
+        residual_span="하루 성적",
+        product_family=family,
+        interaction_intent=InteractionIntent.SEARCH,
+        operation=ResolutionOperation.RANK,
+    )
+
+    assert policy.has_explicit_threshold(
+        product_family=family,
+        field_id=field_id,
+        operation="rank",
+    ) is False
+    assert linked.status.value == "abstain"
+    assert linked.reason_code == "hclx_review_required"
+    assert linked.hclx_eligible is True
 
 
 def test_default_router_keeps_unknown_directional_metric_fail_closed() -> None:
@@ -233,7 +306,7 @@ def test_kure_dense_resolves_only_schema_field_then_server_compiles_and_executes
         {ProductFamily.DOMESTIC_ETP: path},
         adaptive_semantic_resolver=resolver,
     ).answer(
-        "몸집이 큰 국내 ETF를 3개 보여줘",
+        "관리 중인 자금 덩어리가 큰 국내 ETF를 3개 보여줘",
         "adaptive-e2e",
     )
 
@@ -301,6 +374,63 @@ class _FakeTransport:
             "request_id": "semantic-fake-001",
             "usage": {"input_tokens": 20, "output_tokens": 8, "total_tokens": 28},
         }
+
+
+def test_uncalibrated_field_can_only_resolve_through_hclx_candidate_review(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    policy = _policy()
+    linker, _ = _production_linker(
+        _KureContractProvider(query_target="risk_level"),
+        policy,
+    )
+    transport = _FakeTransport(
+        '{"decision":"resolve","selected_field_id":"risk_level","operation":"rank",'
+        '"direction":"asc","reason_code":"candidate_context_match",'
+        '"evidence_spans":["미해결척도"],"ambiguity_reason":""}'
+    )
+    hclx = HyperClovaXSemanticResolverProvider(
+        HyperClovaXSettings(model="HCX-CONTRACT-TEST", timeout_seconds=10),
+        transport,
+    )
+    monkeypatch.setattr(
+        "finance_agent_core.retrieval.schema_adaptive.constrain_semantic_candidate_fields",
+        lambda text, **kwargs: kwargs["eligible_field_ids"],
+    )
+    monkeypatch.setattr(
+        "finance_agent_core.agent.adaptive_semantic.semantic_field_evidence",
+        lambda text, **kwargs: SemanticFieldEvidence(
+            status="supported",
+            reason_code="semantic_field_evidence_supported",
+            semantic_group="test_hclx_candidate_review",
+            evidence_spans=("미해결척도",),
+        ),
+    )
+    monkeypatch.setattr(
+        "finance_agent_core.agent.semantic_resolution.semantic_field_evidence",
+        lambda text, **kwargs: SemanticFieldEvidence(
+            status="supported",
+            reason_code="semantic_field_evidence_supported",
+            semantic_group="test_hclx_candidate_review",
+            evidence_spans=("미해결척도",),
+        ),
+    )
+    trace = IntentRouter(adaptive_semantic_enabled=True).route_with_planning(
+        "미해결척도가 낮은 공모펀드를 3개 보여줘",
+        "adaptive-uncalibrated-hclx-review",
+    )
+
+    outcome = AdaptiveSemanticResolver(
+        linker,
+        hclx_provider=hclx,
+    ).resolve(trace)
+
+    assert outcome.status == "resolved"
+    assert outcome.reason_code == "hclx_semantic_resolution_admitted"
+    assert outcome.receipt is not None
+    assert outcome.receipt.field_id == "risk_level"
+    assert outcome.receipt.source is SpanSource.HCLX
+    assert len(transport.requests) == 1
 
 
 def test_hclx_semantic_resolver_uses_candidate_only_structured_schema() -> None:
@@ -389,7 +519,10 @@ def test_unique_server_evidence_bypasses_hclx_even_when_dense_scores_tie(
         ),
     )
 
-    result = agent.answer("몸집이 큰 국내 ETF를 3개 보여줘", "adaptive-hclx-e2e")
+    result = agent.answer(
+        "관리 중인 자금 덩어리가 큰 국내 ETF를 3개 보여줘",
+        "adaptive-hclx-e2e",
+    )
 
     assert result.status == "executed"
     assert result.query_plan is not None
@@ -525,7 +658,10 @@ def test_dense_audit_is_redacted_and_links_exact_model_and_index(
         audit_sink=audit,
     )
 
-    result = agent.answer("몸집이 큰 국내 ETF를 3개 보여줘", "adaptive-audit")
+    result = agent.answer(
+        "관리 중인 자금 덩어리가 큰 국내 ETF를 3개 보여줘",
+        "adaptive-audit",
+    )
     assert audit.close(timeout_seconds=2)
     events = memory.snapshot()
     dense_events = [event for event in events if event.stage is AuditStage.DENSE]
@@ -537,7 +673,7 @@ def test_dense_audit_is_redacted_and_links_exact_model_and_index(
     assert dense_events[0].model_snapshot_manifest_sha256 == (
         _policy().snapshot_file_manifest_sha256
     )
-    assert "몸집" not in "\n".join(event.model_dump_json() for event in events)
+    assert "덩어리" not in "\n".join(event.model_dump_json() for event in events)
     assert audit.metrics.snapshot().counters[MetricCounter.DENSE_CALLS.value] == 1
 
 
@@ -591,7 +727,7 @@ def test_unsafe_or_conflicting_conditions_never_reach_dense(question: str) -> No
 def test_compiler_revalidates_receipt_and_lock_against_model_construct_bypass() -> None:
     linker, _ = _production_linker()
     trace = IntentRouter(adaptive_semantic_enabled=True).route_with_planning(
-        "몸집이 큰 국내 ETF를 3개 보여줘",
+        "관리 중인 자금 덩어리가 큰 국내 ETF를 3개 보여줘",
         "adaptive-tampered-receipt",
     )
     outcome = AdaptiveSemanticResolver(linker).resolve(trace)
@@ -617,7 +753,7 @@ def test_plan_authority_requires_v2_receipt_bound_to_the_current_request(
     path, _, _ = domestic_sample_database
     linker, _ = _production_linker()
     trace = IntentRouter(adaptive_semantic_enabled=True).route_with_planning(
-        "몸집이 큰 국내 ETF를 3개 보여줘",
+        "관리 중인 자금 덩어리가 큰 국내 ETF를 3개 보여줘",
         "adaptive-authority",
     )
     outcome = AdaptiveSemanticResolver(linker).resolve(trace)
@@ -686,7 +822,7 @@ class _FailingKureProvider(_KureContractProvider):
 def test_schema_dense_provider_failure_is_redacted_and_fails_closed() -> None:
     linker, _ = _production_linker(_FailingKureProvider())
     trace = IntentRouter(adaptive_semantic_enabled=True).route_with_planning(
-        "몸집이 큰 국내 ETF를 3개 보여줘",
+        "관리 중인 자금 덩어리가 큰 국내 ETF를 3개 보여줘",
         "adaptive-dense-failure",
     )
 
@@ -704,7 +840,7 @@ def test_schema_dense_capacity_is_single_flight_and_fails_closed() -> None:
     linker, _ = _production_linker(provider, policy)
     resolver = AdaptiveSemanticResolver(linker)
     trace = IntentRouter(adaptive_semantic_enabled=True).route_with_planning(
-        "몸집이 큰 국내 ETF를 3개 보여줘",
+        "관리 중인 자금 덩어리가 큰 국내 ETF를 3개 보여줘",
         "adaptive-capacity",
     )
     first_outcomes = []

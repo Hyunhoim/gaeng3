@@ -14,6 +14,7 @@ from finance_agent_core.agent.semantic_admission import (
 from finance_agent_core.config import load_field_registry
 from finance_agent_core.contracts.queryplan import (
     Constraint,
+    ConstraintExpression,
     ConstraintStrength,
     ProductFamily,
     QueryPlan,
@@ -151,6 +152,10 @@ class HardFilterLock(SemanticModel):
     schema_version: Literal["1.0"] = "1.0"
     product_families: tuple[ProductFamily, ...] = Field(min_length=1, max_length=4)
     constraints: tuple[Constraint, ...] = Field(default=(), max_length=20)
+    constraint_expression: ConstraintExpression | None = Field(
+        default=None,
+        exclude_if=lambda value: value is None,
+    )
     rankings: tuple[Ranking, ...] = Field(default=(), max_length=5)
     requested_limit: int | None = Field(default=None, ge=1, le=100)
     product_mentions: tuple[str, ...] = Field(default=(), max_length=20)
@@ -161,17 +166,21 @@ class HardFilterLock(SemanticModel):
         *,
         product_families: tuple[ProductFamily, ...],
         constraints: tuple[Constraint, ...],
+        constraint_expression: ConstraintExpression | None,
         rankings: tuple[Ranking, ...],
         requested_limit: int | None,
         product_mentions: tuple[str, ...],
     ) -> dict[str, object]:
-        return {
+        payload: dict[str, object] = {
             "product_families": [item.value for item in product_families],
             "constraints": [item.model_dump(mode="json") for item in constraints],
             "rankings": [item.model_dump(mode="json") for item in rankings],
             "requested_limit": requested_limit,
             "product_mentions": list(product_mentions),
         }
+        if constraint_expression is not None:
+            payload["constraint_expression"] = constraint_expression.model_dump(mode="json")
+        return payload
 
     @classmethod
     def create(
@@ -179,6 +188,7 @@ class HardFilterLock(SemanticModel):
         *,
         product_families: tuple[ProductFamily, ...],
         constraints: tuple[Constraint, ...] = (),
+        constraint_expression: ConstraintExpression | None = None,
         rankings: tuple[Ranking, ...] = (),
         requested_limit: int | None = None,
         product_mentions: tuple[str, ...] = (),
@@ -192,6 +202,7 @@ class HardFilterLock(SemanticModel):
         payload = cls._payload(
             product_families=product_families,
             constraints=constraints,
+            constraint_expression=constraint_expression,
             rankings=rankings,
             requested_limit=requested_limit,
             product_mentions=product_mentions,
@@ -199,6 +210,7 @@ class HardFilterLock(SemanticModel):
         return cls(
             product_families=product_families,
             constraints=constraints,
+            constraint_expression=constraint_expression,
             rankings=rankings,
             requested_limit=requested_limit,
             product_mentions=product_mentions,
@@ -216,6 +228,7 @@ class HardFilterLock(SemanticModel):
         return cls.create(
             product_families=tuple(plan.product_families),
             constraints=tuple(plan.constraints),
+            constraint_expression=plan.constraint_expression,
             rankings=tuple(plan.ranking),
             requested_limit=requested_limit,
             product_mentions=product_mentions,
@@ -233,6 +246,7 @@ class HardFilterLock(SemanticModel):
             self._payload(
                 product_families=self.product_families,
                 constraints=self.constraints,
+                constraint_expression=self.constraint_expression,
                 rankings=self.rankings,
                 requested_limit=self.requested_limit,
                 product_mentions=self.product_mentions,
@@ -249,6 +263,7 @@ class HardFilterLock(SemanticModel):
             self._payload(
                 product_families=self.product_families,
                 constraints=self.constraints,
+                constraint_expression=self.constraint_expression,
                 rankings=self.rankings,
                 requested_limit=self.requested_limit,
                 product_mentions=self.product_mentions,
@@ -261,6 +276,8 @@ class HardFilterLock(SemanticModel):
         plan_constraints = tuple(plan.constraints)
         if plan_constraints != self.constraints:
             raise SemanticResolutionError("semantic resolution changed a locked constraint")
+        if plan.constraint_expression != self.constraint_expression:
+            raise SemanticResolutionError("semantic resolution changed locked constraint logic")
         plan_rankings = tuple(plan.ranking)
         if any(item not in plan_rankings for item in self.rankings):
             raise SemanticResolutionError("semantic resolution changed a locked ranking")

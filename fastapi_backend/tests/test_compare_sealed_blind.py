@@ -6,12 +6,17 @@ import pytest
 import scripts.compare_sealed_blind as sealed_comparator
 from scripts.compare_sealed_blind import (
     _compare_phase2,
+    _external_evidence_required,
     _gold_product_identity,
     _normalize_filter,
     _phase2_plan_metrics,
     _source_field_map,
 )
-from scripts.run_sealed_lab_blind import _validate_question_only, _verify_pre_gold_source_state
+from scripts.run_sealed_lab_blind import (
+    _validate_document_calibration,
+    _validate_question_only,
+    _verify_pre_gold_source_state,
+)
 
 
 def _phase2_question_payload() -> dict[str, object]:
@@ -104,6 +109,75 @@ def test_phase4_1000_case_question_only_contract_is_supported(tmp_path) -> None:
     assert cases[-1]["id"] == "P4-1000"
 
 
+def test_phase5_105_case_question_only_contract_is_supported(tmp_path) -> None:
+    sets = ("A", "B", "C")
+    payload = {
+        "schema_version": "1.0",
+        "suite_id": "finance-agent-final-rehearsal-phase5-v1.1-105",
+        "phase": 5,
+        "revision": "v1.1-official-examples",
+        "status": "sealed_question_only_not_used_for_development",
+        "case_count": 105,
+        "set_count": 3,
+        "cases_per_set": 35,
+        "sets": [
+            {
+                "set_id": set_id,
+                "case_count": 35,
+                "id_range": [f"P5-{set_id}-01", f"P5-{set_id}-35"],
+            }
+            for set_id in sets
+        ],
+        "cases": [
+            {"id": f"P5-{set_id}-{index:02d}", "question": f"질문 {set_id}-{index}"}
+            for set_id in sets
+            for index in range(1, 36)
+        ],
+    }
+    path = tmp_path / "phase5-questions.json"
+    path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+
+    metadata, cases = _validate_question_only(
+        path,
+        hashlib.sha256(path.read_bytes()).hexdigest(),
+    )
+
+    assert metadata["suite_id"] == "finance-agent-final-rehearsal-phase5-v1.1-105"
+    assert metadata["phase"] == 5
+    assert metadata["suite_case_count"] == 105
+    assert len(cases) == 105
+    assert cases[0]["id"] == "P5-A-01"
+    assert cases[-1]["id"] == "P5-C-35"
+
+
+def test_phase6_150_case_question_only_contract_is_supported(tmp_path) -> None:
+    payload = {
+        "schema_version": "1.0",
+        "suite_id": "finance-agent-generalization-phase6-v1-150",
+        "phase": 6,
+        "status": "sealed_question_only_not_used_for_development_before_run",
+        "case_count": 150,
+        "cases": [
+            {"id": f"P6-{index:03d}", "question": f"질문 {index}"}
+            for index in range(1, 151)
+        ],
+    }
+    path = tmp_path / "phase6-questions.json"
+    path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+
+    metadata, cases = _validate_question_only(
+        path,
+        hashlib.sha256(path.read_bytes()).hexdigest(),
+    )
+
+    assert metadata["suite_id"] == "finance-agent-generalization-phase6-v1-150"
+    assert metadata["phase"] == 6
+    assert metadata["suite_case_count"] == 150
+    assert len(cases) == 150
+    assert cases[0]["id"] == "P6-001"
+    assert cases[-1]["id"] == "P6-150"
+
+
 def test_pre_gold_source_diff_file_is_verified(tmp_path) -> None:
     diff_file = tmp_path / "source.diff"
     diff_file.write_bytes(b"diff --git a/runtime.py b/runtime.py\n")
@@ -136,6 +210,57 @@ def test_pre_gold_source_diff_file_and_hash_are_required_together(tmp_path) -> N
 
     with pytest.raises(RuntimeError, match="must be set together"):
         _verify_pre_gold_source_state(arguments)
+
+
+def test_document_dense_gate_matches_hybrid_candidate_runtime_path(tmp_path) -> None:
+    report = {
+        "report_kind": "document_dense_public_calibration_not_blind",
+        "artifact_sha256": "a" * 64,
+        "metrics": {
+            "bm25": {"top1_accuracy": 0.57, "recall_at_5": 0.84},
+            "dense": {"top1_accuracy": 0.84, "recall_at_5": 0.96},
+            "hybrid_rrf": {"top1_accuracy": 0.80, "recall_at_5": 1.0},
+        },
+    }
+    path = tmp_path / "document-calibration.json"
+    path.write_text(json.dumps(report), encoding="utf-8")
+    arguments = type(
+        "Arguments",
+        (),
+        {
+            "document_dense_calibration_file": path,
+            "document_dense_calibration_sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+            "document_dense_index_sha256": "a" * 64,
+        },
+    )()
+
+    _validate_document_calibration(arguments)
+
+
+def test_document_dense_gate_rejects_low_dense_recall_or_hybrid_regression(tmp_path) -> None:
+    report = {
+        "report_kind": "document_dense_public_calibration_not_blind",
+        "artifact_sha256": "a" * 64,
+        "metrics": {
+            "bm25": {"top1_accuracy": 0.8, "recall_at_5": 0.9},
+            "dense": {"top1_accuracy": 0.7, "recall_at_5": 0.9},
+            "hybrid_rrf": {"top1_accuracy": 0.8, "recall_at_5": 0.8},
+        },
+    }
+    path = tmp_path / "document-calibration.json"
+    path.write_text(json.dumps(report), encoding="utf-8")
+    arguments = type(
+        "Arguments",
+        (),
+        {
+            "document_dense_calibration_file": path,
+            "document_dense_calibration_sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+            "document_dense_index_sha256": "a" * 64,
+        },
+    )()
+
+    with pytest.raises(RuntimeError, match="quality gate failed"):
+        _validate_document_calibration(arguments)
 
 
 def test_phase3_600_case_gold_comparator_contract_is_supported(
@@ -182,6 +307,49 @@ def test_phase4_1000_case_gold_comparator_contract_is_supported(
     monkeypatch.setattr(sealed_comparator, "_compare_phase2", lambda *args, **kwargs: marker)
 
     assert sealed_comparator.compare(predictions, gold) is marker
+
+
+def test_phase5_105_case_gold_comparator_contract_is_supported(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    question_hash = "c" * 64
+    ids = [
+        f"P5-{set_id}-{index:02d}"
+        for set_id in ("A", "B", "C")
+        for index in range(1, 36)
+    ]
+    predictions = {
+        "suite_id": "finance-agent-final-rehearsal-phase5-v1.1-105",
+        "suite_phase": 5,
+        "answer_key_opened": False,
+        "question_count": 105,
+        "questions_sha256": question_hash,
+        "results": [{"id": case_id} for case_id in ids],
+    }
+    gold = {
+        "suite_id": predictions["suite_id"],
+        "questions_sha256": question_hash,
+        "cases": [{"id": case_id} for case_id in ids],
+    }
+    marker = {"phase5": "accepted"}
+    monkeypatch.setattr(sealed_comparator, "_compare_phase2", lambda *args, **kwargs: marker)
+
+    assert sealed_comparator.compare(predictions, gold) is marker
+
+
+def test_external_evidence_required_supports_phase4_top_level_contract() -> None:
+    assert _external_evidence_required({"external_evidence_required": True}) is True
+    assert _external_evidence_required({"external_evidence_required": False}) is False
+
+
+def test_external_evidence_required_supports_legacy_nested_contract() -> None:
+    assert (
+        _external_evidence_required(
+            {"expected_status_basis": {"external_evidence_required": True}}
+        )
+        is True
+    )
+    assert _external_evidence_required({}) is False
 
 
 def test_question_only_rejects_unregistered_suite(tmp_path) -> None:
@@ -422,6 +590,186 @@ def test_phase2_composite_plan_metrics_validate_each_public_family_subplan() -> 
     }
 
 
+def test_derived_metric_ranking_is_not_forced_into_one_standard_field() -> None:
+    expected = {
+        "expected_disposition": "execute",
+        "expected_subqueries": [
+            {
+                "product_family": "fund",
+                "filters": [],
+                "ranking_field": None,
+                "derived_metric": {
+                    "kind": "subtract",
+                    "fields": ["fd_yr1_ern_r", "fd_mm3_ern_r"],
+                },
+                "direction": "asc",
+                "limit": 5,
+            }
+        ],
+    }
+    response = {
+        "query_plan": {
+            "product_families": ["fund"],
+            "constraints": [],
+            "ranking": [],
+            "limit": 5,
+        },
+        "candidate_count": 10,
+        "products": [],
+    }
+
+    assert _phase2_plan_metrics(
+        expected,
+        response,
+        source_fields=_source_field_map(),
+    ) == {
+        "family_exact": True,
+        "filters_exact": True,
+        "ranking_exact": None,
+        "limit_exact": True,
+    }
+
+
+def test_empty_identity_intersection_uses_zero_result_receipt_instead_of_empty_in() -> None:
+    expected = {
+        "expected_disposition": "execute",
+        "expected_subqueries": [
+            {
+                "product_family": "domestic_etp",
+                "filters": [
+                    {"field": "pd_grp_no", "operator": "eq", "value": "ETF"},
+                    {"field": "pd_itm_no", "operator": "in", "value": []},
+                ],
+                "ranking_field": "pd_net_tamt",
+                "direction": "desc",
+                "limit": 3,
+            },
+            {
+                "product_family": "overseas_etp",
+                "filters": [
+                    {"field": "pd_grp_no", "operator": "eq", "value": "ETF"},
+                    {"field": "pd_itm_no", "operator": "in", "value": []},
+                ],
+                "ranking_field": "du_last_aum",
+                "direction": "desc",
+                "limit": 3,
+            },
+        ],
+    }
+    response = {
+        "query_plan": None,
+        "family_searches": [
+            {
+                "query_plan": {
+                    "product_families": ["domestic_etp"],
+                    "constraints": [
+                        {"field": "product_type", "operator": "eq", "value": "ETF"}
+                    ],
+                    "ranking": [{"field": "net_asset_total", "direction": "desc"}],
+                    "limit": 3,
+                },
+                "candidate_count": 0,
+                "returned_product_ids": [],
+            },
+            {
+                "query_plan": {
+                    "product_families": ["overseas_etp"],
+                    "constraints": [
+                        {"field": "product_type", "operator": "eq", "value": "ETF"}
+                    ],
+                    "ranking": [{"field": "aum", "direction": "desc"}],
+                    "limit": 3,
+                },
+                "candidate_count": 0,
+                "returned_product_ids": [],
+            },
+        ],
+    }
+
+    assert _phase2_plan_metrics(
+        expected,
+        response,
+        source_fields=_source_field_map(),
+    ) == {
+        "family_exact": True,
+        "filters_exact": True,
+        "ranking_exact": True,
+        "limit_exact": None,
+    }
+
+
+def test_composite_external_plan_is_not_scored_as_a_standard_sql_plan() -> None:
+    expected = {
+        "expected_disposition": "execute",
+        "expected_subqueries": [
+            {
+                "product_family": "domestic_etp",
+                "filters": [],
+                "ranking_field": "pd_net_tamt",
+                "direction": "desc",
+                "limit": 3,
+            }
+        ],
+    }
+    response = {
+        "query_plan": {
+            "plan_kind": "composite_external_knowledge",
+            "interaction_intent": "search",
+            "requirements": [],
+        },
+        "candidate_count": 1,
+        "products": [],
+    }
+
+    assert _phase2_plan_metrics(
+        expected,
+        response,
+        source_fields=_source_field_map(),
+    ) == {
+        "family_exact": None,
+        "filters_exact": None,
+        "ranking_exact": None,
+        "limit_exact": None,
+    }
+
+
+def test_composed_targeted_regression_requires_explicit_provenance(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    question_hash = "d" * 64
+    predictions = {
+        "suite_id": "finance-agent-independent-holdout-phase4-v1-1000",
+        "suite_phase": 4,
+        "answer_key_opened": True,
+        "evaluation_kind": "post_gold_development_regression",
+        "artifact_kind": "post_gold_composed_targeted_regression_predictions",
+        "question_count": 1000,
+        "questions_sha256": question_hash,
+        "results": [{"id": f"P4-{index:04d}"} for index in range(1, 1001)],
+        "regression_composition": {
+            "unchanged_full_run_cases": 986,
+            "actual_targeted_rerun_cases": 14,
+        },
+        "targeted_regression_source_sha256s": ["e" * 64],
+    }
+    gold = {
+        "suite_id": predictions["suite_id"],
+        "questions_sha256": question_hash,
+        "cases": [{"id": f"P4-{index:04d}"} for index in range(1, 1001)],
+    }
+    marker = {"composed": "accepted"}
+    monkeypatch.setattr(sealed_comparator, "_compare_phase2", lambda *args, **kwargs: marker)
+
+    assert (
+        sealed_comparator.compare(
+            predictions,
+            gold,
+            allow_post_gold_development=True,
+        )
+        is marker
+    )
+
+
 def test_phase2_post_gold_report_is_never_labeled_as_first_blind() -> None:
     gold_cases = []
     prediction_results = []
@@ -473,3 +821,68 @@ def test_phase2_post_gold_report_is_never_labeled_as_first_blind() -> None:
 
     assert report["artifact_kind"] == "post_gold_development_regression_comparison"
     assert report["evaluation_kind"] == "post_gold_development_regression"
+
+
+def test_terminal_lookup_results_are_execute_dispositions_but_keep_distinct_statuses() -> None:
+    gold_cases = []
+    prediction_results = []
+    for index in range(1, 301):
+        case_id = f"P2-{index:03d}"
+        if index <= 2:
+            expected_disposition = "execute"
+            expected_status = "NOT_FOUND"
+            predicted_status = "not_found" if index == 1 else "cannot_verify"
+        else:
+            expected_disposition = "clarify"
+            expected_status = "CLARIFY"
+            predicted_status = "clarification"
+        gold_cases.append(
+            {
+                "id": case_id,
+                "category": "resolvable" if index <= 2 else "clarify",
+                "query_scope": "single_family",
+                "expected_disposition": expected_disposition,
+                "expected_result_status": expected_status,
+                "expected_product_families": [],
+                "expected_top_products": [],
+                "expected_candidate_count_total": 0,
+                "expected_subqueries": [],
+                "expected_status_basis": {"external_evidence_required": False},
+            }
+        )
+        prediction_results.append(
+            {
+                "id": case_id,
+                "http_status": 200,
+                "duration_ms": 1.0,
+                "provider_calls": [],
+                "backend_response": {
+                    "status": predicted_status,
+                    "products": [],
+                    "product_families": [],
+                    "candidate_count": 0,
+                    "documents": [],
+                    "query_plan": None,
+                },
+            }
+        )
+
+    report = _compare_phase2(
+        {
+            "suite_id": "finance-agent-independent-holdout-phase2-v1-300",
+            "suite_phase": "phase2",
+            "canonical_prediction_sha256": "a" * 64,
+            "questions_sha256": "b" * 64,
+            "implementation_commit": "c" * 40,
+            "image_id": "sha256:" + "d" * 64,
+            "results": prediction_results,
+        },
+        {"cases": gold_cases},
+        allow_post_gold_development=True,
+    )
+
+    assert report["metrics"]["disposition_accuracy"] == 1.0
+    assert report["metrics"]["result_status_accuracy"] == 0.996667
+    assert report["metrics"]["outcome_exact_accuracy"] == 0.996667
+    assert report["metrics"]["false_block_rate"] == 0.0
+    assert report["metrics"]["product_macro_f1"] == 1.0

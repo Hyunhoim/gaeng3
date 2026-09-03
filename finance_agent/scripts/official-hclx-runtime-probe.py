@@ -144,6 +144,7 @@ def main() -> None:
             settings,
             transport,
             on_call=calls.append,
+            require_execution_structure=True,
         ),
         official_answer_provider=HyperClovaXFinalAnswerProvider(
             settings,

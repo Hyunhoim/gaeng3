@@ -22,6 +22,15 @@ from finance_agent_core.agent.compiler import (
     ServerQueryPlanCompiler,
     resolve_cross_family_global_ranking,
 )
+from finance_agent_core.agent.compound_query import (
+    AggregateThresholdUnavailableError,
+    CompoundAuthorizationReceipt,
+    CompoundExecution,
+    NamedComparisonIncompleteError,
+    TypedCompoundPlan,
+    TypedCompoundQueryEngine,
+    requires_typed_two_stage_plan,
+)
 from finance_agent_core.agent.external_knowledge_router import (
     ExternalKnowledgeRouteDecision,
     ExternalKnowledgeRouteDisposition,
@@ -31,9 +40,12 @@ from finance_agent_core.agent.external_search_planning import (
     ExternalSearchPlanCompiler,
     ProvidedProductUniverseBuilder,
 )
+from finance_agent_core.agent.field_language import registry_field_mentions
 from finance_agent_core.agent.intent_analysis import (
     IntentAnalysisDraft,
     IntentAnalysisProvider,
+    has_external_knowledge_surface,
+    has_negated_external_relation,
     has_server_authorized_knowledge_requirements,
     sanitize_server_authorized_knowledge_draft,
     verify_intent_analysis,
@@ -57,6 +69,12 @@ from finance_agent_core.agent.planning_policy import (
     PlanningTrace,
 )
 from finance_agent_core.agent.product_comparison import normalize_product_mention
+from finance_agent_core.agent.product_identity import (
+    DatabaseProductIdentityMatcher,
+    extract_plain_labeled_product_lookup,
+    normalize_database_identity,
+    unresolved_identity_like_spans,
+)
 from finance_agent_core.agent.providers.hyperclova import (
     HyperClovaXConfigurationError,
     HyperClovaXTimeoutError,
@@ -64,6 +82,7 @@ from finance_agent_core.agent.providers.hyperclova import (
 )
 from finance_agent_core.agent.router import IntentRouter, extract_product_routing_hints
 from finance_agent_core.agent.safety import SafetyDisposition
+from finance_agent_core.agent.semantic_aliases import ranking_intent_present
 from finance_agent_core.agent.semantic_gate import SemanticCoverageDecision
 from finance_agent_core.answering.final_generation import FinalAnswerProvider
 from finance_agent_core.answering.models import AnswerComposition
@@ -71,11 +90,21 @@ from finance_agent_core.config import QualityStatus, load_field_registry
 from finance_agent_core.contracts import QueryPlan, RouteDecision, RouteDisposition
 from finance_agent_core.contracts.knowledge import (
     KnowledgePlanAuthorityError,
-    RelationKnowledgeOperation,
     canonical_knowledge_plan_sha256,
 )
-from finance_agent_core.contracts.queryplan import Intent, ProductFamily
-from finance_agent_core.contracts.routing import InteractionIntent, RoutedExecutionError
+from finance_agent_core.contracts.queryplan import (
+    Constraint,
+    ConstraintOperator,
+    ConstraintStrength,
+    Intent,
+    ProductFamily,
+    Unit,
+)
+from finance_agent_core.contracts.routing import (
+    InteractionIntent,
+    MinimalQueryDraft,
+    RoutedExecutionError,
+)
 from finance_agent_core.deadline import (
     RequestDeadlineExceeded,
     current_request_deadline,
@@ -86,6 +115,7 @@ from finance_agent_core.domain import (
     ComparisonEvidence,
     DatabaseManifest,
     ProductEvidence,
+    VerifiedAggregation,
     VerifiedSearch,
 )
 from finance_agent_core.execution import (
@@ -125,6 +155,7 @@ from finance_agent_core.execution.external_knowledge_runtime import (
 )
 from finance_agent_core.execution.verifier_projection import (
     load_projected_verifier_records,
+    record_cache_covers_verifier_projection,
 )
 from finance_agent_core.observability import (
     AuditOutcome,
@@ -141,6 +172,7 @@ from finance_agent_core.release import (
     PublicKnowledgeRetrievalRelease,
     ResolvedAgentRelease,
 )
+from finance_agent_core.retrieval import DocumentEvidence
 from finance_agent_core.retrieval.relations import RelationIndexError
 from finance_agent_core.storage import (
     ProductIdentitySnapshotCache,
@@ -152,6 +184,155 @@ from finance_agent_core.storage import (
 _PUBLIC_INTENT_ANALYSIS: contextvars.ContextVar[IntentAnalysisDraft | None] = (
     contextvars.ContextVar("finance_public_intent_analysis", default=None)
 )
+_MULTI_FAMILY_COMPOUND_REQUIRED = re.compile(
+    r"(?:각각|각\s*(?:상품군|시장|유형|종류)(?:에서|별로)?|"
+    r"상품군별(?:로)?|따로|나란히|구분해서|"
+    r"한\s*(?:목록|리스트|표)(?:으로|에서|에)?|직접\s*(?:정렬|순위)|"
+    r"합치지\s*말고|섞지\s*말고|"
+    r"(?:먼저|우선).{0,80}(?:추리|추린|고르|고른|선별|남기|남긴)"
+    r".{0,40}(?:다음|뒤|후|이후))",
+    re.IGNORECASE,
+)
+_MULTI_FAMILY_COUNT_REQUIRED = re.compile(
+    r"(?:(?:상품|종목|펀드)\s*(?:수|개수|건수).{0,24}상품군별|"
+    r"상품군별.{0,24}(?:상품|종목|펀드)\s*(?:수|개수|건수))",
+    re.IGNORECASE,
+)
+_SINGLE_FAMILY_COMPOUND_REQUIRED = re.compile(
+    r"(?<![A-Z0-9])(?:KR[A-Z0-9]{10}|[A-Z][A-Z0-9.]{1,19})"
+    r"(?:\)|\s)*(?:보다|대비|의\s*.{1,64}?(?:넘는|웃도는|초과하는|밑도는|미만인))|"
+    r"(?:상위|하위|최상단|최하단).{0,18}(?:개|종목|상품).{0,72}?"
+    r"(?:먼저|우선|1\s*차|후보|남긴|고른|선별|줄이고|만든\s*뒤|안에서|그중)|"
+    # ``metric 기준 N개로 1차 선별`` is staged even when its first-stage
+    # direction is missing.  The compound compiler must reject it and the
+    # service must preserve that rejection as CLARIFY instead of falling back
+    # to a broad one-stage SEARCH that silently drops the shortlist.
+    r"기준(?:으로)?\s*(?:\d+|한|두|세|셋|네|넷|다섯|여섯|일곱|여덟|아홉|열)\s*"
+    r"(?:개|종목|상품)(?:로|를)?\s*(?:1\s*(?:차|단계)|예선|후보|선별)|"
+    r"(?:평균(?:값|치)?|중앙\s*값|중위수|메디안|최빈값)\s*"
+    r"(?:(?:보다|이상|이하|초과|미만)|(?:을|를)?\s*"
+    r"(?:넘는|웃도는|밑도는))|"
+    # Two explicitly named metrics compared row-by-row must never fall back
+    # to an ordinary one-metric SEARCH if the compound grammar rejects it.
+    r"(?:보다|에\s*비해).{0,32}(?:높은|낮은|큰|작은|많은|적은|긴|짧은)"
+    r".{0,80}(?:차이|격차)",
+    re.IGNORECASE,
+)
+
+_EXTERNAL_CONTROL_JOINERS = frozenset(
+    {
+        "의",
+        "이",
+        "가",
+        "을",
+        "를",
+        "은",
+        "는",
+        "와",
+        "과",
+        "및",
+        "중",
+        "에서",
+        "가운데",
+    }
+)
+_EXTERNAL_CONTROL_FAMILY_SCOPES = frozenset(
+    {
+        "국내etf",
+        "해외etf",
+        "국내etn",
+        "해외etn",
+        "국내etp",
+        "해외etp",
+        "공모펀드",
+        "펀드",
+        "원화채권",
+        "국내채권",
+        "채권",
+    }
+)
+
+
+def _external_control_span_is_authorized(span: str, requirements: tuple) -> bool:
+    """Return whether one compiler control span is wholly external semantics.
+
+    The ordinary DB compiler deliberately marks relation verbs as unsupported.
+    They may be removed from a *prefilter-only* plan only when the independently
+    compiled external plan owns every character through literal subject or
+    relation evidence.  DB fields, values and ranking words can therefore never
+    disappear through this bridge.
+    """
+
+    normalized = normalize_database_identity(span).replace(" ", "")
+    if not normalized:
+        return False
+    relation_atoms = {
+        normalize_database_identity(requirement.relation_evidence_span).replace(" ", "")
+        for requirement in requirements
+    }
+    subject_atoms = {
+        normalize_database_identity(requirement.subject_evidence_span).replace(" ", "")
+        for requirement in requirements
+    }
+    relation_atoms.discard("")
+    subject_atoms.discard("")
+    # The DB compiler can report only the relation-bearing suffix of a longer
+    # server-authorized evidence span (for example ``테마와 연결`` from
+    # ``심해로봇 테마와 연결 이력이 있는``).  It is safe to remove that
+    # control span from this *prefilter-only* plan because the complete
+    # relation span was independently grounded in the literal question and
+    # validated by the capability-specific sanitizer.  The reverse containment
+    # is deliberately not accepted: a broad compiler span may still contain a
+    # DB field, threshold or ranking expression that must remain authoritative.
+    if any(normalized in relation_atom for relation_atom in relation_atoms):
+        return True
+    atoms = tuple(
+        sorted(
+            (
+                *relation_atoms,
+                *subject_atoms,
+                *_EXTERNAL_CONTROL_JOINERS,
+                *_EXTERNAL_CONTROL_FAMILY_SCOPES,
+            ),
+            key=lambda value: (-len(value), value),
+        )
+    )
+    reachable: dict[int, bool] = {0: False}
+    for offset in range(len(normalized) + 1):
+        if offset not in reachable:
+            continue
+        used_relation = reachable[offset]
+        for atom in atoms:
+            if normalized.startswith(atom, offset):
+                next_offset = offset + len(atom)
+                reachable[next_offset] = reachable.get(next_offset, False) or (
+                    used_relation or atom in relation_atoms
+                )
+    return reachable.get(len(normalized), False)
+
+
+def _external_identity_control_span_is_authorized(
+    span: str,
+    identity_surfaces: tuple[str, ...],
+) -> bool:
+    """Allow only a compiler suffix wholly owned by one explicit identity.
+
+    Unknown literal product names are resolved to an empty universe by
+    ``ProvidedProductUniverseBuilder``.  The DB prefilter must not convert that
+    deterministic NOT_FOUND into CLARIFY, but it also must not discard a broad
+    span containing an unrelated DB condition.  Therefore containment is
+    intentionally one-way: the compiler span must fit inside the product
+    surface extracted by the server Router.
+    """
+
+    normalized = normalize_database_identity(span).replace(" ", "")
+    if not normalized:
+        return False
+    return any(
+        normalized
+        in normalize_database_identity(surface).replace(" ", "")
+        for surface in identity_surfaces
+    )
 
 
 class RoutedServiceModel(BaseModel):
@@ -170,8 +351,20 @@ class FamilySearchResult(RoutedServiceModel):
 
     @model_validator(mode="after")
     def validate_family_result(self) -> FamilySearchResult:
-        if self.query_plan.intent is not Intent.SEARCH:
-            raise ValueError("family search result requires a SEARCH QueryPlan")
+        if self.query_plan.intent not in {Intent.SEARCH, Intent.AGGREGATE}:
+            raise ValueError("family result requires a SEARCH or AGGREGATE QueryPlan")
+        if self.query_plan.intent is Intent.AGGREGATE and (
+            self.products
+            or not self.query_plan.intent_payload.aggregations
+            or any(
+                item.function.value
+                not in {"count", "avg", "median", "sum", "min", "max"}
+                for item in self.query_plan.intent_payload.aggregations
+            )
+        ):
+            raise ValueError(
+                "family aggregate result requires approved measures and no products"
+            )
         if self.query_plan.product_families != [self.product_family]:
             raise ValueError("family search result and QueryPlan family differ")
         if (self.status == "not_found") != (self.candidate_count == 0):
@@ -199,28 +392,41 @@ class RoutedAgentResult(RoutedServiceModel):
     products: list[ProductEvidence]
     aggregates: list[AggregateEvidence] = Field(default_factory=list)
     comparisons: list[ComparisonEvidence] = Field(default_factory=list)
+    documents: list[DocumentEvidence] = Field(default_factory=list)
     warnings: list[str]
     source_manifest: DatabaseManifest | None
     answer_composition: AnswerComposition | None
     family_searches: list[FamilySearchResult] = Field(default_factory=list, max_length=4)
+    verified_document_intersection_count: int = Field(default=0, ge=0)
 
     @model_validator(mode="after")
     def validate_result_state(self) -> RoutedAgentResult:
         if self.request_id != self.decision.draft.request_id:
             raise ValueError("result and route request IDs differ")
         if self.status == "executed":
+            if self.verified_document_intersection_count and not self.documents:
+                raise ValueError(
+                    "verified document intersections require official document evidence"
+                )
             if self.family_searches:
                 if len(self.family_searches) < 2:
-                    raise ValueError("multi-family result requires at least two family searches")
+                    raise ValueError("compound result requires at least two family searches")
+                family_intents = {item.query_plan.intent for item in self.family_searches}
+                if family_intents not in ({Intent.SEARCH}, {Intent.AGGREGATE}):
+                    raise ValueError("multi-family result cannot mix query intents")
+                aggregate_bundle = family_intents == {Intent.AGGREGATE}
                 if (
                     self.query_plan is not None
                     or self.source_manifest is not None
-                    or self.aggregates
                     or self.comparisons
+                    or (self.aggregates and not aggregate_bundle)
+                    or (aggregate_bundle and not self.aggregates)
                 ):
                     raise ValueError(
-                        "multi-family SEARCH result must keep plans and manifests per family"
+                        "multi-family result must keep compatible evidence per family"
                     )
+                if aggregate_bundle and self.products:
+                    raise ValueError("multi-family aggregate cannot return product rows")
                 if self.candidate_count != sum(
                     item.candidate_count for item in self.family_searches
                 ):
@@ -253,10 +459,11 @@ class RoutedAgentResult(RoutedServiceModel):
                             raise ValueError(
                                 "multi-family products must preserve each family result order"
                             )
-                if [item.product_family for item in self.family_searches] != (
-                    self.decision.draft.product_families
-                ):
-                    raise ValueError("multi-family result order must match the routed family order")
+                bundle_families = list(
+                    dict.fromkeys(item.product_family for item in self.family_searches)
+                )
+                if bundle_families != self.decision.draft.product_families:
+                    raise ValueError("compound result order must match the routed family order")
                 if (
                     self.answer_composition is not None
                     and self.answer_composition.answer != self.answer
@@ -274,12 +481,29 @@ class RoutedAgentResult(RoutedServiceModel):
             or self.products
             or self.aggregates
             or self.comparisons
+            or self.documents
             or self.warnings
             or self.source_manifest is not None
             or self.answer_composition is not None
             or self.family_searches
+            or self.verified_document_intersection_count
         ):
             raise ValueError("control result must not contain executed evidence")
+        return self
+
+
+class ExactIdentityNotFoundResult(RoutedServiceModel):
+    """Absence proven across every configured provided-product database."""
+
+    request_id: str = Field(min_length=1, max_length=128)
+    identity: str = Field(min_length=2, max_length=48)
+    checked_families: list[ProductFamily] = Field(min_length=1, max_length=4)
+    answer: str = Field(min_length=1, max_length=500)
+
+    @model_validator(mode="after")
+    def validate_checked_scope(self) -> ExactIdentityNotFoundResult:
+        if len(self.checked_families) != len(set(self.checked_families)):
+            raise ValueError("checked product families must be unique")
         return self
 
 
@@ -310,6 +534,16 @@ _CROSS_FAMILY_ALL_REQUIRED = re.compile(
 )
 _CROSS_FAMILY_EXACT_FIELDS = frozenset(
     {"product_id", "product_name", "ticker", "isin", "credit_rating"}
+)
+_EXACT_IDENTITY_READ_CUE = re.compile(
+    r"상세|정보|원천\s*(?:값|데이터)|제공\s*필드|수치|값|"
+    r"조회|확인|알려|보여|말해|적어|나열|궁금",
+    re.IGNORECASE,
+)
+_CLOSED_IDENTITY_COMPARISON_CUE = re.compile(
+    r"비교|대조|나란히|(?:입력|질문|적은|쓴)\s*(?:한)?\s*순서|"
+    r"순서(?:를)?\s*(?:유지|대로)|차례(?:대로|로)|각각|표(?:로|에서)",
+    re.IGNORECASE,
 )
 
 
@@ -511,6 +745,76 @@ def _canonical_sha256(value: object) -> str:
     return hashlib.sha256(payload).hexdigest()
 
 
+def _aggregate_response_candidate_count(
+    plan: QueryPlan,
+    verified: VerifiedAggregation,
+    question: str,
+) -> int:
+    """Expose the complete usable population for a single aggregate metric."""
+
+    aggregations = plan.intent_payload.aggregations
+    if len(aggregations) != 1 or verified.total_group_count != len(verified.groups):
+        return verified.candidate_count
+    if not plan.intent_payload.group_by and re.search(
+        r"0\s*(?:이|가)?\s*아닌|0\s*(?:값|수치)?\s*(?:제외|빼고)",
+        question,
+        re.IGNORECASE,
+    ) is None:
+        return verified.candidate_count
+    requested = aggregations[0]
+    if requested.function.value == "count" and requested.field != "product_id":
+        # COUNT(field) availability reports partition the same verified cohort
+        # into present/missing groups.  The public candidate count is therefore
+        # the whole cohort, not only the non-null side's valid_count.
+        return verified.candidate_count
+    valid_count = 0
+    for group in verified.groups:
+        metric = next(
+            (
+                item
+                for item in group.metrics
+                if item.function is requested.function and item.field == requested.field
+            ),
+            None,
+        )
+        if metric is None:
+            return verified.candidate_count
+        valid_count += metric.valid_count
+    return valid_count
+
+
+def _lock_approved_fund_aggregate_scope(plan: QueryPlan) -> QueryPlan:
+    """Attach the immutable public-fund row scope before authority validation.
+
+    The lexical compiler deliberately treats ``공모펀드`` as the supplied
+    dataset name, so its standalone parser output does not duplicate that word
+    as a row predicate.  At the executable server boundary, however, every
+    fund aggregate must carry exactly the same locked ``public_offering=true``
+    constraint as SEARCH and COMPARE.  An explicit conflicting predicate is
+    preserved and rejected by ``require_fund_public_scope`` rather than being
+    silently overwritten.
+    """
+
+    if plan.intent is not Intent.AGGREGATE or plan.product_families != [ProductFamily.FUND]:
+        return plan
+    if any(item.field == "public_offering" for item in plan.constraints):
+        return plan
+    return plan.model_copy(
+        update={
+            "constraints": [
+                *plan.constraints,
+                Constraint(
+                    field="public_offering",
+                    operator=ConstraintOperator.EQ,
+                    value=True,
+                    unit=Unit.BOOLEAN,
+                    strength=ConstraintStrength.LOCKED,
+                ),
+            ]
+        }
+    )
+
+
 def _compile_cross_family_answer(
     family_searches: list[FamilySearchResult],
 ) -> str:
@@ -583,6 +887,7 @@ class RoutedFinanceAgent:
         self.identity_cache = identity_cache or ProductIdentitySnapshotCache(
             max_entries=max(1, len(self.database_paths))
         )
+        self.database_identity_matcher = DatabaseProductIdentityMatcher(self.database_paths)
         self.router = router or IntentRouter(
             adaptive_semantic_enabled=adaptive_semantic_resolver is not None,
         )
@@ -591,14 +896,22 @@ class RoutedFinanceAgent:
             record_cache=self.record_cache,
             identity_cache=self.identity_cache,
         )
+        self.compound_query_engine = TypedCompoundQueryEngine(
+            self.database_paths,
+            record_cache=self.record_cache,
+        )
         self.intent_analysis_provider = intent_analysis_provider
         self.official_answer_provider = official_answer_provider
         self.require_official_hclx = require_official_hclx
         if require_official_hclx and (
-            intent_analysis_provider is None or official_answer_provider is None
+            intent_analysis_provider is None
+            or official_answer_provider is None
+            or getattr(intent_analysis_provider, "require_execution_structure", False)
+            is not True
         ):
             raise ValueError(
-                "official HCLX mode requires Intent analysis and final answer providers"
+                "official HCLX mode requires semantic-structure Intent analysis and "
+                "final answer providers"
             )
         if (
             adaptive_semantic_resolver is not None
@@ -714,13 +1027,186 @@ class RoutedFinanceAgent:
 
     def _record_universe(self, database_path: Path, validated_plan: ValidatedPlan):
         require_validated_plan(validated_plan, database_path)
-        if self._record_cache_enabled:
+        if self._record_cache_enabled and record_cache_covers_verifier_projection(
+            validated_plan.canonical_plan
+        ):
             snapshot = self.record_cache.get(database_path)
             require_manifest_binding(validated_plan, snapshot.manifest)
             require_verifier_budget(validated_plan, len(snapshot.records))
             require_validated_plan(validated_plan, database_path)
             return snapshot.records
         return load_projected_verifier_records(database_path, validated_plan)
+
+    def _external_db_prefilter_candidate_ids(
+        self,
+        *,
+        question: str,
+        request_id: str,
+        external_plan,
+        families: tuple[ProductFamily, ...],
+        identity_surfaces: tuple[str, ...] = (),
+    ) -> dict[ProductFamily, set[str]] | None:
+        """Apply ordinary DB constraints before any external evidence lookup.
+
+        The returned IDs are produced by the same QueryPlan compiler, public
+        authority gate and read-only verifier projection as an ordinary SEARCH.
+        Ranking and limit intentionally do not narrow this set: external
+        relations are intersected first, then the external executor applies
+        the requested global/product selection.
+        """
+
+        candidate_ids: dict[ProductFamily, set[str]] = {}
+        scoped_questions = self.compiler.scope_family_questions(question, families)
+        for family in families:
+            scoped_question = scoped_questions[family]
+            decision = RouteDecision(
+                draft=MinimalQueryDraft(
+                    request_id=request_id,
+                    question=scoped_question,
+                    intent=InteractionIntent.SEARCH,
+                    product_families=[family],
+                    # Exact product identities are intersected independently
+                    # by ProvidedProductUniverseBuilder.  Keeping them out of
+                    # this filter-only plan prevents one family's named product
+                    # from leaking into another family slot.
+                    product_mentions=[],
+                    requested_limit=None,
+                ),
+                disposition=RouteDisposition.EXECUTE,
+                reason_code="external_db_prefilter",
+                reason="외부 근거 검색 전 제공 DB 조건을 고정",
+                query_plan_intent=Intent.SEARCH,
+                capability_matrix_version=self.router.matrix.matrix_version,
+            )
+            plan = self.compiler.compile(decision)
+            remaining_ambiguities = [
+                item
+                for item in plan.ambiguities
+                if not _external_control_span_is_authorized(
+                    item.span,
+                    external_plan.requirements,
+                )
+                and not _external_identity_control_span_is_authorized(
+                    item.span,
+                    identity_surfaces,
+                )
+            ]
+            remaining_unsupported = [
+                item
+                for item in plan.unsupported_conditions
+                if not _external_control_span_is_authorized(
+                    item.span,
+                    external_plan.requirements,
+                )
+                and not _external_identity_control_span_is_authorized(
+                    item.span,
+                    identity_surfaces,
+                )
+            ]
+            if remaining_ambiguities or remaining_unsupported:
+                spans = tuple(
+                    item.span for item in (*remaining_ambiguities, *remaining_unsupported)
+                )
+                raise PlanCompilationBlockedError(
+                    "외부 관계와 함께 요청한 DB 조건을 모두 확정할 수 없습니다: "
+                    + ", ".join(spans)
+                )
+            plan = QueryPlan.model_validate(
+                {
+                    **plan.model_dump(mode="python"),
+                    "ambiguities": [],
+                    "unsupported_conditions": [],
+                }
+            )
+            if not plan.constraints:
+                continue
+            planning = AdaptiveShadowPlanningPolicy().decide(
+                decision,
+                SemanticCoverageDecision(),
+            )
+            validated = self.plan_authority_gate.validate_routed(
+                plan,
+                decision,
+                planning_decision=planning,
+            )
+            candidate_ids[family] = set(
+                SQLiteOracle(self.database_paths[family]).candidate_product_ids(validated)
+            )
+        return candidate_ids or None
+
+    def _assert_compound_authority_current(self) -> None:
+        """Apply the ordinary immutable DB/release boundary to compound plans."""
+
+        raise_if_request_stopped()
+        if self.release_guard is not None:
+            self.release_guard.assert_request_current()
+        if self.require_approved_databases:
+            require_approved_database_paths(self.database_paths)
+        raise_if_request_stopped()
+
+    @staticmethod
+    def _compound_control_decision(
+        decision: RouteDecision,
+        *,
+        reason_code: str,
+        reason: str,
+    ) -> RouteDecision:
+        """Fail closed when compound syntax cannot produce execution authority.
+
+        Safety and unsupported routes are terminal and must never be rewritten
+        to a weaker disposition.  Every other compound representation or
+        authorization failure becomes a non-executable CLARIFY decision.
+        """
+
+        if (
+            decision.disposition is RouteDisposition.UNSUPPORTED
+            or decision.reason_code.startswith("safety_")
+        ):
+            return decision
+        return RouteDecision(
+            draft=decision.draft.model_copy(update={"intent": InteractionIntent.CLARIFY}),
+            disposition=RouteDisposition.CLARIFY,
+            reason_code=reason_code,
+            reason=reason,
+            query_plan_intent=None,
+            capability_matrix_version=decision.capability_matrix_version,
+        )
+
+    @staticmethod
+    def _requires_multi_family_compound_plan(decision: RouteDecision) -> bool:
+        """Detect explicit per-family/multi-stage grammar that may not degrade.
+
+        Simple cross-family searches remain on the existing family-search
+        executor.  Requests that explicitly demand separate family clauses or
+        a staged shortlist require a Typed Compound Plan; a compiler miss must
+        not silently discard one clause and run a narrower ordinary search.
+        """
+
+        return (
+            decision.disposition is not RouteDisposition.UNSUPPORTED
+            and len(set(decision.draft.product_families)) > 1
+            and (
+                (
+                    _MULTI_FAMILY_COMPOUND_REQUIRED.search(decision.draft.question)
+                    is not None
+                    and ranking_intent_present(decision.draft.question)
+                )
+                or _MULTI_FAMILY_COUNT_REQUIRED.search(decision.draft.question) is not None
+            )
+        )
+
+    @staticmethod
+    def _requires_single_family_compound_plan(decision: RouteDecision) -> bool:
+        """Keep a failed relative/staged parse from degrading to DETAIL/SEARCH."""
+
+        return (
+            decision.disposition is not RouteDisposition.UNSUPPORTED
+            and (
+                _SINGLE_FAMILY_COMPOUND_REQUIRED.search(decision.draft.question)
+                is not None
+                or requires_typed_two_stage_plan(decision.draft.question)
+            )
+        )
 
     def _assert_signed_knowledge_current(self) -> None:
         """Recheck the in-process knowledge assembly at every public boundary."""
@@ -770,6 +1256,17 @@ class RoutedFinanceAgent:
             # request check is the cheap inode/path fingerprint used by readiness.
             self.knowledge_agent.assert_ready_current()
 
+    def assert_public_response_boundary_current(self) -> None:
+        """Recheck every immutable public input immediately before HTTP return.
+
+        HyperCLOVA X final generation can take materially longer than the
+        deterministic DB path.  A release binding or approved database that
+        changes during that call invalidates the already-built answer, so the
+        adapter calls this boundary after generation and discards the result.
+        """
+
+        self._assert_public_knowledge_boundary_current()
+
     def answer(self, question: str, request_id: str) -> RoutedAgentResult:
         return self._execute_audited(
             question,
@@ -815,50 +1312,214 @@ class RoutedFinanceAgent:
         | KnowledgeRouteDecision
         | ExternalKnowledgeRouteDecision
         | ExternalKnowledgeRuntimeResult
+        | ExactIdentityNotFoundResult
     ):
         """Route one public request without bypassing the established atomic boundary."""
 
         self._assert_public_knowledge_boundary_current()
         safety = self.router.safety_envelope.evaluate(question)
-        # The official contract still requires HCLX Intent analysis. Safety is
-        # evaluated first, and its terminal disposition remains authoritative:
-        # an HCLX draft can never downgrade a blocked request to execution.
+        # SafetyEnvelope is a deterministic pre-provider boundary.  A terminal
+        # safety decision never sends an attack, secret-exfiltration attempt, or
+        # other blocked text to HCLX.  The official HCLX Intent requirement still
+        # applies to every evaluation query that passes this boundary.
+        if safety.disposition is not SafetyDisposition.ALLOW:
+            return self._answer_atomically(question, request_id)
         intent_draft = self._analyze_public_intent(question, request_id)
         token = _PUBLIC_INTENT_ANALYSIS.set(intent_draft)
         try:
-            if safety.disposition is not SafetyDisposition.ALLOW:
-                return self._answer_atomically(question, request_id)
+            # Negative relationship predicates require proof of absence across
+            # a complete official-document universe.  The current external
+            # runtime verifies positive evidence only, so it must never turn
+            # ``보유하지 않은`` or ``자회사가 아닌`` into a positive relation
+            # after lexical sanitization.  HCX has no authority to override
+            # this deterministic, pre-sanitizer control decision.
+            if has_negated_external_relation(safety.normalized_question):
+                self._assert_public_knowledge_boundary_current()
+                return ExternalKnowledgeRouteDecision(
+                    disposition=ExternalKnowledgeRouteDisposition.CLARIFY,
+                    reason_code="negated_external_relation_unverifiable",
+                    reason=(
+                        "외부 공식 자료만으로 관계가 존재하지 않는다는 사실을 "
+                        "완전하게 검증할 수 없어 조건을 확정할 수 없음"
+                    ),
+                )
+            labeled_lookup = extract_plain_labeled_product_lookup(
+                safety.normalized_question
+            )
+            if (
+                labeled_lookup is not None
+                and self.database_identity_matcher.resolve_literal(labeled_lookup)
+                is None
+            ):
+                # The request asks only whether one explicit code exists.  A
+                # full exact-identity index over every configured provided DB
+                # proves the empty result without guessing a product family.
+                # Fabrication/insertion, ranking, comparison, and external
+                # relation requests are excluded by the extractor (and unsafe
+                # mutations are already terminal in SafetyEnvelope).
+                checked_families = sorted(
+                    self.database_paths,
+                    key=lambda family: family.value,
+                )
+                self._assert_public_knowledge_boundary_current()
+                return ExactIdentityNotFoundResult(
+                    request_id=request_id,
+                    identity=labeled_lookup,
+                    checked_families=checked_families,
+                    answer=(
+                        f"요청한 상품 식별자 {labeled_lookup}는 제공 데이터의 "
+                        "국내채권·국내/해외 ETP·공모펀드 범위에서 찾을 수 없습니다."
+                    ),
+                )
             lexical_families, lexical_product_mentions = extract_product_routing_hints(
                 safety.normalized_question
             )
+            db_product_mentions: tuple[str, ...] = ()
+            if self.external_universe_builder is not None and has_external_knowledge_surface(
+                question
+            ):
+                identity_families = lexical_families
+                if not identity_families:
+                    if re.search(r"(?<![A-Za-z])(?:ETF|ETN|ETP)(?![A-Za-z])", question, re.I):
+                        identity_families = (
+                            ProductFamily.DOMESTIC_ETP,
+                            ProductFamily.OVERSEAS_ETP,
+                        )
+                    elif re.search(r"(?:공모\s*)?펀드", question, re.I):
+                        identity_families = (ProductFamily.FUND,)
+                    elif re.search(r"(?:원화|국내)?\s*채권", question, re.I):
+                        identity_families = (ProductFamily.BOND,)
+                db_product_mentions = (
+                    self.external_universe_builder.question_identity_surfaces(
+                        families=identity_families,
+                        question=question,
+                    )
+                )
+            product_mentions = tuple(
+                dict.fromkeys((*lexical_product_mentions, *db_product_mentions))
+            )
+            # Development/offline profiles may intentionally omit HCX, but a
+            # literal server-owned external relation must still never fall
+            # through to a broad SQL search.  Seed a zero-authority draft and
+            # let the same deterministic sanitizer derive the relation.  In
+            # evaluation/production ``require_official_hclx`` still makes the
+            # real Intent call mandatory before reaching this point.
+            knowledge_seed = intent_draft
+            if knowledge_seed is None and has_external_knowledge_surface(question):
+                knowledge_seed = IntentAnalysisDraft(
+                    intent=InteractionIntent.SEARCH,
+                    product_families=list(lexical_families),
+                    evidence_spans=[],
+                    needs_clarification=False,
+                )
             knowledge_draft = (
                 None
-                if intent_draft is None
+                if knowledge_seed is None
                 else sanitize_server_authorized_knowledge_draft(
                     question,
-                    intent_draft,
+                    knowledge_seed,
                     fallback_families=lexical_families,
-                    product_mentions=lexical_product_mentions,
+                    product_mentions=product_mentions,
                 )
             )
-            if knowledge_draft is not None and has_server_authorized_knowledge_requirements(
-                question, knowledge_draft
+            has_external_requirements = (
+                knowledge_draft is not None
+                and has_server_authorized_knowledge_requirements(question, knowledge_draft)
+            )
+            public_coverage = self.router.semantic_coverage_gate.evaluate(
+                safety.normalized_question,
+                interaction_intent=None,
+                check_exclusions=True,
+            )
+            # A rejected HCX relation proposal has no authority.  The server
+            # sanitizer independently derives every explicit external
+            # relation from the question; if it finds none, continue through
+            # the ordinary SemanticCoverageGate and Typed QueryPlan path.  The
+            # previous model-proposal veto falsely blocked pure DB questions
+            # such as multi-stage ranking whenever HCX mislabeled one phrase
+            # as external knowledge.
+            # Exact product IDs and fully specified DB filters outrank a model
+            # hint only when the server found no literal external relation.
+            # A query such as "자회사를 편입한 ETF 중 순자산 큰 상품" needs
+            # both the verified relation and the DB ranking; letting the metric
+            # pre-empt the relation silently drops the user's main condition.
+            if (
+                not has_external_requirements
+                and product_search_has_precedence(safety.normalized_question)
             ):
-                knowledge_identity_surfaces = tuple(
-                    dict.fromkeys(
-                        (
-                            *lexical_product_mentions,
-                            *(item.subject_span for item in knowledge_draft.knowledge_requirements),
-                        )
-                    )
+                return self._answer_atomically(question, request_id)
+            # External retrieval must not bypass the same ambiguity boundary
+            # that protects the SQL path.  Examples include a missing holding
+            # subject ("최근에 편입된") or an undefined ranking metric such as
+            # "가격 매력".  Route those through the authoritative server gate,
+            # which returns CLARIFY without opening the network.
+            externally_covered_ambiguities = {
+                span
+                for span in public_coverage.ambiguity_spans
+                if has_external_requirements
+                and any(
+                    span in requirement.relation_span
+                    or requirement.relation_span in span
+                    for requirement in knowledge_draft.knowledge_requirements
                 )
-                if self.external_knowledge_router is None:
+            }
+            unresolved_public_ambiguities = tuple(
+                span
+                for span in public_coverage.ambiguity_spans
+                if span not in externally_covered_ambiguities
+            )
+            if unresolved_public_ambiguities:
+                if has_external_requirements:
                     self._assert_public_knowledge_boundary_current()
                     return ExternalKnowledgeRouteDecision(
-                        disposition=ExternalKnowledgeRouteDisposition.UNSUPPORTED,
-                        reason_code="external_knowledge_runtime_not_configured",
-                        reason="공식 외부 근거 검색 경로가 현재 공개 런타임에 조립되지 않음",
+                        disposition=ExternalKnowledgeRouteDisposition.CLARIFY,
+                        reason_code="external_relation_semantically_ambiguous",
+                        reason="외부 관계의 대상·시점·정렬 조건을 하나로 확정할 수 없음",
                     )
+                return self._answer_atomically(question, request_id)
+            if has_external_requirements:
+                assert knowledge_draft is not None
+                knowledge_identity_surfaces = tuple(
+                    dict.fromkeys(product_mentions)
+                )
+                if self.external_knowledge_router is None:
+                    # A valid holdings/theme/corporate/risk/fund-document
+                    # question does not become an unsupported action merely
+                    # because this runtime profile has no live evidence
+                    # executor. Compile the same server-owned typed plan, then
+                    # remove execution authority and expose KNOWLEDGE_SEARCH.
+                    # The public adapter maps that state to CANNOT_VERIFY and
+                    # never falls through to a broad SQL search or the legacy
+                    # relation router.
+                    unavailable_route = ExternalKnowledgeRouter().route(
+                        question,
+                        request_id,
+                        knowledge_draft,
+                    )
+                    if (
+                        unavailable_route.disposition
+                        is ExternalKnowledgeRouteDisposition.EXECUTE
+                    ):
+                        assert unavailable_route.plan is not None
+                        candidate_plan = type(unavailable_route.plan).model_validate(
+                            {
+                                **unavailable_route.plan.model_dump(mode="python"),
+                                "execution_authorized": False,
+                            }
+                        )
+                        unavailable_route = ExternalKnowledgeRouteDecision(
+                            disposition=(
+                                ExternalKnowledgeRouteDisposition.KNOWLEDGE_SEARCH
+                            ),
+                            reason_code="external_knowledge_runtime_unavailable",
+                            reason=(
+                                "정상 금융상품 지식 질문이지만 이 실행 환경에는 "
+                                "검증된 공식 외부 근거 실행기가 조립되지 않음"
+                            ),
+                            plan=candidate_plan,
+                        )
+                    self._assert_public_knowledge_boundary_current()
+                    return unavailable_route
                 source_selection_signals = None
                 if self.external_universe_builder is not None:
                     source_selection_signals = (
@@ -898,8 +1559,29 @@ class RoutedFinanceAgent:
                                 key=lambda item: item.value,
                             )
                         )
+                        try:
+                            candidate_ids_by_family = (
+                                self._external_db_prefilter_candidate_ids(
+                                    question=question,
+                                    request_id=request_id,
+                                    external_plan=external_decision.plan,
+                                    families=families,
+                                    identity_surfaces=knowledge_identity_surfaces,
+                                )
+                            )
+                        except PlanCompilationBlockedError:
+                            self._assert_public_knowledge_boundary_current()
+                            return ExternalKnowledgeRouteDecision(
+                                disposition=ExternalKnowledgeRouteDisposition.CLARIFY,
+                                reason_code="external_db_prefilter_incomplete",
+                                reason=(
+                                    "외부 관계와 함께 요청한 제공 DB 조건을 모두 "
+                                    "안전하게 확정할 수 없음"
+                                ),
+                            )
                         universe = self.external_universe_builder.build(
                             families=families,
+                            candidate_ids_by_family=candidate_ids_by_family,
                             identity_surfaces=knowledge_identity_surfaces,
                         )
                         search_plan = self.external_search_plan_compiler.compile(
@@ -924,8 +1606,6 @@ class RoutedFinanceAgent:
                     self._assert_public_knowledge_boundary_current()
                     return external_decision
             if self.knowledge_router is None:
-                return self._answer_atomically(question, request_id)
-            if product_search_has_precedence(safety.normalized_question):
                 return self._answer_atomically(question, request_id)
             decision = self.knowledge_router.route_after_safety_gate(
                 safety.normalized_question,
@@ -1002,23 +1682,11 @@ class RoutedFinanceAgent:
         if draft is None or decision.disposition is not KnowledgeRouteDisposition.EXECUTE:
             return True
         assert decision.plan is not None
-        operation = decision.plan.operation
-        expected_intent = (
-            InteractionIntent.SEARCH
-            if isinstance(operation, RelationKnowledgeOperation)
-            else InteractionIntent.EXPLAIN
-        )
-        expected_families = (
-            list(operation.product_families)
-            if isinstance(operation, RelationKnowledgeOperation)
-            else []
-        )
-        return (
-            not draft.needs_clarification
-            and draft.intent is expected_intent
-            and draft.product_families == expected_families
-            and all(span in decision.plan.question for span in draft.evidence_spans)
-        )
+        # HCX supplies the mandatory Intent receipt, but the deterministic
+        # relation router owns operation and family scope.  Intent/family label
+        # drift is therefore advisory just like the SQL path; only invented
+        # evidence may veto an otherwise verified server plan.
+        return all(span in decision.plan.question for span in draft.evidence_spans)
 
     def _execute_knowledge_audited(
         self,
@@ -1677,7 +2345,116 @@ class RoutedFinanceAgent:
         decision = trace.route_decision
         route_emitted = False
         try:
+            decision = self._bind_database_product_identities(decision)
             decision = self._resolve_exact_identity_family(decision)
+            intent_draft = _PUBLIC_INTENT_ANALYSIS.get()
+            hclx_structure = (
+                ()
+                if intent_draft is None
+                else tuple(
+                    (
+                        item.text_span,
+                        tuple(item.product_families),
+                        item.role,
+                    )
+                    for item in intent_draft.execution_clauses
+                )
+            )
+            compound_plan: TypedCompoundPlan | None = None
+            compound_authorization: CompoundAuthorizationReceipt | None = None
+            compound_terminal = (
+                decision.reason_code.startswith("safety_")
+                or (
+                    decision.disposition is RouteDisposition.UNSUPPORTED
+                    and decision.reason_code != "semantic_unmapped_action"
+                )
+            )
+            if not compound_terminal:
+                try:
+                    compound_plan = self.compound_query_engine.compile(
+                        question,
+                        request_id,
+                        hclx_structure=hclx_structure,
+                    )
+                except ValueError:
+                    decision = self._compound_control_decision(
+                        decision,
+                        reason_code="compound_plan_invalid",
+                        reason=(
+                            "복합 조건의 상품군·필터·정렬 구조를 안전한 "
+                            "실행 계획으로 확정하지 못했습니다."
+                        ),
+                    )
+                if (
+                    compound_plan is None
+                    and decision.disposition is RouteDisposition.EXECUTE
+                    # Check the pre-resolution route as well: exact-identity
+                    # family resolution must not collapse an originally
+                    # multi-family compound request into one ordinary family.
+                    and self._requires_multi_family_compound_plan(trace.route_decision)
+                ):
+                    decision = self._compound_control_decision(
+                        trace.route_decision,
+                        reason_code="compound_plan_required",
+                        reason=(
+                            "상품군별 복합 조건을 모두 보존하는 실행 계획을 "
+                            "확정하지 못했습니다. 상품군별 조건을 다시 명시해 주세요."
+                        ),
+                    )
+                elif (
+                    compound_plan is None
+                    and decision.disposition is RouteDisposition.EXECUTE
+                    and self._requires_single_family_compound_plan(trace.route_decision)
+                ):
+                    decision = self._compound_control_decision(
+                        trace.route_decision,
+                        reason_code="compound_plan_required",
+                        reason=(
+                            "상대 비교 또는 단계별 후보 조건을 모두 보존하는 실행 계획을 "
+                            "확정하지 못했습니다. 기준 상품과 각 조건을 다시 확인해 주세요."
+                        ),
+                    )
+            if compound_plan is not None:
+                # Compound grammar is not authority by itself.  Bind it to the
+                # exact routed request only while the same approved DB and
+                # immutable release checks used by the normal Oracle path are
+                # current.  Safety/unsupported routes remain terminal inside
+                # authorize_decision().
+                self._assert_compound_authority_current()
+                try:
+                    decision, compound_authorization = (
+                        self.compound_query_engine.authorize_decision(
+                            decision,
+                            compound_plan,
+                            unresolved_spans=trace.planning_decision.unresolved_spans,
+                        )
+                    )
+                except ValueError:
+                    decision = self._compound_control_decision(
+                        decision,
+                        reason_code="compound_authorization_invalid",
+                        reason=(
+                            "복합 실행 계획을 현재 요청·상품군·승인 데이터와 "
+                            "일치하는 권한으로 검증하지 못했습니다."
+                        ),
+                    )
+                    compound_plan = None
+                    compound_authorization = None
+                else:
+                    self._assert_compound_authority_current()
+                    if (
+                        decision.disposition is RouteDisposition.EXECUTE
+                        and compound_authorization is None
+                    ):
+                        decision = self._compound_control_decision(
+                            decision,
+                            reason_code="compound_authorization_missing",
+                            reason=(
+                                "복합 실행 계획의 서버 권한 증명을 완성하지 "
+                                "못해 조건을 다시 확인해야 합니다."
+                            ),
+                        )
+                        compound_plan = None
             planning_decision = trace.planning_decision
             if decision != trace.route_decision:
                 # Exact product identity is a server-owned DB resolution, not
@@ -1697,19 +2474,22 @@ class RoutedFinanceAgent:
                         duration_ms=(perf_counter() - planning_started) * 1000,
                         **self._decision_audit_fields(decision),
                     )
-            intent_draft = _PUBLIC_INTENT_ANALYSIS.get()
-            if self.require_official_hclx and intent_draft is None:
+            safety_terminal = (
+                decision.disposition is not RouteDisposition.EXECUTE
+                and decision.reason_code.startswith("safety_")
+            )
+            if self.require_official_hclx and intent_draft is None and not safety_terminal:
                 raise HyperClovaXConfigurationError(
                     "official request lost its HyperCLOVA X Intent analysis receipt"
                 )
             # A server-owned SafetyEnvelope terminal decision has the highest
-            # precedence. HCLX still supplies the required Intent receipt, but
-            # disagreement can never downgrade UNSUPPORTED to CLARIFY/EXECUTE.
+            # precedence and is completed without sending blocked text to HCLX.
             if intent_draft is not None and not decision.reason_code.startswith("safety_"):
                 intent_verification = verify_intent_analysis(
                     decision.draft.question,
                     decision,
                     intent_draft,
+                    require_execution_structure=self.require_official_hclx,
                 )
                 if audit is not None:
                     audit.emit(
@@ -1749,7 +2529,13 @@ class RoutedFinanceAgent:
                     **self._decision_audit_fields(decision),
                 )
                 route_emitted = True
-            return self._answer_from_decision(decision, planning_decision, trace)
+            return self._answer_from_decision(
+                decision,
+                planning_decision,
+                trace,
+                compound_plan=compound_plan,
+                compound_authorization=compound_authorization,
+            )
         except Exception as error:  # noqa: BLE001 - private atomic error transport
             if audit is not None and not route_emitted:
                 audit.emit(
@@ -1768,13 +2554,32 @@ class RoutedFinanceAgent:
         decision: RouteDecision,
         planning_decision: PlanningDecision,
         trace: PlanningTrace,
+        *,
+        compound_plan: TypedCompoundPlan | None = None,
+        compound_authorization: CompoundAuthorizationReceipt | None = None,
     ) -> RoutedAgentResult:
         request_id = decision.draft.request_id
         semantic_plan: QueryPlan | None = None
         semantic_planning_decision: BaseModel | None = None
         semantic_authority_receipts: tuple[BaseModel, ...] = ()
+        if compound_plan is not None and decision.disposition is RouteDisposition.EXECUTE:
+            if compound_authorization is None:
+                raise PlanExecutionBlockedError(
+                    "compound execution requires a server authorization receipt"
+                )
+            # HAVING-like valid-value thresholds and aggregate-output ordering
+            # are sealed in TypedCompoundPlan but cannot be represented by the
+            # public QueryPlan DTO.  Execute every compound shape through its
+            # dedicated deterministic executor so those semantics cannot be
+            # dropped while adapting to the ordinary aggregate Oracle.
+            return self._answer_compound_query(
+                decision,
+                compound_plan,
+                compound_authorization=compound_authorization,
+            )
         if (
-            planning_decision.path is PlanningPath.SCHEMA_LINK_SHADOW
+            semantic_plan is None
+            and planning_decision.path is PlanningPath.SCHEMA_LINK_SHADOW
             and self.adaptive_semantic_resolver is not None
         ):
             semantic_started = perf_counter()
@@ -1889,6 +2694,7 @@ class RoutedFinanceAgent:
                 reason="질문의 실행 조건을 안전한 계획으로 확정하지 못했습니다.",
             )
         decision, plan = compiled
+        plan = _lock_approved_fund_aggregate_scope(plan)
         if audit is not None:
             audit.emit(
                 stage=AuditStage.COMPILER,
@@ -2128,6 +2934,11 @@ class RoutedFinanceAgent:
                     candidate_count=verified_aggregation.candidate_count,
                     **self._validated_audit_fields(validated_plan),
                 )
+            response_candidate_count = _aggregate_response_candidate_count(
+                plan,
+                verified_aggregation,
+                decision.draft.question,
+            )
             renderer_started = perf_counter()
             try:
                 aggregates = build_aggregate_evidence(plan, verified_aggregation)
@@ -2166,7 +2977,7 @@ class RoutedFinanceAgent:
                 decision=decision,
                 answer=answer,
                 query_plan=plan,
-                candidate_count=verified_aggregation.candidate_count,
+                candidate_count=response_candidate_count,
                 products=[],
                 aggregates=aggregates,
                 comparisons=[],
@@ -2330,19 +3141,479 @@ class RoutedFinanceAgent:
             answer_composition=None,
         )
 
-    def _resolve_exact_identity_family(self, decision: RouteDecision) -> RouteDecision:
+    def _answer_compound_query(
+        self,
+        decision: RouteDecision,
+        compound_plan: TypedCompoundPlan,
+        *,
+        compound_authorization: CompoundAuthorizationReceipt,
+        execution: CompoundExecution | None = None,
+    ) -> RoutedAgentResult:
+        self._assert_compound_authority_current()
+        if execution is None:
+            try:
+                execution = self.compound_query_engine.execute_authorized(
+                    compound_plan,
+                    compound_authorization,
+                )
+            except NamedComparisonIncompleteError:
+                self._assert_compound_authority_current()
+                reason = (
+                    "비교 대상으로 지정한 모든 상품에서 요청 지표의 유효한 값을 "
+                    "확인할 수 없어 일부 상품만으로 비교하지 않았습니다. 다른 지표를 "
+                    "지정하거나 비교 대상을 다시 확인해 주세요."
+                )
+                control = self._compound_control_decision(
+                    decision,
+                    reason_code="named_comparison_metric_unavailable",
+                    reason=reason,
+                )
+                return self._control_result(control)
+            except AggregateThresholdUnavailableError:
+                self._assert_compound_authority_current()
+                reason = (
+                    "같은 후보군에서 집계 기준을 계산할 유효한 0이 아닌 수치가 없어 "
+                    "평균·중앙값 조건을 실행하지 않았습니다. 다른 지표나 범위를 "
+                    "지정해 주세요."
+                )
+                control = self._compound_control_decision(
+                    decision,
+                    reason_code="aggregate_threshold_unavailable",
+                    reason=reason,
+                )
+                return self._control_result(control)
+        else:
+            self.compound_query_engine.verify_authorized_execution(
+                execution,
+                compound_authorization,
+            )
+        self._assert_compound_authority_current()
+        family_results: list[FamilySearchResult] = []
+        compound_aggregates: list[AggregateEvidence] = []
+        registry = load_field_registry()
+        for item in execution.families:
+            manifest = self.record_cache.get(
+                self.database_paths[item.plan.product_family]
+            ).manifest
+            family_results.append(
+                FamilySearchResult(
+                    product_family=item.plan.product_family,
+                    status="success" if item.candidate_count else "not_found",
+                    answer=execution.answer,
+                    query_plan=item.query_plan,
+                    candidate_count=item.candidate_count,
+                    products=list(item.products),
+                    warnings=[
+                        "Typed Compound Plan으로 원천 필터·중간 shortlist·"
+                        "최종 계산을 순서대로 실행했습니다."
+                    ],
+                    source_manifest=manifest,
+                )
+            )
+            if execution.plan.kind in {
+                "grouped_aggregate",
+                "family_count_aggregate",
+                "family_summary_aggregate",
+            }:
+                aggregate_specs = item.query_plan.intent_payload.aggregations
+                group_fields = item.query_plan.intent_payload.group_by
+                if not item.grouped_aggregates or len(group_fields) > 2:
+                    raise ValueError("compound aggregate execution lost its evidence")
+                for group_index, group in enumerate(item.grouped_aggregates, start=1):
+                    if len(group.aggregates) != len(aggregate_specs):
+                        raise ValueError("compound aggregate measure count changed")
+                    if not group_fields:
+                        group_values = {}
+                    else:
+                        raw_group_values = (
+                            group.group_value
+                            if isinstance(group.group_value, tuple)
+                            else (group.group_value,)
+                        )
+                        if len(raw_group_values) != len(group_fields):
+                            raise ValueError("compound aggregate group axes changed")
+                        group_values = dict(
+                            zip(group_fields, raw_group_values, strict=True)
+                        )
+                    group_source_columns = {
+                        field: registry.require_field(
+                            field, [item.plan.product_family.value]
+                        ).source.columns
+                        for field in group_fields
+                    }
+                    for value_index, (value, specification) in enumerate(
+                        zip(group.aggregates, aggregate_specs, strict=True), start=1
+                    ):
+                        canonical = specification.field
+                        if value.function is not specification.function:
+                            raise ValueError("compound aggregate function changed")
+                        definition = registry.require_field(
+                            canonical,
+                            [item.plan.product_family.value],
+                        )
+                        compound_aggregates.append(
+                            AggregateEvidence(
+                                evidence_id=(
+                                    f"aggregate_{item.plan.product_family.value}_"
+                                    f"{group_index}_{value_index}_"
+                                    f"{value.function.value}_{canonical}"
+                                ),
+                                function=value.function,
+                                field=canonical,
+                                label=(
+                                    f"{item.plan.product_family.value} 상품 수"
+                                    if value.function.value == "count"
+                                    else f"{item.plan.product_family.value} "
+                                    f"{definition.label} {value.function.value}"
+                                ),
+                                value=(
+                                    str(value.value)
+                                    if isinstance(value.value, Decimal)
+                                    else value.value
+                                ),
+                                unit=definition.unit,
+                                group_values=group_values,
+                                group_source_columns=group_source_columns,
+                                row_count=group.row_count,
+                                valid_count=value.valid_count,
+                                missing_count=value.missing_count,
+                                source_dataset=item.plan.product_family.value,
+                                source_id=group.source_id,
+                                source_columns=definition.source.columns,
+                                source_snapshot_date=manifest.source_snapshot_date,
+                                as_of_start=group.as_of,
+                                as_of_end=group.as_of,
+                                quality=(
+                                    QualityStatus.VALID
+                                    if value.value is not None
+                                    else QualityStatus.UNKNOWN
+                                ),
+                                quality_reason=(
+                                    None
+                                    if value.value is not None
+                                    else "all_values_missing_or_unusable"
+                                ),
+                            )
+                        )
+        products = list(execution.ordered_products) or [
+            product for item in family_results for product in item.products
+        ]
+        candidate_count = sum(item.candidate_count for item in family_results)
+        use_family_bundle = len(family_results) > 1
+        if use_family_bundle:
+            bundle_warning = (
+                "동일 canonical field와 단위가 검증된 상품군만 global TOP-K에 "
+                "포함했습니다."
+                if execution.plan.kind == "global_ranking"
+                else "복수 하위 검색의 계산 결과를 각각 독립 검증했습니다."
+            )
+            exclusion_warnings = [
+                (
+                    f"{item.product_family.value}은 제공 데이터 schema에 "
+                    f"{item.canonical_field} 필드가 없어 통합 순위에서 제외했습니다."
+                )
+                for item in execution.plan.excluded_families
+            ]
+            return RoutedAgentResult(
+                request_id=decision.draft.request_id,
+                status="executed",
+                decision=decision,
+                answer=execution.answer,
+                query_plan=None,
+                candidate_count=candidate_count,
+                products=products,
+                aggregates=compound_aggregates,
+                comparisons=[],
+                warnings=[bundle_warning, *exclusion_warnings],
+                source_manifest=None,
+                answer_composition=None,
+                family_searches=family_results,
+            )
+        first = family_results[0]
+        return RoutedAgentResult(
+            request_id=decision.draft.request_id,
+            status="executed",
+            decision=decision,
+            answer=execution.answer,
+            query_plan=first.query_plan,
+            candidate_count=candidate_count,
+            products=products,
+            aggregates=compound_aggregates,
+            comparisons=[],
+            warnings=[
+                "Typed Compound Plan으로 모든 수치 입력과 계산 순서를 결정론적으로 검증했습니다."
+            ],
+            source_manifest=first.source_manifest,
+            answer_composition=None,
+            family_searches=[],
+        )
+
+    def _bind_database_product_identities(self, decision: RouteDecision) -> RouteDecision:
+        """Replace heuristic name spans with longest exact approved-DB identities.
+
+        The lexical router intentionally has no access to product rows.  This
+        server boundary enriches its draft only with exact DB aliases, before
+        either the compound compiler or ordinary QueryPlan compiler can run.
+        Duplicate names/share classes/venues never acquire execution authority.
+        """
+
         if (
-            decision.disposition is not RouteDisposition.CLARIFY
-            or decision.reason_code != "ambiguous_product_family"
-            or not decision.draft.product_mentions
+            decision.disposition is RouteDisposition.UNSUPPORTED
+            and decision.reason_code != "safety_scope"
+        ):
+            return decision
+        matches = self.database_identity_matcher.find(decision.draft.question)
+        unresolved_identities = unresolved_identity_like_spans(
+            decision.draft.question,
+            matches,
+        )
+        if unresolved_identities and decision.disposition is RouteDisposition.EXECUTE:
+            return self._compound_control_decision(
+                decision,
+                reason_code="unresolved_product_identity_span",
+                reason=(
+                    "상품명처럼 보이는 표현을 제공 데이터의 상품 식별자와 유일하게 "
+                    "연결하지 못했습니다. 정확한 상품명이나 종목코드를 확인해 주세요."
+                ),
+            )
+        if not matches:
+            return decision
+        if any(not match.is_unique for match in matches):
+            return self._compound_control_decision(
+                decision,
+                reason_code="ambiguous_product_identity",
+                reason=(
+                    "같은 상품명 또는 식별자가 제공 데이터의 여러 상품·시장·클래스와 "
+                    "일치합니다. 종목코드나 시장을 함께 지정해 주세요."
+                ),
+            )
+
+        # ``safety_scope`` here is the lexical Router's lack-of-finance-signal
+        # fallback, not a SafetyEnvelope policy violation (those use their
+        # own ``safety_<gate>`` reason codes).  A unique exact identity from
+        # the approved DB is stronger positive scope evidence, so let the
+        # normal exact-family resolver re-authorize DETAIL/COMPARE below.
+        if (
+            decision.disposition is RouteDisposition.UNSUPPORTED
+            and decision.reason_code == "safety_scope"
+        ):
+            decision = decision.model_copy(
+                update={
+                    "disposition": RouteDisposition.CLARIFY,
+                    "reason_code": "ambiguous_product_family",
+                    "reason": "정확한 제공 DB 상품 식별자의 상품군을 확인 중",
+                    "query_plan_intent": None,
+                }
+            )
+
+        exact_aliases = tuple(match.normalized_alias for match in matches)
+        retained_mentions: list[str] = []
+        for mention in decision.draft.product_mentions:
+            normalized = normalize_database_identity(mention)
+            # The old branded-name regex can greedily absorb request grammar
+            # (``KODEX 200보다 ...``).  An exact DB span inside it is stronger
+            # and replaces the whole heuristic surface.
+            if any(alias in normalized or normalized in alias for alias in exact_aliases):
+                continue
+            retained_mentions.append(mention)
+        # A question commonly supplies both the official name and its ticker
+        # in parentheses.  Those are two aliases for one DB row, not two
+        # products.  Collapse by family+product_id and pass the canonical
+        # executable literal to downstream DETAIL/COMPARE compilers.
+        resolved_mentions: list[str] = []
+        resolved_products: set[tuple[ProductFamily, str]] = set()
+        for match in matches:
+            candidate = match.candidates[0]
+            key = (candidate.product_family, candidate.canonical_literal)
+            if key in resolved_products:
+                continue
+            resolved_products.add(key)
+            resolved_mentions.append(candidate.canonical_literal)
+        product_mentions = list(
+            dict.fromkeys([*resolved_mentions, *retained_mentions])
+        )
+        matched_families = list(
+            dict.fromkeys(match.product_families[0] for match in matches)
+        )
+        exact_identity_detail = False
+        if (
+            len(resolved_products) == 1
+            and len(product_mentions) == 1
+            and len(matched_families) == 1
+        ):
+            identity_end = max(match.end for match in matches)
+            tail = decision.draft.question[identity_end:]
+            explicit_detail_marker = re.match(
+                r"^\s*(?:의|에\s*대한)?\s*.{0,50}?"
+                r"(?:상세|정보|원천\s*(?:값|데이터)|제공\s*필드|수치|값)",
+                tail,
+                re.IGNORECASE,
+            ) is not None
+            explicit_field = any(
+                mention.start >= identity_end
+                for capability in ("queryable", "comparable", "sortable")
+                for mention in registry_field_mentions(
+                    decision.draft.question,
+                    matched_families[0].value,
+                    capability,
+                )
+            )
+            exact_identity_detail = (
+                (
+                    explicit_detail_marker
+                    or explicit_field
+                    or _EXACT_IDENTITY_READ_CUE.search(tail) is not None
+                )
+                # Ranking words can legitimately be part of the official
+                # product name (for example ``...TOP2+...``).  Only the
+                # request tail outside every exact DB identity may decide
+                # whether this is a screen rather than a detail lookup.
+                and ranking_intent_present(tail) is False
+                and re.search(r"(?:보다|대비)", tail) is None
+                and re.search(
+                    r"(?:편입|보유|구성\s*종목|자회사|계열사|테마|"
+                    r"연결\s*이력|동향|위험\s*요인)",
+                    tail,
+                )
+                is None
+            )
+        if (
+            exact_identity_detail
+            and decision.disposition is RouteDisposition.CLARIFY
+            and decision.reason_code
+            in {
+                "missing_product_identity",
+                "multiple_product_identities_unbound",
+                "unresolved_product_identity_span",
+                "semantic_coverage_incomplete",
+            }
+        ):
+            decision = decision.model_copy(
+                update={
+                    "draft": decision.draft.model_copy(
+                        update={"intent": InteractionIntent.DETAIL}
+                    ),
+                    "reason_code": "ambiguous_product_family",
+                    "reason": "정확한 제공 DB 상품 식별자의 상품군을 확인 중",
+                }
+            )
+        updates: dict[str, object] = {"product_mentions": product_mentions}
+        if exact_identity_detail:
+            # A unique, approved DB identity followed by requested fields is a
+            # DETAIL even when the lexical Router originally saw only the
+            # dataset noun inside the long official name and chose SEARCH.
+            updates["intent"] = InteractionIntent.DETAIL
+        exact_closed_comparison = (
+            2 <= len(resolved_products) <= 3
+            and len(matched_families) == 1
+            and len(resolved_products) == len(product_mentions)
+            and _CLOSED_IDENTITY_COMPARISON_CUE.search(decision.draft.question)
+            is not None
+        )
+        if exact_closed_comparison:
+            # The DB matcher has now supplied the evidence that the lexical
+            # Router lacked.  Re-enter the normal family capability check; do
+            # not preserve heuristic missing/counterpart errors after every
+            # target is uniquely bound to one approved dataset.
+            updates["intent"] = InteractionIntent.COMPARE
+            if decision.disposition is RouteDisposition.CLARIFY:
+                decision = decision.model_copy(
+                    update={
+                        "reason_code": "ambiguous_product_family",
+                        "reason": "정확한 제공 DB 비교 대상을 한 상품군으로 확인 중",
+                        "query_plan_intent": None,
+                    }
+                )
+        if any(
+            re.match(r"\s*(?:보다|대비)", decision.draft.question[match.end :])
+            is not None
+            for match in matches
+        ):
+            # ``기준상품보다 ... 상품 N개`` is a universe SEARCH.  The
+            # heuristic Router sees one exact name first and may label it
+            # DETAIL; exact DB span ownership makes the relative grammar
+            # deterministic and prevents that downgrade.
+            updates["intent"] = InteractionIntent.SEARCH
+        explicit_families = decision.draft.product_families
+        name_corroborated = all(
+            match.candidates[0].alias_kind
+            in {"product_name", "short_name", "derived_product_name"}
+            for match in matches
+        )
+        if len(matched_families) == 1 and (
+            not explicit_families
+            or explicit_families == matched_families
+            or decision.reason_code == "ambiguous_product_family"
+            or name_corroborated
+        ):
+            updates["product_families"] = matched_families
+        return decision.model_copy(
+            update={"draft": decision.draft.model_copy(update=updates)}
+        )
+
+    def _resolve_exact_identity_family(self, decision: RouteDecision) -> RouteDecision:
+        if not decision.draft.product_mentions:
+            return decision
+        if decision.disposition is RouteDisposition.UNSUPPORTED:
+            return decision
+        if (
+            decision.disposition is RouteDisposition.CLARIFY
+            and decision.reason_code != "ambiguous_product_family"
+        ):
+            return decision
+        # The lexical router cannot know every official product name.  Once a
+        # single identity has been proven uniquely against the approved DB,
+        # bind the common possessive detail form (``<name>(<ticker>)의
+        # <field>``) as DETAIL.  Relative/ranking screens deliberately stay
+        # SEARCH and relationship/document questions are handled elsewhere.
+        if (
+            decision.draft.intent is InteractionIntent.SEARCH
+            and len(decision.draft.product_mentions) == 1
+            and not ranking_intent_present(decision.draft.question)
+            and re.search(r"(?:보다|대비)", decision.draft.question) is None
+            and re.search(
+                r"(?:\([^)]{1,40}\))?\s*(?:의|에\s*대한)\s*"
+                r"(?:상세|정보|수치|값|[가-힣A-Za-z0-9_%·/ -]{1,40})",
+                decision.draft.question,
+            )
+            is not None
+            and re.search(
+                r"(?:편입|보유|구성\s*종목|자회사|계열사|테마|연결\s*이력|동향|위험\s*요인)",
+                decision.draft.question,
+            )
+            is None
+        ):
+            decision = decision.model_copy(
+                update={
+                    "draft": decision.draft.model_copy(
+                        update={"intent": InteractionIntent.DETAIL}
+                    )
+                }
+            )
+        if decision.draft.intent not in {
+            InteractionIntent.DETAIL,
+            InteractionIntent.EXPLAIN,
+            InteractionIntent.COMPARE,
+        } and not (
+            decision.draft.intent is InteractionIntent.SEARCH
+            and (
+                len(decision.draft.product_mentions) >= 2
+                or re.search(r"(?:보다|대비)", decision.draft.question) is not None
+            )
         ):
             return decision
         resolved_families: set[ProductFamily] = set()
+        corroborated_identity_name = False
+        normalized_question = normalize_product_mention(decision.draft.question)
+        identity_records_by_family = {
+            family: self.identity_cache.get(path).records
+            for family, path in self.database_paths.items()
+        }
         for mention in decision.draft.product_mentions:
             matches: set[ProductFamily] = set()
             normalized_mention = normalize_product_mention(mention)
-            for family, path in self.database_paths.items():
-                for record in self.identity_cache.get(path).records:
+            for family, records in identity_records_by_family.items():
+                for record in records:
                     identities = (
                         record.product_id,
                         record.product_name,
@@ -2355,14 +3626,35 @@ class RoutedFinanceAgent:
                         for value in identities
                     ):
                         matches.add(family)
+                        corroborated_identity_name = corroborated_identity_name or any(
+                            value is not None
+                            and normalize_product_mention(value) in normalized_question
+                            for value in (record.product_name, record.short_name)
+                        )
             if len(matches) != 1:
                 return decision
             resolved_families.update(matches)
         if len(resolved_families) != 1:
             return decision
         family = next(iter(resolved_families))
+        if (
+            decision.disposition is RouteDisposition.EXECUTE
+            and decision.draft.product_families != [family]
+            and not corroborated_identity_name
+        ):
+            # An explicit family and an unrelated code conflict must remain
+            # fail-closed.  Family correction is allowed only when the same
+            # approved DB record also corroborates the product name printed in
+            # the question (words inside that name caused the lexical error).
+            return decision
         capability = self.router.matrix.require(family, decision.draft.intent)
         if capability.status != "executable" or capability.query_plan_intent is None:
+            return decision
+        if (
+            decision.disposition is RouteDisposition.EXECUTE
+            and decision.draft.product_families == [family]
+            and decision.query_plan_intent is capability.query_plan_intent
+        ):
             return decision
         draft = decision.draft.model_copy(update={"product_families": [family]})
         return RouteDecision(
@@ -2811,7 +4103,18 @@ class RoutedFinanceAgent:
             else InteractionIntent.UNSUPPORTED
         )
         control_reason = reason or decision.reason
-        if decision.disposition is not actual_disposition or decision.query_plan_intent is not None:
+        preserve_original_clarification = (
+            actual_disposition is RouteDisposition.CLARIFY
+            and decision.disposition is RouteDisposition.CLARIFY
+            and decision.query_plan_intent is None
+            and decision.reason_code
+            in {"missing_product_identity", "ambiguous_product_family"}
+        )
+        if not preserve_original_clarification and (
+            decision.disposition is not actual_disposition
+            or decision.query_plan_intent is not None
+            or decision.draft.intent is not control_intent
+        ):
             decision = RouteDecision(
                 draft=decision.draft.model_copy(update={"intent": control_intent}),
                 disposition=actual_disposition,

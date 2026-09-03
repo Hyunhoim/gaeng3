@@ -5,6 +5,7 @@ from finance_agent_core.agent.compiler import (
     ServerQueryPlanCompiler,
     _mask_bound_product_mentions,
     _ranked_identity_requests_single_winner,
+    _remove_exact_detail_projection_ambiguities,
 )
 from finance_agent_core.agent.fund_comparison_parser import extract_fund_comparison_fields
 from finance_agent_core.agent.intent_analysis import (
@@ -405,6 +406,38 @@ def test_exact_identifier_and_explicit_return_period_precede_relation_router(
     assert product_search_has_precedence(question)
 
 
+def test_dotted_overseas_tickers_precede_external_entity_routing() -> None:
+    question = (
+        "TrueShares ConVequity ETF(PVEX.K)하고 AdvisorShares Dorsey Wright "
+        "Short ETF(DWSH.O)를 연간보수율로 비교해 주세요."
+    )
+
+    assert product_search_has_precedence(question)
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        (
+            "한국투자 ACE 미국친환경그린테마증권상장지수투자신탁(주식)"
+            "(KR7391600004)보다 추적오차율이 큰 국내 ETF를 3개월 수익률 "
+            "작은 순으로 3개 찾아 주세요."
+        ),
+        "Tradr 2X Short SMR Daily ETF(SMZ)의 고가 및 저가를 알려 주세요.",
+    ],
+)
+def test_exact_product_identity_with_db_metrics_precedes_name_like_theme_routing(
+    question: str,
+) -> None:
+    assert product_search_has_precedence(question)
+
+
+def test_exact_identity_does_not_override_an_explicit_holdings_relation() -> None:
+    assert not product_search_has_precedence(
+        "KR7391600004가 삼성전자를 보유한 ETF인지 공식 구성종목으로 확인해 주세요."
+    )
+
+
 @pytest.mark.parametrize(
     "question",
     [
@@ -476,13 +509,14 @@ def test_numeric_filters_and_rankings_exclude_zero_and_missing_in_sql() -> None:
         assert "buy_yield_micro_pct <> 0" in sql
 
 
-def test_bond_ranked_search_excludes_ended_maturities_and_uses_public_id_tie_break() -> None:
+def test_bond_ranked_search_does_not_infer_listing_status_from_maturity() -> None:
     plan = bond_vertical_slice_plan("official-current-bond-scope")
 
     select_sql, count_sql, _ = compile_search_sql(plan)
 
     for sql in (select_sql, count_sql):
-        assert "maturity_date > dynamic_as_of" in sql
+        assert "maturity_date > dynamic_as_of" not in sql
+        assert "buyable_quantity" not in sql
     assert "buy_yield_micro_pct ELSE NULL END DESC" in select_sql
     assert select_sql.endswith("ticker ASC LIMIT ?")
 
@@ -575,7 +609,7 @@ def test_manager_possessive_and_bare_operation_surfaces(
         force_product_family_hint=True,
     )
 
-    assert ("manager", "eq", expected_manager) in {
+    assert ("manager", "contains", expected_manager) in {
         (item["field"], item["operator"], item["value"]) for item in hints["required_constraints"]
     }
 
@@ -858,7 +892,7 @@ def test_natural_distribution_payment_count_is_preserved() -> None:
         (
             "온라인 클래스 공모펀드를 판매회사 보수가 낮은 순으로 4개 보여줘.",
             "fund",
-            ("sales_channel", "eq", "온라인"),
+            ("sales_channel", "contains", "온라인"),
             ("sale_company_fee_pct", "asc"),
         ),
         (
@@ -1011,6 +1045,26 @@ def test_bound_product_name_words_do_not_become_filters() -> None:
     assert all(
         item["field"] != "fund_management_attribute" for item in hints["required_constraints"]
     )
+
+
+def test_exact_detail_bare_field_label_is_projection_not_missing_filter_value() -> None:
+    payload: dict[str, object] = {
+        "projection": ["product_id", "product_name", "risk_level"],
+        "ambiguities": [
+            {"span": "위험등급", "reason": "missing value", "options": []},
+            {"span": "임의 기준", "reason": "unknown", "options": []},
+        ],
+    }
+
+    _remove_exact_detail_projection_ambiguities(
+        payload,
+        ProductFamily.BOND,
+        "이 채권의 위험등급과 임의 기준을 알려줘.",
+    )
+
+    assert payload["ambiguities"] == [
+        {"span": "임의 기준", "reason": "unknown", "options": []}
+    ]
 
 
 def test_exact_product_risk_is_a_projection_not_a_vague_filter() -> None:
@@ -1565,6 +1619,24 @@ def test_global_metric_before_family_list_is_preserved_in_every_plan() -> None:
     )
 
 
+def test_external_prefilter_family_scoping_owns_each_threshold() -> None:
+    question = (
+        "삼성전자를 보유한 국내 ETF는 순자산 1조 이상, "
+        "해외 ETF는 AUM 10억 이상인 상품을 찾아줘"
+    )
+    scoped = ServerQueryPlanCompiler.scope_family_questions(
+        question,
+        [ProductFamily.DOMESTIC_ETP, ProductFamily.OVERSEAS_ETP],
+    )
+
+    domestic = scoped[ProductFamily.DOMESTIC_ETP]
+    overseas = scoped[ProductFamily.OVERSEAS_ETP]
+    assert "1조 이상" in domestic
+    assert "10억 이상" not in domestic
+    assert "10억 이상" in overseas
+    assert "1조 이상" not in overseas
+
+
 def test_global_and_answer_direction_presentation_do_not_create_ambiguity() -> None:
     question = (
         "국내 ETF와 공모펀드를 따로 나누지 말고 6개월 수익률 하나로 "
@@ -1870,5 +1942,86 @@ def test_cross_family_incompatible_field_hint_clarifies_instead_of_http_500() ->
         "official-cross-family-incompatible-hint",
     )
 
-    with pytest.raises(PlanCompilationBlockedError, match="unavailable for product families"):
+    with pytest.raises(PlanCompilationBlockedError, match="상품군별 서로 다른 조건"):
         ServerQueryPlanCompiler({}).compile_family_searches(decision)
+
+
+def test_unsupported_two_cohort_aggregate_clarifies_instead_of_validation_500() -> None:
+    decision = IntentRouter().route(
+        "채권종류가 일반회사채인 장내 국내채권과 채권종류가 특수은행채인 "
+        "장내 국내채권의 민평금리 분포를 비교해 주세요. 0·빈칸은 빼고 각각 "
+        "유효 상품 수, 단순평균, 최솟값과 최댓값을 계산한 뒤 각 집단의 상위 "
+        "3개도 알려주세요. 평균이 더 큰 집단과 평균 차이까지 부탁드립니다.",
+        "phase4-two-cohort-no-500",
+    )
+
+    with pytest.raises(PlanCompilationBlockedError):
+        ServerQueryPlanCompiler({}).compile(decision)
+
+
+@pytest.mark.parametrize(
+    ("question", "field", "direction"),
+    [
+        (
+            "배포 DB에서 키움 운용 국내 ETF만 볼게요. "
+            "순자산총액이 11246205191 이상인 것 중 높은 순서로 4개 보여주세요.",
+            "net_asset_total",
+            "desc",
+        ),
+        (
+            "배포 DB에서 제로인 대유형이 절대수익추구형인 공모펀드만 볼게요. "
+            "집합투자업자보수가 3 이상인 것 중 낮은 순서로 5개 보여주세요.",
+            "management_company_fee_pct",
+            "asc",
+        ),
+    ],
+)
+def test_single_numeric_threshold_can_supply_the_generic_ranking_referent(
+    question: str,
+    field: str,
+    direction: str,
+) -> None:
+    hints = build_lexical_hints(question)
+
+    assert hints["required_rankings"] == [
+        {"field": field, "direction": direction, "nulls": "last"}
+    ]
+    assert hints["ambiguity_spans"] == []
+
+
+def test_data_scope_preamble_is_not_part_of_the_asset_manager_value() -> None:
+    hints = build_lexical_hints(
+        "배포 DB에서 키움 운용 국내 ETF만 볼게요. "
+        "순자산총액이 11246205191 이상인 것 중 높은 순서로 4개 보여주세요."
+    )
+
+    manager = [item for item in hints["required_constraints"] if item["field"] == "manager"]
+    assert manager == [
+        {"field": "manager", "operator": "contains", "value": "키움"}
+    ]
+
+
+@pytest.mark.parametrize("fund_type", ["채권혼합형", "해외채권혼합형"])
+def test_fund_subtype_containing_bond_word_does_not_open_bond_family(fund_type: str) -> None:
+    decision = IntentRouter().route(
+        f"배포 DB에서 제로인 대유형이 {fund_type}인 공모펀드만 볼게요. "
+        "판매회사보수가 3 이상인 것 중 높은 순서로 4개 보여주세요.",
+        f"phase4-fund-subtype-{fund_type}",
+    )
+
+    assert [item.value for item in decision.draft.product_families] == ["fund"]
+
+
+def test_condition_before_each_family_clause_compiles_as_two_independent_searches() -> None:
+    question = (
+        "두 상품군을 나란히 보고 싶어요. 채권종류가 할부금융채인 장내 국내채권은 "
+        "표면이자율이 높은 순으로 2개, 제로인 대유형이 채권형인 공모펀드는 "
+        "순자산이 낮은 순으로 2개를 각각 정리해 주세요. "
+        "서로 다른 지표를 합쳐 순위를 만들지는 말아 주세요."
+    )
+    decision = IntentRouter().route(question, "phase4-condition-before-family")
+    searches = ServerQueryPlanCompiler({}).compile_family_searches(decision)
+
+    assert [item.plan.product_families[0].value for item in searches] == ["bond", "fund"]
+    assert [item.plan.ranking[0].field for item in searches] == ["coupon_rate_pct", "aum"]
+    assert [item.plan.limit for item in searches] == [2, 2]

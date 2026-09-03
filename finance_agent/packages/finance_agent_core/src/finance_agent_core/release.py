@@ -246,6 +246,10 @@ class ExternalKnowledgeArtifactRelease(ReleaseModel):
     corpus_manifest_sha256: str = Field(pattern=_SHA256_PATTERN)
     document_bm25_sha256: str | None = Field(default=None, pattern=_SHA256_PATTERN)
     document_dense_sha256: str | None = Field(default=None, pattern=_SHA256_PATTERN)
+    document_activation_receipt_sha256: str | None = Field(
+        default=None,
+        pattern=_SHA256_PATTERN,
+    )
     temporal_relation_sha256: str = Field(pattern=_SHA256_PATTERN)
     verifier_contract_sha256: str = Field(pattern=_SHA256_PATTERN)
     embedding_model_revision: Literal["d14c8a9423946e268a0c9952fecf3a7aabd73bd9"] | None = (
@@ -258,16 +262,19 @@ class ExternalKnowledgeArtifactRelease(ReleaseModel):
             if (
                 self.document_bm25_sha256 is None
                 or self.document_dense_sha256 is None
+                or self.document_activation_receipt_sha256 is None
                 or self.embedding_model_revision is None
             ):
                 raise ValueError(
-                    "approved corpus external knowledge requires BM25, Dense, and KURE revision"
+                    "approved corpus external knowledge requires BM25, Dense, activation, "
+                    "and KURE revision"
                 )
         elif any(
             value is not None
             for value in (
                 self.document_bm25_sha256,
                 self.document_dense_sha256,
+                self.document_activation_receipt_sha256,
                 self.embedding_model_revision,
             )
         ):

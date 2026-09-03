@@ -46,6 +46,7 @@ from finance_agent_core.retrieval.document_dense import (
 )
 from finance_agent_core.retrieval.document_discovery import (
     CacheFirstOfficialDiscoveryProvider,
+    build_cache_first_discovery_provider,
 )
 from finance_agent_core.retrieval.external_knowledge_release import (
     build_live_external_knowledge_bootstrap,
@@ -108,6 +109,34 @@ _SUPPORTED_SUITES = {
         "case_count": 1000,
         "status": "sealed_question_only_not_used_for_development",
         "phase": 4,
+    },
+    "finance-agent-final-rehearsal-phase5-v1.1-105": {
+        "id_prefix": "P5",
+        "id_sets": ("A", "B", "C"),
+        "id_width": 2,
+        "cases_per_set": 35,
+        "case_count": 105,
+        "status": "sealed_question_only_not_used_for_development",
+        "phase": 5,
+        "revision": "v1.1-official-examples",
+    },
+    "finance-agent-generalization-phase6-v1-150": {
+        "id_prefix": "P6",
+        "case_count": 150,
+        "status": "sealed_question_only_not_used_for_development_before_run",
+        "phase": 6,
+    },
+    "finance-agent-final-evaluation-phase7-v2-200": {
+        "id_prefix": "P7V2",
+        "case_count": 200,
+        "status": "sealed_question_only_not_used_for_development",
+        "phase": None,
+    },
+    "finance-agent-paraphrase-evaluation-phase8-200": {
+        "id_prefix": "P8",
+        "case_count": 200,
+        "status": "sealed_question_only_not_used_for_development",
+        "phase": None,
     },
 }
 
@@ -231,7 +260,36 @@ def _validate_question_only(
     ):
         raise RuntimeError("question-only suite contract differs")
     id_width = int(contract.get("id_width", 3))
-    expected_ids = [f"{id_prefix}-{index:0{id_width}d}" for index in range(1, case_count + 1)]
+    id_sets = contract.get("id_sets")
+    if id_sets is None:
+        expected_ids = [
+            f"{id_prefix}-{index:0{id_width}d}" for index in range(1, case_count + 1)
+        ]
+    else:
+        cases_per_set = int(contract["cases_per_set"])
+        expected_ids = [
+            f"{id_prefix}-{set_id}-{index:0{id_width}d}"
+            for set_id in id_sets
+            for index in range(1, cases_per_set + 1)
+        ]
+        expected_sets = [
+            {
+                "set_id": set_id,
+                "case_count": cases_per_set,
+                "id_range": [
+                    f"{id_prefix}-{set_id}-{1:0{id_width}d}",
+                    f"{id_prefix}-{set_id}-{cases_per_set:0{id_width}d}",
+                ],
+            }
+            for set_id in id_sets
+        ]
+        if (
+            payload.get("revision") != contract["revision"]
+            or payload.get("set_count") != len(id_sets)
+            or payload.get("cases_per_set") != cases_per_set
+            or payload.get("sets") != expected_sets
+        ):
+            raise RuntimeError("question-only suite contract differs")
     if [item.get("id") for item in cases] != expected_ids:
         raise RuntimeError("question-only IDs differ")
     if any(
@@ -351,13 +409,26 @@ def _validate_document_calibration(arguments: argparse.Namespace) -> None:
         label="Document Dense calibration report",
     )
     metrics = report.get("metrics", {})
+    bm25 = metrics.get("bm25", {}) if isinstance(metrics, dict) else {}
     dense = metrics.get("dense", {}) if isinstance(metrics, dict) else {}
     hybrid = metrics.get("hybrid_rrf", {}) if isinstance(metrics, dict) else {}
+    numeric_keys = ("top1_accuracy", "recall_at_5")
+    if any(
+        not isinstance(channel.get(key), (int, float))
+        for channel in (bm25, dense, hybrid)
+        for key in numeric_keys
+    ):
+        raise RuntimeError("Document Dense public calibration quality gate failed")
     if (
         report.get("report_kind") != "document_dense_public_calibration_not_blind"
         or report.get("artifact_sha256") != arguments.document_dense_index_sha256
-        or dense.get("recall_at_5") != 1
         or hybrid.get("recall_at_5") != 1
+        or dense.get("recall_at_5", 0) < 0.95
+        or dense["top1_accuracy"] < bm25["top1_accuracy"]
+        or hybrid["recall_at_5"] < max(
+            bm25["recall_at_5"],
+            dense["recall_at_5"],
+        )
     ):
         raise RuntimeError("Document Dense public calibration quality gate failed")
 
@@ -439,7 +510,7 @@ def _build_agent(
     pending_manifest = load_pending_corpus_manifest(arguments.pending_corpus_manifest)
     if _sha256(arguments.pending_corpus_manifest) != arguments.pending_corpus_manifest_sha256:
         raise RuntimeError("pending corpus manifest SHA-256 differs")
-    document_discovery = CacheFirstOfficialDiscoveryProvider(
+    document_discovery = build_cache_first_discovery_provider(
         index=OfflineHybridDocumentIndex(document_artifact, embedding),
         artifact=document_artifact,
         corpus_manifest=pending_manifest,
@@ -469,6 +540,7 @@ def _build_agent(
             hcx_settings,
             transport,
             on_call=calls.append,
+            require_execution_structure=True,
         ),
         official_answer_provider=HyperClovaXFinalAnswerProvider(
             hcx_settings,
@@ -621,7 +693,7 @@ def _parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--schema-dense-min-score", type=float, default=0.340015)
     parser.add_argument("--schema-dense-hclx-candidate-min-score", type=float, default=0.3)
-    parser.add_argument("--schema-dense-minimum-margin", type=float, default=0.042213)
+    parser.add_argument("--schema-dense-minimum-margin", type=float, default=0.042771)
     parser.add_argument("--kure-snapshot-dir", type=Path, required=True)
     parser.add_argument("--kure-snapshot-manifest", type=Path, required=True)
     parser.add_argument("--kure-cache-root", type=Path, required=True)

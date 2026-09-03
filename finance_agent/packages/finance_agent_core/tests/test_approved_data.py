@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 
+from finance_agent_core.config import load_field_registry
 from finance_agent_core.domain import DatabaseManifest
 from finance_agent_core.storage import approval as approval_module
 from finance_agent_core.storage.approval import (
@@ -54,7 +55,7 @@ def test_packaged_approval_is_complete_and_bound_to_registry() -> None:
     release = load_approved_dataset_manifest()
 
     assert release.status == "official_competition_data_approved"
-    assert release.registry_schema_version == "1.5"
+    assert release.registry_schema_version == load_field_registry().schema_version == "1.8"
     assert set(release.datasets) == {"bond", "domestic_etp", "overseas_etp", "fund"}
     assert len(release.canonical_sha256) == 64
     assert release.datasets["fund"].logical_product_rows == 23560

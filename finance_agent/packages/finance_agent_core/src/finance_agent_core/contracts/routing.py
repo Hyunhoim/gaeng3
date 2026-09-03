@@ -62,11 +62,21 @@ class RouteDecision(RoutingModel):
                 raise ValueError("executable routes require a QueryPlan intent")
             if not self.draft.product_families:
                 raise ValueError("executable routes require at least one product family")
-            if len(self.draft.product_families) > 1 and (
-                self.draft.intent is not InteractionIntent.SEARCH
-                or self.query_plan_intent is not Intent.SEARCH
-            ):
-                raise ValueError("multi-family execution is limited to independent SEARCH routes")
+            if len(self.draft.product_families) > 1:
+                independent_search = (
+                    self.draft.intent is InteractionIntent.SEARCH
+                    and self.query_plan_intent is Intent.SEARCH
+                )
+                server_typed_aggregate = (
+                    self.draft.intent is InteractionIntent.AGGREGATE
+                    and self.query_plan_intent is Intent.AGGREGATE
+                    and self.reason_code == "typed_compound_plan_authorized"
+                )
+                if not (independent_search or server_typed_aggregate):
+                    raise ValueError(
+                        "multi-family execution requires independent SEARCH or "
+                        "a server-authorized typed AGGREGATE"
+                    )
         elif self.query_plan_intent is not None:
             raise ValueError("non-executable routes must not expose a QueryPlan intent")
         if self.disposition is RouteDisposition.CLARIFY:

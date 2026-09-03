@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import html
 import io
 import json
 import re
@@ -49,13 +50,15 @@ _KOREAN_EVIDENCE_DATE_PATTERN = re.compile(
     re.IGNORECASE,
 )
 _ENGLISH_EVIDENCE_DATE_PATTERN = re.compile(
-    r"(?:as\s+of|holdings\s+(?:date|as\s+of))\s*[:：]?\s*"
-    r"(January|February|March|April|May|June|July|August|September|October|November|December)"
+    r"(?:as\s+of|holdings\s+(?:date|as\s+of))\s*[,;:：]?\s*[\"']?"
+    r"(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|"
+    r"Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|"
+    r"Dec(?:ember)?)"
     r"\s+(\d{1,2}),?\s+(20\d{2})",
     re.IGNORECASE,
 )
 _ENGLISH_NUMERIC_EVIDENCE_DATE_PATTERN = re.compile(
-    r"(?:as\s+of|holdings\s+(?:date|as\s+of))\s*[:：]?\s*"
+    r"(?:as\s+of|holdings\s+(?:date|as\s+of))\s*[,;:：]?\s*[\"']?"
     r"(\d{1,2})[./-](\d{1,2})[./-](20\d{2})",
     re.IGNORECASE,
 )
@@ -79,6 +82,9 @@ _ENGLISH_MONTHS = {
         start=1,
     )
 }
+_ENGLISH_MONTHS.update(
+    {name[:3].casefold(): month for name, month in tuple(_ENGLISH_MONTHS.items())}
+)
 
 
 class OfficialConnectorError(RuntimeError):
@@ -92,8 +98,16 @@ class OfficialConnectorModel(BaseModel):
 class OfficialDiscoveryCandidate(OfficialConnectorModel):
     url: str = Field(min_length=8, max_length=2000)
     title: str = Field(min_length=1, max_length=500)
+    # Search metadata is useful only for candidate ordering.  It is never
+    # copied into an evidence reference; the connector still has to fetch the
+    # original official bytes and the exact-span extractor must approve them.
+    summary: str | None = Field(default=None, max_length=2000)
     published_at: date | None = None
     as_of: date | None = None
+    # A ticker may cross an official-document graph only after it was derived
+    # from an approved issuer URL and matched exactly to the provided DB
+    # universe.  It is provenance, not a value inferred from search snippets.
+    db_ticker: str | None = Field(default=None, pattern=r"^[A-Z][A-Z0-9-]{0,9}$")
 
     @field_validator("title")
     @classmethod
@@ -101,6 +115,14 @@ class OfficialDiscoveryCandidate(OfficialConnectorModel):
         if not value.strip():
             raise ValueError("discovery title cannot be blank")
         return value
+
+    @field_validator("summary")
+    @classmethod
+    def normalize_optional_summary(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = " ".join(value.split())
+        return normalized or None
 
     @model_validator(mode="after")
     def validate_dates(self) -> OfficialDiscoveryCandidate:
@@ -147,6 +169,7 @@ class OfficialSourceSnapshot:
     content_sha256: str
     published_at: date | None
     as_of: date
+    db_ticker: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -166,6 +189,7 @@ class OfficialNavigationSnapshot:
     content_sha256: str
     published_at: None = None
     as_of: None = None
+    db_ticker: str | None = None
 
 
 class OfficialHttpTransport(Protocol):
@@ -231,6 +255,15 @@ class UrllibOfficialHttpTransport:
                 content_type = response.headers.get_content_type().casefold()
                 body = response.read(max_bytes + 1)
         except urllib.error.HTTPError as error:
+            if error.code in {301, 302, 303, 307, 308}:
+                location = error.headers.get("Location")
+                if location:
+                    return OfficialHttpResponse(
+                        status_code=int(error.code),
+                        final_url=str(location),
+                        content_type=error.headers.get_content_type().casefold(),
+                        body=b"",
+                    )
             raise OfficialConnectorError(f"official source returned HTTP {error.code}") from error
         except (urllib.error.URLError, TimeoutError, OSError) as error:
             raise OfficialConnectorError("official source fetch failed") from error
@@ -375,7 +408,8 @@ class CeleroShortLinkDocumentMaterializer:
 class _LinkParser(HTMLParser):
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
-        self.links: list[str] = []
+        self.links: list[tuple[str, str]] = []
+        self._active_link: int | None = None
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         if tag.casefold() not in {"a", "link"}:
@@ -383,7 +417,43 @@ class _LinkParser(HTMLParser):
         values = dict(attrs)
         value = values.get("href")
         if value:
-            self.links.append(value)
+            label = " ".join(
+                item
+                for item in (
+                    values.get("aria-label"),
+                    values.get("title"),
+                    values.get("rel"),
+                )
+                if item
+            )
+            self.links.append((value, label[:500]))
+            self._active_link = len(self.links) - 1 if tag.casefold() == "a" else None
+
+    def handle_data(self, data: str) -> None:
+        if self._active_link is None or not data.strip():
+            return
+        href, label = self.links[self._active_link]
+        combined = " ".join((label, data.strip())).strip()
+        self.links[self._active_link] = (href, combined[:500])
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag.casefold() == "a":
+            self._active_link = None
+
+
+_EMBEDDED_OFFICIAL_URL = re.compile(
+    r"https?://[^\s\"'<>]+(?:\.pdf|\.csv|\.xlsx|\.json)(?:\?[^\s\"'<>]*)?",
+    re.IGNORECASE,
+)
+_GLOBALX_PRODUCT_PATH = re.compile(
+    r"^/funds/(?P<ticker>[a-z][a-z0-9-]{0,9})/?$",
+    re.IGNORECASE,
+)
+_GLOBALX_HOLDINGS_PATH = re.compile(
+    r"^/funds/holdings/(?P<ticker>[a-z][a-z0-9-]{0,9})_full-holdings_"
+    r"(?P<as_of>20\d{6})\.csv$",
+    re.IGNORECASE,
+)
 
 
 def _parse_publication_date(value: str) -> date | None:
@@ -503,7 +573,7 @@ def infer_official_evidence_date(content_type: str, body: bytes) -> date | None:
             text = "\n".join(parts)
         except Exception:  # noqa: BLE001 - a malformed date source is rejected
             return None
-    elif media_type == "text/plain":
+    elif media_type in {"text/plain", "text/csv", "application/csv"}:
         text = body.decode("utf-8", errors="replace")
     elif media_type == "application/json":
         try:
@@ -577,15 +647,21 @@ class OfficialDocumentLinkResolver:
         # endpoint generically from the page's opaque product ID; company names
         # and ETF names are never embedded in this connector.
         parsed_source = urllib.parse.urlsplit(snapshot.source_uri)
-        if snapshot.source.source_id == "samsungfund-kodex-product":
+        if snapshot.source.source_id in {
+            "samsungfund-kodex-product",
+            "samsungfund-kodex-product-mobile",
+        }:
             product_ids = urllib.parse.parse_qs(parsed_source.query).get("id", [])
             if len(product_ids) == 1 and re.fullmatch(r"[0-9A-Za-z_-]{2,40}", product_ids[0]):
                 product_id = product_ids[0]
                 if snapshot.capability is KnowledgeCapability.PRODUCT_RISK_FACTORS:
                     relative = f"/upload/invest/{product_id}-A.pdf"
-                    risk_url = urllib.parse.urljoin(snapshot.source_uri, relative)
+                    risk_url = urllib.parse.urljoin("https://www.samsungfund.com", relative)
                     source = self.registry.authorize_url(risk_url, snapshot.capability)
-                    if source.source_id != snapshot.source.source_id:
+                    if source.source_id != snapshot.source.source_id and (
+                        source.publisher != snapshot.source.publisher
+                        or source.authority != snapshot.source.authority
+                    ):
                         raise OfficialConnectorError("linked KODEX PDF changed source scope")
                     return (
                         OfficialDiscoveryCandidate(
@@ -603,7 +679,10 @@ class OfficialDocumentLinkResolver:
                     f"gijunYMD={target_date:%Y.%m.%d}"
                 )
                 source = self.registry.authorize_url(api_url, snapshot.capability)
-                if source.source_id != snapshot.source.source_id:
+                if source.source_id != snapshot.source.source_id and (
+                    source.publisher != snapshot.source.publisher
+                    or source.authority != snapshot.source.authority
+                ):
                     raise OfficialConnectorError("linked KODEX API changed source scope")
                 return (
                     OfficialDiscoveryCandidate(
@@ -612,11 +691,122 @@ class OfficialDocumentLinkResolver:
                     ),
                 )
         parser = _LinkParser()
-        parser.feed(snapshot.content.decode("utf-8", errors="replace"))
+        decoded_content = snapshot.content.decode("utf-8", errors="replace")
+        parser.feed(decoded_content)
         parser.close()
-        resolved: list[OfficialDiscoveryCandidate] = []
+        discovered_links = list(parser.links[:500])
+        # Modern official product pages frequently publish their canonical
+        # DataDownload URL only in JSON-LD or an embedded application payload,
+        # not in an anchor.  Admit only bounded document-like URLs and run the
+        # same Source Registry authorization below; script text itself is never
+        # evidence and cannot add a new trust domain.
+        for match in _EMBEDDED_OFFICIAL_URL.finditer(decoded_content):
+            raw_link = html.unescape(match.group(0)).replace(r"\/", "/")
+            context = decoded_content[max(0, match.start() - 160) : match.end() + 80]
+            discovered_links.append((raw_link, html.unescape(context)[:500]))
+            if len(discovered_links) >= 700:
+                break
+
+        # Global X exposes the current dated holdings CSV from each official
+        # product page.  Historical files use the same issuer-authored naming
+        # convention.  Rewriting the date is allowed only when the product page
+        # itself carries a DB-validated ticker provenance and actually exposes
+        # the exact same-ticker CSV template. A search result or arbitrary
+        # product URL cannot create this provenance.
+        product_match = _GLOBALX_PRODUCT_PATH.fullmatch(parsed_source.path)
+        if (
+            snapshot.capability is KnowledgeCapability.PORTFOLIO_HOLDINGS
+            and snapshot.source.source_id == "globalx-etf-official"
+            and snapshot.db_ticker is not None
+            and product_match is not None
+            and not parsed_source.query
+            and product_match.group("ticker").casefold() == snapshot.db_ticker.casefold()
+        ):
+            target_date = min(
+                evidence_as_of or self.registry.evidence_cutoff,
+                self.registry.evidence_cutoff,
+            )
+            historical_urls: set[str] = set()
+            for raw_link, _link_label in discovered_links:
+                exposed_url = urllib.parse.urljoin(snapshot.source_uri, raw_link)
+                parsed_link = urllib.parse.urlsplit(exposed_url)
+                holdings_match = _GLOBALX_HOLDINGS_PATH.fullmatch(parsed_link.path)
+                if (
+                    parsed_link.scheme != "https"
+                    or parsed_link.hostname != "assets.globalxetfs.com"
+                    or parsed_link.query
+                    or parsed_link.fragment
+                    or holdings_match is None
+                    or holdings_match.group("ticker").casefold()
+                    != snapshot.db_ticker.casefold()
+                ):
+                    continue
+                try:
+                    exposed_source = self.registry.authorize_url(
+                        exposed_url,
+                        snapshot.capability,
+                    )
+                except OfficialSourceRegistryError:
+                    continue
+                if (
+                    exposed_source.source_id != "globalx-etf-factsheets"
+                    or exposed_source.publisher != snapshot.source.publisher
+                    or exposed_source.authority != snapshot.source.authority
+                ):
+                    continue
+                target_path = (
+                    f"/funds/holdings/{snapshot.db_ticker.casefold()}_full-holdings_"
+                    f"{target_date:%Y%m%d}.csv"
+                )
+                historical_url = urllib.parse.urlunsplit(
+                    ("https", "assets.globalxetfs.com", target_path, "", "")
+                )
+                target_source = self.registry.authorize_url(
+                    historical_url,
+                    snapshot.capability,
+                )
+                if (
+                    target_source.source_id != exposed_source.source_id
+                    or target_source.publisher != snapshot.source.publisher
+                    or target_source.authority != snapshot.source.authority
+                ):
+                    continue
+                historical_urls.add(historical_url)
+            if len(historical_urls) == 1:
+                return (
+                    OfficialDiscoveryCandidate(
+                        url=next(iter(historical_urls)),
+                        title=f"{snapshot.db_ticker} official full holdings",
+                        as_of=target_date,
+                        db_ticker=snapshot.db_ticker,
+                    ),
+                )
+
+        ranked_links: list[tuple[tuple[int, int, str], OfficialDiscoveryCandidate]] = []
         seen: set[str] = set()
-        for raw_link in parser.links:
+        capability_cues = {
+            KnowledgeCapability.PORTFOLIO_HOLDINGS: re.compile(
+                r"holdings?|portfolio|facts?heet|구성종목|보유종목",
+                re.IGNORECASE,
+            ),
+            KnowledgeCapability.CORPORATE_SUBSIDIARY: re.compile(
+                r"subsidiar|group|company|brochure|자회사|계열사|회사소개|브로슈어",
+                re.IGNORECASE,
+            ),
+            KnowledgeCapability.SECTOR_THEME_HISTORY: re.compile(
+                r"theme|sector|insight|news|report|테마|섹터|뉴스|리포트",
+                re.IGNORECASE,
+            ),
+            KnowledgeCapability.FUND_STRUCTURE_STRATEGY_TREND: re.compile(
+                r"strategy|report|prospectus|fund|전략|보고서|투자설명서|펀드",
+                re.IGNORECASE,
+            ),
+            KnowledgeCapability.PRODUCT_RISK_FACTORS: re.compile(
+                r"risk|prospectus|invest|투자위험|투자설명서|간이투자",
+                re.IGNORECASE,
+            ),
+        }[snapshot.capability]
+        for link_ordinal, (raw_link, link_label) in enumerate(discovered_links):
             url = urllib.parse.urljoin(snapshot.source_uri, raw_link)
             if url in seen:
                 continue
@@ -637,18 +827,34 @@ class OfficialDocumentLinkResolver:
                 not is_pdf and source.connector_kind is SourceConnectorKind.PDF
             ):
                 continue
-            resolved.append(
-                OfficialDiscoveryCandidate(
-                    url=url,
-                    title=snapshot.title,
-                    published_at=snapshot.published_at,
-                    as_of=snapshot.as_of,
+            parsed_link = urllib.parse.urlsplit(url)
+            search_surface = urllib.parse.unquote(
+                " ".join((parsed_link.path, parsed_link.query, link_label))
+            )
+            link_score = (
+                10 * int(is_pdf)
+                + 7 * int(capability_cues.search(search_surface) is not None)
+                + 4 * int(_PUBLICATION_DATE_PATTERN.search(search_surface) is not None)
+                + 3
+                * int(
+                    snapshot.capability is KnowledgeCapability.PORTFOLIO_HOLDINGS
+                    and re.search(r"api|json|excel|download", search_surface, re.I) is not None
+                )
+            )
+            ranked_links.append(
+                (
+                    (-link_score, link_ordinal, url),
+                    OfficialDiscoveryCandidate(
+                        url=url,
+                        title=link_label or snapshot.title,
+                        published_at=snapshot.published_at,
+                        as_of=snapshot.as_of,
+                    ),
                 )
             )
             seen.add(url)
-            if len(resolved) == max_links:
-                break
-        return tuple(resolved)
+        ranked_links.sort(key=lambda item: item[0])
+        return tuple(candidate for _, candidate in ranked_links[:max_links])
 
 
 class StaticThenDynamicOfficialHttpTransport:
@@ -744,11 +950,29 @@ class OfficialSourceConnector:
         self._celero_materializer = CeleroShortLinkDocumentMaterializer(transport)
 
     @staticmethod
-    def _content_type_allowed(entry: OfficialSourceEntry, content_type: str) -> bool:
+    def _content_type_allowed(
+        entry: OfficialSourceEntry,
+        content_type: str,
+        *,
+        url: str,
+        capability: KnowledgeCapability,
+    ) -> bool:
         normalized = content_type.casefold().split(";", maxsplit=1)[0].strip()
         is_html = normalized in {"text/html", "application/xhtml+xml"}
         is_pdf = normalized == "application/pdf"
         is_json = normalized == "application/json"
+        path = urllib.parse.urlsplit(url).path.casefold()
+        # Holdings downloads linked from an already-authorized official product
+        # page are often served as text/plain or text/csv.  Keep this exception
+        # capability- and extension-scoped so an arbitrary text endpoint cannot
+        # become evidence.
+        is_holdings_text = (
+            capability is KnowledgeCapability.PORTFOLIO_HOLDINGS
+            and path.endswith(".csv")
+            and normalized in {"text/plain", "text/csv", "application/csv"}
+        )
+        if is_holdings_text:
+            return True
         if entry.connector_kind is SourceConnectorKind.HTML:
             return is_html
         if entry.connector_kind is SourceConnectorKind.PDF:
@@ -780,12 +1004,35 @@ class OfficialSourceConnector:
             timeout_seconds=request.timeout_seconds,
             max_bytes=request.max_bytes,
         )
+        if response.status_code in {301, 302, 303, 307, 308}:
+            redirected_url = urllib.parse.urljoin(request.url, response.final_url)
+            parsed_redirect = urllib.parse.urlsplit(redirected_url)
+            # Some legacy official endpoints emit an HTTP canonical URL even
+            # though the same target is available over HTTPS.  Never contact
+            # the downgraded URL: upgrade it locally, then require its exact
+            # hostname/path to belong to an explicitly trusted source ID.
+            if parsed_redirect.scheme == "http":
+                redirected_url = urllib.parse.urlunsplit(
+                    parsed_redirect._replace(scheme="https")
+                )
+            redirected_source = self.registry.authorize_url(
+                redirected_url,
+                request.capability,
+            )
+            if redirected_source.source_id not in source.trusted_redirect_source_ids:
+                raise OfficialConnectorError("official redirect target is not explicitly trusted")
+            response = self.transport.fetch(
+                redirected_url,
+                timeout_seconds=request.timeout_seconds,
+                max_bytes=request.max_bytes,
+            )
+            source = redirected_source
         if (
             source.content_platform is SourceContentPlatform.CELERO_SHORT_LINK
             and self._celero_materializer.is_thin_shell(response)
         ):
             response = self._celero_materializer.materialize(
-                request.url,
+                response.final_url,
                 timeout_seconds=request.timeout_seconds,
                 max_bytes=request.max_bytes,
             )
@@ -796,7 +1043,12 @@ class OfficialSourceConnector:
         final_source = self.registry.authorize_url(response.final_url, request.capability)
         if final_source.source_id != source.source_id:
             raise OfficialConnectorError("official source changed trust domain while fetching")
-        if not self._content_type_allowed(source, response.content_type):
+        if not self._content_type_allowed(
+            source,
+            response.content_type,
+            url=response.final_url,
+            capability=request.capability,
+        ):
             raise OfficialConnectorError("official source content type is not approved")
         if not response.body or len(response.body) > request.max_bytes:
             raise OfficialConnectorError("official source body is empty or oversized")
@@ -833,6 +1085,7 @@ class OfficialSourceConnector:
                     content_type=response.content_type,
                     content=response.body,
                     content_sha256=hashlib.sha256(response.body).hexdigest(),
+                    db_ticker=candidate.db_ticker,
                 )
             raise OfficialConnectorError("official source requires an explicit evidence date")
         if published_at is not None and published_at > self.registry.evidence_cutoff:
@@ -849,6 +1102,7 @@ class OfficialSourceConnector:
             content_sha256=hashlib.sha256(response.body).hexdigest(),
             published_at=published_at,
             as_of=effective_as_of,
+            db_ticker=candidate.db_ticker,
         )
 
 
