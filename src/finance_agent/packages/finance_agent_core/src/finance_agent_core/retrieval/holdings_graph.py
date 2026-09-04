@@ -34,6 +34,7 @@ from urllib.parse import parse_qs, urlencode, urlsplit
 from finance_agent_core.agent.external_search_planning import (
     ProvidedProductUniverseBuilder,
     intersect_evidence_with_provided_products,
+    normalize_product_identity,
 )
 from finance_agent_core.config.knowledge_coverage import KnowledgeCapability
 from finance_agent_core.config.source_registry import (
@@ -322,13 +323,16 @@ def _header_product(
 
     if len(candidates) < 2:
         return candidates
-    folded = header.casefold()
+    # Publisher titles space names differently from the provided DB
+    # (``TIGER 200 커버드콜OTM`` vs ``TIGER 200커버드콜OTM``), so compare identities
+    # the way the DB intersection does: NFKC, casefolded, alphanumerics only.
+    folded = normalize_product_identity(header)
     best_surface: dict[str, str] = {}
     for candidate in candidates:
         surfaces = [
-            surface.casefold()
+            normalized
             for surface in (candidate.product_name, *candidate.aliases)
-            if surface.casefold() in folded
+            if (normalized := normalize_product_identity(surface)) and normalized in folded
         ]
         best_surface[candidate.product_id] = max(surfaces, key=len, default="")
     kept = tuple(

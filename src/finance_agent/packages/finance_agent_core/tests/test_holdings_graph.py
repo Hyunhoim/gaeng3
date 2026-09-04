@@ -299,6 +299,39 @@ def test_header_prefers_the_longest_identity_over_a_sibling_substring() -> None:
     assert {relation.product_id for relation in report.relations} == {"KR70008S0004"}
 
 
+def test_header_matches_identities_regardless_of_publisher_spacing() -> None:
+    covered_call = ProvidedProductCandidate(
+        product_family=ProductFamily.DOMESTIC_ETP,
+        product_id="KR7166400002",
+        product_name="미래에셋 TIGER 200커버드콜OTM증권상장지수투자신탁(주식)",
+        aliases=("A166400", "KR7166400002", "TIGER 200커버드콜OTM"),
+    )
+    kospi200 = ProvidedProductCandidate(
+        product_family=ProductFamily.DOMESTIC_ETP,
+        product_id="KR7102110004",
+        product_name="미래에셋 TIGER 200증권상장지수투자신탁(주식)",
+        aliases=("A102110", "KR7102110004", "TIGER 200"),
+    )
+    page = (
+        "<html><head><title>TIGER 200 커버드콜OTM | ETF 상품 | 미래에셋 TIGER ETF</title></head>"
+        "<body><h2>TIGER 200 커버드콜OTM</h2><p>TIGER 200 지수에 콜옵션을 매도합니다.</p></body>"
+        "</html>"
+    ).encode()
+    saved = SavedHoldingsProduct(
+        publisher="tiger",
+        page_id="KR7166400002",
+        page_url=_TIGER_PAGE_URL.replace("KR7396520009", "KR7166400002"),
+        page_content=page,
+        holdings_url=tiger_holdings_url("KR7166400002", fix_date=date(2026, 8, 21)),
+        holdings_content=_TIGER_TABLE,
+    )
+
+    report = build_holdings_relations((saved,), universe=_universe(covered_call, kospi200))
+
+    assert report.bound_page_ids == ("KR7166400002",)
+    assert {relation.product_id for relation in report.relations} == {"KR7166400002"}
+
+
 def test_ambiguous_or_unbound_pages_produce_no_relation() -> None:
     both = _page("KODEX 2차전지산업 KODEX 차이나2차전지MSCI(합성)")
     report = build_holdings_relations(

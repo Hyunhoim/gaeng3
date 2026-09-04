@@ -27,6 +27,7 @@ from finance_agent_core.contracts.external_knowledge import (
     ProvidedProductCandidateUniverse,
 )
 from finance_agent_core.contracts.queryplan import ProductFamily
+from finance_agent_core.retrieval.hangul_romanization import hangul_romanization_key
 from finance_agent_core.retrieval.official_connector import OfficialSourceSnapshot
 from finance_agent_core.retrieval.sqlite_fts import (
     chunk_document,
@@ -148,6 +149,8 @@ def _requirement_relation_signal(requirement: KnowledgeRequirement) -> re.Patter
             re.IGNORECASE | re.DOTALL,
         )
     return re.compile("|".join(f"(?:{pattern})" for pattern in unique_patterns), re.IGNORECASE)
+
+
 _RISK_FACTOR_SIGNAL = re.compile(
     r"(?:원금|투자금).{0,16}(?:손실|잃)|"
     r"손실.{0,16}(?:가능|발생|위험|입을\s*수)|"
@@ -318,80 +321,7 @@ _SUBSIDIARY_SELECTION = re.compile(
     re.IGNORECASE,
 )
 
-_HANGUL_INITIAL = (
-    "g",
-    "kk",
-    "n",
-    "d",
-    "tt",
-    "r",
-    "m",
-    "b",
-    "pp",
-    "s",
-    "ss",
-    "",
-    "j",
-    "jj",
-    "ch",
-    "k",
-    "t",
-    "p",
-    "h",
-)
-_HANGUL_VOWEL = (
-    "a",
-    "ae",
-    "ya",
-    "yae",
-    "eo",
-    "e",
-    "yeo",
-    "ye",
-    "o",
-    "wa",
-    "wae",
-    "oe",
-    "yo",
-    "u",
-    "wo",
-    "we",
-    "wi",
-    "yu",
-    "eu",
-    "ui",
-    "i",
-)
-_HANGUL_FINAL = (
-    "",
-    "k",
-    "k",
-    "k",
-    "n",
-    "n",
-    "n",
-    "t",
-    "l",
-    "k",
-    "m",
-    "p",
-    "t",
-    "t",
-    "p",
-    "t",
-    "m",
-    "p",
-    "p",
-    "t",
-    "t",
-    "ng",
-    "t",
-    "t",
-    "k",
-    "t",
-    "p",
-    "t",
-)
+
 _ASCII_ENTITY_TOKEN = re.compile(r"(?<![A-Za-z])[A-Z][A-Za-z]{3,39}(?![A-Za-z])")
 _GENERIC_ASCII_ENTITY_TOKENS = frozenset(
     {
@@ -410,32 +340,6 @@ _GENERIC_ASCII_ENTITY_TOKENS = frozenset(
 )
 
 
-def _hangul_romanization_key(value: str) -> str:
-    """Return a deterministic phonetic key, not a linguistic translation.
-
-    The key is used only to recover an exact Latin spelling already present in
-    an approved official document.  It never creates evidence or authorizes a
-    source on its own.
-    """
-
-    output: list[str] = []
-    for character in unicodedata.normalize("NFKC", value):
-        codepoint = ord(character)
-        if 0xAC00 <= codepoint <= 0xD7A3:
-            offset = codepoint - 0xAC00
-            initial = offset // 588
-            vowel = (offset % 588) // 28
-            final = offset % 28
-            output.extend(
-                (
-                    _HANGUL_INITIAL[initial],
-                    _HANGUL_VOWEL[vowel],
-                    _HANGUL_FINAL[final],
-                )
-            )
-    return "".join(output)
-
-
 def _official_cross_script_aliases(subject: str, text: str) -> tuple[str, ...]:
     """Find one conservative exact Latin spelling for a Hangul proper name.
 
@@ -446,7 +350,7 @@ def _official_cross_script_aliases(subject: str, text: str) -> tuple[str, ...]:
     must still occur in the same verified excerpt before execution.
     """
 
-    romanized = _hangul_romanization_key(subject)
+    romanized = hangul_romanization_key(subject)
     if len(romanized) < 5:
         return ()
     occurrences: dict[str, int] = {}
@@ -849,9 +753,7 @@ def _precise_risk_evidence_units(excerpt: str, *, limit: int = 5) -> tuple[str, 
             ):
                 best_by_family[family] = candidate
     chosen = sorted(best_by_family.values(), key=lambda item: (-item[0], item[1]))[:limit]
-    return tuple(
-        dict.fromkeys(item[2] for item in sorted(chosen, key=lambda item: item[1]))
-    )
+    return tuple(dict.fromkeys(item[2] for item in sorted(chosen, key=lambda item: item[1])))
 
 
 def _observed_at(snapshot: OfficialSourceSnapshot) -> date:

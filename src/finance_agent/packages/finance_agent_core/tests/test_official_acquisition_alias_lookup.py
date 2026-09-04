@@ -125,6 +125,21 @@ def test_cache_lookup_without_a_matching_label_still_misses() -> None:
             return ()
 
     coordinator.discovery_provider = _EmptyDiscovery()
-    miss = coordinator.acquire(_requirement("캠브리콘", "Cambridge"))
+    miss = coordinator.acquire(_requirement("에코프로비엠", "Ecopro BM"))
 
     assert miss.status is not OfficialEvidenceAcquisitionStatus.CACHE_HIT
+
+
+def test_hangul_subject_reaches_a_latin_graph_label_by_phonetic_key() -> None:
+    store = _store()
+    coordinator = OfficialEvidenceAcquisitionCoordinator(
+        relation_store=store,
+        discovery_provider=_UnusedDiscovery(),
+        connector=OfficialSourceConnector(_UnusedTransport(), store.registry),
+    )
+
+    # HCLX proposed a wrong alias ("Cambridge"); the phonetic key still finds Cambricon.
+    hit = coordinator.acquire(_requirement("캠브리콘", "Cambridge"))
+
+    assert hit.status is OfficialEvidenceAcquisitionStatus.CACHE_HIT
+    assert hit.relations[0].object.canonical_name == "Cambricon Technologies Corp Ltd"
