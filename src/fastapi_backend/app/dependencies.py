@@ -744,6 +744,11 @@ def _build_external_knowledge_runtime(
         raise RuntimeError("external temporal relations differ from the release artifact")
     if artifact.retrieval_mode == "verified_live_official" and bundle.relations:
         raise RuntimeError("live-only external knowledge requires an empty relation cache")
+    if (
+        artifact.retrieval_mode == "verified_live_official_with_relation_graph"
+        and not bundle.relations
+    ):
+        raise RuntimeError("relation graph external knowledge requires a non-empty graph")
     relation_store = TemporalRelationStore(bundle, registry)
     live_discovery = BoundedOfficialDiscoveryProvider(
         NaverApiHubWebSearchTransport(

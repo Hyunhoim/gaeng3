@@ -41,7 +41,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     parser.add_argument(
         "--mode",
-        choices=("verified_live_official", "approved_corpus_cache_first"),
+        choices=(
+            "verified_live_official",
+            "verified_live_official_with_relation_graph",
+            "approved_corpus_cache_first",
+        ),
         default="verified_live_official",
     )
     parser.add_argument("--artifact", type=Path, required=True)
@@ -57,6 +61,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--document-cache-activation-output", type=Path)
     parser.add_argument("--approved-temporal-relations", type=Path)
     parser.add_argument("--approved-temporal-relations-sha256")
+    parser.add_argument("--approved-relation-graph", type=Path)
+    parser.add_argument("--approved-relation-graph-sha256")
     arguments = parser.parse_args(argv)
     cache_values = (
         arguments.approved_corpus_manifest,
@@ -71,12 +77,30 @@ def main(argv: Sequence[str] | None = None) -> int:
         arguments.approved_temporal_relations,
         arguments.approved_temporal_relations_sha256,
     )
+    graph_values = (
+        arguments.approved_relation_graph,
+        arguments.approved_relation_graph_sha256,
+    )
     if arguments.mode == "verified_live_official":
-        if any(value is not None for value in cache_values):
+        if any(value is not None for value in (*cache_values, *graph_values)):
             parser.error("live-only mode rejects approved cache inputs")
         bootstrap = write_live_external_knowledge_bootstrap(
             artifact_path=arguments.artifact,
             relation_bundle_path=arguments.temporal_relations,
+        )
+    elif arguments.mode == "verified_live_official_with_relation_graph":
+        if any(value is not None for value in cache_values):
+            parser.error("relation graph mode rejects approved document cache inputs")
+        if any(value is None for value in graph_values):
+            parser.error(
+                "verified_live_official_with_relation_graph requires: "
+                "approved-relation-graph, approved-relation-graph-sha256"
+            )
+        bootstrap = write_live_external_knowledge_bootstrap(
+            artifact_path=arguments.artifact,
+            relation_bundle_path=arguments.temporal_relations,
+            relation_graph_path=arguments.approved_relation_graph,
+            expected_relation_graph_file_sha256=arguments.approved_relation_graph_sha256,
         )
     else:
         _required_cache_arguments(parser, arguments)

@@ -74,6 +74,8 @@ jobs:
       APPROVED_DOCUMENT_CACHE_ACTIVATION_SHA256: ${{ vars.APPROVED_DOCUMENT_CACHE_ACTIVATION_SHA256 }}
       APPROVED_EXTERNAL_TEMPORAL_RELATIONS: ${{ vars.APPROVED_EXTERNAL_TEMPORAL_RELATIONS }}
       APPROVED_EXTERNAL_TEMPORAL_RELATIONS_SHA256: ${{ vars.APPROVED_EXTERNAL_TEMPORAL_RELATIONS_SHA256 }}
+      APPROVED_EXTERNAL_RELATION_GRAPH: ${{ vars.APPROVED_EXTERNAL_RELATION_GRAPH }}
+      APPROVED_EXTERNAL_RELATION_GRAPH_SHA256: ${{ vars.APPROVED_EXTERNAL_RELATION_GRAPH_SHA256 }}
 
     steps:
       - name: Check out the exact source commit
@@ -322,6 +324,25 @@ jobs:
               --document-cache-activation-output "$RELEASE_OUTPUT_DIR/document-cache-activation.json"
               --approved-temporal-relations "$GITHUB_WORKSPACE/$APPROVED_EXTERNAL_TEMPORAL_RELATIONS"
               --approved-temporal-relations-sha256 "$APPROVED_EXTERNAL_TEMPORAL_RELATIONS_SHA256"
+            )
+          elif [ "$external_mode" = "verified_live_official_with_relation_graph" ]; then
+            for input_name in APPROVED_EXTERNAL_RELATION_GRAPH APPROVED_EXTERNAL_RELATION_GRAPH_SHA256; do
+              test -n "${!input_name:-}" || {
+                echo "Protected relation graph input is missing: $input_name" >&2
+                exit 1
+              }
+            done
+            case "$APPROVED_EXTERNAL_RELATION_GRAPH" in
+              /*|../*|*/../*|*/..) echo "Approved relation graph path is outside the checkout" >&2; exit 1 ;;
+            esac
+            git ls-files --error-unmatch -- "$APPROVED_EXTERNAL_RELATION_GRAPH" >/dev/null || {
+              echo "Approved relation graph is not tracked by the release commit: $APPROVED_EXTERNAL_RELATION_GRAPH" >&2
+              exit 1
+            }
+            test -f "$GITHUB_WORKSPACE/$APPROVED_EXTERNAL_RELATION_GRAPH"
+            external_arguments+=(
+              --approved-relation-graph "$GITHUB_WORKSPACE/$APPROVED_EXTERNAL_RELATION_GRAPH"
+              --approved-relation-graph-sha256 "$APPROVED_EXTERNAL_RELATION_GRAPH_SHA256"
             )
           elif [ "$external_mode" != "verified_live_official" ]; then
             echo "Protected external retrieval mode is invalid" >&2

@@ -163,6 +163,11 @@ class ExternalKnowledgeRuntime:
                 and acquisition.relation_store.bundle.relations
             ):
                 raise ValueError("live-only external runtime requires an empty relation cache")
+            if (
+                release_artifact.retrieval_mode == "verified_live_official_with_relation_graph"
+                and not acquisition.relation_store.bundle.relations
+            ):
+                raise ValueError("relation graph external runtime requires a non-empty graph")
             if release_artifact.retrieval_mode == "approved_corpus_cache_first":
                 discovery = acquisition.discovery_provider
                 if (

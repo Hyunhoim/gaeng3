@@ -240,6 +240,7 @@ class ExternalKnowledgeArtifactRelease(ReleaseModel):
     retrieval_mode: Literal[
         "approved_corpus_cache_first",
         "verified_live_official",
+        "verified_live_official_with_relation_graph",
     ] = "approved_corpus_cache_first"
     source_registry_sha256: str = Field(pattern=_SHA256_PATTERN)
     coverage_manifest_sha256: str = Field(pattern=_SHA256_PATTERN)
