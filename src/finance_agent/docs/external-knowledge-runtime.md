@@ -53,6 +53,13 @@
   Source Registry, coverage, Verifier contract, 제공 DB hash를 하나의
   `AgentReleaseManifest`에 결합한다. 승인된 corpus가 없으므로 이 Release는 BM25·Document
   Dense를 사용한다고 표시하지 않는다.
+- `verified_live_official_with_relation_graph` 모드는 같은 Release 경계 안에서 미리 봉인한
+  구성종목 Graph(`retrieval/holdings_graph.py`)를 Temporal Relation cache로 쓴다. Graph의 각 관계는
+  라이브 KODEX 경로가 요청마다 받는 두 공식 자원(상품 페이지 → 제공 DB identity 바인딩, 구성종목
+  JSON → 보유 종목·기준일)의 excerpt와 content SHA-256을 그대로 지니며, 시작 시
+  `TemporalRelationStore`가 Source Registry·cutoff·publisher를 다시 검증한다. cache miss는 종전과
+  같은 예산·Verifier로 라이브 공식 검색에 간다. "종목 X를 편입한 ETF"처럼 종목→상품 방향 질문은
+  사이트 검색이 종목명을 무시하므로 이 Graph 없이는 검증 불가로 끝난다.
 - 향후 `approved_corpus_cache_first` 모드는 corpus, BM25/Dense index, Temporal Relation Store를
   모두 SHA-256으로 결합해야만 실행할 수 있다.
 - Release와 runtime artifact가 다르면 시작 단계에서 실패한다.

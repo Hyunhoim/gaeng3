@@ -215,17 +215,22 @@ class ExternalKnowledgeExecutor:
                 )
             matches: dict[str, TemporalRelationRecord] = {}
             for subject, required_product_key in targets:
+                lookup = TemporalRelationSearchRequest(
+                    capability=requirement.capability,
+                    subject=subject,
+                    product_families=requirement.product_families,
+                    time_range=requirement.time_range,
+                    top_k=50,
+                )
+                found = self.relation_store.search(lookup)
+                if not found and required_product_key is None:
+                    # Same cross-script rule the acquisition cache lookup used, so a
+                    # relation reached through ``캠브리콘`` -> ``Cambricon`` is not
+                    # lost again when the plan is executed over the verified set.
+                    found = self.relation_store.search_cross_script(lookup)
                 target_matches = tuple(
                     relation
-                    for relation in self.relation_store.search(
-                        TemporalRelationSearchRequest(
-                            capability=requirement.capability,
-                            subject=subject,
-                            product_families=requirement.product_families,
-                            time_range=requirement.time_range,
-                            top_k=50,
-                        )
-                    )
+                    for relation in found
                     if (
                         required_product_key is None
                         or _relation_product_key(relation) == required_product_key
