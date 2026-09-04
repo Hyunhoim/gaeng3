@@ -45,6 +45,9 @@ from finance_agent_core.retrieval.temporal_relations import (
 _MAX_FETCH_TIMEOUT_SECONDS = 10.0
 
 
+_CACHE_HIT_LIMIT = 50
+
+
 class OfficialEvidenceAcquisitionStatus(StrEnum):
     CACHE_HIT = "cache_hit"
     LIVE_EVIDENCE_CANDIDATE = "live_evidence_candidate"
@@ -386,7 +389,7 @@ class OfficialEvidenceAcquisitionCoordinator:
                         subject=lookup_subject,
                         product_families=requirement.product_families,
                         time_range=requirement.time_range,
-                        top_k=min(top_k, 50),
+                        top_k=_CACHE_HIT_LIMIT,
                     )
                 ):
                     cached_by_id.setdefault(relation.relation_id, relation)
@@ -397,11 +400,14 @@ class OfficialEvidenceAcquisitionCoordinator:
                     subject=requirement.subject,
                     product_families=requirement.product_families,
                     time_range=requirement.time_range,
-                    top_k=min(top_k, 50),
+                    top_k=_CACHE_HIT_LIMIT,
                 )
             ):
                 cached_by_id.setdefault(relation.relation_id, relation)
-        cached = tuple(cached_by_id.values())[: min(top_k, 50)]
+        # ``top_k`` is derived from the remaining *fetch* budget; a sealed cache
+        # costs no fetch, and truncating it would drop real holders before the
+        # provided-DB ranking (``순자산이 큰 상품``) sees them.
+        cached = tuple(cached_by_id.values())[:_CACHE_HIT_LIMIT]
         if cached:
             return OfficialEvidenceAcquisitionResult(
                 status=OfficialEvidenceAcquisitionStatus.CACHE_HIT,
