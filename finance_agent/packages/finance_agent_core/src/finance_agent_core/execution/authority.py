@@ -1441,8 +1441,28 @@ def require_manifest_binding(
         )
 
 
+def candidate_row_budget(validated: ValidatedPlan) -> int:
+    """Return the authenticated row ceiling for the selected Oracle path.
+
+    ``searchable_rows`` retains the historic public-offering search scope for
+    PRFD01N001. An unscoped aggregate over that organizer-supplied table may
+    inspect the full normalized product universe, whose independently sealed
+    ceiling is ``max_verifier_rows``. No other plan receives the wider budget.
+    """
+
+    plan = validated.canonical_plan
+    unscoped_fund_aggregate = (
+        plan.intent is Intent.AGGREGATE
+        and plan.product_families == [ProductFamily.FUND]
+        and not any(item.field == "public_offering" for item in plan.constraints)
+    )
+    if unscoped_fund_aggregate:
+        return validated.receipt.max_verifier_rows
+    return validated.receipt.max_candidate_rows
+
+
 def require_candidate_budget(validated: ValidatedPlan, candidate_count: int) -> None:
-    if candidate_count > validated.receipt.max_candidate_rows:
+    if candidate_count > candidate_row_budget(validated):
         raise PlanAuthorityError(
             PlanAuthorityCode.ROW_BUDGET_EXCEEDED,
             "database candidate count exceeds the validated row budget",

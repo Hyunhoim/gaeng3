@@ -9,7 +9,7 @@
     a owl:Ontology ;
     owl:imports <https://gaeng3.ai/ontology/common> ;
     rdfs:label "국내 ETF·ETN Ontology"@ko ;
-    ga:registryVersion "1.5" .
+    ga:registryVersion "1.8" .
 
 etfkr:KoreanETPProduct
     a owl:Class ;
@@ -62,7 +62,9 @@ etfkr:Family
     ga:hasCanonicalField etfkr:field_two_hundred_fifty_two_day_volatility_pct ;
     ga:hasCanonicalField etfkr:field_distribution_yield_pct ;
     ga:hasCanonicalField etfkr:field_distribution_payments_per_year ;
-    ga:hasCanonicalField etfkr:field_net_asset_value .
+    ga:hasCanonicalField etfkr:field_net_asset_value ;
+    ga:hasCanonicalField etfkr:field_net_asset_total ;
+    ga:hasCanonicalField etfkr:field_one_month_average_trading_value .
 
 etfkr:Dataset
     a ga:Dataset ;
@@ -352,12 +354,6 @@ etfkr:field_asset_type
     ga:comparisonScope "same_dataset" ;
     ga:allowedOperator "eq" ;
     ga:allowedOperator "in" ;
-    ga:enumValue "Equity" ;
-    ga:enumValue "Alternatives" ;
-    ga:enumValue "Bond" ;
-    ga:enumValue "Mixed Assets" ;
-    ga:enumValue "Commodity" ;
-    ga:enumValue "Money Market" ;
     ga:enumValue "주식" ;
     ga:enumValue "채권" ;
     ga:enumValue "원자재" ;
@@ -394,65 +390,6 @@ etfkr:field_investment_region
     ga:comparisonScope "same_dataset" ;
     ga:allowedOperator "eq" ;
     ga:allowedOperator "in" ;
-    ga:enumValue "ASEAN" ;
-    ga:enumValue "Africa" ;
-    ga:enumValue "Argentina" ;
-    ga:enumValue "Asia Pacific" ;
-    ga:enumValue "Asia Pacific ex Japan" ;
-    ga:enumValue "Australia" ;
-    ga:enumValue "Austria" ;
-    ga:enumValue "BRIC" ;
-    ga:enumValue "Belgium" ;
-    ga:enumValue "Brazil" ;
-    ga:enumValue "Canada" ;
-    ga:enumValue "Chile" ;
-    ga:enumValue "China" ;
-    ga:enumValue "Colombia" ;
-    ga:enumValue "Denmark" ;
-    ga:enumValue "EuroZone" ;
-    ga:enumValue "Europe" ;
-    ga:enumValue "Finland" ;
-    ga:enumValue "France" ;
-    ga:enumValue "Germany" ;
-    ga:enumValue "Global" ;
-    ga:enumValue "Global Emerging Markets" ;
-    ga:enumValue "Global Ex US" ;
-    ga:enumValue "Greater China" ;
-    ga:enumValue "Greece" ;
-    ga:enumValue "Hong Kong" ;
-    ga:enumValue "Iceland" ;
-    ga:enumValue "India" ;
-    ga:enumValue "Indonesia" ;
-    ga:enumValue "Ireland" ;
-    ga:enumValue "Israel" ;
-    ga:enumValue "Italy" ;
-    ga:enumValue "Japan" ;
-    ga:enumValue "Korea" ;
-    ga:enumValue "Kuwait" ;
-    ga:enumValue "Latin America" ;
-    ga:enumValue "Malaysia" ;
-    ga:enumValue "Mexico" ;
-    ga:enumValue "Netherlands" ;
-    ga:enumValue "New Zealand" ;
-    ga:enumValue "North America" ;
-    ga:enumValue "Norway" ;
-    ga:enumValue "Peru" ;
-    ga:enumValue "Philippines" ;
-    ga:enumValue "Poland" ;
-    ga:enumValue "Qatar" ;
-    ga:enumValue "Saudi Arabia" ;
-    ga:enumValue "Singapore" ;
-    ga:enumValue "South Africa" ;
-    ga:enumValue "Spain" ;
-    ga:enumValue "Sweden" ;
-    ga:enumValue "Switzerland" ;
-    ga:enumValue "Taiwan" ;
-    ga:enumValue "Thailand" ;
-    ga:enumValue "Turkey" ;
-    ga:enumValue "United Arab Emirates" ;
-    ga:enumValue "United Kingdom" ;
-    ga:enumValue "United States of America" ;
-    ga:enumValue "Vietnam" ;
     ga:enumValue "국내" ;
     ga:enumValue "미국" ;
     ga:enumValue "글로벌" ;
@@ -479,6 +416,10 @@ etfkr:field_total_expense_ratio_pct
     skos:altLabel "보수율"@ko ;
     skos:altLabel "연간보수"@ko ;
     skos:altLabel "연간보수율"@ko ;
+    skos:altLabel "운용비"@ko ;
+    skos:altLabel "운영비"@ko ;
+    skos:altLabel "관리비"@ko ;
+    skos:altLabel "수수료 부담"@ko ;
     skos:altLabel "expense ratio"@ko ;
     skos:altLabel "fee"@ko ;
     ga:valueType "number" ;
@@ -510,6 +451,7 @@ etfkr:field_aum
     ga:forFamily etfkr:Family ;
     ga:canonicalName "aum" ;
     rdfs:label "최근 AUM"@ko ;
+    skos:altLabel "AUM"@ko ;
     skos:altLabel "순자산"@ko ;
     skos:altLabel "운용 자산"@ko ;
     skos:altLabel "assets under management"@ko ;
@@ -608,6 +550,8 @@ etfkr:field_dynamic_as_of
     ga:canonicalName "dynamic_as_of" ;
     rdfs:label "동적 지표 기준일"@ko ;
     skos:altLabel "AUM 업데이트일"@ko ;
+    skos:altLabel "최신 기준일"@ko ;
+    skos:altLabel "동적 기준일"@ko ;
     skos:altLabel "dynamic as of"@ko ;
     ga:valueType "date" ;
     ga:unit "date" ;
@@ -639,6 +583,12 @@ etfkr:field_one_day_return_pct
     rdfs:label "1일 수익률"@ko ;
     skos:altLabel "하루 수익률"@ko ;
     skos:altLabel "일간 수익률"@ko ;
+    skos:altLabel "당일 수익률"@ko ;
+    skos:altLabel "오늘 상승률"@ko ;
+    skos:altLabel "하루 등락률"@ko ;
+    skos:altLabel "하루 등락"@ko ;
+    skos:altLabel "일간 등락률"@ko ;
+    skos:altLabel "일간 등락"@ko ;
     skos:altLabel "one day return"@ko ;
     ga:valueType "number" ;
     ga:unit "pct_point" ;
@@ -819,7 +769,7 @@ etfkr:field_risk_level
     ga:coveragePct "100"^^xsd:decimal ;
     ga:queryable true ;
     ga:selectable true ;
-    ga:sortable false ;
+    ga:sortable true ;
     ga:aggregatable false ;
     ga:comparable true ;
     ga:comparisonMode "value_only" ;
@@ -836,7 +786,7 @@ etfkr:field_risk_level
     ga:sourceDataset "domestic_etp" ;
     ga:sourceColumn "pd_risk_nm" ;
     ga:sourceTransform "identity" ;
-    ga:notes "원천 등급명을 그대로 보존하며 투자 적합성 판단을 대신하지 않는다."@ko .
+    ga:notes "원천 등급명을 그대로 보존한다. 정렬 시에만 매우낮은위험부터 매우높은위험까지 서버 고정 순서를 사용하며 투자 적합성 판단을 대신하지 않는다."@ko .
 
 etfkr:field_pension_eligible
     a ga:CanonicalField ;
@@ -1428,3 +1378,64 @@ etfkr:field_net_asset_value
     ga:sourceTransform "identity" ;
     ga:sentinelValuesJson "{\"0\":\"UNKNOWN\"}" ;
     ga:notes "공식 최종 NAV 원천값을 사용하고 0·결측은 수치 실행에서 제외한다."@ko .
+
+etfkr:field_net_asset_total
+    a ga:CanonicalField ;
+    ga:forFamily etfkr:Family ;
+    ga:canonicalName "net_asset_total" ;
+    rdfs:label "순자산총액"@ko ;
+    skos:altLabel "국내 ETF 순자산총액"@ko ;
+    ga:valueType "number" ;
+    ga:unit "source_currency_amount" ;
+    ga:quality "PARTIAL" ;
+    ga:coveragePct "100"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable true ;
+    ga:aggregatable true ;
+    ga:comparable true ;
+    ga:comparisonMode "numeric_delta" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "lt" ;
+    ga:allowedOperator "lte" ;
+    ga:allowedOperator "gt" ;
+    ga:allowedOperator "gte" ;
+    ga:allowedOperator "between" ;
+    ga:asOfBasis "dynamic" ;
+    ga:sourceDataset "domestic_etp" ;
+    ga:sourceColumn "pd_net_tamt" ;
+    ga:sourceTransform "identity" ;
+    ga:sentinelValuesJson "{\"0\":\"UNKNOWN\"}" ;
+    ga:notes "공식 국내 ETP 순자산총액을 보존하고 0·결측은 수치 실행에서 제외한다."@ko .
+
+etfkr:field_one_month_average_trading_value
+    a ga:CanonicalField ;
+    ga:forFamily etfkr:Family ;
+    ga:canonicalName "one_month_average_trading_value" ;
+    rdfs:label "1개월 평균 거래대금"@ko ;
+    skos:altLabel "월평균 거래대금"@ko ;
+    skos:altLabel "1개월 평균 거래대금"@ko ;
+    ga:valueType "number" ;
+    ga:unit "source_currency_amount" ;
+    ga:quality "PARTIAL" ;
+    ga:coveragePct "100"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable true ;
+    ga:aggregatable true ;
+    ga:comparable true ;
+    ga:comparisonMode "numeric_delta" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "lt" ;
+    ga:allowedOperator "lte" ;
+    ga:allowedOperator "gt" ;
+    ga:allowedOperator "gte" ;
+    ga:allowedOperator "between" ;
+    ga:asOfBasis "dynamic" ;
+    ga:sourceDataset "domestic_etp" ;
+    ga:sourceColumn "du_val_1m" ;
+    ga:sourceTransform "identity" ;
+    ga:sentinelValuesJson "{\"0\":\"UNKNOWN\"}" ;
+    ga:notes "공식 국내 ETP 1개월 평균 거래대금을 보존하고 0·결측은 수치 실행에서 제외한다."@ko .

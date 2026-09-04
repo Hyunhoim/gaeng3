@@ -104,7 +104,6 @@
           "remaining_days",
           "coupon_rate_pct",
           "buy_yield_pct",
-          "buyable_quantity",
           "dynamic_as_of"
         ],
         "limit": 5,
@@ -117,7 +116,7 @@
         "ambiguities": [],
         "unsupported_conditions": []
       },
-      "query_plan_sha256": "b0d3e2a1d1ea0ad1291974221ce1b4578ca191b6d12bb29644d31b654d968ace",
+      "query_plan_sha256": "247daef0dd8e24ea238b8ea28ebdc6d49ef71df737c5b4a20db1e9be5a1bc791",
       "candidate_count": 9164,
       "top_product_ids": [
         "KR101501DB72",

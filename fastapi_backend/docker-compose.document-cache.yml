@@ -1,0 +1,22 @@
+# Optional fourth overlay for an independently approved Document Dense cache.
+# Use only with a signed external artifact whose retrieval_mode is
+# approved_corpus_cache_first. The application fails closed if either file or
+# any Release-pinned SHA-256 binding differs.
+services:
+  backend:
+    environment:
+      FINANCE_EXTERNAL_DOCUMENT_DENSE_ARTIFACT_FILE: /models/document-dense-approved.json
+      FINANCE_EXTERNAL_DOCUMENT_CACHE_ACTIVATION_FILE: /run/finance-release/document-cache-activation.json
+    volumes:
+      - type: bind
+        source: ${FINANCE_EXTERNAL_DOCUMENT_DENSE_ARTIFACT_HOST_FILE:?required}
+        target: /models/document-dense-approved.json
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${FINANCE_EXTERNAL_DOCUMENT_CACHE_ACTIVATION_HOST_FILE:?required}
+        target: /run/finance-release/document-cache-activation.json
+        read_only: true
+        bind:
+          create_host_path: false

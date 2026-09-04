@@ -19,7 +19,7 @@ from finance_agent_core.domain import (
     ProductEvidence,
 )
 from finance_agent_core.observability import AuditOutcome, AuditStage, current_request_audit
-from finance_agent_core.retrieval import DocumentEvidence
+from finance_agent_core.retrieval import DocumentEvidence, DocumentSourceKind
 
 
 class BackendContractModel(BaseModel):
@@ -146,13 +146,16 @@ class BackendAgentResponse(BackendContractModel):
             raise ValueError("as_of_dates must be unique")
         if self.family_searches:
             if len(self.family_searches) < 2:
-                raise ValueError("multi-family response requires at least two family searches")
+                raise ValueError("compound response requires at least two family searches")
             if self.query_plan is not None or self.source_manifest is not None:
                 raise ValueError(
                     "multi-family response keeps plans and manifests in family_searches"
                 )
-            if self.product_families != [item.product_family for item in self.family_searches]:
-                raise ValueError("family search order must match product_families")
+            bundle_families = list(
+                dict.fromkeys(item.product_family for item in self.family_searches)
+            )
+            if self.product_families != bundle_families:
+                raise ValueError("compound family order must match product_families")
             if self.candidate_count != sum(item.candidate_count for item in self.family_searches):
                 raise ValueError("candidate_count must equal the family search sum")
             if [manifest for manifest in self.source_manifests] != [
@@ -209,7 +212,28 @@ class BackendAgentResponse(BackendContractModel):
             # explain *why* NOT_FOUND is trustworthy; they must never carry a
             # product or turn a plain SQL empty result into web evidence.
             if self.documents or self.citations or self.as_of_dates:
-                if not isinstance(self.query_plan, CompositeKnowledgeQueryPlan):
+                document_evidence_ids = {
+                    document.evidence_id for document in self.documents
+                }
+                cited_evidence_ids = {
+                    evidence_ref
+                    for citation in self.citations
+                    for evidence_ref in citation.evidence_refs
+                }
+                verified_document_intersection = (
+                    bool(self.documents)
+                    and bool(self.citations)
+                    and all(
+                        item.source_kind is DocumentSourceKind.EXTERNAL_APPROVED
+                        for item in self.documents
+                    )
+                    and all(item.kind == "relation_field" for item in self.citations)
+                    and cited_evidence_ids == document_evidence_ids
+                )
+                if not (
+                    isinstance(self.query_plan, CompositeKnowledgeQueryPlan)
+                    and verified_document_intersection
+                ):
                     raise ValueError(
                         "only external-knowledge not_found may contain source evidence"
                     )
@@ -412,7 +436,10 @@ def routed_result_to_backend(result: RoutedAgentResult) -> BackendAgentResponse:
     audit = current_request_audit()
     status = {
         "executed": (
-            BackendStatus.NOT_FOUND if result.candidate_count == 0 else BackendStatus.SUCCESS
+            BackendStatus.NOT_FOUND
+            if result.candidate_count == 0
+            and result.verified_document_intersection_count == 0
+            else BackendStatus.SUCCESS
         ),
         "clarify": BackendStatus.CLARIFICATION,
         "unsupported": BackendStatus.UNSUPPORTED,
@@ -432,6 +459,18 @@ def routed_result_to_backend(result: RoutedAgentResult) -> BackendAgentResponse:
         *_product_citations(result.products),
         *_comparison_citations(result.comparisons),
         *_aggregate_citations(result.aggregates),
+        *(
+            SourceCitation(
+                citation_id=f"official-document:{document.evidence_id}",
+                kind="relation_field",
+                label=document.title,
+                source_id=str(document.metadata.get("publisher", document.document_id)),
+                source_locator=document.source_uri,
+                as_of=document.as_of,
+                evidence_refs=[document.evidence_id],
+            )
+            for document in result.documents
+        ),
     ]
     evidence_ref_count = len(
         {evidence_ref for citation in citations for evidence_ref in citation.evidence_refs}
@@ -455,6 +494,7 @@ def routed_result_to_backend(result: RoutedAgentResult) -> BackendAgentResponse:
                 for cell in comparison.cells
                 if cell.as_of is not None
             ),
+            *(document.as_of for document in result.documents),
             *(
                 bound
                 for evidence in result.aggregates
@@ -503,9 +543,9 @@ def routed_result_to_backend(result: RoutedAgentResult) -> BackendAgentResponse:
         products=result.products,
         comparisons=[] if status is BackendStatus.NOT_FOUND else result.comparisons,
         aggregates=result.aggregates,
-        documents=[],
-        citations=[] if status is BackendStatus.NOT_FOUND else citations,
-        as_of_dates=[] if status is BackendStatus.NOT_FOUND else as_of_dates,
+        documents=result.documents,
+        citations=citations,
+        as_of_dates=as_of_dates,
         warnings=result.warnings,
         answer_mode=answer_mode,
         fallback_used=answer_mode is BackendAnswerMode.DETERMINISTIC_FALLBACK,

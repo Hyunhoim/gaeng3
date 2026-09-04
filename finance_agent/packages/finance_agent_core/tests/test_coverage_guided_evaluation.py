@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import shutil
 import subprocess
 
 import pytest
@@ -344,6 +345,8 @@ def test_coverage_campaign_preflight_rejects_unbound_nonempty_output(tmp_path) -
 
 
 def test_coverage_campaign_git_lock_rejects_nonignored_untracked_source(tmp_path) -> None:
+    if shutil.which("git") is None:
+        pytest.skip("minimal runtime image intentionally excludes the git CLI")
     subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
     (tmp_path / ".gitignore").write_text("artifacts/\n", encoding="utf-8")
     (tmp_path / "tracked.py").write_text("VALUE = 1\n", encoding="utf-8")

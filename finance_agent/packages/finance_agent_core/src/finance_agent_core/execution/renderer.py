@@ -265,8 +265,7 @@ def _comparison_evidence(cell: ComparisonCell) -> str:
 
 
 def _comparison_delta(field: FieldComparison) -> str:
-    if field.status in {"numeric_delta", "stale_input"}:
-        assert field.delta is not None
+    if field.status in {"numeric_delta", "stale_input"} and field.delta is not None:
         if field.unit == "pct_point":
             value = f"{_format_decimal(field.delta)}%p"
         elif field.unit == "source_currency_amount":
@@ -303,6 +302,8 @@ def _comparison_ranking(field: FieldComparison) -> str | None:
     def label(cell: ComparisonCell) -> str:
         return cell.product_name or cell.product_id
 
+    if len(field.cells) != 2:
+        return None
     first, second = field.cells
     if field.delta == 0:
         return f"  - 두 상품의 {field.label}이(가) 같습니다"
@@ -331,7 +332,14 @@ def render_verified_comparison(
         ),
         "비교 대상:",
     ]
-    records_by_id = {record.product_id: record for record in comparison.verified.records}
+    records_by_id = {
+        (
+            record.product_id.split(":", 1)[0]
+            if verified.manifest.dataset == "bond"
+            else record.product_id
+        ): record
+        for record in comparison.verified.records
+    }
     for index, product_id in enumerate(comparison.requested_product_ids, start=1):
         record = records_by_id.get(product_id)
         if record is None:
@@ -342,23 +350,23 @@ def render_verified_comparison(
         lines.append("확인되지 않은 상품: " + ", ".join(comparison.missing_product_ids))
     lines.append("항목별 비교:")
     for field in comparison.fields:
-        first, second = field.cells
+        ordinal = ("첫 번째", "두 번째", "세 번째")
+        lines.append(f"- {field.label}")
         lines.extend(
-            [
-                f"- {field.label}",
-                f"  - 첫 번째: {_comparison_cell_value(first, field)}",
-                f"  - 두 번째: {_comparison_cell_value(second, field)}",
-                f"  - {_comparison_delta(field)}",
-                (
-                    "  - 근거: "
-                    f"첫 번째 {_comparison_evidence(first)}; "
-                    f"두 번째 {_comparison_evidence(second)}"
-                ),
-            ]
+            f"  - {ordinal[index]}: {_comparison_cell_value(cell, field)}"
+            for index, cell in enumerate(field.cells)
         )
+        lines.append(f"  - {_comparison_delta(field)}")
         ranking = _comparison_ranking(field)
         if ranking is not None:
-            lines.insert(len(lines) - 1, ranking)
+            lines.append(ranking)
+        lines.append(
+            "  - 근거: "
+            + "; ".join(
+                f"{ordinal[index]} {_comparison_evidence(cell)}"
+                for index, cell in enumerate(field.cells)
+            )
+        )
     lines.append(
         "원천: "
         f"{verified.manifest.source_file_name} "
@@ -367,9 +375,13 @@ def render_verified_comparison(
     answer = "\n".join(lines)
     if warnings:
         answer = f"{answer}\n주의: " + " ".join(warnings)
+    if len(comparison.requested_product_ids) == 2:
+        answer += "\n차이는 두 번째 상품 값에서 첫 번째 상품 값을 뺀 값입니다."
+    else:
+        answer += "\n세 상품은 요청에 입력된 순서를 보존해 원천값만 대조했습니다."
     answer += (
-        "\n차이는 두 번째 상품 값에서 첫 번째 상품 값을 뺀 값입니다. "
-        "이 결과는 제공 데이터 조회 결과이며 수익을 보장하거나 투자 판단을 대신하지 않습니다."
+        " 이 결과는 제공 데이터 조회 결과이며 수익을 보장하거나 "
+        "투자 판단을 대신하지 않습니다."
     )
     return answer, warnings
 
@@ -464,7 +476,12 @@ def warning_codes_for_aggregation(
         if "after_tax_yield_pct" in fields:
             codes.append("after_tax_yield_assumptions")
     if verified.manifest.dataset == "fund":
-        codes.extend(["fund_public_scope_locked", "fund_class_level_results"])
+        if any(
+            item.field == "public_offering" and item.value is True
+            for item in plan.constraints
+        ):
+            codes.append("fund_public_scope_locked")
+        codes.append("fund_class_level_results")
         if return_fields & fields:
             codes.append("fund_snapshot_level_returns")
         if "one_year_return_pct" in fields:
@@ -551,6 +568,7 @@ def render_verified_aggregation(
             AggregateFunction.MIN: "최솟값",
             AggregateFunction.MAX: "최댓값",
             AggregateFunction.AVG: "평균",
+            AggregateFunction.MEDIAN: "중앙값",
             AggregateFunction.SUM: "합계",
         }
         lines = [

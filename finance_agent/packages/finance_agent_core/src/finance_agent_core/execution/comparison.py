@@ -38,7 +38,6 @@ _USABLE_QUALITIES = {
 _STALE_BOND_FIELDS = {
     "buy_yield_pct",
     "after_tax_yield_pct",
-    "buyable_quantity",
     "duration_years",
     "applied_yield_pct",
     "evaluation_price",
@@ -73,7 +72,7 @@ class FieldComparison:
     canonical_field: str
     label: str
     unit: str
-    cells: tuple[ComparisonCell, ComparisonCell]
+    cells: tuple[ComparisonCell, ...]
     status: ComparisonStatus
     delta: Decimal | None
     delta_basis: Literal["second_minus_first"] | None
@@ -82,7 +81,7 @@ class FieldComparison:
 
 @dataclass(frozen=True)
 class ProductComparison:
-    requested_product_ids: tuple[str, str]
+    requested_product_ids: tuple[str, ...]
     found_product_ids: tuple[str, ...]
     missing_product_ids: tuple[str, ...]
     verified: VerifiedSearch
@@ -118,10 +117,25 @@ def _usable(evidence: FieldEvidence | None) -> bool:
     )
 
 
+def _comparison_identity(family: str, product_id: str) -> str:
+    """Return the request-facing identity used by a comparison plan.
+
+    Bond rows have a physical storage key (ticker, venue, date, row suffix),
+    while the public identifier supplied by a user is the organizer ticker.
+    Keep the physical ID on evidence objects, but join request targets to rows
+    through this stable logical identity.  Other product families already use
+    their public ID as the storage ID.
+    """
+
+    if family == "bond":
+        return product_id.split(":", 1)[0]
+    return product_id
+
+
 def _field_comparison(
     field_name: str,
     family: str,
-    requested_ids: tuple[str, str],
+    requested_ids: tuple[str, ...],
     records_by_id: dict[str, NormalizedProductRecord],
     products_by_id: dict[str, ProductEvidence],
 ) -> FieldComparison:
@@ -144,37 +158,37 @@ def _field_comparison(
                 ),
             )
         )
-    pair = (cells[0], cells[1])
-    if any(cell.product_name is None for cell in pair):
+    ordered_cells = tuple(cells)
+    if any(cell.product_name is None for cell in ordered_cells):
         return FieldComparison(
             canonical_field=field_name,
             label=definition.label,
             unit=definition.unit,
-            cells=pair,
+            cells=ordered_cells,
             status="incomplete",
             delta=None,
             delta_basis=None,
             reason="requested_product_missing",
         )
-    if not all(_usable(cell.evidence) for cell in pair):
+    if not all(_usable(cell.evidence) for cell in ordered_cells):
         return FieldComparison(
             canonical_field=field_name,
             label=definition.label,
             unit=definition.unit,
-            cells=pair,
+            cells=ordered_cells,
             status="unavailable",
             delta=None,
             delta_basis=None,
             reason="one_or_more_values_unavailable",
         )
     if "trading_currency" in definition.comparison_scope and any(
-        cell.trading_currency is None for cell in pair
+        cell.trading_currency is None for cell in ordered_cells
     ):
         return FieldComparison(
             canonical_field=field_name,
             label=definition.label,
             unit=definition.unit,
-            cells=pair,
+            cells=ordered_cells,
             status="unavailable",
             delta=None,
             delta_basis=None,
@@ -182,13 +196,13 @@ def _field_comparison(
         )
     if (
         "trading_currency" in definition.comparison_scope
-        and pair[0].trading_currency != pair[1].trading_currency
+        and len({cell.trading_currency for cell in ordered_cells}) != 1
     ):
         return FieldComparison(
             canonical_field=field_name,
             label=definition.label,
             unit=definition.unit,
-            cells=pair,
+            cells=ordered_cells,
             status="currency_mismatch",
             delta=None,
             delta_basis=None,
@@ -199,45 +213,56 @@ def _field_comparison(
             canonical_field=field_name,
             label=definition.label,
             unit=definition.unit,
-            cells=pair,
+            cells=ordered_cells,
             status="value_only",
             delta=None,
             delta_basis=None,
             reason="non_numeric_field",
         )
-    first_evidence = pair[0].evidence
-    second_evidence = pair[1].evidence
-    assert first_evidence is not None and second_evidence is not None
+    evidences = tuple(cell.evidence for cell in ordered_cells)
+    assert all(evidence is not None for evidence in evidences)
     if (
         definition.as_of_basis.value in {"dynamic", "snapshot"}
-        and first_evidence.as_of != second_evidence.as_of
+        and len({evidence.as_of for evidence in evidences if evidence is not None}) != 1
     ):
         return FieldComparison(
             canonical_field=field_name,
             label=definition.label,
             unit=definition.unit,
-            cells=pair,
+            cells=ordered_cells,
             status="as_of_mismatch",
             delta=None,
             delta_basis=None,
             reason="field_as_of_mismatch",
         )
-    first = Decimal(str(pair[0].value))
-    second = Decimal(str(pair[1].value))
     stale = any(
-        cell.evidence is not None and cell.evidence.quality is QualityStatus.STALE for cell in pair
+        cell.evidence is not None and cell.evidence.quality is QualityStatus.STALE
+        for cell in ordered_cells
     )
     if family == "bond" and field_name in _STALE_BOND_FIELDS:
         stale = stale or any(
             cell.evidence is not None
             and records_by_id[cell.product_id].source_snapshot_date > cell.evidence.as_of
-            for cell in pair
+            for cell in ordered_cells
         )
+    if len(ordered_cells) > 2:
+        return FieldComparison(
+            canonical_field=field_name,
+            label=definition.label,
+            unit=definition.unit,
+            cells=ordered_cells,
+            status="stale_input" if stale else "value_only",
+            delta=None,
+            delta_basis=None,
+            reason="one_or_more_values_stale" if stale else "multi_product_comparison",
+        )
+    first = Decimal(str(ordered_cells[0].value))
+    second = Decimal(str(ordered_cells[1].value))
     return FieldComparison(
         canonical_field=field_name,
         label=definition.label,
         unit=definition.unit,
-        cells=pair,
+        cells=ordered_cells,
         status="stale_input" if stale else "numeric_delta",
         delta=second - first,
         delta_basis="second_minus_first",
@@ -263,18 +288,29 @@ class ComparisonResultVerifier:
             plan.intent_payload.comparison_fields
         ):
             raise ValueError("comparison field order differs from the QueryPlan")
-        product_ids = {product.product_id for product in comparison.products}
+        family = plan.product_families[0].value
+        product_ids = {
+            _comparison_identity(family, product.product_id)
+            for product in comparison.products
+        }
         if product_ids != set(comparison.found_product_ids):
             raise ValueError("comparison products and found IDs differ")
-        records_by_id = {record.product_id: record for record in comparison.verified.records}
-        products_by_id = {product.product_id: product for product in comparison.products}
-        family = plan.product_families[0].value
+        records_by_id = {
+            _comparison_identity(family, record.product_id): record
+            for record in comparison.verified.records
+        }
+        products_by_id = {
+            _comparison_identity(family, product.product_id): product
+            for product in comparison.products
+        }
         for field in comparison.fields:
             if tuple(cell.product_id for cell in field.cells) != requested:
                 raise ValueError("comparison cell order differs from the request")
             if field.delta is not None:
                 if field.delta_basis != "second_minus_first":
                     raise ValueError("comparison delta basis is invalid")
+                if len(field.cells) != 2:
+                    raise ValueError("comparison delta requires exactly two cells")
                 first, second = field.cells
                 if first.value is None or second.value is None:
                     raise ValueError("comparison delta cannot use a missing value")
@@ -314,16 +350,29 @@ def build_product_comparison(
 
     require_comparison_contract(plan)
     requested = tuple(comparison_product_ids(plan))
-    assert len(requested) == 2
+    assert 2 <= len(requested) <= 3
     family = plan.product_families[0].value
-    records_by_id = {record.product_id: record for record in verified.records}
-    products_by_id = {product.product_id: product for product in products}
-    if len(records_by_id) != len(verified.records):
+    physical_records_by_id = {record.product_id: record for record in verified.records}
+    physical_products_by_id = {product.product_id: product for product in products}
+    if len(physical_records_by_id) != len(verified.records):
         raise ValueError("verified comparison contains duplicate product records")
-    if len(products_by_id) != len(products):
+    if len(physical_products_by_id) != len(products):
         raise ValueError("comparison evidence contains duplicate product IDs")
-    if set(products_by_id) != set(records_by_id):
+    if set(physical_products_by_id) != set(physical_records_by_id):
         raise ValueError("comparison evidence and verified products differ")
+
+    records_by_id = {
+        _comparison_identity(family, record.product_id): record
+        for record in verified.records
+    }
+    products_by_id = {
+        _comparison_identity(family, product.product_id): product
+        for product in products
+    }
+    if len(records_by_id) != len(verified.records):
+        raise ValueError("verified comparison contains duplicate logical product records")
+    if len(products_by_id) != len(products):
+        raise ValueError("comparison evidence contains duplicate logical product IDs")
 
     ordered_records = [
         records_by_id[product_id] for product_id in requested if product_id in records_by_id
@@ -350,7 +399,9 @@ def build_product_comparison(
     )
     comparison = ProductComparison(
         requested_product_ids=requested,
-        found_product_ids=tuple(record.product_id for record in ordered_records),
+        found_product_ids=tuple(
+            product_id for product_id in requested if product_id in records_by_id
+        ),
         missing_product_ids=missing,
         verified=ordered_verified,
         products=tuple(ordered_products),

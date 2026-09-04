@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date
 from enum import StrEnum
-from functools import lru_cache
+from functools import cached_property, lru_cache
 from importlib.resources import files
 from typing import Any
 
@@ -45,6 +45,7 @@ class SourceTransform(StrEnum):
     BOOLEAN_CODE = "boolean_code"
     CODE_MAP = "code_map"
     DAYS_FROM_SNAPSHOT = "days_from_snapshot"
+    SOURCE_PREFERRED_THEN_DAYS_FROM_SNAPSHOT = "source_preferred_then_days_from_snapshot"
     AVAILABLE_ON_SNAPSHOT = "available_on_snapshot"
 
 
@@ -277,6 +278,26 @@ class FieldRegistry(BaseModel):
     datasets: dict[str, DatasetDefinition]
     fields: dict[str, FieldDefinition]
 
+    @cached_property
+    def _resolved_fields_by_dataset(self) -> dict[tuple[str, str], FieldDefinition]:
+        """Resolve immutable dataset overrides once per loaded Registry.
+
+        ``FieldDefinition.resolve`` validates and reconstructs a Pydantic model
+        whenever a canonical field uses a dataset override.  Query execution
+        can ask for the same field tens of thousands of times while the Python
+        verifier independently sorts a result universe.  The Registry itself
+        is frozen, so rebuilding the same immutable definition cannot improve
+        safety; keeping one private, non-serialized resolution per
+        ``(field, dataset)`` removes that repeated validation work without
+        changing any public Registry data.
+        """
+
+        return {
+            (name, dataset): definition.resolve(dataset)
+            for name, definition in self.fields.items()
+            for dataset in definition.datasets
+        }
+
     @model_validator(mode="after")
     def validate_references(self) -> FieldRegistry:
         for name, field_definition in self.fields.items():
@@ -341,7 +362,7 @@ class FieldRegistry(BaseModel):
             raise ValueError(f"{name} is unavailable for product families: {sorted(unsupported)}")
         if len(product_families) != 1:
             raise ValueError("cross-family field resolution is not executable yet")
-        return field_definition.resolve(product_families[0])
+        return self._resolved_fields_by_dataset[(name, product_families[0])]
 
     def _field_datasets(self, definition: FieldDefinition, *, executable_only: bool) -> list[str]:
         if not executable_only:

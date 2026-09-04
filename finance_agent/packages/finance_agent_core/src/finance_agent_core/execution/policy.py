@@ -63,15 +63,15 @@ def comparison_product_ids(plan: QueryPlan) -> list[str]:
         or constraints[0].operator is not ConstraintOperator.IN
         or constraints[0].strength is not ConstraintStrength.LOCKED
         or not isinstance(constraints[0].value, list)
-        or len(constraints[0].value) != 2
+        or not 2 <= len(constraints[0].value) <= 3
         or not all(
             isinstance(product_id, str) and product_id.strip()
             for product_id in constraints[0].value
         )
-        or len(set(constraints[0].value)) != 2
+        or len(set(constraints[0].value)) != len(constraints[0].value)
     ):
         raise PlanExecutionBlockedError(
-            "comparison requires exactly two unique product IDs in one "
+            "comparison requires two or three unique product IDs in one "
             "locked product_id IN constraint"
         )
     return list(constraints[0].value)
@@ -103,8 +103,17 @@ def require_comparison_contract(
         )
     if plan.ranking:
         blockers.append("comparison preserves requested product order and forbids ranking")
-    if plan.limit != 2:
-        blockers.append("comparison limit must equal the two requested products")
+    try:
+        requested_product_count = len(comparison_product_ids(plan))
+    except PlanExecutionBlockedError:
+        requested_product_count = 0
+    if plan.limit != requested_product_count:
+        if plan.limit == 2:
+            blockers.append(
+                "comparison with limit 2 requires exactly two unique product IDs"
+            )
+        else:
+            blockers.append("comparison limit must equal the requested product count")
     allowed_constraint_fields = {"product_id"}
     if plan.product_families == [ProductFamily.FUND]:
         allowed_constraint_fields.add("public_offering")
@@ -218,6 +227,12 @@ def require_aggregate_contract(
                     "amount aggregation requires one locked trading_currency equality "
                     "or trading_currency group_by"
                 )
+        # PRFD01N001 is itself the organizer-supplied public-fund product
+        # family, but the approved executable universe is still the rows whose
+        # independent public_offering attribute is true.  Apply the same
+        # immutable scope used by SEARCH/COMPARE so an aggregate can never
+        # widen from the approved 14,606 public rows to the private-fund rows
+        # that happen to coexist in the supplied master table.
         try:
             require_fund_public_scope(plan)
         except PlanExecutionBlockedError as error:

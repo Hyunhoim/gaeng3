@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import os
+from dataclasses import replace
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from finance_agent_core.agent.providers import (
@@ -11,11 +13,31 @@ from finance_agent_core.agent.providers import (
     HyperClovaXIntentAnalysisProvider,
     HyperClovaXStructuredRequest,
 )
+from finance_agent_core.config.knowledge_coverage import (
+    load_approved_knowledge_coverage_manifest,
+)
+from finance_agent_core.config.source_registry import load_official_source_registry
 from finance_agent_core.observability import BoundedAsyncAuditSink, InMemoryAuditSink
+from finance_agent_core.release import (
+    ExternalKnowledgeArtifactRelease,
+    PublicDocumentRetrievalRelease,
+    PublicExternalKnowledgeRelease,
+    PublicKnowledgeRetrievalRelease,
+    PublicRelationRetrievalRelease,
+    external_knowledge_verifier_contract_sha256,
+)
+from finance_agent_core.retrieval.temporal_relations import (
+    seal_temporal_relation_bundle,
+)
 from pydantic import ValidationError
 
 from app.config import Settings
-from app.dependencies import _load_hcx_api_key, build_agent, require_approval_guard
+from app.dependencies import (
+    _build_external_knowledge_runtime,
+    _load_hcx_api_key,
+    build_agent,
+    require_approval_guard,
+)
 from tests.conftest import stub_resolved_release
 
 
@@ -106,6 +128,7 @@ def test_build_agent_wires_hcx_intent_and_final_answer_without_eager_network_cal
     assert isinstance(agent.intent_analysis_provider, HyperClovaXIntentAnalysisProvider)
     assert isinstance(agent.official_answer_provider, HyperClovaXFinalAnswerProvider)
     assert agent.intent_analysis_provider.model_name == "HCX-007"
+    assert agent.intent_analysis_provider.require_execution_structure is True
     assert agent.official_answer_provider.model_name == "HCX-007"
     assert agent.require_official_hclx
     assert transport.calls == 0
@@ -410,3 +433,151 @@ def test_fund_execution_policy_requires_database_and_enables_only_fund(
 
     assert {family.value for family in settings.capability_execution_overrides} == {"fund"}
     assert {family.value for family in agent.capability_execution_overrides} == {"fund"}
+
+
+def _document_cache_settings_values(tmp_path: Path) -> dict[str, object]:
+    return {
+        "FINANCE_RELEASE_MANIFEST_FILE": tmp_path / "release.json",
+        "FINANCE_DEPLOYMENT_BINDING_FILE": tmp_path / "binding.json",
+        "FINANCE_DEPLOYMENT_BINDING_SHA256": "1" * 64,
+        "FINANCE_SOURCE_COMMIT": "2" * 40,
+        "FINANCE_RUNTIME_IMAGE_REFERENCE": "registry.example/finance@sha256:" + "3" * 64,
+        "FINANCE_ADAPTIVE_SEMANTIC_ENABLED": True,
+        "FINANCE_DENSE_SCHEMA_LINKER_ENABLED": True,
+        "FINANCE_SCHEMA_DENSE_INDEX_FILE": tmp_path / "schema.json",
+        "FINANCE_SCHEMA_DENSE_INDEX_SHA256": "4" * 64,
+        "FINANCE_SCHEMA_DENSE_CALIBRATION_REPORT_SHA256": "5" * 64,
+        "FINANCE_SCHEMA_DENSE_MIN_SCORE": 0.7,
+        "FINANCE_SCHEMA_DENSE_HCLX_CANDIDATE_MIN_SCORE": 0.5,
+        "FINANCE_SCHEMA_DENSE_MINIMUM_MARGIN": 0.1,
+        "FINANCE_KURE_SNAPSHOT_DIR": tmp_path / "kure",
+        "FINANCE_KURE_SNAPSHOT_MANIFEST_FILE": tmp_path / "kure.json",
+        "FINANCE_KURE_TRUSTED_CACHE_ROOT": tmp_path / "cache",
+        "FINANCE_EXTERNAL_KNOWLEDGE_ENABLED": True,
+        "FINANCE_EXTERNAL_KNOWLEDGE_ARTIFACT_FILE": tmp_path / "external.json",
+        "FINANCE_EXTERNAL_KNOWLEDGE_ARTIFACT_SHA256": "6" * 64,
+        "FINANCE_EXTERNAL_TEMPORAL_RELATION_FILE": tmp_path / "relations.json",
+        "FINANCE_EXTERNAL_TEMPORAL_RELATION_SHA256": "7" * 64,
+        "NAVER_API_HUB_CLIENT_ID_FILE": tmp_path / "naver-id",
+        "NAVER_API_HUB_CLIENT_SECRET_FILE": tmp_path / "naver-secret",
+    }
+
+
+def test_settings_require_document_cache_artifacts_as_one_release_set(tmp_path: Path) -> None:
+    values = _document_cache_settings_values(tmp_path)
+    with pytest.raises(ValidationError, match="both index and activation receipt"):
+        Settings(
+            **values,
+            FINANCE_EXTERNAL_DOCUMENT_DENSE_ARTIFACT_FILE=tmp_path / "dense.json",
+        )
+
+    settings = Settings(
+        **values,
+        FINANCE_EXTERNAL_DOCUMENT_DENSE_ARTIFACT_FILE=tmp_path / "dense.json",
+        FINANCE_EXTERNAL_DOCUMENT_CACHE_ACTIVATION_FILE=tmp_path / "activation.json",
+    )
+    assert settings.document_cache_configured
+
+
+def test_external_runtime_selects_release_pinned_cache_first_builder(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    registry = load_official_source_registry()
+    coverage = load_approved_knowledge_coverage_manifest()
+    corpus_sha = "8" * 64
+    relation_bundle = seal_temporal_relation_bundle(
+        (),
+        corpus_manifest_sha256=corpus_sha,
+        registry=registry,
+    )
+    external = ExternalKnowledgeArtifactRelease(
+        retrieval_mode="approved_corpus_cache_first",
+        source_registry_sha256=registry.canonical_sha256,
+        coverage_manifest_sha256=coverage.canonical_sha256,
+        corpus_manifest_sha256=corpus_sha,
+        document_bm25_sha256="9" * 64,
+        document_dense_sha256="a" * 64,
+        document_activation_receipt_sha256="b" * 64,
+        temporal_relation_sha256=relation_bundle.manifest.relation_set_sha256,
+        verifier_contract_sha256=external_knowledge_verifier_contract_sha256(),
+        embedding_model_revision="d14c8a9423946e268a0c9952fecf3a7aabd73bd9",
+    )
+    artifact_file_sha = "c" * 64
+    knowledge = PublicKnowledgeRetrievalRelease(
+        relation=PublicRelationRetrievalRelease(status="disabled_not_activated"),
+        document=PublicDocumentRetrievalRelease(),
+        external=PublicExternalKnowledgeRelease(
+            status="activated",
+            artifact=external,
+            artifact_file_sha256=artifact_file_sha,
+        ),
+    )
+    base_guard = stub_resolved_release()
+    guard = replace(
+        base_guard,
+        manifest=SimpleNamespace(
+            release_id="finance-agent-test-v1",
+            components=SimpleNamespace(knowledge_retrieval=knowledge),
+        ),
+    )
+    values = _document_cache_settings_values(tmp_path)
+    values["FINANCE_EXTERNAL_KNOWLEDGE_ARTIFACT_SHA256"] = artifact_file_sha
+    settings = Settings(
+        **values,
+        FINANCE_EXTERNAL_DOCUMENT_DENSE_ARTIFACT_FILE=tmp_path / "dense.json",
+        FINANCE_EXTERNAL_DOCUMENT_CACHE_ACTIVATION_FILE=tmp_path / "activation.json",
+    )
+    for name in ("naver-id", "naver-secret"):
+        secret = tmp_path / name
+        secret.write_text("test-secret", encoding="utf-8")
+        secret.chmod(0o600)
+    monkeypatch.setattr(
+        "app.dependencies.load_external_knowledge_artifact_release",
+        lambda **_kwargs: external,
+    )
+    monkeypatch.setattr(
+        "app.dependencies.load_verified_temporal_relation_bundle",
+        lambda *_args, **_kwargs: relation_bundle,
+    )
+    captured: dict[str, object] = {}
+
+    class FakeCache:
+        production_approved = True
+        activation_binding_sha256 = "b" * 64
+        artifact = SimpleNamespace(canonical_sha256="a" * 64)
+
+    def build_cache(**kwargs: object) -> object:
+        captured.update(kwargs)
+        return FakeCache()
+
+    monkeypatch.setattr(
+        "app.dependencies.build_release_pinned_cache_first_discovery",
+        build_cache,
+    )
+    monkeypatch.setattr(
+        "finance_agent_core.execution.external_knowledge_runtime."
+        "CacheFirstOfficialDiscoveryProvider",
+        FakeCache,
+    )
+    monkeypatch.setattr(
+        "app.dependencies.SqliteOfficialProductFactProvider",
+        lambda *_args, **_kwargs: object(),
+    )
+    monkeypatch.setattr(
+        "app.dependencies.ProvidedProductUniverseBuilder",
+        lambda *_args, **_kwargs: object(),
+    )
+    embedding = SimpleNamespace(metadata=SimpleNamespace())
+
+    runtime, universe, compiler = _build_external_knowledge_runtime(
+        settings,
+        guard,
+        embedding_provider=embedding,  # type: ignore[arg-type]
+    )
+
+    assert runtime is not None and universe is not None and compiler is not None
+    assert captured["expected_activation_receipt_sha256"] == "b" * 64
+    assert captured["expected_document_dense_sha256"] == "a" * 64
+    assert captured["expected_document_bm25_sha256"] == "9" * 64
+    assert captured["embedding"] is embedding

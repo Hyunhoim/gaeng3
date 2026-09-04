@@ -7,10 +7,23 @@ from pathlib import Path
 import pytest
 
 from finance_agent_core.agent import RoutedFinanceAgent
+from finance_agent_core.contracts import QueryPlan
+from finance_agent_core.contracts.queryplan import ProductFamily, search_projection
+from finance_agent_core.execution import (
+    ResultVerifier,
+    SQLiteOracle,
+    authorize_internal_evaluation_plan,
+)
+from finance_agent_core.execution.verifier_projection import (
+    ProjectedVerifierRecord,
+    record_cache_covers_verifier_projection,
+    source_only_registry_fields,
+)
 from finance_agent_core.storage import (
     ProductIdentitySnapshotCache,
     RecordSnapshotCache,
     load_record_snapshot_uncached,
+    write_database,
 )
 
 
@@ -149,10 +162,89 @@ def test_routed_comparison_uses_identity_cache_without_full_record_cache(
     identity_stats = identity_cache.stats()
     assert identity_stats.misses == 1
     assert identity_stats.loads == 1
-    assert identity_stats.hits == 1
+    # Each request corroborates the exact identity and the compiler then
+    # reuses that same snapshot: one hit on the first request, two on the next.
+    assert identity_stats.hits == 3
     assert record_cache.stats().loads == 0
 
 
 def test_record_cache_requires_positive_capacity() -> None:
     with pytest.raises(ValueError, match="at least one"):
         RecordSnapshotCache(max_entries=0)
+
+
+def _source_only_leverage_plan() -> QueryPlan:
+    return QueryPlan.model_validate(
+        {
+            "schema_version": "1.0",
+            "question_id": "source-projection-cache",
+            "intent": "search",
+            "product_families": ["overseas_etp"],
+            "constraints": [
+                {
+                    "field": "leverage_factor",
+                    "operator": "gte",
+                    "value": 2,
+                    "unit": "none",
+                    "strength": "locked",
+                }
+            ],
+            "ranking": [],
+            "projection": search_projection("overseas_etp", "leverage_factor"),
+            "limit": 5,
+            "intent_payload": {
+                "comparison_fields": [],
+                "group_by": [],
+                "aggregations": [],
+                "explain_product_ids": [],
+            },
+            "ambiguities": [],
+            "unsupported_conditions": [],
+        }
+    )
+
+
+def test_source_only_registry_fields_are_family_specific_and_cache_ineligible() -> None:
+    plan = _source_only_leverage_plan()
+
+    assert "leverage_factor" in source_only_registry_fields("overseas_etp")
+    assert "leverage_factor" not in source_only_registry_fields("domestic_etp")
+    assert "net_asset_total" in source_only_registry_fields("domestic_etp")
+    assert "fee_type" in source_only_registry_fields("fund")
+    assert not record_cache_covers_verifier_projection(plan)
+
+
+def test_source_only_verifier_fields_use_sqlite_projection_with_record_cache(
+    tmp_path: Path,
+    sample_database: tuple[Path, list[object], object],
+) -> None:
+    _, records, manifest = sample_database
+    source_backed_records = [
+        record.model_copy(
+            update={
+                "source_values": {
+                    **record.source_values,
+                    "cu_lev_fector": "2" if index < 3 else "1",
+                }
+            }
+        )
+        for index, record in enumerate(records)
+    ]
+    path = tmp_path / "source-only-overseas-etp.sqlite3"
+    write_database(path, source_backed_records, manifest)
+    plan = _source_only_leverage_plan()
+    validated = authorize_internal_evaluation_plan(plan, path)
+    executed = SQLiteOracle(path).execute(validated)
+    record_cache = RecordSnapshotCache(max_entries=1)
+    agent = RoutedFinanceAgent(
+        {ProductFamily.OVERSEAS_ETP: path},
+        record_cache=record_cache,
+    )
+
+    universe = agent._record_universe(path, validated)
+    verified = ResultVerifier().verify(plan, executed, universe)
+
+    assert all(isinstance(record, ProjectedVerifierRecord) for record in universe)
+    assert record_cache.stats().loads == 0
+    assert verified.candidate_count == 3
+    assert [record.ticker for record in verified.records] == ["B1", "B2", "B3"]

@@ -224,7 +224,12 @@ def test_server_recovers_explicit_fund_structure_from_hclx_unsupported() -> None
     assert sanitized.intent is InteractionIntent.SEARCH
     assert sanitized.product_families == [ProductFamily.FUND]
     assert [item.capability for item in sanitized.knowledge_requirements] == [
+        KnowledgeCapability.FUND_STRUCTURE_STRATEGY_TREND,
         KnowledgeCapability.FUND_STRUCTURE_STRATEGY_TREND
+    ]
+    assert [item.relation_span for item in sanitized.knowledge_requirements] == [
+        "구조",
+        "판매 동향",
     ]
 
 
@@ -310,14 +315,13 @@ def test_server_builds_explicit_subsidiary_holding_and_risk_chain() -> None:
         KnowledgeCapability.CORPORATE_SUBSIDIARY,
         KnowledgeCapability.PORTFOLIO_HOLDINGS,
         KnowledgeCapability.PRODUCT_RISK_FACTORS,
-        KnowledgeCapability.PRODUCT_RISK_FACTORS,
     ]
     assert plan.requirements[1].depends_on == ("need_1",)
     assert plan.requirements[2].depends_on == ("need_2",)
-    assert plan.requirements[3].depends_on == ("need_2",)
     assert plan.requirements[0].source_registry_ids == (
         "ecopro-corporate",
         "ecopro-official-brochures",
+        "kind-corporate-disclosures",
     )
     assert plan.requirements[1].source_registry_ids == (
         "samsungfund-kodex-newsroom",
@@ -371,6 +375,7 @@ def test_source_selection_uses_registry_and_db_signals_without_entity_policy() -
     assert plan.requirements[0].source_registry_ids == (
         "miraeasset-investments",
         "miraeasset-investments-prod",
+        "miraeasset-tiger-legacy-pdf",
     )
 
 
@@ -432,6 +437,86 @@ def test_hclx_cannot_invent_subject_but_can_propose_bounded_cross_script_alias()
     assert len(sanitized.knowledge_requirements) == 1
     assert sanitized.knowledge_requirements[0].subject_span == "캠브리콘"
     assert sanitized.knowledge_requirements[0].search_aliases == ("Cambricon",)
+
+
+def test_hclx_can_bridge_grounded_non_adjacent_holding_syntax() -> None:
+    question = (
+        "세 공식 팩트시트에서 상위 종목을 확인하고 Apple·삼성전자 중 하나 이상이 "
+        "상위 10개에 들어 있는 ETF만 추려 주세요."
+    )
+    draft = IntentAnalysisDraft(
+        intent=InteractionIntent.SEARCH,
+        product_families=[
+            ProductFamily.DOMESTIC_ETP,
+            ProductFamily.OVERSEAS_ETP,
+        ],
+        evidence_spans=[],
+        needs_clarification=False,
+        knowledge_requirements=[
+            KnowledgeIntentRequirement(
+                capability=KnowledgeCapability.PORTFOLIO_HOLDINGS,
+                subject_span="Apple·삼성전자",
+                relation_span="상위 10개에 들어 있는",
+            )
+        ],
+    )
+
+    sanitized = sanitize_server_authorized_knowledge_draft(question, draft)
+
+    assert [item.model_dump(mode="json") for item in sanitized.knowledge_requirements] == [
+        {
+            "capability": "portfolio_holdings",
+            "subject_span": "Apple·삼성전자",
+            "relation_span": "상위 10개에 들어 있는",
+            "search_aliases": [],
+        }
+    ]
+
+
+def test_related_etp_parser_does_not_promote_connective_as_theme_subject() -> None:
+    question = "최근 6개월 동안 우주항공 테마와 연결 이력이 있는 관련 ETF를 정리해줘."
+    draft = IntentAnalysisDraft(
+        intent=InteractionIntent.SEARCH,
+        product_families=[
+            ProductFamily.DOMESTIC_ETP,
+            ProductFamily.OVERSEAS_ETP,
+        ],
+        evidence_spans=[],
+        needs_clarification=False,
+        knowledge_requirements=[],
+    )
+
+    sanitized = sanitize_server_authorized_knowledge_draft(question, draft)
+
+    assert [(item.capability, item.subject_span) for item in sanitized.knowledge_requirements] == [
+        (KnowledgeCapability.SECTOR_THEME_HISTORY, "우주항공 테마")
+    ]
+
+
+def test_generic_related_investment_product_search_keeps_all_provided_families() -> None:
+    question = "Kimi 관련 투자 상품 있어?"
+    draft = IntentAnalysisDraft(
+        intent=InteractionIntent.UNSUPPORTED,
+        product_families=[],
+        evidence_spans=["Kimi"],
+        needs_clarification=False,
+        knowledge_requirements=[],
+    )
+
+    sanitized = sanitize_server_authorized_knowledge_draft(question, draft)
+
+    assert sanitized.intent is InteractionIntent.SEARCH
+    assert sanitized.product_families == list(ProductFamily)
+    assert [(item.capability, item.subject_span) for item in sanitized.knowledge_requirements] == [
+        (KnowledgeCapability.SECTOR_THEME_HISTORY, "Kimi")
+    ]
+    plan = CompositeKnowledgePlanCompiler().compile(
+        question,
+        "generic-related-product",
+        sanitized,
+    )
+    assert plan.requirements[0].subject == "Kimi"
+    assert plan.requirements[0].predicate == "theme_related"
 
 
 def test_hclx_cross_script_alias_rejects_generic_or_non_ascii_fact_text() -> None:
@@ -855,6 +940,28 @@ def test_server_normalizes_particles_and_builds_parent_only_multihop_chain() -> 
     assert [item.subject for item in plan.requirements] == ["에코프로", "에코프로", "상품"]
     assert plan.requirements[1].depends_on == ("need_1",)
     assert plan.requirements[2].depends_on == ("need_2",)
+
+
+def test_server_adds_only_literal_theme_base_as_document_search_alias() -> None:
+    question = "최근 6개월 동안 우주항공 테마와 연결 이력이 있는 국내 ETF를 정리해줘."
+    sanitized = sanitize_server_authorized_knowledge_draft(
+        question,
+        IntentAnalysisDraft(
+            intent=InteractionIntent.SEARCH,
+            product_families=[ProductFamily.DOMESTIC_ETP],
+            evidence_spans=["우주항공 테마"],
+            needs_clarification=False,
+            knowledge_requirements=[],
+        ),
+    )
+
+    requirement = next(
+        item
+        for item in sanitized.knowledge_requirements
+        if item.capability is KnowledgeCapability.SECTOR_THEME_HISTORY
+    )
+    assert requirement.subject_span == "우주항공 테마"
+    assert requirement.search_aliases == ("우주항공",)
 
 
 def test_live_parent_only_subsidiary_extracts_exact_official_company_spans() -> None:

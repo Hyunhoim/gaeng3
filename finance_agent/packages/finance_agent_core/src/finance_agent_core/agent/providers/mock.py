@@ -193,7 +193,6 @@ def bond_vertical_slice_plan(question_id: str) -> QueryPlan:
                 "remaining_days",
                 "coupon_rate_pct",
                 "buy_yield_pct",
-                "buyable_quantity",
                 "dynamic_as_of",
             ],
             "limit": 5,

@@ -13,6 +13,19 @@ from finance_agent_core.contracts.queryplan import ProductFamily, SortDirection
 from finance_agent_core.contracts.routing import InteractionIntent
 
 
+def _canonical_payload_sha256(payload: object) -> str:
+    serialized = (
+        json.dumps(
+            payload,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        + "\n"
+    ).encode("utf-8")
+    return hashlib.sha256(serialized).hexdigest()
+
+
 class ExternalKnowledgeContractModel(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -23,6 +36,13 @@ class KnowledgePredicate(StrEnum):
     THEME_RELATED = "theme_related"
     DESCRIBES_FUND_STRUCTURE_TREND = "describes_fund_structure_trend"
     HAS_RISK_FACTOR = "has_risk_factor"
+
+
+class KnowledgeMatchMode(StrEnum):
+    """Set operation used across sibling external-relation requirements."""
+
+    ALL = "all"
+    ANY = "any"
 
 
 _CAPABILITY_PREDICATE: dict[KnowledgeCapability, KnowledgePredicate] = {
@@ -93,8 +113,11 @@ class KnowledgeRequirement(ExternalKnowledgeContractModel):
     relation_evidence_span: str = Field(min_length=1, max_length=120)
     product_families: tuple[ProductFamily, ...] = Field(default=(), max_length=4)
     time_range: KnowledgeTimeRange | None = None
-    source_registry_ids: tuple[str, ...] = Field(min_length=1, max_length=20)
-    depends_on: tuple[str, ...] = Field(default=(), max_length=4)
+    # Keep registry scope bounded by the same hard ceiling as the server-owned
+    # search budget. The approved registry may legitimately contain more than
+    # twenty capability-compatible publisher paths.
+    source_registry_ids: tuple[str, ...] = Field(min_length=1, max_length=40)
+    depends_on: tuple[str, ...] = Field(default=(), max_length=8)
 
     @model_validator(mode="after")
     def validate_requirement(self) -> KnowledgeRequirement:
@@ -116,8 +139,21 @@ class KnowledgeRequirement(ExternalKnowledgeContractModel):
         return self
 
 
+ExternalRankingField = Literal[
+    "aum",
+    "total_expense_ratio_pct",
+    "one_day_return_pct",
+    "one_month_return_pct",
+    "three_month_return_pct",
+    "one_year_return_pct",
+    "daily_volume",
+    "daily_trading_value",
+    "twenty_day_volatility_pct",
+]
+
+
 class KnowledgeProductSelection(ExternalKnowledgeContractModel):
-    rank_field: Literal["aum", "one_year_return_pct"]
+    rank_field: ExternalRankingField
     direction: SortDirection
     limit: int = Field(ge=1, le=20)
     value_source: Literal["provided_product_database"] = "provided_product_database"
@@ -138,18 +174,27 @@ class CompositeKnowledgeQueryPlan(ExternalKnowledgeContractModel):
     ]
     evidence_cutoff: date
     requirements: tuple[KnowledgeRequirement, ...] = Field(min_length=1, max_length=8)
+    holding_match_mode: KnowledgeMatchMode = KnowledgeMatchMode.ALL
     product_selection: KnowledgeProductSelection | None = None
     requested_product_fields: tuple[
         Literal[
             "aum",
+            "daily_trading_value",
+            "daily_volume",
             "investment_region",
             "manager",
+            "one_day_return_pct",
+            "one_month_return_pct",
+            "one_year_return_pct",
             "product_name",
             "risk_level",
+            "three_month_return_pct",
             "ticker",
+            "total_expense_ratio_pct",
+            "twenty_day_volatility_pct",
         ],
         ...,
-    ] = Field(default=(), max_length=6)
+    ] = Field(default=(), max_length=15)
     join_order: tuple[str, ...] = Field(min_length=2, max_length=9)
     execution_authorized: bool = False
 
@@ -179,6 +224,11 @@ class CompositeKnowledgeQueryPlan(ExternalKnowledgeContractModel):
                 raise ValueError("knowledge time range exceeds the evidence cutoff")
         if self.requested_product_fields != tuple(sorted(set(self.requested_product_fields))):
             raise ValueError("requested external product fields must be unique and sorted")
+        holding_count = sum(
+            item.capability is KnowledgeCapability.PORTFOLIO_HOLDINGS for item in self.requirements
+        )
+        if holding_count < 2 and self.holding_match_mode is KnowledgeMatchMode.ANY:
+            raise ValueError("ANY holding matching requires at least two holding requirements")
         return self
 
 
@@ -242,22 +292,54 @@ class ProvidedProductCandidateUniverse(ExternalKnowledgeContractModel):
         families = {item.product_family for item in self.candidates}
         if not families <= set(self.database_sha256s):
             raise ValueError("provided candidate family lacks a database hash")
-        if self.explicit_identity_bound and not self.candidates:
-            raise ValueError("an explicit product identity cannot bind an empty universe")
         return self
 
     @property
     def canonical_sha256(self) -> str:
-        payload = (
-            json.dumps(
-                self.model_dump(mode="json"),
-                ensure_ascii=False,
-                sort_keys=True,
-                separators=(",", ":"),
-            )
-            + "\n"
-        ).encode("utf-8")
-        return hashlib.sha256(payload).hexdigest()
+        return _canonical_payload_sha256(self.model_dump(mode="json"))
+
+
+class ExternalSearchExecutionReceipt(ExternalKnowledgeContractModel):
+    """Server-minted, immutable binding for one executable external search.
+
+    ``execution_authorized`` on the semantic plan is deliberately insufficient:
+    execution also requires this receipt to bind the exact plan, DB universe,
+    source policy and resource budget that the server approved.  This removes
+    the old caller-boolean escalation path while keeping non-executing search
+    probes representable.
+    """
+
+    schema_version: Literal["1.0"] = "1.0"
+    authority_kind: Literal["server_authorized_external_route"] = (
+        "server_authorized_external_route"
+    )
+    composite_plan_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    candidate_universe_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    candidate_count: int = Field(ge=0)
+    source_registry_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    budget_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+    @classmethod
+    def bind(
+        cls,
+        *,
+        composite_plan: CompositeKnowledgeQueryPlan,
+        candidate_universe_sha256: str,
+        candidate_count: int,
+        source_registry_sha256: str,
+        budget: ExternalSearchBudget,
+    ) -> ExternalSearchExecutionReceipt:
+        if not composite_plan.execution_authorized:
+            raise ValueError("cannot mint an execution receipt for a candidate-only plan")
+        return cls(
+            composite_plan_sha256=_canonical_payload_sha256(
+                composite_plan.model_dump(mode="json")
+            ),
+            candidate_universe_sha256=candidate_universe_sha256,
+            candidate_count=candidate_count,
+            source_registry_sha256=source_registry_sha256,
+            budget_sha256=_canonical_payload_sha256(budget.model_dump(mode="json")),
+        )
 
 
 class ExternalKnowledgeSearchPlan(ExternalKnowledgeContractModel):
@@ -269,11 +351,31 @@ class ExternalKnowledgeSearchPlan(ExternalKnowledgeContractModel):
     candidate_count: int = Field(ge=0)
     source_registry_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     budget: ExternalSearchBudget = Field(default_factory=ExternalSearchBudget)
+    execution_receipt: ExternalSearchExecutionReceipt | None = None
 
     @model_validator(mode="after")
     def validate_search_plan(self) -> ExternalKnowledgeSearchPlan:
-        if not self.composite_plan.execution_authorized:
-            raise ValueError("external search plan requires server execution authority")
+        carries_receipt = self.execution_receipt is not None
+        if self.composite_plan.execution_authorized != carries_receipt:
+            raise ValueError(
+                "external search execution authority requires a matching server receipt"
+            )
+        if self.execution_receipt is not None:
+            receipt = self.execution_receipt
+            if receipt.composite_plan_sha256 != _canonical_payload_sha256(
+                self.composite_plan.model_dump(mode="json")
+            ):
+                raise ValueError("external search receipt plan binding changed")
+            if receipt.candidate_universe_sha256 != self.candidate_universe_sha256:
+                raise ValueError("external search receipt candidate universe binding changed")
+            if receipt.candidate_count != self.candidate_count:
+                raise ValueError("external search receipt candidate count changed")
+            if receipt.source_registry_sha256 != self.source_registry_sha256:
+                raise ValueError("external search receipt source registry binding changed")
+            if receipt.budget_sha256 != _canonical_payload_sha256(
+                self.budget.model_dump(mode="json")
+            ):
+                raise ValueError("external search receipt budget binding changed")
         return self
 
 
@@ -282,21 +384,34 @@ class ExternalKnowledgeOutcome(ExternalKnowledgeContractModel):
 
     status: ExternalKnowledgeOutcomeStatus
     search_complete: bool
+    verified_product_keys: tuple[tuple[ProductFamily, str], ...] = ()
     verified_product_ids: tuple[str, ...] = ()
     reason_codes: tuple[str, ...] = Field(min_length=1, max_length=20)
 
     @model_validator(mode="after")
     def validate_outcome(self) -> ExternalKnowledgeOutcome:
         if self.status is ExternalKnowledgeOutcomeStatus.SUCCESS:
-            if not self.search_complete or not self.verified_product_ids:
+            if not self.search_complete or not self.verified_product_keys:
                 raise ValueError("SUCCESS requires a complete verified DB intersection")
+            if len(self.verified_product_keys) != len(set(self.verified_product_keys)):
+                raise ValueError("verified product family/ID keys must be unique")
+            if self.verified_product_ids != tuple(
+                product_id for _family, product_id in self.verified_product_keys
+            ):
+                raise ValueError(
+                    "verified product IDs must preserve the family-qualified key order"
+                )
         elif self.status is ExternalKnowledgeOutcomeStatus.NOT_FOUND:
-            if not self.search_complete or self.verified_product_ids:
+            if (
+                not self.search_complete
+                or self.verified_product_keys
+                or self.verified_product_ids
+            ):
                 raise ValueError("NOT_FOUND requires a complete empty DB intersection")
         elif self.status is ExternalKnowledgeOutcomeStatus.CANNOT_VERIFY:
-            if self.search_complete or self.verified_product_ids:
+            if self.search_complete or self.verified_product_keys or self.verified_product_ids:
                 raise ValueError("CANNOT_VERIFY requires an incomplete evidence chain")
-        elif self.verified_product_ids:
+        elif self.verified_product_keys or self.verified_product_ids:
             raise ValueError("control outcomes cannot carry product IDs")
         if self.reason_codes != tuple(sorted(set(self.reason_codes))):
             raise ValueError("external outcome reasons must be unique and sorted")
@@ -308,8 +423,11 @@ __all__ = [
     "ExternalKnowledgeOutcome",
     "ExternalKnowledgeOutcomeStatus",
     "ExternalKnowledgeSearchPlan",
+    "ExternalSearchExecutionReceipt",
     "ExternalSearchBudget",
+    "ExternalRankingField",
     "KnowledgeIntentRequirement",
+    "KnowledgeMatchMode",
     "KnowledgePredicate",
     "KnowledgeProductSelection",
     "KnowledgeRequirement",

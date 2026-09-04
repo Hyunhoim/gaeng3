@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from datetime import date
 from time import perf_counter
 
 from pydantic import BaseModel, ConfigDict
@@ -13,6 +14,7 @@ from finance_agent_core.contracts.external_knowledge import (
     ExternalKnowledgeOutcome,
     ExternalKnowledgeOutcomeStatus,
     ExternalKnowledgeSearchPlan,
+    KnowledgeMatchMode,
     ProvidedProductCandidateUniverse,
 )
 from finance_agent_core.execution.external_knowledge_executor import (
@@ -20,8 +22,14 @@ from finance_agent_core.execution.external_knowledge_executor import (
     ExternalKnowledgeExecutionError,
     ExternalKnowledgeExecutor,
     OfficialProductFactProvider,
+    ProductKey,
+    matched_product_keys,
+    selected_product_keys,
 )
 from finance_agent_core.release import ExternalKnowledgeArtifactRelease
+from finance_agent_core.retrieval.document_discovery import (
+    CacheFirstOfficialDiscoveryProvider,
+)
 from finance_agent_core.retrieval.official_acquisition import (
     OfficialEvidenceAcquisitionCoordinator,
     OfficialEvidenceAcquisitionResult,
@@ -37,6 +45,46 @@ from finance_agent_core.retrieval.temporal_relations import (
     TemporalRelationStore,
     seal_temporal_relation_bundle,
 )
+
+_PRODUCT_EVIDENCE_DATE = (
+    r"(?:(20\d{2})[-./](0?[1-9]|1[0-2])[-./](0?[1-9]|[12]\d|3[01])(?!\d)"
+    r"|(20\d{2})\s*년\s*(0?[1-9]|1[0-2])\s*월\s*"
+    r"(0?[1-9]|[12]\d|3[01])\s*일)"
+)
+
+
+def _parse_product_evidence_date(match: re.Match[str]) -> date | None:
+    values = match.groups()
+    parts = values[:3] if values[0] is not None else values[3:]
+    try:
+        return date(*(int(value) for value in parts if value is not None))
+    except ValueError:
+        return None
+
+
+def _dates_bound_to_product_surface(question: str, surface: str) -> frozenset[date]:
+    """Read an exact date immediately before or after one DB-bound product.
+
+    Both ISO-like dates and natural Korean dates are supported.  The match is
+    intentionally local and requires the exact supplied product surface, so a
+    general date elsewhere in the question cannot be attached to every product
+    in a comparison.
+    """
+
+    escaped = re.escape(surface)
+    patterns = (
+        rf"(?<![0-9A-Za-z가-힣]){escaped}\s*(?:\(\s*)?"
+        rf"{_PRODUCT_EVIDENCE_DATE}(?:\s*\))?\s*(?:기준)?",
+        rf"{_PRODUCT_EVIDENCE_DATE}\s*(?:기준(?:의|으로)?\s*)?"
+        rf"{escaped}(?:과|와|은|는|이|가|의|을|를)?"
+        rf"(?![0-9A-Za-z가-힣])",
+    )
+    parsed: set[date] = set()
+    for pattern in patterns:
+        for match in re.finditer(pattern, question, re.IGNORECASE):
+            if (value := _parse_product_evidence_date(match)) is not None:
+                parsed.add(value)
+    return frozenset(parsed)
 
 
 class ExternalKnowledgeRuntimeResult(BaseModel):
@@ -83,6 +131,18 @@ class ExternalKnowledgeRuntime:
                 and acquisition.relation_store.bundle.relations
             ):
                 raise ValueError("live-only external runtime requires an empty relation cache")
+            if release_artifact.retrieval_mode == "approved_corpus_cache_first":
+                discovery = acquisition.discovery_provider
+                if (
+                    type(discovery) is not CacheFirstOfficialDiscoveryProvider
+                    or not discovery.production_approved
+                    or discovery.activation_binding_sha256
+                    != release_artifact.document_activation_receipt_sha256
+                    or discovery.artifact.canonical_sha256 != release_artifact.document_dense_sha256
+                ):
+                    raise ValueError(
+                        "cache-first external runtime requires its release-pinned approved cache"
+                    )
         self.release_artifact = release_artifact
         self.release_artifact_file_sha256 = release_artifact_file_sha256
         self.live_relation_extractor = live_relation_extractor or VerifiedLiveRelationExtractor()
@@ -91,11 +151,23 @@ class ExternalKnowledgeRuntime:
     def _dependency_targets(
         requirement,
         resolved: dict[str, tuple],
+        *,
+        selected_keys: frozenset[ProductKey] = frozenset(),
     ) -> tuple[tuple[str, tuple[str, ...], tuple | None], ...]:
         targets: dict[str, tuple[str, tuple[str, ...], tuple | None]] = {}
         for dependency in requirement.depends_on:
             for relation in resolved.get(dependency, ()):
                 if requirement.capability is KnowledgeCapability.PRODUCT_RISK_FACTORS:
+                    product_key = (
+                        relation.product_family,
+                        relation.product_id,
+                    )
+                    if (
+                        product_key[0] is None
+                        or product_key[1] is None
+                        or product_key not in selected_keys
+                    ):
+                        continue
                     entities = (
                         item
                         for item in (relation.subject, relation.object)
@@ -120,6 +192,103 @@ class ExternalKnowledgeRuntime:
         return tuple(targets[key] for key in sorted(targets))
 
     @staticmethod
+    def _explicit_product_discovery_terms(
+        requirement,
+        universe: ProvidedProductCandidateUniverse,
+    ) -> tuple[str, ...]:
+        """Return DB-bound names and identifiers for official discovery only."""
+
+        if not universe.explicit_identity_bound or requirement.capability not in {
+            KnowledgeCapability.PORTFOLIO_HOLDINGS,
+            KnowledgeCapability.SECTOR_THEME_HISTORY,
+            KnowledgeCapability.FUND_STRUCTURE_STRATEGY_TREND,
+            KnowledgeCapability.PRODUCT_RISK_FACTORS,
+        }:
+            return ()
+        terms = (
+            value
+            for candidate in universe.candidates
+            if candidate.product_family in requirement.product_families
+            for value in (candidate.product_name, *candidate.aliases)
+        )
+        return tuple(dict.fromkeys(terms))[:3]
+
+    @staticmethod
+    def _provided_product_discovery_surfaces(
+        requirement,
+        universe: ProvidedProductCandidateUniverse,
+    ) -> tuple[str, ...]:
+        """Expose only the already-fixed DB universe to local candidate ranking."""
+
+        if requirement.capability not in {
+            KnowledgeCapability.PORTFOLIO_HOLDINGS,
+            KnowledgeCapability.SECTOR_THEME_HISTORY,
+            KnowledgeCapability.FUND_STRUCTURE_STRATEGY_TREND,
+            KnowledgeCapability.PRODUCT_RISK_FACTORS,
+        }:
+            return ()
+        values = (
+            value
+            for candidate in universe.candidates
+            if candidate.product_family in requirement.product_families
+            for value in (candidate.product_name, *candidate.aliases)
+        )
+        return tuple(dict.fromkeys(values))
+
+    @staticmethod
+    def _provided_product_evidence_dates(
+        question: str,
+        *,
+        requirement,
+        universe: ProvidedProductCandidateUniverse,
+    ) -> tuple[tuple[str, date], ...]:
+        """Bind explicit per-product ISO dates to DB-authorized identities.
+
+        A comparison can ask for two named products at different dates.  Such
+        dates cannot be represented by the requirement-wide ``time_range``.
+        Only a literal product name/ticker already present in the fixed DB
+        universe may create a binding; dates never widen that universe.
+        """
+
+        if (
+            requirement.capability is not KnowledgeCapability.PORTFOLIO_HOLDINGS
+            or not universe.explicit_identity_bound
+        ):
+            return ()
+        bindings: dict[str, date] = {}
+        ambiguous_surfaces: set[str] = set()
+        for candidate in universe.candidates:
+            if candidate.product_family not in requirement.product_families:
+                continue
+            surfaces = tuple(
+                sorted(
+                    dict.fromkeys((candidate.product_name, *candidate.aliases)),
+                    key=lambda value: (-len(value), value.casefold()),
+                )
+            )
+            candidate_dates: set[date] = set()
+            for surface in surfaces:
+                if len(normalize_product_identity(surface)) < 2:
+                    continue
+                candidate_dates.update(
+                    _dates_bound_to_product_surface(question, surface)
+                )
+            if len(candidate_dates) != 1:
+                continue
+            selected_date = next(iter(candidate_dates))
+            for surface in surfaces:
+                key = normalize_product_identity(surface)
+                if len(key) < 2 or key in ambiguous_surfaces:
+                    continue
+                previous = bindings.get(key)
+                if previous is not None and previous != selected_date:
+                    bindings.pop(key, None)
+                    ambiguous_surfaces.add(key)
+                    continue
+                bindings[key] = selected_date
+        return tuple(sorted(bindings.items(), key=lambda item: (item[0], item[1])))
+
+    @staticmethod
     def _identity_only_empty_intersection_allowed(
         requirement,
         universe: ProvidedProductCandidateUniverse,
@@ -137,7 +306,8 @@ class ExternalKnowledgeRuntime:
             requirement.capability is not KnowledgeCapability.SECTOR_THEME_HISTORY
             or requirement.time_range is not None
             or re.search(
-                r"(?:관련\s*(?:된\s*)?)?(?:국내\s*|해외\s*)?(?:ETF|ETN|ETP)",
+                r"(?:관련\s*(?:된\s*)?)?(?:국내\s*|해외\s*)?(?:ETF|ETN|ETP)|"
+                r"관련\s*(?:투자\s*)?상품",
                 requirement.relation_evidence_span,
                 re.IGNORECASE,
             )
@@ -182,6 +352,10 @@ class ExternalKnowledgeRuntime:
         all_snapshots = []
 
         identity_evidence: dict[str, ExternalEvidenceReference] = {}
+        approved_candidate_keys = frozenset(
+            (candidate.product_family, candidate.product_id)
+            for candidate in universe.candidates
+        )
 
         def terminal(status, reasons, *, complete=False):
             return ExternalKnowledgeRuntimeResult(
@@ -199,30 +373,40 @@ class ExternalKnowledgeRuntime:
             )
 
         requirements = search_plan.composite_plan.requirements
-        for requirement in requirements:
+        for requirement_index, requirement in enumerate(requirements):
             if requirement.depends_on:
-                targets = self._dependency_targets(requirement, resolved)
-                if (
-                    requirement.capability is KnowledgeCapability.PRODUCT_RISK_FACTORS
-                    and search_plan.composite_plan.product_selection is not None
-                ):
-                    product_keys = tuple(
-                        sorted(
-                            {
-                                key
-                                for _, _, key in targets
-                                if key is not None and key[0] is not None and key[1] is not None
-                            },
-                            key=lambda item: (item[0].value, item[1]),
+                selected_keys: frozenset[ProductKey] = frozenset()
+                if requirement.capability is KnowledgeCapability.PRODUCT_RISK_FACTORS:
+                    matched_keys = matched_product_keys(search_plan.composite_plan, resolved)
+                    if not matched_keys:
+                        return terminal(
+                            ExternalKnowledgeOutcomeStatus.NOT_FOUND,
+                            ("verified_external_relation_set_empty",),
+                            complete=True,
                         )
-                    )
-                    rank_facts = self.product_fact_provider.fetch(
-                        product_keys,
-                        search_plan.composite_plan.product_selection,
-                        (),
-                    )
-                    selected_keys = {(item.product_family, item.product_id) for item in rank_facts}
-                    targets = tuple(item for item in targets if item[2] in selected_keys)
+                    try:
+                        selected_keys = frozenset(
+                            selected_product_keys(
+                                search_plan.composite_plan,
+                                resolved,
+                                self.product_fact_provider,
+                            )
+                        )
+                    except (KeyError, TypeError, ValueError):
+                        return terminal(
+                            ExternalKnowledgeOutcomeStatus.CANNOT_VERIFY,
+                            ("provided_db_ranking_unavailable",),
+                        )
+                    if not selected_keys:
+                        return terminal(
+                            ExternalKnowledgeOutcomeStatus.CANNOT_VERIFY,
+                            ("provided_db_numeric_ranking_basis_empty",),
+                        )
+                targets = self._dependency_targets(
+                    requirement,
+                    resolved,
+                    selected_keys=selected_keys,
+                )
             else:
                 targets = ((requirement.subject, requirement.search_aliases, None),)
             if not targets:
@@ -234,7 +418,7 @@ class ExternalKnowledgeRuntime:
             requirement_relations = {}
             target_incomplete = False
             target_not_found = 0
-            for target_index, (subject, aliases, _) in enumerate(targets):
+            for target_index, (subject, aliases, required_product_key) in enumerate(targets):
                 remaining_ms = search_plan.budget.deadline_ms - int(
                     (perf_counter() - started) * 1000
                 )
@@ -275,35 +459,62 @@ class ExternalKnowledgeRuntime:
                     )
                 except (OfficialLiveEvidenceError, ValueError):
                     reused = []
+                if required_product_key is not None:
+                    reused = [
+                        relation
+                        for relation in reused
+                        if (relation.product_family, relation.product_id) == required_product_key
+                    ]
+                reused = [
+                    relation
+                    for relation in reused
+                    if (relation.product_family, relation.product_id)
+                    in approved_candidate_keys
+                ]
                 if reused:
                     requirement_relations.update(
                         {relation.relation_id: relation for relation in reused}
                     )
                     continue
+                future_requirement_slots = len(requirements) - requirement_index - 1
+                acquisition_slots = max(
+                    1,
+                    targets_left + future_requirement_slots,
+                )
+                query_budget = max(1, remaining_queries // acquisition_slots)
+                source_count = len(effective.source_registry_ids)
+                # One exact typed query per source is the coverage floor. A
+                # second broad/factsheet variant is admitted only when the
+                # global budget leaves room for later requirements/targets.
+                query_budget = min(
+                    remaining_queries,
+                    max(
+                        min(source_count, query_budget),
+                        min(source_count * 2, query_budget),
+                    ),
+                )
+                explicit_product_terms = self._explicit_product_discovery_terms(
+                    effective,
+                    universe,
+                )
+                product_evidence_dates = self._provided_product_evidence_dates(
+                    search_plan.composite_plan.question,
+                    requirement=effective,
+                    universe=universe,
+                )
                 item = self.acquisition.acquire(
                     effective,
-                    discovery_terms=(
-                        tuple(
-                            dict.fromkeys(
-                                candidate.product_name
-                                for candidate in universe.candidates
-                                if candidate.product_family in effective.product_families
-                            )
-                        )[:3]
-                        if (
-                            effective.capability is KnowledgeCapability.PORTFOLIO_HOLDINGS
-                            and universe.explicit_identity_bound
-                        )
-                        else ()
+                    discovery_terms=explicit_product_terms,
+                    provided_product_surfaces=self._provided_product_discovery_surfaces(
+                        effective,
+                        universe,
                     ),
+                    provided_product_evidence_dates=product_evidence_dates,
                     top_k=min(
                         search_plan.budget.max_candidates_per_requirement,
                         max(1, remaining_fetches // targets_left),
                     ),
-                    max_search_queries=min(
-                        remaining_queries,
-                        len(effective.source_registry_ids),
-                    ),
+                    max_search_queries=query_budget,
                     max_fetches=max(1, remaining_fetches // targets_left),
                     max_total_bytes=remaining_bytes,
                     deadline_ms=remaining_ms,
@@ -346,9 +557,151 @@ class ExternalKnowledgeRuntime:
                         )
                     except (OfficialLiveEvidenceError, ValueError):
                         extracted = ()
+                if required_product_key is not None:
+                    extracted = tuple(
+                        relation
+                        for relation in extracted
+                        if (relation.product_family, relation.product_id) == required_product_key
+                    )
+                raw_relation_evidence_found = bool(extracted)
+                extracted = tuple(
+                    relation
+                    for relation in extracted
+                    if (relation.product_family, relation.product_id)
+                    in approved_candidate_keys
+                )
+                if (
+                    not extracted
+                    and raw_relation_evidence_found
+                    and item.search_complete
+                ):
+                    # The official evidence search completed and proved only
+                    # products outside the DB-filtered universe.  This is a
+                    # verified empty intersection, not a retrieval failure.
+                    target_not_found += 1
+                    continue
+                evidence_snapshots = item.snapshots
+                if (
+                    not extracted
+                    and item.status
+                    is OfficialEvidenceAcquisitionStatus.LIVE_EVIDENCE_CANDIDATE
+                    and item.search_query_count == 0
+                    and isinstance(
+                        self.acquisition.discovery_provider,
+                        CacheFirstOfficialDiscoveryProvider,
+                    )
+                ):
+                    # A Document Dense hit is only a URL proposal.  If the
+                    # refetched bytes fail the exact subject/relation/product
+                    # checks, treat it as a semantic cache miss and spend the
+                    # remaining bounded budget on the official live provider.
+                    # Without this second stage, one high-scoring but stale or
+                    # neighbouring official document permanently suppresses a
+                    # valid result that live search could verify.
+                    remaining_ms = search_plan.budget.deadline_ms - int(
+                        (perf_counter() - started) * 1000
+                    )
+                    if (
+                        min(remaining_queries, remaining_fetches, remaining_bytes) > 0
+                        and remaining_ms >= 100
+                    ):
+                        live_item = self.acquisition.acquire(
+                            effective,
+                            discovery_terms=explicit_product_terms,
+                            provided_product_surfaces=(
+                                self._provided_product_discovery_surfaces(
+                                    effective,
+                                    universe,
+                                )
+                            ),
+                            provided_product_evidence_dates=product_evidence_dates,
+                            top_k=min(
+                                search_plan.budget.max_candidates_per_requirement,
+                                max(1, remaining_fetches // targets_left),
+                            ),
+                            max_search_queries=max(1, min(query_budget, remaining_queries)),
+                            max_fetches=max(1, remaining_fetches // targets_left),
+                            max_total_bytes=remaining_bytes,
+                            deadline_ms=remaining_ms,
+                            force_live_discovery=True,
+                        )
+                        acquisitions.append(live_item)
+                        remaining_queries -= live_item.search_query_count
+                        remaining_fetches -= live_item.fetch_count
+                        remaining_bytes -= live_item.fetched_bytes
+                        if live_item.status is OfficialEvidenceAcquisitionStatus.NOT_FOUND:
+                            target_not_found += 1
+                            continue
+                        if live_item.status in {
+                            OfficialEvidenceAcquisitionStatus.CANNOT_VERIFY,
+                            OfficialEvidenceAcquisitionStatus.INTAKE_PENDING,
+                        }:
+                            target_incomplete = True
+                            continue
+                        if live_item.status is OfficialEvidenceAcquisitionStatus.CACHE_HIT:
+                            # ``force_live_discovery`` bypasses only the
+                            # document-URL cache, not the sealed relation
+                            # cache.  Its relation records remain authoritative.
+                            extracted = live_item.relations
+                        else:
+                            all_snapshots.extend(live_item.snapshots)
+                            evidence_snapshots = tuple(
+                                (*evidence_snapshots, *live_item.snapshots)
+                            )
+                            try:
+                                extract_many = getattr(
+                                    self.live_relation_extractor,
+                                    "extract_many",
+                                    None,
+                                )
+                                extracted = (
+                                    tuple(
+                                        extract_many(
+                                            live_item.snapshots,
+                                            effective,
+                                            universe,
+                                        )
+                                    )
+                                    if callable(extract_many)
+                                    else tuple(
+                                        relation
+                                        for snapshot in live_item.snapshots
+                                        for relation in self.live_relation_extractor.extract(
+                                            snapshot,
+                                            effective,
+                                            universe,
+                                        )
+                                    )
+                                )
+                            except (OfficialLiveEvidenceError, ValueError):
+                                extracted = ()
+                        if required_product_key is not None:
+                            extracted = tuple(
+                                relation
+                                for relation in extracted
+                                if (
+                                    relation.product_family,
+                                    relation.product_id,
+                                )
+                                == required_product_key
+                            )
+                        raw_relation_evidence_found = bool(extracted)
+                        extracted = tuple(
+                            relation
+                            for relation in extracted
+                            if (relation.product_family, relation.product_id)
+                            in approved_candidate_keys
+                        )
+                        if (
+                            not extracted
+                            and raw_relation_evidence_found
+                            and live_item.search_complete
+                        ):
+                            target_not_found += 1
+                            continue
                 if not extracted:
                     subject_evidence = self.live_relation_extractor.extract_subject_evidence(
-                        item.snapshots,
+                        evidence_snapshots,
                         effective,
                     )
                     if subject_evidence and self._identity_only_empty_intersection_allowed(
@@ -376,6 +729,13 @@ class ExternalKnowledgeRuntime:
                 return terminal(ExternalKnowledgeOutcomeStatus.CANNOT_VERIFY, reasons)
             if not requirement_relations:
                 if target_not_found == len(targets):
+                    if (
+                        requirement.capability is KnowledgeCapability.PORTFOLIO_HOLDINGS
+                        and not requirement.depends_on
+                        and search_plan.composite_plan.holding_match_mode is KnowledgeMatchMode.ANY
+                    ):
+                        resolved[requirement.requirement_id] = ()
+                        continue
                     return terminal(
                         ExternalKnowledgeOutcomeStatus.NOT_FOUND,
                         ("complete_official_search_empty",),
@@ -388,6 +748,38 @@ class ExternalKnowledgeRuntime:
             ordered = tuple(requirement_relations[key] for key in sorted(requirement_relations))
             resolved[requirement.requirement_id] = ordered
             all_relations.update(requirement_relations)
+
+        matched_keys = matched_product_keys(search_plan.composite_plan, resolved)
+        if (
+            any(
+                requirement.capability is KnowledgeCapability.PORTFOLIO_HOLDINGS
+                for requirement in requirements
+            )
+            and not matched_keys
+        ):
+            return terminal(
+                ExternalKnowledgeOutcomeStatus.NOT_FOUND,
+                ("verified_external_relation_set_empty",),
+                complete=True,
+            )
+        if search_plan.composite_plan.product_selection is not None:
+            try:
+                ranked_keys = selected_product_keys(
+                    search_plan.composite_plan,
+                    resolved,
+                    self.product_fact_provider,
+                )
+            except (KeyError, TypeError, ValueError):
+                return terminal(
+                    ExternalKnowledgeOutcomeStatus.CANNOT_VERIFY,
+                    ("provided_db_ranking_unavailable",),
+                )
+            if not ranked_keys:
+                return terminal(
+                    ExternalKnowledgeOutcomeStatus.NOT_FOUND,
+                    ("provided_db_numeric_ranking_basis_empty",),
+                    complete=True,
+                )
 
         corpus_hash = hashlib.sha256(
             (
@@ -413,9 +805,7 @@ class ExternalKnowledgeRuntime:
             ),
             self.acquisition.connector.registry,
         )
-        approved_ids = {
-            (candidate.product_family, candidate.product_id) for candidate in universe.candidates
-        }
+        approved_ids = set(approved_candidate_keys)
         executor = ExternalKnowledgeExecutor(
             relation_store=relation_store,
             product_fact_provider=self.product_fact_provider,
@@ -423,19 +813,24 @@ class ExternalKnowledgeRuntime:
         )
         try:
             execution = executor.execute(search_plan.composite_plan)
-        except ExternalKnowledgeExecutionError:
+        except ExternalKnowledgeExecutionError as error:
+            reason = (
+                "provided_db_requested_fact_unavailable"
+                if "provided product DB" in str(error)
+                else "verified_relation_chain_incomplete"
+            )
             return terminal(
                 ExternalKnowledgeOutcomeStatus.CANNOT_VERIFY,
-                ("verified_relation_chain_incomplete",),
+                (reason,),
             )
-        product_ids = tuple(
+        product_keys = tuple(
             dict.fromkeys(
-                fact.product_id
+                (fact.product_family, fact.product_id)
                 for fact in execution.evidence.product_facts
                 if (fact.product_family, fact.product_id) in approved_ids
             )
         )
-        if not product_ids:
+        if not product_keys:
             return ExternalKnowledgeRuntimeResult(
                 outcome=ExternalKnowledgeOutcome(
                     status=ExternalKnowledgeOutcomeStatus.NOT_FOUND,
@@ -451,7 +846,8 @@ class ExternalKnowledgeRuntime:
             outcome=ExternalKnowledgeOutcome(
                 status=ExternalKnowledgeOutcomeStatus.SUCCESS,
                 search_complete=True,
-                verified_product_ids=product_ids,
+                verified_product_keys=product_keys,
+                verified_product_ids=tuple(product_id for _family, product_id in product_keys),
                 reason_codes=("verified_external_db_intersection",),
             ),
             search_plan=search_plan,
@@ -465,7 +861,7 @@ class ExternalKnowledgeRuntime:
         search_plan: ExternalKnowledgeSearchPlan,
         universe: ProvidedProductCandidateUniverse,
         *,
-        evidence_execution_authorized: bool = False,
+        evidence_execution_authorized: bool | None = None,
     ) -> ExternalKnowledgeRuntimeResult:
         if search_plan.candidate_universe_sha256 != universe.canonical_sha256:
             raise ValueError("external search plan candidate universe changed")
@@ -475,6 +871,14 @@ class ExternalKnowledgeRuntime:
             self.acquisition.connector.registry.canonical_sha256
         ):
             raise ValueError("external search plan source registry changed")
+        receipt_authorized = search_plan.execution_receipt is not None
+        if (
+            evidence_execution_authorized is not None
+            and evidence_execution_authorized is not receipt_authorized
+        ):
+            raise ValueError(
+                "caller execution flag differs from the server-bound external search receipt"
+            )
         if not universe.candidates:
             return ExternalKnowledgeRuntimeResult(
                 outcome=ExternalKnowledgeOutcome(
@@ -486,101 +890,8 @@ class ExternalKnowledgeRuntime:
                 candidate_universe=universe,
                 acquisitions=(),
             )
-        if evidence_execution_authorized:
+        if receipt_authorized:
             return self._execute_authorized_staged(search_plan, universe)
-
-        started = perf_counter()
-        remaining_queries = search_plan.budget.max_search_queries
-        remaining_fetches = search_plan.budget.max_fetches
-        remaining_bytes = search_plan.budget.max_total_bytes
-        acquired: list[OfficialEvidenceAcquisitionResult] = []
-        requirements = search_plan.composite_plan.requirements
-        for requirement_index, requirement in enumerate(requirements):
-            requirements_left = len(requirements) - requirement_index
-            remaining_ms = search_plan.budget.deadline_ms - int((perf_counter() - started) * 1000)
-            if (
-                min(remaining_queries, remaining_fetches, remaining_bytes) <= 0
-                or remaining_ms < 100
-            ):
-                return ExternalKnowledgeRuntimeResult(
-                    outcome=ExternalKnowledgeOutcome(
-                        status=ExternalKnowledgeOutcomeStatus.CANNOT_VERIFY,
-                        search_complete=False,
-                        reason_codes=("external_search_budget_exhausted",),
-                    ),
-                    search_plan=search_plan,
-                    candidate_universe=universe,
-                    acquisitions=tuple(acquired),
-                )
-            # Reserve fetch capacity for every remaining hop.  Passing the
-            # entire remaining budget to an early requirement allowed its
-            # linked documents to starve later holdings/risk joins.
-            requirement_fetch_budget = max(
-                1,
-                remaining_fetches // requirements_left,
-            )
-            requirement_query_budget = min(
-                remaining_queries,
-                len(requirement.source_registry_ids),
-            )
-            item = self.acquisition.acquire(
-                requirement,
-                top_k=min(
-                    search_plan.budget.max_candidates_per_requirement,
-                    requirement_fetch_budget,
-                ),
-                max_search_queries=requirement_query_budget,
-                max_fetches=requirement_fetch_budget,
-                max_total_bytes=remaining_bytes,
-                deadline_ms=remaining_ms,
-            )
-            acquired.append(item)
-            remaining_queries -= item.search_query_count
-            remaining_fetches -= item.fetch_count
-            remaining_bytes -= item.fetched_bytes
-        acquisitions = tuple(acquired)
-        if any(
-            item.status
-            in {
-                OfficialEvidenceAcquisitionStatus.CANNOT_VERIFY,
-                OfficialEvidenceAcquisitionStatus.INTAKE_PENDING,
-            }
-            for item in acquisitions
-        ):
-            reasons = {
-                reason
-                for item in acquisitions
-                for reason in (
-                    item.failure_codes
-                    or (
-                        "external_evidence_intake_pending"
-                        if item.status is OfficialEvidenceAcquisitionStatus.INTAKE_PENDING
-                        else "external_search_incomplete",
-                    )
-                )
-            }
-            return ExternalKnowledgeRuntimeResult(
-                outcome=ExternalKnowledgeOutcome(
-                    status=ExternalKnowledgeOutcomeStatus.CANNOT_VERIFY,
-                    search_complete=False,
-                    reason_codes=tuple(sorted(reasons)),
-                ),
-                search_plan=search_plan,
-                candidate_universe=universe,
-                acquisitions=acquisitions,
-            )
-        if any(item.status is OfficialEvidenceAcquisitionStatus.NOT_FOUND for item in acquisitions):
-            return ExternalKnowledgeRuntimeResult(
-                outcome=ExternalKnowledgeOutcome(
-                    status=ExternalKnowledgeOutcomeStatus.NOT_FOUND,
-                    search_complete=True,
-                    reason_codes=("complete_official_search_empty",),
-                ),
-                search_plan=search_plan,
-                candidate_universe=universe,
-                acquisitions=acquisitions,
-            )
-
         return ExternalKnowledgeRuntimeResult(
             outcome=ExternalKnowledgeOutcome(
                 status=ExternalKnowledgeOutcomeStatus.CANNOT_VERIFY,
@@ -589,7 +900,7 @@ class ExternalKnowledgeRuntime:
             ),
             search_plan=search_plan,
             candidate_universe=universe,
-            acquisitions=acquisitions,
+            acquisitions=(),
         )
 
 

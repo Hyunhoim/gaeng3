@@ -86,8 +86,24 @@ def test_pending_intake_registry_cannot_change_production_source_authority() -> 
     pending = tuple(
         entry for entry in intake.entries if entry.status == "approved_for_snapshot_intake"
     )
-    assert len(pending) == 10
+    pending_source_ids = {entry.source_id for entry in pending}
+    assert pending_source_ids == {
+        "globalx-etf-static-official",
+        "invesco-etf-official",
+    }
     assert {entry.product_families for entry in pending} == {(ProductFamily.OVERSEAS_ETP,)}
+    production_source_ids = {entry.source_id for entry in production.entries}
+    assert pending_source_ids.isdisjoint(production_source_ids)
+    assert {
+        "first-trust-etf-official",
+        "globalx-etf-official",
+        "ishares-etf-official",
+        "proshares-etf-official",
+        "state-street-etf-official",
+        "vaneck-etf-official",
+        "vanguard-etf-official",
+        "wisdomtree-etf-official",
+    }.issubset(production_source_ids)
     assert intake.canonical_sha256 != production.canonical_sha256
 
 

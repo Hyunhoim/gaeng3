@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from decimal import Decimal
+
 from finance_agent_core.config import QualityStatus
 from finance_agent_core.contracts.backend import (
     BackendAgentResponse,
@@ -8,11 +10,20 @@ from finance_agent_core.contracts.backend import (
     SourceCitation,
 )
 from finance_agent_core.contracts.external_knowledge import ExternalKnowledgeOutcomeStatus
+from finance_agent_core.contracts.queryplan import ProductFamily
 from finance_agent_core.domain import FieldEvidence, ProductEvidence
 from finance_agent_core.execution.external_knowledge_runtime import (
     ExternalKnowledgeRuntimeResult,
 )
 from finance_agent_core.retrieval import DocumentEvidence, DocumentSourceKind
+
+
+def _backend_evidence_scalar(value: float | int | str) -> str | int:
+    """Preserve non-integral DB numbers in the DTO's exact string boundary."""
+
+    if isinstance(value, float):
+        return str(Decimal(str(value)))
+    return value
 
 
 def _success_answer(result: ExternalKnowledgeRuntimeResult) -> str:
@@ -143,29 +154,47 @@ def external_knowledge_result_to_backend(
         raise ValueError("external runtime adapter received an unsupported terminal state")
 
     facts = result.execution.evidence.product_facts
-    fields_by_product: dict[str, list[FieldEvidence]] = {}
-    product_name_by_id: dict[str, str] = {}
+    # Product IDs are not globally unique across all four source tables.  Keep
+    # the product family in the internal key so a cross-family result cannot
+    # accidentally merge evidence from two distinct products that happen to
+    # share the same identifier.
+    fields_by_product: dict[tuple[ProductFamily, str], list[FieldEvidence]] = {}
+    product_name_by_key: dict[tuple[ProductFamily, str], str] = {}
+    ordered_product_keys: list[tuple[ProductFamily, str]] = []
     product_citations: list[SourceCitation] = []
     for fact in facts:
+        product_key = (fact.product_family, fact.product_id)
+        if product_key not in product_name_by_key:
+            ordered_product_keys.append(product_key)
         field = FieldEvidence(
             canonical_field=fact.canonical_field,
             source_dataset=fact.source_dataset,
             source_id=fact.source_id,
-            source_key={"product_id": fact.product_id},
+            source_key={
+                "product_family": fact.product_family.value,
+                "product_id": fact.product_id,
+            },
             source_row=fact.source_row,
             source_columns=list(fact.source_columns),
             raw_values={},
-            normalized_value=fact.normalized_value,
+            normalized_value=_backend_evidence_scalar(fact.normalized_value),
             unit=fact.unit,
             as_of=fact.as_of,
-            quality=QualityStatus.VALID,
-            quality_reason=None,
+            quality=fact.quality,
+            quality_reason=(
+                None
+                if fact.quality is QualityStatus.VALID
+                else "제공 데이터의 원천 품질 상태를 그대로 보존했습니다."
+            ),
         )
-        product_name_by_id[fact.product_id] = fact.product_name
-        fields_by_product.setdefault(fact.product_id, []).append(field)
+        product_name_by_key[product_key] = fact.product_name
+        fields_by_product.setdefault(product_key, []).append(field)
         product_citations.append(
             SourceCitation(
-                citation_id=f"product:{fact.product_id}:{fact.canonical_field}",
+                citation_id=(
+                    f"product:{fact.product_family.value}:{fact.product_id}:"
+                    f"{fact.canonical_field}"
+                ),
                 kind="product_field",
                 label=f"{fact.product_name} · {fact.canonical_field}",
                 source_id=fact.source_id,
@@ -217,13 +246,14 @@ def external_knowledge_result_to_backend(
             )
     products = [
         ProductEvidence(
-            product_id=product_id,
-            product_name=product_name_by_id[product_id],
+            product_id=product_key[1],
+            product_name=product_name_by_key[product_key],
             ticker=None,
-            fields=fields_by_product[product_id],
+            fields=fields_by_product[product_key],
         )
-        for product_id in result.outcome.verified_product_ids
-        if product_id in fields_by_product
+        for product_key in ordered_product_keys
+        if product_key in result.outcome.verified_product_keys
+        and product_key in fields_by_product
     ]
     return BackendAgentResponse(
         request_id=plan.question_id,

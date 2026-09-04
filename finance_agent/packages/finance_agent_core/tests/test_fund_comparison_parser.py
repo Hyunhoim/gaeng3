@@ -3,7 +3,6 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
-
 from finance_agent_core.agent import (
     FundComparisonDraft,
     FundProductResolver,
@@ -155,6 +154,95 @@ def test_fund_comparison_fields_preserve_question_order_and_specific_sale_scope(
     assert extract_fund_comparison_fields(
         '"테스트 공모펀드 A C클래스"와 "테스트 공모펀드 B C-e클래스"의 1년 수익률을 비교해줘'
     ) == ["one_year_return_pct"]
+    assert extract_fund_comparison_fields(
+        '"테스트 공모펀드 A C클래스"와 "테스트 공모펀드 B C-e클래스"의 원본 보존 비율을 비교해줘'
+    ) == ["preservation_ratio_pct"]
+    assert extract_fund_comparison_fields(
+        "3개월 및 1년 수익률을 입력 순서대로 비교해줘"
+    ) == ["three_month_return_pct", "one_year_return_pct"]
+    assert extract_fund_comparison_fields(
+        "해외채권·국내주식 비중을 입력 순서대로 비교해줘"
+    ) == ["overseas_bond_ratio_pct", "domestic_stock_ratio_pct"]
+    assert extract_fund_comparison_fields(
+        "국내주식·해외주식 편입비와 환헤지 상태를 비교해줘"
+    ) == [
+        "domestic_stock_ratio_pct",
+        "overseas_stock_ratio_pct",
+        "currency_hedged",
+    ]
+
+
+def test_fund_comparison_accepts_named_ids_and_polite_comparison_request() -> None:
+    question = (
+        "‘테스트 공모펀드 A C클래스’(ID KR0000000001)와 "
+        "‘테스트 공모펀드 B C-e클래스’(ID KR0000000002)의 "
+        "국내주식·해외주식 편입비와 환헤지 상태를 비교 부탁해요."
+    )
+    normalized_question = (
+        "KR0000000001와 KR0000000002의 "
+        "국내주식·해외주식 편입비와 환헤지 상태를 비교 부탁해요."
+    )
+    compiled = compile_fund_comparison_query_plan(
+        question=normalized_question,
+        question_id="fund-labelled-identity-comparison",
+        draft=FundComparisonDraft(
+            target_mentions=["KR0000000001", "KR0000000002"],
+            comparison_fields=extract_fund_comparison_fields(question),
+        ),
+        resolver=_resolver(),
+    )
+
+    assert compiled.targets_complete is True
+    assert compiled.plan.ambiguities == []
+    assert compiled.plan.intent_payload.comparison_fields == [
+        "domestic_stock_ratio_pct",
+        "overseas_stock_ratio_pct",
+        "currency_hedged",
+    ]
+
+
+@pytest.mark.parametrize(
+    ("field_surface", "expected_fields"),
+    [
+        (
+            "3개월 및 1년 수익률",
+            ["three_month_return_pct", "one_year_return_pct"],
+        ),
+        (
+            "국내주식·국내채권 비중",
+            ["domestic_stock_ratio_pct", "domestic_bond_ratio_pct"],
+        ),
+        (
+            "6개월·3년 수익률과 운용속성",
+            [
+                "six_month_return_pct",
+                "three_year_return_pct",
+                "fund_management_attribute",
+            ],
+        ),
+    ],
+)
+def test_fund_comparison_accepts_exact_names_with_coordinated_fields(
+    field_surface: str,
+    expected_fields: list[str],
+) -> None:
+    question = (
+        "'테스트 공모펀드 A C클래스'와 '테스트 공모펀드 B C-e클래스'를 "
+        f"{field_surface} 기준으로 입력한 순서대로 비교해 줘."
+    )
+    provider = RuleFundComparisonDraftProvider()
+    draft = provider.generate_comparison_draft(question, "fund-coordinated")
+    compiled = compile_fund_comparison_query_plan(
+        question=question,
+        question_id="fund-coordinated",
+        draft=draft,
+        resolver=_resolver(),
+    )
+
+    assert draft.comparison_fields == expected_fields
+    assert compiled.targets_complete is True
+    assert compiled.plan.ambiguities == []
+    assert compiled.plan.intent_payload.comparison_fields == expected_fields
 
 
 def test_fund_comparison_compiler_locks_resolved_targets_and_supported_fields() -> None:
@@ -818,6 +906,23 @@ def test_fund_comparison_compiler_accepts_audited_semantic_variants(
             "한 달 수익률이 더 좋고, 위험도는 어떤지 좀 알려줘."
         ),
         "KR0000000001 vs KR0000000003, 공모펀드, 1M 수익률, 위험등급 비교",
+        "KR0000000001와 KR0000000003 공모펀드의 3개월 수익률을 비교해 주세요.",
+        (
+            "공모펀드 KR0000000001, KR0000000003 중 1년 수익률 기준으로 "
+            "어느 쪽이 큰지 알려 주세요."
+        ),
+        (
+            "두 공모펀드 식별자 KR0000000001 및 KR0000000003의 "
+            "3개월 수익률 차이를 확인해 주세요."
+        ),
+        (
+            "공모펀드 KR0000000001와 KR0000000003를 1년 수익률과 "
+            "순자산 기준으로 비교해 주세요."
+        ),
+        (
+            "펀드코드 KR0000000001, KR0000000003의 판매회사 보수와 "
+            "당사 판매 여부를 비교해 주세요."
+        ),
     ],
 )
 def test_fund_comparison_compiler_accepts_audited_natural_id_variants(

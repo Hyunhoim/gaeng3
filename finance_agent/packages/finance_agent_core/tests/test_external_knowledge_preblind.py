@@ -72,7 +72,7 @@ def test_preblind_gate_accepts_release_approved_live_activation(tmp_path) -> Non
             {
                 "report_kind": "document_dense_public_calibration_not_blind",
                 "artifact_sha256": artifact.canonical_sha256,
-                "metrics": {"dense": {"recall_at_5": 1.0}},
+                "metrics": {"hybrid_rrf": {"recall_at_5": 1.0}},
             }
         )
     )

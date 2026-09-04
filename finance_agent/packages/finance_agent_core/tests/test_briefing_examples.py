@@ -60,5 +60,5 @@ def test_unknown_entity_is_safely_controlled_without_evidence() -> None:
     )
 
     assert result.passed
-    assert result.actual_backend_status.value == "unsupported"
+    assert result.actual_backend_status.value == "cannot_verify"
     assert result.evidence_count == 0

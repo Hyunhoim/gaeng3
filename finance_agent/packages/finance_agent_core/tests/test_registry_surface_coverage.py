@@ -110,8 +110,8 @@ def test_a_longer_surface_wins_over_the_shorter_one_it_contains(question: str) -
     "question",
     [
         # A vague metric with no registry surface behind it stays ambiguous.
+        # "비용" is deliberately mapped to 총보수 for ETPs, so it is not listed.
         "가격이 높은 국내 ETF 3개",
-        "비용이 낮은 국내 ETF 3개",
     ],
 )
 def test_a_vague_metric_still_fails_closed(question: str) -> None:

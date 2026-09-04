@@ -47,20 +47,33 @@ jobs:
       FINAL_ANSWER_PROVIDER: hyperclova
       FINAL_HCX_QUERYPLAN_ENABLED: "false"
       FINAL_HCX_INTENT_ANALYSIS_ENABLED: "true"
-      FINAL_HCX_SEMANTIC_RESOLVER_ENABLED: "false"
+      FINAL_HCX_SEMANTIC_RESOLVER_ENABLED: "true"
       FINAL_ADAPTIVE_SEMANTIC_ENABLED: "true"
       FINAL_FUND_EXECUTION_POLICY: public_fund_v1_approved
-      FINAL_SCHEMA_DENSE_INDEX_SHA256: 465f8105d5f7b339b82068f67d8a75ceae63754f0bc8f232cacffed68b37cbc0
-      FINAL_SCHEMA_DENSE_CALIBRATION_REPORT_SHA256: 2aabaf5bb7a2edd5947d102f0851f205d29e27918d69e37c812831d9994d14c1
-      FINAL_SCHEMA_DENSE_CALIBRATION_ARTIFACT_SHA256: dba5fbfdafcce6d74bf03ba0ebb13b3a614061b511b174cf21e89d894ff4708d
+      FINAL_SCHEMA_DENSE_INDEX_SHA256: c215649fdfb3ed21c7122987a5b4ddd6101993871039ddf6b1e7165c08860358
+      FINAL_SCHEMA_DENSE_CALIBRATION_REPORT_SHA256: 25f854e88f8a11ca4d65e381af67303ac1cad375bc2eb44d5e7b4063aeb5b458
+      FINAL_SCHEMA_DENSE_CALIBRATION_ARTIFACT_SHA256: 68978674def32d8613b3e0fd20c624ada9ebc9b6330f64ea172836ac5b31932b
       FINAL_SCHEMA_DENSE_MIN_SCORE: "0.340015"
       FINAL_SCHEMA_DENSE_HCLX_CANDIDATE_MIN_SCORE: "0.3"
-      FINAL_SCHEMA_DENSE_MINIMUM_MARGIN: "0.042213"
+      FINAL_SCHEMA_DENSE_MINIMUM_MARGIN: "0.042771"
       FINAL_SCHEMA_DENSE_TOP_K: "10"
-      TRACKED_SCHEMA_DENSE_INDEX: ${{ github.workspace }}/finance_agent/artifacts/runtime/schema-dense/kure-schema-dense-production-v3-20260829.json
-      TRACKED_SCHEMA_DENSE_CALIBRATION_REPORT: ${{ github.workspace }}/finance_agent/artifacts/evaluation/kure-schema-dense-p1-selective-v15-20260829.json
+      TRACKED_SCHEMA_DENSE_INDEX: ${{ github.workspace }}/finance_agent/artifacts/runtime/schema-dense/kure-schema-dense-production-v6-margin42771-20260902.json
+      TRACKED_SCHEMA_DENSE_CALIBRATION_REPORT: ${{ github.workspace }}/finance_agent/artifacts/evaluation/kure-schema-dense-p1-selective-v17-registry16-phase6-recall-20260902.json
       TRACKED_KURE_SNAPSHOT_MANIFEST: ${{ github.workspace }}/finance_agent/artifacts/evaluation/schema-embedding/snapshot-manifests/kure-v1-d14c8a9423946e268a0c9952fecf3a7aabd73bd9-snapshot-v2.json
       FINAL_KURE_SNAPSHOT_MANIFEST_SHA256: caa502227d3ed92bb1b5290fc7bced2202c99b70f6846e448c4608551498004c
+      # Empty means verified_live_official. Cache-first can be selected only
+      # through this protected Environment and only with commit-tracked,
+      # independently approved inputs plus their protected SHA-256 anchors.
+      APPROVED_EXTERNAL_RETRIEVAL_MODE: ${{ vars.APPROVED_EXTERNAL_RETRIEVAL_MODE }}
+      APPROVED_DOCUMENT_CORPUS_ROOT: ${{ vars.APPROVED_DOCUMENT_CORPUS_ROOT }}
+      APPROVED_DOCUMENT_CORPUS_MANIFEST: ${{ vars.APPROVED_DOCUMENT_CORPUS_MANIFEST }}
+      APPROVED_DOCUMENT_CORPUS_MANIFEST_SHA256: ${{ vars.APPROVED_DOCUMENT_CORPUS_MANIFEST_SHA256 }}
+      APPROVED_DOCUMENT_DENSE_ARTIFACT: ${{ vars.APPROVED_DOCUMENT_DENSE_ARTIFACT }}
+      APPROVED_DOCUMENT_DENSE_ARTIFACT_SHA256: ${{ vars.APPROVED_DOCUMENT_DENSE_ARTIFACT_SHA256 }}
+      APPROVED_DOCUMENT_CACHE_ACTIVATION: ${{ vars.APPROVED_DOCUMENT_CACHE_ACTIVATION }}
+      APPROVED_DOCUMENT_CACHE_ACTIVATION_SHA256: ${{ vars.APPROVED_DOCUMENT_CACHE_ACTIVATION_SHA256 }}
+      APPROVED_EXTERNAL_TEMPORAL_RELATIONS: ${{ vars.APPROVED_EXTERNAL_TEMPORAL_RELATIONS }}
+      APPROVED_EXTERNAL_TEMPORAL_RELATIONS_SHA256: ${{ vars.APPROVED_EXTERNAL_TEMPORAL_RELATIONS_SHA256 }}
 
     steps:
       - name: Check out the exact source commit
@@ -177,6 +190,21 @@ jobs:
         id: adaptive_artifacts
         run: |
           set -euo pipefail
+          for tracked_artifact in \
+            "$TRACKED_SCHEMA_DENSE_INDEX" \
+            "$TRACKED_SCHEMA_DENSE_CALIBRATION_REPORT" \
+            "$TRACKED_KURE_SNAPSHOT_MANIFEST"; do
+            case "$tracked_artifact" in
+              "$GITHUB_WORKSPACE"/*) ;;
+              *) echo "Adaptive artifact must be inside the clean checkout" >&2; exit 1 ;;
+            esac
+            tracked_relative="${tracked_artifact#"$GITHUB_WORKSPACE"/}"
+            git ls-files --error-unmatch -- "$tracked_relative" >/dev/null || {
+              echo "Adaptive artifact is not tracked by the release commit: $tracked_relative" >&2
+              exit 1
+            }
+            test -f "$tracked_artifact"
+          done
           test "$(sha256sum "$TRACKED_SCHEMA_DENSE_INDEX" | cut -d ' ' -f 1)" = \
             "$FINAL_SCHEMA_DENSE_INDEX_SHA256"
           test "$(sha256sum "$TRACKED_SCHEMA_DENSE_CALIBRATION_REPORT" | cut -d ' ' -f 1)" = \
@@ -238,11 +266,71 @@ jobs:
             --constraint finance_agent/requirements/constraints.txt \
             --requirement fastapi_backend/requirements.txt \
             ./finance_agent/packages/finance_agent_core
+          external_mode="${APPROVED_EXTERNAL_RETRIEVAL_MODE:-verified_live_official}"
+          external_arguments=(
+            --mode "$external_mode"
+            --artifact "$RELEASE_OUTPUT_DIR/external-knowledge-artifact.json"
+            --temporal-relations "$RELEASE_OUTPUT_DIR/external-temporal-relations.json"
+          )
+          if [ "$external_mode" = "approved_corpus_cache_first" ]; then
+            required_cache_inputs=(
+              APPROVED_DOCUMENT_CORPUS_ROOT
+              APPROVED_DOCUMENT_CORPUS_MANIFEST
+              APPROVED_DOCUMENT_CORPUS_MANIFEST_SHA256
+              APPROVED_DOCUMENT_DENSE_ARTIFACT
+              APPROVED_DOCUMENT_DENSE_ARTIFACT_SHA256
+              APPROVED_DOCUMENT_CACHE_ACTIVATION
+              APPROVED_DOCUMENT_CACHE_ACTIVATION_SHA256
+              APPROVED_EXTERNAL_TEMPORAL_RELATIONS
+              APPROVED_EXTERNAL_TEMPORAL_RELATIONS_SHA256
+            )
+            for input_name in "${required_cache_inputs[@]}"; do
+              test -n "${!input_name:-}" || {
+                echo "Protected Document Dense input is missing: $input_name" >&2
+                exit 1
+              }
+            done
+            tracked_cache_paths=(
+              "$APPROVED_DOCUMENT_CORPUS_MANIFEST"
+              "$APPROVED_DOCUMENT_DENSE_ARTIFACT"
+              "$APPROVED_DOCUMENT_CACHE_ACTIVATION"
+              "$APPROVED_EXTERNAL_TEMPORAL_RELATIONS"
+            )
+            for tracked_relative in "${tracked_cache_paths[@]}"; do
+              case "$tracked_relative" in
+                /*|../*|*/../*|*/..) echo "Approved cache path is outside the checkout" >&2; exit 1 ;;
+              esac
+              git ls-files --error-unmatch -- "$tracked_relative" >/dev/null || {
+                echo "Approved cache input is not tracked by the release commit: $tracked_relative" >&2
+                exit 1
+              }
+              test -f "$GITHUB_WORKSPACE/$tracked_relative"
+            done
+            case "$APPROVED_DOCUMENT_CORPUS_ROOT" in
+              /*|../*|*/../*|*/..) echo "Approved corpus root is outside the checkout" >&2; exit 1 ;;
+            esac
+            test -d "$GITHUB_WORKSPACE/$APPROVED_DOCUMENT_CORPUS_ROOT"
+            external_arguments+=(
+              --approved-corpus-manifest "$GITHUB_WORKSPACE/$APPROVED_DOCUMENT_CORPUS_MANIFEST"
+              --approved-corpus-root "$GITHUB_WORKSPACE/$APPROVED_DOCUMENT_CORPUS_ROOT"
+              --approved-corpus-manifest-sha256 "$APPROVED_DOCUMENT_CORPUS_MANIFEST_SHA256"
+              --approved-document-dense "$GITHUB_WORKSPACE/$APPROVED_DOCUMENT_DENSE_ARTIFACT"
+              --approved-document-dense-sha256 "$APPROVED_DOCUMENT_DENSE_ARTIFACT_SHA256"
+              --document-dense-output "$RELEASE_OUTPUT_DIR/document-dense-approved.json"
+              --document-cache-activation "$GITHUB_WORKSPACE/$APPROVED_DOCUMENT_CACHE_ACTIVATION"
+              --document-cache-activation-sha256 "$APPROVED_DOCUMENT_CACHE_ACTIVATION_SHA256"
+              --document-cache-activation-output "$RELEASE_OUTPUT_DIR/document-cache-activation.json"
+              --approved-temporal-relations "$GITHUB_WORKSPACE/$APPROVED_EXTERNAL_TEMPORAL_RELATIONS"
+              --approved-temporal-relations-sha256 "$APPROVED_EXTERNAL_TEMPORAL_RELATIONS_SHA256"
+            )
+          elif [ "$external_mode" != "verified_live_official" ]; then
+            echo "Protected external retrieval mode is invalid" >&2
+            exit 1
+          fi
           PYTHONPATH="$GITHUB_WORKSPACE/finance_agent/packages/finance_agent_core/src" \
             "$RUNNER_TEMP/release-venv/bin/python" \
             -m finance_agent_core.retrieval.external_knowledge_release_cli \
-            --artifact "$RELEASE_OUTPUT_DIR/external-knowledge-artifact.json" \
-            --temporal-relations "$RELEASE_OUTPUT_DIR/external-temporal-relations.json"
+            "${external_arguments[@]}"
           external_knowledge_artifact_sha256="$(
             sha256sum "$RELEASE_OUTPUT_DIR/external-knowledge-artifact.json" | cut -d ' ' -f 1
           )"
@@ -501,6 +589,27 @@ jobs:
             --certificate-oidc-issuer "$OIDC_ISSUER" \
             "$RELEASE_OUTPUT_DIR/deployment-binding.json" \
             > "$RELEASE_OUTPUT_DIR/deployment-binding-verification.txt"
+          release_knowledge_blobs=(
+            "$RELEASE_OUTPUT_DIR/external-knowledge-artifact.json"
+            "$RELEASE_OUTPUT_DIR/external-temporal-relations.json"
+          )
+          if [ -f "$RELEASE_OUTPUT_DIR/document-dense-approved.json" ]; then
+            test -f "$RELEASE_OUTPUT_DIR/document-cache-activation.json"
+            release_knowledge_blobs+=(
+              "$RELEASE_OUTPUT_DIR/document-dense-approved.json"
+              "$RELEASE_OUTPUT_DIR/document-cache-activation.json"
+            )
+          fi
+          for blob in "${release_knowledge_blobs[@]}"; do
+            bundle="${blob%.json}.sigstore.json"
+            verification="${blob%.json}-verification.txt"
+            cosign sign-blob --yes --bundle "$bundle" "$blob"
+            cosign verify-blob \
+              --bundle "$bundle" \
+              --certificate-identity "$WORKFLOW_IDENTITY" \
+              --certificate-oidc-issuer "$OIDC_ISSUER" \
+              "$blob" > "$verification"
+          done
 
       - name: Record non-secret release evidence
         env:
@@ -531,16 +640,27 @@ jobs:
             --relation-artifact-sha256 "$RELATION_RETRIEVAL_ARTIFACT_SHA256" \
             --github-run-id "$TRUSTED_RUN_ID" \
             --github-run-attempt "$TRUSTED_RUN_ATTEMPT"
-          sha256sum \
-            "$RELEASE_OUTPUT_DIR/agent-release-manifest.json" \
-            "$RELEASE_OUTPUT_DIR/deployment-binding.json" \
-            "$RELEASE_OUTPUT_DIR/external-knowledge-artifact.json" \
-            "$RELEASE_OUTPUT_DIR/external-temporal-relations.json" \
-            "$RELEASE_OUTPUT_DIR/image-runtime-boundary.json" \
-            "$RELEASE_OUTPUT_DIR/release-metadata.json" \
-            "$RELEASE_OUTPUT_DIR/schema-dense-index.json" \
-            "$RELEASE_OUTPUT_DIR/schema-dense-calibration-report.json" \
-            "$RELEASE_OUTPUT_DIR/kure-snapshot-manifest.json" \
+          release_artifacts=(
+            "$RELEASE_OUTPUT_DIR/agent-release-manifest.json"
+            "$RELEASE_OUTPUT_DIR/deployment-binding.json"
+            "$RELEASE_OUTPUT_DIR/external-knowledge-artifact.json"
+            "$RELEASE_OUTPUT_DIR/external-temporal-relations.json"
+            "$RELEASE_OUTPUT_DIR/image-runtime-boundary.json"
+            "$RELEASE_OUTPUT_DIR/release-metadata.json"
+            "$RELEASE_OUTPUT_DIR/schema-dense-index.json"
+            "$RELEASE_OUTPUT_DIR/schema-dense-calibration-report.json"
+            "$RELEASE_OUTPUT_DIR/kure-snapshot-manifest.json"
+          )
+          if [ -f "$RELEASE_OUTPUT_DIR/document-dense-approved.json" ]; then
+            test -f "$RELEASE_OUTPUT_DIR/document-cache-activation.json"
+            release_artifacts+=(
+              "$RELEASE_OUTPUT_DIR/document-dense-approved.json"
+              "$RELEASE_OUTPUT_DIR/document-cache-activation.json"
+            )
+          else
+            test ! -e "$RELEASE_OUTPUT_DIR/document-cache-activation.json"
+          fi
+          sha256sum "${release_artifacts[@]}" \
             > "$RELEASE_OUTPUT_DIR/release-artifacts.sha256"
 
       - name: Upload non-secret immutable release evidence
@@ -552,6 +672,8 @@ jobs:
             fastapi_backend/release/deployment-binding.json
             fastapi_backend/release/external-knowledge-artifact.json
             fastapi_backend/release/external-temporal-relations.json
+            fastapi_backend/release/document-dense-approved.json
+            fastapi_backend/release/document-cache-activation.json
             fastapi_backend/release/release-metadata.json
             fastapi_backend/release/release-artifacts.sha256
             fastapi_backend/release/release-image-inspect.json
@@ -566,5 +688,13 @@ jobs:
             fastapi_backend/release/deployment-binding.sigstore.json
             fastapi_backend/release/agent-release-manifest-verification.txt
             fastapi_backend/release/deployment-binding-verification.txt
+            fastapi_backend/release/external-knowledge-artifact.sigstore.json
+            fastapi_backend/release/external-knowledge-artifact-verification.txt
+            fastapi_backend/release/external-temporal-relations.sigstore.json
+            fastapi_backend/release/external-temporal-relations-verification.txt
+            fastapi_backend/release/document-dense-approved.sigstore.json
+            fastapi_backend/release/document-dense-approved-verification.txt
+            fastapi_backend/release/document-cache-activation.sigstore.json
+            fastapi_backend/release/document-cache-activation-verification.txt
           if-no-files-found: error
           retention-days: 90

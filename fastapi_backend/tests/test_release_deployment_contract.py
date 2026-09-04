@@ -117,6 +117,17 @@ def test_adaptive_release_overlay_is_explicit_and_read_only() -> None:
     assert 'FINANCE_PRODUCT_DENSE_ENABLED: "true"' not in overlay
 
 
+def test_document_cache_release_overlay_is_explicit_and_read_only() -> None:
+    overlay = (
+        _repository_root() / "fastapi_backend" / "docker-compose.document-cache.yml"
+    ).read_text(encoding="utf-8")
+
+    assert "FINANCE_EXTERNAL_DOCUMENT_DENSE_ARTIFACT_FILE" in overlay
+    assert "FINANCE_EXTERNAL_DOCUMENT_CACHE_ACTIVATION_FILE" in overlay
+    assert overlay.count("read_only: true") == 2
+    assert overlay.count("create_host_path: false") == 2
+
+
 @pytest.mark.skipif(shutil.which("docker") is None, reason="Docker Compose CLI is unavailable")
 def test_release_compose_renders_only_explicit_relation_trust_source() -> None:
     root = _repository_root()
@@ -217,6 +228,8 @@ def test_final_release_env_example_pins_public_http_and_hcx_answer_only() -> Non
     assert "FINANCE_BACKEND_FUND_EXECUTION_POLICY=public_fund_v1_approved" in example
     assert "FINANCE_ADAPTIVE_SEMANTIC_ENABLED=true" in example
     assert "FINANCE_EXTERNAL_KNOWLEDGE_ENABLED=true" in example
+    assert "Leave the four values below unset for verified_live_official" in example
+    assert "# FINANCE_EXTERNAL_DOCUMENT_DENSE_ARTIFACT_HOST_FILE=" in example
 
 
 def test_release_build_context_is_allowlisted_and_base_has_no_mutable_default() -> None:
@@ -664,7 +677,7 @@ def test_release_launcher_accepts_complete_external_knowledge_profile(tmp_path: 
     temporal_relations = tmp_path / "external-temporal-relations.json"
     client_id = tmp_path / "naver-api-hub-client-id"
     client_secret = tmp_path / "naver-api-hub-client-secret"
-    external_artifact.write_bytes(b'{"artifact":"approved"}\n')
+    external_artifact.write_bytes(b'{"retrieval_mode":"verified_live_official"}\n')
     temporal_relations.write_bytes(b'{"relations":[]}\n')
     external_artifact.chmod(0o444)
     temporal_relations.chmod(0o444)
@@ -715,7 +728,7 @@ def test_release_launcher_rejects_external_knowledge_artifact_hash_mismatch(
     temporal_relations = tmp_path / "external-temporal-relations.json"
     client_id = tmp_path / "naver-api-hub-client-id"
     client_secret = tmp_path / "naver-api-hub-client-secret"
-    external_artifact.write_bytes(b'{"artifact":"approved"}\n')
+    external_artifact.write_bytes(b'{"retrieval_mode":"verified_live_official"}\n')
     temporal_relations.write_bytes(b'{"relations":[]}\n')
     external_artifact.chmod(0o444)
     temporal_relations.chmod(0o444)
@@ -755,6 +768,165 @@ def test_release_launcher_rejects_external_knowledge_artifact_hash_mismatch(
 
     assert completed.returncode == 1
     assert "differs from its trusted SHA-256" in completed.stderr
+    assert not capture.exists()
+
+
+def test_release_launcher_snapshots_and_auto_assembles_approved_document_cache(
+    tmp_path: Path,
+) -> None:
+    environment_path, environment, capture, test_launcher = _release_launcher_fixture(tmp_path)
+    schema_dense = tmp_path / "schema-dense.json"
+    kure_manifest = tmp_path / "kure-manifest.json"
+    kure_cache = tmp_path / "kure-cache"
+    kure_snapshot = (
+        kure_cache
+        / "models--nlpai-lab--KURE-v1/snapshots"
+        / "d14c8a9423946e268a0c9952fecf3a7aabd73bd9"
+    )
+    kure_snapshot.mkdir(parents=True)
+    schema_dense.write_text("{}\n", encoding="utf-8")
+    schema_dense.chmod(0o444)
+    kure_manifest.write_text("{}\n", encoding="utf-8")
+
+    dense = tmp_path / "document-dense-approved.json"
+    activation = tmp_path / "document-cache-activation.json"
+    dense.write_bytes(b'{"approved":"dense"}\n')
+    activation.write_bytes(b'{"approved":"activation"}\n')
+    dense.chmod(0o444)
+    activation.chmod(0o444)
+    dense_sha = hashlib.sha256(dense.read_bytes()).hexdigest()
+    activation_sha = hashlib.sha256(activation.read_bytes()).hexdigest()
+    external_artifact = tmp_path / "external-knowledge-artifact.json"
+    external_artifact.write_text(
+        json.dumps(
+            {
+                "retrieval_mode": "approved_corpus_cache_first",
+                "document_dense_sha256": dense_sha,
+                "document_activation_receipt_sha256": activation_sha,
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    relations = tmp_path / "external-temporal-relations.json"
+    relations.write_text('{"relations":[]}\n', encoding="utf-8")
+    external_artifact.chmod(0o444)
+    relations.chmod(0o444)
+    client_id = tmp_path / "naver-id"
+    client_secret = tmp_path / "naver-secret"
+    client_id.write_text("client-id", encoding="utf-8")
+    client_secret.write_text("client-secret", encoding="utf-8")
+    client_id.chmod(0o600)
+    client_secret.chmod(0o600)
+    with environment_path.open("a", encoding="utf-8") as stream:
+        stream.write(
+            "\n".join(
+                [
+                    "FINANCE_ADAPTIVE_SEMANTIC_ENABLED=true",
+                    f"FINANCE_SCHEMA_DENSE_INDEX_HOST_FILE={schema_dense}",
+                    "FINANCE_SCHEMA_DENSE_INDEX_SHA256=" + "1" * 64,
+                    "FINANCE_SCHEMA_DENSE_CALIBRATION_REPORT_SHA256=" + "2" * 64,
+                    "FINANCE_SCHEMA_DENSE_MIN_SCORE=0.5",
+                    "FINANCE_SCHEMA_DENSE_HCLX_CANDIDATE_MIN_SCORE=0.3",
+                    "FINANCE_SCHEMA_DENSE_MINIMUM_MARGIN=0.1",
+                    f"FINANCE_KURE_CACHE_HOST_DIR={kure_cache}",
+                    f"FINANCE_KURE_SNAPSHOT_MANIFEST_HOST_FILE={kure_manifest}",
+                    "FINANCE_EXTERNAL_KNOWLEDGE_ENABLED=true",
+                    f"FINANCE_EXTERNAL_KNOWLEDGE_ARTIFACT_HOST_FILE={external_artifact}",
+                    "FINANCE_EXTERNAL_KNOWLEDGE_ARTIFACT_FILE=/run/finance-release/external-knowledge-artifact.json",
+                    "FINANCE_EXTERNAL_KNOWLEDGE_ARTIFACT_SHA256="
+                    + hashlib.sha256(external_artifact.read_bytes()).hexdigest(),
+                    f"FINANCE_EXTERNAL_TEMPORAL_RELATION_HOST_FILE={relations}",
+                    "FINANCE_EXTERNAL_TEMPORAL_RELATION_FILE=/run/finance-release/external-temporal-relations.json",
+                    "FINANCE_EXTERNAL_TEMPORAL_RELATION_SHA256="
+                    + hashlib.sha256(relations.read_bytes()).hexdigest(),
+                    f"FINANCE_EXTERNAL_DOCUMENT_DENSE_ARTIFACT_HOST_FILE={dense}",
+                    "FINANCE_EXTERNAL_DOCUMENT_DENSE_ARTIFACT_FILE=/models/document-dense-approved.json",
+                    f"FINANCE_EXTERNAL_DOCUMENT_CACHE_ACTIVATION_HOST_FILE={activation}",
+                    "FINANCE_EXTERNAL_DOCUMENT_CACHE_ACTIVATION_FILE=/run/finance-release/document-cache-activation.json",
+                    f"NAVER_API_HUB_CLIENT_ID_HOST_FILE={client_id}",
+                    "NAVER_API_HUB_CLIENT_ID_FILE=/run/secrets/naver_api_hub_client_id",
+                    f"NAVER_API_HUB_CLIENT_SECRET_HOST_FILE={client_secret}",
+                    "NAVER_API_HUB_CLIENT_SECRET_FILE=/run/secrets/naver_api_hub_client_secret",
+                ]
+            )
+            + "\n"
+        )
+
+    completed = subprocess.run(
+        [str(test_launcher), "config", "--quiet"],
+        cwd=_repository_root(),
+        env=environment,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    arguments = capture.read_text(encoding="utf-8").splitlines()
+    assert "fastapi_backend/docker-compose.adaptive.yml" in arguments
+    assert "fastapi_backend/docker-compose.document-cache.yml" in arguments
+
+
+def test_release_launcher_rejects_document_cache_on_live_only_artifact(
+    tmp_path: Path,
+) -> None:
+    environment_path, environment, capture, test_launcher = _release_launcher_fixture(tmp_path)
+    external = tmp_path / "external.json"
+    relations = tmp_path / "relations.json"
+    dense = tmp_path / "dense.json"
+    activation = tmp_path / "activation.json"
+    client_id = tmp_path / "client-id"
+    client_secret = tmp_path / "client-secret"
+    external.write_bytes(b'{"retrieval_mode":"verified_live_official"}\n')
+    relations.write_bytes(b'{"relations":[]}\n')
+    dense.write_bytes(b'{"dense":"approved"}\n')
+    activation.write_bytes(b'{"activation":"approved"}\n')
+    for artifact in (external, relations, dense, activation):
+        artifact.chmod(0o444)
+    client_id.write_text("client-id", encoding="utf-8")
+    client_secret.write_text("client-secret", encoding="utf-8")
+    client_id.chmod(0o600)
+    client_secret.chmod(0o600)
+    with environment_path.open("a", encoding="utf-8") as stream:
+        stream.write(
+            "\n".join(
+                [
+                    "FINANCE_EXTERNAL_KNOWLEDGE_ENABLED=true",
+                    f"FINANCE_EXTERNAL_KNOWLEDGE_ARTIFACT_HOST_FILE={external}",
+                    "FINANCE_EXTERNAL_KNOWLEDGE_ARTIFACT_FILE=/run/finance-release/external-knowledge-artifact.json",
+                    "FINANCE_EXTERNAL_KNOWLEDGE_ARTIFACT_SHA256="
+                    + hashlib.sha256(external.read_bytes()).hexdigest(),
+                    f"FINANCE_EXTERNAL_TEMPORAL_RELATION_HOST_FILE={relations}",
+                    "FINANCE_EXTERNAL_TEMPORAL_RELATION_FILE=/run/finance-release/external-temporal-relations.json",
+                    "FINANCE_EXTERNAL_TEMPORAL_RELATION_SHA256="
+                    + hashlib.sha256(relations.read_bytes()).hexdigest(),
+                    f"FINANCE_EXTERNAL_DOCUMENT_DENSE_ARTIFACT_HOST_FILE={dense}",
+                    "FINANCE_EXTERNAL_DOCUMENT_DENSE_ARTIFACT_FILE=/models/document-dense-approved.json",
+                    f"FINANCE_EXTERNAL_DOCUMENT_CACHE_ACTIVATION_HOST_FILE={activation}",
+                    "FINANCE_EXTERNAL_DOCUMENT_CACHE_ACTIVATION_FILE=/run/finance-release/document-cache-activation.json",
+                    f"NAVER_API_HUB_CLIENT_ID_HOST_FILE={client_id}",
+                    "NAVER_API_HUB_CLIENT_ID_FILE=/run/secrets/naver_api_hub_client_id",
+                    f"NAVER_API_HUB_CLIENT_SECRET_HOST_FILE={client_secret}",
+                    "NAVER_API_HUB_CLIENT_SECRET_FILE=/run/secrets/naver_api_hub_client_secret",
+                ]
+            )
+            + "\n"
+        )
+
+    completed = subprocess.run(
+        [str(test_launcher), "config", "--quiet"],
+        cwd=_repository_root(),
+        env=environment,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 1
+    assert "live-only external knowledge rejects Document Dense artifacts" in completed.stderr
     assert not capture.exists()
 
 

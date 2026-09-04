@@ -12,6 +12,7 @@ from pydantic import ValidationError
 from finance_agent_core.agent import RoutedFinanceAgent
 from finance_agent_core.agent.knowledge_router import DeterministicKnowledgeRouter
 from finance_agent_core.agent.knowledge_service import KnowledgeAgent
+from finance_agent_core.config import load_field_registry
 from finance_agent_core.execution import PlanAuthorityCode, PlanAuthorityError, SQLiteOracle
 from finance_agent_core.release import (
     AgentReleaseCode,
@@ -116,7 +117,10 @@ def test_release_manifest_pins_code_contract_prompt_data_model_and_disabled_inde
     assert len(manifest.components.code.core_package_sha256) == 64
     assert len(manifest.components.code.backend_package_sha256) == 64
     assert manifest.components.queryplan.schema_version == "1.0"
-    assert manifest.components.field_registry_schema_version == "1.5"
+    assert (
+        manifest.components.field_registry_schema_version
+        == load_field_registry().schema_version
+    )
     assert manifest.components.approved_datasets.snapshots.keys() == {
         "bond",
         "domestic_etp",

@@ -76,6 +76,7 @@ class OfficialSourceEntry(SourceRegistryModel):
         default=(),
         max_length=5,
     )
+    trusted_redirect_source_ids: tuple[str, ...] = Field(default=(), max_length=10)
     status: str = Field(pattern=r"^(?:approved_for_snapshot_intake|approved_for_live_evidence)$")
     publication_date_required: bool = True
 
@@ -122,6 +123,13 @@ class OfficialSourceEntry(SourceRegistryModel):
         serialized = [item.value for item in values]
         if serialized != sorted(serialized) or len(serialized) != len(set(serialized)):
             raise ValueError("historical link capabilities must be unique and sorted")
+        return values
+
+    @field_validator("trusted_redirect_source_ids")
+    @classmethod
+    def validate_trusted_redirect_source_ids(cls, values: tuple[str, ...]) -> tuple[str, ...]:
+        if values != tuple(sorted(values)) or len(values) != len(set(values)):
+            raise ValueError("trusted redirect source IDs must be unique and sorted")
         return values
 
     @model_validator(mode="after")
@@ -195,12 +203,21 @@ class OfficialSourceRegistry(SourceRegistryModel):
         if source_ids != sorted(source_ids) or len(source_ids) != len(set(source_ids)):
             raise ValueError("source registry entries must be unique and sorted")
         host_paths: set[tuple[str, str]] = set()
+        entries_by_id = {entry.source_id: entry for entry in self.entries}
         for entry in self.entries:
             for prefix in entry.path_prefixes:
                 key = (entry.hostname, prefix)
                 if key in host_paths:
                     raise ValueError("source registry path scopes must not overlap exactly")
                 host_paths.add(key)
+            for target_id in entry.trusted_redirect_source_ids:
+                target = entries_by_id.get(target_id)
+                if target is None or target_id == entry.source_id:
+                    raise ValueError("trusted redirect target must be another registered source")
+                if target.publisher != entry.publisher or target.authority is not entry.authority:
+                    raise ValueError("trusted redirect target must preserve publisher authority")
+                if not set(entry.capabilities).issubset(target.capabilities):
+                    raise ValueError("trusted redirect target must preserve source capabilities")
         return self
 
     @property

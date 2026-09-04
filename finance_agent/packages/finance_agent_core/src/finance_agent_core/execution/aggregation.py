@@ -113,12 +113,24 @@ def _average(values: list[Decimal]) -> Decimal:
         )
 
 
+def _median(values: list[Decimal]) -> Decimal:
+    """Return the exact deterministic median, averaging the middle pair if needed."""
+
+    ordered = sorted(values)
+    middle = len(ordered) // 2
+    if len(ordered) % 2:
+        return ordered[middle]
+    return _average([ordered[middle - 1], ordered[middle]])
+
+
 def _reduce_numeric(
     function: AggregateFunction,
     values: list[Decimal],
 ) -> Decimal:
     if function is AggregateFunction.AVG:
         return _average(values)
+    if function is AggregateFunction.MEDIAN:
+        return _median(values)
     if function is AggregateFunction.SUM:
         reduced = Decimal("0")
         for index, value in enumerate(values):
@@ -150,12 +162,12 @@ def _group_sort_key(
     item: tuple[tuple[str | int | bool | None, ...], list[VerifierRecord]],
 ) -> tuple[object, ...]:
     raise_if_request_stopped()
-    key, records = item
+    key, _records = item
     rendered = tuple(
         (value is None, type(value).__name__, "" if value is None else str(value).casefold())
         for value in key
     )
-    return (-len(records), *rendered)
+    return rendered
 
 
 def _aggregate_quality(
@@ -205,7 +217,12 @@ def _metric(
     valid_records: list[VerifierRecord] = []
     for index, record in enumerate(records):
         _periodic_deadline_check(index)
-        if _usable_value(record, field_name) is not None:
+        usable_value = _usable_value(record, field_name)
+        if usable_value is not None and not (
+            definition.value_type.value == "number"
+            and not isinstance(usable_value, bool)
+            and usable_value == 0
+        ):
             valid_records.append(record)
     raise_if_request_stopped()
 
@@ -269,7 +286,9 @@ def aggregate_records(
 ) -> tuple[int, list[AggregateGroup]]:
     """Reduce already-filtered rows using exact Decimal arithmetic.
 
-    Groups are ordered by row count descending and then by canonical group values.
+    Groups are ordered by canonical group values.  Group counts are measures,
+    not an implicit sort request; label order makes the result deterministic
+    and matches explicit ``유형명 오름차순`` presentation grammar.
     ``plan.limit`` limits returned groups, while the first tuple item preserves the
     full group count for truncation disclosure.
     """
@@ -290,6 +309,12 @@ def aggregate_records(
     for index, record in enumerate(selected):
         _periodic_deadline_check(index)
         key = _group_key(record, group_fields)
+        # The organizer's 2026-08-26 clarification treats both missing and
+        # sentinel-zero values as unavailable for a queried field.  A NULL
+        # group is therefore not a real category and must not be surfaced as
+        # if it were one.  Ungrouped aggregation keeps the empty tuple.
+        if group_fields and any(value is None for value in key):
+            continue
         grouped.setdefault(key, []).append(record)
 
     groups: list[AggregateGroup] = []

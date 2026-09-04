@@ -1,0 +1,41 @@
+{
+  "schema_version": "1.0",
+  "report_kind": "external_knowledge_preblind_readiness",
+  "status": "ready_for_independent_blind",
+  "independent_blind_executed": false,
+  "production_execution_enabled": true,
+  "source_registry_sha256": "3b8234b3691ce407c35f5bfe11653cd6124b774fd5c2b75d37e7339aba6ea110",
+  "coverage_manifest_sha256": "e0ca991a6b615affc4cb3439321374336d49a82f1db7647f469c57f90d11adf0",
+  "document_dense_artifact_sha256": "5d77b7487b651cd75ab06d7979bd9b73ea2d6bc33d8b3ea9ecc65bf00d9e99e3",
+  "public_calibration_report_sha256": "4bd7f95c5f39c9c2a957a78c5a4be3db342c6ba257bf5bcd4abcbfa2e1f2eea3",
+  "checks": {
+    "all_capabilities_have_live_source_scope": true,
+    "coverage_execution_is_approved_live_official": true,
+    "document_dense_is_frozen_kure": true,
+    "document_dense_is_offline_only": true,
+    "calibration_is_public_not_blind": true,
+    "calibration_binds_exact_artifact": true,
+    "public_hybrid_recall_at_5_meets_candidate_gate": true
+  },
+  "public_metrics": {
+    "bm25": {
+      "mrr": 0.7854320987654321,
+      "recall_at_3": 0.8888888888888888,
+      "recall_at_5": 0.9333333333333333,
+      "top1_accuracy": 0.6888888888888889
+    },
+    "dense": {
+      "mrr": 0.9007407407407407,
+      "recall_at_3": 0.9333333333333333,
+      "recall_at_5": 0.9555555555555556,
+      "top1_accuracy": 0.8666666666666667
+    },
+    "hybrid_rrf": {
+      "mrr": 0.8755555555555555,
+      "recall_at_3": 0.9555555555555556,
+      "recall_at_5": 1.0,
+      "top1_accuracy": 0.8
+    }
+  },
+  "blockers": []
+}

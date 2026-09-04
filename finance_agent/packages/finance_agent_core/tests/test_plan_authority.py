@@ -10,6 +10,7 @@ from pydantic import ValidationError
 from finance_agent_core.agent import RoutedFinanceAgent
 from finance_agent_core.agent.planning_policy import PlanningDecision
 from finance_agent_core.agent.providers import first_vertical_slice_plan
+from finance_agent_core.config import load_field_registry
 from finance_agent_core.contracts.queryplan import (
     Ambiguity,
     ProductFamily,
@@ -127,7 +128,7 @@ def test_gate_issues_nominal_validated_plan_with_complete_receipt(
     assert receipt.planning_policy_version == "adaptive-shadow-v1"
     assert receipt.capability_matrix_version == "2026-07-30.3"
     assert len(receipt.capability_matrix_sha256) == 64
-    assert receipt.registry_schema_version == "1.5"
+    assert receipt.registry_schema_version == load_field_registry().schema_version
     assert len(receipt.registry_sha256) == 64
     assert len(receipt.ontology_bundle_sha256) == 64
     assert receipt.dataset is ProductFamily.OVERSEAS_ETP

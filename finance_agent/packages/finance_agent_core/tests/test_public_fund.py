@@ -13,6 +13,9 @@ from finance_agent_core.agent import (
     RoutedFinanceAgent,
     compile_fund_comparison_query_plan,
 )
+from finance_agent_core.agent.fund_comparison_parser import (
+    _audited_natural_id_comparison_surface,
+)
 from finance_agent_core.agent.providers import (
     fund_comparison_plan,
     fund_vertical_slice_plan,
@@ -24,7 +27,7 @@ from finance_agent_core.answering import (
 )
 from finance_agent_core.config import QualityStatus
 from finance_agent_core.contracts import QueryPlan
-from finance_agent_core.contracts.queryplan import ProductFamily
+from finance_agent_core.contracts.queryplan import AggregateFunction, ProductFamily
 from finance_agent_core.domain import DatabaseManifest, NormalizedPublicFundRecord
 from finance_agent_core.evaluation.answer_cli import build_parser as build_answer_parser
 from finance_agent_core.evaluation.answer_runner import (
@@ -301,6 +304,21 @@ def write_one_year_return_fund_database(
     return path, result, manifest
 
 
+def test_audited_exact_id_comparison_accepts_rank_delta_and_secondary_field_grammar() -> None:
+    first = "KR0000000001"
+    second = "KR0000000002"
+    question = (
+        f"{first}하고 {second}를 비교해 주세요. 1년 수익률이 큰 쪽부터 "
+        "둘 다 보여주고, 그 값의 차이와 각 상품의 순자산도 적어주세요."
+    )
+    spans = (
+        (question.index(first), question.index(first) + len(first)),
+        (question.index(second), question.index(second) + len(second)),
+    )
+
+    assert _audited_natural_id_comparison_surface(question, spans)
+
+
 def test_routed_fund_comparison_accepts_required_family_prefix(
     tmp_path: Path,
 ) -> None:
@@ -314,7 +332,7 @@ def test_routed_fund_comparison_accepts_required_family_prefix(
         "routed-fund-compare-001",
     )
 
-    assert result.status == "executed"
+    assert result.status == "executed", result.answer
     assert [product.product_id for product in result.products] == [
         "KR0000000001",
         "KR0000000002",
@@ -349,7 +367,7 @@ def test_routed_fund_execution_requires_explicit_family_override(
     ]
 
 
-def test_fund_aggregate_groups_risk_levels_in_public_scope(tmp_path: Path) -> None:
+def test_fund_aggregate_groups_risk_levels_in_supplied_dataset(tmp_path: Path) -> None:
     path, _, _ = write_comparison_fund_database(tmp_path)
     result = RoutedFinanceAgent(
         {"fund": path},
@@ -369,17 +387,63 @@ def test_fund_aggregate_groups_risk_levels_in_public_scope(tmp_path: Path) -> No
     assert "클래스 단위" in result.answer
 
 
+def test_unscoped_fund_count_uses_approved_public_product_scope(tmp_path: Path) -> None:
+    path, _, _ = write_sample_fund_database(tmp_path)
+    result = RoutedFinanceAgent(
+        {"fund": path},
+        allow_internal_disabled_dataset=True,
+    ).answer(
+        "공모펀드는 모두 몇 개인가요? 상품 수만 집계해 주세요.",
+        "aggregate-fund-unscoped-budget",
+    )
+
+    assert result.status == "executed"
+    assert result.candidate_count == 1
+    assert result.products == []
+    assert [(item.function, item.field, item.value) for item in result.aggregates] == [
+        (AggregateFunction.COUNT, "product_id", 1)
+    ]
+    assert any(
+        item.field == "public_offering" and item.value is True
+        for item in result.query_plan.constraints
+    )
+    assert "공모펀드 기본 범위" in result.answer
+
+
+def test_explicit_public_offering_fund_count_keeps_narrow_scope(tmp_path: Path) -> None:
+    path, _, _ = write_sample_fund_database(tmp_path)
+    result = RoutedFinanceAgent(
+        {"fund": path},
+        allow_internal_disabled_dataset=True,
+    ).answer(
+        "모집구분이 공모인 펀드는 총 몇 개인가요?",
+        "aggregate-fund-explicit-public",
+    )
+
+    assert result.status == "executed"
+    assert result.candidate_count == 1
+    assert [(item.function, item.field, item.value) for item in result.aggregates] == [
+        (AggregateFunction.COUNT, "product_id", 1)
+    ]
+    assert any(
+        item.field == "public_offering" and item.value is True
+        for item in result.query_plan.constraints
+    )
+    assert "공모펀드 기본 범위" in result.answer
+
+
 def test_fund_verifier_projection_matches_normalized_records(tmp_path: Path) -> None:
     path, records, manifest = write_sample_fund_database(tmp_path)
     agent = RoutedFinanceAgent(
         {"fund": path},
         allow_internal_disabled_dataset=True,
     )
-    decision = agent.router.route(
+    result = agent.answer(
         "공모펀드의 위험등급별 분포를 집계해줘",
-        "projection-fund-001",
+        "projection-fund-001-runtime",
     )
-    plan = agent.compiler.compile(decision)
+    assert result.query_plan is not None
+    plan = result.query_plan
     validated = _validated(plan, path)
     projected = load_projected_verifier_records(path, validated)
     expected = {record.product_id: record for record in records.products}
@@ -1718,3 +1782,43 @@ def test_public_fund_unknown_sentinels_cannot_match_oracle_filters(
         payload = {**base, "constraints": constraints}
         plan = QueryPlan.model_validate(payload)
         assert SQLiteOracle(path).execute(_validated(plan, path)).candidate_count == 0
+
+
+def test_grouped_fund_average_uses_aggregate_evidence_contract(
+    tmp_path: Path,
+) -> None:
+    path, _, _ = write_comparison_fund_database(tmp_path)
+    agent = RoutedFinanceAgent(
+        {ProductFamily.FUND: path},
+        allow_internal_disabled_dataset=True,
+    )
+
+    result = agent.answer(
+        "공모펀드의 위험등급별 3개월 수익률 평균을 집계해 주세요.",
+        "fund-grouped-average-contract",
+    )
+
+    assert result.status == "executed"
+    assert result.query_plan is not None
+    assert result.query_plan.intent.value == "aggregate"
+    assert result.query_plan.intent_payload.group_by == ["risk_level"]
+    assert [
+        (item.function.value, item.field)
+        for item in result.query_plan.intent_payload.aggregations
+    ] == [("avg", "three_month_return_pct")]
+    assert result.products == []
+    assert result.family_searches == []
+    assert result.candidate_count == 2
+    assert {
+        (
+            item.group_values["risk_level"],
+            item.value,
+            item.row_count,
+            item.valid_count,
+            item.missing_count,
+        )
+        for item in result.aggregates
+    } == {
+        ("높은위험(2등급)", "3.75", 1, 1, 0),
+        ("보통위험(4등급)", "5.25", 1, 1, 0),
+    }

@@ -18,6 +18,8 @@ SOURCE_COLUMNS = (
     "pd_nm",
     "pd_abrv_nm",
     "pd_ctry_cd",
+    "bd_inrt_tcd",
+    "bd_intp_tcd",
     "pd_pbcm",
     "std_pd_mcls_nm",
     "std_pd_scls_nm",
@@ -189,7 +191,17 @@ def normalize_bond_row(
         field="pd_std_info_update",
     )
     dynamic_as_of = dynamic_source_date or snapshot
-    remaining_days = None if maturity_date is None else (maturity_date - snapshot).days
+    raw_remaining_days = _decimal(values.get("remaining_days"), field="remaining_days")
+    if raw_remaining_days is not None:
+        if raw_remaining_days < 0 or raw_remaining_days != raw_remaining_days.to_integral_value():
+            raise BondNormalizationError("remaining_days must be a non-negative integer")
+        remaining_days = int(raw_remaining_days)
+        remaining_days_reason = "official_source_remaining_days"
+    else:
+        remaining_days = None if maturity_date is None else (maturity_date - snapshot).days
+        remaining_days_reason = (
+            None if remaining_days is None else "derived_from_maturity_date_fallback"
+        )
     currently_buyable = True
 
     buy_yield = _micro_decimal(values.get("buy_yield"), field="buy_yield")
@@ -262,7 +274,11 @@ def normalize_bond_row(
         ),
         "remaining_days": _quality(
             remaining_days,
-            missing_reason="maturity_date_missing",
+            missing_reason="remaining_days_and_maturity_date_missing",
+            present_quality=(
+                QualityStatus.VALID if raw_remaining_days is not None else QualityStatus.PARTIAL
+            ),
+            present_reason=remaining_days_reason,
         ),
         "duration_years": _quality(
             duration,

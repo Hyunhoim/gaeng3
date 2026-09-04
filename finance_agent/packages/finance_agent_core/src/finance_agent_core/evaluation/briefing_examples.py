@@ -28,6 +28,7 @@ _SAFE_UNANSWERABLE_STATUSES = {
     BackendStatus.CLARIFICATION,
     BackendStatus.UNSUPPORTED,
     BackendStatus.NOT_FOUND,
+    BackendStatus.CANNOT_VERIFY,
 }
 _GLOBAL_FORBIDDEN_ANSWER_FRAGMENTS = (
     "/home/",

@@ -416,6 +416,39 @@ def test_public_api_classifies_incomplete_external_search_as_cannot_verify() -> 
     assert "safe_cannot_verify_response" in official.think_trace
 
 
+def test_verified_external_relation_precedes_db_ranking_fast_path() -> None:
+    question = (
+        "에코프로의 자회사를 편입한 국내 ETF 중 순자산이 큰 상품의 "
+        "위험요인을 알려줘."
+    )
+    draft = _intent(
+        question,
+        [
+            (KnowledgeCapability.CORPORATE_SUBSIDIARY, "에코프로", "자회사"),
+            (KnowledgeCapability.PORTFOLIO_HOLDINGS, "에코프로", "편입한"),
+            (KnowledgeCapability.PRODUCT_RISK_FACTORS, "상품", "위험요인"),
+        ],
+        [ProductFamily.DOMESTIC_ETP],
+    )
+    agent = RoutedFinanceAgent(
+        {},
+        intent_analysis_provider=_FixedIntentProvider(draft),
+        external_knowledge_router=ExternalKnowledgeRouter(coverage=_disabled_coverage()),
+    )
+
+    result = execute_answer_request(
+        agent,
+        BackendAgentRequest(request_id="external-precedes-db-ranking", question=question),
+    )
+
+    assert result.http_status_code == 200
+    assert result.response.status is BackendStatus.CANNOT_VERIFY
+    assert result.response.query_plan is not None
+    assert result.response.query_plan.plan_kind == "composite_external_knowledge"
+    assert result.response.query_plan.product_selection is not None
+    assert result.response.query_plan.product_selection.rank_field == "aum"
+
+
 @pytest.mark.parametrize(
     ("question", "requirements", "families", "intent", "expected"),
     [

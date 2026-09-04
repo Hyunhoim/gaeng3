@@ -309,6 +309,151 @@ def rebind_pending_corpus_registry(
     return manifest.model_copy(update={"source_registry_sha256": registry.canonical_sha256})
 
 
+def _verified_snapshot_bytes(
+    root: Path,
+    relative_path: str,
+    *,
+    size_bytes: int,
+    sha256: str,
+) -> bytes:
+    try:
+        resolved_root = root.resolve(strict=True)
+        resolved = (resolved_root / relative_path).resolve(strict=True)
+        resolved.relative_to(resolved_root)
+    except (OSError, ValueError) as error:
+        raise PendingCorpusError("pending snapshot path escaped its corpus root") from error
+    if resolved.is_symlink() or not resolved.is_file():
+        raise PendingCorpusError("pending snapshot must be a regular file")
+    content = resolved.read_bytes()
+    if len(content) != size_bytes or hashlib.sha256(content).hexdigest() != sha256:
+        raise PendingCorpusError("pending snapshot bytes differ from the manifest")
+    return content
+
+
+def merge_pending_corpus_roots(
+    output_root: str | Path,
+    source_roots: tuple[str | Path, ...],
+    *,
+    registry: OfficialSourceRegistry,
+) -> PendingCorpusManifest:
+    """Merge verified pending corpora without granting retrieval authority.
+
+    Every source manifest is rebound to the current Source Registry only after
+    its URL, capability, source ID and publisher remain identical. Raw and text
+    bytes are re-hashed before being copied into one atomic output tree.
+    """
+
+    if len(source_roots) < 2:
+        raise PendingCorpusError("at least two pending corpus roots are required")
+    roots = tuple(Path(value) for value in source_roots)
+    manifests = tuple(
+        rebind_pending_corpus_registry(
+            load_pending_corpus_manifest(root / "pending-manifest.json"),
+            registry,
+        )
+        for root in roots
+    )
+    if any(item.evidence_cutoff != registry.evidence_cutoff for item in manifests):
+        raise PendingCorpusError("pending corpus evidence cutoffs differ")
+
+    target = Path(output_root)
+    parent = target.parent.resolve(strict=True)
+    if target.exists() or target.is_symlink():
+        raise PendingCorpusError("merged pending corpus output already exists")
+    staging = Path(tempfile.mkdtemp(prefix=f".{target.name}.", dir=parent))
+    completed = False
+    try:
+        documents_by_id: dict[str, PendingCorpusSnapshot] = {}
+        document_id_by_raw_sha256: dict[str, str] = {}
+        failures_by_id: dict[str, PendingCorpusFailure] = {}
+        for root, manifest in zip(roots, manifests, strict=True):
+            for failure in manifest.failures:
+                failures_by_id.setdefault(failure.document_id, failure)
+            for snapshot in manifest.documents:
+                if snapshot.document_id in documents_by_id:
+                    previous = documents_by_id[snapshot.document_id]
+                    if previous.raw_sha256 != snapshot.raw_sha256:
+                        raise PendingCorpusError("duplicate document ID carries different bytes")
+                    continue
+                raw = _verified_snapshot_bytes(
+                    root,
+                    snapshot.raw_relative_path,
+                    size_bytes=snapshot.raw_size_bytes,
+                    sha256=snapshot.raw_sha256,
+                )
+                text = _verified_snapshot_bytes(
+                    root,
+                    snapshot.text_relative_path,
+                    size_bytes=snapshot.text_size_bytes,
+                    sha256=snapshot.text_sha256,
+                )
+                duplicate_id = document_id_by_raw_sha256.get(snapshot.raw_sha256)
+                if duplicate_id is not None:
+                    previous = documents_by_id[duplicate_id]
+                    if previous.text_sha256 != snapshot.text_sha256:
+                        raise PendingCorpusError(
+                            "identical official bytes produced different extracted text"
+                        )
+                    documents_by_id[duplicate_id] = previous.model_copy(
+                        update={
+                            "capabilities": tuple(
+                                sorted(
+                                    {*previous.capabilities, *snapshot.capabilities},
+                                    key=lambda item: item.value,
+                                )
+                            ),
+                            "purposes": tuple(
+                                sorted({*previous.purposes, *snapshot.purposes})
+                            ),
+                        }
+                    )
+                    failures_by_id[snapshot.document_id] = PendingCorpusFailure(
+                        document_id=snapshot.document_id,
+                        source_uri=snapshot.source_uri,
+                        stage="deduplication",
+                        reason_code="duplicate_official_snapshot",
+                    )
+                    continue
+                raw_suffix = ".pdf" if snapshot.raw_media_type == "application/pdf" else ".html"
+                raw_relative_path = f"raw/{snapshot.document_id}{raw_suffix}"
+                text_relative_path = f"snapshots/{snapshot.document_id}.txt"
+                _write_file(staging / raw_relative_path, raw)
+                _write_file(staging / text_relative_path, text)
+                documents_by_id[snapshot.document_id] = snapshot.model_copy(
+                    update={
+                        "raw_relative_path": raw_relative_path,
+                        "text_relative_path": text_relative_path,
+                    }
+                )
+                document_id_by_raw_sha256[snapshot.raw_sha256] = snapshot.document_id
+
+        for document_id in documents_by_id:
+            failures_by_id.pop(document_id, None)
+        documents = tuple(documents_by_id[key] for key in sorted(documents_by_id))
+        failures = tuple(failures_by_id[key] for key in sorted(failures_by_id))
+        digest = hashlib.sha256(
+            "\n".join(item.canonical_sha256 for item in manifests).encode("ascii")
+        ).hexdigest()[:16]
+        manifest = PendingCorpusManifest(
+            catalog_id=f"merged-pending-corpus-{digest}",
+            source_registry_sha256=registry.canonical_sha256,
+            evidence_cutoff=registry.evidence_cutoff,
+            documents=documents,
+            document_count=len(documents),
+            failures=failures,
+            requested_document_count=len(documents) + len(failures),
+            raw_file_manifest_sha256=_file_manifest_sha256(documents, kind="raw"),
+            text_file_manifest_sha256=_file_manifest_sha256(documents, kind="text"),
+        )
+        _write_file(staging / "pending-manifest.json", pending_corpus_manifest_bytes(manifest))
+        os.replace(staging, target)
+        completed = True
+        return manifest
+    finally:
+        if not completed:
+            shutil.rmtree(staging, ignore_errors=True)
+
+
 def _extract_text(
     media_type: str,
     content: bytes,
@@ -501,6 +646,7 @@ __all__ = [
     "collect_pending_corpus",
     "load_pending_corpus_catalog",
     "load_pending_corpus_manifest",
+    "merge_pending_corpus_roots",
     "pending_corpus_manifest_bytes",
     "rebind_pending_corpus_registry",
 ]

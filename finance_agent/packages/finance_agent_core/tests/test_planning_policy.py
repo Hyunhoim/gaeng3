@@ -345,8 +345,8 @@ def test_planning_only_scan_finds_unsupported_action_inside_clarify_intent() -> 
         "planning-control-rescan",
     )
 
-    assert trace.route_decision.disposition is RouteDisposition.CLARIFY
-    assert trace.route_decision.reason_code == "subjective_condition"
+    assert trace.route_decision.disposition is RouteDisposition.UNSUPPORTED
+    assert trace.route_decision.reason_code == "semantic_unmapped_action"
     assert trace.planning_decision.semantic_issue is PlanningSemanticIssue.UNSUPPORTED
     assert any("CSV" in span for span in trace.planning_decision.unresolved_spans)
     _assert_all_calls_are_closed(trace.planning_decision)
@@ -489,6 +489,22 @@ def test_exact_identity_resolution_recomputes_planning_for_the_final_route(
     assert planning.path is PlanningPath.DETERMINISTIC_FAST
     assert planning.product_families == (ProductFamily.OVERSEAS_ETP,)
     assert planning.route_reason_code == route.reason_code
+
+
+def test_exact_db_identity_does_not_override_an_uncorroborated_family_conflict(
+    sample_database,
+) -> None:
+    path, _, _ = sample_database
+    agent = RoutedFinanceAgent({"overseas_etp": path})
+
+    result = agent.answer(
+        "국내 ETF 종목코드 B2의 상세 정보를 알려줘",
+        "planning-exact-identity-family-correction",
+    )
+
+    assert result.status != "executed"
+    assert result.decision.reason_code != "exact_identity_family_resolved"
+    assert result.decision.draft.product_families == [ProductFamily.DOMESTIC_ETP]
 
 
 def test_public_route_decision_contract_is_unchanged_by_shadow_metadata() -> None:

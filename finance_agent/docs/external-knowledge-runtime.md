@@ -73,9 +73,10 @@ pending text·chunk·추출 관계는 답변 근거로 사용하지 않으며, �
 ### 제출 전 pending corpus 확장
 
 - 운영 `approved_source_registry.json`은 실제 답변 근거 권한이 있는 출처만 유지한다.
-- 추가 운용사 공식 사이트는 `pending_source_registry_extension.json`에
-  `approved_for_snapshot_intake`로만 등록한다. 이 확장은 운영 Source Registry ID·SHA-256에
-  결합되며, 운영 Registry의 live 권한이나 Runtime 최대 출처 수를 변경할 수 없다.
+- 아직 live 범위가 검증되지 않은 추가 운용사 공식 사이트는
+  `pending_source_registry_extension.json`에 `approved_for_snapshot_intake`로만 등록한다.
+  이 확장은 운영 Source Registry ID·SHA-256에 결합되며, 운영 Registry의 live 권한이나
+  Runtime 최대 출처 수를 변경할 수 없다.
 - `finance-expand-pending-corpus`는 제공 DB의 상품명·운용사와 수집 전용 Registry metadata로
   bounded discovery query를 만든다. 기업·상품별 코드 분기는 두지 않는다.
 - 발견 URL은 공식 hostname·path·capability와 2026-08-24 cutoff를 원문에서 다시 검사한다.

@@ -30,6 +30,7 @@ from finance_agent_core.execution.authority import (
 )
 from finance_agent_core.execution.verifier_projection import (
     load_projected_verifier_records,
+    record_cache_covers_verifier_projection,
 )
 from finance_agent_core.storage import RecordSnapshotCache
 
@@ -109,7 +110,7 @@ class FinanceAgent:
         executed = SQLiteOracle(self.database_path).execute(validated_plan)
         universe = None
         if plan.intent is not Intent.COMPARE:
-            if self._record_cache_enabled:
+            if self._record_cache_enabled and record_cache_covers_verifier_projection(plan):
                 require_validated_plan(validated_plan, self.database_path)
                 snapshot = self.record_cache.get(self.database_path)
                 require_manifest_binding(validated_plan, snapshot.manifest)

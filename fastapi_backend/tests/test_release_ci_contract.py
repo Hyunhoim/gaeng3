@@ -57,21 +57,21 @@ def _valid_input_arguments(output: Path) -> list[str]:
         "--hcx-intent-analysis-enabled",
         "true",
         "--hcx-semantic-resolver-enabled",
-        "false",
+        "true",
         "--adaptive-semantic-enabled",
         "true",
         "--fund-execution-policy",
         "public_fund_v1_approved",
         "--schema-dense-index-sha256",
-        "465f8105d5f7b339b82068f67d8a75ceae63754f0bc8f232cacffed68b37cbc0",
+        "c215649fdfb3ed21c7122987a5b4ddd6101993871039ddf6b1e7165c08860358",
         "--schema-dense-calibration-report-sha256",
-        "2aabaf5bb7a2edd5947d102f0851f205d29e27918d69e37c812831d9994d14c1",
+        "25f854e88f8a11ca4d65e381af67303ac1cad375bc2eb44d5e7b4063aeb5b458",
         "--schema-dense-min-score",
         "0.340015",
         "--schema-dense-hclx-candidate-min-score",
         "0.3",
         "--schema-dense-minimum-margin",
-        "0.042213",
+        "0.042771",
         "--schema-dense-top-k",
         "10",
         "--python-base-image",
@@ -157,18 +157,18 @@ def test_release_ci_accepts_only_normalized_protected_main_inputs(tmp_path: Path
     assert values["answer_provider"] == "hyperclova"
     assert values["hcx_queryplan_enabled"] == "false"
     assert values["hcx_intent_analysis_enabled"] == "true"
-    assert values["hcx_semantic_resolver_enabled"] == "false"
+    assert values["hcx_semantic_resolver_enabled"] == "true"
     assert values["adaptive_semantic_enabled"] == "true"
     assert values["fund_execution_policy"] == "public_fund_v1_approved"
     assert values["schema_dense_index_sha256"] == (
-        "465f8105d5f7b339b82068f67d8a75ceae63754f0bc8f232cacffed68b37cbc0"
+        "c215649fdfb3ed21c7122987a5b4ddd6101993871039ddf6b1e7165c08860358"
     )
     assert values["schema_dense_calibration_report_sha256"] == (
-        "2aabaf5bb7a2edd5947d102f0851f205d29e27918d69e37c812831d9994d14c1"
+        "25f854e88f8a11ca4d65e381af67303ac1cad375bc2eb44d5e7b4063aeb5b458"
     )
     assert values["schema_dense_min_score"] == "0.340015"
     assert values["schema_dense_hclx_candidate_min_score"] == "0.3"
-    assert values["schema_dense_minimum_margin"] == "0.042213"
+    assert values["schema_dense_minimum_margin"] == "0.042771"
     assert values["schema_dense_top_k"] == "10"
     assert values["model_id"] == "HCX-007"
 
@@ -179,7 +179,7 @@ def test_release_ci_accepts_only_normalized_protected_main_inputs(tmp_path: Path
         ("--answer-provider", "deterministic"),
         ("--hcx-queryplan-enabled", "true"),
         ("--hcx-intent-analysis-enabled", "false"),
-        ("--hcx-semantic-resolver-enabled", "true"),
+        ("--hcx-semantic-resolver-enabled", "false"),
         ("--adaptive-semantic-enabled", "false"),
         ("--fund-execution-policy", "locked"),
         ("--schema-dense-index-sha256", "a" * 64),
@@ -815,58 +815,22 @@ def test_release_workflow_binds_exact_adaptive_runtime_artifacts() -> None:
         step for step in steps if step.get("name") == "Upload non-secret immutable release evidence"
     )
 
-    assert release["env"]["FINAL_HCX_SEMANTIC_RESOLVER_ENABLED"] == "false"
+    assert release["env"]["FINAL_HCX_SEMANTIC_RESOLVER_ENABLED"] == "true"
     assert release["env"]["FINAL_ADAPTIVE_SEMANTIC_ENABLED"] == "true"
     assert release["env"]["FINAL_SCHEMA_DENSE_CALIBRATION_REPORT_SHA256"] == (
-        "2aabaf5bb7a2edd5947d102f0851f205d29e27918d69e37c812831d9994d14c1"
+        "25f854e88f8a11ca4d65e381af67303ac1cad375bc2eb44d5e7b4063aeb5b458"
     )
     assert release["env"]["FINAL_SCHEMA_DENSE_CALIBRATION_ARTIFACT_SHA256"] == (
-        "dba5fbfdafcce6d74bf03ba0ebb13b3a614061b511b174cf21e89d894ff4708d"
+        "68978674def32d8613b3e0fd20c624ada9ebc9b6330f64ea172836ac5b31932b"
     )
     assert release["env"]["FINAL_SCHEMA_DENSE_MIN_SCORE"] == "0.340015"
     assert release["env"]["FINAL_SCHEMA_DENSE_HCLX_CANDIDATE_MIN_SCORE"] == "0.3"
-    assert release["env"]["FINAL_SCHEMA_DENSE_MINIMUM_MARGIN"] == "0.042213"
-    registry_path = (
-        _repository_root()
-        / "finance_agent/packages/finance_agent_core/src/finance_agent_core/config/field_registry.yaml"
-    )
-    index_path = (
-        _repository_root()
-        / "finance_agent/artifacts/runtime/schema-dense/kure-schema-dense-production-v3-20260829.json"
-    )
-    report_path = (
-        _repository_root()
-        / "finance_agent/artifacts/evaluation/kure-schema-dense-p1-selective-v15-20260829.json"
-    )
-    registry = yaml.safe_load(registry_path.read_text(encoding="utf-8"))
-    registry_sha256 = hashlib.sha256(registry_path.read_bytes()).hexdigest()
-    index = json.loads(index_path.read_text(encoding="utf-8"))
-    report = json.loads(report_path.read_text(encoding="utf-8"))
-    for manifest in (
-        index["manifest"],
-        report["corpora"]["schema-field-prototype-v3"]["manifest"],
-    ):
-        assert manifest["field_registry_schema_version"] == registry["schema_version"]
-        assert manifest["field_registry_sha256"] == registry_sha256
-    assert (
-        hashlib.sha256(index_path.read_bytes()).hexdigest()
-        == (release["env"]["FINAL_SCHEMA_DENSE_INDEX_SHA256"])
-    )
-    assert (
-        hashlib.sha256(report_path.read_bytes()).hexdigest()
-        == (release["env"]["FINAL_SCHEMA_DENSE_CALIBRATION_ARTIFACT_SHA256"])
-    )
-    assert (
-        report["report_sha256"] == (release["env"]["FINAL_SCHEMA_DENSE_CALIBRATION_REPORT_SHA256"])
-    )
-    assert (
-        str(report["calibrated_threshold"]["minimum_score"])
-        == (release["env"]["FINAL_SCHEMA_DENSE_MIN_SCORE"])
-    )
-    assert (
-        str(report["calibrated_threshold"]["minimum_margin"])
-        == (release["env"]["FINAL_SCHEMA_DENSE_MINIMUM_MARGIN"])
-    )
+    assert release["env"]["FINAL_SCHEMA_DENSE_MINIMUM_MARGIN"] == "0.042771"
+    # Generated/ignored local artifacts must not be an implicit CI dependency.
+    # The clean checkout is now checked explicitly before any image push. The
+    # Release cannot proceed until these exact files are part of its commit.
+    assert "git ls-files --error-unmatch" in adaptive_step["run"]
+    assert "Adaptive artifact is not tracked by the release commit" in adaptive_step["run"]
     assert base_build["with"]["target"] == "adaptive-runtime"
     assert steps.index(adaptive_step) < steps.index(base_build)
     assert "sha256sum" in adaptive_step["run"]
@@ -884,6 +848,64 @@ def test_release_workflow_binds_exact_adaptive_runtime_artifacts() -> None:
     ):
         assert artifact_name in evidence_step["run"]
         assert artifact_name in upload_step["with"]["path"]
+
+
+def test_release_workflow_cache_first_requires_protected_tracked_approved_inputs() -> None:
+    workflow_path = _repository_root() / ".github" / "workflows" / "immutable-ncp-release.yml"
+    workflow = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
+    release = workflow["jobs"]["release"]
+    manifest_step = next(
+        step
+        for step in release["steps"]
+        if step.get("name") == "Create AgentReleaseManifest from the clean checkout"
+    )
+    evidence_step = next(
+        step
+        for step in release["steps"]
+        if step.get("name") == "Record non-secret release evidence"
+    )
+    upload_step = next(
+        step
+        for step in release["steps"]
+        if step.get("name") == "Upload non-secret immutable release evidence"
+    )
+    signing_step = next(
+        step
+        for step in release["steps"]
+        if step.get("name") == "Keyless-sign and verify release control-plane files"
+    )
+
+    assert release["env"]["APPROVED_EXTERNAL_RETRIEVAL_MODE"] == (
+        "${{ vars.APPROVED_EXTERNAL_RETRIEVAL_MODE }}"
+    )
+    for protected_name in (
+        "APPROVED_DOCUMENT_CORPUS_ROOT",
+        "APPROVED_DOCUMENT_CORPUS_MANIFEST",
+        "APPROVED_DOCUMENT_CORPUS_MANIFEST_SHA256",
+        "APPROVED_DOCUMENT_DENSE_ARTIFACT",
+        "APPROVED_DOCUMENT_DENSE_ARTIFACT_SHA256",
+        "APPROVED_DOCUMENT_CACHE_ACTIVATION",
+        "APPROVED_DOCUMENT_CACHE_ACTIVATION_SHA256",
+        "APPROVED_EXTERNAL_TEMPORAL_RELATIONS",
+        "APPROVED_EXTERNAL_TEMPORAL_RELATIONS_SHA256",
+    ):
+        assert protected_name in release["env"]
+    run = manifest_step["run"]
+    assert 'external_mode="${APPROVED_EXTERNAL_RETRIEVAL_MODE:-verified_live_official}"' in run
+    assert 'if [ "$external_mode" = "approved_corpus_cache_first" ]' in run
+    assert "git ls-files --error-unmatch" in run
+    assert "--approved-corpus-manifest" in run
+    assert "--approved-document-dense-sha256" in run
+    assert "--document-cache-activation-sha256" in run
+    assert "--approved-temporal-relations-sha256" in run
+    assert "document-dense-approved.json" in evidence_step["run"]
+    assert "document-cache-activation.json" in evidence_step["run"]
+    assert "document-dense-approved.json" in upload_step["with"]["path"]
+    assert "document-cache-activation.json" in upload_step["with"]["path"]
+    assert "release_knowledge_blobs" in signing_step["run"]
+    assert "document-dense-approved.json" in signing_step["run"]
+    assert "document-cache-activation.json" in signing_step["run"]
+    assert "document-dense-approved.sigstore.json" in upload_step["with"]["path"]
 
 
 def test_release_workflow_has_a_commit_pinned_keyless_trust_boundary() -> None:
@@ -930,7 +952,7 @@ def test_release_workflow_has_a_commit_pinned_keyless_trust_boundary() -> None:
     assert "fund_execution_policy" not in dispatch_inputs
     assert release["env"]["FINAL_ANSWER_PROVIDER"] == "hyperclova"
     assert release["env"]["FINAL_HCX_QUERYPLAN_ENABLED"] == "false"
-    assert release["env"]["FINAL_HCX_SEMANTIC_RESOLVER_ENABLED"] == "false"
+    assert release["env"]["FINAL_HCX_SEMANTIC_RESOLVER_ENABLED"] == "true"
     assert release["env"]["FINAL_ADAPTIVE_SEMANTIC_ENABLED"] == "true"
     assert release["env"]["FINAL_FUND_EXECUTION_POLICY"] == "public_fund_v1_approved"
     assert "external_knowledge_release_cli" in text

@@ -28,6 +28,7 @@ from finance_agent_core.agent.providers.hyperclova import (
 from finance_agent_core.agent.router import IntentRouter
 from finance_agent_core.answering.final_generation import (
     FinalAnswerContext,
+    build_clarification_guidance,
     compose_final_answer,
 )
 from finance_agent_core.contracts.backend import (
@@ -72,6 +73,8 @@ class RoutedAnswerService(Protocol):
 
     def answer(self, question: str, request_id: str): ...
 
+    def assert_public_response_boundary_current(self) -> None: ...
+
 
 class AnswerAdapterResult(BaseModel):
     """Framework-neutral result consumed by a future FastAPI /answer route."""
@@ -108,6 +111,17 @@ def _finalize_with_official_hclx(
         raise HyperClovaXConfigurationError("invalid official answer provider")
     if response.status is BackendStatus.ERROR:
         return response
+    clarification_guidance = None
+    if response.status is BackendStatus.CLARIFICATION:
+        if response.clarification is None:
+            raise HyperClovaXConfigurationError("clarification response is missing server guidance")
+        clarification_guidance = build_clarification_guidance(
+            question=question,
+            reason_code=response.clarification.code,
+            required_fields=response.clarification.required_fields,
+            product_families=[family.value for family in response.product_families],
+            existing_options=response.clarification.options,
+        )
     context = FinalAnswerContext(
         question=question,
         status=response.status.value,
@@ -123,6 +137,7 @@ def _finalize_with_official_hclx(
         citation_count=len(response.citations),
         as_of_dates=[value.isoformat() for value in response.as_of_dates],
         deterministic_answer=response.answer,
+        clarification_guidance=clarification_guidance,
     )
     audit = current_request_audit()
     if audit is not None:
@@ -167,6 +182,16 @@ def _finalize_with_official_hclx(
             evidence_count=context.evidence_count,
         )
     updates: dict[str, object] = {"answer": composition.answer}
+    if composition.clarification_question is not None:
+        assert response.clarification is not None
+        assert clarification_guidance is not None
+        updates["clarification"] = response.clarification.model_copy(
+            update={
+                "message": composition.clarification_question,
+                "required_fields": clarification_guidance.missing_slots,
+                "options": clarification_guidance.allowed_options,
+            }
+        )
     if response.status in {
         BackendStatus.SUCCESS,
         BackendStatus.NOT_FOUND,
@@ -178,6 +203,33 @@ def _finalize_with_official_hclx(
             provider_model=composition.model_name,
         )
     return BackendAgentResponse.model_validate({**response.model_dump(mode="python"), **updates})
+
+
+def _is_safety_terminal_result(result: object) -> bool:
+    """Return whether the server stopped a request at SafetyEnvelope.
+
+    Safety controls are deliberately deterministic.  In particular, blocked
+    user text is sent to neither the Intent provider nor the final-answer
+    provider, even when official HCLX is mandatory for allowed evaluation
+    queries.
+    """
+
+    decision = getattr(result, "decision", None)
+    reason_code = getattr(decision, "reason_code", "")
+    disposition = getattr(decision, "disposition", None)
+    return (
+        isinstance(reason_code, str)
+        and reason_code.startswith("safety_")
+        and getattr(disposition, "value", None) in {"clarify", "unsupported"}
+    )
+
+
+def _assert_final_public_boundary_current(service: RoutedAnswerService) -> None:
+    """Discard a generated answer if its release or approved DB changed."""
+
+    boundary = getattr(service, "assert_public_response_boundary_current", None)
+    if callable(boundary):
+        boundary()
 
 
 @dataclass(frozen=True, slots=True)
@@ -408,13 +460,41 @@ def execute_answer_request(
                 knowledge_route_control_to_backend,
             )
             from finance_agent_core.agent.knowledge_service import KnowledgeAgentResult
-            from finance_agent_core.agent.routed_service import RoutedAgentResult
+            from finance_agent_core.agent.routed_service import (
+                ExactIdentityNotFoundResult,
+                RoutedAgentResult,
+            )
             from finance_agent_core.execution.external_knowledge_runtime import (
                 ExternalKnowledgeRuntimeResult,
             )
 
             if type(public_result) is RoutedAgentResult:
                 response = routed_result_to_backend(public_result)
+            elif type(public_result) is ExactIdentityNotFoundResult:
+                response = BackendAgentResponse(
+                    request_id=public_result.request_id,
+                    status=BackendStatus.NOT_FOUND,
+                    intent=InteractionIntent.DETAIL,
+                    product_families=public_result.checked_families,
+                    answer=public_result.answer,
+                    query_plan=None,
+                    candidate_count=0,
+                    products=[],
+                    comparisons=[],
+                    aggregates=[],
+                    documents=[],
+                    citations=[],
+                    as_of_dates=[],
+                    warnings=[],
+                    answer_mode=BackendAnswerMode.DETERMINISTIC,
+                    fallback_used=False,
+                    provider_model=None,
+                    clarification=None,
+                    error=None,
+                    source_manifest=None,
+                    family_searches=[],
+                    source_manifests=[],
+                )
             elif type(public_result) is KnowledgeAgentResult:
                 response = knowledge_result_to_backend(public_result)
             elif type(public_result) is KnowledgeRouteDecision:
@@ -431,8 +511,26 @@ def execute_answer_request(
                 response = external_knowledge_result_to_backend(public_result)
             else:
                 raise TypeError("public Agent returned an unsupported result contract")
-            response = _finalize_with_official_hclx(service, request.question, response)
-            return AnswerAdapterResult(http_status_code=200, response=response)
+            if not _is_safety_terminal_result(public_result):
+                try:
+                    response = _finalize_with_official_hclx(
+                        service,
+                        request.question,
+                        response,
+                    )
+                except Exception:
+                    # A release/DB trust change that happens during the provider
+                    # call outranks a malformed provider draft.  Re-check the
+                    # immutable boundary before exposing the provider error so
+                    # stale generated text is always discarded as 503.
+                    _assert_final_public_boundary_current(service)
+                    raise
+            adapter_result = AnswerAdapterResult(http_status_code=200, response=response)
+            # This must be the last operation before returning the public DTO.
+            # It closes the final-generation race for both release bindings and
+            # approved DB artifacts.
+            _assert_final_public_boundary_current(service)
+            return adapter_result
         except Exception as error:  # noqa: BLE001 - outer application boundary
             trusted_decision = None
             actual_error = error

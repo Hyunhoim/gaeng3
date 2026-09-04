@@ -8,13 +8,15 @@ from finance_agent_core.config import AsOfBasis, QualityStatus, load_field_regis
 from finance_agent_core.contracts.queryplan import (
     AggregateFunction,
     Constraint,
+    ConstraintExpression,
     ConstraintOperator,
     Intent,
+    LogicalOperator,
     NullPlacement,
-    ProductFamily,
     QueryPlan,
     Ranking,
     SortDirection,
+    constraint_key,
 )
 from finance_agent_core.deadline import raise_if_request_stopped
 from finance_agent_core.domain import (
@@ -57,34 +59,23 @@ def _logical_product_universe(
 
     if plan.product_families[0].value != "bond":
         return universe
-    ranked_field = next(
-        (
-            ranking.field
-            for ranking in plan.ranking
-            if ranking_requires_usable_value(plan, ranking.field)
-        ),
-        None,
-    )
-
-    def carries_the_metric(record: VerifierRecord) -> bool:
-        if ranked_field is None:
-            return False
-        return _query_metric_value(record, ranked_field) is not None
-
     canonical: dict[str, VerifierRecord] = {}
     for record in universe:
-        if record.is_quarantined:
+        if (
+            record.is_quarantined
+            or not _matches_plan_constraints(record, plan)
+            or any(
+                ranking_requires_usable_value(plan, ranking.field)
+                and _query_metric_value(record, ranking.field) is None
+                for ranking in plan.ranking
+            )
+        ):
             continue
         logical_id = record.product_id.split(":", 1)[0]
         previous = canonical.get(logical_id)
-        if previous is None:
-            canonical[logical_id] = record
-            continue
-        # Mirror the SQL rank: a row that carries the ranked metric wins, and
-        # source_row still breaks the tie so the choice stays deterministic.
-        current_key = (not carries_the_metric(record), record.source_row)
-        previous_key = (not carries_the_metric(previous), previous.source_row)
-        if current_key < previous_key:
+        if previous is None or _logical_record_preference(plan, record) < (
+            _logical_record_preference(plan, previous)
+        ):
             canonical[logical_id] = record
     return list(canonical.values())
 
@@ -117,6 +108,57 @@ def _query_metric_value(record: VerifierRecord, field_name: str) -> object | Non
     return value
 
 
+def _logical_record_preference(
+    plan: QueryPlan,
+    record: VerifierRecord,
+) -> tuple[int, str, int]:
+    """Mirror the bond representative-row rule independently of SQLite."""
+
+    if plan.intent is not Intent.AGGREGATE:
+        return (0, "", record.source_row)
+    preference_fields = tuple(
+        dict.fromkeys(
+            [
+                *plan.intent_payload.group_by,
+                *(
+                    item.field
+                    for item in plan.intent_payload.aggregations
+                    if item.field != "product_id"
+                ),
+            ]
+        )
+    )
+    usable_count = sum(
+        _query_metric_value(record, field_name) is not None
+        for field_name in preference_fields
+    )
+    # Lower tuples win: maximize supported requested fields, then use the
+    # source-defined physical ID and row order for a deterministic representative.
+    return (-usable_count, record.product_id, record.source_row)
+
+
+def _ranking_metric_value(record: VerifierRecord, field_name: str) -> object | None:
+    value = _query_metric_value(record, field_name)
+    if field_name != "risk_level" or value is None:
+        return value
+    normalized = str(value).replace(" ", "")
+    semantic_risk_order = {
+        "매우낮은위험(6등급)": 1,
+        "매우낮은위험": 1,
+        "낮은위험(5등급)": 2,
+        "낮은위험": 2,
+        "보통위험(4등급)": 3,
+        "보통위험": 3,
+        "다소높은위험(3등급)": 4,
+        "다소높은위험": 4,
+        "높은위험(2등급)": 5,
+        "높은위험": 5,
+        "매우높은위험(1등급)": 6,
+        "매우높은위험": 6,
+    }
+    return semantic_risk_order.get(normalized)
+
+
 def _public_product_id(record: VerifierRecord) -> str:
     if record.product_family == "bond":
         return record.product_id.split(":", 1)[0]
@@ -125,18 +167,24 @@ def _public_product_id(record: VerifierRecord) -> str:
     return record.product_id
 
 
-def _inside_current_product_scope(plan: QueryPlan, record: VerifierRecord) -> bool:
-    if plan.product_families != [ProductFamily.BOND] or any(
-        constraint.field == "product_id" for constraint in plan.constraints
-    ):
-        return True
-    maturity = _comparable_value(record, "maturity_date")
-    # The end signal uses the snapshot the row was loaded from, because
-    # remaining_days is stored as maturity minus that snapshot. Measuring it
-    # against the earlier dynamic date left already matured bonds in scope.
-    return maturity is None or (
-        isinstance(maturity, date) and maturity >= record.source_snapshot_date
-    )
+def _requested_comparison_id(
+    record: VerifierRecord,
+    requested_ids: set[str],
+) -> str:
+    """Match either a physical ID or its approved public shorthand.
+
+    Overseas queries may legitimately use ``exchange:ticker`` or a unique
+    ticker, while bond queries expose a logical ticker over venue rows.  Prefer
+    the exact requested spelling so verification does not rewrite one accepted
+    identity form into another.
+    """
+
+    if record.product_id in requested_ids:
+        return record.product_id
+    public_id = _public_product_id(record)
+    if public_id in requested_ids:
+        return public_id
+    return public_id
 
 
 def _expected_value(record_value: object, query_value: object) -> object:
@@ -160,9 +208,23 @@ def _matches_constraint(
         if constraint.field == "product_id" and record.product_family == "bond"
         else _query_metric_value(record, constraint.field)
     )
+    operator = constraint.operator
+    if operator in {
+        ConstraintOperator.IS_PRESENT,
+        ConstraintOperator.IS_MISSING,
+    }:
+        present = actual is not None
+        if isinstance(actual, str):
+            present = bool(actual.strip())
+        elif (
+            isinstance(actual, (int, float, Decimal))
+            and not isinstance(actual, bool)
+            and constraint.field != "remaining_days"
+        ):
+            present = actual != 0
+        return present if operator is ConstraintOperator.IS_PRESENT else not present
     if actual is None:
         return False
-    operator = constraint.operator
     expected = constraint.value
 
     def canonical_expected(value: object) -> object:
@@ -205,6 +267,38 @@ def _matches_constraint(
     raise ResultVerificationError(f"unsupported operator: {operator}")
 
 
+def _matches_plan_constraints(record: VerifierRecord, plan: QueryPlan) -> bool:
+    """Evaluate the same Boolean constraint tree independently of SQLite."""
+
+    expression = plan.constraint_expression
+    if expression is None:
+        return all(_matches_constraint(record, item) for item in plan.constraints)
+    constraints_by_key = {constraint_key(item): item for item in plan.constraints}
+
+    def expression_keys(node: ConstraintExpression) -> set[str]:
+        keys = set(node.constraint_keys)
+        for child in node.children:
+            keys.update(expression_keys(child))
+        return keys
+
+    def matches_expression(node: ConstraintExpression) -> bool:
+        values = [
+            _matches_constraint(record, constraints_by_key[key])
+            for key in node.constraint_keys
+        ]
+        values.extend(matches_expression(child) for child in node.children)
+        if node.operator is LogicalOperator.ALL:
+            return all(values)
+        return any(values)
+
+    logical_keys = expression_keys(expression)
+    return all(
+        _matches_constraint(record, item)
+        for item in plan.constraints
+        if constraint_key(item) not in logical_keys
+    ) and matches_expression(expression)
+
+
 def _compare_values(
     left: object | None,
     right: object | None,
@@ -220,7 +314,10 @@ def _compare_values(
     return -comparison if ranking.direction is SortDirection.DESC else comparison
 
 
-def _record_comparator(plan: QueryPlan):
+def _record_comparator(
+    plan: QueryPlan,
+    ranking_values: dict[int, tuple[object | None, ...]],
+):
     comparison_count = 0
 
     def compare(
@@ -230,10 +327,12 @@ def _record_comparator(plan: QueryPlan):
         nonlocal comparison_count
         comparison_count += 1
         _periodic_deadline_check(comparison_count)
-        for ranking in plan.ranking:
+        left_values = ranking_values[id(left)]
+        right_values = ranking_values[id(right)]
+        for index, ranking in enumerate(plan.ranking):
             comparison = _compare_values(
-                _query_metric_value(left, ranking.field),
-                _query_metric_value(right, ranking.field),
+                left_values[index],
+                right_values[index],
                 ranking,
             )
             if comparison:
@@ -261,34 +360,34 @@ class ResultVerifier:
             raise ResultVerificationError("search manifest dataset differs from the plan")
         if plan.intent is Intent.COMPARE:
             requested_ids = comparison_product_ids(plan)
-            actual_ids = [record.product_id for record in executed.records]
-            if executed.candidate_count != len(actual_ids):
+            requested_id_set = set(requested_ids)
+            physical_ids = [record.product_id for record in executed.records]
+            actual_ids = [
+                _requested_comparison_id(record, requested_id_set)
+                for record in executed.records
+            ]
+            if executed.candidate_count != len(physical_ids):
                 raise ResultVerificationError(
                     "comparison candidate_count mismatch: "
-                    f"SQL={executed.candidate_count}, records={len(actual_ids)}"
+                    f"SQL={executed.candidate_count}, records={len(physical_ids)}"
                 )
             if (
                 len(actual_ids) != len(set(actual_ids))
                 or not set(actual_ids).issubset(requested_ids)
-                or actual_ids
-                != sorted(
-                    actual_ids,
-                    key=lambda value: (
-                        value.split(":", 1)[-1]
-                        if plan.product_families == [ProductFamily.OVERSEAS_ETP]
-                        else value.split(":", 1)[0]
-                        if plan.product_families == [ProductFamily.BOND]
-                        else value
-                    ),
-                )
             ):
                 raise ResultVerificationError(
                     f"comparison results mismatch: SQL={actual_ids}, "
                     f"requested={sorted(requested_ids)}"
                 )
+            # Oracle rows have a deterministic storage-ID order, which need
+            # not equal the order in which the caller named the products.  The
+            # comparison builder reorders these independently verified rows to
+            # ``comparison_product_ids`` before calculating deltas.  Set
+            # coverage plus uniqueness preserves identity safety here without
+            # rejecting a valid reverse input order.
             if any(
                 record.is_quarantined
-                or not all(_matches_constraint(record, item) for item in plan.constraints)
+                or not _matches_plan_constraints(record, plan)
                 for record in executed.records
             ):
                 raise ResultVerificationError(
@@ -305,21 +404,25 @@ class ResultVerifier:
             raise ResultVerificationError("search verification requires the record universe")
         universe = _logical_product_universe(plan, universe)
         candidates: list[VerifierRecord] = []
+        ranking_values: dict[int, tuple[object | None, ...]] = {}
         for index, record in enumerate(universe):
             _periodic_deadline_check(index)
-            if (
-                not record.is_quarantined
-                and _inside_current_product_scope(plan, record)
-                and all(_matches_constraint(record, item) for item in plan.constraints)
-                and all(
-                    not ranking_requires_usable_value(plan, ranking.field)
-                    or _query_metric_value(record, ranking.field) is not None
-                    for ranking in plan.ranking
-                )
-            ):
-                candidates.append(record)
+            if record.is_quarantined or not _matches_plan_constraints(record, plan):
+                continue
+            values: list[object | None] = []
+            ranking_is_usable = True
+            for ranking in plan.ranking:
+                value = _ranking_metric_value(record, ranking.field)
+                values.append(value)
+                if ranking_requires_usable_value(plan, ranking.field) and value is None:
+                    ranking_is_usable = False
+                    break
+            if not ranking_is_usable:
+                continue
+            candidates.append(record)
+            ranking_values[id(record)] = tuple(values)
         raise_if_request_stopped()
-        candidates.sort(key=cmp_to_key(_record_comparator(plan)))
+        candidates.sort(key=cmp_to_key(_record_comparator(plan, ranking_values)))
         raise_if_request_stopped()
         expected = candidates[: plan.limit]
         expected_ids = [record.product_id for record in expected]
@@ -420,12 +523,22 @@ def _verifier_average(values: list[Decimal]) -> Decimal:
         )
 
 
+def _verifier_median(values: list[Decimal]) -> Decimal:
+    ordered = sorted(values)
+    middle = len(ordered) // 2
+    if len(ordered) % 2:
+        return ordered[middle]
+    return _verifier_average([ordered[middle - 1], ordered[middle]])
+
+
 def _verifier_reduce_numeric(
     function: AggregateFunction,
     values: list[Decimal],
 ) -> Decimal:
     if function is AggregateFunction.AVG:
         return _verifier_average(values)
+    if function is AggregateFunction.MEDIAN:
+        return _verifier_median(values)
     if function is AggregateFunction.SUM:
         reduced = Decimal("0")
         for index, value in enumerate(values):
@@ -557,6 +670,10 @@ def _expected_aggregate_groups(
     for index, record in enumerate(records):
         _periodic_deadline_check(index)
         key = tuple(_verifier_scalar(_verifier_usable(record, field)) for field in fields)
+        # Mirror the organizer's missing/zero rule independently from the
+        # execution reducer: NULL is an unavailable group key, not a category.
+        if fields and any(value is None for value in key):
+            continue
         grouped.setdefault(key, []).append(record)
     raise_if_request_stopped()
 
@@ -567,12 +684,12 @@ def _expected_aggregate_groups(
         ],
     ) -> tuple[object, ...]:
         raise_if_request_stopped()
-        key, group_records = item
+        key, _group_records = item
         rendered = tuple(
             (value is None, type(value).__name__, "" if value is None else str(value).casefold())
             for value in key
         )
-        return (-len(group_records), *rendered)
+        return rendered
 
     expected: list[AggregateGroup] = []
     family = plan.product_families[0].value
@@ -622,17 +739,20 @@ class AggregateResultVerifier:
             raise ResultVerificationError("question_id changed during aggregate execution")
         if executed.manifest.dataset != plan.product_families[0].value:
             raise ResultVerificationError("aggregate manifest dataset differs from the plan")
-        universe = _logical_product_universe(plan, universe)
+        # COUNT(field) availability summaries count organizer rows just like
+        # COUNT(product_id).  Numeric reductions retain logical-bond
+        # de-duplication; every-count plans must mirror the Oracle's physical
+        # row scope so the independent verifier checks the same declared unit.
+        physical_bond_count = plan.product_families[0].value == "bond" and all(
+            item.function is AggregateFunction.COUNT
+            for item in plan.intent_payload.aggregations
+        )
+        if not physical_bond_count:
+            universe = _logical_product_universe(plan, universe)
         candidates: list[VerifierRecord] = []
         for index, record in enumerate(universe):
             _periodic_deadline_check(index)
-            if (
-                not record.is_quarantined
-                # Aggregates count the same universe a search would return, so
-                # a count cannot report bonds no search could ever reach.
-                and _inside_current_product_scope(plan, record)
-                and all(_matches_constraint(record, item) for item in plan.constraints)
-            ):
+            if not record.is_quarantined and _matches_plan_constraints(record, plan):
                 candidates.append(record)
         raise_if_request_stopped()
         total_group_count, expected_groups = _expected_aggregate_groups(plan, candidates)

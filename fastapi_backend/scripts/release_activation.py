@@ -497,13 +497,24 @@ def _compose_command(env_file: Path, arguments: list[str]) -> list[str]:
         "-f",
         "fastapi_backend/docker-compose.release.yml",
     ]
-    adaptive = (
-        _load_environment(env_file).get("FINANCE_ADAPTIVE_SEMANTIC_ENABLED", "false").casefold()
-    )
+    environment = _load_environment(env_file)
+    adaptive = environment.get("FINANCE_ADAPTIVE_SEMANTIC_ENABLED", "false").casefold()
     if adaptive not in {"true", "false"}:
         raise ReleaseActivationError("FINANCE_ADAPTIVE_SEMANTIC_ENABLED must be true or false")
     if adaptive == "true":
         compose_files.extend(["-f", "fastapi_backend/docker-compose.adaptive.yml"])
+    document_cache_values = (
+        environment.get("FINANCE_EXTERNAL_DOCUMENT_DENSE_ARTIFACT_HOST_FILE", ""),
+        environment.get("FINANCE_EXTERNAL_DOCUMENT_DENSE_ARTIFACT_FILE", ""),
+        environment.get("FINANCE_EXTERNAL_DOCUMENT_CACHE_ACTIVATION_HOST_FILE", ""),
+        environment.get("FINANCE_EXTERNAL_DOCUMENT_CACHE_ACTIVATION_FILE", ""),
+    )
+    if any(document_cache_values) and not all(document_cache_values):
+        raise ReleaseActivationError("Document Dense release profile is incomplete")
+    if all(document_cache_values):
+        if adaptive != "true":
+            raise ReleaseActivationError("Document Dense release requires adaptive semantics")
+        compose_files.extend(["-f", "fastapi_backend/docker-compose.document-cache.yml"])
     return [
         "docker",
         "compose",

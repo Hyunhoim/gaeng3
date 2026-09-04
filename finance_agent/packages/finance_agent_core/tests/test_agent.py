@@ -109,7 +109,7 @@ def test_routed_agent_resolves_exact_identity_before_a_reversed_label(
     assert result.status == "executed"
     assert result.query_plan is not None
     assert result.query_plan.limit == 1
-    assert [product.product_id for product in result.products] == ["AMX:B2"]
+    assert [product.product_id for product in result.products] == ["B2"]
 
 
 def test_routed_agent_never_touches_tools_for_control_route() -> None:

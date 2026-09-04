@@ -1,0 +1,319 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>금융상품 Agent Phase 5·6 Blind 성능 보고서</title>
+  <style>
+    :root{--ink:#172033;--muted:#607086;--line:#dce4ef;--navy:#153a63;--blue:#2676c9;--good:#08775c;--warn:#9b5a00;--bad:#b33434;--bg:#f4f7fb}
+    *{box-sizing:border-box}body{margin:0;color:var(--ink);background:var(--bg);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",sans-serif;line-height:1.58}
+    main{max-width:1160px;margin:0 auto;padding:38px 22px 70px}header,section{background:#fff;border:1px solid var(--line);border-radius:16px;padding:27px;margin-bottom:18px;box-shadow:0 6px 18px rgba(21,58,99,.045)}
+    header{color:#fff;background:linear-gradient(130deg,var(--navy),#2876ba);border:0}h1{margin:0 0 8px;font-size:30px;line-height:1.25}h2{margin:0 0 17px;font-size:21px;color:var(--navy)}h3{margin:21px 0 8px;font-size:17px}p{margin:7px 0}.sub{color:#dcecff}
+    .grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.card{border:1px solid var(--line);border-radius:12px;padding:15px;background:#fbfcff}.card b{display:block;font-size:22px;color:var(--navy)}.card span{color:var(--muted);font-size:13px}
+    .notice,.warning,.danger{padding:13px 15px;border-radius:8px}.notice{border-left:4px solid var(--blue);background:#f1f7ff}.warning{border-left:4px solid var(--warn);background:#fff8eb}.danger{border-left:4px solid var(--bad);background:#fff2f2}
+    .good{color:var(--good);font-weight:700}.bad{color:var(--bad);font-weight:700}.muted,.small{color:var(--muted)}.small{font-size:12px}
+    table{width:100%;border-collapse:collapse;font-size:14px}th,td{padding:10px 9px;border-bottom:1px solid var(--line);text-align:right;vertical-align:top}th:first-child,td:first-child{text-align:left}th{color:#40506a;background:#f7f9fc}
+    ul,ol{margin:8px 0;padding-left:22px}li{margin:5px 0}code{overflow-wrap:anywhere;color:#254d7b;background:#f0f4f9;border-radius:5px;padding:2px 5px}.tag{display:inline-block;margin:2px 4px 2px 0;padding:3px 8px;border-radius:999px;background:#eaf3ff;color:#245d98;font-size:12px;font-weight:700}
+    @media(max-width:800px){.grid{grid-template-columns:repeat(2,minmax(0,1fr))}table{font-size:12px}}@media(max-width:520px){main{padding:16px 10px 40px}header,section{padding:19px}.grid{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Phase 5·6 Blind 성능 보고서</h1>
+    <p class="sub">Gold 비접근 최초 1회 Blind · 모든 기능 ON · HCX-007 실제 호출 · Phase 6 무결성 재검산 추가</p>
+  </header>
+
+  <section>
+    <h2>1. 최종 결과</h2>
+    <div class="grid">
+      <div class="card"><b>34.29%</b><span>Outcome Exact 정확도</span></div>
+      <div class="card"><b>37.14%</b><span>상품 micro F1</span></div>
+      <div class="card"><b>69.15%</b><span>상품 micro Precision</span></div>
+      <div class="card"><b>25.39%</b><span>상품 micro Recall</span></div>
+    </div>
+    <p class="danger"><strong>결론:</strong> 현재 Agent의 최종 일반화 성능은 충분하지 않다. 실행·차단 경로 판단은 62.86%지만, 상태와 상품 순서가 함께 맞는 Outcome Exact는 34.29%, 상품 F1은 37.14%다. 특히 Recall 25.39%와 false block 33.33%가 낮은 최종 성능의 주원인이다.</p>
+    <p class="warning"><strong>동결 원칙:</strong> Gold 공개 후 코드·Ontology·Alias·threshold·corpus를 수정하거나 재실행하지 않았다. 이 보고서는 개선된 회귀 점수가 아니라 실제 최초 Blind 결과다.</p>
+  </section>
+
+  <section>
+    <h2>2. 핵심 지표</h2>
+    <table>
+      <thead><tr><th>지표</th><th>결과</th><th>해석</th></tr></thead>
+      <tbody>
+        <tr><td>Disposition 정확도</td><td>62.86% (66/105)</td><td>EXECUTE·CLARIFY·UNSUPPORTED 경로 판단</td></tr>
+        <tr><td>Result Status 정확도</td><td>55.88% (57/102)</td><td>SUCCESS·NOT_FOUND·CANNOT_VERIFY·CLARIFY 상태</td></tr>
+        <tr><td>Outcome Exact</td><td class="bad">34.29% (36/105)</td><td>경로·상태·반환 상품 순서가 함께 정확</td></tr>
+        <tr><td>Strict Exact</td><td class="bad">17.14% (18/105)</td><td>Outcome에 후보 수와 QueryPlan까지 모두 정확</td></tr>
+        <tr><td>상품 micro Precision</td><td>69.15%</td><td>반환 상품 중 정답 상품 비율</td></tr>
+        <tr><td>상품 micro Recall</td><td class="bad">25.39%</td><td>Gold 정답 상품 중 실제 반환한 비율</td></tr>
+        <tr><td>상품 micro F1</td><td class="bad">37.14%</td><td>Precision과 Recall의 조화평균</td></tr>
+        <tr><td>상품 순서 정확도</td><td>35.42%</td><td>96개 실행 문항의 Top-N 순서</td></tr>
+        <tr><td>후보 수 정확도</td><td>34.38%</td><td>Gold 후보군 전체 건수 일치</td></tr>
+        <tr><td>False block</td><td class="bad">35건 · 33.33%</td><td>실행 가능한 질문을 CLARIFY/UNSUPPORTED로 차단</td></tr>
+        <tr><td>False execution</td><td>1건 · 0.95%</td><td>차단해야 할 질문을 실행</td></tr>
+      </tbody>
+    </table>
+    <p class="small">105문항 표본에서 Wilson 95% 구간은 Disposition 53.31–71.49%, Outcome 25.91–43.77%, Strict Exact 11.13–25.48%다. 표본 구성에 따른 불확실성을 함께 봐야 한다.</p>
+  </section>
+
+  <section>
+    <h2>3. 독립성 해석</h2>
+    <table>
+      <thead><tr><th>범위</th><th>문항</th><th>Disposition</th><th>Outcome</th><th>Precision</th><th>Recall</th><th>F1</th></tr></thead>
+      <tbody>
+        <tr><td>Phase 5 전체</td><td>105</td><td>62.86%</td><td>34.29%</td><td>69.15%</td><td>25.39%</td><td>37.14%</td></tr>
+        <tr><td>공개 예시 8개 제외</td><td>97</td><td>61.86%</td><td>34.02%</td><td>71.76%</td><td>24.50%</td><td>36.53%</td></tr>
+        <tr><td>과제자료 공개 예시</td><td>8</td><td>75.00%</td><td>37.50%</td><td>44.44%</td><td>57.14%</td><td>50.00%</td></tr>
+      </tbody>
+    </table>
+    <p>Gold v1.1은 기존 Phase 5 v1의 8문항을 과제자료 공식 예시로 교체한 개정본이다. 공개 예시를 제외한 97문항 점수가 전체와 거의 같으므로, 보수적인 최종 일반화 추정치는 <strong>Outcome 약 34%, 상품 F1 약 36.5%</strong>로 보는 것이 적절하다.</p>
+  </section>
+
+  <section>
+    <h2>4. 세트·난이도별 정확도</h2>
+    <h3>독립 3세트</h3>
+    <table>
+      <thead><tr><th>세트</th><th>문항</th><th>Disposition</th><th>Outcome</th><th>상품 F1</th><th>Strict</th><th>False block</th></tr></thead>
+      <tbody>
+        <tr><td>A</td><td>35</td><td>71.43%</td><td>45.71%</td><td>45.31%</td><td>22.86%</td><td>10</td></tr>
+        <tr><td>B</td><td>35</td><td>60.00%</td><td>25.71%</td><td>31.19%</td><td>14.29%</td><td>12</td></tr>
+        <tr><td>C</td><td>35</td><td>57.14%</td><td>31.43%</td><td>33.63%</td><td>14.29%</td><td>13</td></tr>
+      </tbody>
+    </table>
+
+    <h3>난이도·답변 불가</h3>
+    <table>
+      <thead><tr><th>평가 구간</th><th>문항</th><th>Disposition</th><th>Outcome</th><th>상품 F1</th><th>Strict</th><th>False block</th></tr></thead>
+      <tbody>
+        <tr><td>하</td><td>30</td><td>90.00%</td><td>50.00%</td><td>57.39%</td><td>40.00%</td><td>3</td></tr>
+        <tr><td>중</td><td>30</td><td>76.67%</td><td>30.00%</td><td>32.79%</td><td>3.33%</td><td>7</td></tr>
+        <tr><td>상</td><td>30</td><td class="bad">26.67%</td><td class="bad">16.67%</td><td class="bad">21.43%</td><td>0%</td><td class="bad">22</td></tr>
+        <tr><td>답변 불가</td><td>15</td><td>53.33%</td><td>46.67%</td><td>해당 없음</td><td>33.33%</td><td>3</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>5. 범위·외부근거·Operation별 정확도</h2>
+    <table>
+      <thead><tr><th>분류</th><th>문항</th><th>Disposition</th><th>Outcome</th><th>상품 F1</th><th>Strict</th></tr></thead>
+      <tbody>
+        <tr><td>단일 상품군</td><td>66</td><td>75.76%</td><td>36.36%</td><td>40.57%</td><td>22.73%</td></tr>
+        <tr><td>교차 상품군</td><td>39</td><td>41.03%</td><td>30.77%</td><td>31.88%</td><td>7.69%</td></tr>
+        <tr><td>제공 DB만 사용</td><td>69</td><td>63.77%</td><td>28.99%</td><td>26.94%</td><td>24.64%</td></tr>
+        <tr><td>공식 외부 근거 필요</td><td>36</td><td>61.11%</td><td>44.44%</td><td>60.95%</td><td>2.78%</td></tr>
+        <tr><td>DETAIL</td><td>12</td><td class="good">100%</td><td class="good">100%</td><td class="good">100%</td><td class="good">100%</td></tr>
+        <tr><td>SEARCH</td><td>78</td><td>62.82%</td><td>24.36%</td><td>34.48%</td><td>1.28%</td></tr>
+        <tr><td>COMPARE</td><td>6</td><td class="bad">0%</td><td class="bad">0%</td><td>해당 없음</td><td>0%</td></tr>
+        <tr><td>차단/역질문</td><td>9</td><td>55.56%</td><td>55.56%</td><td>해당 없음</td><td>55.56%</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>6. 문항 유형별 정확도</h2>
+    <table>
+      <thead><tr><th>Gold 문항 유형</th><th>문항</th><th>Disposition</th><th>Outcome</th><th>상품 F1</th><th>False block</th></tr></thead>
+      <tbody>
+        <tr><td>지정 상품 snapshot 상세</td><td>11</td><td>100%</td><td>100%</td><td>100%</td><td>0</td></tr>
+        <tr><td>공식문서 관계 기반 제한 검색</td><td>10</td><td>90.00%</td><td>80.00%</td><td>86.49%</td><td>1</td></tr>
+        <tr><td>다중 기업·문서·DB·위험요인</td><td>7</td><td>100%</td><td>71.43%</td><td>82.76%</td><td>0</td></tr>
+        <tr><td>단일 상품군 2조건 정렬</td><td>12</td><td>91.67%</td><td>33.33%</td><td>54.55%</td><td>1</td></tr>
+        <tr><td>양방향 기준 상품 비교 검색</td><td>12</td><td>100%</td><td>0%</td><td>해당 없음</td><td>0</td></tr>
+        <tr><td>지정 상품 3개 순서 비교</td><td>6</td><td>66.67%</td><td>0%</td><td>36.36%</td><td>2</td></tr>
+        <tr><td>구성종목 교집합 후 선별</td><td>6</td><td>0%</td><td>0%</td><td>해당 없음</td><td>6</td></tr>
+        <tr><td>2단계 파생지표 shortlist</td><td>6</td><td>0%</td><td>0%</td><td>해당 없음</td><td>6</td></tr>
+        <tr><td>교차 상품군 파생지표 선별</td><td>6</td><td>0%</td><td>0%</td><td>해당 없음</td><td>6</td></tr>
+        <tr><td>교차 상품군 2조건 병렬 검색</td><td>6</td><td>0%</td><td>0%</td><td>해당 없음</td><td>6</td></tr>
+        <tr><td>기간이 있는 테마·교차검색</td><td>3</td><td>0%</td><td>0%</td><td>해당 없음</td><td>3</td></tr>
+        <tr><td>외부 확인 후 빈 DB 교집합</td><td>3</td><td>33.33%</td><td>0%</td><td>해당 없음</td><td>2</td></tr>
+        <tr><td>혼합 검색·범위 밖 요청</td><td>3</td><td>33.33%</td><td>33.33%</td><td>해당 없음</td><td>0</td></tr>
+        <tr><td>교차 비교조건 부족 → CLARIFY</td><td>3</td><td>66.67%</td><td>66.67%</td><td>해당 없음</td><td>0</td></tr>
+        <tr><td>단일 판단기준 부족 → CLARIFY</td><td>3</td><td>66.67%</td><td>66.67%</td><td>해당 없음</td><td>0</td></tr>
+      </tbody>
+    </table>
+    <p class="small">나머지 8개 유형은 과제자료 공식 예시를 각각 1문항씩 반영했다. 1문항 유형의 0%·100%는 통계적으로 일반화할 수 없으므로 별도 성능 주장에 사용하지 않는다.</p>
+  </section>
+
+  <section>
+    <h2>7. 병목 진단 — 수정하지 않음</h2>
+    <ol>
+      <li><strong>과도한 안전 차단:</strong> 실행 가능한 96문항 중 35문항을 차단했다. 고난도 30문항에서는 22건이 false block이었다.</li>
+      <li><strong>QueryPlan filter 보존:</strong> filter 정확도 21.51%, ranking 44.57%, limit 42.39%로 조건 구조화 이후의 계획 보존이 가장 약하다.</li>
+      <li><strong>복합·교차 실행:</strong> 교차 상품군 실행 정확도는 27.27%이며, 2단계·교집합·병렬 조건 유형은 대부분 실행 전에 차단됐다.</li>
+      <li><strong>상품 누락:</strong> Precision은 69.15%지만 Recall이 25.39%다. 틀린 상품을 다수 추가하는 문제보다 정답 상품을 반환하지 못하는 문제가 더 크다.</li>
+      <li><strong>외부 근거 완결성:</strong> 외부근거 필요 문항의 문서 존재율은 50%, Outcome은 44.44%다.</li>
+      <li><strong>HCLX 장애가 주원인은 아님:</strong> Intent 105회, 최종 답변 105회, Semantic Resolver 4회가 모두 성공했다. 현재 오답의 주원인은 provider 실패보다 Router·Compiler·QueryPlan·교집합 실행 계약이다.</li>
+    </ol>
+    <p class="warning">사용자 요청에 따라 위 병목을 확인만 했으며 Alias 추가, threshold 변경, prompt 변경, corpus 추가, Agent 판단 코드 수정, 재실행을 하지 않았다. 실행 전 변경은 Phase 5 suite metadata와 ID 형식을 허용하는 Blind harness 계약 추가뿐이며 Agent 응답에는 영향을 주지 않는다.</p>
+  </section>
+
+  <section>
+    <h2>8. 안정성·지연</h2>
+    <table>
+      <thead><tr><th>항목</th><th>결과</th></tr></thead>
+      <tbody>
+        <tr><td>HTTP 200</td><td>105/105</td></tr>
+        <tr><td>HCLX terminal failure</td><td>0건</td></tr>
+        <tr><td>p50 / p95 / p99</td><td>4.33초 / 6.05초 / 16.23초</td></tr>
+        <tr><td>최대 지연</td><td>71.47초 — 공식 PDF 원문 파싱 경로</td></tr>
+        <tr><td>300초 timeout</td><td>0건</td></tr>
+        <tr><td>Document Dense cache / live fallback</td><td>4회 조회 · cache hit 3회 · live fallback 1회</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>9. 봉인 및 재현 정보</h2>
+    <ul>
+      <li>question-only SHA-256: <code>89fb1f174d2da2aa96ffab60ddc0ebd8fdef3b044548f229096c33a8cd8bae70</code></li>
+      <li>Gold SHA-256: <code>0c08aafa9f545523f13a58cfdc9a285c58653f8c493d392c56ce227436e87061</code></li>
+      <li>pre-Gold source diff SHA-256: <code>64363ac0380dc20808cab2b61ce39b095ff05792ca071291131411b9ee7bb54c</code></li>
+      <li>prediction file SHA-256: <code>ebf9486058dc37366b16aee1e125ecdc647b05a9079f328091a0e6fdf6aa6759</code></li>
+      <li>canonical prediction SHA-256: <code>510665432ba2bd9af93264ca5f5550ec2ca0bd5d447109e5b4e6dd48b8eb6ab5</code></li>
+      <li>score file SHA-256: <code>1632818d46bc5381029f10b14b9f065339c43a03e566190df9218baec39b7cea</code></li>
+      <li>score canonical report SHA-256: <code>ac9d5decad5c1370d31b8656d4ff45a2a4a5d9ebb97e04ced51ba432706a6702</code></li>
+      <li>기준 commit: <code>f0b4926c031d0cbb6a235da47cccce5bd2aab0f2</code> + 봉인된 pre-Gold development diff</li>
+      <li>Docker image ID: <code>sha256:5a4fc730f7737665fecda11b0e58f6a2a513b2363b986d0773605f0ec83fbfb8</code></li>
+    </ul>
+    <p class="small">Gold는 prediction 파일 생성·read-only 고정·SHA-256 기록이 끝난 후 처음 열었다. 질문 원문·Gold 세부 정답·HCLX 응답 원문·API Key는 이 보고서에 포함하지 않았다. NCP 배포·commit·push는 수행하지 않았다.</p>
+  </section>
+
+  <section>
+    <h2>10. Phase 6 최초 Blind 결과 — 2026-09-02</h2>
+    <p class="notice"><strong>결과:</strong> 150문항 최초 Blind에서 Outcome Exact <strong>85.33%</strong>, 상품 micro F1 <strong>90.78%</strong>, Strict Exact <strong>82.67%</strong>를 기록했다. 잘못 실행한 false execution은 0건이고, 답할 수 있는 질문을 차단한 false block은 12건(8.00%)이다. Phase 5 최초 Blind보다 구조적 일반화 성능이 크게 개선됐지만, Phase 6는 공식 예시·유사 유형·이전 회귀 유형의 혼합 세트이므로 완전 독립 일반화 수치로 단정하지 않는다.</p>
+
+    <div class="grid">
+      <div class="card"><b>85.33%</b><span>Outcome Exact 정확도</span></div>
+      <div class="card"><b>90.78%</b><span>상품 micro F1</span></div>
+      <div class="card"><b>97.48%</b><span>상품 micro Precision</span></div>
+      <div class="card"><b>84.93%</b><span>상품 micro Recall</span></div>
+    </div>
+
+    <h3>10.1 핵심 성능</h3>
+    <table>
+      <thead><tr><th>지표</th><th>결과</th><th>해석</th></tr></thead>
+      <tbody>
+        <tr><td>Disposition 정확도</td><td>92.00%</td><td>EXECUTE·CLARIFY·UNSUPPORTED 경로 판단</td></tr>
+        <tr><td>Result Status 정확도</td><td>89.66%</td><td>SUCCESS·NOT_FOUND·CLARIFY 등 최종 상태</td></tr>
+        <tr><td>Outcome Exact</td><td class="good">85.33%</td><td>경로·상태·상품 순서가 모두 일치</td></tr>
+        <tr><td>Strict Exact</td><td class="good">82.67%</td><td>Outcome과 후보 수·QueryPlan 계약까지 일치</td></tr>
+        <tr><td>상품 micro Precision / Recall / F1</td><td>97.48% / 84.93% / 90.78%</td><td>오답 상품 추가보다 정답 상품 누락이 남은 주된 문제</td></tr>
+        <tr><td>상품 순서 정확도</td><td>83.94%</td><td>137개 실행 문항의 Top-N 순서 일치</td></tr>
+        <tr><td>후보 수 정확도</td><td>86.13%</td><td>필터 후 전체 후보군 건수 일치</td></tr>
+        <tr><td>QueryPlan family / filter / ranking / limit</td><td>89.31% / 86.26% / 84.87% / 86.29%</td><td>구조화된 조건 보존 정확도</td></tr>
+        <tr><td>교차 상품군 실행 Exact</td><td class="good">94.74%</td><td>여러 상품군을 함께 다루는 실행 문항</td></tr>
+        <tr><td>외부근거 Outcome / 문서 제시율</td><td>93.75% / 93.75%</td><td>공식 외부문서가 필요한 64문항 기준</td></tr>
+        <tr><td>False block / false execution</td><td>12건(8.00%) / 0건</td><td>안전성은 유지했으나 정상 질문의 과잉 차단이 남음</td></tr>
+      </tbody>
+    </table>
+
+    <h3>10.2 평가 구성별 결과</h3>
+    <table>
+      <thead><tr><th>구성</th><th>문항</th><th>Disposition</th><th>Outcome</th><th>Strict</th><th>상품 macro F1</th><th>False block</th></tr></thead>
+      <tbody>
+        <tr><td>공식 예시와 같은 유형</td><td>92</td><td>95.65%</td><td>91.30%</td><td>90.22%</td><td>91.27%</td><td>4</td></tr>
+        <tr><td>과제자료 공식 예시 원문</td><td>8</td><td>100%</td><td>62.50%</td><td>37.50%</td><td>62.50%</td><td>0</td></tr>
+        <tr><td>Phase 1~5 회귀 유형</td><td>50</td><td>84.00%</td><td>78.00%</td><td>76.00%</td><td>81.48%</td><td>8</td></tr>
+        <tr><td>교차 상품군</td><td>67</td><td>98.51%</td><td>95.52%</td><td>95.52%</td><td>—</td><td>1</td></tr>
+        <tr><td>단일 상품군</td><td>83</td><td>86.75%</td><td>77.11%</td><td>72.29%</td><td>—</td><td>11</td></tr>
+      </tbody>
+    </table>
+    <p class="warning"><strong>독립성 한계:</strong> Phase 6는 공식 예시 8개, 공식 예시 유사 유형 92개, 이전 Phase의 계약을 재구성한 회귀 유형 50개로 구성됐다. 질문 원문 142개는 새로 작성됐지만 상품·필터·관계 근거가 이전 평가와 겹치므로, 이 수치는 최종 독립 일반화 성능의 하한·상한으로 단정할 수 없다.</p>
+
+    <h3>10.3 난이도별 결과</h3>
+    <table>
+      <thead><tr><th>난이도</th><th>문항</th><th>Disposition</th><th>Outcome</th><th>Strict</th><th>상품 macro F1</th><th>False block</th></tr></thead>
+      <tbody>
+        <tr><td>하</td><td>34</td><td>82.35%</td><td>76.47%</td><td>73.53%</td><td>75.76%</td><td>6</td></tr>
+        <tr><td>중</td><td>42</td><td>92.86%</td><td>80.95%</td><td>78.57%</td><td>86.67%</td><td>3</td></tr>
+        <tr><td>상</td><td>71</td><td class="good">95.77%</td><td class="good">91.55%</td><td class="good">91.55%</td><td>91.26%</td><td>3</td></tr>
+        <tr><td>답변 불가</td><td>3</td><td>100%</td><td>100%</td><td>33.33%</td><td>100%</td><td>0</td></tr>
+      </tbody>
+    </table>
+    <p class="small">상 난이도가 더 높은 것은 Phase 6의 상 문항 다수가 이미 구현된 Document Dense·교차 검색 구조를 직접 평가한 반면, 하·중 구간에 새로운 지정상품 표현과 과거 회귀 취약 유형이 집중됐기 때문이다. 난이도별 수치를 일반 난이도 곡선으로 해석하면 안 된다.</p>
+
+    <h3>10.4 문항 유형별 정확도</h3>
+    <table>
+      <thead><tr><th>문항 유형</th><th>문항</th><th>Disposition</th><th>Outcome</th><th>Strict</th><th>상품 macro F1</th><th>False block</th></tr></thead>
+      <tbody>
+        <tr><td>다중 기업·공식문서·위험요인 선별</td><td>18</td><td>100%</td><td>100%</td><td>100%</td><td>100%</td><td>0</td></tr>
+        <tr><td>공식문서 관계 → 제공 DB</td><td>12</td><td>100%</td><td>100%</td><td>100%</td><td>100%</td><td>0</td></tr>
+        <tr><td>구성종목 역검색</td><td>10</td><td>100%</td><td>100%</td><td>100%</td><td>100%</td><td>0</td></tr>
+        <tr><td>교차 상품군 2단계 검색</td><td>6</td><td>100%</td><td>100%</td><td>100%</td><td>100%</td><td>0</td></tr>
+        <tr><td>파생지표 2단계 shortlist</td><td>6</td><td>100%</td><td>100%</td><td>100%</td><td>100%</td><td>0</td></tr>
+        <tr><td>외부 확인 후 빈 DB 교집합</td><td>7</td><td>100%</td><td>100%</td><td>100%</td><td>100%</td><td>0</td></tr>
+        <tr><td>지정 상품 상세</td><td>20</td><td>75.00%</td><td>75.00%</td><td>75.00%</td><td>75.00%</td><td>5</td></tr>
+        <tr><td>단일 조건 정렬</td><td>11</td><td>90.91%</td><td>81.82%</td><td>72.73%</td><td>81.82%</td><td>1</td></tr>
+        <tr><td>기준 상품 상대검색</td><td>10</td><td>90.00%</td><td>80.00%</td><td>80.00%</td><td>80.00%</td><td>1</td></tr>
+        <tr><td>기간 테마 이력·교차검색</td><td>10</td><td>100%</td><td>80.00%</td><td>80.00%</td><td>86.67%</td><td>0</td></tr>
+        <tr><td>두 지정 상품 비교</td><td>5</td><td>80.00%</td><td class="bad">20.00%</td><td class="bad">0%</td><td>73.33%</td><td>1</td></tr>
+        <tr><td>두 집단 분포·대표상품 집계</td><td>5</td><td class="bad">40.00%</td><td class="bad">40.00%</td><td class="bad">40.00%</td><td>40.00%</td><td>3</td></tr>
+        <tr><td>범위 밖·무결성 공격</td><td>5</td><td>100%</td><td>100%</td><td>100%</td><td>해당 없음</td><td>0</td></tr>
+      </tbody>
+    </table>
+    <p class="small">문항이 1개뿐인 세부 유형은 0%·100%가 일반화 성능을 뜻하지 않으므로 표에서 제외했다. 전체 원본 score에는 모든 29개 유형이 보존돼 있다.</p>
+
+    <h3>10.5 확인된 병목 — 아직 수정하지 않음</h3>
+    <ol>
+      <li><strong>정상 질문 과잉 차단 12건:</strong> 지정 상품 상세 5건, 집단 집계 3건, 기준상품 상대검색·교차 병렬검색·지정상품 비교·단일 정렬 각 1건이다. HCLX가 정상 Intent를 제안해도 서버의 의미상 동등성·복합구문 보존 경계가 너무 엄격한 구간이 남아 있다.</li>
+      <li><strong>지정상품 비교의 정렬·완전성:</strong> 비교 5문항 Outcome은 20%다. 두 상품을 모두 찾고도 정렬 방향이 반대인 사례, 한 상품만 반환한 사례, 정상 비교를 CLARIFY한 사례가 각각 확인됐다.</li>
+      <li><strong>공식 외부근거 Cache Miss:</strong> 공식 예시 중 캠브리콘 편입 ETF와 에코프로 자회사 편입 ETF는 계획을 만들었지만 문서를 확보하지 못해 <code>CANNOT_VERIFY</code>로 종료했다. 근거 없이 상품을 반환하지 않는 안전 원칙은 지켰지만 Recall을 잃었다.</li>
+      <li><strong>복합 외부검색 뒤 병렬 DB 하위계획 누락:</strong> 기간 테마 검색 2건은 ETF 근거와 상품은 맞았지만 함께 요구된 채권 shortlist를 실행하지 않아 상품 Recall이 20%에 그쳤다.</li>
+      <li><strong>상품명 내부 단어의 외부관계 오탐:</strong> 정확한 상품명에 포함된 테마 표현을 별도 외부지식 요구로 인식해, DB-only 상대검색을 <code>CANNOT_VERIFY</code>로 보낸 사례가 있다. product identity span을 먼저 잠그는 경계가 필요하다.</li>
+      <li><strong>채권 잔존일수 기준 불일치:</strong> QueryPlan은 맞았지만 Runtime이 만기일과 2026-08-24를 이용해 잔존일수를 다시 계산하면서, 원천 Gold의 <code>remaining_days</code> 값과 2일 차이가 발생했다. 제공 컬럼 우선 원칙과 파생값 표시를 분리해야 한다.</li>
+      <li><strong>평가계약 한계 1건:</strong> 제한 없이 전체를 요구한 채권 질문은 Gold의 Top-N이 빈 배열인데 Agent는 대표 5개를 반환해 Outcome 오답으로 계산됐다. 후보 수와 필터는 정확하므로, 이 1건은 Agent 오류와 함께 unbounded 결과 채점 계약의 한계로 별도 해석해야 한다.</li>
+    </ol>
+    <p class="warning"><strong>중요:</strong> 사용자 지시에 따라 Phase 6 결과를 확인하고 병목을 분류만 했다. Alias·threshold·prompt·Router·Compiler·Document corpus·SQL·Verifier는 Phase 6 Gold를 본 뒤 수정하지 않았고, 재실행도 하지 않았다.</p>
+
+    <h3>10.6 안정성·지연·HCLX</h3>
+    <table>
+      <thead><tr><th>항목</th><th>결과</th></tr></thead>
+      <tbody>
+        <tr><td>HTTP 200 / 300초 timeout</td><td>150/150 / 0건</td></tr>
+        <tr><td>HCLX Intent</td><td>성공 150회 · schema 응답 오류 3회는 제한 재시도로 복구</td></tr>
+        <tr><td>HCLX Semantic Resolver</td><td>성공 26회 · schema 응답 오류 2회는 안전 경로로 종료</td></tr>
+        <tr><td>HCLX 최종 답변</td><td>150/150 성공</td></tr>
+        <tr><td>p50 / p95 / p99</td><td>7.10초 / 13.93초 / 21.88초</td></tr>
+        <tr><td>최대 지연</td><td>31.27초</td></tr>
+        <tr><td>Provider terminal failure</td><td>0건</td></tr>
+      </tbody>
+    </table>
+
+    <h3>10.7 Gold 무결성 검사</h3>
+    <p class="good">구조·공식 데이터·계산 계약은 통과했다.</p>
+    <table>
+      <thead><tr><th>검사</th><th>결과</th></tr></thead>
+      <tbody>
+        <tr><td>suite·Phase·150개 ID·question-only 연결</td><td>통과 · 누락/중복 0</td></tr>
+        <tr><td>공식 XLSX 8개 파일 SHA-256·크기</td><td>8/8 일치</td></tr>
+        <tr><td>원천행 / 원천 필드 값</td><td>365행 / 3,357값 · 불일치 0</td></tr>
+        <tr><td>후보 수 / Top-N / 집계</td><td>196 / 194 / 15회 재계산 · 불일치 0</td></tr>
+        <tr><td>케이스 후보 총합</td><td>137회 · 불일치 0</td></tr>
+        <tr><td>BUYABLE_QUANTITY·해외 ETF 1년 수익률·Gold CANNOT_VERIFY</td><td>금지 계약 위반 0</td></tr>
+        <tr><td>외부 관계 상품의 제공 DB 교집합</td><td>76건 확인 · 누락 0</td></tr>
+        <tr><td>외부문서 snapshot</td><td>23개 중 17개 SHA 일치 · 6개는 로컬 원문 부재</td></tr>
+      </tbody>
+    </table>
+    <p class="warning"><strong>Gold 제한:</strong> 금융위원회 국민성장, VanEck SMHC, MarketVector SMHC, 에코프로 2건, NOT_FOUND 검색범위 pointer 등 6개 외부 근거는 URL·기록 SHA·날짜 계약은 존재하지만 로컬 원문 snapshot이 없어 바이트 단위 독립 재현을 완료하지 못했다. 따라서 Gold 상태는 <code>passed_with_limitations</code>이며, DB 수치·정렬·상품 ID 무결성에는 발견된 오류가 없다.</p>
+
+    <h3>10.8 Phase 6 봉인 정보</h3>
+    <ul>
+      <li>question-only SHA-256: <code>f8fc8c2339b0a556fb59fc85ec4169af4e2f1c4aba7797fa29705ddc8ca2ca1a</code></li>
+      <li>Gold SHA-256: <code>2410ea556599146cc5312d661d658463cfc990825a26bbc7d2597040edaa141f</code></li>
+      <li>pre-Gold source archive SHA-256: <code>bada62156d4c4411fdf487310237de56000ec721969fac1192df44709bfea08c</code></li>
+      <li>prediction file SHA-256: <code>28374bfff9b1d6fc6633a311e9812471abbeaec6294b091b502312ab9d8883f3</code></li>
+      <li>canonical prediction SHA-256: <code>113331b3823037b4380507b2b6949060987c2c3d23896b00bc684c2a870279ca</code></li>
+      <li>prediction journal SHA-256: <code>6842840605e18ec7173913ba43bc1307fd20f9ed5c7a446322ee8440b4c9ca85</code></li>
+      <li>score file SHA-256: <code>dad16d55c2fdffdb60339b3771dc35694d4d6e9519ae4ad64d6e8e5d935a9500</code></li>
+      <li>score canonical report SHA-256: <code>87cac1ca47574558bc1cdd621a56d9f3e3a66c212dfe3cf98ba1a380819bd907</code></li>
+      <li>Gold integrity audit SHA-256: <code>3d0e6d215f1641566179d47dd33550a7c8765a3763f04d160ef78b640bd5b315</code></li>
+      <li>기준 commit: <code>f0b4926c031d0cbb6a235da47cccce5bd2aab0f2</code> + pre-Gold dirty source archive</li>
+      <li>Docker image ID: <code>sha256:5a4fc730f7737665fecda11b0e58f6a2a513b2363b986d0773605f0ec83fbfb8</code></li>
+    </ul>
+    <p class="small">Phase 6 예측·journal·score·Gold audit는 mode 0400으로 고정했다. Gold는 150문항 예측 완료와 prediction SHA 기록 이후 처음 열었다. Secret·질문 원문·Gold 정답·HCLX 원문 응답은 보고서에 넣지 않았다. commit·push·NCP 배포는 수행하지 않았다.</p>
+  </section>
+</main>
+</body>
+</html>

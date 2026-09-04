@@ -9,7 +9,7 @@
     a owl:Ontology ;
     owl:imports <https://gaeng3.ai/ontology/common> ;
     rdfs:label "해외 ETF·ETN Ontology"@ko ;
-    ga:registryVersion "1.5" .
+    ga:registryVersion "1.8" .
 
 etfgl:GlobalETPProduct
     a owl:Class ;
@@ -40,6 +40,9 @@ etfgl:Family
     ga:hasCanonicalField etfgl:field_one_day_return_pct ;
     ga:hasCanonicalField etfgl:field_short_name ;
     ga:hasCanonicalField etfgl:field_manager ;
+    ga:hasCanonicalField etfgl:field_base_index ;
+    ga:hasCanonicalField etfgl:field_strategy_description ;
+    ga:hasCanonicalField etfgl:field_index_replication_method ;
     ga:hasCanonicalField etfgl:field_leverage_factor ;
     ga:hasCanonicalField etfgl:field_close_price ;
     ga:hasCanonicalField etfgl:field_daily_trading_value ;
@@ -49,7 +52,10 @@ etfgl:Family
     ga:hasCanonicalField etfgl:field_index_tracking ;
     ga:hasCanonicalField etfgl:field_base_price ;
     ga:hasCanonicalField etfgl:field_listing_date ;
-    ga:hasCanonicalField etfgl:field_fund_currency .
+    ga:hasCanonicalField etfgl:field_fund_currency ;
+    ga:hasCanonicalField etfgl:field_open_price ;
+    ga:hasCanonicalField etfgl:field_high_price ;
+    ga:hasCanonicalField etfgl:field_low_price .
 
 etfgl:Dataset
     a ga:Dataset ;
@@ -347,15 +353,6 @@ etfgl:field_asset_type
     ga:enumValue "Mixed Assets" ;
     ga:enumValue "Commodity" ;
     ga:enumValue "Money Market" ;
-    ga:enumValue "주식" ;
-    ga:enumValue "채권" ;
-    ga:enumValue "원자재" ;
-    ga:enumValue "혼합자산" ;
-    ga:enumValue "단기자금" ;
-    ga:enumValue "통화" ;
-    ga:enumValue "부동산" ;
-    ga:enumValue "대체투자" ;
-    ga:enumValue "기타" ;
     ga:asOfBasis "static" ;
     ga:sourceDataset "overseas_etp" ;
     ga:sourceColumn "wu_inv_ast_type" ;
@@ -442,17 +439,6 @@ etfgl:field_investment_region
     ga:enumValue "United Kingdom" ;
     ga:enumValue "United States of America" ;
     ga:enumValue "Vietnam" ;
-    ga:enumValue "국내" ;
-    ga:enumValue "미국" ;
-    ga:enumValue "글로벌" ;
-    ga:enumValue "중국" ;
-    ga:enumValue "아시아" ;
-    ga:enumValue "일본" ;
-    ga:enumValue "인도" ;
-    ga:enumValue "남미/북미" ;
-    ga:enumValue "유럽" ;
-    ga:enumValue "베트남" ;
-    ga:enumValue "이머징/브릭스" ;
     ga:asOfBasis "static" ;
     ga:sourceDataset "overseas_etp" ;
     ga:sourceColumn "wu_inv_rgn" ;
@@ -468,6 +454,10 @@ etfgl:field_total_expense_ratio_pct
     skos:altLabel "보수율"@ko ;
     skos:altLabel "연간보수"@ko ;
     skos:altLabel "연간보수율"@ko ;
+    skos:altLabel "운용비"@ko ;
+    skos:altLabel "운영비"@ko ;
+    skos:altLabel "관리비"@ko ;
+    skos:altLabel "수수료 부담"@ko ;
     skos:altLabel "expense ratio"@ko ;
     skos:altLabel "fee"@ko ;
     ga:valueType "number" ;
@@ -499,6 +489,7 @@ etfgl:field_aum
     ga:forFamily etfgl:Family ;
     ga:canonicalName "aum" ;
     rdfs:label "최근 AUM"@ko ;
+    skos:altLabel "AUM"@ko ;
     skos:altLabel "순자산"@ko ;
     skos:altLabel "운용 자산"@ko ;
     skos:altLabel "assets under management"@ko ;
@@ -596,6 +587,8 @@ etfgl:field_dynamic_as_of
     ga:canonicalName "dynamic_as_of" ;
     rdfs:label "동적 지표 기준일"@ko ;
     skos:altLabel "AUM 업데이트일"@ko ;
+    skos:altLabel "최신 기준일"@ko ;
+    skos:altLabel "동적 기준일"@ko ;
     skos:altLabel "dynamic as of"@ko ;
     ga:valueType "date" ;
     ga:unit "date" ;
@@ -627,6 +620,12 @@ etfgl:field_one_day_return_pct
     rdfs:label "1일 수익률"@ko ;
     skos:altLabel "하루 수익률"@ko ;
     skos:altLabel "일간 수익률"@ko ;
+    skos:altLabel "당일 수익률"@ko ;
+    skos:altLabel "오늘 상승률"@ko ;
+    skos:altLabel "하루 등락률"@ko ;
+    skos:altLabel "하루 등락"@ko ;
+    skos:altLabel "일간 등락률"@ko ;
+    skos:altLabel "일간 등락"@ko ;
     skos:altLabel "one day return"@ko ;
     ga:valueType "number" ;
     ga:unit "pct_point" ;
@@ -704,6 +703,96 @@ etfgl:field_manager
     ga:sourceColumn "cu_fund_mgmt_co" ;
     ga:sourceTransform "identity" ;
     ga:notes "해외 ETP의 공식 운용사명을 원문 그대로 사용하고 결측은 제외한다."@ko .
+
+etfgl:field_base_index
+    a ga:CanonicalField ;
+    ga:forFamily etfgl:Family ;
+    ga:canonicalName "base_index" ;
+    rdfs:label "기초지수"@ko ;
+    skos:altLabel "추종 지수"@ko ;
+    skos:altLabel "benchmark"@ko ;
+    skos:altLabel "base index"@ko ;
+    ga:valueType "string" ;
+    ga:unit "none" ;
+    ga:quality "PARTIAL" ;
+    ga:coveragePct "51.4494"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable false ;
+    ga:aggregatable false ;
+    ga:comparable true ;
+    ga:comparisonMode "value_only" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "contains" ;
+    ga:asOfBasis "static" ;
+    ga:sourceDataset "overseas_etp" ;
+    ga:sourceColumn "cu_base_index" ;
+    ga:sourceTransform "identity" ;
+    ga:notes "원천 6,026행에 값이 있지만 주요 제공 불가 placeholder 2,920행을 제외한 3,106행만 의미 있는 기초지수로 간주하며, 결측과 placeholder를 지수 부재로 해석하지 않는다."@ko .
+
+etfgl:field_strategy_description
+    a ga:CanonicalField ;
+    ga:forFamily etfgl:Family ;
+    ga:canonicalName "strategy_description" ;
+    rdfs:label "해외 ETP 운용 전략"@ko ;
+    skos:altLabel "운용 전략"@ko ;
+    skos:altLabel "운용전략"@ko ;
+    skos:altLabel "운용 전략 설명"@ko ;
+    skos:altLabel "투자 전략 설명"@ko ;
+    skos:altLabel "investment strategy"@ko ;
+    ga:valueType "string" ;
+    ga:unit "none" ;
+    ga:quality "PARTIAL" ;
+    ga:coveragePct "99.8178"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable false ;
+    ga:aggregatable false ;
+    ga:comparable true ;
+    ga:comparisonMode "value_only" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "contains" ;
+    ga:asOfBasis "static" ;
+    ga:sourceDataset "overseas_etp" ;
+    ga:sourceColumn "cu_strtegy" ;
+    ga:sourceTransform "identity" ;
+    ga:notes "공식 2026-08-24 원천 6,026행의 영문 운용전략 서술을 요약·추론하지 않고 그대로 보존하며, 명시적 문구 일치에만 사용한다."@ko .
+
+etfgl:field_index_replication_method
+    a ga:CanonicalField ;
+    ga:forFamily etfgl:Family ;
+    ga:canonicalName "index_replication_method" ;
+    rdfs:label "지수 복제방법"@ko ;
+    skos:altLabel "지수복제방법"@ko ;
+    skos:altLabel "지수 복제 방식"@ko ;
+    skos:altLabel "지수복제방식"@ko ;
+    skos:altLabel "복제 방식"@ko ;
+    skos:altLabel "복제방식"@ko ;
+    skos:altLabel "index replication method"@ko ;
+    ga:valueType "enum" ;
+    ga:unit "code" ;
+    ga:quality "PARTIAL" ;
+    ga:coveragePct "39.8708"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable false ;
+    ga:aggregatable false ;
+    ga:comparable true ;
+    ga:comparisonMode "value_only" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "in" ;
+    ga:enumValue "Optimized" ;
+    ga:enumValue "Swap" ;
+    ga:enumValue "Full" ;
+    ga:enumValue "Other" ;
+    ga:asOfBasis "static" ;
+    ga:sourceDataset "overseas_etp" ;
+    ga:sourceColumn "cu_index_repl_mthd" ;
+    ga:sourceTransform "identity" ;
+    ga:notes "공식 2026-08-24 원천의 2,407행에서만 제공된 Optimized·Swap·Full·Other 코드를 그대로 보존하고 결측은 UNKNOWN으로 유지한다."@ko .
 
 etfgl:field_leverage_factor
     a ga:CanonicalField ;
@@ -1007,3 +1096,96 @@ etfgl:field_fund_currency
     ga:sourceColumn "pd_curr_cd" ;
     ga:sourceTransform "identity" ;
     ga:notes "거래통화 pd_trd_ccy와 구분해 공식 펀드통화코드를 원문 보존한다."@ko .
+
+etfgl:field_open_price
+    a ga:CanonicalField ;
+    ga:forFamily etfgl:Family ;
+    ga:canonicalName "open_price" ;
+    rdfs:label "시가"@ko ;
+    skos:altLabel "시가"@ko ;
+    skos:altLabel "open price"@ko ;
+    ga:valueType "number" ;
+    ga:unit "source_currency_amount" ;
+    ga:quality "PARTIAL" ;
+    ga:coveragePct "100"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable true ;
+    ga:aggregatable true ;
+    ga:comparable true ;
+    ga:comparisonMode "numeric_delta" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "lt" ;
+    ga:allowedOperator "lte" ;
+    ga:allowedOperator "gt" ;
+    ga:allowedOperator "gte" ;
+    ga:allowedOperator "between" ;
+    ga:asOfBasis "dynamic" ;
+    ga:sourceDataset "overseas_etp" ;
+    ga:sourceColumn "du_opr" ;
+    ga:sourceTransform "identity" ;
+    ga:sentinelValuesJson "{\"0\":\"UNKNOWN\"}" ;
+    ga:notes "공식 해외 ETP 시가를 보존하고 0·결측은 수치 실행에서 제외한다."@ko .
+
+etfgl:field_high_price
+    a ga:CanonicalField ;
+    ga:forFamily etfgl:Family ;
+    ga:canonicalName "high_price" ;
+    rdfs:label "고가"@ko ;
+    skos:altLabel "고가"@ko ;
+    skos:altLabel "high price"@ko ;
+    ga:valueType "number" ;
+    ga:unit "source_currency_amount" ;
+    ga:quality "PARTIAL" ;
+    ga:coveragePct "100"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable true ;
+    ga:aggregatable true ;
+    ga:comparable true ;
+    ga:comparisonMode "numeric_delta" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "lt" ;
+    ga:allowedOperator "lte" ;
+    ga:allowedOperator "gt" ;
+    ga:allowedOperator "gte" ;
+    ga:allowedOperator "between" ;
+    ga:asOfBasis "dynamic" ;
+    ga:sourceDataset "overseas_etp" ;
+    ga:sourceColumn "du_hpr" ;
+    ga:sourceTransform "identity" ;
+    ga:sentinelValuesJson "{\"0\":\"UNKNOWN\"}" ;
+    ga:notes "공식 해외 ETP 고가를 보존하고 0·결측은 수치 실행에서 제외한다."@ko .
+
+etfgl:field_low_price
+    a ga:CanonicalField ;
+    ga:forFamily etfgl:Family ;
+    ga:canonicalName "low_price" ;
+    rdfs:label "저가"@ko ;
+    skos:altLabel "저가"@ko ;
+    skos:altLabel "low price"@ko ;
+    ga:valueType "number" ;
+    ga:unit "source_currency_amount" ;
+    ga:quality "PARTIAL" ;
+    ga:coveragePct "100"^^xsd:decimal ;
+    ga:queryable true ;
+    ga:selectable true ;
+    ga:sortable true ;
+    ga:aggregatable true ;
+    ga:comparable true ;
+    ga:comparisonMode "numeric_delta" ;
+    ga:comparisonScope "same_dataset" ;
+    ga:allowedOperator "eq" ;
+    ga:allowedOperator "lt" ;
+    ga:allowedOperator "lte" ;
+    ga:allowedOperator "gt" ;
+    ga:allowedOperator "gte" ;
+    ga:allowedOperator "between" ;
+    ga:asOfBasis "dynamic" ;
+    ga:sourceDataset "overseas_etp" ;
+    ga:sourceColumn "du_lpr" ;
+    ga:sourceTransform "identity" ;
+    ga:sentinelValuesJson "{\"0\":\"UNKNOWN\"}" ;
+    ga:notes "공식 해외 ETP 저가를 보존하고 0·결측은 수치 실행에서 제외한다."@ko .

@@ -130,6 +130,44 @@ def test_compose_command_rejects_invalid_adaptive_flag(tmp_path: Path) -> None:
         release_activation._compose_command(env_file, _compose_arguments())
 
 
+def test_compose_command_adds_document_cache_overlay_only_for_complete_profile(
+    tmp_path: Path,
+) -> None:
+    env_file = tmp_path / "document-cache.env"
+    env_file.write_text(
+        """FINANCE_ADAPTIVE_SEMANTIC_ENABLED='true'
+FINANCE_EXTERNAL_DOCUMENT_DENSE_ARTIFACT_HOST_FILE='/release/document-dense.json'
+FINANCE_EXTERNAL_DOCUMENT_DENSE_ARTIFACT_FILE='/models/document-dense-approved.json'
+FINANCE_EXTERNAL_DOCUMENT_CACHE_ACTIVATION_HOST_FILE='/release/document-cache-activation.json'
+FINANCE_EXTERNAL_DOCUMENT_CACHE_ACTIVATION_FILE='/run/finance-release/document-cache-activation.json'
+""",
+        encoding="utf-8",
+    )
+    env_file.chmod(0o600)
+
+    command = release_activation._compose_command(env_file, _compose_arguments())
+
+    assert command.count("fastapi_backend/docker-compose.adaptive.yml") == 1
+    assert command.count("fastapi_backend/docker-compose.document-cache.yml") == 1
+
+
+def test_compose_command_rejects_partial_document_cache_profile(tmp_path: Path) -> None:
+    env_file = tmp_path / "partial-document-cache.env"
+    env_file.write_text(
+        """FINANCE_ADAPTIVE_SEMANTIC_ENABLED='true'
+FINANCE_EXTERNAL_DOCUMENT_DENSE_ARTIFACT_HOST_FILE='/release/document-dense.json'
+""",
+        encoding="utf-8",
+    )
+    env_file.chmod(0o600)
+
+    with pytest.raises(
+        release_activation.ReleaseActivationError,
+        match="profile is incomplete",
+    ):
+        release_activation._compose_command(env_file, _compose_arguments())
+
+
 def test_activation_rejects_signed_old_binding_and_allows_exact_idempotent_restart(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

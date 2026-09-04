@@ -3,10 +3,14 @@ from __future__ import annotations
 import re
 import unicodedata
 from dataclasses import dataclass
-from typing import Literal, Protocol
+from typing import Literal, Protocol, cast
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from finance_agent_core.agent.field_language import (
+    literal_field_pattern,
+    registry_field_phrases,
+)
 from finance_agent_core.agent.fund_resolver import (
     FundMentionResolution,
     FundProductResolver,
@@ -41,6 +45,19 @@ type FundComparisonField = Literal[
     "currency_hedged",
     "sellable",
     "company_sellable",
+    "sales_channel",
+    "interest_dividend_type",
+    "sale_company_fee_pct",
+    "trustee_fee_pct",
+    "domestic_stock_ratio_pct",
+    "domestic_bond_ratio_pct",
+    "overseas_stock_ratio_pct",
+    "overseas_bond_ratio_pct",
+    "latest_distribution_pct",
+    "management_company_fee_pct",
+    "preservation_ratio_pct",
+    "fund_major_type",
+    "office_administration_fee_pct",
 ]
 
 SUPPORTED_FUND_COMPARISON_FIELDS: tuple[FundComparisonField, ...] = (
@@ -65,9 +82,22 @@ SUPPORTED_FUND_COMPARISON_FIELDS: tuple[FundComparisonField, ...] = (
     "currency_hedged",
     "sellable",
     "company_sellable",
+    "sales_channel",
+    "interest_dividend_type",
+    "sale_company_fee_pct",
+    "trustee_fee_pct",
+    "domestic_stock_ratio_pct",
+    "domestic_bond_ratio_pct",
+    "overseas_stock_ratio_pct",
+    "overseas_bond_ratio_pct",
+    "latest_distribution_pct",
+    "management_company_fee_pct",
+    "preservation_ratio_pct",
+    "fund_major_type",
+    "office_administration_fee_pct",
 )
 
-_FIELD_PATTERNS: tuple[tuple[FundComparisonField, tuple[str, ...]], ...] = (
+_MANUAL_FIELD_PATTERNS: tuple[tuple[FundComparisonField, tuple[str, ...]], ...] = (
     (
         "one_week_return_pct",
         (
@@ -122,14 +152,146 @@ _FIELD_PATTERNS: tuple[tuple[FundComparisonField, tuple[str, ...]], ...] = (
     ("fund_management_attribute", (r"펀드\s*유형", r"운용\s*속성", r"상품\s*유형")),
     ("investment_region", (r"투자\s*지역", r"투자\s*국가")),
     ("investor_type", (r"투자자\s*(?:유형|구분)", r"개인\s*법인\s*구분")),
-    ("currency_hedged", (r"환\s*헤지\s*여부", r"환헤지")),
+    (
+        "currency_hedged",
+        (
+            r"환\s*헤지\s*(?:여부|상태|적용\s*여부)",
+            r"환헤지",
+        ),
+    ),
     ("trading_currency", (r"거래\s*통화", r"표시\s*통화", r"통화")),
     ("product_name", (r"정식\s*상품명", r"정확한\s*상품명", r"상품명", r"펀드명", r"정식명")),
     ("short_name", (r"짧은\s*이름", r"단축\s*상품명", r"약어명")),
     ("risk_level", (r"위험\s*등급", r"위험도")),
     ("aum", (r"(?<![A-Z])AUM(?![A-Z])", r"순자산", r"운용\s*자산")),
     ("sellable", (r"판매\s*(?:가능\s*)?여부", r"판매\s*상태")),
+    ("sale_company_fee_pct", (r"판매\s*회사\s*보수", r"판매\s*보수")),
+    (
+        "management_company_fee_pct",
+        (r"집합\s*투자\s*업자\s*보수", r"운용사\s*보수"),
+    ),
+    (
+        "preservation_ratio_pct",
+        (r"원본\s*보존\s*비율", r"보전\s*(?:율|비율)", r"원본(?:을)?\s*남겨\s*둔\s*비율"),
+    ),
 )
+
+
+def _registry_augmented_fund_patterns() -> tuple[
+    tuple[FundComparisonField, tuple[str, ...]], ...
+]:
+    """Keep the comparison grammar aligned with Registry capabilities."""
+
+    manual = {field: list(patterns) for field, patterns in _MANUAL_FIELD_PATTERNS}
+    registry = load_field_registry()
+    ordered: list[tuple[FundComparisonField, tuple[str, ...]]] = []
+    for raw_field in SUPPORTED_FUND_COMPARISON_FIELDS:
+        field = cast(FundComparisonField, raw_field)
+        definition = registry.require_field(field, ["fund"])
+        if not definition.comparable:
+            continue
+        patterns = manual.pop(field, [])
+        patterns.extend(
+            literal_field_pattern(phrase)
+            for phrase in registry_field_phrases(definition)
+        )
+        ordered.append((field, tuple(dict.fromkeys(patterns))))
+    if manual:  # pragma: no cover - static contract guard
+        raise RuntimeError(f"unknown fund comparison patterns: {sorted(manual)}")
+    return tuple(ordered)
+
+
+_FIELD_PATTERNS = _registry_augmented_fund_patterns()
+
+_COORDINATED_RETURN_PERIOD = re.compile(
+    r"(?P<periods>"
+    r"(?:1\s*주|일주일|1W|1\s*개월|한\s*달|1M|3\s*개월|석\s*달|3M|"
+    r"6\s*개월|반년|6M|18\s*개월|18M|1\s*년|1Y|2\s*년|2Y|"
+    r"3\s*년|3Y|5\s*년|5Y)"
+    r"(?:\s*(?:및|와|과|·|/|,)\s*"
+    r"(?:1\s*주|일주일|1W|1\s*개월|한\s*달|1M|3\s*개월|석\s*달|3M|"
+    r"6\s*개월|반년|6M|18\s*개월|18M|1\s*년|1Y|2\s*년|2Y|"
+    r"3\s*년|3Y|5\s*년|5Y))+"
+    r")\s*(?:수익률|수익|성과)",
+    re.IGNORECASE,
+)
+_RETURN_PERIOD_TOKEN = re.compile(
+    r"1\s*주|일주일|1W|1\s*개월|한\s*달|1M|3\s*개월|석\s*달|3M|"
+    r"6\s*개월|반년|6M|18\s*개월|18M|1\s*년|1Y|2\s*년|2Y|"
+    r"3\s*년|3Y|5\s*년|5Y",
+    re.IGNORECASE,
+)
+_RETURN_FIELD_BY_PERIOD = {
+    "1주": "one_week_return_pct",
+    "일주일": "one_week_return_pct",
+    "1w": "one_week_return_pct",
+    "1개월": "one_month_return_pct",
+    "한달": "one_month_return_pct",
+    "1m": "one_month_return_pct",
+    "3개월": "three_month_return_pct",
+    "석달": "three_month_return_pct",
+    "3m": "three_month_return_pct",
+    "6개월": "six_month_return_pct",
+    "반년": "six_month_return_pct",
+    "6m": "six_month_return_pct",
+    "18개월": "eighteen_month_return_pct",
+    "18m": "eighteen_month_return_pct",
+    "1년": "one_year_return_pct",
+    "1y": "one_year_return_pct",
+    "2년": "two_year_return_pct",
+    "2y": "two_year_return_pct",
+    "3년": "three_year_return_pct",
+    "3y": "three_year_return_pct",
+    "5년": "five_year_return_pct",
+    "5y": "five_year_return_pct",
+}
+_COORDINATED_PORTFOLIO_RATIO = re.compile(
+    r"(?P<assets>"
+    r"(?:국내\s*주식|국내\s*채권|해외\s*주식|해외\s*채권)"
+    r"(?:\s*(?:및|와|과|·|/|,)\s*"
+    r"(?:국내\s*주식|국내\s*채권|해외\s*주식|해외\s*채권))+"
+    r")\s*(?:구성\s*비율|구성비|비중|편입\s*비(?:율)?)",
+    re.IGNORECASE,
+)
+_PORTFOLIO_ASSET_TOKEN = re.compile(
+    r"국내\s*주식|국내\s*채권|해외\s*주식|해외\s*채권",
+    re.IGNORECASE,
+)
+_RATIO_FIELD_BY_ASSET = {
+    "국내주식": "domestic_stock_ratio_pct",
+    "국내채권": "domestic_bond_ratio_pct",
+    "해외주식": "overseas_stock_ratio_pct",
+    "해외채권": "overseas_bond_ratio_pct",
+}
+
+
+def _coordinated_field_mentions(
+    question: str,
+) -> tuple[tuple[int, int, FundComparisonField], ...]:
+    mentions: list[tuple[int, int, FundComparisonField]] = []
+    for coordinated in _COORDINATED_RETURN_PERIOD.finditer(question):
+        periods = coordinated.group("periods")
+        for token in _RETURN_PERIOD_TOKEN.finditer(periods):
+            normalized = re.sub(r"\s+", "", token.group(0)).casefold()
+            mentions.append(
+                (
+                    coordinated.start("periods") + token.start(),
+                    coordinated.start("periods") + token.end(),
+                    cast(FundComparisonField, _RETURN_FIELD_BY_PERIOD[normalized]),
+                )
+            )
+    for coordinated in _COORDINATED_PORTFOLIO_RATIO.finditer(question):
+        assets = coordinated.group("assets")
+        for token in _PORTFOLIO_ASSET_TOKEN.finditer(assets):
+            normalized = re.sub(r"\s+", "", token.group(0))
+            mentions.append(
+                (
+                    coordinated.start("assets") + token.start(),
+                    coordinated.start("assets") + token.end(),
+                    cast(FundComparisonField, _RATIO_FIELD_BY_ASSET[normalized]),
+                )
+            )
+    return tuple(mentions)
 
 _UNSUPPORTED_PATTERNS: tuple[tuple[str, str], ...] = (
     (r"총\s*보수", "총보수"),
@@ -142,7 +304,9 @@ _UNSUPPORTED_PATTERNS: tuple[tuple[str, str], ...] = (
 )
 
 _COMPARISON_TRIGGER = re.compile(
-    r"비교|대조|차이|나란히|더\s*(?:높|낮|좋|나쁘)\w*",
+    r"비교|대조|차이|나란히|더\s*(?:높|낮|좋|나쁘)\w*|"
+    r"어느\s*(?:쪽|것|상품)(?:이|가)?\s*(?:더\s*)?"
+    r"(?:큰|작은|높은|낮은|많은|적은)지",
     flags=re.IGNORECASE,
 )
 _SUPPORTED_REQUEST_PREAMBLE_PATTERNS = (
@@ -171,7 +335,8 @@ _SUPPORTED_RESPONSE_SUFFIX_PATTERNS = (
 )
 _REQUEST_SENTENCE_END_PATTERN = re.compile(
     r"(?:해\s*줘|해\s*주세요|알려\s*줘|알려\s*주세요|보여\s*줘|보여\s*주세요|"
-    r"말해\s*줘|말해\s*주세요|설명해\s*줘|설명해\s*주세요)\s*[.!?…]?\s*$",
+    r"말해\s*줘|말해\s*주세요|설명해\s*줘|설명해\s*주세요|"
+    r"부탁해(?:요|줘|주세요)?|부탁드려요|부탁드립니다)\s*[.!?…]?\s*$",
     flags=re.IGNORECASE,
 )
 _ID_PATTERN = re.compile(r"(?<![A-Z0-9])KR[A-Z0-9]{10}(?![A-Z0-9])", flags=re.IGNORECASE)
@@ -481,6 +646,11 @@ def extract_fund_comparison_fields(
             for pattern in patterns
             for match in re.finditer(pattern, masked, flags=re.IGNORECASE)
         ]
+    # Korean frequently shares the trailing noun across coordinated periods
+    # (``3개월 및 1년 수익률``).  Recover each explicitly written period in
+    # source order; no period is inferred when it is absent.
+    for start, end, field_name in _coordinated_field_mentions(masked):
+        matches_by_field[field_name].append((start, end))
     specific_spans = {
         "sellable": matches_by_field["company_sellable"],
         "product_name": matches_by_field["short_name"],
@@ -497,6 +667,18 @@ def extract_fund_comparison_fields(
                     for specific_start, specific_end in specific_spans[field_name]
                 )
             ]
+        spans = [
+            (match_start, match_end)
+            for match_start, match_end in spans
+            if not any(
+                other_field != field_name
+                and other_start <= match_start
+                and match_end <= other_end
+                and (other_end - other_start) > (match_end - match_start)
+                for other_field, other_spans in matches_by_field.items()
+                for other_start, other_end in other_spans
+            )
+        ]
         starts = [start for start, _ in spans]
         if starts:
             matched.append((min(starts), field_index, field_name))
@@ -676,6 +858,13 @@ def _mask_supported_question_language(masked_question: str) -> str:
     patterns.extend(pattern for pattern, _ in _UNSUPPORTED_PATTERNS)
     patterns.append(_COMPARISON_TRIGGER.pattern)
     patterns.append(_REQUEST_SENTENCE_END_PATTERN.pattern)
+    patterns.append(r"(?:을|를)?\s*기준(?:으로)?\s*입력한\s*순서대로")
+    patterns.extend(
+        (
+            _COORDINATED_RETURN_PERIOD.pattern,
+            _COORDINATED_PORTFOLIO_RATIO.pattern,
+        )
+    )
     for pattern in patterns:
         for match in re.finditer(pattern, masked_question, flags=re.IGNORECASE):
             masked[match.start() : match.end()] = " " * (match.end() - match.start())
@@ -766,6 +955,18 @@ def _supported_field_spans(text: str) -> tuple[tuple[int, int], ...]:
                 for _, patterns in _FIELD_PATTERNS
                 for pattern in patterns
                 for match in re.finditer(pattern, text, flags=re.IGNORECASE)
+            }
+            | {
+                (start, end)
+                for start, end, _ in _coordinated_field_mentions(text)
+            }
+            | {
+                match.span()
+                for pattern in (
+                    _COORDINATED_RETURN_PERIOD,
+                    _COORDINATED_PORTFOLIO_RATIO,
+                )
+                for match in pattern.finditer(text)
             }
         )
     )
@@ -867,22 +1068,21 @@ def _question_target_structure_unambiguous(
     if not _suffix_punctuation_is_supported(suffix):
         return False
 
-    tail_boundaries = [
-        match.start()
-        for _, patterns in _FIELD_PATTERNS
-        for pattern in patterns
-        for match in re.finditer(
-            pattern,
-            normalized[second_end:],
-            flags=re.IGNORECASE,
-        )
-    ]
+    suffix = normalized[second_end:]
+    # Use the same field-span contract as extraction.  In Korean coordinated
+    # expressions such as ``3개월 및 1년 수익률`` the first period deliberately
+    # omits the shared noun, so the single-field patterns cannot find its start.
+    # Treating that omission as target text made two otherwise exact identities
+    # look incomplete.  The coordinated grammar still requires every period or
+    # asset token to be explicit; this only aligns structural validation with
+    # the already validated field extractor.
+    tail_boundaries = [start for start, _ in _supported_field_spans(suffix)]
     tail_boundaries.extend(
         match.start()
         for pattern, _ in _UNSUPPORTED_PATTERNS
         for match in re.finditer(
             pattern,
-            normalized[second_end:],
+            suffix,
             flags=re.IGNORECASE,
         )
     )
@@ -890,7 +1090,7 @@ def _question_target_structure_unambiguous(
     if trigger is not None:
         tail_boundaries.append(trigger.start() - second_end)
     target_tail = normalized[
-        second_end : second_end + min(tail_boundaries, default=len(normalized) - second_end)
+        second_end : second_end + min(tail_boundaries, default=len(suffix))
     ]
     target_tail = re.sub(r"\b최근\s*", "", target_tail)
     tail_form = "".join(
@@ -928,6 +1128,34 @@ def _audited_natural_id_comparison_surface(
     )
     patterns = (
         re.compile(
+            rf"^\s*(?:공모\s*펀드|펀드\s*(?:코드|상품\s*(?:ID|번호)))?\s*"
+            rf"<ID>\s*(?:및|와|과|랑|이랑|,)\s*<ID>(?:의|을|를)?\s*"
+            rf"{field}\s*(?:및|와|과|,)\s*{field}(?:을|를)?\s*"
+            r"(?:기준(?:으로)?\s*)?(?:비교|대조)(?:해|해서)?\s*"
+            r"(?:주세요|줘|주십시오)?\s*[.!?]?\s*$",
+            flags=re.IGNORECASE,
+        ),
+        re.compile(
+            rf"^\s*<ID>\s*(?:및|와|과|랑|이랑|,)\s*<ID>\s*"
+            rf"공모\s*펀드(?:의|를|을)?\s*{field}(?:을|를|의)?\s*"
+            r"(?:비교|대조)(?:해|해서)?\s*(?:주세요|줘|주십시오)?\s*[.!?]?\s*$",
+            flags=re.IGNORECASE,
+        ),
+        re.compile(
+            rf"^\s*공모\s*펀드\s*<ID>\s*[,，、]\s*<ID>\s*"
+            rf"(?:중(?:에서)?|가운데)\s*{field}\s*기준(?:으로)?\s*"
+            r"어느\s*쪽(?:이|이\s*더)?\s*(?:큰|작은|높은|낮은)지\s*"
+            r"(?:알려|확인해|보여)\s*(?:주세요|줘|주십시오)?\s*[.!?]?\s*$",
+            flags=re.IGNORECASE,
+        ),
+        re.compile(
+            rf"^\s*두\s*공모\s*펀드\s*(?:식별자|상품\s*(?:ID|번호))\s*"
+            rf"<ID>\s*(?:및|와|과|랑|이랑|,)\s*<ID>(?:의|을|를)?\s*"
+            rf"{field}\s*(?:값의\s*)?차이(?:를|가|는)?\s*"
+            r"(?:확인해|알려|보여)\s*(?:주세요|줘|주십시오)?\s*[.!?]?\s*$",
+            flags=re.IGNORECASE,
+        ),
+        re.compile(
             rf"^\s*공모\s*펀드\s*중에서\s*상품\s*(?:ID|아이디|번호)"
             rf"(?:가|는|은|이)?\s*<ID>\s*(?:및|와|과|랑|이랑)\s*<ID>"
             rf"\s*인\s*두\s*상품의\s*(?:상품\s*)?{field}"
@@ -954,6 +1182,14 @@ def _audited_natural_id_comparison_surface(
             rf"<ID>\s*(?:가운데|중(?:에서)?)\s*{field}(?:이|가)?\s*더\s*"
             rf"(?:높|낮|좋|나쁘)\w*\s*상품(?:을|이|은|는)?\s*"
             r"(?:알려|보여|찾아)\s*(?:줘|주세요|주십시오)?\s*[.!?]?\s*$",
+            flags=re.IGNORECASE,
+        ),
+        re.compile(
+            rf"^\s*<ID>\s*(?:하고|와|과|랑|이랑)\s*<ID>(?:을|를)?\s*"
+            rf"비교해\s*주세요\s*[.!?]?\s*{field}(?:이|가)?\s*"
+            rf"(?:큰|작은|높은|낮은)\s*쪽부터\s*둘\s*다\s*보여주고\s*[,，]?\s*"
+            rf"그\s*값의\s*차이와\s*각\s*상품의\s*{field}(?:도)?\s*"
+            r"적어\s*주세요\s*[.!?]?\s*$",
             flags=re.IGNORECASE,
         ),
     )

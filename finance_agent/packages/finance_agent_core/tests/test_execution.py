@@ -2,6 +2,7 @@ from pathlib import Path
 
 import pytest
 
+import finance_agent_core.execution.verifier as verifier_module
 from finance_agent_core.agent import RoutedFinanceAgent
 from finance_agent_core.agent.providers import first_vertical_slice_plan
 from finance_agent_core.deadline import (
@@ -50,6 +51,31 @@ def test_sql_oracle_and_python_verifier_agree(
         "B3",
     ]
     assert "Z0" not in {record.ticker for record in verified.records}
+
+
+def test_python_verifier_resolves_each_candidate_ranking_value_once(
+    sample_database: tuple[Path, list[NormalizedOverseasEtpRecord], DatabaseManifest],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    path, _, _ = sample_database
+    plan = first_vertical_slice_plan("oracle-ranking-cache")
+    executed = SQLiteOracle(path).execute(_validated(plan, path))
+    with connect_read_only(path) as connection:
+        universe = load_all_records(connection)
+    original = verifier_module._ranking_metric_value
+    calls = 0
+
+    def counted(record, field_name: str):
+        nonlocal calls
+        calls += 1
+        return original(record, field_name)
+
+    monkeypatch.setattr(verifier_module, "_ranking_metric_value", counted)
+
+    verified = ResultVerifier().verify(plan, executed, universe)
+
+    assert verified.candidate_count == 6
+    assert calls <= verified.candidate_count * len(plan.ranking)
 
 
 def test_python_verifier_stops_after_request_cancellation(

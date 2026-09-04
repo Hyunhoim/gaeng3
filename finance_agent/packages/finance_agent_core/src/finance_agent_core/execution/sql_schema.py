@@ -52,8 +52,13 @@ def _source_text(source_column: str) -> SqlField:
 
 
 def _source_number(source_column: str) -> SqlField:
+    # XLSX cells are IEEE-754 doubles.  Their parsed JSON text can therefore
+    # contain representation tails such as ``764.0700000000001`` even though
+    # the published cell is 764.07.  The canonical runtime supports at most
+    # eight decimal places elsewhere, so normalize only the SQL projection;
+    # raw evidence remains unchanged in ``source_values_json``.
     return SqlField(
-        f"CAST({_json_value(source_column)} AS REAL)",
+        f"ROUND(CAST({_json_value(source_column)} AS REAL), 8)",
         usable_numeric=True,
     )
 
@@ -109,12 +114,18 @@ OVERSEAS_SQL_FIELDS = {
     "asset_type": SqlField("asset_type"),
     "investment_region": SqlField("investment_region"),
     "manager": _source_text("cu_fund_mgmt_co"),
+    "base_index": _source_text("cu_base_index"),
+    "strategy_description": _source_text("cu_strtegy"),
+    "index_replication_method": _source_text("cu_index_repl_mthd"),
     "leverage_factor": _source_number("cu_lev_fector"),
     "inverse_short": _source_boolean("cu_inverse_short_yn"),
     "index_tracking": _source_boolean("cu_index_tracking_yn"),
     "base_price": _source_number("du_bpr"),
     "listing_date": _source_date("pd_lstg_dt"),
     "fund_currency": _source_text("pd_curr_cd"),
+    "open_price": _source_number("du_opr"),
+    "high_price": _source_number("du_hpr"),
+    "low_price": _source_number("du_lpr"),
     "total_expense_ratio_pct": SqlField(
         "total_expense_ratio_micro_pct",
         scale=FEE_SCALE,
@@ -160,6 +171,8 @@ DOMESTIC_SQL_FIELDS = {
     "short_name": SqlField("short_name"),
     "manager": SqlField("manager"),
     "net_asset_value": _source_number("du_last_nav"),
+    "net_asset_total": _source_number("pd_net_tamt"),
+    "one_month_average_trading_value": _source_number("du_val_1m"),
     "base_index": SqlField("base_index", quality_column="base_index_quality"),
     "strategy": SqlField("strategy", quality_column="strategy_quality"),
     "leverage_factor": SqlField(
@@ -265,9 +278,11 @@ DOMESTIC_SQL_FIELDS = {
 for _overseas_only_field in (
     "base_price",
     "fund_currency",
+    "index_replication_method",
     "index_tracking",
     "inverse_short",
     "listing_date",
+    "strategy_description",
 ):
     DOMESTIC_SQL_FIELDS.pop(_overseas_only_field)
 
@@ -287,6 +302,8 @@ BOND_SQL_FIELDS = {
         quality_column="bond_subclass_quality",
     ),
     "bond_type": SqlField("bond_type", quality_column="bond_type_quality"),
+    "interest_rate_type": _source_text("bd_inrt_tcd"),
+    "interest_payment_type": _source_text("bd_intp_tcd"),
     "public_offering": _source_enum_boolean(
         "bd_ofr_tcd",
         true_value="공모",
@@ -419,7 +436,9 @@ FUND_SQL_FIELDS = {
     "base_index": SqlField("base_index", quality_column="base_index_quality"),
     "sales_channel": SqlField("sales_channel", quality_column="sales_channel_quality"),
     "fee_type": _source_text("han_clas_fee_type"),
+    "fund_major_type": _source_text("zrin_btyp_nm"),
     "management_company_fee_pct": _source_number("or_co_rwrd_r"),
+    "office_administration_fee_pct": _source_number("ofwk_trus_rwrd_r"),
     "interest_dividend_type": SqlField(
         "interest_dividend_type",
         quality_column="interest_dividend_type_quality",
@@ -528,31 +547,12 @@ TABLE_BY_FAMILY = {
 }
 
 
-def logical_product_scope(family: str, *, usable_value_sql: str | None = None) -> str:
-    """Restrict SQL execution to one stable row per organizer product ID.
+def logical_product_scope(family: str) -> str:
+    """Restrict SQL execution to one stable row per organizer product ID."""
 
-    A bond is quoted on more than one market, so the same organizer product ID
-    arrives as several rows. Collapsing to the lowest ``source_row`` keeps one
-    row per bond, but that row is chosen without regard to the question: when a
-    metric is only carried on the over-the-counter row, picking the exchange row
-    drops the bond from the answer even though the value exists.
-
-    ``usable_value_sql`` names the condition that makes a row usable for the
-    metric being ranked. Rows that satisfy it are preferred, and ``source_row``
-    still breaks the tie so the choice stays deterministic.
-    """
-
-    if family != "bond":
-        return "1 = 1"
-    if usable_value_sql is None:
+    if family == "bond":
         return (
             "source_row IN (SELECT MIN(source_row) FROM bond_products "
             "WHERE is_quarantined = 0 GROUP BY ticker)"
         )
-    return (
-        "source_row IN (SELECT source_row FROM (SELECT source_row, ROW_NUMBER() OVER ("
-        "PARTITION BY ticker ORDER BY "
-        f"CASE WHEN {usable_value_sql} THEN 0 ELSE 1 END, source_row"
-        ") AS logical_rank FROM bond_products WHERE is_quarantined = 0"
-        ") WHERE logical_rank = 1)"
-    )
+    return "1 = 1"

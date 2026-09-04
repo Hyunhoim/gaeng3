@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import hashlib
+import json
+import re
 from datetime import date
 from enum import StrEnum
 from typing import Literal
@@ -49,7 +52,6 @@ SEARCH_PROJECTION_BY_FAMILY = {
         "remaining_days",
         "coupon_rate_pct",
         "buy_yield_pct",
-        "buyable_quantity",
         "dynamic_as_of",
     ],
     "fund": [
@@ -112,12 +114,21 @@ class ConstraintOperator(StrEnum):
     GTE = "gte"
     BETWEEN = "between"
     CONTAINS = "contains"
+    IS_PRESENT = "is_present"
+    IS_MISSING = "is_missing"
 
 
 class ConstraintStrength(StrEnum):
     LOCKED = "locked"
     ASK_BEFORE_RELAXING = "ask_before_relaxing"
     PREFERENCE = "preference"
+
+
+class LogicalOperator(StrEnum):
+    """Boolean connective used by the server-owned constraint expression."""
+
+    ALL = "all"
+    ANY = "any"
 
 
 class Unit(StrEnum):
@@ -147,6 +158,7 @@ class AggregateFunction(StrEnum):
     MIN = "min"
     MAX = "max"
     AVG = "avg"
+    MEDIAN = "median"
     SUM = "sum"
 
 
@@ -163,6 +175,13 @@ class Constraint(ContractModel):
 
     @model_validator(mode="after")
     def validate_value_shape(self) -> Constraint:
+        if self.operator in {
+            ConstraintOperator.IS_PRESENT,
+            ConstraintOperator.IS_MISSING,
+        }:
+            if self.value is not True:
+                raise ValueError(f"{self.operator} requires the literal true")
+            return self
         is_list = isinstance(self.value, list)
         if self.operator in {ConstraintOperator.IN, ConstraintOperator.NOT_IN}:
             if not is_list or not self.value:
@@ -176,6 +195,48 @@ class Constraint(ContractModel):
         if self.operator is ConstraintOperator.CONTAINS and not isinstance(self.value, str):
             raise ValueError("contains requires a string value")
         return self
+
+
+class ConstraintExpression(ContractModel):
+    """A bounded Boolean tree over immutable constraints in one QueryPlan.
+
+    The flat constraint list remains the single typed catalogue consumed by
+    field projection, evidence and policy code.  This expression only records
+    how those immutable leaves are combined, so an ``OR`` can no longer be
+    silently executed as ``AND``.  An absent expression preserves the legacy
+    contract: every flat constraint is conjunctive. Constraints not referenced
+    by this expression are also conjunctive; stable content keys prevent a
+    later insertion/removal from retargeting a positional index.
+    """
+
+    operator: LogicalOperator
+    constraint_keys: list[StrictStr] = Field(default_factory=list, max_length=20)
+    children: list[ConstraintExpression] = Field(default_factory=list, max_length=10)
+
+    @model_validator(mode="after")
+    def validate_shape(self) -> ConstraintExpression:
+        arity = len(self.constraint_keys) + len(self.children)
+        if arity == 0:
+            raise ValueError("constraint expression cannot be empty")
+        if self.operator is LogicalOperator.ANY and arity < 2:
+            raise ValueError("any constraint expression requires at least two branches")
+        if len(self.constraint_keys) != len(set(self.constraint_keys)):
+            raise ValueError("constraint expression keys must not repeat within one node")
+        if any(re.fullmatch(r"[0-9a-f]{64}", key) is None for key in self.constraint_keys):
+            raise ValueError("constraint expression keys must be SHA-256 values")
+        return self
+
+
+def constraint_key(constraint: Constraint) -> str:
+    """Return the stable semantic identity of a typed constraint leaf."""
+
+    payload = json.dumps(
+        constraint.model_dump(mode="json"),
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
 class Ranking(ContractModel):
@@ -212,6 +273,14 @@ def _values(value: ConstraintValue) -> list[ScalarValue]:
 
 
 def _validate_value_type(constraint: Constraint, definition: FieldDefinition) -> None:
+    if constraint.operator in {
+        ConstraintOperator.IS_PRESENT,
+        ConstraintOperator.IS_MISSING,
+    }:
+        # Availability is a property of the source observation rather than
+        # the field's domain value.  The literal ``true`` keeps the DTO shape
+        # explicit without pretending that NULL is a user-supplied value.
+        return
     values = _values(constraint.value)
     if definition.value_type is ValueType.NUMBER:
         valid = all(
@@ -251,6 +320,12 @@ class QueryPlan(ContractModel):
     intent: Intent
     product_families: list[ProductFamily] = Field(min_length=1, max_length=4)
     constraints: list[Constraint] = Field(max_length=20)
+    constraint_expression: ConstraintExpression | None = Field(
+        default=None,
+        # Backwards-compatible plans must retain their byte-for-byte JSON
+        # shape.  Pydantic 2.13 applies this to nested model serialization.
+        exclude_if=lambda value: value is None,
+    )
     ranking: list[Ranking] = Field(max_length=5)
     projection: list[str] = Field(min_length=1, max_length=30)
     limit: StrictInt = Field(ge=1, le=100)
@@ -280,7 +355,11 @@ class QueryPlan(ContractModel):
             definition = registry.require_field(constraint.field, families)
             if not definition.queryable:
                 raise ValueError(f"{constraint.field} is not queryable")
-            if constraint.operator.value not in definition.allowed_operators:
+            if (
+                constraint.operator
+                not in {ConstraintOperator.IS_PRESENT, ConstraintOperator.IS_MISSING}
+                and constraint.operator.value not in definition.allowed_operators
+            ):
                 raise ValueError(
                     f"{constraint.operator.value} is not allowed for {constraint.field}"
                 )
@@ -290,6 +369,44 @@ class QueryPlan(ContractModel):
                     f"not {constraint.unit.value}"
                 )
             _validate_value_type(constraint, definition)
+
+        if self.constraint_expression is not None:
+            keys_by_value: dict[str, list[Constraint]] = {}
+            for constraint in self.constraints:
+                keys_by_value.setdefault(constraint_key(constraint), []).append(constraint)
+            seen_keys: list[str] = []
+            any_keys: set[str] = set()
+
+            def visit(expression: ConstraintExpression, depth: int) -> None:
+                if depth > 4:
+                    raise ValueError("constraint expression exceeds maximum depth 4")
+                seen_keys.extend(expression.constraint_keys)
+                if expression.operator is LogicalOperator.ANY:
+                    any_keys.update(expression.constraint_keys)
+                    for child in expression.children:
+                        any_keys.update(_expression_keys(child))
+                for child in expression.children:
+                    visit(child, depth + 1)
+
+            def _expression_keys(expression: ConstraintExpression) -> set[str]:
+                values = set(expression.constraint_keys)
+                for child in expression.children:
+                    values.update(_expression_keys(child))
+                return values
+
+            visit(self.constraint_expression, 1)
+            if len(seen_keys) != len(set(seen_keys)):
+                raise ValueError("constraint expression must reference each constraint once")
+            missing_or_ambiguous = [
+                key for key in seen_keys if len(keys_by_value.get(key, ())) != 1
+            ]
+            if missing_or_ambiguous:
+                raise ValueError("constraint expression references an unknown or duplicate leaf")
+            if any(
+                keys_by_value[key][0].strength is not ConstraintStrength.LOCKED
+                for key in any_keys
+            ):
+                raise ValueError("OR branches require locked constraints")
 
         for field_name in self.projection:
             definition = registry.require_field(field_name, families)

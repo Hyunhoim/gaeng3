@@ -18,7 +18,11 @@ _KOREAN_CARDINALS = {
     "아홉": 9,
     "열": 10,
 }
-_COUNTER = r"(?:개(?!월)|건|종목|상품(?!군))"
+_COUNTER = (
+    r"(?:개(?!월)|건|종(?!가|목)|종목|상품(?!군)|"
+    r"(?:국내\s*|해외\s*|원화\s*)?(?:ETF|ETN|ETP|채권)|"
+    r"(?:공모\s*)?펀드)"
+)
 
 
 def requested_result_limit(question: str) -> int | None:
@@ -62,6 +66,16 @@ def requested_result_limit(question: str) -> int | None:
     )
     if korean:
         return _KOREAN_CARDINALS[korean[-1]]
+
+    korean_ordinal = re.findall(
+        rf"(?<![0-9A-Za-z가-힣])"
+        rf"(첫|{'|'.join(sorted(_KOREAN_CARDINALS, key=len, reverse=True))})\s*"
+        r"번째\s*(?:까지|이내)",
+        question,
+    )
+    if korean_ordinal:
+        token = korean_ordinal[-1]
+        return 1 if token == "첫" else _KOREAN_CARDINALS[token]
 
     if re.search(
         r"(?:^|\s)하나(?:만)?\s*(?:보여|알려|찾아|골라|선정|조회)",

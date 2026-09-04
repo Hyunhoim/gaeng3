@@ -298,6 +298,24 @@ def row_to_bond_record(
     qualities = {
         name: QualityStatus(value) for name, value in json.loads(row["field_quality_json"]).items()
     }
+    source_values = json.loads(row["source_values_json"]) if include_source_values else {}
+    # Migration-safe read boundary: older immutable DBs calculated this field
+    # from maturity_date even though the official 2026-08-24 workbook already
+    # carries ``remaining_days``. New builds store the official value directly,
+    # while this adapter lets the same signed source row be read under the new
+    # source-preferred contract until a replacement DB is frozen. It does not
+    # invent a value; malformed/missing source cells retain the stored fallback
+    # and are still checked by NormalizedBondRecord.
+    remaining_days = row["remaining_days"]
+    official_remaining_days = source_values.get("remaining_days")
+    if official_remaining_days not in {None, ""}:
+        try:
+            parsed_remaining_days = int(str(official_remaining_days).strip())
+        except ValueError:
+            pass
+        else:
+            if parsed_remaining_days >= 0:
+                remaining_days = parsed_remaining_days
     return NormalizedBondRecord(
         source_row=row["source_row"],
         source_snapshot_date=row["source_snapshot_date"],
@@ -305,7 +323,7 @@ def row_to_bond_record(
         is_quarantined=bool(row["is_quarantined"]),
         quarantine_reason=row["quarantine_reason"],
         row_quality=QualityStatus(row["row_quality"]),
-        source_values=(json.loads(row["source_values_json"]) if include_source_values else {}),
+        source_values=source_values,
         product_id=row["product_id"],
         product_name=row["product_name"],
         ticker=row["ticker"],
@@ -364,7 +382,7 @@ def row_to_bond_record(
         currently_buyable=(
             None if row["currently_buyable"] is None else bool(row["currently_buyable"])
         ),
-        remaining_days=row["remaining_days"],
+        remaining_days=remaining_days,
         duration_years=(
             None
             if row["duration_micro_years"] is None

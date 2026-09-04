@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+import sqlite3
 from dataclasses import replace
 from datetime import date
+from types import SimpleNamespace
 
 import pytest
 
@@ -13,8 +15,10 @@ from finance_agent_core.agent.external_knowledge_result_adapter import (
 )
 from finance_agent_core.agent.external_search_planning import (
     ExternalSearchPlanCompiler,
+    ProvidedProductUniverseBuilder,
     build_provided_candidate_universe,
     intersect_evidence_with_provided_products,
+    resolve_question_identity_surfaces,
 )
 from finance_agent_core.agent.intent_analysis import (
     IntentAnalysisDraft,
@@ -24,6 +28,7 @@ from finance_agent_core.agent.knowledge_planning import (
     CompositeKnowledgePlanCompiler,
     CompositeKnowledgePlanningError,
 )
+from finance_agent_core.config import QualityStatus
 from finance_agent_core.config.knowledge_coverage import (
     KnowledgeCapability,
     load_approved_knowledge_coverage_manifest,
@@ -34,16 +39,24 @@ from finance_agent_core.contracts.external_knowledge import (
     ExternalKnowledgeOutcome,
     ExternalKnowledgeOutcomeStatus,
     KnowledgeIntentRequirement,
+    KnowledgeProductSelection,
     ProvidedProductCandidate,
     ProvidedProductCandidateUniverse,
 )
 from finance_agent_core.contracts.queryplan import ProductFamily
 from finance_agent_core.contracts.routing import InteractionIntent
 from finance_agent_core.execution.external_knowledge_executor import ExternalKnowledgeExecutor
-from finance_agent_core.execution.external_knowledge_runtime import ExternalKnowledgeRuntime
+from finance_agent_core.execution.external_knowledge_runtime import (
+    ExternalKnowledgeRuntime,
+    ExternalKnowledgeRuntimeResult,
+)
 from finance_agent_core.execution.external_knowledge_verifier import OfficialProductFact
+from finance_agent_core.execution.official_product_facts import SqliteOfficialProductFactProvider
 from finance_agent_core.release import ExternalKnowledgeArtifactRelease
 from finance_agent_core.retrieval import official_live_evidence as live_evidence_module
+from finance_agent_core.retrieval.document_discovery import (
+    CacheFirstOfficialDiscoveryProvider,
+)
 from finance_agent_core.retrieval.official_acquisition import (
     OfficialEvidenceAcquisitionCoordinator,
     OfficialEvidenceAcquisitionResult,
@@ -66,6 +79,7 @@ from finance_agent_core.retrieval.official_discovery import (
     BoundedOfficialDiscoveryProvider,
     DiscoveryFailureCode,
     OfficialDiscoveryError,
+    OfficialDiscoveryReport,
 )
 from finance_agent_core.retrieval.official_live_evidence import (
     VerifiedLiveRelationExtractor,
@@ -82,6 +96,100 @@ from finance_agent_core.storage.identity_cache import ProductIdentityRecord
 
 _SHA_A = "a" * 64
 _SHA_B = "b" * 64
+
+
+def test_external_backend_adapter_keeps_cross_family_identity_and_source_quality() -> None:
+    question = "오로라소재를 보유한 국내외 ETF를 순자산 큰 순으로 두 개 보여줘."
+    plan = CompositeKnowledgePlanCompiler().compile(
+        question,
+        "cross-family-same-id",
+        IntentAnalysisDraft(
+            intent=InteractionIntent.SEARCH,
+            product_families=[
+                ProductFamily.DOMESTIC_ETP,
+                ProductFamily.OVERSEAS_ETP,
+            ],
+            evidence_spans=[],
+            needs_clarification=False,
+            knowledge_requirements=[
+                KnowledgeIntentRequirement(
+                    capability=KnowledgeCapability.PORTFOLIO_HOLDINGS,
+                    subject_span="오로라소재",
+                    relation_span="보유한",
+                )
+            ],
+        ),
+    )
+    facts = (
+        OfficialProductFact(
+            evidence_id="provided:domestic_etp:SAME:aum",
+            product_family=ProductFamily.DOMESTIC_ETP,
+            product_id="SAME",
+            product_name="국내 합성 ETF",
+            canonical_field="aum",
+            normalized_value=10.0,
+            as_of=date(2026, 8, 22),
+            source_dataset="domestic_etp",
+            source_id="PREF01N001",
+            source_row=2,
+            source_columns=("aum_minor_units",),
+            unit="source_currency_amount",
+            quality=QualityStatus.PARTIAL,
+            trading_currency="KRW",
+            source_database_sha256=_SHA_A,
+        ),
+        OfficialProductFact(
+            evidence_id="provided:overseas_etp:SAME:aum",
+            product_family=ProductFamily.OVERSEAS_ETP,
+            product_id="SAME",
+            product_name="Overseas Synthetic ETF",
+            canonical_field="aum",
+            normalized_value=20.0,
+            as_of=date(2026, 8, 23),
+            source_dataset="overseas_etp",
+            source_id="PREF02N001",
+            source_row=2,
+            source_columns=("aum_minor_units",),
+            unit="source_currency_amount",
+            quality=QualityStatus.VALID,
+            trading_currency="USD",
+            source_database_sha256=_SHA_B,
+        ),
+    )
+    result = ExternalKnowledgeRuntimeResult.model_construct(
+        outcome=ExternalKnowledgeOutcome(
+            status=ExternalKnowledgeOutcomeStatus.SUCCESS,
+            search_complete=True,
+            verified_product_keys=(
+                (ProductFamily.DOMESTIC_ETP, "SAME"),
+                (ProductFamily.OVERSEAS_ETP, "SAME"),
+            ),
+            verified_product_ids=("SAME", "SAME"),
+            reason_codes=("verified_external_db_intersection",),
+        ),
+        search_plan=SimpleNamespace(
+            composite_plan=plan,
+        ),
+        candidate_universe=SimpleNamespace(),
+        acquisitions=(),
+        execution=SimpleNamespace(
+            evidence=SimpleNamespace(product_facts=facts, relations=())
+        ),
+        identity_evidence=(),
+    )
+
+    backend = external_knowledge_result_to_backend(result)
+
+    assert [item.product_name for item in backend.products] == [
+        "국내 합성 ETF",
+        "Overseas Synthetic ETF",
+    ]
+    assert [item.fields[0].source_dataset for item in backend.products] == [
+        "domestic_etp",
+        "overseas_etp",
+    ]
+    assert backend.products[0].fields[0].quality is QualityStatus.PARTIAL
+    assert len({item.citation_id for item in backend.citations}) == 2
 
 
 def _intent(
@@ -340,7 +448,7 @@ def test_external_outcome_states_cannot_be_mislabeled() -> None:
 
 def test_live_source_scopes_and_coverage_activate_external_execution_together() -> None:
     registry = load_official_source_registry()
-    assert registry.registry_id == "official-external-sources-20260824-v8"
+    assert registry.registry_id == "official-external-sources-20260824-v13"
     assert {entry.status for entry in registry.entries} == {"approved_for_live_evidence"}
     coverage = load_approved_knowledge_coverage_manifest()
     assert all(
@@ -366,6 +474,50 @@ def test_external_named_etp_surface_is_server_derived_without_entity_hardcoding(
 
     assert [item.subject_span for item in sanitized.knowledge_requirements] == ["Kimi"]
     assert [item.relation_span for item in sanitized.knowledge_requirements] == ["Kimi 해외 ETF"]
+
+
+@pytest.mark.parametrize(
+    ("question", "subject", "relation"),
+    [
+        (
+            "Keating Active ETF(KEAT.O)의 고가와 저가를 알려 주세요.",
+            "Keating Active",
+            "Keating Active ETF",
+        ),
+        (
+            "T Rowe Price Active Crypto ETF(TKNZ.K)를 기준 상품으로 삼아 주세요.",
+            "Rowe Price Active Crypto",
+            "Rowe Price Active Crypto ETF",
+        ),
+    ],
+)
+def test_exact_named_etp_identity_never_opens_external_theme_retrieval(
+    question: str,
+    subject: str,
+    relation: str,
+) -> None:
+    draft = IntentAnalysisDraft(
+        intent=InteractionIntent.DETAIL,
+        product_families=[ProductFamily.OVERSEAS_ETP],
+        evidence_spans=[relation],
+        needs_clarification=False,
+        knowledge_requirements=[
+            KnowledgeIntentRequirement(
+                capability=KnowledgeCapability.SECTOR_THEME_HISTORY,
+                subject_span=subject,
+                relation_span=relation,
+            )
+        ],
+    )
+
+    sanitized = sanitize_server_authorized_knowledge_draft(
+        question,
+        draft,
+        fallback_families=(ProductFamily.OVERSEAS_ETP,),
+        product_mentions=(question.rsplit("(", 1)[-1].split(")", 1)[0],),
+    )
+
+    assert sanitized.knowledge_requirements == []
 
 
 def test_external_requirement_uses_its_local_product_family_scope() -> None:
@@ -452,6 +604,72 @@ def test_short_alias_does_not_create_a_false_product_intersection() -> None:
     assert [item.product_id for item in exact_match] == ["P-2"]
 
 
+@pytest.mark.parametrize(
+    "question",
+    [
+        "IBM을 편입한 해외 ETF를 찾아 주세요.",
+        "IBM이 편입된 ETF를 알려 주세요.",
+        "IBM 편입 해외 ETF 중 순자산이 큰 상품은?",
+        "IBM 보유 ETF를 검색해 주세요.",
+        "IBM를 구성종목으로 둔 ETF를 보여 주세요.",
+        "IBM이 들어 있는 ETF를 찾아 주세요.",
+        "IBM은 편입된 ETF만 보여 주세요.",
+        "IBM 담긴 해외 ETF를 알려 주세요.",
+        "해외 ETFs holding IBM을 찾아 주세요.",
+        "ETFs containing IBM 종목을 검색해 주세요.",
+        "IBM-containing ETFs를 알려 주세요.",
+    ],
+)
+def test_ticker_shaped_holding_entity_never_narrows_product_universe(
+    question: str,
+) -> None:
+    """A corporate symbol can collide with a unique provided ETF ticker."""
+
+    records = {
+        ProductFamily.OVERSEAS_ETP: (
+            ProductIdentityRecord(
+                product_family="overseas_etp",
+                product_id="NYSE:IBM.O",
+                product_name="Illustrative Balanced Markets ETF",
+                ticker="IBM.O",
+                isin=None,
+                short_name=None,
+                public_offering=None,
+                is_quarantined=False,
+            ),
+        )
+    }
+
+    assert resolve_question_identity_surfaces(records, question) == ()
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        "IBM ETF의 위험요인을 공식 자료로 알려 주세요.",
+        "IBM의 구성종목을 확인해 주세요.",
+        "IBM ETF 정보와 투자위험을 설명해 주세요.",
+    ],
+)
+def test_ticker_shaped_explicit_product_remains_identity_bound(question: str) -> None:
+    records = {
+        ProductFamily.OVERSEAS_ETP: (
+            ProductIdentityRecord(
+                product_family="overseas_etp",
+                product_id="NYSE:IBM.O",
+                product_name="Illustrative Balanced Markets ETF",
+                ticker="IBM.O",
+                isin=None,
+                short_name=None,
+                public_offering=None,
+                is_quarantined=False,
+            ),
+        )
+    }
+
+    assert resolve_question_identity_surfaces(records, question) == ("IBM",)
+
+
 def test_ric_ticker_intersection_requires_exact_token_and_unique_base() -> None:
     records = {
         ProductFamily.OVERSEAS_ETP: (
@@ -533,6 +751,49 @@ def test_ric_ticker_intersection_requires_exact_token_and_unique_base() -> None:
     assert [item.product_id for item in matches] == ["AMX:KSTR.K"]
 
 
+def test_ric_base_uniqueness_is_qualified_by_product_family() -> None:
+    records = {
+        ProductFamily.DOMESTIC_ETP: (
+            ProductIdentityRecord(
+                product_family="domestic_etp",
+                product_id="SHARED",
+                product_name="Domestic Duplicate Base ETF",
+                ticker="DUP.K",
+                isin=None,
+                short_name=None,
+                public_offering=None,
+                is_quarantined=False,
+            ),
+        ),
+        ProductFamily.OVERSEAS_ETP: (
+            ProductIdentityRecord(
+                product_family="overseas_etp",
+                product_id="SHARED",
+                product_name="Overseas Duplicate Base ETF",
+                ticker="DUP.O",
+                isin=None,
+                short_name=None,
+                public_offering=None,
+                is_quarantined=False,
+            ),
+        ),
+    }
+    universe = build_provided_candidate_universe(
+        records,
+        database_sha256s={
+            ProductFamily.DOMESTIC_ETP: _SHA_A,
+            ProductFamily.OVERSEAS_ETP: _SHA_B,
+        },
+    )
+
+    matches = intersect_evidence_with_provided_products(
+        universe,
+        ("DUP ETF official holdings were updated.",),
+    )
+
+    assert matches == ()
+
+
 def test_cache_hit_executes_only_the_provided_db_intersection() -> None:
     store = TemporalRelationStore(
         seal_temporal_relation_bundle(
@@ -554,7 +815,7 @@ def test_cache_hit_executes_only_the_provided_db_intersection() -> None:
     )
     universe = _universe()
     search_plan = ExternalSearchPlanCompiler(store.registry).compile(
-        candidate_plan,
+        candidate_plan.model_copy(update={"execution_authorized": True}),
         universe,
     )
 
@@ -565,9 +826,224 @@ def test_cache_hit_executes_only_the_provided_db_intersection() -> None:
     )
 
     assert result.outcome.status is ExternalKnowledgeOutcomeStatus.SUCCESS
+    assert result.outcome.verified_product_keys == (
+        (ProductFamily.OVERSEAS_ETP, "KSTR"),
+    )
     assert result.outcome.verified_product_ids == ("KSTR",)
     assert result.execution is not None
     assert result.execution.verification.passed
+
+
+def test_candidate_plan_cannot_be_escalated_by_the_runtime_boolean() -> None:
+    store = TemporalRelationStore(
+        seal_temporal_relation_bundle(
+            (_holding_relation(),),
+            corpus_manifest_sha256=_SHA_B,
+        )
+    )
+    question = "캠브리콘이 편입된 해외 ETF를 알려줘."
+    candidate_plan = CompositeKnowledgePlanCompiler().compile(
+        question,
+        "runtime-authority-boundary",
+        _intent(
+            question,
+            capability=KnowledgeCapability.PORTFOLIO_HOLDINGS,
+            subject="캠브리콘",
+            relation="편입된",
+            family=ProductFamily.OVERSEAS_ETP,
+        ),
+    )
+    universe = _universe()
+    search_plan = ExternalSearchPlanCompiler(store.registry).compile(
+        candidate_plan,
+        universe,
+    )
+
+    assert not search_plan.composite_plan.execution_authorized
+    assert search_plan.execution_receipt is None
+    with pytest.raises(ValueError, match="caller execution flag"):
+        _runtime(store).execute(
+            search_plan,
+            universe,
+            evidence_execution_authorized=True,
+        )
+
+    # A candidate-only search remains a valid fail-closed probe and must not
+    # depend on optional runtime attributes.
+    result = _runtime(store).execute(search_plan, universe)
+    assert result.outcome.status is ExternalKnowledgeOutcomeStatus.CANNOT_VERIFY
+    assert result.acquisitions == ()
+
+
+def test_candidate_only_plan_performs_no_discovery_or_document_fetch() -> None:
+    registry = load_official_source_registry()
+    store = TemporalRelationStore(
+        seal_temporal_relation_bundle((), corpus_manifest_sha256=_SHA_B, registry=registry),
+        registry,
+    )
+
+    class ForbiddenAcquisition:
+        def __init__(self) -> None:
+            self.connector = OfficialSourceConnector(_UnusedTransport(), registry)
+            self.relation_store = store
+            self.discovery_provider = _EmptyDiscovery()
+
+        def acquire(self, *_args, **_kwargs):
+            raise AssertionError("candidate-only external plan must perform no I/O")
+
+    question = "캠브리콘이 편입된 해외 ETF를 알려줘."
+    candidate_plan = CompositeKnowledgePlanCompiler(registry).compile(
+        question,
+        "candidate-plan-no-io",
+        _intent(
+            question,
+            capability=KnowledgeCapability.PORTFOLIO_HOLDINGS,
+            subject="캠브리콘",
+            relation="편입된",
+            family=ProductFamily.OVERSEAS_ETP,
+        ),
+    )
+    universe = _universe()
+    search_plan = ExternalSearchPlanCompiler(registry).compile(candidate_plan, universe)
+    runtime = ExternalKnowledgeRuntime(
+        acquisition=ForbiddenAcquisition(),  # type: ignore[arg-type]
+        product_fact_provider=_FactProvider(),
+    )
+
+    result = runtime.execute(search_plan, universe)
+
+    assert result.outcome.status is ExternalKnowledgeOutcomeStatus.CANNOT_VERIFY
+    assert result.outcome.reason_codes == ("sealed_evidence_not_release_authorized",)
+    assert result.acquisitions == ()
+
+
+def test_unknown_explicit_product_identity_never_widens_to_the_family(tmp_path) -> None:
+    database = tmp_path / "identity-placeholder.sqlite3"
+    database.write_bytes(b"identity-hash-only")
+    record = ProductIdentityRecord(
+        product_family="overseas_etp",
+        product_id="KSTR",
+        product_name="KraneShares SSE STAR Market 50 Index ETF",
+        ticker="KSTR.K",
+        isin=None,
+        short_name=None,
+        public_offering=None,
+        is_quarantined=False,
+    )
+
+    class FixedIdentityCache:
+        def get(self, path):
+            assert path == database
+            return SimpleNamespace(records=(record,))
+
+    builder = ProvidedProductUniverseBuilder(
+        {ProductFamily.OVERSEAS_ETP: database},
+        identity_cache=FixedIdentityCache(),  # type: ignore[arg-type]
+        verify_approved_databases=False,
+    )
+
+    unknown = builder.build(
+        families=(ProductFamily.OVERSEAS_ETP,),
+        identity_surfaces=("가상의브랜드 알파 ETF",),
+        question="캠브리콘을 보유한 가상의브랜드 알파 ETF를 알려줘.",
+    )
+    unbound = builder.build(families=(ProductFamily.OVERSEAS_ETP,))
+    repeated = builder.build(families=(ProductFamily.OVERSEAS_ETP,))
+
+    assert unknown.explicit_identity_bound
+    assert unknown.candidates == ()
+    assert not unbound.explicit_identity_bound
+    assert [item.product_id for item in unbound.candidates] == ["KSTR"]
+    assert repeated.candidates[0] is unbound.candidates[0]
+
+
+def _minimal_overseas_identity_database(path) -> None:
+    connection = sqlite3.connect(path)
+    try:
+        connection.execute(
+            """
+            CREATE TABLE overseas_etp_products (
+                product_id TEXT PRIMARY KEY,
+                product_name TEXT NOT NULL,
+                source_row INTEGER NOT NULL,
+                is_quarantined INTEGER NOT NULL,
+                static_as_of TEXT NOT NULL
+            )
+            """
+        )
+        connection.execute(
+            """
+            INSERT INTO overseas_etp_products
+                (product_id, product_name, source_row, is_quarantined, static_as_of)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            ("KSTR", "KraneShares SSE STAR Market 50 Index ETF", 2, 0, "2026-08-23"),
+        )
+        connection.commit()
+    finally:
+        connection.close()
+
+
+def test_missing_optional_product_field_preserves_verified_product_identity(tmp_path) -> None:
+    database = tmp_path / "overseas-identity.sqlite3"
+    _minimal_overseas_identity_database(database)
+    provider = SqliteOfficialProductFactProvider(
+        {ProductFamily.OVERSEAS_ETP: database},
+        verify_approved_databases=False,
+    )
+
+    facts = provider.fetch(
+        ((ProductFamily.OVERSEAS_ETP, "KSTR"),),
+        None,
+        ("risk_level",),
+    )
+
+    assert [(item.product_id, item.canonical_field) for item in facts] == [
+        ("KSTR", "product_name")
+    ]
+
+
+def test_unsupported_ranking_basis_is_cannot_verify_not_not_found(tmp_path) -> None:
+    database = tmp_path / "overseas-identity.sqlite3"
+    _minimal_overseas_identity_database(database)
+    provider = SqliteOfficialProductFactProvider(
+        {ProductFamily.OVERSEAS_ETP: database},
+        verify_approved_databases=False,
+    )
+    store = TemporalRelationStore(
+        seal_temporal_relation_bundle(
+            (_holding_relation(),),
+            corpus_manifest_sha256=_SHA_B,
+        )
+    )
+    question = "캠브리콘이 편입된 해외 ETF를 1년 수익률 높은 순으로 알려줘."
+    plan = CompositeKnowledgePlanCompiler().compile(
+        question,
+        "runtime-ranking-unavailable",
+        _intent(
+            question,
+            capability=KnowledgeCapability.PORTFOLIO_HOLDINGS,
+            subject="캠브리콘",
+            relation="편입된",
+            family=ProductFamily.OVERSEAS_ETP,
+        ),
+    ).model_copy(
+        update={
+            "product_selection": KnowledgeProductSelection(
+                rank_field="one_year_return_pct",
+                direction="desc",
+                limit=3,
+            ),
+            "execution_authorized": True,
+        }
+    )
+    universe = _universe()
+    search_plan = ExternalSearchPlanCompiler(store.registry).compile(plan, universe)
+
+    result = _runtime(store, provider).execute(search_plan, universe)
+
+    assert result.outcome.status is ExternalKnowledgeOutcomeStatus.CANNOT_VERIFY
+    assert result.outcome.reason_codes == ("provided_db_ranking_unavailable",)
 
 
 def test_empty_provided_db_universe_is_the_only_immediate_not_found() -> None:
@@ -637,6 +1113,151 @@ def test_non_exhaustive_official_search_is_cannot_verify_not_not_found() -> None
     assert not result.outcome.search_complete
 
 
+def test_document_cache_exact_span_miss_retries_bounded_live_discovery() -> None:
+    """A false-positive cached URL must not suppress a verifiable live source."""
+
+    registry = load_official_source_registry()
+    source_uri = "https://engage.kraneshares.com/s/b264ceb1/kstr-presentation/"
+    source = registry.authorize_url(
+        source_uri,
+        KnowledgeCapability.PORTFOLIO_HOLDINGS,
+    )
+
+    def snapshot(title: str, text: str) -> OfficialSourceSnapshot:
+        content = text.encode()
+        return OfficialSourceSnapshot(
+            source=source,
+            capability=KnowledgeCapability.PORTFOLIO_HOLDINGS,
+            source_uri=source_uri,
+            title=title,
+            content_type="text/plain",
+            content=content,
+            content_sha256=hashlib.sha256(content).hexdigest(),
+            published_at=date(2026, 6, 30),
+            as_of=date(2026, 6, 30),
+        )
+
+    cached = snapshot(
+        "semantically close but wrong cached document",
+        "공식 ETF 시장 자료이지만 요청 기업과 구성종목 표는 없습니다.",
+    )
+    live = snapshot(
+        "verified live KSTR holdings",
+        "KraneShares SSE STAR Market 50 Index ETF의 구성종목에는 캠브리콘이 편입되어 있습니다.",
+    )
+    store = TemporalRelationStore(
+        seal_temporal_relation_bundle((), corpus_manifest_sha256=_SHA_B, registry=registry),
+        registry,
+    )
+
+    class CacheThenLiveAcquisition:
+        def __init__(self) -> None:
+            self.connector = OfficialSourceConnector(_UnusedTransport(), registry)
+            self.relation_store = store
+            self.discovery_provider = object.__new__(CacheFirstOfficialDiscoveryProvider)
+            self.calls: list[bool] = []
+
+        def acquire(self, requirement, **kwargs):
+            del requirement
+            forced = bool(kwargs.get("force_live_discovery", False))
+            self.calls.append(forced)
+            selected = live if forced else cached
+            return OfficialEvidenceAcquisitionResult(
+                status=OfficialEvidenceAcquisitionStatus.LIVE_EVIDENCE_CANDIDATE,
+                snapshots=(selected,),
+                discovered_candidate_count=1,
+                rejected_candidate_count=0,
+                search_complete=False,
+                failure_codes=("live_evidence_requires_verification",),
+                search_query_count=1 if forced else 0,
+                fetch_count=1,
+                fetched_bytes=len(selected.content),
+            )
+
+    question = "캠브리콘이 편입된 해외 ETF를 알려 주세요."
+    candidate_plan = CompositeKnowledgePlanCompiler(registry).compile(
+        question,
+        "cache-exact-span-live-retry",
+        _intent(
+            question,
+            capability=KnowledgeCapability.PORTFOLIO_HOLDINGS,
+            subject="캠브리콘",
+            relation="편입된",
+            family=ProductFamily.OVERSEAS_ETP,
+        ),
+    )
+    universe = _universe()
+    search_plan = ExternalSearchPlanCompiler(registry).compile(
+        candidate_plan.model_copy(update={"execution_authorized": True}),
+        universe,
+    )
+    acquisition = CacheThenLiveAcquisition()
+    runtime = ExternalKnowledgeRuntime(
+        acquisition=acquisition,  # type: ignore[arg-type]
+        product_fact_provider=_FactProvider(),
+    )
+
+    result = runtime.execute(search_plan, universe)
+
+    assert acquisition.calls == [False, True]
+    assert result.outcome.status is ExternalKnowledgeOutcomeStatus.SUCCESS
+    assert result.outcome.verified_product_keys == (
+        (ProductFamily.OVERSEAS_ETP, "KSTR"),
+    )
+
+
+def test_acquisition_force_live_bypasses_document_cache_discovery() -> None:
+    registry = load_official_source_registry()
+    store = TemporalRelationStore(
+        seal_temporal_relation_bundle((), corpus_manifest_sha256=_SHA_B, registry=registry),
+        registry,
+    )
+
+    class CacheAwareDiscovery:
+        def __init__(self) -> None:
+            self.live_calls = 0
+
+        def discover_report(self, **_kwargs):
+            raise AssertionError("document cache must be bypassed")
+
+        def discover_live_report(self, **_kwargs):
+            self.live_calls += 1
+            return OfficialDiscoveryReport(
+                candidates=(),
+                queried_source_registry_ids=("kraneshares-product",),
+                search_query_count=1,
+                exhaustive=False,
+            )
+
+    provider = CacheAwareDiscovery()
+    acquisition = OfficialEvidenceAcquisitionCoordinator(
+        relation_store=store,
+        discovery_provider=provider,  # type: ignore[arg-type]
+        connector=OfficialSourceConnector(_UnusedTransport(), registry),
+    )
+    question = "캠브리콘이 편입된 해외 ETF를 알려 주세요."
+    requirement = CompositeKnowledgePlanCompiler(registry).compile(
+        question,
+        "force-live-acquisition",
+        _intent(
+            question,
+            capability=KnowledgeCapability.PORTFOLIO_HOLDINGS,
+            subject="캠브리콘",
+            relation="편입된",
+            family=ProductFamily.OVERSEAS_ETP,
+        ),
+    ).requirements[0]
+
+    result = acquisition.acquire(
+        requirement,
+        force_live_discovery=True,
+    )
+
+    assert provider.live_calls == 1
+    assert result.status is OfficialEvidenceAcquisitionStatus.CANNOT_VERIFY
+    assert result.search_query_count == 1
+
+
 def test_verified_external_identity_with_empty_provided_db_intersection_is_not_found() -> None:
     registry = load_official_source_registry()
     source = registry.authorize_url(
@@ -702,7 +1323,10 @@ def test_verified_external_identity_with_empty_provided_db_intersection_is_not_f
         database_sha256s={ProductFamily.OVERSEAS_ETP: _SHA_A},
         candidate_filter_sha256=_SHA_B,
     )
-    search_plan = ExternalSearchPlanCompiler(registry).compile(candidate_plan, universe)
+    search_plan = ExternalSearchPlanCompiler(registry).compile(
+        candidate_plan.model_copy(update={"execution_authorized": True}),
+        universe,
+    )
     runtime = ExternalKnowledgeRuntime(
         acquisition=FixedAcquisition(),
         product_fact_provider=_FactProvider(),
@@ -719,6 +1343,92 @@ def test_verified_external_identity_with_empty_provided_db_intersection_is_not_f
     assert backend.status is BackendStatus.NOT_FOUND
     assert [item.title for item in backend.documents] == ["Kimi K2 High-Speed Model Released"]
     assert len(backend.citations) == 1
+
+
+def test_verified_external_identity_generic_product_lookup_is_not_found() -> None:
+    registry = load_official_source_registry()
+    source = registry.authorize_url(
+        "https://forum.moonshot.ai/t/kimi-k2-high-speed-model-released/25",
+        KnowledgeCapability.SECTOR_THEME_HISTORY,
+    )
+    content = b"Kimi K2 High-Speed Model Released by Moonshot AI."
+    snapshot = OfficialSourceSnapshot(
+        source=source,
+        capability=KnowledgeCapability.SECTOR_THEME_HISTORY,
+        source_uri="https://forum.moonshot.ai/t/kimi-k2-high-speed-model-released/25",
+        title="Kimi K2 High-Speed Model Released",
+        content_type="text/plain",
+        content=content,
+        content_sha256=hashlib.sha256(content).hexdigest(),
+        published_at=date(2025, 8, 1),
+        as_of=date(2025, 8, 1),
+    )
+    store = TemporalRelationStore(
+        seal_temporal_relation_bundle((), corpus_manifest_sha256=_SHA_B, registry=registry),
+        registry,
+    )
+
+    class FixedAcquisition:
+        def __init__(self) -> None:
+            self.connector = OfficialSourceConnector(_UnusedTransport(), registry)
+            self.relation_store = store
+
+        def acquire(self, requirement, **kwargs):
+            del requirement, kwargs
+            return OfficialEvidenceAcquisitionResult(
+                status=OfficialEvidenceAcquisitionStatus.LIVE_EVIDENCE_CANDIDATE,
+                snapshots=(snapshot,),
+                discovered_candidate_count=1,
+                rejected_candidate_count=0,
+                search_complete=False,
+                failure_codes=("live_evidence_requires_verification",),
+                search_query_count=1,
+                fetch_count=1,
+                fetched_bytes=len(content),
+            )
+
+    question = "Kimi 관련 투자 상품 있어?"
+    intent = sanitize_server_authorized_knowledge_draft(
+        question,
+        IntentAnalysisDraft(
+            intent=InteractionIntent.UNSUPPORTED,
+            product_families=[],
+            evidence_spans=["Kimi"],
+            needs_clarification=False,
+        ),
+    )
+    candidate_plan = CompositeKnowledgePlanCompiler(registry).compile(
+        question,
+        "runtime-generic-product-empty-db-intersection",
+        intent,
+    )
+    universe = ProvidedProductCandidateUniverse(
+        candidates=(
+            ProvidedProductCandidate(
+                product_family=ProductFamily.FUND,
+                product_id="UNRELATED",
+                product_name="Unrelated Global Fund",
+            ),
+        ),
+        database_sha256s={ProductFamily.FUND: _SHA_A},
+        candidate_filter_sha256=_SHA_B,
+    )
+    search_plan = ExternalSearchPlanCompiler(registry).compile(
+        candidate_plan.model_copy(update={"execution_authorized": True}),
+        universe,
+    )
+    runtime = ExternalKnowledgeRuntime(
+        acquisition=FixedAcquisition(),
+        product_fact_provider=_FactProvider(),
+    )
+
+    result = runtime.execute(search_plan, universe, evidence_execution_authorized=True)
+
+    assert result.outcome.status is ExternalKnowledgeOutcomeStatus.NOT_FOUND
+    assert result.outcome.search_complete
+    assert [item.title for item in result.identity_evidence] == [
+        "Kimi K2 High-Speed Model Released"
+    ]
 
 
 class _FailedSearchTransport:
@@ -1899,6 +2609,16 @@ def test_one_year_external_ranking_is_a_typed_server_plan() -> None:
     assert plan.product_selection is not None
     assert plan.product_selection.rank_field == "one_year_return_pct"
     assert plan.product_selection.limit == 10
+    universe = ProvidedProductCandidateUniverse(
+        candidates=(),
+        database_sha256s={
+            ProductFamily.DOMESTIC_ETP: _SHA_A,
+            ProductFamily.FUND: _SHA_B,
+        },
+        candidate_filter_sha256="c" * 64,
+    )
+    search_plan = ExternalSearchPlanCompiler().compile(plan, universe)
+    assert search_plan.budget.max_candidates_per_requirement == 12
 
 
 class _CountingIntentProvider:
@@ -1920,7 +2640,47 @@ class _CountingIntentProvider:
         )
 
 
-def test_safety_envelope_remains_terminal_after_required_hclx_intent_analysis() -> None:
+class _AmbiguousHoldingIntentProvider:
+    provider_name = "ambiguous-holding-intent"
+    model_name = "ambiguous-holding-intent"
+
+    def analyze_intent(self, question: str, question_id: str) -> IntentAnalysisDraft:
+        assert question_id
+        return IntentAnalysisDraft(
+            intent=InteractionIntent.SEARCH,
+            product_families=[ProductFamily.DOMESTIC_ETP],
+            evidence_spans=["국내 ETF", "최근에", "편입된"],
+            needs_clarification=False,
+            knowledge_requirements=[
+                KnowledgeIntentRequirement(
+                    capability=KnowledgeCapability.PORTFOLIO_HOLDINGS,
+                    subject_span="최근에",
+                    relation_span="편입된",
+                )
+            ],
+        )
+
+
+def test_external_runtime_cannot_bypass_server_semantic_ambiguity_gate() -> None:
+    agent = RoutedFinanceAgent(
+        {},
+        intent_analysis_provider=_AmbiguousHoldingIntentProvider(),
+    )
+
+    result = execute_answer_request(
+        agent,
+        BackendAgentRequest(
+            request_id="ambiguous-holding-before-network",
+            question="삼성 운용 국내 ETF 중 최근에 편입된 상품부터 보여 주세요.",
+        ),
+    )
+
+    assert result.http_status_code == 200
+    assert result.response.status is BackendStatus.CLARIFICATION
+    assert not result.response.products
+
+
+def test_safety_envelope_is_terminal_before_hclx_intent_analysis() -> None:
     provider = _CountingIntentProvider()
     agent = RoutedFinanceAgent({}, intent_analysis_provider=provider)
 
@@ -1934,4 +2694,4 @@ def test_safety_envelope_remains_terminal_after_required_hclx_intent_analysis() 
 
     assert result.http_status_code == 200
     assert result.response.status is BackendStatus.UNSUPPORTED
-    assert provider.calls == 1
+    assert provider.calls == 0

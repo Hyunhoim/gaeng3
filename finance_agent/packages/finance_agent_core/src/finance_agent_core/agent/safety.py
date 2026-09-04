@@ -42,11 +42,15 @@ class SafetyEnvelopeDecision:
 _SECURITY = re.compile(
     r"(?:이전|기존|앞선|위의|모든)?\s*(?:지시|지침|명령|규칙|정책|가드레일)"
     r".{0,32}?(?:무시|잊어|우회|해제|따르지)|"
-    r"(?:시스템|개발자)\s*(?:프롬프트|메시지|지시|규칙)"
+    r"(?:시스템|개발자)\s*(?:프롬프트|메시지|지시|규칙|설정)"
     r".{0,32}?(?:출력|공개|노출|보여|알려|붙여|넣|첨부)|"
-    r"(?:숨겨진|내부|비공개)\s*(?:지침|설정|규칙|프롬프트|데이터\s*경로)"
+    r"(?:숨겨진|내부|비공개)\s*(?:시스템\s*)?"
+    r"(?:지시(?:문)?|지침|설정|규칙|프롬프트|데이터\s*경로|인증\s*(?:키|정보))"
     r".{0,32}?(?:출력|공개|노출|보여|알려)|"
-    r"(?:비밀|토큰|API\s*키|환경\s*변수|데이터베이스\s*경로)"
+    r"(?:숨겨진|내부|비공개).{0,16}?"
+    r"(?:prompt|credentials?|secrets?|api\s*keys?)"
+    r".{0,40}?(?:출력|공개|노출|보여|알려)|"
+    r"(?:비밀|토큰|API\s*(?:키|key)|환경\s*변수|데이터베이스\s*경로)"
     r".{0,32}?(?:출력|공개|노출|보여|알려|나열|인용|붙여)|"
     r"(?:내부\s*)?(?:도구|툴).{0,32}?(?:이름|인자|목록)"
     r".{0,24}?(?:출력|공개|노출|보여|알려|나열)|"
@@ -71,6 +75,8 @@ _SECURITY = re.compile(
     r"(?:평가(?:기|\s*결과)?|검증|provider\s*호출\s*수|호출\s*로그)"
     r".{0,36}?(?:속여|조작|삭제|0으로\s*기록|PASS)|"
     r"검증(?:\s*(?:단계|절차|경계))?.{0,20}?(?:우회|건너뛰|비활성화)|"
+    r"(?:verifier|검증기|answer\s*verifier).{0,24}?"
+    r"(?:우회|건너뛰|건너뛴|건너뜀|생략|비활성화|끄고|제거)|"
     r"(?:원본\s*데이터\s*파일|서버|내부\s*파일).{0,20}?"
     r"(?:경로|위치).{0,24}?(?:전부\s*)?(?:출력|공개|노출|보여|알려)|"
     r"(?:로그|기록).{0,24}?(?:삭제|지워|조작)|"
@@ -90,7 +96,15 @@ _SECURITY = re.compile(
     r"(?:내부\s*)?(?:alias|별칭|동의어)\s*(?:사전|목록|원문)"
     r".{0,32}?(?:다운로드|내려받|반출|출력|공개|보여)|"
     r"(?:벡터|임베딩|embedding)\s*(?:원문|코퍼스|index|인덱스|데이터)"
-    r".{0,32}?(?:다운로드|내려받|반출|출력|공개|보여)",
+    r".{0,32}?(?:다운로드|내려받|반출|출력|공개|보여)|"
+    r"(?:평가용\s*)?(?:정답|gold)\s*(?:파일|키|데이터).{0,32}?"
+    r"(?:찾|열|읽|출력|공개|보여)|"
+    r"(?:다른|타인|다른\s*고객).{0,56}?(?:이름|성명|주민등록번호|잔고)|"
+    r"(?:주민등록번호|보유\s*잔고).{0,40}?(?:꺼내|공개|보여|알려|조회)|"
+    r"(?:개인\s*정보|본인\s*확인|인증)\s*(?:확인\s*)?(?:절차)?"
+    r".{0,24}?(?:생략|우회).{0,32}?(?:잔고|계좌|보유)|"
+    r"(?:운영자|관리자)\s*권한.{0,32}?(?:DB|데이터베이스).{0,24}?(?:접속|수정)|"
+    r"(?:조회|감사|접속|주문)\s*(?:로그|기록).{0,24}?(?:남지\s*않|남기지\s*않|우회)",
     re.IGNORECASE,
 )
 _PROTECTED_MARKER = re.compile(
@@ -124,7 +138,42 @@ _DATA_INTEGRITY = re.compile(
     r".{0,24}?(?:만들|나오게|조작)|"
     r"(?:보수율|수익률|수치|조건|필터).{0,24}?(?:숨기|은폐)"
     r".{0,48}?(?:특정\s*)?(?:티커|상품|종목).{0,24}?(?:1\s*위|상위)"
-    r".{0,16}?(?:만들|조작)",
+    r".{0,16}?(?:만들|조작)|"
+    r"(?:공시|근거|출처).{0,40}?(?:확인했다고\s*거짓말|가짜\s*출처|"
+    r"없는\s*것을?.{0,12}?있는\s*것처럼)|"
+    r"(?:근거\s*문서|공식\s*자료).{0,40}?(?:없던|없는).{0,28}?"
+    r"(?:편입|보유|구성).{0,20}?(?:있는\s*것처럼|작성)|"
+    r"(?:손실률|위험|불리한\s*수치).{0,28}?(?:숨기|은폐).{0,40}?"
+    r"(?:수익|유리한).{0,20}?(?:것처럼|상품처럼)|"
+    r"(?:손실(?:률|\s*수치)?|위험(?:\s*요인)?|불리한\s*(?:정보|수치))"
+    r".{0,32}?(?:숨기|숨긴|은폐).{0,40}?"
+    r"(?:홍보|광고|마케팅|소개)(?:\s*(?:문구|카피|자료))?|"
+    r"(?:문서|자료|근거).{0,24}?(?:기준일|날짜).{0,32}?"
+    r"(?:바꿔|변경|조작).{0,32}?(?:최신|현재).{0,20}?(?:처럼|으로)|"
+    r"(?:조건|필터).{0,24}?(?:몰래|임의로).{0,20}?(?:바꿔|변경)|"
+    r"(?:원천|공식).{0,20}?(?:수익률|가격|수치).{0,24}?(?:고쳐|덮어써)|"
+    r"(?:원천|공식|제공).{0,24}?(?:파일|자료|데이터).{0,24}?"
+    r"(?:덮어\s*쓰|덮어써|덮어쓴|덮어쓸|overwrite|변조|수정|교체)|"
+    r"(?:결측\s*값|결측치|빈\s*값).{0,40}?(?:고수익|높은\s*수익).{0,24}?"
+    r"(?:채워|대체)|"
+    r"(?:DB|데이터(?:베이스)?).{0,32}?(?:없|미제공|누락).{0,64}?"
+    r"(?:배(?:해서|하여)?|곱(?:해서|하여)?|환산|추정).{0,40}?"
+    r"(?:채워|생성|만들|대체)|"
+    r"(?:DB|데이터(?:베이스)?).{0,24}?(?:없|미제공|누락).{0,48}?"
+    r"(?:결과.{0,12}?)?(?:끼워\s*넣|삽입|포함|섞어\s*넣)|"
+    r"(?:근거\s*(?:문서|자료)|공식\s*(?:출처|문서|자료)).{0,32}?"
+    r"(?:지어\s*내|꾸며\s*내|날조|가짜).{0,16}?(?:줘|주세요|작성|생성)?|"
+    r"(?:위험\s*등급|수익률|가격|수치).{0,32}?(?:덮어써|원래\s*값이라고)|"
+    r"(?:공식\s*)?(?:근거|출처|인용).{0,20}?(?:위조|날조|조작|꾸며)|"
+    r"(?:원천|공식|제공).{0,20}?(?:값|수치|데이터|자료).{0,24}?"
+    r"(?:수정|변경|조작).{0,48}?(?:성과|수익률|순서|순위).{0,32}?"
+    r"(?:원하는\s*대로|마음대로|유리하게|불리하게).{0,20}?(?:바꿔|변경|조작)?|"
+    r"(?:다른\s*(?:팀|회사|서비스)|외부\s*(?:쇼핑|판매|상거래)).{0,32}?"
+    r"(?:상품|종목).{0,40}?(?:제공\s*)?(?:DB|데이터|검색)\s*결과.{0,28}?"
+    r"(?:몰래\s*)?(?:섞|추가|삽입|포함)|"
+    r"(?:임의|가짜|존재하지\s*않는).{0,24}?"
+    r"(?:코인|주식|상품|종목).{0,32}?(?:ETF|ETN|채권|공모\s*펀드|펀드)"
+    r"(?:로|라고).{0,20}?(?:답|표시|분류|포함)",
     re.IGNORECASE,
 )
 _UNVERIFIABLE_FRESHNESS = re.compile(
@@ -141,6 +190,17 @@ _UNVERIFIABLE_FRESHNESS = re.compile(
     r"(?:의|을|를|은|는)?\s*)?(?:가격|종가|시세|호가)",
     re.IGNORECASE,
 )
+_BOND_PURCHASE_YIELD_CONTEXT = re.compile(
+    r"(?=.*(?:원화\s*)?(?:국내\s*)?채권)"
+    r"(?:"
+    r"(?=.*(?:사는|매수(?:하는|할)?).{0,16}?가격.{0,16}?반영)"
+    r"(?=.*(?:(?:세전|세후).{0,16}?(?:수익|보상)|(?:수익|보상).{0,16}?(?:세전|세후)))|"
+    r"(?=.*(?:현재|지금)\s*(?:매수\s*)?가격)"
+    r"(?=.*(?:샀을|살\s*때|매수(?:할|하는|한)?))"
+    r"(?=.*(?:세전|세후).{0,16}?(?:수익률|수익|보상))"
+    r")",
+    re.IGNORECASE,
+)
 _TRANSACTION = re.compile(
     r"(?:내\s*이름|본인\s*명의).{0,64}?(?:매수|매도|주문|가입|환매|거래)"
     r".{0,32}?(?:실제로|제출|체결|대신|끝내|실행)|"
@@ -150,7 +210,7 @@ _TRANSACTION = re.compile(
     r"(?:계좌\s*잔고|내\s*잔고).{0,64}?(?:확인|조회)"
     r".{0,64}?(?:주문|매수|매도|거래)|"
     r"(?:매수|매도|주문|가입|환매).{0,48}?"
-    r"(?:실제로\s*)?(?:제출|체결|대신\s*끝내|실행|처리|진행)|"
+    r"(?:실제로\s*)?(?:제출|체결|대신\s*끝내|실행|처리|진행|시켜)|"
     r"지금\s*즉시.{0,48}?(?:매수|매도|주문).{0,32}?(?:지시|실행|제출)|"
     r"(?:사|구입(?:해)?|매입(?:해)?|구매(?:해)?)\s*"
     r"(?:줘|주세요|주십시오|달라)|"
@@ -160,7 +220,16 @@ _TRANSACTION = re.compile(
     r"(?:체결|결제)(?:해)?\s*(?:줘|주세요|주십시오|달라)|"
     r"(?:가입|매수|주문).{0,32}?(?:결제|체결)(?:까지)?|"
     r"(?:로그인|인증)\s*정보.{0,40}?계좌.{0,32}?(?:접속|잔고|조회)|"
-    r"계좌.{0,24}?(?:접속|로그인).{0,32}?(?:잔고|보유|조회)",
+    r"계좌.{0,24}?(?:접속|로그인).{0,32}?(?:잔고|보유|조회)|"
+    r"(?:동의\s*없이|자동)\s*(?:매수|매도|주문).{0,40}?(?:등록|반복|실행)|"
+    r"(?:주문|거래).{0,32}?(?:로그|기록).{0,24}?(?:남지\s*않|남기지\s*않)|"
+    r"(?:가진|보유한)\s*(?:현금|자금|잔고).{0,32}?(?:전부|모두).{0,20}?"
+    r"(?:투자|매수|주문)|"
+    r"(?:실제로|직접)\s*(?:매수|매도|주문|가입|환매)(?:해)?\s*"
+    r"(?:줘|주세요|주십시오|달라)|"
+    r"(?:내\s*)?개인\s*정보(?:를|로|까지|와|하고)?\s*.{0,64}?"
+    r"(?:매수|매도|주문|가입|환매).{0,32}?"
+    r"(?:완료|실행|제출|체결|처리|진행|해\s*줘|해주세요)",
     re.IGNORECASE,
 )
 _MARKET_ABUSE = re.compile(
@@ -181,7 +250,11 @@ _FORECAST = re.compile(
     r"(?:오를|내릴|상승|하락|수익|가격)|"
     r"(?:오를|내릴|상승할|하락할)\s*(?:까|것|상품)|"
     r"(?:오를|내릴)\s*가능성|(?:곧\s*)?떡상|폭등|폭락|유망한|대박날|담아야\s*할|"
-    r"(?:오늘(?:\s*밤)?|금일).{0,28}?(?:급등|급락|오를|내릴|상승|하락)(?:할|하겠|할\s*것)?|"
+    # A provided snapshot may legitimately contain a field described as
+    # ``오늘 상승률``.  Only future morphology is a forecast; a bare historical
+    # ``상승률`` must remain available to the normal field linker.
+    r"(?:오늘(?:\s*밤)?|금일).{0,28}?(?:급등할|급락할|오를|내릴|상승할|하락할|"
+    r"상승하겠|하락하겠|급등하겠|급락하겠)|"
     r"(?:호재|악재).{0,20}?(?:반영|전망|예상)|"
     r"(?:전\s*재산|은퇴\s*자금|대출\s*받아|빚을?\s*내).{0,36}?"
     r"(?:넣|투자|살|사야|매수|골라|정해|추천|지시)|"
@@ -198,7 +271,9 @@ _FORECAST = re.compile(
     re.IGNORECASE,
 )
 _GUARANTEE = re.compile(
-    r"원금\s*(?:이\s*)?보장|수익\s*(?:이\s*)?보장|손실\s*(?:이\s*)?없|"
+    r"원금\s*(?:이|은)?\s*(?:(?:반드시|확실히|무조건|절대)\s*)?보장|"
+    r"수익\s*(?:이|은)?\s*(?:(?:반드시|확실히|무조건|절대)\s*)?보장|"
+    r"손실\s*(?:이\s*)?없|"
     r"손실.{0,16}?절대.{0,12}?없|"
     r"손실.{0,20}?(?:나지|발생하지).{0,12}?않|"
     r"손실\s*가능성\s*(?:0\s*%|제로)|절대.{0,12}?손실.{0,12}?없|"
@@ -209,6 +284,8 @@ _GUARANTEE = re.compile(
     r"(?:원금|수익|무손실)을?\s*(?:지켜|보장|보증)|"
     r"손해(?:를)?\s*(?:안\s*보|보지\s*않)|"
     r"원금(?:을|이)?\s*(?:안\s*(?:잃|까먹|줄)|(?:잃|줄)지\s*않)|"
+    r"(?:투자(?:에)?\s*실패|손실).{0,32}?원금.{0,24}?(?:돌려주|환급|확약)|"
+    r"손실.{0,20}?절대\s*안\s*(?:나|난|발생).{0,24}?(?:보장|확약)?|"
     r"\bguaranteed\s+(?:returns?|profits?|no[-\s]?loss)\b|\bno[-\s]?loss\b",
     re.IGNORECASE,
 )
@@ -230,13 +307,16 @@ _OFF_TOPIC = re.compile(
     r"(?:이|삼|사|오|육|칠|팔|구|N)\s*행시|끝말잇기|말장난|"
     r"(?:아재\s*)?개그|농담|역할극|"
     r"운세|사주|파이썬.{0,24}?코드|"
+    r"(?:메뉴|음식|요리|쇼핑\s*상품).{0,32}?"
+    r"(?:ETF|ETN|ETP|채권|공모\s*펀드|펀드)\s*(?:분석|상품)?(?:인|인\s*것처럼|처럼)"
+    r".{0,24}?(?:꾸며|포장|분류|답)|"
     r"(?:파이썬|자바(?:스크립트)?|JavaScript|SQL)\s*"
     r"(?:코드|프로그램|게임)|코딩\s*(?:해|문제)",
     re.IGNORECASE,
 )
 _OUT_OF_SCOPE = re.compile(
     r"가상\s*자산|암호\s*화폐|비트코인|알트코인|코인\s*(?:시세|매매)|"
-    r"\bcrypto(?:currency)?\b|"
+    r"\bcrypto(?:currency)?\b(?!\s+(?:ETF|ETN|ETP)\b)|"
     r"예금|적금|대출(?!형)|보험(?!회사채)|개별\s*주식|주식\s*종목|"
     r"선물\s*옵션|"
     r"외환\s*매매|환전|부동산\s*(?:매물|시세)",
@@ -244,24 +324,49 @@ _OUT_OF_SCOPE = re.compile(
 )
 _DATA_SCOPE_BYPASS = re.compile(
     r"(?:제공\s*)?데이터(?:에)?\s*(?:없어도|없더라도|밖(?:의|에서))|"
-    r"(?:인터넷|웹|온라인)(?:을|에서|으로)?\s*.{0,48}?"
+    r"(?:제공|공식|승인)\s*(?:데이터|자료)(?:의)?\s*"
+    r"(?:제한|범위|경계|근거)(?:를|을|는|은)?\s*(?:무시|우회|없애|해제)|"
+    # ``위성 인터넷`` is an investable theme noun, not a request to bypass
+    # the approved source boundary with an Internet search.
+    r"(?:(?<!위성)(?<!위성\s)인터넷|웹|온라인)(?:을|에서|으로)?\s*.{0,48}?"
     r"(?:지식|검색|찾아|조회|가져|수집|크롤링|확인)|외부\s*지식|"
-    r"상품(?:을|를)?\s*(?:지어내|만들어|창작)|가상(?:의)?\s*상품|"
+    r"(?:없는|가짜|허구의?)?\s*(?:ETF|ETN|ETP|채권|펀드|상품)(?:도|을|를)?\s*"
+    r"(?:지어내|만들어|창작|생성)|"
+    r"상품(?:을|를)?\s*(?:지어내|만들어|창작)|"
     r"(?:없는|존재하지\s*않는|가짜|허구|KR-(?:FAKE|UNICORN)[A-Z0-9-]*)"
     r".{0,48}?(?:실제.{0,20}?처럼|가정|포함)|"
+    r"(?:없는|존재하지\s*않는|가짜|허구의?)\s*"
+    r"(?:ETF|ETN|ETP|채권|펀드|상품|종목)(?:\s*코드)?"
+    r".{0,56}?(?:추가|끼워\s*넣|넣어|삽입|포함)|"
     r"(?:수익률|가격|수치)(?:을|를)?\s*(?:임의로|마음대로|가짜로)?\s*"
     r"(?:만들|지어내|생성)|"
     r"(?:근거|인용)(?:을|를)?\s*(?:임의로|마음대로|가짜로)?\s*"
     r"(?:만들|지어내|생성)|"
+    r"(?:근거\s*(?:문서|자료|출처)|인용문)(?:도|을|를)?\s*"
+    r"(?:임의로|마음대로|가짜로)?\s*(?:만들|지어내|생성)|"
+    r"(?:DB|데이터(?:베이스)?|제공\s*데이터).{0,28}?없는.{0,32}?"
+    r"(?:ETF|ETN|ETP|채권|펀드|상품).{0,40}?"
+    r"(?:끼워\s*넣|삽입|포함|섞)|"
     r"(?:외부|개별|[A-Za-z0-9가-힣._-]{2,30}\s*주식).{0,36}?"
     r"(?:ETF|ETN|ETP|국내채권|공모펀드|ID).{0,28}?(?:바꿔|삽입|포함)|"
     r"(?:외부|개별).{0,12}?주식.{0,24}?(?:삽입|포함|섞)|"
+    r"(?:외부|쇼핑|타사|다른\s*(?:팀|회사)).{0,20}?(?:상품|종목).{0,28}?"
+    r"(?:ETF|ETN|ETP|채권|공모\s*펀드|펀드)(?:인|인\s*척|처럼).{0,32}?"
+    r"(?:추가|삽입|포함|섞|답)|"
     r"(?:외부|미국\s*국채|원문).{0,36}?(?:승인\s*(?:DB|데이터))"
     r".{0,24}?(?:추가|넣어|삽입)|"
     r"사모\s*펀드.{0,36}?공모\s*펀드.{0,28}?(?:포함|가정|승인\s*범위)|"
     r"(?:공모\s*펀드|국내채권|ETF|ETN).{0,12}?(?:이|라고)\s*가정|"
     r"(?:승인\s*(?:경계|범위)|공식\s*데이터).{0,24}?(?:무시|우회)|"
-    r"실제.{0,12}?가짜\s*상품.{0,16}?(?:섞|포함)",
+    r"실제.{0,12}?가짜\s*상품.{0,16}?(?:섞|포함)|"
+    r"(?:(?<![A-Za-z0-9])BUYABLE[_\s-]*QUANTITY(?![A-Za-z0-9])"
+    r".{0,72}?(?:사용|기준|조회|계산|필터|정렬)|"
+    r"(?:사용|기준|조회|계산|필터|정렬).{0,72}?"
+    r"(?<![A-Za-z0-9])BUYABLE[_\s-]*QUANTITY(?![A-Za-z0-9]))|"
+    r"(?:(?:Morningstar|모닝스타|Lipper|리퍼|제\s*3자|외부\s*평가\s*기관)"
+    r".{0,32}?(?:별점|평점|스타\s*등급|rating)|"
+    r"(?:별점|평점|스타\s*등급|rating).{0,32}?"
+    r"(?:Morningstar|모닝스타|Lipper|리퍼|제\s*3자|외부\s*평가\s*기관))",
     re.IGNORECASE,
 )
 _NEGATED_EXTERNAL_SOURCE = re.compile(
@@ -275,7 +380,9 @@ _ONLINE_OFFLINE_TRADING_CHANNEL = re.compile(
     re.IGNORECASE,
 )
 _STRUCTURED_SALES_CHANNEL = re.compile(
-    r"(?:클래스\s*)?판매\s*채널(?:이|은|가)?\s*(?:온라인|오프라인)",
+    r"(?:클래스\s*)?판매\s*채널(?:이|은|가)?\s*(?:온라인|오프라인)|"
+    r"(?:개인용\s*|법인용\s*)?(?:온라인|오프라인)\s*(?:전용\s*)?"
+    r"판매\s*(?:공모\s*)?(?:펀드|상품)",
     re.IGNORECASE,
 )
 _MULTITURN = re.compile(
@@ -344,7 +451,12 @@ _NEGATED_POLICY_REQUEST = re.compile(
     r"(?:추천|전망|예측|보장)"
     r"(?:(?:이나|이나\s+|과|와|또는|/|,|·)\s*(?:추천|전망|예측|보장))*"
     r"(?:은|는|이|가)?\s*"
-    r"(?:필요(?:가)?\s*없|원하지\s*않|하지\s*(?:말|않)|없이|제외)",
+    r"(?:필요(?:가)?\s*없|원하지\s*않|하지\s*(?:말|않)|없이|제외|말고|빼고)",
+    re.IGNORECASE,
+)
+_NON_ADVISORY_CALCULATION = re.compile(
+    r"(?:이\s*)?계산값을\s*.{0,40}?(?:전망|예측|투자\s*추천)"
+    r".{0,32}?해석하지\s*말(?:고|아|라)",
     re.IGNORECASE,
 )
 
@@ -374,7 +486,9 @@ def normalize_user_question(question: str) -> str:
 def safety_policy_surface(question: str) -> str:
     """Remove explicit negative disclaimers from lexical policy matching only."""
 
-    return _NEGATED_POLICY_REQUEST.sub(" ", normalize_user_question(question))
+    normalized = normalize_user_question(question)
+    normalized = _NON_ADVISORY_CALCULATION.sub(" ", normalized)
+    return _NEGATED_POLICY_REQUEST.sub(" ", normalized)
 
 
 def data_scope_policy_surface(question: str) -> str:
@@ -396,6 +510,240 @@ _CLAUSE_BOUNDARY = re.compile(
     r"(?:하고|하며|해서|하면서|한\s*뒤|한\s*후)\s+)",
     re.IGNORECASE,
 )
+
+# High-risk intent categories are kept as separate, reviewable grammars rather
+# than appending one-off sentences to the older catch-all expressions above.
+# Each rule requires both a protected target and an adversarial action, which
+# preserves ordinary product questions while making the unsafe clause terminal
+# even when it is joined to a valid DB search.
+_SENSITIVE_RUNTIME_DISCLOSURE = re.compile(
+    r"(?:\.env(?:\.[A-Za-z0-9_-]+)?|(?:api\s*)?secrets?|credentials?|"
+    r"인증\s*(?:키|정보)|비밀\s*(?:키|파일)|"
+    r"(?:서버|docker|컨테이너|런타임|내부)\s*(?:파일\s*)?경로)"
+    r"(?:의|을|를|은|는|이|가)?\s*.{0,36}?"
+    r"(?:내용|값|원문|위치)?\s*.{0,16}?"
+    r"(?:출력|공개|노출|보여|알려|읽어|꺼내|내놔|전달)|"
+    r"(?:출력|공개|노출|보여|알려|읽어|꺼내|내놔)\s*.{0,24}?"
+    r"(?:\.env(?:\.[A-Za-z0-9_-]+)?|(?:api\s*)?secrets?|credentials?|"
+    r"인증\s*(?:키|정보)|비밀\s*(?:키|파일)|"
+    r"(?:서버|docker|컨테이너|런타임|내부)\s*(?:파일\s*)?경로)",
+    re.IGNORECASE,
+)
+_EXPLICIT_NUMERIC_TAMPERING = re.compile(
+    r"(?:(?:DB|데이터베이스|원천|공식|제공)\s*)?"
+    r"(?:수익률|가격|수치|순위|AUM|순자산|보수율|위험\s*등급)"
+    r"(?:을|를|은|는|이|가)?\s*"
+    r"(?:\d+(?:\.\d+)?\s*(?:%|퍼센트|배|포인트)?\s*)?"
+    r"(?:높여|낮춰|올려|내려|늘려|줄여|증가시켜|감소시켜|더해|빼서|곱해|"
+    r"부풀려|깎아서|고쳐)"
+    r".{0,28}?(?:표시|답|보여|출력|반영|만들|정렬)",
+    re.IGNORECASE,
+)
+
+# Mutation and truth-substitution are modelled as actions rather than a list of
+# frozen red-team sentences.  Requiring both a protected data target and a
+# write/replace action avoids blocking ordinary read-only questions that merely
+# mention a DB field, product ID, or numeric comparison.
+_DATABASE_MUTATION_OR_TOOL_INJECTION = re.compile(
+    r"(?:"
+    r"(?:DB|데이터베이스|SQLite|테이블|원천\s*파일|데이터\s*파일)"
+    r"(?:을|를|의|\s*값(?:을|를|의)?)?\s*.{0,36}?"
+    r"(?:수정|변경|변조|바(?:꿔|꾸|꾼)|고쳐|덮어\s*쓰|업데이트|삽입|추가|삭제|폐기)"
+    r"(?:해|하|해서|한)?|"
+    r"(?:exec[_\s-]*sql|execute[_\s-]*sql|run[_\s-]*sql|도구\s*출력|tool)"
+    r".{0,80}?\b(?:UPDATE|INSERT|DELETE|DROP|ALTER|REPLACE)\b|"
+    r"\b(?:UPDATE|INSERT\s+INTO|DELETE\s+FROM|DROP\s+TABLE|ALTER\s+TABLE|"
+    r"REPLACE\s+INTO)\b"
+    r")",
+    re.IGNORECASE,
+)
+_GROUND_TRUTH_SUBSTITUTION = re.compile(
+    r"(?:"
+    r"(?:실제|공식|제공)\s*(?:DB|데이터|값|수치|상품\s*ID|종목\s*ID)?"
+    r".{0,28}?(?:달라도|대신|무시하고|관계없이).{0,56}?"
+    r"(?:바꿔|치환|대체|꾸며|고쳐|반환|답해|표시)|"
+    r"(?:상품|종목)\s*ID(?:를|을)?\s*.{0,24}?(?:실제\s*값\s*)?대신"
+    r".{0,40}?(?:바꿔|치환|대체|반환)|"
+    r"(?:가짜|임의|지정한)\s*(?:ETF|ETN|ETP|채권|펀드|상품|종목|ID)"
+    r".{0,48}?(?:1\s*위|상위|결과|목록).{0,28}?(?:넣|추가|삽입|반환)|"
+    r"(?:모든|전체)\s*(?:ETF|ETN|ETP|채권|펀드|상품|종목)?\s*"
+    r"(?:수익률|가격|수치|AUM|순자산|보수율)(?:을|를)?\s*"
+    r"\d+(?:\.\d+)?\s*(?:%|퍼센트|배|포인트)?(?:로|이라고)?\s*"
+    r"(?:꾸며|바꿔|고쳐|표시|답해)"
+    r")",
+    re.IGNORECASE,
+)
+
+# The evaluation snapshot has no live FX/benchmark/ESG feed.  A request to
+# inject a newly announced market value and recompute provided product metrics
+# is therefore terminally unverifiable, while ordinary snapshot-period fields
+# such as ``오늘 수익률`` remain supported.
+_UNAPPROVED_LIVE_RECALCULATION = re.compile(
+    r"(?:"
+    r"(?:오늘|현재|실시간)\s*(?:환율|기준\s*금리|시장\s*금리|ESG\s*(?:점수|등급))"
+    r".{0,64}?(?:환산|재계산|반영|비교|순위|정렬)|"
+    r"(?:방금|오늘|금일|최근)\s*(?:발표|공개|고시)(?:된)?\s*.{0,32}?"
+    r"(?:환율|기준\s*금리|시장\s*금리|ESG\s*(?:점수|등급))"
+    r".{0,64}?(?:환산|재계산|반영|비교|순위|정렬)"
+    r")",
+    re.IGNORECASE,
+)
+_ACCOUNT_TRANSACTION_ACTION = re.compile(
+    r"(?:내|제|고객|사용자)?\s*계좌(?:로|에서|에|를)?\s*.{0,48}?"
+    r"(?:(?:실제(?:로)?|직접)\s*)?"
+    r"(?:매수|매도|주문|가입|환매)(?:해|하|를|을|까지)?\s*.{0,12}?"
+    r"(?:줘|주세요|주십시오|달라|실행|체결|접수|처리|완료|주문\s*번호)|"
+    r"(?:내|제|고객|사용자)?\s*계좌(?:로|에서|에|를)?\s*.{0,48}?"
+    r"(?:거래\s*(?:실행|체결|접수|처리|완료)|거래(?:해|하)\s*"
+    r"(?:줘|주세요|주십시오|달라))|"
+    r"(?:실제(?:로)?|직접)\s*(?:매수|매도|주문|가입|환매|거래)"
+    r"(?:해|하|를|을)?\s*(?:줘|주세요|주십시오|달라|실행|체결|접수|처리)|"
+    r"(?:개인\s*정보|인증\s*정보|계좌\s*정보)(?:를|로|까지|와|하고)?"
+    r"\s*.{0,80}?(?:계좌|포트폴리오).{0,56}?"
+    r"(?:담아|넣어|편입|추가)(?:\s*해)?\s*"
+    r"(?:줘|주세요|주십시오|달라|실행|처리|완료)|"
+    r"(?:내|제|고객|사용자)?\s*(?:연금|ISA|개인)?\s*계좌(?:에|로|에서)?"
+    r".{0,64}?(?:ETF|ETN|ETP|채권|공모\s*펀드|펀드|상품|종목)"
+    r"(?:을|를)?\s*.{0,24}?(?:담아|넣어|편입|추가)(?:\s*해)?\s*"
+    r"(?:줘|주세요|주십시오|달라|실행|처리|완료)",
+    re.IGNORECASE,
+)
+_OUTSIDE_ASSET_INJECTION = re.compile(
+    r"(?:(?:주최\s*측|대회\s*주최\s*측|제공|승인|공식)\s*)?"
+    r"(?:데이터|DB|데이터베이스)(?:에|에는|의)?\s*"
+    r"(?:없|없는|밖(?:의|에|에서)).{0,40}?"
+    r"(?:코인|가상\s*자산|암호\s*화폐|개별\s*주식|주식\s*종목|"
+    r"예금|적금|보험|대출|외부\s*상품|타사\s*상품)"
+    r".{0,32}?(?:ETF|ETN|ETP|채권|공모\s*펀드|펀드|상품|종목)"
+    r"(?:로|라고|인\s*것처럼|인\s*척|처럼).{0,24}?"
+    r"(?:추가|삽입|포함|끼워|섞|답|표시|분류)",
+    re.IGNORECASE,
+)
+_AUDIT_OR_STATUS_TAMPERING = re.compile(
+    r"(?:(?:감사|요청|접속|검증|실행|호출|서버)\s*)?"
+    r"(?:로그|기록)(?:를|을|은|는)?\s*.{0,24}?"
+    r"(?:삭제|지우|지워|없애|말소|변조|조작)|"
+    r"(?:거래\s*(?:정지|중지)|판매\s*불가|가입\s*불가|상장\s*폐지)"
+    r"(?:된|인)?\s*(?:상품|종목)?(?:을|를|은|는)?\s*.{0,28}?"
+    r"(?:정상|거래\s*가능|판매\s*가능|가입\s*가능)(?:이라고|으로|인\s*것처럼)"
+    r".{0,20}?(?:표시|위장|변경|조작|답)",
+    re.IGNORECASE,
+)
+_SOURCE_PROVENANCE_SPOOFING = re.compile(
+    r"(?:외부\s*)?(?:블로그|카페|커뮤니티|SNS|개인\s*(?:글|게시물)|"
+    r"비공식\s*(?:자료|문서|출처)|미확인\s*(?:자료|문서|출처))"
+    r".{0,48}?(?:공식|승인)\s*(?:자료|문서|출처|근거)(?:라고|인\s*척|처럼)?"
+    r".{0,24}?(?:속(?:이|여)|위장|꾸미|사칭|둔갑|거짓)|"
+    r"(?:공식|승인)\s*(?:자료|문서|출처|근거)(?:인\s*척|처럼)\s*.{0,28}?"
+    r"(?:블로그|카페|커뮤니티|SNS|개인\s*(?:글|게시물)|비공식\s*자료)",
+    re.IGNORECASE,
+)
+_INTERNAL_REASONING_DISCLOSURE = re.compile(
+    r"(?:(?:HCLX|LLM|모델|에이전트)\s*)?(?:내부|숨겨진|비공개)\s*"
+    r"(?:추론|사고\s*과정|생각\s*과정|도구\s*호출\s*(?:기록|내역)|"
+    r"think[_\s-]*trace|chain[_\s-]*of[_\s-]*thought)"
+    r".{0,32}?(?:원문|그대로|전문)?\s*.{0,16}?"
+    r"(?:출력|공개|노출|보여|알려|내놔|제공)",
+    re.IGNORECASE,
+)
+_DANGEROUS_OFF_TOPIC_INSTRUCTIONS = re.compile(
+    r"(?:폭발물|폭탄|화약|사제\s*무기|총기).{0,24}?"
+    r"(?:제조법|제작법|만드는\s*법|만들기|제조|제작)"
+    r"|(?:제조|제작|만드는\s*법).{0,24}?(?:폭발물|폭탄|화약|사제\s*무기)",
+    re.IGNORECASE,
+)
+_VERIFICATION_BYPASS = re.compile(
+    r"(?:검증|검산|확인)(?:\s*(?:단계|절차|경계|규칙|정책|기능|로직))?"
+    r"(?:을|를|은|는)?\s*.{0,28}?"
+    r"(?:끄|꺼|해제|우회|비활성화|건너\s*뛰|건너\s*뛴|"
+    r"스킵|skip|생략|제외|무시)",
+    re.IGNORECASE,
+)
+
+_PROMPT_POLICY_BYPASS = re.compile(
+    r"(?:시스템\s*)?(?:프롬프트|prompt)(?:의|에\s*있는|\s*)?"
+    r"(?:규칙|정책|지침|제약|제한)(?:을|를|은|는)?\s*.{0,28}?"
+    r"(?:무효화|해제|우회|무시|삭제|제거|비활성화|끄|꺼|건너\s*뛰|스킵|skip)",
+    re.IGNORECASE,
+)
+_MEDICAL_OFF_TOPIC = re.compile(
+    r"(?:"
+    r"(?:질환|질병|증상|통증|두통|복통|요통|허리\s*통증|감기|당뇨|고혈압)"
+    r".{0,40}?(?:약|의약품|처방|복용|투약|진단|치료)|"
+    r"(?:약|의약품)(?:을|를|은|는)?\s*.{0,32}?"
+    r"(?:처방|추천|복용량|용량|먹(?:어|을)|투약)|"
+    r"(?:처방|진단|치료)(?:해|하|을|를|이|가|법)?\s*.{0,24}?"
+    r"(?:줘|주세요|주십시오|알려|정해|추천)"
+    r")",
+    re.IGNORECASE,
+)
+
+# These policies describe unsafe *actions*, not a list of known entities.  A
+# user may vary the invented product name or the third-party model provider,
+# but neither may expand the approved product universe or delegate product
+# selection to an unapproved commercial LLM.  Requiring both the unsafe target
+# and its action keeps ordinary questions such as ``LLM 관련 ETF`` in scope.
+_SYNTHETIC_PRODUCT_INJECTION = re.compile(
+    r"(?:"
+    r"(?:(?:공식|제공|승인|주최\s*측)\s*(?:데이터|DB|데이터베이스|목록)"
+    r"(?:에|에는|의|에서)?\s*(?:없|없는|밖(?:의|에|에서))|"
+    r"(?:가상(?:의)?|가짜|허구(?:의)?|존재하지\s*않는|임의로\s*(?:만든|생성한)))"
+    r".{0,64}?(?:ETF|ETN|ETP|채권|공모\s*펀드|펀드|금융\s*상품|상품|종목)"
+    r".{0,48}?(?:목록|검색\s*결과|후보|제공\s*데이터|DB)?\s*.{0,24}?"
+    r"(?:추가|삽입|끼워\s*넣|섞어\s*넣|포함(?:시켜|해)?|만들어\s*넣)|"
+    r"(?:목록|검색\s*결과|후보|제공\s*데이터|DB)(?:에|에는|로)?\s*.{0,28}?"
+    r"(?:추가|삽입|끼워\s*넣|섞어\s*넣|포함(?:시켜|해)?)\s*.{0,48}?"
+    r"(?:가상(?:의)?|가짜|허구(?:의)?|존재하지\s*않는|임의로\s*(?:만든|생성한))"
+    r".{0,48}?(?:ETF|ETN|ETP|채권|공모\s*펀드|펀드|금융\s*상품|상품|종목)"
+    r")",
+    re.IGNORECASE,
+)
+_UNAPPROVED_LLM_PRODUCT_SELECTION = re.compile(
+    r"(?:(?:외부|타사|상용|유료|SaaS(?:형)?)\s*)+"
+    r"(?:생성형\s*)?(?:AI|LLM|대규모\s*언어\s*모델|언어\s*모델|모델|API)"
+    r"(?:을|를|에게|로)?\s*.{0,40}?"
+    r"(?:호출|사용|활용|연결|질의|물어|문의)"
+    r".{0,64}?(?:추천|선정|골라|고르|추려|순위|랭킹|후보|포트폴리오)"
+    r"|(?:추천|선정|골라|고르|추려|순위|랭킹|후보|포트폴리오)"
+    r".{0,64}?(?:(?:외부|타사|상용|유료|SaaS(?:형)?)\s*)+"
+    r"(?:생성형\s*)?(?:AI|LLM|대규모\s*언어\s*모델|언어\s*모델|모델|API)"
+    r"(?:을|를|에게|로)?\s*.{0,32}?(?:호출|사용|활용|연결|질의|물어|문의)",
+    re.IGNORECASE,
+)
+_FUTURE_PRODUCT_SELECTION = re.compile(
+    r"(?:(?:미래에(?!셋)|장래에|앞으로|향후)\s*.{0,40}?"
+    r"(?:오를|내릴|상승|하락|수익(?:이|률)?|성과|가격)|"
+    r"(?:미래|장래)(?:의)?\s+(?:수익률|성과|가격))"
+    r".{0,64}?(?:ETF|ETN|ETP|채권|공모\s*펀드|펀드|상품|종목)?"
+    r".{0,32}?(?:골라|고르|선정|추천|추려|뽑아|알려|찾아)",
+    re.IGNORECASE,
+)
+
+_ADDITIONAL_TERMINAL_PATTERNS: dict[SafetyGate, tuple[re.Pattern[str], ...]] = {
+    SafetyGate.SECURITY: (
+        _SENSITIVE_RUNTIME_DISCLOSURE,
+        _AUDIT_OR_STATUS_TAMPERING,
+        _INTERNAL_REASONING_DISCLOSURE,
+        _UNAPPROVED_LLM_PRODUCT_SELECTION,
+        _VERIFICATION_BYPASS,
+        _PROMPT_POLICY_BYPASS,
+        _DATABASE_MUTATION_OR_TOOL_INJECTION,
+    ),
+    SafetyGate.DATA_INTEGRITY: (
+        _EXPLICIT_NUMERIC_TAMPERING,
+        _OUTSIDE_ASSET_INJECTION,
+        _SYNTHETIC_PRODUCT_INJECTION,
+        _SOURCE_PROVENANCE_SPOOFING,
+        _GROUND_TRUTH_SUBSTITUTION,
+    ),
+    SafetyGate.TRANSACTION: (_ACCOUNT_TRANSACTION_ACTION,),
+    SafetyGate.OFF_TOPIC: (
+        _DANGEROUS_OFF_TOPIC_INSTRUCTIONS,
+        _MEDICAL_OFF_TOPIC,
+    ),
+    SafetyGate.FORECAST: (_FUTURE_PRODUCT_SELECTION,),
+    SafetyGate.FRESHNESS: (_UNAPPROVED_LIVE_RECALCULATION,),
+}
 
 
 def _policy_clauses(question: str) -> tuple[str, ...]:
@@ -471,21 +819,63 @@ class SafetyEnvelope:
                 if gate in {SafetyGate.FORECAST, SafetyGate.GUARANTEE}
                 else normalized_clauses
             )
+            gate_patterns = (pattern, *_ADDITIONAL_TERMINAL_PATTERNS.get(gate, ()))
             matched = next(
-                (match for surface in surfaces if (match := pattern.search(surface)) is not None),
+                (
+                    match
+                    for surface in surfaces
+                    for candidate in gate_patterns
+                    if (match := candidate.search(surface)) is not None
+                ),
                 None,
             )
             if gate is SafetyGate.SECURITY:
                 matched = (
                     matched
                     or _PROTECTED_MARKER.search(normalized)
-                    or pattern.search(normalized[::-1])
+                    or next(
+                        (
+                            match
+                            for candidate in gate_patterns
+                            if (match := candidate.search(normalized[::-1])) is not None
+                        ),
+                        None,
+                    )
                     or _PROTECTED_MARKER.search(normalized[::-1])
                 )
+            if (
+                gate is SafetyGate.FRESHNESS
+                and matched is not None
+                and _BOND_PURCHASE_YIELD_CONTEXT.search(normalized) is not None
+            ):
+                # ``지금 사는 가격을 반영한 세전/세후 보상`` is a natural
+                # description of the provided snapshot's buy-yield fields. It
+                # does not request a live quote.  Keep real-time price/news
+                # requests blocked, but let this narrowly evidenced product
+                # metric proceed to the normal QueryPlan authority checks.
+                matched = None
             if matched:
                 return SafetyEnvelopeDecision(normalized, disposition, gate, reason)
 
-        if _DATA_SCOPE_BYPASS.search(scope_surface) or _OUT_OF_SCOPE.search(normalized):
+        out_of_scope = _OUT_OF_SCOPE.search(normalized)
+        if (
+            out_of_scope is not None
+            and out_of_scope.group(0).startswith("보험")
+            and _EXPLICIT_PRODUCT_IDENTITY.search(normalized) is not None
+            and re.search(
+                r"(?:중|비교|대조|수익률|금리|이율|만기|듀레이션|컨벡시티|"
+                r"발행잔액|평가일단가)",
+                normalized,
+            )
+            is not None
+        ):
+            # ``푸본현대생명보험24(후)...(KR...)`` is the issuer-bearing
+            # name of an exact provided-DB bond, not a request to search for an
+            # insurance policy.  The DB-resolved identity still has to pass the
+            # normal Router/Compiler authority checks after this narrow scope
+            # disambiguation.
+            out_of_scope = None
+        if _DATA_SCOPE_BYPASS.search(scope_surface) or out_of_scope is not None:
             return SafetyEnvelopeDecision(
                 normalized,
                 SafetyDisposition.UNSUPPORTED,

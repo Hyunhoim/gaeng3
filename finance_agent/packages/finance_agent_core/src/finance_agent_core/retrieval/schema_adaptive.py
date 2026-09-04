@@ -62,9 +62,9 @@ class AdaptiveSchemaCandidateSet(AdaptiveSchemaModel):
         if self.status is AdaptiveSchemaLinkStatus.FOUND and not self.candidates:
             raise ValueError("found schema result requires candidates")
         if self.hclx_eligible and (
-            self.status is AdaptiveSchemaLinkStatus.FOUND or len(self.candidates) < 2
+            self.status is AdaptiveSchemaLinkStatus.FOUND or not self.candidates
         ):
-            raise ValueError("only unresolved multi-candidate results can call HCLX")
+            raise ValueError("only unresolved candidate-bound results can call HCLX")
         return self
 
 
@@ -257,9 +257,7 @@ class ProductionHybridSchemaLinker:
             field_id=top_dense.field_id,
             operation=operation.value,
         )
-        hclx_candidate_floor_met = (
-            top_dense.score >= threshold.hclx_candidate_min_score and len(candidates) >= 2
-        )
+        hclx_candidate_floor_met = top_dense.score >= threshold.hclx_candidate_min_score
         if top_dense.score < threshold.dense_min_score:
             return AdaptiveSchemaCandidateSet(
                 status=AdaptiveSchemaLinkStatus.ABSTAIN,

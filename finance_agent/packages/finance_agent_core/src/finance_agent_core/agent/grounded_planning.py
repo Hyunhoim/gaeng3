@@ -134,6 +134,7 @@ _RESERVED_UNCUED_IDENTITIES = {
 _FUNCTION_PATTERNS = {
     AggregateFunction.COUNT: re.compile(r"몇|개수|건수|상품\s*수|분포|집계"),
     AggregateFunction.AVG: re.compile(r"평균"),
+    AggregateFunction.MEDIAN: re.compile(r"중앙\s*값|메디안|median", re.IGNORECASE),
     AggregateFunction.MAX: re.compile(r"최대|최댓|최고"),
     AggregateFunction.MIN: re.compile(r"최소|최솟|최저"),
     AggregateFunction.SUM: re.compile(r"합계|총합"),
@@ -684,6 +685,21 @@ class GroundedPlanGate:
             ambiguities=[],
             unsupported_conditions=[],
         )
+        if trusted_plan is not None and trusted_plan.constraint_expression is not None:
+            # Boolean connectives are server authority. HCLX may reproduce the
+            # typed leaves, but it must never invent, remove or rewrite OR.
+            # Reattach the trusted expression by stable leaf hash and let the
+            # QueryPlan validator reject a proposal that omitted any branch.
+            payload = plan.model_dump(mode="json")
+            payload["constraint_expression"] = trusted_plan.constraint_expression.model_dump(
+                mode="json"
+            )
+            try:
+                plan = QueryPlan.model_validate(payload)
+            except ValueError as error:
+                raise GroundedPlanRejectedError(
+                    "proposal did not preserve the server constraint expression"
+                ) from error
         self._require_trusted_anchors(question, plan)
         self._require_server_plan_anchors(question, trusted_plan, plan)
         return plan
@@ -711,6 +727,8 @@ class GroundedPlanGate:
             raise GroundedPlanRejectedError("proposal changed the server plan intent")
         if trusted_plan.product_families != model_plan.product_families:
             raise GroundedPlanRejectedError("proposal changed the server plan family")
+        if trusted_plan.constraint_expression != model_plan.constraint_expression:
+            raise GroundedPlanRejectedError("proposal changed server constraint logic")
         model_identity_ids = {
             str(value)
             for item in model_plan.constraints
@@ -1211,6 +1229,14 @@ class GroundedPlanGate:
             raise GroundedPlanRejectedError(
                 f"proposal omitted trusted constraints: {sorted(missing)}"
             )
+        trusted_expression = payload.get("constraint_expression")
+        plan_expression = (
+            None
+            if plan.constraint_expression is None
+            else plan.constraint_expression.model_dump(mode="json")
+        )
+        if trusted_expression != plan_expression:
+            raise GroundedPlanRejectedError("proposal changed trusted constraint logic")
         if plan.intent is Intent.SEARCH and payload["ranking"]:
             trusted_rankings = {
                 (item["field"], item["direction"])

@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>금융상품 Agent 최종 인수인계</title>
+  <style>
+    :root{color-scheme:light;--navy:#14284b;--blue:#eaf2ff;--line:#d9e1ec;--bad:#9b2c2c;--good:#12633b;--text:#182230}
+    *{box-sizing:border-box}body{margin:0;background:#f5f7fa;color:var(--text);font:15px/1.62 system-ui,-apple-system,"Noto Sans KR",sans-serif}
+    main{max-width:1080px;margin:32px auto;padding:0 20px 56px}section,header{background:#fff;border:1px solid var(--line);border-radius:14px;padding:24px;margin:14px 0}
+    h1{margin:0 0 8px;color:var(--navy);font-size:30px}h2{margin:0 0 14px;color:var(--navy);font-size:21px}h3{color:var(--navy)}p{margin:8px 0}.lead{font-size:17px}.note{background:var(--blue);border-left:4px solid #3478d4;padding:12px 14px}.warn{background:#fff4f4;border-left:4px solid var(--bad);padding:12px 14px}.good{color:var(--good);font-weight:700}
+    .flow{white-space:pre-line;background:#101b2d;color:#f4f7fb;border-radius:10px;padding:18px;font-weight:650}.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px}.card{border:1px solid var(--line);border-radius:10px;padding:14px}.card b{display:block;font-size:22px;color:var(--navy)}
+    table{width:100%;border-collapse:collapse;font-size:14px}th,td{padding:9px 10px;border:1px solid var(--line);text-align:left;vertical-align:top}th{background:#edf3fa;color:var(--navy)}pre{overflow:auto;background:#111b2b;color:#edf5ff;padding:16px;border-radius:10px}code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace}ul,ol{padding-left:22px}@media(max-width:700px){section,header{padding:17px}table{display:block;overflow:auto}}
+  </style>
+</head>
+<body><main>
+  <header><h1>금융상품 Agent 최종 인수인계</h1><p>2026-09-03 · 조해영 전달용 · Agent 흐름, Phase 1~8, Blind 실행법, NCP·Docker Compose</p></header>
+
+  <section><h2>1. 결론</h2><p class="lead">현재 코드는 <b>SafetyEnvelope → HCX-007 Intent → 결정론적 QueryPlan·SQL → Verifier → HCX-007 답변</b> 경계를 갖췄다. Phase 8에서는 상품 Precision 100%와 false execution 0건을 유지했지만 외부문서 Router 배선과 과잉 CLARIFY 때문에 Outcome 58.00%였다.</p><p class="warn">Phase 8은 Gold 공개 전 최초 실행 결과다. post-Gold 회귀 점수와 섞어 일반화 성능으로 주장하지 않는다.</p></section>
+
+  <section><h2>2. 현재 Agent 흐름</h2><div class="flow">사용자 질문 → SafetyEnvelope
+→ HCX-007 Intent
+→ Ontology·Lexical·Typed Alias Registry
+→ 미해결 의미만 Schema Dense·제한된 HCX Resolver
+→ 서버 Typed QueryPlan 검증
+→ 제공 DB 후보 고정 → SQLite/Python
+→ 필요 시 공식 외부 검색·Document Dense
+→ 외부 근거와 제공 DB 교집합
+→ Verifier → HCX grounded answer → Answer Verifier</div><ul><li>HCLX는 SQL 결과·상품·순위·수치를 바꾸지 못한다.</li><li>외부 근거 교집합 없음은 NOT_FOUND, 검증 실패는 CANNOT_VERIFY, 복수 해석은 CLARIFY다.</li><li>최종 상품 ID·수치·기간·출처는 서버가 다시 검사한다.</li></ul></section>
+
+  <section><h2>3. Phase 1~8 이력</h2><table><thead><tr><th>평가</th><th>문항</th><th>상태</th><th>Outcome</th><th>상품 F1</th><th>Strict</th><th>성격</th></tr></thead><tbody>
+    <tr><td>Phase 1 최초</td><td>300</td><td>75.67%</td><td>50.67%</td><td>56.78%</td><td>40.67%</td><td>Blind</td></tr>
+    <tr><td>Phase 2 최종</td><td>300</td><td>100%</td><td>99.00%</td><td>98.94%</td><td>83.00%</td><td>post-Gold</td></tr>
+    <tr><td>Phase 3 최초</td><td>600</td><td>62.33%</td><td>59.17%</td><td>72.84%</td><td>48.67%</td><td>Blind</td></tr>
+    <tr><td>Phase 3 v20</td><td>600</td><td>93.33%</td><td>87.17%</td><td>90.23%</td><td>73.50%</td><td>post-Gold</td></tr>
+    <tr><td>Phase 4 최초</td><td>1,000</td><td>17.20%</td><td>14.80%</td><td>11.44%</td><td>11.10%</td><td>Blind</td></tr>
+    <tr><td>Phase 4 최종</td><td>1,000</td><td>100%</td><td>100%</td><td>100%</td><td>100%</td><td>post-Gold</td></tr>
+    <tr><td>Phase 5 최초</td><td>105</td><td>62.86%</td><td>34.29%</td><td>37.14%</td><td>17.14%</td><td>Blind</td></tr>
+    <tr><td>Phase 6 최초</td><td>150</td><td>92.00%</td><td>85.33%</td><td>90.78%</td><td>82.67%</td><td>혼합 Blind</td></tr>
+    <tr><td>Phase 7</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>표적 검증, 단일 aggregate 없음</td></tr>
+    <tr><td><b>Phase 8 최초</b></td><td><b>200</b></td><td><b>60.00%</b></td><td><b>58.00%</b></td><td><b>84.94%</b></td><td><b>49.50%</b></td><td><b>Blind</b></td></tr>
+  </tbody></table><p>Phase마다 구성·난도가 다르므로 같은 Phase 안의 최초 실행과 후검증을 구분해 읽는다.</p></section>
+
+  <section><h2>4. Phase 8 상세</h2><div class="cards"><div class="card"><b>200/200</b>HTTP 200</div><div class="card"><b>100%</b>상품 Precision</div><div class="card"><b>84.94%</b>상품 micro F1</div><div class="card"><b>0건</b>false execution</div><div class="card"><b>79건</b>false block</div><div class="card"><b>6.34초</b>p50</div></div><ul><li>외부근거 59건 Outcome 0건: Document Dense 2회, cache hit 0회, Live Search 2회.</li><li>QueryPlan filter 50.54%, ranking 53.55%.</li><li>HCLX Intent schema 오류 5회는 재시도로 복구했고 timeout·429·5xx는 없었다.</li><li>p95 13.04초, p99 17.76초, 최대 34.33초.</li></ul><p class="note">지정상품 상세 20/20, 단순 카테고리 정렬 14/15, 교차 bounded 검색 14/15. 공식 구성종목·보유관계·위험요인·테마·펀드 구조는 0건으로, 검색 모델보다 외부 Search Plan 배선이 우선 병목이다.</p></section>
+
+  <section><h2>5. Blind 실행 방법</h2><ol><li>question-only SHA-256 고정.</li><li>코드 commit/diff, DB·model·index SHA 고정.</li><li>Gold 비접근 상태에서 preflight.</li><li>공식 GET과 같은 순차 호출로 prediction 생성.</li><li>prediction·journal SHA 기록 후 mode 0400.</li><li>그 뒤 Gold를 열어 compare script로 최초 1회 채점.</li><li>이후 실행은 post-Gold regression으로 명시.</li></ol><pre><code>python3 fastapi_backend/scripts/run_sealed_lab_blind.py --help
+python3 fastapi_backend/scripts/compare_sealed_blind.py \
+  --predictions &lt;PREDICTION&gt; --predictions-sha256 &lt;SHA&gt; \
+  --gold &lt;GOLD&gt; --gold-sha256 &lt;SHA&gt; --output &lt;SCORE&gt;</code></pre><p>Secret·질문·Gold·prediction·journal·score 원본은 Git에 추가하지 않는다.</p></section>
+
+  <section><h2>6. NCP·Docker Compose</h2><table><tbody><tr><th>서버</th><td>finance-agent-eval-01 / 101.79.25.57</td></tr><tr><th>마지막 확인 Release</th><td>evaluation-20260829-external-audit-g9-r6 (Generation 9)</td></tr><tr><th>Image</th><td><code>gaeng3-finance.kr.ncr.ntruss.com/finance-agent/backend@sha256:771260d17e93ea80582aed74e87e3bd7018ce2329b1cc89d871910e66279607f</code></td></tr><tr><th>Endpoint</th><td><code>GET http://101.79.25.57/answer</code></td></tr></tbody></table><p class="warn"><b>2026-09-03 현재 외부 확인:</b> /health와 SSH 22가 모두 connection timeout이다. 현재 commit도 아직 NCP에 배포되지 않았다. 서버 상태 → 공인 IP → ACG → container 순으로 확인해야 한다.</p><pre><code>cd /opt/finance-agent
+umask 022
+RELEASE_ENV_FILE=fastapi_backend/.env.release ./compose-release.sh config --quiet
+RELEASE_ENV_FILE=fastapi_backend/.env.release ./compose-release.sh up --detach --wait
+curl --fail http://127.0.0.1/health
+curl -G http://127.0.0.1/answer \
+  --data-urlencode 'question_id=SMOKE-001' \
+  --data-urlencode 'question=최근 1년 수익률이 높은 국내 ETF 3개 알려줘'</code></pre><p>외부 성공 조건은 0.0.0.0:80 bind, ACG TCP 80 허용, healthy container, 네 상품군·relation·audit ready/ok, 공식 다섯 문자열 응답이다.</p></section>
+
+  <section><h2>7. 동결 검증·후속</h2><ul><li>Backend 전체: <span class="good">493 passed, 1 skipped</span>.</li><li>Agent Core 마지막 전체: 3,111 passed, 5 failed, 12 skipped.</li><li>알려진 5건을 수정하고 영향 테스트: <span class="good">36 passed</span>. 최소 검증 지시에 따라 전체 재실행은 생략.</li><li>PR 검토 뒤, 최종 제출 승인 때만 clean commit 기반 새 immutable Release를 만들고 NCP에 배포한다.</li></ul></section>
+</main></body></html>

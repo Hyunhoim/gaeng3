@@ -13,19 +13,49 @@ from typing import Any
 
 from finance_agent_core.config import load_field_registry
 
+_SHA256 = re.compile(r"[0-9a-f]{64}")
+
 _SUPPORTED_SUITES = {
     "finance-agent-independent-holdout-v2-300": ("IH", 300, "phase1"),
     "finance-agent-independent-holdout-phase2-v1-300": ("P2", 300, "phase2"),
     "finance-agent-development-phase3-v1-600": ("P3", 600, "phase2_style"),
     "finance-agent-independent-holdout-phase4-v1-1000": ("P4", 1000, "phase2_style"),
+    "finance-agent-final-rehearsal-phase5-v1.1-105": ("P5", 105, "phase2_style"),
+    "finance-agent-generalization-phase6-v1-150": ("P6", 150, "phase2_style"),
+    "finance-agent-final-evaluation-phase7-v2-200": ("P7V2", 200, "phase2_style"),
+    "finance-agent-paraphrase-evaluation-phase8-200": ("P8", 200, "phase2_style"),
 }
 
 _SUITE_ID_WIDTHS = {
     "finance-agent-independent-holdout-phase4-v1-1000": 4,
 }
 
+_BACKEND_DISPOSITION = {
+    # NOT_FOUND and CANNOT_VERIFY are terminal results of an executed lookup,
+    # not evidence that the request was blocked before execution.
+    "success": "execute",
+    "not_found": "execute",
+    "cannot_verify": "execute",
+    "clarification": "clarify",
+    "unsupported": "unsupported",
+    "error": "error",
+}
+
+_BACKEND_RESULT_STATUS = {
+    "success": "SUCCESS",
+    "clarification": "CLARIFY",
+    "not_found": "NOT_FOUND",
+    "cannot_verify": "CANNOT_VERIFY",
+}
+
 
 def _expected_ids(suite_id: str, prefix: str, case_count: int) -> set[str]:
+    if suite_id == "finance-agent-final-rehearsal-phase5-v1.1-105":
+        return {
+            f"{prefix}-{set_id}-{index:02d}"
+            for set_id in ("A", "B", "C")
+            for index in range(1, 36)
+        }
     width = _SUITE_ID_WIDTHS.get(suite_id, 3)
     return {f"{prefix}-{index:0{width}d}" for index in range(1, case_count + 1)}
 
@@ -217,6 +247,18 @@ def _safe_ratio(numerator: int, denominator: int) -> float:
     return 0.0 if denominator == 0 else numerator / denominator
 
 
+def _external_evidence_required(expected: dict[str, Any]) -> bool:
+    """Read both the Phase 4 and legacy Phase 2 Gold layouts."""
+    if "external_evidence_required" in expected:
+        return bool(expected["external_evidence_required"])
+    status_basis = expected.get("expected_status_basis", {})
+    return bool(
+        status_basis.get("external_evidence_required")
+        if isinstance(status_basis, dict)
+        else False
+    )
+
+
 def _f1(precision: float, recall: float) -> float:
     return 0.0 if precision + recall == 0 else 2 * precision * recall / (precision + recall)
 
@@ -273,8 +315,22 @@ def _phase2_plan_metrics(
             "ranking_exact": None,
             "limit_exact": None,
         }
+    public_plan = response.get("query_plan")
+    if (
+        isinstance(public_plan, dict)
+        and public_plan.get("plan_kind") == "composite_external_knowledge"
+    ):
+        # Composite external-knowledge plans use a deliberately different DTO.
+        # Their product selection, relation evidence and DB intersection are
+        # scored independently; a standard SQL QueryPlan comparison is N/A.
+        return {
+            "family_exact": None,
+            "filters_exact": None,
+            "ranking_exact": None,
+            "limit_exact": None,
+        }
     if len(subqueries) == 1:
-        plan = response.get("query_plan")
+        plan = public_plan
         observed_plans = [
             {
                 "plan": plan,
@@ -306,8 +362,8 @@ def _phase2_plan_metrics(
 
     family_exact = True
     filters_exact = True
-    ranking_exact = True
-    limit_exact = True
+    ranking_checks: list[bool] = []
+    limit_checks: list[bool] = []
     identity_fields = {"product_identity", "product_name", "short_name", "ticker", "isin"}
     for expected_plan, observed in zip(subqueries, observed_plans, strict=True):
         plan = observed["plan"]
@@ -334,6 +390,27 @@ def _phase2_plan_metrics(
         )
         expected_identity = tuple(item for item in expected_filters if item[0] in identity_fields)
         observed_identity = tuple(item for item in observed_filters if item[0] in identity_fields)
+        expected_empty_identity = tuple(
+            item
+            for item in expected_identity
+            if item[1] == "in" and item[2] == ()
+        )
+        verified_empty_identity_scope = (
+            bool(expected_empty_identity)
+            and not observed_identity
+            and observed.get("candidate_count") == 0
+            and not observed.get("returned_product_ids", ())
+        )
+        if verified_empty_identity_scope:
+            # QueryPlan forbids an empty IN list. The compound execution receipt
+            # proves the identity scope was active and returned zero without SQL
+            # broadening, so compare the remaining public constraints only.
+            expected_filters = tuple(
+                item for item in expected_filters if item not in expected_empty_identity
+            )
+            expected_identity = tuple(
+                item for item in expected_identity if item not in expected_empty_identity
+            )
         exact_single_identity = (
             len(expected_identity) == 1
             and len(observed_identity) == 1
@@ -355,30 +432,35 @@ def _phase2_plan_metrics(
             observed_filters = tuple(item for item in observed_filters if item != redundant_type)
         filters_exact = filters_exact and observed_filters == expected_filters
 
-        ranking = plan.get("ranking", ())
-        expected_raw_ranking = expected_plan.get("ranking_field")
-        expected_ranking = (
-            None
-            if expected_raw_ranking is None
-            else source_fields.get(
-                (family, str(expected_raw_ranking).casefold()), expected_raw_ranking
+        if expected_plan.get("derived_metric") is None:
+            ranking = plan.get("ranking", ())
+            expected_raw_ranking = expected_plan.get("ranking_field")
+            expected_ranking = (
+                None
+                if expected_raw_ranking is None
+                else source_fields.get(
+                    (family, str(expected_raw_ranking).casefold()), expected_raw_ranking
+                )
             )
-        )
-        observed_ranking = None
-        observed_direction = None
-        if isinstance(ranking, list) and len(ranking) == 1 and isinstance(ranking[0], dict):
-            observed_ranking = ranking[0].get("field")
-            observed_direction = ranking[0].get("direction")
-        ranking_exact = ranking_exact and (
-            observed_ranking == expected_ranking
-            and observed_direction == expected_plan.get("direction")
-        )
-        limit_exact = limit_exact and plan.get("limit") == expected_plan.get("limit")
+            observed_ranking = None
+            observed_direction = None
+            if isinstance(ranking, list) and len(ranking) == 1 and isinstance(ranking[0], dict):
+                observed_ranking = ranking[0].get("field")
+                observed_direction = ranking[0].get("direction")
+            ranking_checks.append(
+                observed_ranking == expected_ranking
+                and observed_direction == expected_plan.get("direction")
+            )
+        # When an externally verified identity set is empty, QueryPlan cannot
+        # encode IN []; no row can be affected by the limit. Treat the arbitrary
+        # Gold default as unobservable instead of an Agent error.
+        if not verified_empty_identity_scope:
+            limit_checks.append(plan.get("limit") == expected_plan.get("limit"))
     return {
         "family_exact": family_exact,
         "filters_exact": filters_exact,
-        "ranking_exact": ranking_exact,
-        "limit_exact": limit_exact,
+        "ranking_exact": all(ranking_checks) if ranking_checks else None,
+        "limit_exact": all(limit_checks) if limit_checks else None,
     }
 
 
@@ -400,20 +482,6 @@ def _compare_phase2(
         raise RuntimeError("Phase 2 Gold or prediction IDs differ")
 
     source_fields = _source_field_map()
-    backend_disposition = {
-        "success": "execute",
-        "clarification": "clarify",
-        "not_found": "not_found",
-        "unsupported": "unsupported",
-        "cannot_verify": "cannot_verify",
-        "error": "error",
-    }
-    backend_result_status = {
-        "success": "SUCCESS",
-        "clarification": "CLARIFY",
-        "not_found": "NOT_FOUND",
-        "cannot_verify": "CANNOT_VERIFY",
-    }
     totals = Counter()
     by_category: dict[str, Counter[str]] = defaultdict(Counter)
     by_scope: dict[str, Counter[str]] = defaultdict(Counter)
@@ -431,14 +499,14 @@ def _compare_phase2(
         observed = prediction_by_id[case_id]
         response = observed["backend_response"]
         status = response["status"]
-        predicted_disposition = backend_disposition.get(status, "error")
+        predicted_disposition = _BACKEND_DISPOSITION.get(status, "error")
         expected_disposition = expected["expected_disposition"]
         disposition_exact = predicted_disposition == expected_disposition
         expected_status = expected.get("expected_result_status")
         result_status_exact = (
             None
             if expected_status is None
-            else backend_result_status.get(status) == expected_status
+            else _BACKEND_RESULT_STATUS.get(status) == expected_status
         )
 
         expected_products = [
@@ -451,9 +519,14 @@ def _compare_phase2(
         tp = len(expected_set & observed_set)
         fp = len(observed_set - expected_set)
         fn = len(expected_set - observed_set)
-        precision = _safe_ratio(tp, tp + fp)
-        recall = _safe_ratio(tp, tp + fn)
-        case_f1 = _f1(precision, recall)
+        if not expected_set and not observed_set:
+            # Returning no product is the exact retrieval result for verified
+            # empty SUCCESS/NOT_FOUND/CANNOT_VERIFY cases, not a zero-score miss.
+            precision = recall = case_f1 = 1.0
+        else:
+            precision = _safe_ratio(tp, tp + fp)
+            recall = _safe_ratio(tp, tp + fn)
+            case_f1 = _f1(precision, recall)
         is_execute = expected_disposition == "execute"
         if is_execute:
             product_tp += tp
@@ -476,11 +549,13 @@ def _compare_phase2(
         cross_family_execute_success = (
             None if not (cross_family and is_execute) else disposition_exact and order_exact
         )
-        external_required = bool(
-            expected.get("expected_status_basis", {}).get("external_evidence_required")
-        )
+        external_required = _external_evidence_required(expected)
         external_documents_present = bool(response.get("documents"))
-        outcome_exact = disposition_exact and (not is_execute or order_exact)
+        outcome_exact = (
+            disposition_exact
+            and result_status_exact is not False
+            and (not is_execute or order_exact)
+        )
         applicable_plan_metrics = [value for value in plan_metrics.values() if value is not None]
         strict_exact = outcome_exact and (
             not is_execute
@@ -594,6 +669,7 @@ def _compare_phase2(
         "questions_sha256": predictions["questions_sha256"],
         "implementation_commit": predictions["implementation_commit"],
         "image_id": predictions["image_id"],
+        "regression_composition": predictions.get("regression_composition"),
         "counts": {
             "cases": case_count,
             "execute": execute_total,
@@ -685,11 +761,16 @@ def compare(
     *,
     allow_post_gold_development: bool = False,
 ) -> dict[str, Any]:
+    artifact_kind = predictions.get("artifact_kind")
     if allow_post_gold_development:
         if (
             predictions.get("answer_key_opened") is not True
             or predictions.get("evaluation_kind") != "post_gold_development_regression"
-            or predictions.get("artifact_kind") != "post_gold_development_regression_predictions"
+            or artifact_kind
+            not in {
+                "post_gold_development_regression_predictions",
+                "post_gold_composed_targeted_regression_predictions",
+            }
         ):
             raise RuntimeError("prediction artifact is not an explicit post-Gold regression")
     elif predictions.get("answer_key_opened") is not False:
@@ -704,6 +785,24 @@ def compare(
         or len(predictions.get("results", ())) != case_count
     ):
         raise RuntimeError("prediction count differs")
+    composition = predictions.get("regression_composition")
+    if artifact_kind == "post_gold_composed_targeted_regression_predictions":
+        if not isinstance(composition, dict):
+            raise RuntimeError("composed regression requires composition provenance")
+        unchanged = composition.get("unchanged_full_run_cases")
+        targeted = composition.get("actual_targeted_rerun_cases")
+        source_hashes = predictions.get("targeted_regression_source_sha256s")
+        if (
+            not isinstance(unchanged, int)
+            or not isinstance(targeted, int)
+            or unchanged < 0
+            or targeted <= 0
+            or unchanged + targeted != case_count
+            or not isinstance(source_hashes, list)
+            or not source_hashes
+            or any(_SHA256.fullmatch(str(value)) is None for value in source_hashes)
+        ):
+            raise RuntimeError("composed regression provenance is invalid")
     if gold.get("questions_sha256") != predictions.get("questions_sha256"):
         raise RuntimeError("Gold and prediction question hashes differ")
     prediction_by_id = {item["id"]: item for item in predictions["results"]}
@@ -731,33 +830,18 @@ def compare(
     operation_counts = Counter()
     provider_outcomes = Counter()
 
-    backend_disposition = {
-        "success": "execute",
-        "clarification": "clarify",
-        "not_found": "not_found",
-        "unsupported": "unsupported",
-        "cannot_verify": "cannot_verify",
-        "error": "error",
-    }
-    backend_result_status = {
-        "success": "SUCCESS",
-        "clarification": "CLARIFY",
-        "not_found": "NOT_FOUND",
-        "cannot_verify": "CANNOT_VERIFY",
-    }
-
     for case_id in sorted(expected_ids):
         expected = gold_by_id[case_id]
         observed = prediction_by_id[case_id]
         response = observed["backend_response"]
         status = response["status"]
-        predicted_disposition = backend_disposition.get(status, "error")
+        predicted_disposition = _BACKEND_DISPOSITION.get(status, "error")
         expected_disposition = expected["expected_disposition"]
         disposition_exact = predicted_disposition == expected_disposition
         result_status_exact = None
         if expected["expected_result_status"] is not None:
             result_status_exact = (
-                backend_result_status.get(status) == expected["expected_result_status"]
+                _BACKEND_RESULT_STATUS.get(status) == expected["expected_result_status"]
             )
 
         family = expected["expected_product_family"]
@@ -770,9 +854,12 @@ def compare(
         tp = len(expected_set & observed_set)
         fp = len(observed_set - expected_set)
         fn = len(expected_set - observed_set)
-        precision = _safe_ratio(tp, tp + fp)
-        recall = _safe_ratio(tp, tp + fn)
-        case_f1 = _f1(precision, recall)
+        if not expected_set and not observed_set:
+            precision = recall = case_f1 = 1.0
+        else:
+            precision = _safe_ratio(tp, tp + fp)
+            recall = _safe_ratio(tp, tp + fn)
+            case_f1 = _f1(precision, recall)
         if expected_disposition == "execute":
             product_tp += tp
             product_fp += fp
@@ -833,28 +920,33 @@ def compare(
                 operation_exact = plan.get("interaction_intent") == expected["expected_operation"]
                 # The external plan intentionally has a different DTO. Product family,
                 # filters, ranking and limit are verified by its own product-selection
-                # and evidence contracts, so do not pretend they match a standard plan.
-                family_exact = filters_exact = ranking_exact = limit_exact = False
+                # and evidence contracts. Mark those standard-QueryPlan dimensions as
+                # not applicable instead of counting a different schema as an error.
+                family_exact = filters_exact = ranking_exact = limit_exact = None
             else:
                 operation_exact = family_exact = filters_exact = ranking_exact = limit_exact = False
 
         product_order_exact = observed_ids_ordered == expected_ids_ordered
         candidate_count_exact = response["candidate_count"] == expected["expected_candidate_count"]
-        outcome_exact = disposition_exact and (
-            expected_disposition != "execute" or product_order_exact
+        outcome_exact = (
+            disposition_exact
+            and result_status_exact is not False
+            and (expected_disposition != "execute" or product_order_exact)
         )
-        strict_exact = outcome_exact and (
-            expected_disposition != "execute"
-            or all(
-                (
-                    operation_exact,
-                    family_exact,
-                    filters_exact,
-                    ranking_exact,
-                    limit_exact,
-                    candidate_count_exact,
-                )
+        applicable_strict_metrics = [
+            value
+            for value in (
+                operation_exact,
+                family_exact,
+                filters_exact,
+                ranking_exact,
+                limit_exact,
+                candidate_count_exact,
             )
+            if value is not None
+        ]
+        strict_exact = outcome_exact and (
+            expected_disposition != "execute" or all(applicable_strict_metrics)
         )
         external_required = bool(expected["expected_status_basis"]["external_evidence_required"])
         documents_present = bool(response.get("documents") or response.get("citations"))
@@ -894,10 +986,15 @@ def compare(
             "result_status_applicable": result_status_exact is not None,
             "result_status_exact": result_status_exact is True,
             "operation_exact": operation_exact is True,
+            "operation_applicable": operation_exact is not None,
             "family_exact": family_exact is True,
+            "family_applicable": family_exact is not None,
             "filters_exact": filters_exact is True,
+            "filters_applicable": filters_exact is not None,
             "ranking_exact": ranking_exact is True,
+            "ranking_applicable": ranking_exact is not None,
             "limit_exact": limit_exact is True,
+            "limit_applicable": limit_exact is not None,
             "outcome_exact": outcome_exact,
             "strict_exact": strict_exact,
             "http_200": observed["http_status"] == 200,
@@ -944,6 +1041,7 @@ def compare(
         "gold_revision": gold.get("gold_revision"),
         "implementation_commit": predictions["implementation_commit"],
         "image_id": predictions["image_id"],
+        "regression_composition": composition,
         "counts": {
             "cases": case_count,
             "execute": execute_total,
@@ -967,11 +1065,28 @@ def compare(
             "candidate_count_exact_accuracy": round(
                 totals["candidate_count_exact"] / execute_total, 6
             ),
-            "queryplan_operation_accuracy": round(totals["operation_exact"] / execute_total, 6),
-            "queryplan_family_accuracy": round(totals["family_exact"] / execute_total, 6),
-            "queryplan_filter_accuracy": round(totals["filters_exact"] / execute_total, 6),
-            "queryplan_ranking_accuracy": round(totals["ranking_exact"] / execute_total, 6),
-            "queryplan_limit_accuracy": round(totals["limit_exact"] / execute_total, 6),
+            "queryplan_operation_accuracy": round(
+                _safe_ratio(totals["operation_exact"], totals["operation_applicable"]), 6
+            ),
+            "queryplan_family_accuracy": round(
+                _safe_ratio(totals["family_exact"], totals["family_applicable"]), 6
+            ),
+            "queryplan_filter_accuracy": round(
+                _safe_ratio(totals["filters_exact"], totals["filters_applicable"]), 6
+            ),
+            "queryplan_ranking_accuracy": round(
+                _safe_ratio(totals["ranking_exact"], totals["ranking_applicable"]), 6
+            ),
+            "queryplan_limit_accuracy": round(
+                _safe_ratio(totals["limit_exact"], totals["limit_applicable"]), 6
+            ),
+            "queryplan_applicable_counts": {
+                "operation": totals["operation_applicable"],
+                "family": totals["family_applicable"],
+                "filters": totals["filters_applicable"],
+                "ranking": totals["ranking_applicable"],
+                "limit": totals["limit_applicable"],
+            },
             "external_outcome_exact_accuracy": round(
                 _safe_ratio(totals["external_outcome_exact"], totals["external_required"]), 6
             ),
