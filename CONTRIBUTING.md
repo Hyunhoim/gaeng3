@@ -32,6 +32,30 @@
 
 `main`은 팀이 검토한 통합 상태를 보관하는 브랜치로 사용하며 직접 작업하지 않음
 
+### 브랜치 역할과 흐름 (2026-09-04 합의)
+
+원격에는 다음 네 브랜치만 둔다. 머지된 PR 브랜치와 dependabot 브랜치는 정리한다.
+
+| 브랜치 | 역할 | 규칙 |
+| --- | --- | --- |
+| `main` | 조해영·임현호가 공유하는 기준 | 직접 커밋 없음. PR로만 변경하고, 머지는 사람이 확인한 뒤 수행 |
+| `submission` | 최신 `main`을 주최측 제출 트리로 만드는 브랜치 (담당 조해영) | **`main`만 병합해서 받는다.** 새 코드 수정은 여기서 하지 않는다. 내부 문건·내부 평가 제외 목록, 제출용 README, 루트 `requirements.txt`만 다르다 |
+| `haeyeongcho` | 조해영 작업 브랜치 | `main`에서 따서 작업하고 PR |
+| `hyunhoim` | 임현호 작업 브랜치 | `main`에서 따서 작업하고 PR |
+
+```text
+haeyeongcho ─┐
+             ├─ PR → main ─→ submission에 병합 ─→ 제외 목록 확인 · 테스트 · Docker 재검증
+hyunhoim ────┘                                      └─→ (마감 시 한 번) zip → 주최측 fin-022 스냅샷 push
+```
+
+- 코드 수정은 항상 `작업 브랜치 → PR → main` 방향으로만 흐른다. `submission`에서 발견한 문제도
+  작업 브랜치에서 고쳐 PR로 올린 뒤 `submission`이 `main`을 다시 병합한다
+- `submission`에 `main`을 병합한 뒤에는 새로 들어온 파일 중 제출 제외 대상(개발 문서·평가 데이터·
+  실험 기록)이 있는지 확인하고, Agent Core·Backend 테스트와 Docker 빌드·기동을 다시 확인한다
+- 주최측 저장소(`fin-022`) push는 마감 직전 한 번만 한다. 마감 이후 변경은 실격 사유다
+- 마감 직전에는 의존성 버전 변경(dependabot 포함)을 머지하지 않는다
+
 ## 4. 커밋 메시지 규칙
 
 커밋 메시지는 [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/)
