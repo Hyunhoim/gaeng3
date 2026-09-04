@@ -173,7 +173,7 @@ registry 1.4 산출물이었고, 그래서 세 상품군의 DB 크기가 승인�
 ### 3.6 정렬 자체는 정확하고, 남은 것은 동점 절단 규칙이다
 
 2026-08-29 보고서가 지목한 채권·해외 ETP 정렬을 독립 SQL로 재대조했다.
-`finance_agent/scripts/check-ranking-against-sql.py`가 같은 질문을 Backend에
+`src/finance_agent/scripts/check-ranking-against-sql.py`가 같은 질문을 Backend에
 보내고, 승인 DB에서 별도로 작성한 SQL로 기대 순서를 다시 계산한다.
 
 | 정렬 | 결과 |
@@ -292,7 +292,7 @@ NCP quota·429·5xx·공인 경로 지연은 아직 측정되지 않았다.
 | 팀원 8/25 빌드 (8월, registry 1.4) | 39,166 |
 | 현재 (8월, registry 1.5) | 37,793 |
 
-`technical-proposal.md`, `finance_agent/README.md`, `project-baseline.md`,
+`technical-proposal.md`, `src/finance_agent/README.md`, `project-baseline.md`,
 `system-architecture.md`가 교체된 데이터의 수치를 싣고 있어 제출 전 정정이 필요하다.
 
 ---

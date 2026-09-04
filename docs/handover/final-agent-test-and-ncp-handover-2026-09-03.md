@@ -77,7 +77,7 @@ Phase 8 원본 질문·Gold·응답·API Key는 Git에 포함하지 않는다. �
 핵심 명령 구조:
 
 ```bash
-python3 fastapi_backend/scripts/run_sealed_lab_blind.py \
+python3 src/fastapi_backend/scripts/run_sealed_lab_blind.py \
   --questions <QUESTION_ONLY> --questions-sha256 <SHA256> \
   --output <PREDICTION_JSON> --journal <JOURNAL_JSONL> \
   --source-commit "$(git rev-parse HEAD)" --image-id <IMAGE_ID> \
@@ -89,13 +89,13 @@ python3 fastapi_backend/scripts/run_sealed_lab_blind.py \
 
 chmod 400 <PREDICTION_JSON> <JOURNAL_JSONL>
 
-python3 fastapi_backend/scripts/compare_sealed_blind.py \
+python3 src/fastapi_backend/scripts/compare_sealed_blind.py \
   --predictions <PREDICTION_JSON> --predictions-sha256 <PREDICTION_SHA256> \
   --gold <GOLD_JSON> --gold-sha256 <GOLD_SHA256> \
   --output <SCORE_JSON>
 ```
 
-필수 인수 전체 목록은 `python3 fastapi_backend/scripts/run_sealed_lab_blind.py --help`로 확인한다. Secret·question-only·Gold·prediction·journal·score 원본은 Git에 추가하지 않는다.
+필수 인수 전체 목록은 `python3 src/fastapi_backend/scripts/run_sealed_lab_blind.py --help`로 확인한다. Secret·question-only·Gold·prediction·journal·score 원본은 Git에 추가하지 않는다.
 
 ## 5. NCP·Docker Compose 배포
 
@@ -117,8 +117,8 @@ umask 022
 
 # .env.release에는 값 자체가 아니라 owner-only Secret 파일 경로와
 # immutable image@sha256, release/binding/artifact 경로·SHA만 둔다.
-RELEASE_ENV_FILE=fastapi_backend/.env.release ./compose-release.sh config --quiet
-RELEASE_ENV_FILE=fastapi_backend/.env.release ./compose-release.sh up --detach --wait
+RELEASE_ENV_FILE=src/fastapi_backend/.env.release ./compose-release.sh config --quiet
+RELEASE_ENV_FILE=src/fastapi_backend/.env.release ./compose-release.sh up --detach --wait
 
 curl --fail http://127.0.0.1/health
 curl -G http://127.0.0.1/answer \

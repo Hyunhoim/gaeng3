@@ -10,15 +10,15 @@
 | AI Agent | 조해영 | 질의 이해, 상품 검색·비교·연산, 근거 검증과 답변 생성 |
 
 - 담당 영역을 기준으로 작업하되 다른 코드 영역과 연결되는 변경은 관련 담당자와 먼저 공유
-- `finance_agent/`는 AI Agent 코드, 평가, 개발 문서를 관리하는 독립 작업공간
+- `src/finance_agent/`는 AI Agent 코드, 평가, 개발 문서를 관리하는 독립 작업공간
 - 저장소 루트의 애플리케이션과 AI Agent는 명시적인 API 계약을 통해 연결
 
 ## 2. 처음 확인할 문서
 
 - 프로젝트 전체 소개: [README](README.md)
-- AI Agent 소개와 실행 방법: [finance_agent/README](finance_agent/README.md)
-- AI 문서 목록: [프로젝트 문서 인덱스](finance_agent/docs/project-index.md)
-- AI 개발 환경과 검증 방법: [개발 환경과 현재 구현 상태](finance_agent/docs/development.md)
+- AI Agent 소개와 실행 방법: [src/finance_agent/README](src/finance_agent/README.md)
+- AI 문서 목록: [프로젝트 문서 인덱스](src/finance_agent/docs/project-index.md)
+- AI 개발 환경과 검증 방법: [개발 환경과 현재 구현 상태](src/finance_agent/docs/development.md)
 
 ## 3. 기본 작업 순서
 
@@ -152,7 +152,7 @@ git diff --check
 git diff --cached --check
 ```
 
-AI Agent 변경은 `finance_agent/`에서 다음 검사를 실행
+AI Agent 변경은 `src/finance_agent/`에서 다음 검사를 실행
 
 ```bash
 conda run -n gaeng3-dev python -m pytest -q
@@ -164,10 +164,10 @@ conda run -n gaeng3-dev python scripts/check-docs.py
 Backend 변경은 저장소 루트에서 다음 검사를 추가로 실행
 
 ```bash
-python -m pytest fastapi_backend/tests
+python -m pytest src/fastapi_backend/tests
 python -m ruff check fastapi_backend
 python -m ruff format --check fastapi_backend
-BACKEND_ENV_FILE=fastapi_backend/.env.example \
+BACKEND_ENV_FILE=src/fastapi_backend/.env.example \
   ./compose.sh config --quiet
 ```
 

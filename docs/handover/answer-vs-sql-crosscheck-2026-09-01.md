@@ -13,7 +13,7 @@
 해석의 일부이므로 plan에서 읽어 반영했다.
 
 DB는 실행 중인 컨테이너의 `/data`에서 복사했다. 저장소의
-`finance_agent/artifacts/normalized/`는 스키마가 낡아 현재 코드로 열리지 않는다.
+`src/finance_agent/artifacts/normalized/`는 스키마가 낡아 현재 코드로 열리지 않는다.
 
 ## 2. 결과
 
@@ -151,7 +151,7 @@ Oracle이 그 field에 붙이는 WHERE 조건과 같게 맞췄다(NULL 아님, �
 
 ## 6. 재현
 
-대조 스크립트는 `finance_agent/scripts/check-ranking-against-sql.py`가 원본이고,
+대조 스크립트는 `src/finance_agent/scripts/check-ranking-against-sql.py`가 원본이고,
 이번에는 백엔드 없이 라이브러리 수준에서 더 많은 케이스로 돌렸다. 컨테이너
 `/data`의 DB가 필요하다.
 

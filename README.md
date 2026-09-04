@@ -36,11 +36,11 @@ ETF·ETN, 공모펀드를 조회·비교·계산한 뒤 근거와 기준일을 �
 | LLM | 최종 평가는 모든 유효 요청에 HCX-007 Intent 분석과 검증 근거 기반 최종 답변 생성을 필수화. HCLX 전체 QueryPlan 생성은 운영 배선에서 제거했으며 SQLite/Python·Verifier가 field·filter·정렬·계산·근거를 계속 확정 |
 | 자동 검증 | pre-HCX 동결 pytest 507개는 역사 기록으로 보존. 2026-09-01 `e58896f` 기준 Agent Core 2,232개·Backend 466개 통과. skip 2건은 봉인된 로컬 키와 선택적 승인 DB 경로 환경변수를 요구하는 opt-in 테스트 |
 
-세부 기능과 평가 결과는 [AI Agent 작업공간](finance_agent/README.md)에서 관리
+세부 기능과 평가 결과는 [AI Agent 작업공간](src/finance_agent/README.md)에서 관리
 배포 버전 고정과 평가·운영 실행은
-[AgentReleaseManifest 배포 계약](finance_agent/docs/agent-release-manifest.md)을 기준으로 한다.
+[AgentReleaseManifest 배포 계약](src/finance_agent/docs/agent-release-manifest.md)을 기준으로 한다.
 관계 검색의 공개 Router·Backend·Release·Docker 검증과 실제 NCP 배포 전 남은 일은
-[P0-10 인수인계 보고서](finance_agent/docs/p0-10-public-relation-release-integration-handover-2026-08-20.md)에서 확인한다.
+[P0-10 인수인계 보고서](src/finance_agent/docs/p0-10-public-relation-release-integration-handover-2026-08-20.md)에서 확인한다.
 
 ## 3. 전체 구조
 
@@ -61,27 +61,28 @@ flowchart LR
 
 ```text
 gaeng3/
-├── compose.sh                        # 전체 Docker 실행 진입점
-├── rehearse.sh                       # Docker·경계·테스트·문서 전체 리허설
-├── docker-compose.yml               # 현재 data-init·Backend 서비스 구성
-├── nextjs-frontend/                 # Next.js 화면(합류 예정)
-├── ontology/                        # 제출용 공통·상품군별 Turtle 5개
-├── fastapi_backend/                 # FastAPI API·Docker·HTTP 테스트
-│   └── README.md                     # Backend 개발 안내
-├── finance_agent/                   # 검색·검증·답변 생성 Agent Core
-│   └── README.md                     # Agent 개발·평가 안내
+├── src/                              # 구현체 소스코드
+│   ├── finance_agent/                # 검색·검증·답변 생성 Agent Core
+│   │   └── README.md                 # Agent 개발·평가 안내
+│   └── fastapi_backend/              # FastAPI API·Docker·HTTP 테스트
+│       └── README.md                 # Backend 개발 안내
+├── ontology/                         # 제출용 공통·상품군별 Turtle 5개
 ├── docs/                             # 팀 공통 문서와 기술 제안서 자료
 │   └── README.md                     # 문서 읽는 순서
+├── compose.sh                        # 전체 Docker 실행 진입점
+├── compose-release.sh                # 서명 릴리스 배포 진입점
+├── rehearse.sh                       # Docker·경계·테스트·문서 전체 리허설
+├── docker-compose.yml                # data-init·Backend 서비스 구성
 ├── CONTRIBUTING.md                   # 브랜치·커밋·PR 규칙
 └── THIRD_PARTY_NOTICES.md            # 템플릿·외부 구성요소 고지
 ```
 
-`nextjs-frontend/`는 아직 현재 브랜치에 없는 예정 경로. 동료 코드가 합류하면 해당
-디렉터리 README에서 화면 개발·테스트 방법을 관리
+구현체는 공식 제출 예시와 같이 `src/` 아래에 둔다. Docker 빌드 컨텍스트와 모든 실행 명령은
+저장소 루트 기준이다.
 
 ## 5. 전체 시스템 실행
 
-모든 Docker 명령은 `fastapi_backend/`가 아니라 저장소 루트 `gaeng3/`에서 실행
+모든 Docker 명령은 `src/fastapi_backend/`가 아니라 저장소 루트 `gaeng3/`에서 실행
 
 ### 5.1 최초 준비
 
@@ -89,12 +90,12 @@ Docker가 실행 중인지 확인하고 환경 설정 파일을 최초 한 번 �
 
 ```bash
 docker info
-test -f fastapi_backend/.env || \
-  cp fastapi_backend/.env.example fastapi_backend/.env
+test -f src/fastapi_backend/.env || \
+  cp src/fastapi_backend/.env.example src/fastapi_backend/.env
 ```
 
 기본 원천 데이터 경로는 프로젝트의 `2. Data/1. Raw/2.금융상품_20260824`. 다른 위치를
-사용한다면 `fastapi_backend/.env`의 `FINANCE_RAW_DATA_DIR` 수정
+사용한다면 `src/fastapi_backend/.env`의 `FINANCE_RAW_DATA_DIR` 수정
 
 ### 5.2 실행
 
@@ -121,7 +122,7 @@ test -f fastapi_backend/.env || \
 curl --fail http://127.0.0.1:18001/health
 ```
 
-기본 Backend 주소는 `http://127.0.0.1:18001`. `fastapi_backend/.env`에서
+기본 Backend 주소는 `http://127.0.0.1:18001`. `src/fastapi_backend/.env`에서
 `BACKEND_PORT=18002`로 변경했다면 확인 주소도 `18002` 사용
 
 질문 한 건을 직접 보내는 예시
@@ -194,9 +195,9 @@ API 명세 화면은 `http://127.0.0.1:18001/docs`에서 확인
 ### 5.6 실행 문제가 있을 때
 
 - Docker 권한 오류: `id`에 `docker` 그룹이 있는지 확인한 뒤 재로그인
-- 포트 충돌: `fastapi_backend/.env`의 `BACKEND_PORT` 변경
+- 포트 충돌: `src/fastapi_backend/.env`의 `BACKEND_PORT` 변경
 - Backend 상태 이상: `./compose.sh logs data-init backend` 확인
-- 자세한 진단과 HTTP 스모크: [Backend README](fastapi_backend/README.md) 참고
+- 자세한 진단과 HTTP 스모크: [Backend README](src/fastapi_backend/README.md) 참고
 
 루트 [compose.sh](compose.sh)는 한글 프로젝트 경로에서 일부 Docker Compose 버전이
 이미지 build context를 찾지 못하는 문제까지 처리하는 프로젝트 공식 실행 진입점
@@ -220,9 +221,9 @@ PYTHON_BIN=/home/haeyeongcho/miniforge3/envs/gaeng3-dev/bin/python \
 | 작업 | 시작 문서 | 실행 위치 |
 | --- | --- | --- |
 | 전체 시스템 실행 | 이 README | 저장소 루트 |
-| FastAPI·Docker·HTTP 계약 | [Backend README](fastapi_backend/README.md) | 저장소 루트 또는 `fastapi_backend/` |
-| Agent·검색·검증·평가 | [AI Agent README](finance_agent/README.md) | `finance_agent/` |
-| Ontology 생성·검사 | [Ontology 제출 계약](finance_agent/docs/ontology.md) | `finance_agent/` |
+| FastAPI·Docker·HTTP 계약 | [Backend README](src/fastapi_backend/README.md) | 저장소 루트 또는 `src/fastapi_backend/` |
+| Agent·검색·검증·평가 | [AI Agent README](src/finance_agent/README.md) | `src/finance_agent/` |
+| Ontology 생성·검사 | [Ontology 제출 계약](src/finance_agent/docs/ontology.md) | `src/finance_agent/` |
 | 팀 문서·기술 제안서 | [문서 안내](docs/README.md) | `docs/` |
 | 기술 제안서 작성 | [기술 제안서 허브](docs/proposal/README.md) | `docs/proposal/` |
 | 협업·커밋·PR | [CONTRIBUTING](CONTRIBUTING.md) | 저장소 전체 |
@@ -236,8 +237,8 @@ PYTHON_BIN=/home/haeyeongcho/miniforge3/envs/gaeng3-dev/bin/python \
 - 공식 데이터와 외부 데이터가 충돌하면 공식 데이터 우선
 - 원천 XLSX, 생성 DB, 평가 응답, 로그와 모델 가중치는 Git에 포함하지 않음
 
-세부 기준은 [현재 프로젝트 기준](finance_agent/docs/project-baseline.md)과
-[제출용 모델 경계](finance_agent/docs/submission-model-boundary.md)에서 관리
+세부 기준은 [현재 프로젝트 기준](src/finance_agent/docs/project-baseline.md)과
+[제출용 모델 경계](src/finance_agent/docs/submission-model-boundary.md)에서 관리
 
 ## 8. 문서와 담당
 

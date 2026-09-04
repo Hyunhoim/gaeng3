@@ -2,7 +2,7 @@ x-backend-image: &backend-image
   image: ${FINANCE_IMAGE_REFERENCE:-gaeng3-backend:local}
   build:
     context: .
-    dockerfile: fastapi_backend/Dockerfile
+    dockerfile: src/fastapi_backend/Dockerfile
 
 services:
   data-init:
@@ -34,7 +34,7 @@ services:
         bind:
           create_host_path: false
       - type: bind
-        source: ./finance_agent/packages/finance_agent_core/src
+        source: ./src/finance_agent/packages/finance_agent_core/src
         target: /opt/finance-agent-core-src
         read_only: true
         bind:

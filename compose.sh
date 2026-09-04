@@ -16,7 +16,7 @@ build_backend_image() {
     # Some Docker Compose releases normalize Unicode paths before handing the
     # build context to Docker. Build directly so the original path is kept.
     docker build \
-        --file fastapi_backend/Dockerfile \
+        --file src/fastapi_backend/Dockerfile \
         --tag gaeng3-backend:local \
         "$@" \
         .
@@ -25,7 +25,7 @@ build_backend_image() {
 if [ "${1:-}" = "build-image" ]; then
     shift
     exec docker build \
-        --file fastapi_backend/Dockerfile \
+        --file src/fastapi_backend/Dockerfile \
         --tag gaeng3-backend:local \
         "$@" \
         .
@@ -33,7 +33,7 @@ fi
 
 if [ ! -r "$COMPOSE_ENV_FILE" ]; then
     echo "Cannot read Compose environment file: $COMPOSE_ENV_FILE" >&2
-    echo "Copy fastapi_backend/.env.example to fastapi_backend/.env first." >&2
+    echo "Copy src/fastapi_backend/.env.example to src/fastapi_backend/.env first." >&2
     exit 2
 fi
 
