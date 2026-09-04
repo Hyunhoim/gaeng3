@@ -120,12 +120,30 @@ def test_store_reaches_one_latin_entity_from_a_hangul_subject() -> None:
     assert store.search_cross_script(_request("에코프로비엠")) == ()
 
 
-def test_store_binds_nothing_when_two_distinct_entities_are_equally_close() -> None:
+def test_store_binds_every_entity_that_carries_the_matched_label() -> None:
+    # Two publishers spell the company differently (TIGER full name, KODEX
+    # truncated), but both carry the alias the question sounds like.
     store = TemporalRelationStore(
         seal_temporal_relation_bundle(
             (
                 _relation("rel-1", "KR7396520009", "Cambricon Technologies Corp Ltd", "Cambricon"),
-                _relation("rel-2", "KR70047A0007", "Cambricon Holdings Ltd", "Cambricon"),
+                _relation("rel-2", "KR70162L0003", "Cambricon Technologies Corp Lt", "Cambricon"),
+            ),
+            corpus_manifest_sha256="b" * 64,
+        )
+    )
+
+    hits = store.search_cross_script(_request("캠브리콘"))
+
+    assert sorted(relation.product_id for relation in hits) == ["KR70162L0003", "KR7396520009"]
+
+
+def test_store_binds_nothing_when_two_different_labels_sound_alike() -> None:
+    store = TemporalRelationStore(
+        seal_temporal_relation_bundle(
+            (
+                _relation("rel-1", "KR7396520009", "Cambricon Technologies Corp Ltd", "Cambricon"),
+                _relation("rel-2", "KR70047A0007", "Cambrion Holdings Ltd", "Cambrion"),
             ),
             corpus_manifest_sha256="b" * 64,
         )

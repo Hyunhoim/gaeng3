@@ -296,25 +296,22 @@ class TemporalRelationStore:
             )
             and relation.overlaps(request.time_range)
         ]
-        entity_scores: dict[str, float] = {}
+        # Uniqueness is judged on the matched *label*, not the entity: two
+        # publishers spell one company differently (``Cambricon Technologies
+        # Corp Ltd`` vs the truncated ``Cambricon Technologies Corp Lt``), yet
+        # both carry the alias ``Cambricon``, which is the label the question
+        # sounds like.  Only a different label that also clears the threshold
+        # within the margin makes the match ambiguous.
         label_scores: dict[str, float] = {}
         for relation in eligible:
-            for entity in (relation.subject, relation.object):
-                if entity.entity_id in entity_scores:
-                    continue
-                best = 0.0
-                for label in entity.labels():
-                    if label not in label_scores:
-                        label_scores[label] = latin_label_phonetic_score(key, label)
-                    best = max(best, label_scores[label])
-                entity_scores[entity.entity_id] = best
-        # Only entities that clear the threshold compete; a whole graph holds
-        # thousands of names, so a sub-threshold runner-up (``Emerson`` next to
-        # ``Cambricon``) is noise, not an ambiguity.
+            for label in (*relation.subject.labels(), *relation.object.labels()):
+                folded = "".join(ch for ch in label.casefold() if ch.isalnum())
+                if folded and folded not in label_scores:
+                    label_scores[folded] = latin_label_phonetic_score(key, label)
         ranked = sorted(
             (
-                (score, entity_id)
-                for entity_id, score in entity_scores.items()
+                (score, folded)
+                for folded, score in label_scores.items()
                 if score >= PHONETIC_MATCH_THRESHOLD
             ),
             key=lambda item: (-item[0], item[1]),
@@ -327,7 +324,10 @@ class TemporalRelationStore:
         return tuple(
             relation
             for relation in eligible
-            if winner in (relation.subject.entity_id, relation.object.entity_id)
+            if any(
+                "".join(ch for ch in label.casefold() if ch.isalnum()) == winner
+                for label in (*relation.subject.labels(), *relation.object.labels())
+            )
         )[: request.top_k]
 
 
@@ -382,7 +382,8 @@ def load_verified_temporal_relation_bundle(
                 or before.st_nlink != 1
                 or before.st_mode & (stat.S_IWGRP | stat.S_IWOTH)
                 or before.st_size <= 0
-                or before.st_size > 64 * 1024 * 1024
+                # A holdings graph over two publishers (~29k relations) is ~64 MiB.
+                or before.st_size > 256 * 1024 * 1024
             ):
                 raise TemporalRelationError("temporal relation bundle file is unsafe")
             chunks = []
