@@ -80,9 +80,11 @@ step_release() {
             export DEBIAN_FRONTEND=noninteractive
             apt-get update -qq >/dev/null && apt-get install -y -qq git >/dev/null
             git config --global --add safe.directory "*"
+            # 저장소는 읽기 전용 마운트라 egg-info를 쓸 수 없다. 코어 패키지는 복사본에서 설치한다.
+            cp -r src/finance_agent/packages/finance_agent_core /tmp/finance_agent_core-install
             python -m venv /tmp/venv && /tmp/venv/bin/pip install -q --disable-pip-version-check \
                 --constraint src/finance_agent/requirements/constraints.txt \
-                --requirement src/fastapi_backend/requirements.txt ./src/finance_agent/packages/finance_agent_core
+                --requirement src/fastapi_backend/requirements.txt /tmp/finance_agent_core-install
             export PYTHONPATH="$REPO_DIR/src/finance_agent/packages/finance_agent_core/src"
             PY=/tmp/venv/bin/python
             $PY src/fastapi_backend/scripts/build_runtime_core.py --source src/finance_agent/packages/finance_agent_core \
