@@ -12,9 +12,14 @@ from finance_agent_core.agent.router import IntentRouter
 from finance_agent_core.answering.final_generation import (
     FinalAnswerContext,
     FinalAnswerDraft,
+    _validated_clarification_question,
     build_clarification_guidance,
     compose_final_answer,
 )
+
+
+class _NoGuidanceContext:
+    clarification_guidance = None
 
 
 class _ClarificationProvider:
@@ -83,11 +88,31 @@ def test_return_clarification_is_a_short_hclx_generated_reverse_question() -> No
         ),
     ],
 )
-def test_clarification_verifier_rejects_answering_missing_or_unapproved_content(
+def test_clarification_verifier_replaces_answering_missing_or_unapproved_content(
     generated: str,
 ) -> None:
+    # HCX was called, but its sentence broke the closed contract. The request
+    # must still end as a clarification (never a 503), and the generated text
+    # must not leak: the server-owned fallback question is asked instead.
+    context = _context()
+    composition = compose_final_answer(context, _ClarificationProvider(generated))
+
+    assert context.clarification_guidance is not None
+    assert composition.clarification_fallback_used is True
+    assert composition.answer == context.clarification_guidance.fallback_question
+    assert composition.clarification_question == composition.answer
+    assert generated not in composition.answer
+    assert composition.answer.endswith("?")
+    for option in context.clarification_guidance.allowed_options:
+        assert option in composition.answer
+
+
+def test_clarification_without_guidance_still_fails_closed() -> None:
     with pytest.raises(HyperClovaXResponseError):
-        compose_final_answer(_context(), _ClarificationProvider(generated))
+        _validated_clarification_question(
+            _NoGuidanceContext(),  # type: ignore[arg-type]
+            "어느 기간의 수익률을 볼까요?",
+        )
 
 
 def test_clarification_contract_carries_no_conversation_state() -> None:

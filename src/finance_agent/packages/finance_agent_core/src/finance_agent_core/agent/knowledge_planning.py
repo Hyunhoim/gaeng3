@@ -30,6 +30,12 @@ class CompositeKnowledgePlanningError(RuntimeError):
     """Raised when HCX evidence cannot be compiled into a server-owned plan."""
 
 
+class EvidencePeriodAfterCutoffError(CompositeKnowledgePlanningError):
+    """The question names a period that starts after the approved evidence cutoff."""
+
+    reason_code = "evidence_period_after_cutoff"
+
+
 _CAPABILITY_SIGNAL: dict[KnowledgeCapability, re.Pattern[str]] = {
     KnowledgeCapability.PORTFOLIO_HOLDINGS: re.compile(
         r"편입|보유|구성\s*종목|담(?:은|긴|고\s*있는)|"
@@ -384,6 +390,13 @@ def _knowledge_time_range(question: str, cutoff: date) -> KnowledgeTimeRange | N
         )
     else:
         return None
+    if result.start is not None and result.start > cutoff:
+        # "2026년 9월 1일 기준 …" asked after the signed evidence cutoff
+        # (2026-08-24).  No approved evidence can exist for that period, so
+        # say so instead of clamping into a reversed range (HTTP 500).
+        raise EvidencePeriodAfterCutoffError(
+            "requested evidence period starts after the approved evidence cutoff"
+        )
     if result.end > cutoff:
         return KnowledgeTimeRange(start=result.start, end=cutoff)
     return result

@@ -650,3 +650,33 @@ def test_cross_family_named_projection_does_not_discard_a_winner_request(
     assert result.status != "executed"
     assert result.products == []
     assert result.family_searches == []
+
+
+def test_suffixed_overseas_ticker_is_reachable_by_its_public_base(tmp_path: Path) -> None:
+    # Blind set A: ``해외 ETF QQQ가 …`` and ``해외 ETF TLT의 …`` were asked for
+    # clarification while ``SPY`` answered, because the provided table stores
+    # ``QQQ.O``/``TLT.O`` but ``SPY`` without a venue suffix.
+    path = _identity_database(
+        tmp_path / "overseas.sqlite3",
+        table="overseas_etp_products",
+        rows=[
+            ("NAS:QQQ.O", "Invesco QQQ Trust, Series 1", None, "QQQ.O", "US46090E1038"),
+            ("NAS:TLT.O", "iShares 20+ Year Treasury Bond ETF", None, "TLT.O", "US4642874329"),
+            ("AMX:SPY", "State Street SPDR S&P 500 ETF Trust", None, "SPY", "US78462F1030"),
+            # The same base on two venues stays a collision, never a guess.
+            ("NAS:NERD.O", "Roundhill Video Games ETF", None, "NERD.O", None),
+            ("AMX:NERD.K", "Global X Video Games ETF", None, "NERD.K", None),
+        ],
+    )
+    matcher = DatabaseProductIdentityMatcher({ProductFamily.OVERSEAS_ETP: path})
+
+    base = matcher.find("해외 ETF QQQ가 어떤 시장에 노출되는지 설명하고 1일 수익률을 알려줘.")
+    suffixed = matcher.find("해외 ETF TLT.O의 연간보수율을 알려줘.")
+    plain = matcher.find("해외 ETF SPY의 기초지수를 알려줘.")
+    collision = matcher.find("해외 ETF NERD의 AUM을 알려줘.")
+
+    assert [(m.surface, m.is_unique) for m in base] == [("QQQ", True)]
+    assert base[0].candidates[0].canonical_literal == "QQQ.O"
+    assert [m.candidates[0].canonical_literal for m in suffixed] == ["TLT.O"]
+    assert [m.candidates[0].canonical_literal for m in plain] == ["SPY"]
+    assert [(m.surface, m.is_unique) for m in collision] == [("NERD", False)]
