@@ -18,6 +18,9 @@ artifacts/evaluation/schema-embedding/snapshot-manifests/*
 !artifacts/evaluation/schema-embedding/snapshot-manifests/kure-v1-d14c8a9423946e268a0c9952fecf3a7aabd73bd9-snapshot-v2.json
 !artifacts/runtime/
 artifacts/runtime/*
+!artifacts/runtime/holdings-graph/
+artifacts/runtime/holdings-graph/*
+!artifacts/runtime/holdings-graph/holdings-graph-*.json
 !artifacts/runtime/schema-dense/
 artifacts/runtime/schema-dense/*
 !artifacts/runtime/schema-dense/kure-schema-dense-production-v1.json
