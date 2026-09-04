@@ -521,7 +521,11 @@ def test_bond_ranked_search_does_not_infer_listing_status_from_maturity() -> Non
     assert select_sql.endswith("ticker ASC LIMIT ?")
 
 
-def test_derived_remaining_days_zero_is_a_real_temporal_value() -> None:
+def test_official_remaining_days_zero_is_excluded_like_every_numeric_zero() -> None:
+    # The 2026-08-24 workbook carries ``remaining_days`` as an official column;
+    # its zero rows are bonds that matured before the snapshot.  Blind set A-01
+    # ("잔존일수 짧은 순") ranked three of them first.  The official zero rule
+    # therefore applies to this field too.
     decision = IntentRouter().route(
         "AA급 채권 중 만기까지 2년을 넘기지 않는 상품을 잔존일수 짧은 순으로 5개 보여 주세요.",
         "official-derived-remaining-zero",
@@ -532,7 +536,7 @@ def test_derived_remaining_days_zero_is_a_real_temporal_value() -> None:
 
     for sql in (select_sql, count_sql):
         assert "remaining_days IS NOT NULL" in sql
-        assert "remaining_days <> 0" not in sql
+        assert "remaining_days <> 0" in sql
 
 
 @pytest.mark.parametrize(

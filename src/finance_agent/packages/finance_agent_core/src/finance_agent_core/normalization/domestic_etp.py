@@ -28,6 +28,7 @@ SOURCE_COLUMNS = (
     "wu_core_yn",
     "cu_fund_mgmt_co",
     "cu_base_index",
+    "ref_base_index",
     "cu_strtegy",
     "cu_lev_fector",
     "cu_charge_rt",
@@ -72,6 +73,11 @@ def _semantic_missing(value: Any) -> bool:
         stripped = value.strip()
         return not stripped or stripped.upper() == "NULL"
     return False
+
+
+_BASE_INDEX_UNAVAILABLE = re.compile(
+    r"^\s*index\s+is\s+not\s+(?:available|provided)", re.IGNORECASE
+)
 
 
 def _text(value: Any, *, field: str, required: bool = False) -> str | None:
@@ -290,7 +296,16 @@ def normalize_domestic_etp_row(
         snapshot=snapshot,
     )
 
+    # The 2026-08-24 workbook fills ``cu_base_index`` for 56 products only and
+    # carries the tracked index of 1,176 more (``KOSPI 200 CR``, ``NASDAQ 100
+    # CR``) in ``ref_base_index``.  Read the primary column first, then the
+    # reference column, and never turn the vendor's "index unavailable" note
+    # into an index name.
     base_index = _text(values.get("cu_base_index"), field="cu_base_index")
+    if base_index is None:
+        reference_index = _text(values.get("ref_base_index"), field="ref_base_index")
+        if reference_index is not None and not _BASE_INDEX_UNAVAILABLE.match(reference_index):
+            base_index = reference_index
     strategy = _text(values.get("cu_strtegy"), field="cu_strtegy")
     currency_code = _text(values.get("pd_curr_cd"), field="pd_curr_cd")
     quality_inputs: dict[str, tuple[object | None, str, bool]] = {

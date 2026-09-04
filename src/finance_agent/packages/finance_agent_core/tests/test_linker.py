@@ -584,3 +584,18 @@ def test_fund_model_family_handoff_blocks_unsupported_class_aggregation() -> Non
         "대표 펀드",
         "클래스는 합쳐서",
     }
+
+
+def test_bare_credit_grade_before_a_bond_class_noun_is_a_filter() -> None:
+    # Blind set A-16: ``AA+ 회사채`` lost its grade and aggregated every 회사채.
+    for question, expected in (
+        ("현재 판매 가능한 AA+ 회사채 가운데 민평수익률 값이 있는 종목 수를 알려줘.", "AA+"),
+        ("현재 판매 가능한 AAA 특수채를 잔존일수 짧은 순으로 3개 알려줘.", "AAA"),
+        ("현재 판매 가능한 AA- 회사채를 표면이자율 높은 순으로 3개 알려줘.", "AA-"),
+    ):
+        payload = first_vertical_slice_plan("bare-grade").model_dump(mode="json")
+        linked = canonicalize_query_plan_payload(question, payload)
+
+        assert ("credit_rating", "eq", expected) in [
+            (item["field"], item["operator"], item["value"]) for item in linked["constraints"]
+        ], question

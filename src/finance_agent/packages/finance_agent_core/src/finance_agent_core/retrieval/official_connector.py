@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import html
+import http.client
 import io
 import json
 import re
@@ -227,6 +228,31 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
         return None
 
 
+def ascii_request_url(url: str) -> str:
+    """Return the IRI as an ASCII URL ``http.client`` can send.
+
+    Discovery returns publisher links exactly as NAVER indexed them, and Korean
+    sites publish paths and query strings with raw Hangul (``/뉴스룸/우주항공``).
+    ``http.client`` encodes the request line as ASCII and raises
+    ``UnicodeEncodeError`` on such a URL, which on 2026-09-05 turned official
+    example E2/E4 into HTTP 503 on the evaluation host.  Existing ``%XX``
+    escapes are preserved; only unescaped non-ASCII and spaces are encoded.
+    """
+
+    parts = urllib.parse.urlsplit(url)
+    host = parts.hostname or ""
+    try:
+        host.encode("ascii")
+    except UnicodeEncodeError:
+        host = host.encode("idna").decode("ascii")
+    netloc = host
+    if parts.port is not None:
+        netloc = f"{host}:{parts.port}"
+    path = urllib.parse.quote(parts.path, safe="/%:@!$&'()*+,;=~-._")
+    query = urllib.parse.quote(parts.query, safe="=&%+/:@!$'()*,;?~-._")
+    return urllib.parse.urlunsplit((parts.scheme, netloc, path, query, ""))
+
+
 class UrllibOfficialHttpTransport:
     """Small production transport with redirects disabled and bounded reads."""
 
@@ -241,7 +267,7 @@ class UrllibOfficialHttpTransport:
         max_bytes: int,
     ) -> OfficialHttpResponse:
         request = urllib.request.Request(
-            url,
+            ascii_request_url(url),
             headers={
                 "Accept": "text/html,application/pdf,application/json,text/plain;q=0.8",
                 "User-Agent": "MiraeAssetFinanceAgentEvidence/1.0",
@@ -265,7 +291,13 @@ class UrllibOfficialHttpTransport:
                         body=b"",
                     )
             raise OfficialConnectorError(f"official source returned HTTP {error.code}") from error
-        except (urllib.error.URLError, TimeoutError, OSError) as error:
+        except (
+            urllib.error.URLError,
+            TimeoutError,
+            OSError,
+            ValueError,  # includes UnicodeEncodeError from http.client
+            http.client.HTTPException,
+        ) as error:
             raise OfficialConnectorError("official source fetch failed") from error
         if len(body) > max_bytes:
             raise OfficialConnectorError("official source exceeded the response size limit")

@@ -790,10 +790,10 @@ fields:
       dataset: domestic_etp
       columns: [cu_base_index]
     quality: PARTIAL
-    coverage_pct: 3.1461
+    coverage_pct: 69.2135
     queryable: true
     allowed_operators: [eq, contains]
-    notes: 56행만 제공되므로 일치 상품 탐색에는 쓸 수 있지만 결측을 지수 부재로 해석하지 않는다.
+    notes: cu_base_index는 56행뿐이라 정규화 단계에서 ref_base_index(1,176행, 예 KOSPI 200 CR)를 보조 원천으로 읽는다. "Index is not available" 안내문은 값으로 쓰지 않으며, 결측을 지수 부재로 해석하지 않는다.
     dataset_overrides:
       overseas_etp:
         source:
