@@ -98,6 +98,38 @@ class ExternalKnowledgeRuntimeResult(BaseModel):
     identity_evidence: tuple[ExternalEvidenceReference, ...] = ()
 
 
+_TRAILING_PARTICLES = frozenset(
+    {"로", "의", "은", "는", "이", "가", "을", "를", "와", "과", "에", "도"}
+)
+_IMPLAUSIBLE_ENTITY = re.compile(
+    r"^\d+(?:년|월|일|%)?$|_|^(?:업무위탁|대표이사|이사회|감사|주주|임원)$"
+)
+
+
+def _plausible_dependency_entity(name: str) -> bool:
+    """Reject tokens that cannot be a company: years, underscores, filing headings."""
+
+    value = name.strip()
+    return len(value) >= 2 and _IMPLAUSIBLE_ENTITY.search(value) is None
+
+
+def _relation_survives_universe(relation, approved_candidate_keys) -> bool:
+    """Keep product relations only inside the fixed DB universe; pass company links through.
+
+    A corporate-subsidiary relation binds two companies and carries no product.
+    It is the *input* of the dependent holdings step, not an answer, so the
+    provided-DB intersection cannot apply to it.  Filtering it here silently
+    ended every ``자회사 → 편입 → 위험요인`` chain at step one.
+    """
+
+    if (
+        relation.product_id is None
+        and relation.capability is KnowledgeCapability.CORPORATE_SUBSIDIARY
+    ):
+        return True
+    return (relation.product_family, relation.product_id) in approved_candidate_keys
+
+
 class ExternalKnowledgeRuntime:
     """Cache-first orchestration with strict DB intersection and terminal states."""
 
@@ -153,8 +185,10 @@ class ExternalKnowledgeRuntime:
         resolved: dict[str, tuple],
         *,
         selected_keys: frozenset[ProductKey] = frozenset(),
+        max_targets: int | None = None,
     ) -> tuple[tuple[str, tuple[str, ...], tuple | None], ...]:
         targets: dict[str, tuple[str, tuple[str, ...], tuple | None]] = {}
+        support: dict[str, int] = {}
         for dependency in requirement.depends_on:
             for relation in resolved.get(dependency, ()):
                 if requirement.capability is KnowledgeCapability.PRODUCT_RISK_FACTORS:
@@ -184,12 +218,33 @@ class ExternalKnowledgeRuntime:
                         )
                 else:
                     entity = relation.object
+                    if not _plausible_dependency_entity(entity.canonical_name):
+                        continue
                     targets[entity.entity_id] = (
                         entity.canonical_name,
                         entity.aliases,
                         None,
                     )
-        return tuple(targets[key] for key in sorted(targets))
+                    support[entity.entity_id] = support.get(entity.entity_id, 0) + 1
+        # A long official filing names one real subsidiary many times and a
+        # noisy token once.  Spend the dependent step's bounded budget on the
+        # entities the evidence supports most, drop a name that is only another
+        # target plus a trailing particle, and cap the list to the plan budget.
+        ordered = sorted(targets, key=lambda key: (-support.get(key, 0), targets[key][0]))
+        names = {targets[key][0] for key in ordered}
+        ordered = [
+            key
+            for key in ordered
+            if not any(
+                targets[key][0].startswith(other)
+                and targets[key][0][len(other) :] in _TRAILING_PARTICLES
+                for other in names
+                if other != targets[key][0]
+            )
+        ]
+        if max_targets is not None:
+            ordered = ordered[: max(1, max_targets)]
+        return tuple(targets[key] for key in ordered)
 
     @staticmethod
     def _explicit_product_discovery_terms(
@@ -406,6 +461,7 @@ class ExternalKnowledgeRuntime:
                     requirement,
                     resolved,
                     selected_keys=selected_keys,
+                    max_targets=search_plan.budget.max_candidates_per_requirement,
                 )
             else:
                 targets = ((requirement.subject, requirement.search_aliases, None),)
@@ -468,8 +524,7 @@ class ExternalKnowledgeRuntime:
                 reused = [
                     relation
                     for relation in reused
-                    if (relation.product_family, relation.product_id)
-                    in approved_candidate_keys
+                    if _relation_survives_universe(relation, approved_candidate_keys)
                 ]
                 if reused:
                     requirement_relations.update(
@@ -567,8 +622,7 @@ class ExternalKnowledgeRuntime:
                 extracted = tuple(
                     relation
                     for relation in extracted
-                    if (relation.product_family, relation.product_id)
-                    in approved_candidate_keys
+                    if _relation_survives_universe(relation, approved_candidate_keys)
                 )
                 if (
                     not extracted
@@ -689,8 +743,7 @@ class ExternalKnowledgeRuntime:
                         extracted = tuple(
                             relation
                             for relation in extracted
-                            if (relation.product_family, relation.product_id)
-                            in approved_candidate_keys
+                            if _relation_survives_universe(relation, approved_candidate_keys)
                         )
                         if (
                             not extracted
