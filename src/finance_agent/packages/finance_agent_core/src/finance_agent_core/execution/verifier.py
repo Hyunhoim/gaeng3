@@ -102,7 +102,6 @@ def _query_metric_value(record: VerifierRecord, field_name: str) -> object | Non
         definition.value_type.value == "number"
         and not isinstance(value, bool)
         and value == 0
-        and field_name != "remaining_days"
     ):
         return None
     return value
@@ -219,7 +218,6 @@ def _matches_constraint(
         elif (
             isinstance(actual, (int, float, Decimal))
             and not isinstance(actual, bool)
-            and constraint.field != "remaining_days"
         ):
             present = actual != 0
         return present if operator is ConstraintOperator.IS_PRESENT else not present

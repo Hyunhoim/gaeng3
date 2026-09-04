@@ -678,7 +678,7 @@ etfkr:field_base_index
     ga:valueType "string" ;
     ga:unit "none" ;
     ga:quality "PARTIAL" ;
-    ga:coveragePct "3.1461"^^xsd:decimal ;
+    ga:coveragePct "69.2135"^^xsd:decimal ;
     ga:queryable true ;
     ga:selectable true ;
     ga:sortable false ;
@@ -692,7 +692,7 @@ etfkr:field_base_index
     ga:sourceDataset "domestic_etp" ;
     ga:sourceColumn "cu_base_index" ;
     ga:sourceTransform "identity" ;
-    ga:notes "56행만 제공되므로 일치 상품 탐색에는 쓸 수 있지만 결측을 지수 부재로 해석하지 않는다."@ko .
+    ga:notes "cu_base_index는 56행뿐이라 정규화 단계에서 ref_base_index(1,176행, 예 KOSPI 200 CR)를 보조 원천으로 읽는다. \"Index is not available\" 안내문은 값으로 쓰지 않으며, 결측을 지수 부재로 해석하지 않는다."@ko .
 
 etfkr:field_strategy
     a ga:CanonicalField ;

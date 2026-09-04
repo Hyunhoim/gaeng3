@@ -144,12 +144,12 @@ def _constraint_sql(
     if spec.scale is not None or spec.usable_numeric:
         # Official 2026-08-26 evaluation rule: a numeric 0 or missing value is
         # not a usable filter/ranking basis.  Keep the source value intact in
-        # storage, but exclude it at deterministic query time. ``remaining_days``
-        # is server-derived from two dates rather than a source numeric field;
-        # zero means "matures on the snapshot date" and is a real value.
+        # storage, but exclude it at deterministic query time.  The 2026-08-24
+        # workbook ships ``remaining_days`` as an official numeric column and
+        # its 49 zero rows are bonds that matured before the snapshot, so the
+        # same rule applies to it (blind set A-01 ranked matured bonds first).
         clauses.append(f"{column} IS NOT NULL")
-        if constraint.field != "remaining_days":
-            clauses.append(f"{column} <> 0")
+        clauses.append(f"{column} <> 0")
 
     value = constraint.value
 
@@ -316,7 +316,7 @@ def _sql_usable_value(spec: SqlField, field_name: str) -> str:
     if spec.quality_column is not None:
         clauses.append(f"{spec.quality_column} IN ('VALID', 'PARTIAL', 'STALE')")
     clauses.append(f"{spec.column} IS NOT NULL")
-    if (spec.scale is not None or spec.usable_numeric) and field_name != "remaining_days":
+    if spec.scale is not None or spec.usable_numeric:
         clauses.append(f"{spec.column} <> 0")
     return " AND ".join(clauses)
 
@@ -356,8 +356,7 @@ def compile_search_sql(
         if spec.quality_column is not None:
             where_clauses.append(f"{spec.quality_column} IN ('VALID', 'PARTIAL')")
         where_clauses.append(f"{spec.column} IS NOT NULL")
-        if ranking.field != "remaining_days":
-            where_clauses.append(f"{spec.column} <> 0")
+        where_clauses.append(f"{spec.column} <> 0")
     where_sql = " AND ".join(where_clauses)
 
     order_by: list[str] = []

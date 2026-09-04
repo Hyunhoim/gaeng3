@@ -2762,8 +2762,12 @@ def build_lexical_hints(
             for rating in dict.fromkeys(value.upper() for value in connected_ratings):
                 add("credit_rating", rating, "eq")
         elif bare_rating := re.search(
+            # ``AA+ 회사채``, ``AAA 특수채``, ``AA- 종목``: the grade sits right in
+            # front of the bond class noun without ``신용등급``/``등급``.
             r"(?<![A-Z])(AAA|AA\+|AA0|AA-|A\+|A0|A-|BBB\+|BBB0|BBB-|"
-            r"BB\+|BB0|BB-|B\+|B0|B-|CCC|CC0|C0|C)\s*채권",
+            r"BB\+|BB0|BB-|B\+|B0|B-|CCC|CC0|C0|C)\s*"
+            r"(?:회사채|특수채|국고채|국채|금융채|은행채|공사채|지방채|통안채|"
+            r"카드채|캐피탈채|채권|종목)",
             question,
             flags=re.IGNORECASE,
         ):
