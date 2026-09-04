@@ -264,6 +264,41 @@ def test_page_header_decides_when_the_body_mentions_sibling_products() -> None:
     assert {relation.product_id for relation in report.relations} == {_ECOPRO_ETF.product_id}
 
 
+def test_header_prefers_the_longest_identity_over_a_sibling_substring() -> None:
+    long_name = ProvidedProductCandidate(
+        product_family=ProductFamily.DOMESTIC_ETP,
+        product_id="KR70008S0004",
+        product_name=(
+            "미래에셋 TIGER 미국배당다우존스타겟데일리커버드콜증권상장지수투자신탁(주식)"
+        ),
+        aliases=("A0008S0", "KR70008S0004", "TIGER 미국배당다우존스타겟데일리커버드콜"),
+    )
+    short_name = ProvidedProductCandidate(
+        product_family=ProductFamily.DOMESTIC_ETP,
+        product_id="KR7458730009",
+        product_name="미래에셋 TIGER 미국배당다우존스증권상장지수투자신탁(주식)",
+        aliases=("A458730", "KR7458730009", "TIGER 미국배당다우존스"),
+    )
+    page = (
+        "<html><head><title>TIGER 미국배당다우존스타겟데일리커버드콜 | ETF 상품 | "
+        "미래에셋 TIGER ETF</title></head><body><h2>TIGER 미국배당다우존스타겟데일리커버드콜</h2>"
+        "<p>TIGER 미국배당다우존스 시리즈의 커버드콜 상품입니다.</p></body></html>"
+    ).encode()
+    saved = SavedHoldingsProduct(
+        publisher="tiger",
+        page_id="KR70008S0004",
+        page_url=_TIGER_PAGE_URL.replace("KR7396520009", "KR70008S0004"),
+        page_content=page,
+        holdings_url=tiger_holdings_url("KR70008S0004", fix_date=date(2026, 8, 21)),
+        holdings_content=_TIGER_TABLE,
+    )
+
+    report = build_holdings_relations((saved,), universe=_universe(long_name, short_name))
+
+    assert report.bound_page_ids == ("KR70008S0004",)
+    assert {relation.product_id for relation in report.relations} == {"KR70008S0004"}
+
+
 def test_ambiguous_or_unbound_pages_produce_no_relation() -> None:
     both = _page("KODEX 2차전지산업 KODEX 차이나2차전지MSCI(합성)")
     report = build_holdings_relations(

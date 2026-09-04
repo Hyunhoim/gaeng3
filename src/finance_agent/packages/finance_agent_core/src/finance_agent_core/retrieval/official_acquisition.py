@@ -371,19 +371,26 @@ class OfficialEvidenceAcquisitionCoordinator:
         if not 100 <= deadline_ms <= 60_000:
             raise ValueError("acquisition deadline is out of bounds")
         deadline = perf_counter() + deadline_ms / 1000
-        cached = (
-            ()
-            if provided_product_evidence_dates
-            else self.relation_store.search(
-                TemporalRelationSearchRequest(
-                    capability=requirement.capability,
-                    subject=requirement.subject,
-                    product_families=requirement.product_families,
-                    time_range=requirement.time_range,
-                    top_k=min(top_k, 50),
-                )
-            )
-        )
+        # The relation cache matches whole labels, so a question surface in one
+        # script (``캠브리콘``) must also be looked up by its verified search
+        # aliases (``Cambricon``).  Aliases only address the lookup; the relation
+        # returned still carries its own official evidence excerpt.
+        cached_by_id: dict[str, TemporalRelationRecord] = {}
+        if not provided_product_evidence_dates:
+            for lookup_subject in dict.fromkeys((requirement.subject, *requirement.search_aliases)):
+                if not any(character.isalnum() for character in lookup_subject):
+                    continue
+                for relation in self.relation_store.search(
+                    TemporalRelationSearchRequest(
+                        capability=requirement.capability,
+                        subject=lookup_subject,
+                        product_families=requirement.product_families,
+                        time_range=requirement.time_range,
+                        top_k=min(top_k, 50),
+                    )
+                ):
+                    cached_by_id.setdefault(relation.relation_id, relation)
+        cached = tuple(cached_by_id.values())[: min(top_k, 50)]
         if cached:
             return OfficialEvidenceAcquisitionResult(
                 status=OfficialEvidenceAcquisitionStatus.CACHE_HIT,

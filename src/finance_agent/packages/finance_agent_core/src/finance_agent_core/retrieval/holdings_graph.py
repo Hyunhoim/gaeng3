@@ -309,6 +309,42 @@ def _tighten_excerpt(
     return excerpt
 
 
+def _header_product(
+    candidates: tuple[ProvidedProductCandidate, ...],
+    header: str,
+) -> tuple[ProvidedProductCandidate, ...]:
+    """Drop header candidates matched only through a substring of another match.
+
+    ``TIGER 미국배당다우존스타겟데일리커버드콜`` also contains the sibling short name
+    ``TIGER 미국배당다우존스``; the publisher's title names the longer product, so the
+    contained match is not an ambiguity.  Two distinct full names stay ambiguous.
+    """
+
+    if len(candidates) < 2:
+        return candidates
+    folded = header.casefold()
+    best_surface: dict[str, str] = {}
+    for candidate in candidates:
+        surfaces = [
+            surface.casefold()
+            for surface in (candidate.product_name, *candidate.aliases)
+            if surface.casefold() in folded
+        ]
+        best_surface[candidate.product_id] = max(surfaces, key=len, default="")
+    kept = tuple(
+        candidate
+        for candidate in candidates
+        if not any(
+            other != candidate.product_id
+            and best_surface[candidate.product_id]
+            and best_surface[candidate.product_id] != surface
+            and best_surface[candidate.product_id] in surface
+            for other, surface in best_surface.items()
+        )
+    )
+    return kept or candidates
+
+
 def _bind_page(
     extractor: VerifiedLiveRelationExtractor,
     snapshot: OfficialSourceSnapshot,
@@ -332,7 +368,9 @@ def _bind_page(
         for part in (_cell_text(html_title.group(1)) if html_title else "", snapshot.source_uri)
         if part
     )
-    candidates = intersect_evidence_with_provided_products(universe, (header,))
+    candidates = _header_product(
+        intersect_evidence_with_provided_products(universe, (header,)), header
+    )
     if len(candidates) != 1:
         candidates = intersect_evidence_with_provided_products(universe, (text,))
     if len(candidates) != 1:
