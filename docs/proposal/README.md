@@ -7,7 +7,7 @@
 제출 마감: 2026-09-06
 
 이 디렉터리는 팀 전체 기술 제안서와 제출 근거를 관리하는 정본이다.
-AI 구현 세부사항은 `finance_agent/docs/`에 유지하고, 이곳에서는 심사위원에게
+AI 구현 세부사항은 `src/finance_agent/docs/`에 유지하고, 이곳에서는 심사위원에게
 전달할 주장과 검증 근거를 연결한다.
 
 ## 공식 요구사항
@@ -45,7 +45,7 @@ AI 구현 세부사항은 `finance_agent/docs/`에 유지하고, 이곳에서는
 | [제출 체크리스트](submission-checklist.md) | 소스·제안서·API·동결 절차 점검 | 활성 |
 | [시스템 구성도](diagrams/system-architecture.md) | 현재 검증 범위와 목표 통합 범위 구분 | P0-10 로컬 검증 반영 |
 | [답변 기능 흐름도](diagrams/answer-flow.md) | intent별 실행·검증·제어 흐름 | P0-10 로컬 검증 반영 |
-| [P0-10 공개 관계 검색 인수인계](../../finance_agent/docs/p0-10-public-relation-release-integration-handover-2026-08-20.md) | 구현·회귀·Docker·변조 검증과 미검증 게이트 정본 | `local implementation verified` |
+| [P0-10 공개 관계 검색 인수인계](../../src/finance_agent/docs/p0-10-public-relation-release-integration-handover-2026-08-20.md) | 구현·회귀·Docker·변조 검증과 미검증 게이트 정본 | `local implementation verified` |
 | [8월 6일 설명회 반영 기록](briefing-2026-08-06.md) | 평가 API·Ontology·HCX·크레딧의 확정·미확정 사항과 구현 순서 | 현장 자료 검토 완료 |
 
 ## 작성 원칙

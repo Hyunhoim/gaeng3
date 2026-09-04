@@ -86,7 +86,7 @@ flowchart LR
   Backend 466 passed(2026-09-01 `e58896f`, 2026-08-24 데이터)
 - clean Docker Backend smoke 8/8·공식 형식 GET 호환 smoke 8/8, 관계 3 products/3 citations,
   부분 표현 `not_found`, 변조 후 health·API 503
-- 수치·실행 범위·한계의 정본은 [P0-10 machine-readable baseline](../../../finance_agent/evaluation/baselines/p0-10-public-relation-release-integration-v1.json)
+- 수치·실행 범위·한계의 정본은 [P0-10 machine-readable baseline](../../../src/finance_agent/evaluation/baselines/p0-10-public-relation-release-integration-v1.json)
 
 ## 외부 통합 대기
 

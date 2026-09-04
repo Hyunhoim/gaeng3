@@ -204,7 +204,7 @@ clean Docker에서 예시 관계 질문이 3개 상품·3개 citation을 반환�
 부분 표현은 `not_found`, 변조 후 health·질문 API는 503을 반환함
 이는 `local implementation verified`이며 NCP 실제 서명 배포·공인 IP, 관계
 HyperCLOVA X claim provider, 금융 alias·의미 blind를 입증한 결과는 아님
-([P0-10 인수인계](../../finance_agent/docs/p0-10-public-relation-release-integration-handover-2026-08-20.md))
+([P0-10 인수인계](../../src/finance_agent/docs/p0-10-public-relation-release-integration-handover-2026-08-20.md))
 
 ## 데모 선정 기준
 

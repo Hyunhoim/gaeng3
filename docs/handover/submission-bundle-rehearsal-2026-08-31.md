@@ -31,11 +31,11 @@
 
 | 경로 | 파일 | 성격 |
 | --- | ---: | --- |
-| `finance_agent/docs/` | 60 | 개발 문서 |
-| `finance_agent/notebooks/` | 2 | 감사 노트북 |
-| `finance_agent/scripts/local-llm/` | 2 | 로컬 모델 실행 스크립트 |
+| `src/finance_agent/docs/` | 60 | 개발 문서 |
+| `src/finance_agent/notebooks/` | 2 | 감사 노트북 |
+| `src/finance_agent/scripts/local-llm/` | 2 | 로컬 모델 실행 스크립트 |
 
-`finance_agent/evaluation/baselines/`는 처음에 제외했다가 되돌렸다.
+`src/finance_agent/evaluation/baselines/`는 처음에 제외했다가 되돌렸다.
 `test_schema_embedding_tracked_baselines.py`가 이 디렉터리를 직접 읽어
 `FileNotFoundError`로 실패한다. 제출 묶음에서도 유지해야 한다.
 
@@ -106,13 +106,13 @@ A안 적용 후 남은 것은 모두 **문자열 표식**이며 실행 파일이
 git archive HEAD | tar -x -C <임시경로>
 cd <임시경로> && git init -q && git add -A && git commit -q -m base
 
-rm -rf finance_agent/docs finance_agent/notebooks finance_agent/scripts/local-llm
+rm -rf src/finance_agent/docs src/finance_agent/notebooks src/finance_agent/scripts/local-llm
 
-PYTHONPATH=finance_agent/packages/finance_agent_core/src \
-  python finance_agent/scripts/check-submission-boundary.py --profile submission
+PYTHONPATH=src/finance_agent/packages/finance_agent_core/src \
+  python src/finance_agent/scripts/check-submission-boundary.py --profile submission
 
-cd finance_agent/packages/finance_agent_core && PYTHONPATH=src python -m pytest -q
-cd - && PYTHONPATH=finance_agent/packages/finance_agent_core/src python -m pytest fastapi_backend/tests -q
+cd src/finance_agent/packages/finance_agent_core && PYTHONPATH=src python -m pytest -q
+cd - && PYTHONPATH=src/finance_agent/packages/finance_agent_core/src python -m pytest src/fastapi_backend/tests -q
 ```
 
 Backend는 `umask 022`가 필요하다. 이 서버의 `umask 002`에서는 릴리스 보안 검사가

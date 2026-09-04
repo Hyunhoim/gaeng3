@@ -38,16 +38,16 @@ logs/
 
 # Locally held keys/source for the sealed safety-blind evaluation.
 # Public questions and encrypted expectations are versioned separately.
-finance_agent/evaluation/safety_blind/.private/
+src/finance_agent/evaluation/safety_blind/.private/
 
 # Generated local evaluation observations and rendered reports. Keep the
 # reusable suites and evaluator code in Git, but never commit raw responses.
-finance_agent/evaluation/baselines/document-dense-public-calibration-kure-*.json
-finance_agent/evaluation/baselines/kure-schema-dense-*.json
-finance_agent/evaluation/baselines/schema-dense-final-runtime-probe-*.json
-finance_agent/reports/internal-100-*.json
-finance_agent/reports/internal-100-*.html
+src/finance_agent/evaluation/baselines/document-dense-public-calibration-kure-*.json
+src/finance_agent/evaluation/baselines/kure-schema-dense-*.json
+src/finance_agent/evaluation/baselines/schema-dense-final-runtime-probe-*.json
+src/finance_agent/reports/internal-100-*.json
+src/finance_agent/reports/internal-100-*.html
 
 # Generated immutable release artifacts. They are built only from a clean
 # checkout and distributed through the deployment control plane, not Git.
-fastapi_backend/release/*.json
+src/fastapi_backend/release/*.json

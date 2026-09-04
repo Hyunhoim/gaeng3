@@ -34,7 +34,7 @@ done
 cd "$REHEARSAL_ROOT"
 if [ ! -r "$REHEARSAL_ENV_FILE" ]; then
     echo "Cannot read $REHEARSAL_ENV_FILE" >&2
-    echo "Copy fastapi_backend/.env.example to fastapi_backend/.env first." >&2
+    echo "Copy src/fastapi_backend/.env.example to src/fastapi_backend/.env first." >&2
     exit 2
 fi
 
@@ -48,7 +48,7 @@ if [ -z "$REHEARSAL_BACKEND_PORT" ]; then
 fi
 REHEARSAL_BACKEND_PORT="${REHEARSAL_BACKEND_PORT:-18001}"
 REHEARSAL_BASE_URL="http://127.0.0.1:${REHEARSAL_BACKEND_PORT}"
-REHEARSAL_OUTPUT_DIR="finance_agent/artifacts/rehearsal"
+REHEARSAL_OUTPUT_DIR="src/finance_agent/artifacts/rehearsal"
 mkdir -p "$REHEARSAL_OUTPUT_DIR"
 
 compose_arguments=(up --detach --wait)
@@ -72,20 +72,20 @@ if payload.get("fund_execution_policy") != "locked":
 print(json.dumps(payload, ensure_ascii=False))
 PY
 
-"$REHEARSAL_PYTHON" fastapi_backend/scripts/smoke.py \
+"$REHEARSAL_PYTHON" src/fastapi_backend/scripts/smoke.py \
     --base-url "$REHEARSAL_BASE_URL" \
     --expected-fund-execution-policy locked \
     --output "$REHEARSAL_OUTPUT_DIR/docker-http-smoke-v2.json"
 
-PYTHONPATH="finance_agent/packages/finance_agent_core/src${PYTHONPATH:+:$PYTHONPATH}" \
-    "$REHEARSAL_PYTHON" finance_agent/scripts/check-submission-boundary.py \
+PYTHONPATH="src/finance_agent/packages/finance_agent_core/src${PYTHONPATH:+:$PYTHONPATH}" \
+    "$REHEARSAL_PYTHON" src/finance_agent/scripts/check-submission-boundary.py \
     --profile "$REHEARSAL_BOUNDARY_PROFILE" \
     --output "$REHEARSAL_OUTPUT_DIR/submission-boundary.json"
 
 "$REHEARSAL_PYTHON" -m pytest \
-    finance_agent/packages/finance_agent_core/tests -q
-"$REHEARSAL_PYTHON" -m pytest fastapi_backend/tests -q
-"$REHEARSAL_PYTHON" finance_agent/scripts/check-docs.py
+    src/finance_agent/packages/finance_agent_core/tests -q
+"$REHEARSAL_PYTHON" -m pytest src/fastapi_backend/tests -q
+"$REHEARSAL_PYTHON" src/finance_agent/scripts/check-docs.py
 
 echo "Rehearsal passed"
 echo "- Backend: $REHEARSAL_BASE_URL"

@@ -927,7 +927,7 @@ case "$subcommand" in
 esac
 
 if [ "$subcommand" = "pull" ]; then
-    python3 fastapi_backend/scripts/release_trust.py --env-file "$RELEASE_ENV_SNAPSHOT"
+    python3 src/fastapi_backend/scripts/release_trust.py --env-file "$RELEASE_ENV_SNAPSHOT"
 fi
 
 if [ "$subcommand" = "down" ] && [ "${#arguments[@]}" -ne "$((subcommand_index + 1))" ]; then
@@ -979,7 +979,7 @@ if [ "$up_index" -ne -1 ]; then
     # The activation broker owns the fixed root-controlled host lock and state.
     # It verifies trust while holding that lock, rejects replay/generation gaps,
     # waits for health, and only then atomically commits the active Binding.
-    python3 fastapi_backend/scripts/release_activation.py \
+    python3 src/fastapi_backend/scripts/release_activation.py \
         --env-file "$RELEASE_ENV_SNAPSHOT" \
         -- \
         "${before_up[@]}" up "${after_up[@]}" \
@@ -989,13 +989,13 @@ fi
 
 compose_files=(
     -f docker-compose.yml
-    -f fastapi_backend/docker-compose.release.yml
+    -f src/fastapi_backend/docker-compose.release.yml
 )
 if [ -f "$RELEASE_ADAPTIVE_MARKER" ]; then
-    compose_files+=( -f fastapi_backend/docker-compose.adaptive.yml )
+    compose_files+=( -f src/fastapi_backend/docker-compose.adaptive.yml )
 fi
 if [ -f "$RELEASE_DOCUMENT_CACHE_MARKER" ]; then
-    compose_files+=( -f fastapi_backend/docker-compose.document-cache.yml )
+    compose_files+=( -f src/fastapi_backend/docker-compose.document-cache.yml )
 fi
 
 docker compose \

@@ -457,7 +457,7 @@ capability별로 등록되어 있고, 출처·게시일·수집일·본문 해�
 - P0-7 관계·문서 계획·주장 검증 계약 22/22, 승인 관계 전체 경로 smoke 4/4
 - P0-10 집중 회귀 522/522, clean Docker Backend smoke
   8/8·공식 형식 GET 호환 smoke 8/8, 관계 질문 3 products/3 citations, 부분 표현 `not_found`,
-  변조 후 health·API 503 ([machine-readable baseline](../../finance_agent/evaluation/baselines/p0-10-public-relation-release-integration-v1.json)·[P0-10 인수인계](../../finance_agent/docs/p0-10-public-relation-release-integration-handover-2026-08-20.md))
+  변조 후 health·API 503 ([machine-readable baseline](../../src/finance_agent/evaluation/baselines/p0-10-public-relation-release-integration-v1.json)·[P0-10 인수인계](../../src/finance_agent/docs/p0-10-public-relation-release-integration-handover-2026-08-20.md))
 - 국내·해외 ETP 교차 SEARCH 공개 실제 데이터 회귀 4/4
 - 국내·해외 ETP 교차 상품군 grounded answer 공개 회귀 4/4, 생성 대상 2문항 모두
   grounded, fallback 0
@@ -533,7 +533,7 @@ rollback, 관계 HyperCLOVA X 답변 품질을 의미하지 않는다.
 ### 11.1 온톨로지 스키마
 
 정본은 `field_registry.yaml`(schema_version 1.5)이고, Turtle 5개는 여기서
-생성된다. `finance_agent/scripts/sync-ontology.py --check`가 둘의 일치를 검사하며
+생성된다. `src/finance_agent/scripts/sync-ontology.py --check`가 둘의 일치를 검사하며
 어긋나면 실패한다.
 
 | 파일 | 줄 수 | 범위 |
@@ -572,7 +572,7 @@ field 92개의 분포는 다음과 같다.
 이 한 명령이 이미지 빌드, 공식 XLSX에서 네 상품군 SQLite 생성, 관계 artifact와
 SHA sidecar 생성, 승인 manifest 대조, Backend 기동, 정상 상태 대기를 수행한다.
 원천 데이터 경로 기본값은 `2. Data/1. Raw/2.금융상품_20260824`이며
-`fastapi_backend/.env`의 `FINANCE_RAW_DATA_DIR`로 바꾼다.
+`src/fastapi_backend/.env`의 `FINANCE_RAW_DATA_DIR`로 바꾼다.
 
 #### 질의
 
@@ -587,7 +587,7 @@ curl --get "http://{endpoint}/answer" \
 #### 테스트
 
 ```bash
-umask 022 && python -m pytest finance_agent/packages/finance_agent_core -q
+umask 022 && python -m pytest src/finance_agent/packages/finance_agent_core -q
 umask 022 && PYTHONPATH=. python -m pytest fastapi_backend -q
 ```
 
@@ -602,7 +602,7 @@ commit `e58896f` 기준 측정값은 Agent Core 2,232 passed·2 skipped, Backend
 #### 온톨로지 일치 검사
 
 ```bash
-python finance_agent/scripts/sync-ontology.py --check
+python src/finance_agent/scripts/sync-ontology.py --check
 ```
 
 Turtle 5개가 `field_registry.yaml`과 일치하면 통과한다.

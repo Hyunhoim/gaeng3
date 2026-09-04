@@ -110,7 +110,7 @@ main(PR51) 값     04513fd5…
 
 ## 6. 환경 주의
 
-- Backend 테스트는 **저장소 루트에서** 실행한다. `fastapi_backend/`로 들어가서
+- Backend 테스트는 **저장소 루트에서** 실행한다. `src/fastapi_backend/`로 들어가서
   실행하면 `ModuleNotFoundError: fastapi_backend`로 5개 모듈 수집이 실패한다
 
   ```bash

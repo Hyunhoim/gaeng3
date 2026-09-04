@@ -37,7 +37,7 @@ jobs:
       contents: read
       id-token: write
     env:
-      RELEASE_OUTPUT_DIR: ${{ github.workspace }}/fastapi_backend/release
+      RELEASE_OUTPUT_DIR: ${{ github.workspace }}/src/fastapi_backend/release
       PINNED_PYTHON_BASE_IMAGE: docker.io/library/python@sha256:4766d8b510c428e595d74b9cc5bbb2fae8e26316fffb4adc89908d79aacd58a2
       PINNED_RUNTIME_PLATFORM: linux/amd64
       WORKFLOW_IDENTITY: ${{ github.server_url }}/${{ github.repository }}/.github/workflows/immutable-ncp-release.yml@refs/heads/main
@@ -57,9 +57,9 @@ jobs:
       FINAL_SCHEMA_DENSE_HCLX_CANDIDATE_MIN_SCORE: "0.3"
       FINAL_SCHEMA_DENSE_MINIMUM_MARGIN: "0.042771"
       FINAL_SCHEMA_DENSE_TOP_K: "10"
-      TRACKED_SCHEMA_DENSE_INDEX: ${{ github.workspace }}/finance_agent/artifacts/runtime/schema-dense/kure-schema-dense-production-v6-margin42771-20260902.json
-      TRACKED_SCHEMA_DENSE_CALIBRATION_REPORT: ${{ github.workspace }}/finance_agent/artifacts/evaluation/kure-schema-dense-p1-selective-v17-registry16-phase6-recall-20260902.json
-      TRACKED_KURE_SNAPSHOT_MANIFEST: ${{ github.workspace }}/finance_agent/artifacts/evaluation/schema-embedding/snapshot-manifests/kure-v1-d14c8a9423946e268a0c9952fecf3a7aabd73bd9-snapshot-v2.json
+      TRACKED_SCHEMA_DENSE_INDEX: ${{ github.workspace }}/src/finance_agent/artifacts/runtime/schema-dense/kure-schema-dense-production-v6-margin42771-20260902.json
+      TRACKED_SCHEMA_DENSE_CALIBRATION_REPORT: ${{ github.workspace }}/src/finance_agent/artifacts/evaluation/kure-schema-dense-p1-selective-v17-registry16-phase6-recall-20260902.json
+      TRACKED_KURE_SNAPSHOT_MANIFEST: ${{ github.workspace }}/src/finance_agent/artifacts/evaluation/schema-embedding/snapshot-manifests/kure-v1-d14c8a9423946e268a0c9952fecf3a7aabd73bd9-snapshot-v2.json
       FINAL_KURE_SNAPSHOT_MANIFEST_SHA256: caa502227d3ed92bb1b5290fc7bced2202c99b70f6846e448c4608551498004c
       # Empty means verified_live_official. Cache-first can be selected only
       # through this protected Environment and only with commit-tracked,
@@ -106,7 +106,7 @@ jobs:
           TRUSTED_GITHUB_REF_PROTECTED: ${{ github.ref_protected }}
         run: |
           set -euo pipefail
-          python3 fastapi_backend/scripts/release_ci.py validate-inputs \
+          python3 src/fastapi_backend/scripts/release_ci.py validate-inputs \
             --release-id "$INPUT_RELEASE_ID" \
             --environment "$INPUT_ENVIRONMENT" \
             --registry "$TRUSTED_NCP_REGISTRY" \
@@ -141,7 +141,7 @@ jobs:
           RELATION_RETRIEVAL_ARTIFACT_SHA256: ${{ vars.APPROVED_RELATION_RETRIEVAL_ARTIFACT_SHA256 }}
         run: |
           set -euo pipefail
-          python3 fastapi_backend/scripts/release_ci.py materialize-relation-artifact \
+          python3 src/fastapi_backend/scripts/release_ci.py materialize-relation-artifact \
             --output "$RUNNER_TEMP/relation-retrieval-artifact.json" \
             --github-output "$GITHUB_OUTPUT"
 
@@ -153,7 +153,7 @@ jobs:
           python3 -c 'import sys; assert sys.version_info[:2] == (3, 12)'
           python3 -m venv "$QA_VENV"
           (
-            cd finance_agent
+            cd src/finance_agent
             "$QA_VENV/bin/python" -m pip install \
               --disable-pip-version-check \
               --requirement requirements/dev.txt
@@ -164,23 +164,23 @@ jobs:
           "$QA_VENV/bin/python" -m pip check
           PYTHONDONTWRITEBYTECODE=1 \
             "$QA_VENV/bin/python" -m pytest -q \
-            finance_agent/packages/finance_agent_core/tests
+            src/finance_agent/packages/finance_agent_core/tests
           PYTHONDONTWRITEBYTECODE=1 \
-            PYTHONPATH="$GITHUB_WORKSPACE/fastapi_backend" \
-            "$QA_VENV/bin/python" -m pytest -q fastapi_backend/tests
+            PYTHONPATH="$GITHUB_WORKSPACE/src/fastapi_backend:$GITHUB_WORKSPACE/src" \
+            "$QA_VENV/bin/python" -m pytest -q src/fastapi_backend/tests
           "$QA_VENV/bin/python" -m ruff check \
-            finance_agent/packages/finance_agent_core/src \
-            finance_agent/packages/finance_agent_core/tests \
+            src/finance_agent/packages/finance_agent_core/src \
+            src/finance_agent/packages/finance_agent_core/tests \
             fastapi_backend
           "$QA_VENV/bin/python" -m ruff format --check \
-            finance_agent/packages/finance_agent_core/src \
-            finance_agent/packages/finance_agent_core/tests \
+            src/finance_agent/packages/finance_agent_core/src \
+            src/finance_agent/packages/finance_agent_core/tests \
             fastapi_backend
           (
-            cd finance_agent
+            cd src/finance_agent
             "$QA_VENV/bin/python" scripts/sync-ontology.py --check
             "$QA_VENV/bin/python" scripts/check-current-release-docs.py
-            PYTHONPATH="$GITHUB_WORKSPACE/finance_agent/packages/finance_agent_core/src" \
+            PYTHONPATH="$GITHUB_WORKSPACE/src/finance_agent/packages/finance_agent_core/src" \
               "$QA_VENV/bin/python" scripts/check-submission-boundary.py \
               --profile development
           )
@@ -213,7 +213,7 @@ jobs:
           FINAL_SCHEMA_DENSE_CALIBRATION_REPORT_SHA256="$FINAL_SCHEMA_DENSE_CALIBRATION_REPORT_SHA256" \
             python3 -c 'import hashlib,json,os,pathlib; p=pathlib.Path(os.environ["TRACKED_SCHEMA_DENSE_CALIBRATION_REPORT"]); d=json.loads(p.read_text(encoding="utf-8")); claimed=d.pop("report_sha256"); canonical=json.dumps(d,ensure_ascii=False,sort_keys=True,separators=(",",":")); actual=hashlib.sha256(canonical.encode("utf-8")).hexdigest(); assert claimed == actual == os.environ["FINAL_SCHEMA_DENSE_CALIBRATION_REPORT_SHA256"]'
           TRACKED_SCHEMA_DENSE_INDEX="$TRACKED_SCHEMA_DENSE_INDEX" \
-          PACKAGED_FIELD_REGISTRY="$GITHUB_WORKSPACE/finance_agent/packages/finance_agent_core/src/finance_agent_core/config/field_registry.yaml" \
+          PACKAGED_FIELD_REGISTRY="$GITHUB_WORKSPACE/src/finance_agent/packages/finance_agent_core/src/finance_agent_core/config/field_registry.yaml" \
             python3 -c 'import hashlib,json,os,pathlib,re; index=json.loads(pathlib.Path(os.environ["TRACKED_SCHEMA_DENSE_INDEX"]).read_text(encoding="utf-8")); registry=pathlib.Path(os.environ["PACKAGED_FIELD_REGISTRY"]).read_bytes(); version=re.search(rb"^schema_version:\s*\"([^\"]+)\"",registry,re.MULTILINE); assert version is not None; manifest=index["manifest"]; assert manifest["field_registry_sha256"] == hashlib.sha256(registry).hexdigest(); assert manifest["field_registry_schema_version"] == version.group(1).decode("ascii")'
           test "$(sha256sum "$TRACKED_KURE_SNAPSHOT_MANIFEST" | cut -d ' ' -f 1)" = \
             "$FINAL_KURE_SNAPSHOT_MANIFEST_SHA256"
@@ -256,16 +256,16 @@ jobs:
           set -euo pipefail
           python3 -c 'import sys; assert sys.version_info[:2] == (3, 12)'
           python3 -m venv "$RUNNER_TEMP/release-venv"
-          python3 fastapi_backend/scripts/build_runtime_core.py \
-            --source finance_agent/packages/finance_agent_core \
+          python3 src/fastapi_backend/scripts/build_runtime_core.py \
+            --source src/finance_agent/packages/finance_agent_core \
             --output "$RUNNER_TEMP/manifest-runtime-core" \
-            --manifest fastapi_backend/runtime-core-manifest.json \
-            --pyproject fastapi_backend/runtime-core-pyproject.toml
+            --manifest src/fastapi_backend/runtime-core-manifest.json \
+            --pyproject src/fastapi_backend/runtime-core-pyproject.toml
           "$RUNNER_TEMP/release-venv/bin/python" -m pip install \
             --disable-pip-version-check \
-            --constraint finance_agent/requirements/constraints.txt \
-            --requirement fastapi_backend/requirements.txt \
-            ./finance_agent/packages/finance_agent_core
+            --constraint src/finance_agent/requirements/constraints.txt \
+            --requirement src/fastapi_backend/requirements.txt \
+            ./src/finance_agent/packages/finance_agent_core
           external_mode="${APPROVED_EXTERNAL_RETRIEVAL_MODE:-verified_live_official}"
           external_arguments=(
             --mode "$external_mode"
@@ -327,7 +327,7 @@ jobs:
             echo "Protected external retrieval mode is invalid" >&2
             exit 1
           fi
-          PYTHONPATH="$GITHUB_WORKSPACE/finance_agent/packages/finance_agent_core/src" \
+          PYTHONPATH="$GITHUB_WORKSPACE/src/finance_agent/packages/finance_agent_core/src" \
             "$RUNNER_TEMP/release-venv/bin/python" \
             -m finance_agent_core.retrieval.external_knowledge_release_cli \
             "${external_arguments[@]}"
@@ -339,7 +339,7 @@ jobs:
             --environment "$RELEASE_ENVIRONMENT"
             --source-commit "$SOURCE_COMMIT"
             --git-root "$GITHUB_WORKSPACE"
-            --backend-root "$GITHUB_WORKSPACE/fastapi_backend/app"
+            --backend-root "$GITHUB_WORKSPACE/src/fastapi_backend/app"
             --runtime-core-root "$RUNNER_TEMP/manifest-runtime-core/src/finance_agent_core"
             --platform "$RUNTIME_PLATFORM"
             --answer-provider "$ANSWER_PROVIDER"
@@ -374,10 +374,10 @@ jobs:
               --schema-dense-top-k "$SCHEMA_DENSE_TOP_K"
             )
           fi
-          PYTHONPATH="$GITHUB_WORKSPACE/finance_agent/packages/finance_agent_core/src" \
+          PYTHONPATH="$GITHUB_WORKSPACE/src/finance_agent/packages/finance_agent_core/src" \
             "$RUNNER_TEMP/release-venv/bin/python" \
             -m finance_agent_core.release_cli manifest "${manifest_arguments[@]}"
-          python3 fastapi_backend/scripts/release_ci.py verify-relation-manifest-binding \
+          python3 src/fastapi_backend/scripts/release_ci.py verify-relation-manifest-binding \
             --manifest "$RELEASE_OUTPUT_DIR/agent-release-manifest.json" \
             --relation-artifact "$RELATION_RETRIEVAL_ARTIFACT_FILE" \
             --relation-artifact-sha256 "$RELATION_RETRIEVAL_ARTIFACT_SHA256"
@@ -397,7 +397,7 @@ jobs:
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: .
-          file: fastapi_backend/Dockerfile
+          file: src/fastapi_backend/Dockerfile
           target: adaptive-runtime
           platforms: ${{ steps.release_inputs.outputs.platform }}
           push: true
@@ -415,7 +415,7 @@ jobs:
           IMAGE_REPOSITORY: ${{ steps.release_inputs.outputs.image_repository }}
         run: |
           set -euo pipefail
-          python3 fastapi_backend/scripts/release_ci.py bind-digest \
+          python3 src/fastapi_backend/scripts/release_ci.py bind-digest \
             --digest "$BUILD_DIGEST" \
             --image-repository "$IMAGE_REPOSITORY" \
             --github-output "$GITHUB_OUTPUT"
@@ -425,7 +425,7 @@ jobs:
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: .
-          file: fastapi_backend/Dockerfile.release
+          file: src/fastapi_backend/Dockerfile.release
           platforms: ${{ steps.release_inputs.outputs.platform }}
           push: true
           provenance: mode=max
@@ -444,7 +444,7 @@ jobs:
           IMAGE_REPOSITORY: ${{ steps.release_inputs.outputs.image_repository }}
         run: |
           set -euo pipefail
-          python3 fastapi_backend/scripts/release_ci.py bind-digest \
+          python3 src/fastapi_backend/scripts/release_ci.py bind-digest \
             --digest "$BUILD_DIGEST" \
             --image-repository "$IMAGE_REPOSITORY" \
             --github-output "$GITHUB_OUTPUT"
@@ -463,11 +463,11 @@ jobs:
           docker image inspect "$IMAGE_REFERENCE" > "$RELEASE_OUTPUT_DIR/release-image-inspect.json"
           docker buildx imagetools inspect --raw "$IMAGE_REFERENCE" \
             > "$RELEASE_OUTPUT_DIR/release-image-manifest.json"
-          python3 fastapi_backend/scripts/release_ci.py inspect-remote-manifest \
+          python3 src/fastapi_backend/scripts/release_ci.py inspect-remote-manifest \
             --manifest-file "$RELEASE_OUTPUT_DIR/release-image-manifest.json" \
             --image-reference "$IMAGE_REFERENCE" \
             --platform "$RUNTIME_PLATFORM"
-          python3 fastapi_backend/scripts/release_ci.py inspect-image \
+          python3 src/fastapi_backend/scripts/release_ci.py inspect-image \
             --inspect-file "$RELEASE_OUTPUT_DIR/release-image-inspect.json" \
             --image-reference "$IMAGE_REFERENCE" \
             --platform "$RUNTIME_PLATFORM" \
@@ -496,7 +496,7 @@ jobs:
             --env FINANCE_RELEASE_MANIFEST_SHA256="$manifest_sha256" \
             --entrypoint python \
             -i "$IMAGE_REFERENCE" - \
-            < fastapi_backend/scripts/image_runtime_boundary.py \
+            < src/fastapi_backend/scripts/image_runtime_boundary.py \
             > "$RELEASE_OUTPUT_DIR/image-runtime-boundary.json"
           python3 -c \
             'import json,sys; p=json.load(open(sys.argv[1], encoding="utf-8")); assert p.get("passed") is True' \
@@ -509,7 +509,7 @@ jobs:
           PREVIOUS_DEPLOYMENT_BINDING_SHA256: ${{ secrets.PREVIOUS_DEPLOYMENT_BINDING_SHA256 }}
         run: |
           set -euo pipefail
-          python3 fastapi_backend/scripts/release_ci.py materialize-previous-binding \
+          python3 src/fastapi_backend/scripts/release_ci.py materialize-previous-binding \
             --output "$RUNNER_TEMP/previous-deployment-binding.json"
 
       - name: Create DeploymentBinding
@@ -535,7 +535,7 @@ jobs:
               --rollback-binding-sha256 "$TRUSTED_PREVIOUS_BINDING_SHA256"
             )
           fi
-          PYTHONPATH="$GITHUB_WORKSPACE/finance_agent/packages/finance_agent_core/src" \
+          PYTHONPATH="$GITHUB_WORKSPACE/src/finance_agent/packages/finance_agent_core/src" \
             "$RUNNER_TEMP/release-venv/bin/python" \
             -m finance_agent_core.release_cli binding "${binding_arguments[@]}"
 
@@ -626,7 +626,7 @@ jobs:
           set -euo pipefail
           manifest_sha256="$(sha256sum "$RELEASE_OUTPUT_DIR/agent-release-manifest.json" | cut -d ' ' -f 1)"
           binding_sha256="$(sha256sum "$RELEASE_OUTPUT_DIR/deployment-binding.json" | cut -d ' ' -f 1)"
-          python3 fastapi_backend/scripts/release_ci.py write-metadata \
+          python3 src/fastapi_backend/scripts/release_ci.py write-metadata \
             --output "$RELEASE_OUTPUT_DIR/release-metadata.json" \
             --workflow-identity "$WORKFLOW_IDENTITY" \
             --source-commit "$SOURCE_COMMIT" \
@@ -668,33 +668,33 @@ jobs:
         with:
           name: immutable-release-${{ steps.release_inputs.outputs.release_id }}
           path: |
-            fastapi_backend/release/agent-release-manifest.json
-            fastapi_backend/release/deployment-binding.json
-            fastapi_backend/release/external-knowledge-artifact.json
-            fastapi_backend/release/external-temporal-relations.json
-            fastapi_backend/release/document-dense-approved.json
-            fastapi_backend/release/document-cache-activation.json
-            fastapi_backend/release/release-metadata.json
-            fastapi_backend/release/release-artifacts.sha256
-            fastapi_backend/release/release-image-inspect.json
-            fastapi_backend/release/release-image-manifest.json
-            fastapi_backend/release/image-runtime-boundary.json
-            fastapi_backend/release/schema-dense-index.json
-            fastapi_backend/release/schema-dense-calibration-report.json
-            fastapi_backend/release/kure-snapshot-manifest.json
-            fastapi_backend/release/base-image-cosign-verification.json
-            fastapi_backend/release/release-image-cosign-verification.json
-            fastapi_backend/release/agent-release-manifest.sigstore.json
-            fastapi_backend/release/deployment-binding.sigstore.json
-            fastapi_backend/release/agent-release-manifest-verification.txt
-            fastapi_backend/release/deployment-binding-verification.txt
-            fastapi_backend/release/external-knowledge-artifact.sigstore.json
-            fastapi_backend/release/external-knowledge-artifact-verification.txt
-            fastapi_backend/release/external-temporal-relations.sigstore.json
-            fastapi_backend/release/external-temporal-relations-verification.txt
-            fastapi_backend/release/document-dense-approved.sigstore.json
-            fastapi_backend/release/document-dense-approved-verification.txt
-            fastapi_backend/release/document-cache-activation.sigstore.json
-            fastapi_backend/release/document-cache-activation-verification.txt
+            src/fastapi_backend/release/agent-release-manifest.json
+            src/fastapi_backend/release/deployment-binding.json
+            src/fastapi_backend/release/external-knowledge-artifact.json
+            src/fastapi_backend/release/external-temporal-relations.json
+            src/fastapi_backend/release/document-dense-approved.json
+            src/fastapi_backend/release/document-cache-activation.json
+            src/fastapi_backend/release/release-metadata.json
+            src/fastapi_backend/release/release-artifacts.sha256
+            src/fastapi_backend/release/release-image-inspect.json
+            src/fastapi_backend/release/release-image-manifest.json
+            src/fastapi_backend/release/image-runtime-boundary.json
+            src/fastapi_backend/release/schema-dense-index.json
+            src/fastapi_backend/release/schema-dense-calibration-report.json
+            src/fastapi_backend/release/kure-snapshot-manifest.json
+            src/fastapi_backend/release/base-image-cosign-verification.json
+            src/fastapi_backend/release/release-image-cosign-verification.json
+            src/fastapi_backend/release/agent-release-manifest.sigstore.json
+            src/fastapi_backend/release/deployment-binding.sigstore.json
+            src/fastapi_backend/release/agent-release-manifest-verification.txt
+            src/fastapi_backend/release/deployment-binding-verification.txt
+            src/fastapi_backend/release/external-knowledge-artifact.sigstore.json
+            src/fastapi_backend/release/external-knowledge-artifact-verification.txt
+            src/fastapi_backend/release/external-temporal-relations.sigstore.json
+            src/fastapi_backend/release/external-temporal-relations-verification.txt
+            src/fastapi_backend/release/document-dense-approved.sigstore.json
+            src/fastapi_backend/release/document-dense-approved-verification.txt
+            src/fastapi_backend/release/document-cache-activation.sigstore.json
+            src/fastapi_backend/release/document-cache-activation-verification.txt
           if-no-files-found: error
           retention-days: 90
