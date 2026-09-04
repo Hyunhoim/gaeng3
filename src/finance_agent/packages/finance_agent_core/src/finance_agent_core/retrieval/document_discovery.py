@@ -315,6 +315,7 @@ class CacheFirstOfficialDiscoveryProvider:
         product_terms: tuple[str, ...] = (),
         relation_terms: tuple[str, ...] = (),
         time_range: KnowledgeTimeRange | None = None,
+        product_surfaces: tuple[str, ...] = (),
     ) -> OfficialDiscoveryReport:
         if evidence_cutoff != self.registry.evidence_cutoff:
             raise OfficialDiscoveryError("document discovery evidence cutoff differs")
@@ -350,6 +351,7 @@ class CacheFirstOfficialDiscoveryProvider:
             product_terms=product_terms,
             relation_terms=relation_terms,
             time_range=time_range,
+            product_surfaces=product_surfaces,
         )
 
     def discover_live_report(
@@ -365,6 +367,7 @@ class CacheFirstOfficialDiscoveryProvider:
         product_terms: tuple[str, ...] = (),
         relation_terms: tuple[str, ...] = (),
         time_range: KnowledgeTimeRange | None = None,
+        product_surfaces: tuple[str, ...] = (),
     ) -> OfficialDiscoveryReport:
         """Bypass a stale/false-positive cache candidate exactly once.
 
@@ -386,6 +389,7 @@ class CacheFirstOfficialDiscoveryProvider:
             product_terms=product_terms,
             relation_terms=relation_terms,
             time_range=time_range,
+            product_surfaces=product_surfaces,
         )
         return report.model_copy(
             update={

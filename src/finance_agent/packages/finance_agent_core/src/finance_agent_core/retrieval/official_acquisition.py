@@ -420,6 +420,7 @@ class OfficialEvidenceAcquisitionCoordinator:
                     product_terms=discovery_terms,
                     relation_terms=(requirement.relation_evidence_span,),
                     time_range=requirement.time_range,
+                    product_surfaces=tuple(provided_product_surfaces),
                 )
                 if type(report) is not OfficialDiscoveryReport:
                     raise TypeError("discovery report provider returned an invalid contract")

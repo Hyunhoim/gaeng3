@@ -25,6 +25,7 @@ from finance_agent_core.config.source_registry import (
     load_official_source_registry,
 )
 from finance_agent_core.contracts.external_knowledge import KnowledgeTimeRange
+from finance_agent_core.contracts.queryplan import ProductFamily
 from finance_agent_core.retrieval.official_connector import OfficialDiscoveryCandidate
 
 _MAX_SECRET_BYTES = 4096
@@ -467,6 +468,65 @@ class NaverApiHubWebSearchTransport:
             raise OfficialDiscoveryError("official search provider response is invalid") from error
 
 
+_HANGUL = re.compile(r"[가-힣]")
+_LATIN = re.compile(r"[A-Za-z]")
+_DOMESTIC_FAMILIES = frozenset({ProductFamily.DOMESTIC_ETP, ProductFamily.FUND, ProductFamily.BOND})
+
+
+def order_entries_for_entity_script(
+    entries: tuple[OfficialSourceEntry, ...] | list[OfficialSourceEntry],
+    *,
+    entity_terms: tuple[str, ...],
+    product_surfaces: tuple[str, ...] = (),
+) -> tuple[OfficialSourceEntry, ...]:
+    """Spend a bounded query budget on publishers that can name the entity.
+
+    Two server-owned signals order the *same* approved entries; the registry
+    stays the only authority on which publishers exist.
+
+    1. Script.  A Hangul-only company such as ``에코프로비엠`` is disclosed by
+       Korean asset managers, not by a US issuer's English factsheet; a
+       Latin-only ticker or name is the reverse.  Mixed or unknown scripts
+       skip this signal.
+    2. Universe weight.  Publishers whose brand aliases (``KODEX``, ``TIGER``,
+       ``VanEck`` …) appear in more provided-DB candidate product names are
+       queried first: they are the issuers most likely to hold the entity.
+
+    Ties keep registry order.
+    """
+
+    joined = " ".join(entity_terms)
+    hangul = _HANGUL.search(joined) is not None
+    latin = _LATIN.search(joined) is not None
+    surfaces = tuple(_normalized_search_surface(item) for item in product_surfaces if item)
+
+    def script_rank(entry: OfficialSourceEntry) -> int:
+        if hangul == latin:
+            return 0
+        families = set(entry.product_families)
+        domestic = bool(families & _DOMESTIC_FAMILIES)
+        overseas = ProductFamily.OVERSEAS_ETP in families
+        if not families or (domestic and overseas):
+            return 1
+        if hangul:
+            return 0 if domestic else 2
+        return 0 if overseas else 2
+
+    def brand_weight(entry: OfficialSourceEntry) -> int:
+        if not surfaces:
+            return 0
+        aliases = tuple(
+            _normalized_search_surface(alias)
+            for alias in (*entry.selection_aliases, entry.publisher)
+            if len(alias.strip()) >= 2
+        )
+        return sum(1 for surface in surfaces if any(alias in surface for alias in aliases))
+
+    indexed = list(enumerate(entries))
+    indexed.sort(key=lambda item: (script_rank(item[1]), -brand_weight(item[1]), item[0]))
+    return tuple(entry for _, entry in indexed)
+
+
 class BoundedOfficialDiscoveryProvider:
     """Search only approved domains, with server-owned query and result budgets.
 
@@ -496,14 +556,19 @@ class BoundedOfficialDiscoveryProvider:
         product_terms: tuple[str, ...] = (),
         relation_terms: tuple[str, ...] = (),
         time_range: KnowledgeTimeRange | None = None,
+        product_surfaces: tuple[str, ...] = (),
     ) -> OfficialDiscoveryReport:
         if evidence_cutoff != self.registry.evidence_cutoff:
             raise OfficialDiscoveryError("discovery evidence cutoff differs from registry")
         if not 1 <= top_k <= 20:
             raise ValueError("top_k must be between 1 and 20")
-        entries = self.registry.entries_for_capability(
-            capability,
-            source_registry_ids=source_registry_ids,
+        entries = order_entries_for_entity_script(
+            self.registry.entries_for_capability(
+                capability,
+                source_registry_ids=source_registry_ids,
+            ),
+            entity_terms=entity_terms,
+            product_surfaces=product_surfaces,
         )
         query_budget = len(entries) if max_queries is None else max_queries
         if not 1 <= query_budget <= 40:
