@@ -1391,3 +1391,21 @@ class SemanticCoverageGate:
             unsupported_spans=_unique(unsupported),
             schema_link_gap_spans=_unique(schema_link_gaps),
         )
+
+
+def is_bare_direction_span(span: str) -> bool:
+    """Report whether an ambiguity span is only a ranking direction word."""
+
+    return _DIRECTION_TERM.fullmatch(span.strip()) is not None
+
+
+def is_bare_risk_span(span: str) -> bool:
+    """Report whether an ambiguity span is only a risk mention without a grade."""
+
+    return _RISK.fullmatch(span.strip()) is not None
+
+
+def is_branded_product_span(span: str) -> bool:
+    """Report whether an ambiguity span is only a branded ETP product name."""
+
+    return _BRANDED_PRODUCT.fullmatch(span.strip()) is not None

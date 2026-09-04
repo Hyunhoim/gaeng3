@@ -442,6 +442,19 @@ def _ranking_choice(question: str) -> tuple[str, SortDirection] | None:
     return next(iter(choices))
 
 
+def question_binds_external_ranking(question: str) -> bool:
+    """Report whether a direction word is bound to a supported product metric.
+
+    A conflicting binding also counts: the plan compiler raises its own CLARIFY
+    for that case, so the coverage boundary does not need to repeat it.
+    """
+
+    try:
+        return _ranking_choice(question) is not None
+    except CompositeKnowledgePlanningError:
+        return True
+
+
 def _holding_match_mode(
     question: str,
     requirements: tuple,
