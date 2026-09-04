@@ -478,6 +478,29 @@ class ServerQueryPlanCompiler:
         return [item.plan for item in self.compile_family_searches(decision)]
 
     @staticmethod
+    def generic_etp_class_scope(
+        question: str,
+        families: list[ProductFamily] | tuple[ProductFamily, ...],
+    ) -> dict[ProductFamily, str] | None:
+        """Return per-family copies of ``question`` when it names the generic ETP class.
+
+        ``캠브리콘이 편입된 중국 반도체 ETF`` says ``ETF`` once without a
+        domestic/overseas qualifier.  The server deliberately widens that bare
+        surface to both ETP families, so there is no per-family clause to
+        separate: every DB condition applies to each market unchanged.  Explicit
+        cross-family requests (``국내 ETF는 …, 해외 ETF는 …``) return ``None`` and
+        keep the ordinary clause-ownership scoping.
+        """
+
+        if set(families) != {ProductFamily.DOMESTIC_ETP, ProductFamily.OVERSEAS_ETP}:
+            return None
+        if any(_SIMPLE_FAMILY_MENTIONS[family].search(question) for family in families):
+            return None
+        if _GENERIC_ETP_CLASS_SURFACE.search(question) is None:
+            return None
+        return {family: question for family in families}
+
+    @staticmethod
     def scope_family_questions(
         question: str,
         families: list[ProductFamily] | tuple[ProductFamily, ...],
@@ -1066,6 +1089,12 @@ _DOMESTIC_BRANDED_FAMILY_PATTERN = (
     r"\b(?:TIGER|KODEX|ACE|RISE|SOL|HANARO|TIMEFOLIO|ARIRANG|KBSTAR)\b"
     r"(?:\s+[0-9A-Za-z가-힣&·+._/-]+){1,10}?"
     r"(?=\s*(?:,|및|와|과|이랑|하고|의|을|를|은|는|이|가|인|$))"
+)
+# A bare ETF/ETN/ETP (or 상장지수상품) surface without 국내/해외 qualifier names the
+# common product class shared by both ETP families.
+_GENERIC_ETP_CLASS_SURFACE = re.compile(
+    r"(?<![0-9A-Za-z가-힣])(?:ETF|ETN|ETP)(?![A-Za-z])|상장\s*지수\s*(?:상품|펀드)",
+    re.IGNORECASE,
 )
 _SIMPLE_FAMILY_MENTIONS: dict[ProductFamily, re.Pattern[str]] = {
     ProductFamily.DOMESTIC_ETP: re.compile(

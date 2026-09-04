@@ -749,3 +749,33 @@ def test_external_runtime_result_keeps_explicit_outcome_status(
     assert raw.outcome.verified_product_keys == (
         (ProductFamily.DOMESTIC_ETP, "KR7000000003"),
     )
+
+
+def test_bare_etf_external_question_intersects_both_etp_families(
+    external_e2e_agent: RoutedFinanceAgent,
+) -> None:
+    """A bare ``ETF`` must not be blocked by the cross-family clause rule.
+
+    The sanitizer widens ``ETF`` to both ETP families; the fixture only lists
+    애플 inside overseas holdings, so the intersection is the overseas set.
+    """
+
+    result = execute_answer_request(
+        external_e2e_agent,
+        BackendAgentRequest(
+            request_id="fresh-external-bare-etf",
+            question=(
+                "애플을 보유한 ETF 중 총보수 0.15% 이하인 상품을 AUM 큰 순으로 다섯 개 알려 주세요."
+            ),
+        ),
+    )
+
+    assert result.http_status_code == 200
+    assert result.response.status is BackendStatus.SUCCESS
+    assert [item.product_id for item in result.response.products] == [
+        "AMX:B5",
+        "AMX:B4",
+        "AMX:B2",
+        "AMX:B1",
+    ]
+    assert result.response.candidate_count == 4
