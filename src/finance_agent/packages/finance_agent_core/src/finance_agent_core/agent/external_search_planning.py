@@ -829,12 +829,18 @@ class ProvidedProductUniverseBuilder:
     ) -> SourceSelectionSignals:
         """Derive brand/owner signals from approved DB identities and registry metadata."""
 
-        if not families:
+        # A knowledge question can name a product without naming its family
+        # ("SPY에서 엔비디아 편입 비중"). Inspect every approved database then, the
+        # same way the identity-surface helper does, instead of failing the request.
+        selected_families = tuple(sorted(set(families), key=lambda item: item.value))
+        if not selected_families:
+            selected_families = tuple(sorted(self.database_paths, key=lambda item: item.value))
+        if not selected_families:
             raise ValueError("source selection requires at least one product family")
         effective_registry = registry or load_official_source_registry()
         snapshots = {
             family: self.identity_cache.get(self.database_paths[family])
-            for family in sorted(set(families), key=lambda item: item.value)
+            for family in selected_families
         }
         records_by_family = {
             family: snapshot.records for family, snapshot in snapshots.items()

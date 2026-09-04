@@ -80,6 +80,7 @@ class FinalAnswerComposition(FinalGenerationModel):
     model_name: str = Field(min_length=1, max_length=128)
     generation_latency_ms: float = Field(ge=0)
     clarification_question: str | None = Field(default=None, max_length=160)
+    clarification_fallback_used: bool = False
 
 
 _LEADS = {
@@ -157,6 +158,15 @@ def build_clarification_guidance(
         else:
             slots = ["return_condition"]
             fallback = "수익률의 기간과 비교 기준을 어떻게 적용할지 구체적으로 알려주시겠어요?"
+    elif reason_code == "evidence_period_after_cutoff":
+        # The question dates its evidence after the approved cutoff; no
+        # official source can answer it, so ask for a period inside the range.
+        slots = ["evidence_period"]
+        required_terms = ["기준일"]
+        fallback = (
+            "요청하신 시점이 공식 근거 마감일 이후라 확인할 수 없는데, "
+            "마감일 이전의 어느 기준일로 확인할까요?"
+        )
     elif reason_code == "ambiguous_product_family" or "product_family" in slots:
         slots = ["product_family"]
         options = ["국내채권", "국내 ETF·ETN", "해외 ETF·ETN", "공모펀드"]
@@ -235,12 +245,27 @@ def compose_final_answer(
 
         raise HyperClovaXResponseError("HyperCLOVA X changed the grounded answer body reference")
     if context.status == "clarification":
-        clarification_question = _validated_clarification_question(context, draft.lead)
+        from finance_agent_core.agent.providers.hyperclova import HyperClovaXResponseError
+
+        fallback_used = False
+        try:
+            clarification_question = _validated_clarification_question(context, draft.lead)
+        except HyperClovaXResponseError:
+            # HCX was called and answered, but its sentence broke the closed
+            # clarification contract (two sentences, a claim, a changed option).
+            # The server-owned fallback question carries the same slots and
+            # options, so asking it beats failing the whole request with 503.
+            guidance = context.clarification_guidance
+            if guidance is None:
+                raise
+            clarification_question = guidance.fallback_question
+            fallback_used = True
         return FinalAnswerComposition(
             answer=clarification_question,
             model_name=provider.model_name,
             generation_latency_ms=latency_ms,
             clarification_question=clarification_question,
+            clarification_fallback_used=fallback_used,
         )
     if draft.lead not in allowed_final_answer_leads(context):
         from finance_agent_core.agent.providers.hyperclova import HyperClovaXResponseError

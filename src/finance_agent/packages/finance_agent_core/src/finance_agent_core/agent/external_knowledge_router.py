@@ -88,7 +88,7 @@ class ExternalKnowledgeRouter:
         except CompositeKnowledgePlanningError as error:
             return ExternalKnowledgeRouteDecision(
                 disposition=ExternalKnowledgeRouteDisposition.CLARIFY,
-                reason_code="external_knowledge_plan_incomplete",
+                reason_code=getattr(error, "reason_code", "external_knowledge_plan_incomplete"),
                 reason=str(error)[:500],
             )
 

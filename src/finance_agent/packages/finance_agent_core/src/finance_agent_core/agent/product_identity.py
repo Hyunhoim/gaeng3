@@ -334,6 +334,9 @@ def _normalized_question_with_offsets(value: str) -> tuple[str, tuple[int, ...]]
     return "".join(output), tuple(offsets)
 
 
+_RIC_TICKER = re.compile(r"(?P<base>[A-Z0-9][A-Z0-9-]{0,31})\.(?P<venue>[A-Z0-9]{1,5})")
+
+
 def _is_alias_eligible(value: str, *, alias_kind: str) -> bool:
     normalized = normalize_database_identity(value)
     if not normalized or normalized in _GENERIC_IDENTITY_ALIASES:
@@ -415,6 +418,19 @@ class DatabaseProductIdentityMatcher:
                     # columns.  Product collision is defined by family+ID, not
                     # by how many identity columns repeated the value.
                     aliases.setdefault(alias, {}).setdefault((family, product_id), candidate)
+                    if family is ProductFamily.OVERSEAS_ETP and column == "ticker":
+                        # 5,334 of the 6,037 provided overseas tickers carry a
+                        # Reuters venue suffix (``QQQ.O``, ``TLT.O``) while a
+                        # question writes the public base ticker.  Index the
+                        # base as one more exact alias of the same row; a base
+                        # shared by two venues stays a collision and CLARIFYs.
+                        ric = _RIC_TICKER.fullmatch(value)
+                        if ric is not None and _is_alias_eligible(
+                            ric.group("base"), alias_kind="ticker"
+                        ):
+                            aliases.setdefault(
+                                normalize_database_identity(ric.group("base")), {}
+                            ).setdefault((family, product_id), candidate)
                     if family is ProductFamily.FUND and column == "product_name":
                         for derived_value in _derived_fund_name_aliases(value):
                             if not _is_alias_eligible(

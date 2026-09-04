@@ -684,3 +684,42 @@ def test_plain_labeled_identity_that_exists_still_uses_normal_detail_execution(
     assert result.response.status is BackendStatus.SUCCESS
     assert result.response.intent is InteractionIntent.DETAIL
     assert [item.product_id for item in result.response.products] == ["KR7000000003"]
+
+
+def test_source_selection_without_a_named_family_inspects_every_approved_database(
+    tmp_path,
+) -> None:
+    # "2026년 9월 1일 기준 SPY에서 엔비디아 편입 비중" names a product but no
+    # family. Blind set A question 35 crashed the request with HTTP 500 here.
+    database = tmp_path / "domestic-etp.sqlite3"
+    database.write_bytes(b"identity-only")
+    snapshot = SimpleNamespace(records=(_kodex_200_identity(),), version="v1")
+
+    class FixedIdentityCache:
+        def get(self, path):
+            assert path == database
+            return snapshot
+
+    builder = ProvidedProductUniverseBuilder(
+        {ProductFamily.DOMESTIC_ETP: database},
+        identity_cache=FixedIdentityCache(),  # type: ignore[arg-type]
+        verify_approved_databases=False,
+    )
+
+    signals = builder.source_selection_signals(
+        families=(),
+        question="KODEX 200의 위험요인을 알려줘.",
+    )
+    named = builder.source_selection_signals(
+        families=(ProductFamily.DOMESTIC_ETP,),
+        question="KODEX 200의 위험요인을 알려줘.",
+    )
+
+    # The selector treats an empty family tuple as "unconstrained", so only the
+    # identity-derived fields must agree with the family-named call.
+    assert signals.product_families == ()
+    assert signals.db_confirmed_aliases == named.db_confirmed_aliases
+    assert signals.matched_product_names == named.matched_product_names
+    assert signals.matched_source_owners == named.matched_source_owners
+    assert signals.explicit_identity_bound is named.explicit_identity_bound
+    assert signals.matched_product_names != ()
