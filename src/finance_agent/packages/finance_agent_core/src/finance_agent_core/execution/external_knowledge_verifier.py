@@ -13,6 +13,7 @@ from finance_agent_core.contracts.external_knowledge import (
     KnowledgeMatchMode,
 )
 from finance_agent_core.contracts.queryplan import ProductFamily, SortDirection
+from finance_agent_core.retrieval.hangul_romanization import best_phonetic_label
 from finance_agent_core.retrieval.temporal_relations import TemporalRelationRecord
 
 
@@ -142,8 +143,12 @@ class ExternalKnowledgeEvidenceVerifier:
                     for value in (requirement.subject, *requirement.search_aliases)
                     if _normalized(value)
                 }
-                if not requirement.depends_on and not allowed_subjects.intersection(
-                    {_normalized(label) for label in labels}
+                if (
+                    not requirement.depends_on
+                    and not allowed_subjects.intersection({_normalized(label) for label in labels})
+                    # A Hangul subject may bind a Latin-labelled relation only
+                    # through the same phonetic rule the lookup used.
+                    and best_phonetic_label(requirement.subject, labels) is None
                 ):
                     checks["requirement_scope"] = False
                     violations.append(f"{requirement_id} relation does not bind its subject")
@@ -237,9 +242,7 @@ class ExternalKnowledgeEvidenceVerifier:
                     }
                 )
         relation_products = (
-            set.intersection(*independent_product_sets)
-            if independent_product_sets
-            else set()
+            set.intersection(*independent_product_sets) if independent_product_sets else set()
         )
 
         subsidiary_objects = {
@@ -299,9 +302,7 @@ class ExternalKnowledgeEvidenceVerifier:
                 violations.append("ranking contains a product outside the holding set operation")
             if independent_product_sets and not rank_product_ids <= relation_products:
                 checks["relation_set_operation"] = False
-                violations.append(
-                    "ranking contains a product outside the conjunctive relation set"
-                )
+                violations.append("ranking contains a product outside the conjunctive relation set")
             expected_unit = _RANK_FIELD_UNITS[selection.rank_field]
             if any(item.unit != expected_unit for item in rank_facts):
                 checks["ranking_source"] = False

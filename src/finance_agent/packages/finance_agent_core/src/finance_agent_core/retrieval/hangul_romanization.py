@@ -8,7 +8,10 @@ creates evidence or authorizes a source on its own.
 
 from __future__ import annotations
 
+import re
 import unicodedata
+from collections.abc import Iterable
+from difflib import SequenceMatcher
 
 _HANGUL_INITIAL = (
     "g",
@@ -110,3 +113,38 @@ def hangul_romanization_key(value: str) -> str:
                 )
             )
     return "".join(output)
+
+
+LATIN_LABEL = re.compile(r"[A-Za-z][A-Za-z0-9&.,'()/ -]{1,120}")
+PHONETIC_MATCH_THRESHOLD = 0.64
+PHONETIC_MARGIN = 0.08
+
+
+def latin_label_phonetic_score(subject_key: str, label: str) -> float:
+    """Score how close a Latin label sounds to a Hangul subject's phonetic key.
+
+    Returns 0.0 unless the label is Latin text whose length is within 0.55-1.45
+    of the key; otherwise the ``SequenceMatcher`` ratio between the two.
+    """
+
+    if len(subject_key) < 5 or LATIN_LABEL.fullmatch(label) is None:
+        return 0.0
+    folded = "".join(ch for ch in label.casefold() if ch.isalnum())
+    if not folded or not 0.55 <= len(folded) / len(subject_key) <= 1.45:
+        return 0.0
+    return SequenceMatcher(None, subject_key, folded).ratio()
+
+
+def best_phonetic_label(subject: str, labels: Iterable[str]) -> tuple[str, float] | None:
+    """Return the Latin label closest to ``subject`` when it clears the threshold."""
+
+    key = hangul_romanization_key(subject)
+    if len(key) < 5:
+        return None
+    ranked = sorted(
+        ((latin_label_phonetic_score(key, label), label) for label in dict.fromkeys(labels)),
+        key=lambda item: (-item[0], item[1].casefold()),
+    )
+    if not ranked or ranked[0][0] < PHONETIC_MATCH_THRESHOLD:
+        return None
+    return ranked[0][1], ranked[0][0]

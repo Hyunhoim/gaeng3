@@ -23,6 +23,12 @@ from finance_agent_core.contracts.external_knowledge import (
     predicate_for_capability,
 )
 from finance_agent_core.contracts.queryplan import ProductFamily
+from finance_agent_core.retrieval.hangul_romanization import (
+    PHONETIC_MARGIN,
+    PHONETIC_MATCH_THRESHOLD,
+    hangul_romanization_key,
+    latin_label_phonetic_score,
+)
 
 
 class TemporalRelationError(RuntimeError):
@@ -260,6 +266,69 @@ class TemporalRelationStore:
                 continue
             matches.append(relation)
         return tuple(matches[: request.top_k])
+
+    def search_cross_script(
+        self,
+        request: TemporalRelationSearchRequest,
+    ) -> tuple[TemporalRelationRecord, ...]:
+        """Reach Latin-labelled relations from a Hangul subject by phonetic key.
+
+        Holdings graphs carry the publisher's spelling (``Cambricon Technologies
+        Corp Ltd``) while a question says ``캠브리콘``.  This mirrors the live
+        extractor's recovery rule: the Hangul key must be uniquely close to one
+        source-authored entity (ratio >= 0.64, length ratio 0.55-1.45, and a
+        0.08 margin over the runner-up entity).  The alias only addresses the
+        lookup; each relation keeps its own official evidence.
+        """
+
+        key = hangul_romanization_key(request.subject)
+        if len(key) < 5:
+            return ()
+        families = set(request.product_families)
+        eligible = [
+            relation
+            for relation in self.bundle.relations
+            if relation.capability is request.capability
+            and (
+                not families
+                or relation.product_family is None
+                or relation.product_family in families
+            )
+            and relation.overlaps(request.time_range)
+        ]
+        entity_scores: dict[str, float] = {}
+        label_scores: dict[str, float] = {}
+        for relation in eligible:
+            for entity in (relation.subject, relation.object):
+                if entity.entity_id in entity_scores:
+                    continue
+                best = 0.0
+                for label in entity.labels():
+                    if label not in label_scores:
+                        label_scores[label] = latin_label_phonetic_score(key, label)
+                    best = max(best, label_scores[label])
+                entity_scores[entity.entity_id] = best
+        # Only entities that clear the threshold compete; a whole graph holds
+        # thousands of names, so a sub-threshold runner-up (``Emerson`` next to
+        # ``Cambricon``) is noise, not an ambiguity.
+        ranked = sorted(
+            (
+                (score, entity_id)
+                for entity_id, score in entity_scores.items()
+                if score >= PHONETIC_MATCH_THRESHOLD
+            ),
+            key=lambda item: (-item[0], item[1]),
+        )
+        if not ranked:
+            return ()
+        if len(ranked) > 1 and ranked[0][0] - ranked[1][0] < PHONETIC_MARGIN:
+            return ()
+        winner = ranked[0][1]
+        return tuple(
+            relation
+            for relation in eligible
+            if winner in (relation.subject.entity_id, relation.object.entity_id)
+        )[: request.top_k]
 
 
 def seal_temporal_relation_bundle(

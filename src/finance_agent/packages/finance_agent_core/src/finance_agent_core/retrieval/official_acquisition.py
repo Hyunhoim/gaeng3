@@ -4,7 +4,6 @@ import re
 import unicodedata
 import urllib.parse
 from datetime import date
-from difflib import SequenceMatcher
 from enum import StrEnum
 from time import perf_counter
 from typing import Protocol
@@ -17,7 +16,6 @@ from finance_agent_core.config.source_registry import (
     OfficialSourceRegistryError,
 )
 from finance_agent_core.contracts.external_knowledge import KnowledgeRequirement
-from finance_agent_core.retrieval.hangul_romanization import hangul_romanization_key
 from finance_agent_core.retrieval.official_connector import (
     BoundedOfficialDiscovery,
     OfficialConnectorError,
@@ -45,9 +43,6 @@ from finance_agent_core.retrieval.temporal_relations import (
 # read, not the whole transfer, so a large PDF that keeps delivering bytes still
 # completes; only a host that stops answering is abandoned.
 _MAX_FETCH_TIMEOUT_SECONDS = 10.0
-
-
-_LATIN_LABEL = re.compile(r"[A-Za-z][A-Za-z0-9&.,'()/ -]{1,120}")
 
 
 class OfficialEvidenceAcquisitionStatus(StrEnum):
@@ -315,59 +310,6 @@ class OfficialEvidenceAcquisitionCoordinator:
         ):
             raise ValueError("link resolver and connector use different source registries")
 
-    def _cross_script_cached(
-        self,
-        requirement: KnowledgeRequirement,
-    ) -> tuple[TemporalRelationRecord, ...]:
-        """Reach a Latin-labelled cached relation from a Hangul subject.
-
-        A prebuilt holdings graph carries the publisher's spelling
-        (``Cambricon Technologies Corp Ltd``) while the question says ``캠브리콘``.
-        This mirrors the live extractor's recovery rule: one phonetic key of the
-        Hangul subject must be uniquely close to a source-authored Latin label.
-        The alias only addresses the lookup; the relation keeps its own official
-        evidence and still passes the provided-DB intersection afterwards.
-        """
-
-        romanized = hangul_romanization_key(requirement.subject)
-        if len(romanized) < 5:
-            return ()
-        families = set(requirement.product_families)
-        eligible = [
-            relation
-            for relation in self.relation_store.bundle.relations
-            if relation.capability is requirement.capability
-            and (
-                not families
-                or relation.product_family is None
-                or relation.product_family in families
-            )
-            and relation.overlaps(requirement.time_range)
-        ]
-        scored: dict[str, float] = {}
-        for relation in eligible:
-            for label in (*relation.subject.labels(), *relation.object.labels()):
-                if label in scored or not _LATIN_LABEL.fullmatch(label):
-                    continue
-                folded = "".join(ch for ch in label.casefold() if ch.isalnum())
-                length_ratio = len(folded) / len(romanized)
-                if not 0.55 <= length_ratio <= 1.45:
-                    scored[label] = 0.0
-                    continue
-                scored[label] = SequenceMatcher(None, romanized, folded).ratio()
-        ranked = sorted(
-            ((score, label) for label, score in scored.items() if score >= 0.64),
-            key=lambda item: (-item[0], item[1].casefold()),
-        )
-        if not ranked or (len(ranked) > 1 and ranked[0][0] - ranked[1][0] < 0.08):
-            return ()
-        best = ranked[0][1]
-        return tuple(
-            relation
-            for relation in eligible
-            if best in (*relation.subject.labels(), *relation.object.labels())
-        )
-
     def acquire(
         self,
         requirement: KnowledgeRequirement,
@@ -449,7 +391,15 @@ class OfficialEvidenceAcquisitionCoordinator:
                 ):
                     cached_by_id.setdefault(relation.relation_id, relation)
         if not cached_by_id and not provided_product_evidence_dates:
-            for relation in self._cross_script_cached(requirement):
+            for relation in self.relation_store.search_cross_script(
+                TemporalRelationSearchRequest(
+                    capability=requirement.capability,
+                    subject=requirement.subject,
+                    product_families=requirement.product_families,
+                    time_range=requirement.time_range,
+                    top_k=min(top_k, 50),
+                )
+            ):
                 cached_by_id.setdefault(relation.relation_id, relation)
         cached = tuple(cached_by_id.values())[: min(top_k, 50)]
         if cached:

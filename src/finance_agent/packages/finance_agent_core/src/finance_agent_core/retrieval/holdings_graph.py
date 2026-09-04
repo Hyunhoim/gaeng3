@@ -327,25 +327,31 @@ def _header_product(
     # (``TIGER 200 커버드콜OTM`` vs ``TIGER 200커버드콜OTM``), so compare identities
     # the way the DB intersection does: NFKC, casefolded, alphanumerics only.
     folded = normalize_product_identity(header)
-    best_surface: dict[str, str] = {}
+    surfaces_by_product: dict[str, tuple[str, ...]] = {}
     for candidate in candidates:
-        surfaces = [
+        surfaces_by_product[candidate.product_id] = tuple(
             normalized
             for surface in (candidate.product_name, *candidate.aliases)
             if (normalized := normalize_product_identity(surface)) and normalized in folded
-        ]
-        best_surface[candidate.product_id] = max(surfaces, key=len, default="")
-    kept = tuple(
-        candidate
-        for candidate in candidates
-        if not any(
-            other != candidate.product_id
-            and best_surface[candidate.product_id]
-            and best_surface[candidate.product_id] != surface
-            and best_surface[candidate.product_id] in surface
-            for other, surface in best_surface.items()
         )
-    )
+
+    def contained_in_another(candidate: ProvidedProductCandidate) -> bool:
+        own = surfaces_by_product[candidate.product_id]
+        others = [
+            surface
+            for product_id, surfaces in surfaces_by_product.items()
+            if product_id != candidate.product_id
+            for surface in surfaces
+        ]
+        # A candidate matched only through strings that sit inside another
+        # candidate's matched name (``tiger200`` inside ``tiger200헬스케어``) is
+        # the sibling, not the page's product.  An ISIN or ticker match of its
+        # own keeps it in contention.
+        return bool(own) and all(
+            any(surface != other and surface in other for other in others) for surface in own
+        )
+
+    kept = tuple(candidate for candidate in candidates if not contained_in_another(candidate))
     return kept or candidates
 
 
