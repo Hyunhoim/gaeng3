@@ -20,6 +20,7 @@
     "src/finance_agent_core/answering/verifier.py",
     "src/finance_agent_core/audit/cli.py",
     "src/finance_agent_core/audit_validation_cli.py",
+    "src/finance_agent_core/config/pending_source_registry_extension.json",
     "src/finance_agent_core/release_cli.py",
     "src/finance_agent_core/retrieval/schema_shadow.py",
     "src/finance_agent_core/storage/cli.py",
