@@ -786,6 +786,11 @@ def _product_entity(candidate: ProvidedProductCandidate) -> TemporalEntity:
     )
 
 
+_KODEX_PRODUCT_PAGE_SOURCES = frozenset(
+    {"samsungfund-kodex-product", "samsungfund-kodex-product-mobile"}
+)
+
+
 class VerifiedLiveRelationExtractor:
     """Conservative exact-span extraction from an approved official source.
 
@@ -930,7 +935,10 @@ class VerifiedLiveRelationExtractor:
 
     @staticmethod
     def _kodex_product_page_id(snapshot: OfficialSourceSnapshot) -> str | None:
-        if snapshot.source.source_id != "samsungfund-kodex-product":
+        # The mobile product page is the same publisher's page for the same
+        # opaque ID (the holdings graph binds through it when www is throttled);
+        # the linked JSON/PDF resources themselves still resolve on www only.
+        if snapshot.source.source_id not in _KODEX_PRODUCT_PAGE_SOURCES:
             return None
         parsed = urlsplit(snapshot.source_uri)
         if parsed.path != "/etf/product/view.do":

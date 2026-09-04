@@ -326,6 +326,7 @@ class OfficialEvidenceAcquisitionCoordinator:
         max_total_bytes: int = 16 * 1024 * 1024,
         deadline_ms: int = 12_000,
         force_live_discovery: bool = False,
+        seed_candidates: tuple[OfficialDiscoveryCandidate, ...] = (),
     ) -> OfficialEvidenceAcquisitionResult:
         if (
             len(discovery_terms) > 3
@@ -416,6 +417,10 @@ class OfficialEvidenceAcquisitionCoordinator:
                 rejected_candidate_count=0,
                 search_complete=True,
             )
+        if seed_candidates:
+            # The graph already names this product's official pages; live search
+            # is only a fallback here, so it gets a small share of the budget.
+            max_search_queries = min(max_search_queries, 3)
         report_method = getattr(
             self.discovery_provider,
             "discover_live_report" if force_live_discovery else "discover_report",
@@ -500,6 +505,16 @@ class OfficialEvidenceAcquisitionCoordinator:
                 ),
             )
         )
+        if seed_candidates:
+            # Seeds are official page URLs the sealed graph already binds to the
+            # required product (its own evidence), so they outrank any search
+            # result: site search for ``KODEX 코스닥150`` happily returns the
+            # sibling ``코스닥150롱 코스피200숏선물`` page first.
+            seed_urls = {candidate.url for candidate in seed_candidates}
+            discovered_pool = (
+                *seed_candidates,
+                *(candidate for candidate in discovered_pool if candidate.url not in seed_urls),
+            )
 
         def is_time_eligible(candidate: OfficialDiscoveryCandidate) -> bool:
             if (
