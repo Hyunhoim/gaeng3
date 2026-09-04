@@ -35,6 +35,7 @@ from finance_agent_core.retrieval.official_acquisition import (
     OfficialEvidenceAcquisitionResult,
     OfficialEvidenceAcquisitionStatus,
 )
+from finance_agent_core.retrieval.official_connector import OfficialDiscoveryCandidate
 from finance_agent_core.retrieval.official_live_evidence import (
     OfficialLiveEvidenceError,
     VerifiedLiveRelationExtractor,
@@ -128,6 +129,11 @@ def _relation_survives_universe(relation, approved_candidate_keys) -> bool:
     ):
         return True
     return (relation.product_family, relation.product_id) in approved_candidate_keys
+
+
+_GRAPH_PAGE_URL = re.compile(
+    r"/etf/product/view\.do\?id=|/tigeretf/ko/product/search/detail/index\.do\?ksdFund="
+)
 
 
 class ExternalKnowledgeRuntime:
@@ -273,6 +279,48 @@ class ExternalKnowledgeRuntime:
         )
         return tuple(dict.fromkeys(terms))[:3]
 
+    def _graph_page_seeds(
+        self,
+        requirement,
+        required_product_key,
+    ) -> tuple[OfficialDiscoveryCandidate, ...]:
+        """Official product pages the sealed graph already binds to this product.
+
+        A dependent step that names one exact product (``선택된 상품의 위험요인``)
+        should open that product's own approved page first.  The graph's
+        evidence carries those URLs with the publisher's identity binding, so
+        they are provenance, not a search guess.  Only pages approved for the
+        requirement's capability are seeded; the connector still fetches and
+        verifies them like any other candidate.
+        """
+
+        if required_product_key is None:
+            return ()
+        registry = self.acquisition.connector.registry
+        seeds: dict[str, OfficialDiscoveryCandidate] = {}
+        for relation in self.acquisition.relation_store.bundle.relations:
+            if (relation.product_family, relation.product_id) != required_product_key:
+                continue
+            for evidence in relation.evidence:
+                if evidence.source_uri in seeds or not _GRAPH_PAGE_URL.search(evidence.source_uri):
+                    continue
+                try:
+                    registry.authorize_url(evidence.source_uri, requirement.capability)
+                except Exception:  # noqa: BLE001 - unapproved for this capability
+                    continue
+                # Undated official product pages are dated at the evidence
+                # cutoff, exactly as the graph builder and the holdings link
+                # resolver do; otherwise the connector keeps the page as
+                # navigation-only and the extractor cannot bind identity to it.
+                seeds[evidence.source_uri] = OfficialDiscoveryCandidate(
+                    url=evidence.source_uri,
+                    title=evidence.title,
+                    as_of=registry.evidence_cutoff,
+                )
+                if len(seeds) >= 4:
+                    return tuple(seeds.values())
+        return tuple(seeds.values())
+
     @staticmethod
     def _provided_product_discovery_surfaces(
         requirement,
@@ -330,9 +378,7 @@ class ExternalKnowledgeRuntime:
             for surface in surfaces:
                 if len(normalize_product_identity(surface)) < 2:
                     continue
-                candidate_dates.update(
-                    _dates_bound_to_product_surface(question, surface)
-                )
+                candidate_dates.update(_dates_bound_to_product_surface(question, surface))
             if len(candidate_dates) != 1:
                 continue
             selected_date = next(iter(candidate_dates))
@@ -407,14 +453,14 @@ class ExternalKnowledgeRuntime:
         remaining_fetches = search_plan.budget.max_fetches
         remaining_bytes = search_plan.budget.max_total_bytes
         acquisitions: list[OfficialEvidenceAcquisitionResult] = []
+        partial_reasons: set[str] = set()
         resolved: dict[str, tuple] = {}
         all_relations = {}
         all_snapshots = []
 
         identity_evidence: dict[str, ExternalEvidenceReference] = {}
         approved_candidate_keys = frozenset(
-            (candidate.product_family, candidate.product_id)
-            for candidate in universe.candidates
+            (candidate.product_family, candidate.product_id) for candidate in universe.candidates
         )
 
         def terminal(status, reasons, *, complete=False):
@@ -484,6 +530,21 @@ class ExternalKnowledgeRuntime:
                     (perf_counter() - started) * 1000
                 )
                 targets_left = len(targets) - target_index
+                budget = search_plan.budget
+                if requirement.depends_on and requirement_relations:
+                    # Verified targets already answer this step.  Unlisted
+                    # subsidiaries would burn the rest of the budget on searches
+                    # that cannot succeed, starving the requirements that still
+                    # follow (e.g. the selected product's risk factors).  Keep
+                    # half of every budget for them and record the partial scope.
+                    if (
+                        remaining_queries <= budget.max_search_queries // 2
+                        or remaining_fetches <= budget.max_fetches // 2
+                        or remaining_bytes <= budget.max_total_bytes // 2
+                        or remaining_ms <= budget.deadline_ms // 2
+                    ):
+                        partial_reasons.add("dependency_targets_partially_verified")
+                        break
                 if (
                     min(remaining_queries, remaining_fetches, remaining_bytes) <= 0
                     or remaining_ms < 100
@@ -570,6 +631,7 @@ class ExternalKnowledgeRuntime:
                         universe,
                     ),
                     provided_product_evidence_dates=product_evidence_dates,
+                    seed_candidates=self._graph_page_seeds(effective, required_product_key),
                     top_k=min(
                         search_plan.budget.max_candidates_per_requirement,
                         max(1, remaining_fetches // targets_left),
@@ -629,11 +691,7 @@ class ExternalKnowledgeRuntime:
                     for relation in extracted
                     if _relation_survives_universe(relation, approved_candidate_keys)
                 )
-                if (
-                    not extracted
-                    and raw_relation_evidence_found
-                    and item.search_complete
-                ):
+                if not extracted and raw_relation_evidence_found and item.search_complete:
                     # The official evidence search completed and proved only
                     # products outside the DB-filtered universe.  This is a
                     # verified empty intersection, not a retrieval failure.
@@ -642,8 +700,7 @@ class ExternalKnowledgeRuntime:
                 evidence_snapshots = item.snapshots
                 if (
                     not extracted
-                    and item.status
-                    is OfficialEvidenceAcquisitionStatus.LIVE_EVIDENCE_CANDIDATE
+                    and item.status is OfficialEvidenceAcquisitionStatus.LIVE_EVIDENCE_CANDIDATE
                     and item.search_query_count == 0
                     and isinstance(
                         self.acquisition.discovery_provider,
@@ -704,9 +761,7 @@ class ExternalKnowledgeRuntime:
                             extracted = live_item.relations
                         else:
                             all_snapshots.extend(live_item.snapshots)
-                            evidence_snapshots = tuple(
-                                (*evidence_snapshots, *live_item.snapshots)
-                            )
+                            evidence_snapshots = tuple((*evidence_snapshots, *live_item.snapshots))
                             try:
                                 extract_many = getattr(
                                     self.live_relation_extractor,
@@ -776,7 +831,14 @@ class ExternalKnowledgeRuntime:
                     {relation.relation_id: relation for relation in extracted}
                 )
 
-            if target_incomplete:
+            if target_incomplete and requirement.depends_on and requirement_relations:
+                # ``자회사를 편입한 ETF``: the parent relation also yields entities
+                # that no official product document can name (unlisted
+                # subsidiaries).  Their searches end unverified, but the
+                # verified targets are a real, evidence-backed answer.  Keep it
+                # and say so instead of discarding the whole chain.
+                partial_reasons.add("dependency_targets_partially_verified")
+            elif target_incomplete:
                 reasons = {
                     reason
                     for item in acquisitions
@@ -906,7 +968,7 @@ class ExternalKnowledgeRuntime:
                 search_complete=True,
                 verified_product_keys=product_keys,
                 verified_product_ids=tuple(product_id for _family, product_id in product_keys),
-                reason_codes=("verified_external_db_intersection",),
+                reason_codes=tuple(sorted({"verified_external_db_intersection", *partial_reasons})),
             ),
             search_plan=search_plan,
             candidate_universe=universe,

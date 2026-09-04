@@ -89,7 +89,9 @@ _CAPABILITY_SEARCH_CUES: dict[KnowledgeCapability, tuple[str, str, str, str]] = 
     KnowledgeCapability.CORPORATE_SUBSIDIARY: (
         "자회사",
         "subsidiaries",
-        "회사소개 관계회사",
+        # KIND's business report (사업보고서) lists 종속회사 in one table; the
+        # disclosure viewer pages that "관계회사" surfaced carry no such table.
+        "사업보고서 종속회사",
         "annual report subsidiaries",
     ),
     KnowledgeCapability.SECTOR_THEME_HISTORY: (
