@@ -262,6 +262,40 @@ _EXTERNAL_CONTROL_FAMILY_SCOPES = frozenset(
 )
 
 
+_EXTERNAL_RELATION_PARTICLE_SPLIT = re.compile(r"(?:의|을|를|이|가|은|는|과|와|에|로|으로)")
+_EXTERNAL_RELATION_VERB_ENDINGS = (
+    "하였던",
+    "되었던",
+    "하는",
+    "되는",
+    "했던",
+    "됐던",
+    "하고",
+    "되고",
+    "한",
+    "된",
+    "했",
+    "됐",
+    "함",
+    "됨",
+)
+
+
+def _external_relation_atom_variants(atoms: set[str]) -> set[str]:
+    """Derive particle-split pieces and verb stems from normalized relation atoms."""
+
+    variants: set[str] = set()
+    for atom in atoms:
+        for piece in _EXTERNAL_RELATION_PARTICLE_SPLIT.split(atom):
+            if len(piece) < 2:
+                continue
+            variants.add(piece)
+            for ending in _EXTERNAL_RELATION_VERB_ENDINGS:
+                if piece.endswith(ending) and len(piece) - len(ending) >= 2:
+                    variants.add(piece[: -len(ending)])
+    return variants
+
+
 def _external_control_span_is_authorized(span: str, requirements: tuple) -> bool:
     """Return whether one compiler control span is wholly external semantics.
 
@@ -285,6 +319,14 @@ def _external_control_span_is_authorized(span: str, requirements: tuple) -> bool
     }
     relation_atoms.discard("")
     subject_atoms.discard("")
+    # The DB compiler segments the same words differently from the external
+    # sanitizer (``자회사를 편입`` versus ``에코프로의 자회사`` + ``편입한``).
+    # Let relation evidence also contribute its particle-split pieces and verb
+    # stems so a span made only of relation words still tiles.  Pieces shorter
+    # than two characters never become atoms, and DB fields, values and ranking
+    # words are still absent from every atom set.
+    relation_atoms |= _external_relation_atom_variants(relation_atoms)
+    subject_atoms |= _external_relation_atom_variants(subject_atoms)
     # The DB compiler can report only the relation-bearing suffix of a longer
     # server-authorized evidence span (for example ``테마와 연결`` from
     # ``심해로봇 테마와 연결 이력이 있는``).  It is safe to remove that
@@ -1065,7 +1107,12 @@ class RoutedFinanceAgent:
         """
 
         candidate_ids: dict[ProductFamily, set[str]] = {}
-        scoped_questions = self.compiler.scope_family_questions(question, families)
+        # A bare ``ETF`` names the generic domestic+overseas class, so the same
+        # DB conditions apply to each market; only explicit per-family clauses
+        # need the cross-family ownership scoping.
+        scoped_questions = self.compiler.generic_etp_class_scope(question, families)
+        if scoped_questions is None:
+            scoped_questions = self.compiler.scope_family_questions(question, families)
         for family in families:
             scoped_question = scoped_questions[family]
             decision = RouteDecision(
