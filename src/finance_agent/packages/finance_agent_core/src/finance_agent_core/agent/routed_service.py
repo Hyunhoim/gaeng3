@@ -5,6 +5,7 @@ import hashlib
 import json
 import re
 import sqlite3
+from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
@@ -50,6 +51,7 @@ from finance_agent_core.agent.intent_analysis import (
     sanitize_server_authorized_knowledge_draft,
     verify_intent_analysis,
 )
+from finance_agent_core.agent.knowledge_planning import question_binds_external_ranking
 from finance_agent_core.agent.knowledge_router import (
     DeterministicKnowledgeRouter,
     KnowledgeRouteDecision,
@@ -83,11 +85,18 @@ from finance_agent_core.agent.providers.hyperclova import (
 from finance_agent_core.agent.router import IntentRouter, extract_product_routing_hints
 from finance_agent_core.agent.safety import SafetyDisposition
 from finance_agent_core.agent.semantic_aliases import ranking_intent_present
-from finance_agent_core.agent.semantic_gate import SemanticCoverageDecision
+from finance_agent_core.agent.semantic_gate import (
+    SemanticCoverageDecision,
+    is_bare_direction_span,
+    is_bare_risk_span,
+    is_branded_product_span,
+)
 from finance_agent_core.answering.final_generation import FinalAnswerProvider
 from finance_agent_core.answering.models import AnswerComposition
 from finance_agent_core.config import QualityStatus, load_field_registry
+from finance_agent_core.config.knowledge_coverage import KnowledgeCapability
 from finance_agent_core.contracts import QueryPlan, RouteDecision, RouteDisposition
+from finance_agent_core.contracts.external_knowledge import KnowledgeIntentRequirement
 from finance_agent_core.contracts.knowledge import (
     KnowledgePlanAuthorityError,
     canonical_knowledge_plan_sha256,
@@ -1457,10 +1466,11 @@ class RoutedFinanceAgent:
                 span
                 for span in public_coverage.ambiguity_spans
                 if has_external_requirements
-                and any(
-                    span in requirement.relation_span
-                    or requirement.relation_span in span
-                    for requirement in knowledge_draft.knowledge_requirements
+                and _external_route_covers_ambiguity(
+                    span,
+                    question=question,
+                    requirements=knowledge_draft.knowledge_requirements,
+                    product_mentions=product_mentions,
                 )
             }
             unresolved_public_ambiguities = tuple(
@@ -4140,3 +4150,52 @@ class RoutedFinanceAgent:
             source_manifest=None,
             answer_composition=None,
         )
+
+
+def _external_route_covers_ambiguity(
+    span: str,
+    *,
+    question: str,
+    requirements: Sequence[KnowledgeIntentRequirement],
+    product_mentions: Sequence[str],
+) -> bool:
+    """Decide whether a compiled external relation already owns an ambiguity span.
+
+    The SemanticCoverageGate guards the SQL path, so it flags a branded product
+    name as a possible filter, a direction word without a registry metric, and a
+    bare ``위험`` that may mean the DB risk grade.  Once the server has compiled
+    an explicit external relation those spans are inputs the external plan
+    consumes and validates itself: the mentioned product is the relation
+    subject (or a name the DB intersection settles), the direction word is bound
+    (or rejected) by the plan compiler, and
+    ``위험`` names the risk-factor capability.  Phase 8 lost 46 of its 79 false
+    blocks to exactly these three.  Everything else -- ``가격 매력``,
+    ``안정적인``, ``대표적인`` -- keeps the gate's CLARIFY.
+    """
+
+    text = span.strip()
+    if not text:
+        return False
+    for requirement in requirements:
+        for owned in (requirement.subject_span, requirement.relation_span):
+            if text in owned or owned in text:
+                return True
+    if any(
+        text in mention or mention in text
+        for mention in product_mentions
+        if len(mention.strip()) >= 2
+    ):
+        return True
+    # A branded name the identity surfaces missed is still a product the
+    # external runtime resolves against the provided DB: an unknown name ends
+    # in NOT_FOUND there, never in a fabricated product.
+    if is_branded_product_span(text):
+        return True
+    if is_bare_direction_span(text):
+        return question_binds_external_ranking(question)
+    if is_bare_risk_span(text):
+        return any(
+            requirement.capability is KnowledgeCapability.PRODUCT_RISK_FACTORS
+            for requirement in requirements
+        )
+    return False
