@@ -6,6 +6,7 @@ import json
 import re
 import unicodedata
 from collections import OrderedDict
+from datetime import date
 from difflib import SequenceMatcher
 from html.parser import HTMLParser
 from threading import Lock
@@ -853,6 +854,22 @@ def _precise_risk_evidence_units(excerpt: str, *, limit: int = 5) -> tuple[str, 
     )
 
 
+def _observed_at(snapshot: OfficialSourceSnapshot) -> date:
+    """Return the date the relation was observed in ``snapshot``.
+
+    ``as_of`` comes from document metadata and can predate publication (a
+    factsheet whose PDF metadata carries the fund inception date).  A relation
+    is observed no earlier than the document that states it was published, so
+    the later of the two dates is the observation date.  Without this the
+    record validator rejects ``observed_at < valid_from`` and the runtime
+    silently drops a real relation as ``live_exact_evidence_span_missing``.
+    """
+
+    if snapshot.published_at is not None and snapshot.published_at > snapshot.as_of:
+        return snapshot.published_at
+    return snapshot.as_of
+
+
 def _entity_id(prefix: str, value: str) -> str:
     digest = hashlib.sha256(value.encode("utf-8")).hexdigest()[:24]
     return f"{prefix}-{digest}"
@@ -1228,7 +1245,7 @@ class VerifiedLiveRelationExtractor:
                                 product_id=product.product_id,
                                 valid_from=api_snapshot.as_of,
                                 valid_to=api_snapshot.as_of,
-                                observed_at=api_snapshot.as_of,
+                                observed_at=_observed_at(api_snapshot),
                                 evidence=evidence,
                             )
         return tuple(relations[key] for key in sorted(relations))
@@ -1293,7 +1310,7 @@ class VerifiedLiveRelationExtractor:
                             product_id=product.product_id,
                             valid_from=pdf_snapshot.published_at or pdf_snapshot.as_of,
                             valid_to=pdf_snapshot.published_at or pdf_snapshot.as_of,
-                            observed_at=pdf_snapshot.as_of,
+                            observed_at=_observed_at(pdf_snapshot),
                             evidence=tuple(
                                 sorted(
                                     (
@@ -1520,7 +1537,7 @@ class VerifiedLiveRelationExtractor:
                             ),
                             valid_from=snapshot.published_at or snapshot.as_of,
                             valid_to=snapshot.published_at or snapshot.as_of,
-                            observed_at=snapshot.as_of,
+                            observed_at=_observed_at(snapshot),
                             evidence=(
                                 ExternalEvidenceReference(
                                     evidence_id=evidence_id,
@@ -1736,7 +1753,7 @@ class VerifiedLiveRelationExtractor:
                             # from the user's requested interval.
                             valid_from=snapshot.published_at or snapshot.as_of,
                             valid_to=snapshot.published_at or snapshot.as_of,
-                            observed_at=snapshot.as_of,
+                            observed_at=_observed_at(snapshot),
                             evidence=tuple(sorted(evidence, key=lambda item: item.evidence_id)),
                         )
                     )
