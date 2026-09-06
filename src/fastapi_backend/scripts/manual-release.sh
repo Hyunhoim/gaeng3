@@ -123,7 +123,8 @@ step_release() {
         [ -f "$RELATION_GRAPH" ] || die "구성종목 Graph 파일이 없습니다: $RELATION_GRAPH"; chmod 444 "$RELATION_GRAPH" 2>/dev/null || true; fi
     if [ "$ADAPTIVE" = true ]; then require_adaptive_inputs; fi
     IMAGE_ID="$(docker image inspect "$IMAGE_TAG" --format '{{.Id}}')"
-    rm -rf "$RELEASE_DIR/work" "$RELEASE_DIR/release"
+    # 이전 실행이 root 소유(0444)로 남긴 산출물도 지울 수 있게 컨테이너 안에서 정리한다
+    docker run --rm -v "$RELEASE_DIR:$RELEASE_DIR" alpine sh -c "rm -rf '$RELEASE_DIR/work' '$RELEASE_DIR/release'"
     mkdir -p "$RELEASE_DIR/work" "$RELEASE_DIR/release"
     log "3/6 매니페스트·바인딩·외부지식 아티팩트 생성 (도구 컨테이너, python 3.12, 모드 $EXTERNAL_MODE, adaptive $ADAPTIVE)"
     # 입력 파일은 모두 같은 절대경로로 읽기 전용 마운트한다.
