@@ -27,7 +27,7 @@ RELEASE_DIR="${RELEASE_DIR:-$HOME/finance-agent-release}"
 RAW_DATA_DIR="${RAW_DATA_DIR:-}"
 SECRETS_DIR="${SECRETS_DIR:-$HOME/.secrets/finance-agent}"
 BIND_ADDRESS="${BIND_ADDRESS:-127.0.0.1}"
-PORT="${PORT:-80}"
+PORT="${PORT:-8080}"
 CONTAINER_NAME="${CONTAINER_NAME:-finance-agent-release}"
 RELEASE_ENV="${RELEASE_ENV:-evaluation}"
 EXTERNAL_MODE="${EXTERNAL_MODE:-approved_corpus_cache_only}"
@@ -35,11 +35,13 @@ RELATION_GRAPH="${RELATION_GRAPH:-$REPO_DIR/src/finance_agent/artifacts/runtime/
 TOOLS_IMAGE="${TOOLS_IMAGE:-docker.io/library/python@sha256:4766d8b510c428e595d74b9cc5bbb2fae8e26316fffb4adc89908d79aacd58a2}"
 
 # 승인 corpus 캐시 입력 (cache 모드)
-APPROVED_CORPUS_MANIFEST="${APPROVED_CORPUS_MANIFEST:-}"
-APPROVED_CORPUS_ROOT="${APPROVED_CORPUS_ROOT:-}"
-APPROVED_DOCUMENT_DENSE="${APPROVED_DOCUMENT_DENSE:-}"
-DOCUMENT_CACHE_ACTIVATION="${DOCUMENT_CACHE_ACTIVATION:-}"
-APPROVED_TEMPORAL_RELATIONS="${APPROVED_TEMPORAL_RELATIONS:-}"
+# 기본값은 저장소에 포함된 승인 문서 묶음(src/finance_agent/artifacts/approved-corpus)이다.
+APPROVED_CORPUS_DIR="${APPROVED_CORPUS_DIR:-$REPO_DIR/src/finance_agent/artifacts/approved-corpus}"
+APPROVED_CORPUS_MANIFEST="${APPROVED_CORPUS_MANIFEST:-$APPROVED_CORPUS_DIR/runtime/approved-corpus-manifest.json}"
+APPROVED_CORPUS_ROOT="${APPROVED_CORPUS_ROOT:-$APPROVED_CORPUS_DIR/corpus-root}"
+APPROVED_DOCUMENT_DENSE="${APPROVED_DOCUMENT_DENSE:-$APPROVED_CORPUS_DIR/runtime/release-bundle/document-dense.json}"
+DOCUMENT_CACHE_ACTIVATION="${DOCUMENT_CACHE_ACTIVATION:-$APPROVED_CORPUS_DIR/runtime/release-bundle/document-cache-activation.json}"
+APPROVED_TEMPORAL_RELATIONS="${APPROVED_TEMPORAL_RELATIONS:-$APPROVED_CORPUS_DIR/runtime/release-bundle/temporal-relations.json}"
 
 # adaptive semantic 입력
 ADAPTIVE="${ADAPTIVE:-true}"

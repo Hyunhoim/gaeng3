@@ -59,19 +59,12 @@ curl --fail http://127.0.0.1:18001/health
 
 실행은 한 명령이다. 이미지 빌드 → 데이터 준비 → 릴리스 봉인(코드·DB·색인·문서 묶음의 SHA-256 결속) →
 컨테이너 기동 → `/health`·`/answer` 확인 순서로 진행하며, 봉인 값과 실제 파일이 다르면 시작하지 않는다.
+문서 묶음 경로는 저장소 안의 기본값을 쓴다.
 
 ```bash
-C=$PWD/src/finance_agent/artifacts/approved-corpus
 RAW_DATA_DIR=/path/to/2.금융상품_20260824 \
 SECRETS_DIR=$HOME/.secrets/finance-agent \
 KURE_CACHE_DIR=$HOME/kure-cache \
-EXTERNAL_MODE=approved_corpus_cache_only ADAPTIVE=true \
-APPROVED_CORPUS_MANIFEST=$C/runtime/approved-corpus-manifest.json \
-APPROVED_CORPUS_ROOT=$C/corpus-root \
-APPROVED_DOCUMENT_DENSE=$C/runtime/release-bundle/document-dense.json \
-DOCUMENT_CACHE_ACTIVATION=$C/runtime/release-bundle/document-cache-activation.json \
-APPROVED_TEMPORAL_RELATIONS=$C/runtime/release-bundle/temporal-relations.json \
-BIND_ADDRESS=127.0.0.1 PORT=8080 \
   src/fastapi_backend/scripts/manual-release.sh all
 ```
 
@@ -81,7 +74,7 @@ curl --get "http://127.0.0.1:8080/answer" \
   --data-urlencode "question=캠브리콘이 편입된 중국 반도체 ETF를 알려줘"
 ```
 
-중지는 `CONTAINER_NAME=finance-agent-release src/fastapi_backend/scripts/manual-release.sh stop`.
+중지는 `src/fastapi_backend/scripts/manual-release.sh stop`. 포트는 `PORT=`로 바꾼다.
 Docker 없이 실행하려면 Python 3.12에서 `pip install -r requirements.txt` 뒤 [Agent README](src/finance_agent/README.md)를 따른다.
 환경변수 전체 목록은 [Backend README](src/fastapi_backend/README.md)에 있다.
 
