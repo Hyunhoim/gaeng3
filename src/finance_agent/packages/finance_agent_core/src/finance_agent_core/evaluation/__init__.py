@@ -1,6 +1,7 @@
 from finance_agent_core.evaluation.briefing_examples import (
     BriefingAnswerability,
     BriefingDifficulty,
+    BriefingEvaluationMode,
     BriefingExampleCase,
     BriefingExampleCaseResult,
     BriefingExampleReport,
@@ -146,6 +147,7 @@ __all__ = [
     "BehavioralTestType",
     "BriefingAnswerability",
     "BriefingDifficulty",
+    "BriefingEvaluationMode",
     "BriefingExampleCase",
     "BriefingExampleCaseResult",
     "BriefingExampleReport",

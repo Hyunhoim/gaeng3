@@ -82,6 +82,143 @@ def test_same_surface_can_be_a_holding_and_an_explicit_product_in_one_question()
     assert resolve_question_identity_surfaces(records, question) == ("KODEX 200",)
 
 
+def test_official_profile_targets_cannot_become_product_identity_aliases() -> None:
+    def record(product_id: str, ticker: str, short_name: str) -> ProductIdentityRecord:
+        return ProductIdentityRecord(
+            product_family="overseas_etp",
+            product_id=product_id,
+            product_name=f"{short_name} Synthetic ETF",
+            ticker=f"{ticker}.O",
+            isin=None,
+            short_name=short_name,
+            public_offering=None,
+            is_quarantined=False,
+        )
+
+    records = {
+        ProductFamily.OVERSEAS_ETP: (
+            record("AMX:ALFA.O", "ALFA", "Alpha Source"),
+            record("AMX:BETA.O", "BETA", "Beta Source"),
+            # This approved-DB alias overlaps punctuation-normalized words in
+            # the target holdings list and must not narrow source products.
+            record("AMX:CK.O", "CK", "Corp K"),
+        )
+    }
+    question = (
+        "ALFA, BETA 두 상품의 공식 상위 10개 편입 종목을 보면 "
+        "Mining Corp, Kappa Systems 두 종목이 모두 들어 있는 ETF를 찾아줘."
+    )
+
+    assert resolve_question_identity_surfaces(records, question) == ("ALFA", "BETA")
+
+
+def test_each_official_profile_clause_can_bind_its_own_source_product() -> None:
+    def record(product_id: str, ticker: str) -> ProductIdentityRecord:
+        return ProductIdentityRecord(
+            product_family="overseas_etp",
+            product_id=product_id,
+            product_name=f"{ticker} Synthetic ETF",
+            ticker=f"{ticker}.O",
+            isin=None,
+            short_name=ticker,
+            public_offering=None,
+            is_quarantined=False,
+        )
+
+    records = {
+        ProductFamily.OVERSEAS_ETP: (
+            record("AMX:ALFA.O", "ALFA"),
+            record("AMX:BETA.O", "BETA"),
+            record("AMX:GAMMA.O", "GAMMA"),
+        )
+    }
+
+    assert resolve_question_identity_surfaces(
+        records,
+        "ALFA 공식 편입표에서 X를 확인하고 BETA 공식 편입표에서 Y를 확인해줘.",
+    ) == ("ALFA", "BETA")
+    assert resolve_question_identity_surfaces(
+        records,
+        "ALFA 공식 편입표에서 X를 확인하고 BETA의 위험요인을 알려줘.",
+    ) == ("ALFA", "BETA")
+    assert resolve_question_identity_surfaces(
+        records,
+        "ALFA 공식 편입표에서 BETA, GAMMA 두 종목을 확인해줘.",
+    ) == ("ALFA",)
+    assert resolve_question_identity_surfaces(
+        records,
+        "ALFA 공식 편입표에서 BETA를 확인하고 GAMMA 공식 편입표에서 Y를 확인해줘.",
+    ) == ("ALFA", "GAMMA")
+    assert resolve_question_identity_surfaces(
+        records,
+        "ALFA 공식 편입표에서 BETA를 확인해줘. GAMMA ETF의 AUM도 알려줘.",
+    ) == ("ALFA", "GAMMA")
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        "ALFA의 공식 편입종목은 BETA와 GAMMA야. 관련 상품을 찾아줘.",
+        "ALFA 공식 구성종목 목록: BETA, GAMMA. 관련 상품을 찾아줘.",
+        "ALFA가 공식적으로 보유한 종목은 BETA와 GAMMA야. 관련 상품을 찾아줘.",
+    ],
+)
+def test_natural_official_holding_lists_do_not_promote_targets_to_source_products(
+    question: str,
+) -> None:
+    def record(product_id: str, ticker: str) -> ProductIdentityRecord:
+        return ProductIdentityRecord(
+            product_family="overseas_etp",
+            product_id=product_id,
+            product_name=f"{ticker} Synthetic ETF",
+            ticker=f"{ticker}.O",
+            isin=None,
+            short_name=ticker,
+            public_offering=None,
+            is_quarantined=False,
+        )
+
+    records = {
+        ProductFamily.OVERSEAS_ETP: (
+            record("AMX:ALFA.O", "ALFA"),
+            record("AMX:BETA.O", "BETA"),
+            record("AMX:GAMMA.O", "GAMMA"),
+        )
+    }
+
+    assert resolve_question_identity_surfaces(records, question) == ("ALFA",)
+
+
+def test_long_product_identity_suppresses_a_contained_shorter_product_name() -> None:
+    def record(product_id: str, short_name: str) -> ProductIdentityRecord:
+        return ProductIdentityRecord(
+            product_family="domestic_etp",
+            product_id=product_id,
+            product_name=f"한빛 {short_name} 증권상장지수투자신탁",
+            ticker=product_id[-6:],
+            isin=product_id,
+            short_name=short_name,
+            public_offering=None,
+            is_quarantined=False,
+        )
+
+    records = {
+        ProductFamily.DOMESTIC_ETP: (
+            record("KR7000000101", "ALPHA 성장"),
+            record("KR7000000102", "ALPHA 성장TOP10"),
+        )
+    }
+
+    assert resolve_question_identity_surfaces(
+        records,
+        "ALPHA 성장TOP10의 공식 구성종목을 확인해줘.",
+    ) == ("ALPHA 성장TOP10",)
+    assert resolve_question_identity_surfaces(
+        records,
+        "ALPHA 성장TOP10과 ALPHA 성장의 공식 구성종목을 비교해줘.",
+    ) == ("ALPHA 성장TOP10", "ALPHA 성장")
+
+
 def test_indexed_runtime_identity_binding_uses_the_same_holding_boundary(tmp_path) -> None:
     database = tmp_path / "domestic-etp.sqlite3"
     database.write_bytes(b"identity-only")
@@ -609,6 +746,78 @@ def test_valid_external_question_without_evidence_runtime_is_cannot_verify_not_u
     assert result.response.status is BackendStatus.CANNOT_VERIFY
     assert result.response.products == []
     assert result.response.query_plan is not None
+
+
+def test_theme_to_product_to_risk_with_evidence_order_reaches_typed_external_route(
+    sample_database,
+    domestic_sample_database,
+) -> None:
+    question = (
+        "2026년 2월 24일부터 2026년 8월 24일까지 운용사가 공개한 공식 자료에서 "
+        "AI 반도체 테마로 소개된 국내 ETF를 찾아주세요. "
+        "테마 연결 근거의 발행일이 최신인 순서로 최대 5개를 보여주고, "
+        "각 상품의 최신 공식 문서에 적힌 핵심 위험요인도 함께 요약해 주세요."
+    )
+    agent = RoutedFinanceAgent(
+        {
+            ProductFamily.DOMESTIC_ETP: domestic_sample_database[0],
+            ProductFamily.OVERSEAS_ETP: sample_database[0],
+        }
+    )
+
+    result = execute_answer_request(
+        agent,
+        BackendAgentRequest(request_id="theme-risk-evidence-order", question=question),
+    )
+
+    assert result.http_status_code == 200
+    assert result.response.status is BackendStatus.CANNOT_VERIFY
+    assert result.response.query_plan is not None
+    assert result.response.query_plan.evidence_selection is not None
+    assert result.response.query_plan.evidence_selection.order_by == "published_at"
+    assert [
+        requirement.capability
+        for requirement in result.response.query_plan.requirements
+    ] == [
+        KnowledgeCapability.SECTOR_THEME_HISTORY,
+        KnowledgeCapability.PRODUCT_RISK_FACTORS,
+    ]
+
+
+def test_public_route_keeps_two_holding_entities_without_projection_noise(
+    sample_database,
+    domestic_sample_database,
+) -> None:
+    question = (
+        "가장 최근의 공식 구성종목 자료를 기준으로 삼성전자와 SK하이닉스를 "
+        "둘 다 담고 있는 국내 ETF만 찾아 순자산이 큰 순서로 5개 보여주세요. "
+        "두 종목의 편입 비중과 구성종목 기준일도 알려주세요."
+    )
+    agent = RoutedFinanceAgent(
+        {
+            ProductFamily.DOMESTIC_ETP: domestic_sample_database[0],
+            ProductFamily.OVERSEAS_ETP: sample_database[0],
+        }
+    )
+
+    result = execute_answer_request(
+        agent,
+        BackendAgentRequest(request_id="two-holding-entities", question=question),
+    )
+
+    assert result.http_status_code == 200
+    assert result.response.status is BackendStatus.CANNOT_VERIFY
+    assert result.response.query_plan is not None
+    holdings = [
+        requirement
+        for requirement in result.response.query_plan.requirements
+        if requirement.capability is KnowledgeCapability.PORTFOLIO_HOLDINGS
+    ]
+    assert [requirement.subject for requirement in holdings] == [
+        "삼성전자",
+        "SK하이닉스",
+    ]
+    assert result.response.query_plan.holding_match_mode is KnowledgeMatchMode.ALL
 
 
 def test_absent_external_runtime_preserves_typed_knowledge_search_route(

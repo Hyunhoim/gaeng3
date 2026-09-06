@@ -1,0 +1,19 @@
+# Optional release overlay for signed retrieval modes with an approved NAVER
+# API HUB Live Search fallback. Cache-only evaluation releases must not include
+# this file, so no NAVER credential is mounted into their Runtime container.
+services:
+  backend:
+    environment:
+      NAVER_API_HUB_CLIENT_ID_FILE: /run/secrets/naver_api_hub_client_id
+      NAVER_API_HUB_CLIENT_SECRET_FILE: /run/secrets/naver_api_hub_client_secret
+    secrets:
+      - source: naver_api_hub_client_id
+        target: naver_api_hub_client_id
+      - source: naver_api_hub_client_secret
+        target: naver_api_hub_client_secret
+
+secrets:
+  naver_api_hub_client_id:
+    file: ${NAVER_API_HUB_CLIENT_ID_HOST_FILE:?required for signed live retrieval}
+  naver_api_hub_client_secret:
+    file: ${NAVER_API_HUB_CLIENT_SECRET_HOST_FILE:?required for signed live retrieval}

@@ -9,10 +9,16 @@ from dataclasses import dataclass
 from pathlib import Path
 from threading import RLock
 
+from finance_agent_core.agent.document_reference import (
+    DatedOfficialDocumentReference,
+    dated_document_time_bounds,
+    extract_dated_official_document_references,
+)
 from finance_agent_core.agent.source_selection import (
     SourceSelectionSignals,
     normalize_selection_surface,
 )
+from finance_agent_core.config.knowledge_coverage import KnowledgeCapability
 from finance_agent_core.config.source_registry import (
     OfficialSourceRegistry,
     load_official_source_registry,
@@ -22,6 +28,9 @@ from finance_agent_core.contracts.external_knowledge import (
     ExternalKnowledgeSearchPlan,
     ExternalSearchBudget,
     ExternalSearchExecutionReceipt,
+    KnowledgeDocumentBinding,
+    KnowledgeRequirement,
+    KnowledgeTimeRange,
     ProvidedProductCandidate,
     ProvidedProductCandidateUniverse,
 )
@@ -58,15 +67,36 @@ def normalize_product_identity(value: str) -> str:
     )
 
 
-_GENERIC_PRODUCT_SUFFIXES = (
-    "상장지수투자신탁",
-    "상장지수펀드",
-    "etf",
-    "etp",
-    "펀드",
-    "채권",
-    "상품",
+_LEADING_SOURCE_OWNER_DESIGNATOR = re.compile(
+    r"^(?:\(주\)|\(유\)|㈜|주식회사|유한회사)\s*",
+    re.IGNORECASE,
 )
+_TRAILING_SOURCE_OWNER_DESIGNATOR = re.compile(
+    r"\s*(?:\(주\)|\(유\)|㈜|주식회사|유한회사)$",
+    re.IGNORECASE,
+)
+
+
+def source_owner_identity_surface(value: str) -> str:
+    """Remove only explicit legal-form markers from one approved DB owner.
+
+    This is exact legal-name normalization, not fuzzy brand expansion.  It
+    lets a natural ``우리은행`` question match the DB spelling ``(주)우리은행``
+    while keeping unrelated companies and short brand fragments distinct.
+    """
+
+    surface = " ".join(unicodedata.normalize("NFKC", value).split())
+    previous = None
+    while previous != surface:
+        previous = surface
+        surface = _LEADING_SOURCE_OWNER_DESIGNATOR.sub("", surface)
+        surface = _TRAILING_SOURCE_OWNER_DESIGNATOR.sub("", surface)
+    return surface.strip()
+
+
+def normalize_source_owner_identity(value: str) -> str:
+    return normalize_product_identity(source_owner_identity_surface(value))
+
 
 _GENERIC_ASCII_IDENTITY_BASES = frozenset(
     {
@@ -134,6 +164,57 @@ _HOLDING_OBJECT_BEFORE_ASCII_IDENTITY = re.compile(
     r")\s*$",
     re.IGNORECASE,
 )
+_OFFICIAL_PROFILE_TARGET_BOUNDARY = re.compile(
+    r"(?:(?:공식(?:적으로)?\s*)?(?:상위|TOP)?\s*\d{0,3}\s*(?:개|종목)?\s*"
+    r"(?:편입\s*(?:표|내역|종목)(?:\s*목록)?|"
+    r"구성\s*종목(?:\s*목록)?|"
+    r"보유\s*(?:(?:한|된)\s*)?(?:표|내역|종목)(?:\s*목록)?)|"
+    r"(?:공식(?:적으로)?\s*)?(?:상위|TOP)\s*\d{1,3}\s*(?:개\s*)?종목)"
+    r"\s*(?:(?:을|를)?\s*(?:보면|기준으로|대조(?:해|해서|하여)|"
+    r"확인(?:하면|해|하여)|에서|중|에)|(?:은|는|이|가)|:)\s*",
+    re.IGNORECASE,
+)
+
+
+_SOURCE_PRODUCT_RELATION_AFTER_IDENTITY = re.compile(
+    r"^\s*(?:\([^()\n]{1,48}\))?\s*"
+    r"(?:의|은|는|에서|,)?\s*(?:각\s*기준일\s*)?(?:공식\s*)?"
+    r"(?:(?:상위|TOP)\s*\d{1,3}\s*(?:개|종목)?\s*)?"
+    r"(?:편입\s*(?:표|내역|종목)|구성\s*종목|보유\s*(?:표|내역|종목)|"
+    r"위험\s*요인|리스크|투자\s*위험|펀드\s*구조|투자\s*전략|운용\s*동향)",
+    re.IGNORECASE,
+)
+
+
+def _is_official_profile_target_identity(
+    question: str,
+    *,
+    start: int,
+    end: int,
+) -> bool:
+    """Keep source-product identities separate from table constituents.
+
+    In ``ALFA, BETA의 공식 편입표를 보면 Gamma Corp ...`` only identities
+    before the table boundary select source products.  A DB alias can
+    coincidentally overlap a company name after that boundary; binding it as a
+    product would silently shrink the provided-DB universe.  This grammar owns
+    roles, not any particular issuer, ticker or evaluation fixture.
+    """
+
+    boundaries = tuple(_OFFICIAL_PROFILE_TARGET_BOUNDARY.finditer(question))
+    preceding = tuple(boundary for boundary in boundaries if boundary.end() <= start)
+    if not preceding:
+        return False
+    # A holdings table owns only its current sentence/clause.  Without this
+    # stop boundary, every later DB identity in the question is mislabeled as
+    # a constituent, so an independent follow-up product condition can vanish.
+    if re.search(r"[.!?。！？;；\n]", question[preceding[-1].end() : start]):
+        return False
+    # A DB identity after an earlier table is a new source only when it directly
+    # owns another profile/risk/strategy relation.  A mere connective is not
+    # enough: in ``...표에서 BETA를 확인하고 GAMMA 공식 편입표...`` BETA is
+    # still a constituent while GAMMA starts the next source clause.
+    return _SOURCE_PRODUCT_RELATION_AFTER_IDENTITY.search(question[end:]) is None
 
 
 def _is_holding_object_identity(question: str, *, start: int, end: int) -> bool:
@@ -165,6 +246,7 @@ def _first_non_holding_identity_match(
     question: str,
     *,
     flags: int = 0,
+    excluded_spans: Sequence[tuple[int, int]] = (),
 ) -> re.Match[str] | None:
     """Return the first occurrence that denotes a queried product.
 
@@ -181,6 +263,15 @@ def _first_non_holding_identity_match(
                 question,
                 start=match.start(),
                 end=match.end(),
+            )
+            and not _is_official_profile_target_identity(
+                question,
+                start=match.start(),
+                end=match.end(),
+            )
+            and not any(
+                excluded_start <= match.start() and match.end() <= excluded_end
+                for excluded_start, excluded_end in excluded_spans
             )
         ),
         None,
@@ -223,23 +314,6 @@ def _selection_alias_occurs_outside_spans(
     )
 
 
-def normalized_product_surface_core(value: str) -> str | None:
-    """Return a bounded DB-linking core only for an explicit product surface.
-
-    This is intentionally not a general substring matcher. A company or theme
-    name such as ``에코프로`` cannot narrow the DB universe merely because it
-    appears in a product label. Only a question surface that explicitly ends
-    in a generic product type may expose its sufficiently long core.
-    """
-
-    normalized = normalize_product_identity(value)
-    for suffix in _GENERIC_PRODUCT_SUFFIXES:
-        if normalized.endswith(suffix):
-            core = normalized[: -len(suffix)]
-            return core if len(core) >= 4 else None
-    return None
-
-
 def normalized_fund_programme_core(value: str) -> str | None:
     """Return a sale-class binding core for one explicit fund programme name.
 
@@ -273,7 +347,53 @@ def _candidate_from_record(record: ProductIdentityRecord) -> ProvidedProductCand
         product_id=record.product_id,
         product_name=record.product_name,
         aliases=aliases,
+        source_owner=record.source_owner,
     )
+
+
+_DOMESTIC_DISPLAY_CODE = re.compile(r"[AQ](?P<base>[0-9A-Z]{6})", re.IGNORECASE)
+
+
+def _add_unique_domestic_display_code_aliases(
+    candidates: Sequence[ProvidedProductCandidate],
+) -> list[ProvidedProductCandidate]:
+    """Expose the organizer-facing code only when it identifies one DB product.
+
+    The official domestic ETP table stores exchange codes with an ``A``/``Q``
+    prefix, while issuer factsheets commonly print the six-character display
+    code.  The prefix-free spelling is evidence-safe only when it has exactly
+    one owner inside the server-frozen candidate universe.
+    """
+
+    owners: dict[str, set[tuple[ProductFamily, str]]] = {}
+    bases_by_product: dict[tuple[ProductFamily, str], set[str]] = {}
+    for candidate in candidates:
+        if candidate.product_family is not ProductFamily.DOMESTIC_ETP:
+            continue
+        product_key = (candidate.product_family, candidate.product_id)
+        for alias in candidate.aliases:
+            match = _DOMESTIC_DISPLAY_CODE.fullmatch(alias.strip())
+            if match is None:
+                continue
+            base = match.group("base").upper()
+            owners.setdefault(base, set()).add(product_key)
+            bases_by_product.setdefault(product_key, set()).add(base)
+
+    enriched: list[ProvidedProductCandidate] = []
+    for candidate in candidates:
+        product_key = (candidate.product_family, candidate.product_id)
+        aliases = set(candidate.aliases)
+        aliases.update(
+            base
+            for base in bases_by_product.get(product_key, ())
+            if len(owners.get(base, ())) == 1
+        )
+        enriched.append(
+            candidate.model_copy(update={"aliases": tuple(sorted(aliases))})
+            if aliases != set(candidate.aliases)
+            else candidate
+        )
+    return enriched
 
 
 def resolve_explicit_candidate_ids(
@@ -394,9 +514,10 @@ def resolve_question_identity_surfaces(
             if value is not None and re.fullmatch(r"[A-Z0-9]{2,15}", value.strip()):
                 exact_ascii_owners.setdefault(value.strip(), []).append(record)
 
-    surfaces: list[tuple[int, str]] = []
+    surfaces: list[tuple[int, int, str]] = []
     seen: set[str] = set()
     for token in tokens:
+        token_key = normalize_product_identity(token)
         owners = {
             (record.product_family, record.product_id)
             for record in (*ric_owners.get(token, ()), *exact_ascii_owners.get(token, ()))
@@ -407,43 +528,62 @@ def resolve_question_identity_surfaces(
             rf"(?<![0-9A-Za-z]){re.escape(token)}(?![0-9A-Za-z])",
             question,
         )
-        if match is not None and token not in seen:
-            surfaces.append((match.start(), token))
-            seen.add(token)
+        if match is not None and token_key not in seen:
+            surfaces.append((match.start(), match.end(), token))
+            seen.add(token_key)
 
-    for record in records:
-        for value in (
-            record.product_id,
-            record.ticker,
-            record.isin,
-            record.product_name,
-            record.short_name,
-        ):
-            if value is None or value in seen:
-                continue
-            normalized = normalize_product_identity(value)
-            if len(normalized) < 5 or normalized not in normalized_question:
-                continue
-            # Preserve an actual question span for downstream evidence checks.
-            literal = _first_non_holding_identity_match(
-                re.escape(value),
-                question,
-                flags=re.IGNORECASE,
+    identity_values = sorted(
+        {
+            value
+            for record in records
+            for value in (
+                record.product_id,
+                record.ticker,
+                record.isin,
+                record.product_name,
+                record.short_name,
             )
-            if literal is not None:
-                surfaces.append((literal.start(), literal.group(0)))
-                seen.add(value)
-                continue
-            compact = re.sub(r"[^0-9A-Za-z가-힣]+", r"[^0-9A-Za-z가-힣]*", re.escape(value))
-            literal = _first_non_holding_identity_match(
-                compact,
-                question,
-                flags=re.IGNORECASE,
-            )
-            if literal is not None:
-                surfaces.append((literal.start(), literal.group(0)))
-                seen.add(value)
-    return tuple(value for _, value in sorted(surfaces, key=lambda item: (item[0], item[1])))
+            if value is not None
+        },
+        key=lambda value: (-len(normalize_product_identity(value)), value.casefold()),
+    )
+    for value in identity_values:
+        normalized = normalize_product_identity(value)
+        if normalized in seen or len(normalized) < 5 or normalized not in normalized_question:
+            continue
+        excluded_spans = tuple((start, end) for start, end, _value in surfaces)
+        # Preserve an actual question span for downstream evidence checks.
+        literal = _first_non_holding_identity_match(
+            re.escape(value),
+            question,
+            flags=re.IGNORECASE,
+            excluded_spans=excluded_spans,
+        )
+        if literal is not None:
+            surfaces.append((literal.start(), literal.end(), literal.group(0)))
+            seen.add(normalized)
+            continue
+        compact = re.sub(
+            r"[^0-9A-Za-z가-힣]+",
+            r"[^0-9A-Za-z가-힣]*",
+            re.escape(value),
+        )
+        literal = _first_non_holding_identity_match(
+            compact,
+            question,
+            flags=re.IGNORECASE,
+            excluded_spans=excluded_spans,
+        )
+        if literal is not None:
+            surfaces.append((literal.start(), literal.end(), literal.group(0)))
+            seen.add(normalized)
+    return tuple(
+        value
+        for _, _, value in sorted(
+            surfaces,
+            key=lambda item: (item[0], -(item[1] - item[0])),
+        )
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -452,6 +592,7 @@ class _QuestionIdentityIndex:
     ric_base_owners: Mapping[str, frozenset[tuple[ProductFamily, str]]]
     ascii_identity_owners: Mapping[str, frozenset[tuple[ProductFamily, str]]]
     max_alias_length: int
+    source_owner_aliases: Mapping[str, tuple[str, ...]]
 
 
 def _build_question_identity_index(
@@ -461,6 +602,7 @@ def _build_question_identity_index(
     aliases: dict[str, set[str]] = {}
     ric_base_owners: dict[str, set[tuple[ProductFamily, str]]] = {}
     ascii_identity_owners: dict[str, set[tuple[ProductFamily, str]]] = {}
+    source_owner_aliases: dict[str, set[str]] = {}
     for record in records:
         if record.is_quarantined:
             continue
@@ -486,6 +628,11 @@ def _build_question_identity_index(
             normalized = normalize_product_identity(value)
             if len(normalized) >= 5:
                 aliases.setdefault(normalized, set()).add(value)
+        if record.source_owner is not None:
+            owner_surface = source_owner_identity_surface(record.source_owner)
+            owner_key = normalize_source_owner_identity(owner_surface)
+            if len(owner_key) >= 3 and owner_surface:
+                source_owner_aliases.setdefault(owner_key, set()).add(owner_surface)
     frozen_aliases = {
         key: tuple(sorted(values, key=lambda value: (-len(value), value)))
         for key, values in aliases.items()
@@ -499,6 +646,10 @@ def _build_question_identity_index(
             key: frozenset(values) for key, values in ascii_identity_owners.items()
         },
         max_alias_length=max((len(key) for key in frozen_aliases), default=0),
+        source_owner_aliases={
+            key: tuple(sorted(values, key=lambda value: (-len(value), value.casefold())))
+            for key, values in source_owner_aliases.items()
+        },
     )
 
 
@@ -547,6 +698,7 @@ def _build_provided_candidate_universe_from_candidates(
             if family_allowed is not None and candidate.product_id not in family_allowed:
                 continue
             candidates.append(candidate)
+    candidates = _add_unique_domestic_display_code_aliases(candidates)
     candidates.sort(key=lambda item: (item.product_family.value, item.product_id))
     filter_payload = {
         family.value: sorted(values)
@@ -646,7 +798,7 @@ class ProvidedProductUniverseBuilder:
         normalized_question = normalize_product_identity(question)
         matched_values = self._indexed_alias_values(indexes, normalized_question)
 
-        surfaces: list[tuple[int, str]] = []
+        surfaces: list[tuple[int, int, str]] = []
         seen: set[str] = set()
         ric_owners: dict[str, set[tuple[ProductFamily, str]]] = {}
         for index in indexes:
@@ -663,7 +815,7 @@ class ProvidedProductUniverseBuilder:
             )
             if literal is None:
                 continue
-            surfaces.append((literal.start(), literal.group(0)))
+            surfaces.append((literal.start(), literal.end(), literal.group(0)))
             seen.add(normalize_product_identity(literal.group(0)))
 
         for value in sorted(matched_values, key=lambda item: (-len(item), item)):
@@ -674,6 +826,7 @@ class ProvidedProductUniverseBuilder:
                 re.escape(value),
                 question,
                 flags=re.IGNORECASE,
+                excluded_spans=tuple((start, end) for start, end, _value in surfaces),
             )
             if literal is None:
                 compact = re.sub(
@@ -685,13 +838,18 @@ class ProvidedProductUniverseBuilder:
                     compact,
                     question,
                     flags=re.IGNORECASE,
+                    excluded_spans=tuple((start, end) for start, end, _value in surfaces),
                 )
             if literal is None:
                 continue
-            surfaces.append((literal.start(), literal.group(0)))
+            surfaces.append((literal.start(), literal.end(), literal.group(0)))
             seen.add(normalized)
         return tuple(
-            value for _, value in sorted(surfaces, key=lambda item: (item[0], -len(item[1])))
+            value
+            for _, _, value in sorted(
+                surfaces,
+                key=lambda item: (item[0], -(item[1] - item[0])),
+            )
         )
 
     @staticmethod
@@ -818,6 +976,61 @@ class ProvidedProductUniverseBuilder:
             if family in self.database_paths
         }
         return self._indexed_question_identity_surfaces(snapshots, question)
+
+    def question_source_owner_surfaces(
+        self,
+        *,
+        families: tuple[ProductFamily, ...],
+        question: str,
+    ) -> tuple[str, ...]:
+        """Return literal DB-confirmed issuer/manager names found in a question.
+
+        These surfaces are separate from product identities and therefore
+        never set ``explicit_identity_bound`` or widen the product universe.
+        Downstream policy may use them only for a typed owner-scoped relation.
+        """
+
+        selected_families = tuple(sorted(set(families), key=lambda item: item.value))
+        if not selected_families:
+            selected_families = tuple(sorted(self.database_paths, key=lambda item: item.value))
+        snapshots = {
+            family: self.identity_cache.get(self.database_paths[family])
+            for family in selected_families
+            if family in self.database_paths
+        }
+        indexes = tuple(
+            self._cached_question_identity_index(family, snapshot)
+            for family, snapshot in snapshots.items()
+        )
+        normalized_question = normalize_product_identity(question)
+        matches: list[tuple[int, int, str]] = []
+        seen: set[str] = set()
+        for index in indexes:
+            for owner_key, aliases in index.source_owner_aliases.items():
+                if owner_key not in normalized_question or owner_key in seen:
+                    continue
+                for alias in aliases:
+                    compact = re.sub(
+                        r"[^0-9A-Za-z가-힣]+",
+                        r"[^0-9A-Za-z가-힣]*",
+                        re.escape(alias),
+                    )
+                    pattern = compact
+                    if alias.isascii():
+                        pattern = rf"(?<![0-9A-Za-z]){compact}(?![0-9A-Za-z])"
+                    literal = re.search(pattern, question, flags=re.IGNORECASE)
+                    if literal is None:
+                        continue
+                    matches.append((literal.start(), literal.end(), literal.group(0)))
+                    seen.add(owner_key)
+                    break
+        return tuple(
+            value
+            for _start, _end, value in sorted(
+                matches,
+                key=lambda item: (item[0], -(item[1] - item[0])),
+            )
+        )
 
     def source_selection_signals(
         self,
@@ -1004,6 +1217,216 @@ def intersect_evidence_with_provided_products(
     return tuple(matches)
 
 
+class DocumentBindingPlanningError(ValueError):
+    """A multi-document question cannot be bound 1:1 without guessing."""
+
+
+def _reference_distance(
+    reference: DatedOfficialDocumentReference,
+    start: int,
+    end: int,
+) -> int:
+    if end < reference.start:
+        return reference.start - end
+    if reference.end < start:
+        return start - reference.end
+    return 0
+
+
+def _document_clause_bounds(
+    question: str,
+    reference: DatedOfficialDocumentReference,
+) -> tuple[int, int]:
+    separators = tuple(re.finditer(r"[/;；\n]", question))
+    start = max(
+        (match.end() for match in separators if match.end() <= reference.start),
+        default=0,
+    )
+    end = min(
+        (match.start() for match in separators if reference.end <= match.start()),
+        default=len(question),
+    )
+    return start, end
+
+
+def _literal_document_product_matches(
+    question: str,
+    universe: ProvidedProductCandidateUniverse,
+) -> tuple[tuple[int, int, str, ProvidedProductCandidate], ...]:
+    matches: list[tuple[int, int, str, ProvidedProductCandidate]] = []
+    normalized_question = normalize_product_identity(question)
+    ric_base_owners: dict[str, set[tuple[ProductFamily, str]]] = {}
+    for candidate in universe.candidates:
+        for surface in (candidate.product_id, *candidate.aliases):
+            if base := _ric_base(surface):
+                ric_base_owners.setdefault(base, set()).add(
+                    (candidate.product_family, candidate.product_id)
+                )
+    for candidate in universe.candidates:
+        surfaces = {
+            candidate.product_id,
+            candidate.product_name,
+            *candidate.aliases,
+        }
+        surfaces.update(
+            base
+            for surface in (candidate.product_id, *candidate.aliases)
+            if (base := _ric_base(surface)) is not None
+            and len(ric_base_owners[base]) == 1
+        )
+        ordered_surfaces = sorted(
+            surfaces,
+            key=lambda value: (-len(value), value.casefold()),
+        )
+        for surface in ordered_surfaces:
+            normalized = normalize_product_identity(surface)
+            if len(normalized) < 2 or normalized not in normalized_question:
+                continue
+            for match in re.finditer(
+                rf"(?<![0-9A-Za-z가-힣]){re.escape(surface)}(?![0-9A-Za-z가-힣])",
+                question,
+                re.IGNORECASE,
+            ):
+                matches.append((match.start(), match.end(), match.group(0), candidate))
+    unique = {
+        (start, end, candidate.product_family, candidate.product_id): (
+            start,
+            end,
+            span,
+            candidate,
+        )
+        for start, end, span, candidate in matches
+    }
+    values = tuple(unique.values())
+    return tuple(
+        item
+        for item in values
+        if not any(
+            other[0] <= item[0]
+            and item[1] <= other[1]
+            and other[1] - other[0] > item[1] - item[0]
+            for other in values
+        )
+    )
+
+
+def _finalize_document_bindings(
+    plan: CompositeKnowledgeQueryPlan,
+    universe: ProvidedProductCandidateUniverse,
+    registry: OfficialSourceRegistry,
+) -> CompositeKnowledgeQueryPlan:
+    references = extract_dated_official_document_references(plan.question)
+    if len(references) < 2 or not universe.candidates:
+        return plan
+    holding_requirements = tuple(
+        item
+        for item in plan.requirements
+        if item.capability is KnowledgeCapability.PORTFOLIO_HOLDINGS
+    )
+    if not holding_requirements:
+        return plan
+    occurrences = _literal_document_product_matches(plan.question, universe)
+    assigned: dict[int, list[tuple[int, int, str, ProvidedProductCandidate]]] = {
+        index: [] for index in range(len(references))
+    }
+    for occurrence in occurrences:
+        clause_owners = tuple(
+            index
+            for index, reference in enumerate(references)
+            if (
+                (bounds := _document_clause_bounds(plan.question, reference))[0]
+                <= occurrence[0]
+                and occurrence[1] <= bounds[1]
+            )
+        )
+        if len(clause_owners) == 1:
+            assigned[clause_owners[0]].append(occurrence)
+            continue
+        distances = tuple(
+            _reference_distance(reference, occurrence[0], occurrence[1])
+            for reference in references
+        )
+        closest = min(distances)
+        owners = tuple(index for index, value in enumerate(distances) if value == closest)
+        if len(owners) == 1 and closest <= 240:
+            assigned[owners[0]].append(occurrence)
+
+    finalized: list[KnowledgeRequirement] = []
+    for requirement in plan.requirements:
+        if requirement.capability is not KnowledgeCapability.PORTFOLIO_HOLDINGS:
+            finalized.append(requirement)
+            continue
+        bindings: list[KnowledgeDocumentBinding] = []
+        used_products: set[tuple[ProductFamily, str]] = set()
+        for index, reference in enumerate(references, start=1):
+            by_product: dict[
+                tuple[ProductFamily, str],
+                tuple[int, int, str, ProvidedProductCandidate],
+            ] = {}
+            for occurrence in assigned[index - 1]:
+                candidate = occurrence[3]
+                key = (candidate.product_family, candidate.product_id)
+                previous = by_product.get(key)
+                if previous is None or occurrence[1] - occurrence[0] > (
+                    previous[1] - previous[0]
+                ):
+                    by_product[key] = occurrence
+            if len(by_product) != 1:
+                raise DocumentBindingPlanningError(
+                    "each dated official document must identify exactly one provided product "
+                    f"(document={index}, candidates={len(by_product)})"
+                )
+            product_key, occurrence = next(iter(by_product.items()))
+            if product_key in used_products:
+                raise DocumentBindingPlanningError(
+                    "dated document bindings must identify unique provided products"
+                )
+            used_products.add(product_key)
+            candidate = occurrence[3]
+            publisher_key = normalize_selection_surface(reference.publisher_alias_span)
+            source_ids = tuple(
+                sorted(
+                    entry.source_id
+                    for entry in registry.entries
+                    if entry.source_id in requirement.source_registry_ids
+                    and requirement.capability in entry.capabilities
+                    and (
+                        not entry.product_families
+                        or candidate.product_family in entry.product_families
+                    )
+                    and publisher_key
+                    in {
+                        normalize_selection_surface(value)
+                        for value in (entry.publisher, *entry.selection_aliases)
+                    }
+                )
+            )
+            if not source_ids:
+                raise DocumentBindingPlanningError(
+                    "document publisher is not authorized for the bound product"
+                )
+            start, end = dated_document_time_bounds(reference, cutoff=plan.evidence_cutoff)
+            bindings.append(
+                KnowledgeDocumentBinding(
+                    binding_id=f"doc_{index}",
+                    product_family=candidate.product_family,
+                    product_id=candidate.product_id,
+                    product_identity_evidence_span=occurrence[2],
+                    document_reference_evidence_span=reference.text.strip(),
+                    source_evidence_span=reference.publisher_alias_span.strip(),
+                    time_evidence_span=reference.time_evidence_span.strip(),
+                    time_range=KnowledgeTimeRange(start=start, end=end),
+                    source_registry_ids=source_ids,
+                )
+            )
+        requirement_payload = requirement.model_dump(mode="python")
+        requirement_payload.update(time_range=None, document_bindings=tuple(bindings))
+        finalized.append(KnowledgeRequirement.model_validate(requirement_payload))
+    plan_payload = plan.model_dump(mode="python")
+    plan_payload["requirements"] = tuple(finalized)
+    return CompositeKnowledgeQueryPlan.model_validate(plan_payload)
+
+
 class ExternalSearchPlanCompiler:
     """Bind a server-authorized plan to the precomputed DB candidate universe."""
 
@@ -1017,6 +1440,7 @@ class ExternalSearchPlanCompiler:
         *,
         budget: ExternalSearchBudget | None = None,
     ) -> ExternalKnowledgeSearchPlan:
+        plan = _finalize_document_bindings(plan, universe, self.registry)
         plan_families = {
             family for requirement in plan.requirements for family in requirement.product_families
         }
@@ -1060,13 +1484,15 @@ class ExternalSearchPlanCompiler:
 
 
 __all__ = [
+    "DocumentBindingPlanningError",
     "ExternalSearchPlanCompiler",
     "ProvidedProductUniverseBuilder",
     "build_provided_candidate_universe",
     "intersect_evidence_with_provided_products",
     "normalize_product_identity",
+    "normalize_source_owner_identity",
     "normalized_fund_programme_core",
-    "normalized_product_surface_core",
     "resolve_explicit_candidate_ids",
     "resolve_question_identity_surfaces",
+    "source_owner_identity_surface",
 ]

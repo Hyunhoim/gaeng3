@@ -40,7 +40,6 @@ from finance_agent_core.retrieval.holdings_graph import (
 from finance_agent_core.retrieval.temporal_relations import (
     TemporalRelationSearchRequest,
     TemporalRelationStore,
-    seal_temporal_relation_bundle,
 )
 
 _PAGE_URL = "https://www.samsungfund.com/etf/product/view.do?id=2ETFE5"
@@ -390,24 +389,14 @@ def test_mobile_kodex_page_binds_through_its_approved_source() -> None:
     assert page_evidence.source_registry_id == "samsungfund-kodex-product-mobile"
 
 
-def test_live_bootstrap_admits_a_graph_only_inside_its_trust_boundary() -> None:
+def test_live_bootstrap_rejects_graph_when_release_is_cache_only() -> None:
     report = build_holdings_relations((_saved(),), universe=_universe(_ECOPRO_ETF))
     graph = seal_holdings_graph(report.relations)
 
-    bootstrap = build_live_external_knowledge_bootstrap(graph)
-
-    assert bootstrap.artifact.retrieval_mode == "verified_live_official_with_relation_graph"
-    assert bootstrap.artifact.temporal_relation_sha256 == graph.manifest.relation_set_sha256
-    assert bootstrap.artifact.document_dense_sha256 is None
-    assert bootstrap.relation_bundle is graph
-    assert build_live_external_knowledge_bootstrap().artifact.retrieval_mode == (
-        "verified_live_official"
-    )
-
-    foreign_corpus = seal_temporal_relation_bundle(
-        report.relations, corpus_manifest_sha256="f" * 64
-    )
-    with pytest.raises(ValueError, match="trust boundary"):
-        build_live_external_knowledge_bootstrap(foreign_corpus)
+    with pytest.raises(
+        ValueError,
+        match="every external capability must be approved for official live search",
+    ):
+        build_live_external_knowledge_bootstrap(graph)
     with pytest.raises(HoldingsGraphError):
         seal_holdings_graph(())

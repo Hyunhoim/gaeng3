@@ -329,6 +329,7 @@ def test_deployment_settings_accept_only_complete_adaptive_semantic_profile() ->
         _env_file=None,
         APP_ENV="evaluation",
         FINANCE_BACKEND_ANSWER_PROVIDER="hyperclova",
+        FINANCE_BACKEND_HCX_INTENT_ANALYSIS_ENABLED=True,
         FINANCE_BACKEND_HCX_SEMANTIC_RESOLVER_ENABLED=True,
         FINANCE_AGENT_LLM_MODE="evaluation",
         LLM_PROVIDER="hyperclova",
@@ -349,3 +350,30 @@ def test_deployment_settings_accept_only_complete_adaptive_semantic_profile() ->
 
     assert settings.adaptive_semantic_enabled is True
     assert settings.uses_hyperclova is True
+
+
+def test_deployment_release_rejects_adaptive_semantics_without_hcx_frame(
+    tmp_path: Path,
+) -> None:
+    settings, _ = _release_settings(tmp_path)
+    adaptive_artifacts = {
+        "adaptive_semantic_enabled": True,
+        "dense_schema_linker_enabled": True,
+        "schema_dense_index_file": tmp_path / "schema-index.json",
+        "schema_dense_index_sha256": "a" * 64,
+        "schema_dense_calibration_report_sha256": "b" * 64,
+        "schema_dense_min_score": 0.7,
+        "schema_dense_hclx_candidate_min_score": 0.4,
+        "schema_dense_minimum_margin": 0.08,
+        "kure_snapshot_dir": tmp_path / "kure/snapshot",
+        "kure_snapshot_manifest_file": tmp_path / "kure-manifest.json",
+        "kure_trusted_cache_root": tmp_path / "kure",
+    }
+
+    values = settings.model_dump()
+    values.update(adaptive_artifacts)
+    with pytest.raises(
+        ValidationError,
+        match="adaptive release requires HCLX Semantic Resolver",
+    ):
+        Settings(**values)

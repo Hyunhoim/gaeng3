@@ -26,6 +26,9 @@ from finance_agent_core.execution.external_knowledge_executor import (
     matched_product_keys,
     selected_product_keys,
 )
+from finance_agent_core.execution.external_knowledge_verifier import (
+    relation_satisfies_document_binding,
+)
 from finance_agent_core.release import ExternalKnowledgeArtifactRelease
 from finance_agent_core.retrieval.document_discovery import (
     CacheFirstOfficialDiscoveryProvider,
@@ -43,6 +46,7 @@ from finance_agent_core.retrieval.official_live_evidence import (
 from finance_agent_core.retrieval.temporal_relations import (
     ExternalEvidenceReference,
     TemporalEntityKind,
+    TemporalRelationRecord,
     TemporalRelationStore,
     seal_temporal_relation_bundle,
 )
@@ -52,8 +56,7 @@ _PRODUCT_EVIDENCE_DATE = (
     r"|(20\d{2})\s*년\s*(0?[1-9]|1[0-2])\s*월\s*"
     r"(0?[1-9]|[12]\d|3[01])\s*일)"
 )
-
-
+_RIC_PRODUCT_SURFACE = re.compile(r"(?P<base>[A-Z0-9]{2,15})\.[A-Z]{1,5}")
 def _parse_product_evidence_date(match: re.Match[str]) -> date | None:
     values = match.groups()
     parts = values[:3] if values[0] is not None else values[3:]
@@ -86,6 +89,20 @@ def _dates_bound_to_product_surface(question: str, surface: str) -> frozenset[da
             if (value := _parse_product_evidence_date(match)) is not None:
                 parsed.add(value)
     return frozenset(parsed)
+
+
+def _document_binding_identity_surfaces(candidate) -> tuple[str, ...]:
+    values = {
+        candidate.product_id,
+        candidate.product_name,
+        *candidate.aliases,
+    }
+    values.update(
+        match.group("base")
+        for value in tuple(values)
+        if (match := _RIC_PRODUCT_SURFACE.fullmatch(value.strip())) is not None
+    )
+    return tuple(sorted(values, key=lambda value: (-len(value), value.casefold())))
 
 
 class ExternalKnowledgeRuntimeResult(BaseModel):
@@ -131,6 +148,40 @@ def _relation_survives_universe(relation, approved_candidate_keys) -> bool:
     return (relation.product_family, relation.product_id) in approved_candidate_keys
 
 
+def _evidence_extraction_universe(
+    universe: ProvidedProductCandidateUniverse,
+    required_product_key: ProductKey | None,
+) -> ProvidedProductCandidateUniverse:
+    """Narrow a dependent evidence step to its already verified DB product.
+
+    Product reports commonly name both the report's own ETF and neighbouring
+    products (for example an underlying ETF in a holdings table).  Once a
+    dependency and the provided-DB ranking have fixed one product key, keeping
+    every product in the extraction universe makes a single-product report look
+    ambiguous and drops risk text that is printed away from the cover name.
+
+    The subset is evidence-scoped only.  It cannot widen or replace the signed
+    candidate universe because the key must already exist in that universe and
+    the execution receipt remains bound to the original canonical hash.
+    """
+
+    if required_product_key is None:
+        return universe
+    candidates = tuple(
+        candidate
+        for candidate in universe.candidates
+        if (candidate.product_family, candidate.product_id) == required_product_key
+    )
+    if len(candidates) != 1:
+        return universe
+    return universe.model_copy(
+        update={
+            "candidates": candidates,
+            "explicit_identity_bound": True,
+        }
+    )
+
+
 _GRAPH_PAGE_URL = re.compile(
     r"/etf/product/view\.do\?id=|/tigeretf/ko/product/search/detail/index\.do\?ksdFund="
 )
@@ -174,7 +225,10 @@ class ExternalKnowledgeRuntime:
                 and not acquisition.relation_store.bundle.relations
             ):
                 raise ValueError("relation graph external runtime requires a non-empty graph")
-            if release_artifact.retrieval_mode == "approved_corpus_cache_first":
+            if release_artifact.retrieval_mode in {
+                "approved_corpus_cache_only",
+                "approved_corpus_cache_first",
+            }:
                 discovery = acquisition.discovery_provider
                 if (
                     type(discovery) is not CacheFirstOfficialDiscoveryProvider
@@ -182,9 +236,17 @@ class ExternalKnowledgeRuntime:
                     or discovery.activation_binding_sha256
                     != release_artifact.document_activation_receipt_sha256
                     or discovery.artifact.canonical_sha256 != release_artifact.document_dense_sha256
+                    or (
+                        release_artifact.retrieval_mode == "approved_corpus_cache_only"
+                        and discovery.live_fallback_enabled
+                    )
+                    or (
+                        release_artifact.retrieval_mode == "approved_corpus_cache_first"
+                        and not discovery.live_fallback_enabled
+                    )
                 ):
                     raise ValueError(
-                        "cache-first external runtime requires its release-pinned approved cache"
+                        "approved-cache external runtime differs from its signed retrieval mode"
                     )
         self.release_artifact = release_artifact
         self.release_artifact_file_sha256 = release_artifact_file_sha256
@@ -262,7 +324,27 @@ class ExternalKnowledgeRuntime:
         requirement,
         universe: ProvidedProductCandidateUniverse,
     ) -> tuple[str, ...]:
-        """Return DB-bound names and identifiers for official discovery only."""
+        """Return one primary DB-bound surface per explicit product target."""
+
+        return tuple(
+            group[0]
+            for group in ExternalKnowledgeRuntime._explicit_product_discovery_term_groups(
+                requirement,
+                universe,
+            )
+        )[:3]
+
+    @staticmethod
+    def _explicit_product_discovery_term_groups(
+        requirement,
+        universe: ProvidedProductCandidateUniverse,
+    ) -> tuple[tuple[str, ...], ...]:
+        """Preserve product/alias grouping for cache-coverage accounting.
+
+        The previous flattened first-three list could contain three aliases for
+        one product and silently omit every later product. Grouping lets the
+        cache and live fallback reserve coverage per DB-authorized identity.
+        """
 
         if not universe.explicit_identity_bound or requirement.capability not in {
             KnowledgeCapability.PORTFOLIO_HOLDINGS,
@@ -271,34 +353,47 @@ class ExternalKnowledgeRuntime:
             KnowledgeCapability.PRODUCT_RISK_FACTORS,
         }:
             return ()
-        terms = (
-            value
+        groups = (
+            tuple(
+                dict.fromkeys(
+                    value.strip()
+                    for value in (candidate.product_name, *candidate.aliases)
+                    if 2 <= len(value.strip()) <= 500
+                    and "http://" not in value.casefold()
+                    and "https://" not in value.casefold()
+                )
+            )
             for candidate in universe.candidates
             if candidate.product_family in requirement.product_families
-            for value in (candidate.product_name, *candidate.aliases)
         )
-        return tuple(dict.fromkeys(terms))[:3]
+        return tuple(group for group in dict.fromkeys(groups) if group)[:20]
 
     def _graph_page_seeds(
         self,
         requirement,
         required_product_key,
+        current_relations: tuple[TemporalRelationRecord, ...] = (),
     ) -> tuple[OfficialDiscoveryCandidate, ...]:
-        """Official product pages the sealed graph already binds to this product.
+        """Official pages the sealed graph or this request binds to a product.
 
         A dependent step that names one exact product (``선택된 상품의 위험요인``)
         should open that product's own approved page first.  The graph's
-        evidence carries those URLs with the publisher's identity binding, so
-        they are provenance, not a search guess.  Only pages approved for the
-        requirement's capability are seeded; the connector still fetches and
-        verifies them like any other candidate.
+        evidence -- including evidence verified by an earlier step in this
+        request -- carries those URLs with the publisher's identity binding,
+        so they are provenance, not a search guess.  Only pages approved for
+        the requirement's capability are seeded; the connector still fetches
+        and verifies them like any other candidate.
         """
 
         if required_product_key is None:
             return ()
         registry = self.acquisition.connector.registry
         seeds: dict[str, OfficialDiscoveryCandidate] = {}
-        for relation in self.acquisition.relation_store.bundle.relations:
+        relations = (
+            *self.acquisition.relation_store.bundle.relations,
+            *current_relations,
+        )
+        for relation in relations:
             if (relation.product_family, relation.product_id) != required_product_key:
                 continue
             for evidence in relation.evidence:
@@ -480,7 +575,20 @@ class ExternalKnowledgeRuntime:
 
         requirements = search_plan.composite_plan.requirements
         for requirement_index, requirement in enumerate(requirements):
-            if requirement.depends_on:
+            document_bindings_by_product = {
+                (item.product_family, item.product_id): item
+                for item in requirement.document_bindings
+            }
+            if requirement.document_bindings:
+                targets = tuple(
+                    (
+                        requirement.subject,
+                        requirement.search_aliases,
+                        (binding.product_family, binding.product_id),
+                    )
+                    for binding in requirement.document_bindings
+                )
+            elif requirement.depends_on:
                 selected_keys: frozenset[ProductKey] = frozenset()
                 if requirement.capability is KnowledgeCapability.PRODUCT_RISK_FACTORS:
                     matched_keys = matched_product_keys(search_plan.composite_plan, resolved)
@@ -559,6 +667,20 @@ class ExternalKnowledgeRuntime:
                         "search_aliases": tuple(sorted(set(aliases))),
                     }
                 )
+                document_binding = document_bindings_by_product.get(required_product_key)
+                if document_binding is not None:
+                    effective = effective.model_copy(
+                        update={
+                            "product_families": (document_binding.product_family,),
+                            "time_range": document_binding.time_range,
+                            "document_bindings": (),
+                            "source_registry_ids": document_binding.source_registry_ids,
+                        }
+                    )
+                extraction_universe = _evidence_extraction_universe(
+                    universe,
+                    required_product_key,
+                )
                 # One official holdings/report document often covers several
                 # entities from the verified parent relation. Re-run exact-span
                 # extraction over already fetched bytes before opening another
@@ -567,7 +689,7 @@ class ExternalKnowledgeRuntime:
                 try:
                     extract_many = getattr(self.live_relation_extractor, "extract_many", None)
                     reused = (
-                        list(extract_many(tuple(all_snapshots), effective, universe))
+                        list(extract_many(tuple(all_snapshots), effective, extraction_universe))
                         if callable(extract_many)
                         else [
                             relation
@@ -575,7 +697,7 @@ class ExternalKnowledgeRuntime:
                             for relation in self.live_relation_extractor.extract(
                                 snapshot,
                                 effective,
-                                universe,
+                                extraction_universe,
                             )
                         ]
                     )
@@ -591,6 +713,7 @@ class ExternalKnowledgeRuntime:
                     relation
                     for relation in reused
                     if _relation_survives_universe(relation, approved_candidate_keys)
+                    and relation_satisfies_document_binding(requirement, relation)
                 ]
                 if reused:
                     requirement_relations.update(
@@ -614,24 +737,53 @@ class ExternalKnowledgeRuntime:
                         min(source_count * 2, query_budget),
                     ),
                 )
+                explicit_product_term_groups = (
+                    self._explicit_product_discovery_term_groups(
+                        effective,
+                        extraction_universe,
+                    )
+                )
                 explicit_product_terms = self._explicit_product_discovery_terms(
                     effective,
-                    universe,
+                    extraction_universe,
                 )
                 product_evidence_dates = self._provided_product_evidence_dates(
                     search_plan.composite_plan.question,
                     requirement=effective,
-                    universe=universe,
+                    universe=extraction_universe,
                 )
+                if (
+                    document_binding is not None
+                    and document_binding.time_range.start
+                    == document_binding.time_range.end
+                ):
+                    product_evidence_dates = tuple(
+                        sorted(
+                            {
+                                (
+                                    normalize_product_identity(surface),
+                                    document_binding.time_range.end,
+                                )
+                                for candidate in extraction_universe.candidates
+                                for surface in _document_binding_identity_surfaces(candidate)
+                                if len(normalize_product_identity(surface)) >= 2
+                            }
+                        )
+                    )
                 item = self.acquisition.acquire(
                     effective,
                     discovery_terms=explicit_product_terms,
+                    discovery_product_term_groups=explicit_product_term_groups,
                     provided_product_surfaces=self._provided_product_discovery_surfaces(
                         effective,
-                        universe,
+                        extraction_universe,
                     ),
                     provided_product_evidence_dates=product_evidence_dates,
-                    seed_candidates=self._graph_page_seeds(effective, required_product_key),
+                    seed_candidates=self._graph_page_seeds(
+                        effective,
+                        required_product_key,
+                        tuple(all_relations.values()),
+                    ),
                     top_k=min(
                         search_plan.budget.max_candidates_per_requirement,
                         max(1, remaining_fetches // targets_left),
@@ -645,6 +797,58 @@ class ExternalKnowledgeRuntime:
                 remaining_queries -= item.search_query_count
                 remaining_fetches -= item.fetch_count
                 remaining_bytes -= item.fetched_bytes
+                if (
+                    item.status is OfficialEvidenceAcquisitionStatus.CANNOT_VERIFY
+                    and item.search_query_count == 0
+                    and item.discovered_candidate_count > 0
+                    and isinstance(
+                        self.acquisition.discovery_provider,
+                        CacheFirstOfficialDiscoveryProvider,
+                    )
+                    and self.acquisition.discovery_provider.live_fallback_enabled
+                ):
+                    # A Document Dense hit is only a cached URL candidate.  The
+                    # URL can later fail authorization/fetch/link traversal and
+                    # therefore yield no evidence snapshot at all.  Treat that
+                    # bounded candidate failure as a cache miss exactly once;
+                    # otherwise it returns CANNOT_VERIFY before the existing
+                    # exact-span miss fallback below can run.
+                    remaining_ms = search_plan.budget.deadline_ms - int(
+                        (perf_counter() - started) * 1000
+                    )
+                    if (
+                        min(remaining_queries, remaining_fetches, remaining_bytes) > 0
+                        and remaining_ms >= 100
+                    ):
+                        live_item = self.acquisition.acquire(
+                            effective,
+                            discovery_terms=explicit_product_terms,
+                            discovery_product_term_groups=explicit_product_term_groups,
+                            provided_product_surfaces=(
+                                self._provided_product_discovery_surfaces(
+                                    effective,
+                                    extraction_universe,
+                                )
+                            ),
+                            provided_product_evidence_dates=product_evidence_dates,
+                            top_k=min(
+                                search_plan.budget.max_candidates_per_requirement,
+                                max(1, remaining_fetches // targets_left),
+                            ),
+                            max_search_queries=max(
+                                1,
+                                min(query_budget, remaining_queries),
+                            ),
+                            max_fetches=max(1, remaining_fetches // targets_left),
+                            max_total_bytes=remaining_bytes,
+                            deadline_ms=remaining_ms,
+                            force_live_discovery=True,
+                        )
+                        acquisitions.append(live_item)
+                        remaining_queries -= live_item.search_query_count
+                        remaining_fetches -= live_item.fetch_count
+                        remaining_bytes -= live_item.fetched_bytes
+                        item = live_item
                 if item.status in {
                     OfficialEvidenceAcquisitionStatus.CANNOT_VERIFY,
                     OfficialEvidenceAcquisitionStatus.INTAKE_PENDING,
@@ -665,7 +869,13 @@ class ExternalKnowledgeRuntime:
                             None,
                         )
                         extracted = (
-                            tuple(extract_many(item.snapshots, effective, universe))
+                            tuple(
+                                extract_many(
+                                    item.snapshots,
+                                    effective,
+                                    extraction_universe,
+                                )
+                            )
                             if callable(extract_many)
                             else tuple(
                                 relation
@@ -673,7 +883,7 @@ class ExternalKnowledgeRuntime:
                                 for relation in self.live_relation_extractor.extract(
                                     snapshot,
                                     effective,
-                                    universe,
+                                    extraction_universe,
                                 )
                             )
                         )
@@ -706,6 +916,7 @@ class ExternalKnowledgeRuntime:
                         self.acquisition.discovery_provider,
                         CacheFirstOfficialDiscoveryProvider,
                     )
+                    and self.acquisition.discovery_provider.live_fallback_enabled
                 ):
                     # A Document Dense hit is only a URL proposal.  If the
                     # refetched bytes fail the exact subject/relation/product
@@ -724,10 +935,11 @@ class ExternalKnowledgeRuntime:
                         live_item = self.acquisition.acquire(
                             effective,
                             discovery_terms=explicit_product_terms,
+                            discovery_product_term_groups=explicit_product_term_groups,
                             provided_product_surfaces=(
                                 self._provided_product_discovery_surfaces(
                                     effective,
-                                    universe,
+                                    extraction_universe,
                                 )
                             ),
                             provided_product_evidence_dates=product_evidence_dates,
@@ -773,7 +985,7 @@ class ExternalKnowledgeRuntime:
                                         extract_many(
                                             live_item.snapshots,
                                             effective,
-                                            universe,
+                                            extraction_universe,
                                         )
                                     )
                                     if callable(extract_many)
@@ -783,7 +995,7 @@ class ExternalKnowledgeRuntime:
                                         for relation in self.live_relation_extractor.extract(
                                             snapshot,
                                             effective,
-                                            universe,
+                                            extraction_universe,
                                         )
                                     )
                                 )
@@ -812,13 +1024,18 @@ class ExternalKnowledgeRuntime:
                         ):
                             target_not_found += 1
                             continue
+                extracted = tuple(
+                    relation
+                    for relation in extracted
+                    if relation_satisfies_document_binding(requirement, relation)
+                )
                 if not extracted:
                     subject_evidence = self.live_relation_extractor.extract_subject_evidence(
                         evidence_snapshots,
                         effective,
                     )
                     if subject_evidence and self._identity_only_empty_intersection_allowed(
-                        effective, universe
+                        effective, extraction_universe
                     ):
                         identity_evidence.update(
                             {value.evidence_id: value for value in subject_evidence}
@@ -882,7 +1099,10 @@ class ExternalKnowledgeRuntime:
                 ("verified_external_relation_set_empty",),
                 complete=True,
             )
-        if search_plan.composite_plan.product_selection is not None:
+        if (
+            search_plan.composite_plan.product_selection is not None
+            or search_plan.composite_plan.evidence_selection is not None
+        ):
             try:
                 ranked_keys = selected_product_keys(
                     search_plan.composite_plan,
@@ -892,12 +1112,20 @@ class ExternalKnowledgeRuntime:
             except (KeyError, TypeError, ValueError):
                 return terminal(
                     ExternalKnowledgeOutcomeStatus.CANNOT_VERIFY,
-                    ("provided_db_ranking_unavailable",),
+                    (
+                        "verified_evidence_date_ordering_unavailable"
+                        if search_plan.composite_plan.evidence_selection is not None
+                        else "provided_db_ranking_unavailable"
+                    ,),
                 )
             if not ranked_keys:
                 return terminal(
                     ExternalKnowledgeOutcomeStatus.NOT_FOUND,
-                    ("provided_db_numeric_ranking_basis_empty",),
+                    (
+                        "verified_evidence_date_selection_empty"
+                        if search_plan.composite_plan.evidence_selection is not None
+                        else "provided_db_numeric_ranking_basis_empty"
+                    ,),
                     complete=True,
                 )
 

@@ -63,15 +63,15 @@ def _valid_input_arguments(output: Path) -> list[str]:
         "--fund-execution-policy",
         "public_fund_v1_approved",
         "--schema-dense-index-sha256",
-        "c215649fdfb3ed21c7122987a5b4ddd6101993871039ddf6b1e7165c08860358",
+        "2807195ef8c233ab3218ff742a4f53e11728aa63b56bbeb6dce62bb178f6ae57",
         "--schema-dense-calibration-report-sha256",
-        "25f854e88f8a11ca4d65e381af67303ac1cad375bc2eb44d5e7b4063aeb5b458",
+        "8c41295bf0746bf395b0898863b406f18f6cbd8a42a4cc379069e88ab85c3a09",
         "--schema-dense-min-score",
         "0.340015",
         "--schema-dense-hclx-candidate-min-score",
         "0.3",
         "--schema-dense-minimum-margin",
-        "0.042771",
+        "0.034684",
         "--schema-dense-top-k",
         "10",
         "--python-base-image",
@@ -161,14 +161,14 @@ def test_release_ci_accepts_only_normalized_protected_main_inputs(tmp_path: Path
     assert values["adaptive_semantic_enabled"] == "true"
     assert values["fund_execution_policy"] == "public_fund_v1_approved"
     assert values["schema_dense_index_sha256"] == (
-        "c215649fdfb3ed21c7122987a5b4ddd6101993871039ddf6b1e7165c08860358"
+        "2807195ef8c233ab3218ff742a4f53e11728aa63b56bbeb6dce62bb178f6ae57"
     )
     assert values["schema_dense_calibration_report_sha256"] == (
-        "25f854e88f8a11ca4d65e381af67303ac1cad375bc2eb44d5e7b4063aeb5b458"
+        "8c41295bf0746bf395b0898863b406f18f6cbd8a42a4cc379069e88ab85c3a09"
     )
     assert values["schema_dense_min_score"] == "0.340015"
     assert values["schema_dense_hclx_candidate_min_score"] == "0.3"
-    assert values["schema_dense_minimum_margin"] == "0.042771"
+    assert values["schema_dense_minimum_margin"] == "0.034684"
     assert values["schema_dense_top_k"] == "10"
     assert values["model_id"] == "HCX-007"
 
@@ -818,14 +818,26 @@ def test_release_workflow_binds_exact_adaptive_runtime_artifacts() -> None:
     assert release["env"]["FINAL_HCX_SEMANTIC_RESOLVER_ENABLED"] == "true"
     assert release["env"]["FINAL_ADAPTIVE_SEMANTIC_ENABLED"] == "true"
     assert release["env"]["FINAL_SCHEMA_DENSE_CALIBRATION_REPORT_SHA256"] == (
-        "25f854e88f8a11ca4d65e381af67303ac1cad375bc2eb44d5e7b4063aeb5b458"
+        "8c41295bf0746bf395b0898863b406f18f6cbd8a42a4cc379069e88ab85c3a09"
     )
     assert release["env"]["FINAL_SCHEMA_DENSE_CALIBRATION_ARTIFACT_SHA256"] == (
-        "68978674def32d8613b3e0fd20c624ada9ebc9b6330f64ea172836ac5b31932b"
+        "7c748c44235b56471c7b7aa9a33b558a5b53a33ffe9669e3aae682c53d344446"
+    )
+    assert release["env"]["FINAL_SCHEMA_DENSE_INDEX_SHA256"] == (
+        "2807195ef8c233ab3218ff742a4f53e11728aa63b56bbeb6dce62bb178f6ae57"
+    )
+    assert release["env"]["FINAL_SCHEMA_DENSE_ACTIVATION_POLICY_SHA256"] == (
+        "09536fbc6cb781d022cd480b6256638b7d771224430447011a6fc8b62837c4c1"
     )
     assert release["env"]["FINAL_SCHEMA_DENSE_MIN_SCORE"] == "0.340015"
     assert release["env"]["FINAL_SCHEMA_DENSE_HCLX_CANDIDATE_MIN_SCORE"] == "0.3"
-    assert release["env"]["FINAL_SCHEMA_DENSE_MINIMUM_MARGIN"] == "0.042771"
+    assert release["env"]["FINAL_SCHEMA_DENSE_MINIMUM_MARGIN"] == "0.034684"
+    assert release["env"]["TRACKED_SCHEMA_DENSE_INDEX"].endswith(
+        "/kure-schema-dense-production-v8-registry18-calibrated-20260905.json"
+    )
+    assert release["env"]["TRACKED_SCHEMA_DENSE_CALIBRATION_REPORT"].endswith(
+        "/kure-schema-dense-calibration-registry18-20260905.json"
+    )
     # Generated/ignored local artifacts must not be an implicit CI dependency.
     # The clean checkout is now checked explicitly before any image push. The
     # Release cannot proceed until these exact files are part of its commit.
@@ -838,6 +850,8 @@ def test_release_workflow_binds_exact_adaptive_runtime_artifacts() -> None:
     assert "claimed == actual" in adaptive_step["run"]
     assert "field_registry_sha256" in adaptive_step["run"]
     assert "field_registry_schema_version" in adaptive_step["run"]
+    assert "activation_policy_sha256" in adaptive_step["run"]
+    assert '== "1.8"' in adaptive_step["run"]
     assert "install -m 0444" in adaptive_step["run"]
     assert '--schema-dense-index "$SCHEMA_DENSE_INDEX"' in manifest_step["run"]
     assert "--schema-dense-calibration-report-sha256" in manifest_step["run"]
@@ -850,10 +864,57 @@ def test_release_workflow_binds_exact_adaptive_runtime_artifacts() -> None:
         assert artifact_name in upload_step["with"]["path"]
 
 
-def test_release_workflow_cache_first_requires_protected_tracked_approved_inputs() -> None:
+def test_registry_18_schema_dense_files_match_the_frozen_workflow_contract() -> None:
+    root = _repository_root()
+    workflow = yaml.safe_load(
+        (root / ".github" / "workflows" / "immutable-ncp-release.yml").read_text(encoding="utf-8")
+    )
+    environment = workflow["jobs"]["release"]["env"]
+    index_path = (
+        root / "src/finance_agent/artifacts/runtime/schema-dense/"
+        "kure-schema-dense-production-v8-registry18-calibrated-20260905.json"
+    )
+    report_path = (
+        root / "src/finance_agent/artifacts/evaluation/"
+        "kure-schema-dense-calibration-registry18-20260905.json"
+    )
+
+    assert (
+        hashlib.sha256(index_path.read_bytes()).hexdigest()
+        == environment["FINAL_SCHEMA_DENSE_INDEX_SHA256"]
+    )
+    assert (
+        hashlib.sha256(report_path.read_bytes()).hexdigest()
+        == environment["FINAL_SCHEMA_DENSE_CALIBRATION_ARTIFACT_SHA256"]
+    )
+    index = json.loads(index_path.read_text(encoding="utf-8"))
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    manifest = index["manifest"]
+    assert manifest["field_registry_schema_version"] == "1.8"
+    assert (
+        manifest["activation_policy_sha256"]
+        == environment["FINAL_SCHEMA_DENSE_ACTIVATION_POLICY_SHA256"]
+    )
+    assert report["report_sha256"] == environment["FINAL_SCHEMA_DENSE_CALIBRATION_REPORT_SHA256"]
+    assert (
+        str(report["calibrated_threshold"]["minimum_score"])
+        == environment["FINAL_SCHEMA_DENSE_MIN_SCORE"]
+    )
+    assert (
+        str(report["calibrated_threshold"]["minimum_margin"])
+        == environment["FINAL_SCHEMA_DENSE_MINIMUM_MARGIN"]
+    )
+
+
+def test_release_workflow_cache_modes_require_protected_tracked_approved_inputs() -> None:
     workflow_path = _repository_root() / ".github" / "workflows" / "immutable-ncp-release.yml"
     workflow = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
     release = workflow["jobs"]["release"]
+    checkout_step = next(
+        step
+        for step in release["steps"]
+        if str(step.get("uses", "")).startswith("actions/checkout@")
+    )
     manifest_step = next(
         step
         for step in release["steps"]
@@ -892,20 +953,57 @@ def test_release_workflow_cache_first_requires_protected_tracked_approved_inputs
         assert protected_name in release["env"]
     run = manifest_step["run"]
     assert 'external_mode="${APPROVED_EXTERNAL_RETRIEVAL_MODE:-verified_live_official}"' in run
-    assert 'if [ "$external_mode" = "approved_corpus_cache_first" ]' in run
+    assert '[ "$external_mode" = "approved_corpus_cache_first" ] ||' in run
+    assert '[ "$external_mode" = "approved_corpus_cache_only" ]' in run
     assert "git ls-files --error-unmatch" in run
+    assert checkout_step["with"]["lfs"] is True
+    assert "git check-attr filter" in run
+    assert 'git cat-file blob "HEAD:$APPROVED_DOCUMENT_DENSE_ARTIFACT"' in run
+    assert "Approved Document Dense artifact must be materialized from Git LFS" in run
+    assert 'sha256sum "$GITHUB_WORKSPACE/$APPROVED_DOCUMENT_DENSE_ARTIFACT"' in run
     assert "--approved-corpus-manifest" in run
     assert "--approved-document-dense-sha256" in run
     assert "--document-cache-activation-sha256" in run
     assert "--approved-temporal-relations-sha256" in run
+    assert "APPROVED_CORPUS_RELEASE_ROOT" in run
+    assert "approved corpus snapshot differs from its manifest" in run
+    assert '"git", "ls-tree", "-z", "HEAD"' in run
+    assert "approved corpus document must be a regular file tracked by HEAD" in run
+    assert '"git", "cat-file", "blob", f"HEAD:{repository_path}"' in run
+    assert "approved corpus materialized bytes differ from the HEAD blob" in run
+    assert "approved corpus Git LFS pointer differs from the manifest" in run
     assert "document-dense-approved.json" in evidence_step["run"]
     assert "document-cache-activation.json" in evidence_step["run"]
+    assert "approved-corpus-manifest.json" in evidence_step["run"]
+    assert 'find "$RELEASE_OUTPUT_DIR/approved-corpus" -type f' in evidence_step["run"]
     assert "document-dense-approved.json" in upload_step["with"]["path"]
     assert "document-cache-activation.json" in upload_step["with"]["path"]
+    assert "approved-corpus-manifest.json" in upload_step["with"]["path"]
+    assert "src/fastapi_backend/release/approved-corpus" in upload_step["with"]["path"]
     assert "release_knowledge_blobs" in signing_step["run"]
     assert "document-dense-approved.json" in signing_step["run"]
     assert "document-cache-activation.json" in signing_step["run"]
+    assert "approved-corpus-manifest.json" in signing_step["run"]
     assert "document-dense-approved.sigstore.json" in upload_step["with"]["path"]
+    assert "approved-corpus-manifest.sigstore.json" in upload_step["with"]["path"]
+
+
+def test_historical_manual_release_path_is_hard_deprecated() -> None:
+    script = (
+        _repository_root() / "src" / "fastapi_backend" / "scripts" / "manual-release.sh"
+    ).read_text(encoding="utf-8")
+
+    assert "this historical partial release path is retired" in script
+    assert "compose-release.sh" in script
+    assert "exit 64" in script
+    for forbidden in (
+        "docker build",
+        "docker run",
+        "CLOVASTUDIO_API_KEY_FILE",
+        "FINANCE_BACKEND_ANSWER_PROVIDER",
+        "curl -fsS",
+    ):
+        assert forbidden not in script
 
 
 def test_release_workflow_has_a_commit_pinned_keyless_trust_boundary() -> None:
@@ -997,7 +1095,9 @@ def test_release_workflow_pushes_then_uses_only_exact_image_digests() -> None:
 
 
 def test_base_dockerfile_pins_the_python_index_and_records_source_revision() -> None:
-    dockerfile = (_repository_root() / "src" / "fastapi_backend" / "Dockerfile").read_text(encoding="utf-8")
+    dockerfile = (_repository_root() / "src" / "fastapi_backend" / "Dockerfile").read_text(
+        encoding="utf-8"
+    )
 
     assert "ARG PYTHON_BASE_IMAGE=docker.io/library/python@sha256:" in dockerfile
     assert "FROM ${PYTHON_BASE_IMAGE}" in dockerfile

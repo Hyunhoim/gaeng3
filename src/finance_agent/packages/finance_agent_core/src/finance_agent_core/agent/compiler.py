@@ -40,10 +40,12 @@ from finance_agent_core.agent.semantic_resolution import (
     HardFilterLock,
     ResolutionOperation,
     SemanticResolutionReceipt,
+    canonical_sha256,
 )
 from finance_agent_core.config import ValueType, load_field_registry
 from finance_agent_core.contracts import QueryPlan
 from finance_agent_core.contracts.queryplan import (
+    Constraint,
     ConstraintOperator,
     Intent,
     NullPlacement,
@@ -65,6 +67,18 @@ from finance_agent_core.storage.identity_cache import ProductIdentityRecord
 
 class PlanCompilationBlockedError(ValueError):
     """Raised when a routed draft cannot be compiled without guessing."""
+
+
+_EXPLICIT_NUMERIC_FILTER_BOUND = re.compile(
+    r"(?:"
+    r"-?\d[\d,.]*\s*(?:조|억|만|천)?\s*"
+    r"(?:%|퍼센트|원|달러|USD|KRW|일|개월|년)?"
+    r"\s*(?:이상|이하|초과|미만|넘지\s*않)"
+    r"|(?:적어도|최소|최대)\s*-?\d[\d,.]*\s*(?:조|억|만|천)?\s*"
+    r"(?:%|퍼센트|원|달러|USD|KRW|일|개월|년)?"
+    r")",
+    re.IGNORECASE,
+)
 
 
 def _normalize_identity_ambiguity_surface(value: object) -> str:
@@ -595,6 +609,25 @@ class ServerQueryPlanCompiler:
 
     def _compile_search_lowering(self, decision: RouteDecision) -> QueryPlan:
         family = decision.draft.product_families[0]
+        identity_records: tuple[ProductIdentityRecord, ...] = ()
+        try:
+            identity_records = self.identity_cache.get(
+                self.database_paths[family]
+            ).records
+        except (KeyError, OSError, ValueError):
+            # Product identity resolution below remains authoritative.  This
+            # optional snapshot is also used only to distinguish a DB-exact
+            # manager/issuer value from an explicitly requested substring.
+            pass
+        exact_manager_values = tuple(
+            sorted(
+                {
+                    record.source_owner
+                    for record in identity_records
+                    if record.source_owner and not record.is_quarantined
+                }
+            )
+        )
         exact_identity_lookup = (
             decision.draft.intent is InteractionIntent.SEARCH
             and len(decision.draft.product_mentions) == 1
@@ -628,7 +661,7 @@ class ServerQueryPlanCompiler:
                 identity_mask_surfaces = _bound_identity_mask_surfaces(
                     family,
                     decision.draft.product_mentions,
-                    self.identity_cache.get(self.database_paths[family]).records,
+                    identity_records,
                 )
             except (KeyError, OSError, ValueError):
                 # Resolution and the authoritative error are handled below.
@@ -651,6 +684,7 @@ class ServerQueryPlanCompiler:
                     "product_families": [family.value],
                 },
                 force_product_family_hint=True,
+                exact_manager_values=exact_manager_values,
             )
         except ValueError as error:
             # Field hints are inferred from natural-language surfaces before
@@ -822,6 +856,24 @@ class ServerQueryPlanCompiler:
             raise PlanCompilationBlockedError("compiler changed the routed product family")
         if (
             decision.draft.intent is InteractionIntent.SEARCH
+            and _EXPLICIT_NUMERIC_FILTER_BOUND.search(semantic_question) is not None
+            and not any(
+                item.operator
+                in {
+                    ConstraintOperator.LT,
+                    ConstraintOperator.LTE,
+                    ConstraintOperator.GT,
+                    ConstraintOperator.GTE,
+                    ConstraintOperator.BETWEEN,
+                }
+                for item in plan.constraints
+            )
+        ):
+            raise PlanCompilationBlockedError(
+                "명시된 수치 조건을 제공 데이터 field에 연결하지 못했습니다."
+            )
+        if (
+            decision.draft.intent is InteractionIntent.SEARCH
             and ranking_intent_present(decision.draft.question)
             and not exact_identity_lookup
         ):
@@ -843,6 +895,8 @@ class ServerQueryPlanCompiler:
         *,
         hard_filter_lock: HardFilterLock,
         receipts: tuple[SemanticResolutionReceipt, ...],
+        semantic_constraints: tuple[Constraint, ...] = (),
+        resolved_residual_spans: tuple[str, ...] = (),
     ) -> QueryPlan:
         """Compile only server-admitted semantic receipts on top of locked lexical facts."""
 
@@ -880,6 +934,19 @@ class ServerQueryPlanCompiler:
             for receipt in receipts
         ):
             raise PlanCompilationBlockedError("semantic receipt differs from its hard-filter lock")
+        constraint_receipt_hashes = {
+            receipt.constraint_sha256
+            for receipt in receipts
+            if receipt.operation is ResolutionOperation.FILTER
+        }
+        supplied_constraint_hashes = {
+            canonical_sha256(item.model_dump(mode="json"))
+            for item in semantic_constraints
+        }
+        if constraint_receipt_hashes != supplied_constraint_hashes:
+            raise PlanCompilationBlockedError(
+                "semantic filter constraints differ from their authority receipts"
+            )
         semantic_question = semantic_query_surface(decision.draft.question)
         payload = canonicalize_query_plan_payload(
             semantic_question,
@@ -890,11 +957,36 @@ class ServerQueryPlanCompiler:
             force_product_family_hint=True,
         )
         admitted_residual_hashes = {receipt.residual_span_sha256 for receipt in receipts}
+        if resolved_residual_spans:
+            supplied_residual_hashes = {
+                hashlib.sha256(span.encode("utf-8")).hexdigest()
+                for span in resolved_residual_spans
+            }
+            if supplied_residual_hashes != admitted_residual_hashes:
+                raise PlanCompilationBlockedError(
+                    "semantic residual spans differ from their authority receipts"
+                )
+
+        def ambiguity_was_resolved(item: dict[str, object]) -> bool:
+            span = str(item["span"])
+            if hashlib.sha256(span.encode("utf-8")).hexdigest() in admitted_residual_hashes:
+                return True
+            # The canonical parser can report only the comparison cue (for
+            # example ``큰``) while the authority receipt binds the complete
+            # HCX clause (``시장 체력이 ... 더 큰``).  Remove that nested cue
+            # only when it occurs once in the user question and the exact
+            # receipt-bound residual contains it.  Repeated cues remain
+            # ambiguous instead of being cleared by textual coincidence.
+            return (
+                bool(resolved_residual_spans)
+                and decision.draft.question.count(span) == 1
+                and any(span in residual for residual in resolved_residual_spans)
+            )
+
         payload["ambiguities"] = [
             item
             for item in payload["ambiguities"]
-            if hashlib.sha256(item["span"].encode("utf-8")).hexdigest()
-            not in admitted_residual_hashes
+            if not ambiguity_was_resolved(item)
         ]
         if payload["ambiguities"] or payload["unsupported_conditions"]:
             raise PlanCompilationBlockedError(
@@ -918,7 +1010,9 @@ class ServerQueryPlanCompiler:
             raise PlanCompilationBlockedError(
                 "semantic hard-filter lock differs from the server reconstruction"
             )
+        hard_filter_lock.require_preserved(server_base_plan)
         ranking = list(payload["ranking"])
+        constraints = list(payload["constraints"])
         projection = list(payload["projection"])
         for receipt in receipts:
             if receipt.operation is ResolutionOperation.RANK:
@@ -938,18 +1032,55 @@ class ServerQueryPlanCompiler:
                 projection = search_projection(family, *projection, receipt.field_id)
             elif receipt.operation is ResolutionOperation.PROJECT:
                 projection = search_projection(family, *projection, receipt.field_id)
+            elif receipt.operation is ResolutionOperation.FILTER:
+                matching = [
+                    item
+                    for item in semantic_constraints
+                    if canonical_sha256(item.model_dump(mode="json"))
+                    == receipt.constraint_sha256
+                ]
+                if len(matching) != 1 or matching[0].field != receipt.field_id:
+                    raise PlanCompilationBlockedError(
+                        "semantic filter receipt has no unique server constraint"
+                    )
+                conflicting = [
+                    item for item in constraints if item["field"] == receipt.field_id
+                ]
+                serialized = matching[0].model_dump(mode="json")
+                if conflicting and serialized not in conflicting:
+                    raise PlanCompilationBlockedError(
+                        "semantic filter conflicts with a locked server constraint"
+                    )
+                if serialized not in constraints:
+                    constraints.append(serialized)
+                projection = search_projection(family, *projection, receipt.field_id)
             else:
                 raise PlanCompilationBlockedError(
-                    "filter and aggregate semantic operations require explicit server values"
+                    "aggregate semantic operations require explicit server values"
                 )
         payload["ranking"] = ranking
+        payload["constraints"] = constraints
         payload["projection"] = projection
         try:
             try:
                 plan = QueryPlan.model_validate(payload)
             except ValidationError as error:
                 raise PlanCompilationBlockedError(str(error)) from error
-            hard_filter_lock.require_preserved(plan)
+            if not semantic_constraints:
+                hard_filter_lock.require_preserved(plan)
+            elif (
+                tuple(item for item in plan.constraints if item in hard_filter_lock.constraints)
+                != hard_filter_lock.constraints
+                or plan.constraint_expression != hard_filter_lock.constraint_expression
+                or any(item not in plan.ranking for item in hard_filter_lock.rankings)
+                or (
+                    hard_filter_lock.requested_limit is not None
+                    and plan.limit != hard_filter_lock.requested_limit
+                )
+            ):
+                raise PlanCompilationBlockedError(
+                    "semantic filter changed a locked server condition"
+                )
         except ValueError as error:
             raise PlanCompilationBlockedError(str(error)) from error
         return plan

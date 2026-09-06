@@ -7,11 +7,14 @@ import pytest
 
 from finance_agent_core.agent.compound_query import (
     CompoundFilter,
+    CompoundMetric,
     TypedCompoundQueryEngine,
+    _anaphoric_anchor_relative_specs,
+    _closed_named_set_count,
     _merge_clause_filters,
     _SourceRecord,
 )
-from finance_agent_core.contracts.queryplan import ProductFamily
+from finance_agent_core.contracts.queryplan import ProductFamily, SortDirection
 
 
 def _engine() -> TypedCompoundQueryEngine:
@@ -138,6 +141,107 @@ def test_supported_cohort_contract_remains_available() -> None:
 
     assert plan is not None
     assert plan.kind == "cohort"
+
+
+@pytest.mark.parametrize(
+    ("surface", "field", "operator"),
+    [
+        ("순자산이 이 상품 이상인 다른 상품", "du_last_aum", "gte"),
+        ("종가가 이 상품보다 큰 다른 상품", "du_clpr", "gt"),
+        ("이 상품보다 연간보수율이 낮은 다른 상품", "cu_charge_rt", "lt"),
+    ],
+)
+def test_anchor_relative_parser_accepts_both_korean_word_orders(
+    surface: str,
+    field: str,
+    operator: str,
+) -> None:
+    parsed = _anaphoric_anchor_relative_specs(
+        surface,
+        ProductFamily.OVERSEAS_ETP,
+    )
+
+    assert parsed == ((CompoundMetric("field", (field,)), operator),)
+
+
+def test_anchor_relative_parser_does_not_turn_final_ranking_into_threshold() -> None:
+    parsed = _anaphoric_anchor_relative_specs(
+        "종가가 이 상품보다 큰 다른 상품을 연간보수율 작은 순으로 4개",
+        ProductFamily.OVERSEAS_ETP,
+    )
+
+    assert parsed == ((CompoundMetric("field", ("du_clpr",)), "gt"),)
+
+
+def test_exact_two_product_conjunction_closes_named_comparison_set() -> None:
+    question = "알파펀드(KR5123456789)하고 베타펀드(KR5987654321)를 비교해 주세요."
+    surfaces = ("알파펀드", "KR5123456789", "베타펀드", "KR5987654321")
+    spans = tuple(
+        (question.index(surface), question.index(surface) + len(surface))
+        for surface in surfaces
+    )
+
+    assert _closed_named_set_count(question, spans, logical_product_count=2) == 2
+
+
+def test_exact_two_products_with_open_set_marker_stays_open() -> None:
+    question = (
+        "알파펀드(KR5123456789)하고 베타펀드(KR5987654321)를 포함한 "
+        "다른 상품도 비교해 주세요."
+    )
+    surfaces = ("알파펀드", "KR5123456789", "베타펀드", "KR5987654321")
+    spans = tuple(
+        (question.index(surface), question.index(surface) + len(surface))
+        for surface in surfaces
+    )
+
+    assert _closed_named_set_count(question, spans, logical_product_count=2) is None
+
+
+def test_exact_two_products_with_trailing_open_extension_stays_open() -> None:
+    question = (
+        "알파펀드(KR5123456789)하고 베타펀드(KR5987654321)를 비교하고 "
+        "다른 상품도 함께 보여 주세요."
+    )
+    surfaces = ("알파펀드", "KR5123456789", "베타펀드", "KR5987654321")
+    spans = tuple(
+        (question.index(surface), question.index(surface) + len(surface))
+        for surface in surfaces
+    )
+
+    assert _closed_named_set_count(question, spans, logical_product_count=2) is None
+
+
+@pytest.mark.parametrize(
+    ("winner", "direction"),
+    [("큰", SortDirection.DESC), ("작은", SortDirection.ASC)],
+)
+def test_cohort_mean_winner_and_difference_are_frozen_in_typed_plan(
+    winner: str,
+    direction: SortDirection,
+) -> None:
+    question = (
+        "알파 운용 국내 ETF와 베타 운용 국내 ETF의 일거래대금 분포를 "
+        "비교해줘. 각 집단의 유효 상품 수, 단순평균, 최솟값과 최댓값을 "
+        f"계산하고 상위 3개도 보여줘. 평균이 더 {winner} 집단과 평균 차이도 알려줘."
+    )
+
+    plan = _engine().compile(question, "cohort-mean-comparison")
+
+    assert plan is not None
+    assert plan.kind == "cohort"
+    assert plan.cohort_mean_direction is direction
+    assert plan.cohort_mean_difference is True
+
+
+def test_unsupported_non_mean_cohort_winner_is_not_substituted() -> None:
+    question = (
+        "알파 운용 국내 ETF와 베타 운용 국내 ETF의 일거래대금 분포를 "
+        "비교해줘. 각 집단의 유효 상품 수, 단순평균, 최솟값과 최댓값을 "
+        "계산하고 상위 3개도 보여줘. 최댓값이 더 큰 집단도 알려줘."
+    )
+
+    assert _engine().compile(question, "unsupported-cohort-winner") is None
 
 
 def test_preliminary_stage_without_a_final_ranking_refuses() -> None:

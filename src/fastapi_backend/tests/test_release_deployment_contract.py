@@ -71,9 +71,9 @@ def test_release_image_embeds_manifest_without_self_referential_digest() -> None
 
 
 def test_release_compose_requires_digest_binding_and_disabled_dense() -> None:
-    compose = (_repository_root() / "src" / "fastapi_backend" / "docker-compose.release.yml").read_text(
-        encoding="utf-8"
-    )
+    compose = (
+        _repository_root() / "src" / "fastapi_backend" / "docker-compose.release.yml"
+    ).read_text(encoding="utf-8")
 
     assert "FINANCE_IMAGE_REFERENCE:?" in compose
     assert "FINANCE_DEPLOYMENT_BINDING_SHA256:?" in compose
@@ -93,6 +93,8 @@ def test_release_compose_requires_digest_binding_and_disabled_dense() -> None:
     assert "FINANCE_RUNTIME_PLATFORM" in compose
     assert "CLOVASTUDIO_API_KEY_FILE:" in compose
     assert "\n      CLOVASTUDIO_API_KEY:" not in compose
+    assert "NAVER_API_HUB_CLIENT_ID_FILE" not in compose
+    assert "naver_api_hub_client_id" not in compose
     assert compose.count("read_only: true") >= 2
     assert "require_approved_database_paths" in compose
     assert "volumes: !override" in compose
@@ -100,9 +102,9 @@ def test_release_compose_requires_digest_binding_and_disabled_dense() -> None:
 
 
 def test_adaptive_release_overlay_is_explicit_and_read_only() -> None:
-    overlay = (_repository_root() / "src" / "fastapi_backend" / "docker-compose.adaptive.yml").read_text(
-        encoding="utf-8"
-    )
+    overlay = (
+        _repository_root() / "src" / "fastapi_backend" / "docker-compose.adaptive.yml"
+    ).read_text(encoding="utf-8")
 
     assert 'FINANCE_ADAPTIVE_SEMANTIC_ENABLED: "true"' in overlay
     assert 'FINANCE_DENSE_SCHEMA_LINKER_ENABLED: "true"' in overlay
@@ -124,8 +126,23 @@ def test_document_cache_release_overlay_is_explicit_and_read_only() -> None:
 
     assert "FINANCE_EXTERNAL_DOCUMENT_DENSE_ARTIFACT_FILE" in overlay
     assert "FINANCE_EXTERNAL_DOCUMENT_CACHE_ACTIVATION_FILE" in overlay
-    assert overlay.count("read_only: true") == 2
-    assert overlay.count("create_host_path: false") == 2
+    assert "FINANCE_EXTERNAL_DOCUMENT_CORPUS_MANIFEST_FILE" in overlay
+    assert "FINANCE_EXTERNAL_DOCUMENT_CORPUS_ROOT" in overlay
+    assert overlay.count("read_only: true") == 4
+    assert overlay.count("create_host_path: false") == 4
+    assert "NAVER_API_HUB" not in overlay
+
+
+def test_live_search_release_overlay_is_explicit_and_secret_only() -> None:
+    overlay = (
+        _repository_root() / "src" / "fastapi_backend" / "docker-compose.live-search.yml"
+    ).read_text(encoding="utf-8")
+
+    assert "NAVER_API_HUB_CLIENT_ID_FILE: /run/secrets/naver_api_hub_client_id" in overlay
+    assert "NAVER_API_HUB_CLIENT_SECRET_FILE: /run/secrets/naver_api_hub_client_secret" in overlay
+    assert "NAVER_API_HUB_CLIENT_ID_HOST_FILE:?" in overlay
+    assert "NAVER_API_HUB_CLIENT_SECRET_HOST_FILE:?" in overlay
+    assert "CLOVASTUDIO" not in overlay
 
 
 @pytest.mark.skipif(shutil.which("docker") is None, reason="Docker Compose CLI is unavailable")
@@ -190,6 +207,9 @@ def test_release_launcher_forbids_build_and_forces_no_build() -> None:
     assert "RELEASE_ENV_SNAPSHOT" in launcher
     assert "/var/lib/finance-agent-release/runtime-bindings" in launcher
     assert "persistent_binding_snapshot" in launcher
+    assert 'PERSISTENT_BINDING_ROOT.parent / "runtime-artifacts"' in launcher
+    assert "persistent_runtime_blob" in launcher
+    assert "survives\n    launcher cleanup, container restart, and Docker daemon restart" in launcher
     assert '"FINANCE_AUDIT_HOST_DIR"' in launcher
     assert "RELEASE_BACKEND_UID = 10001" in launcher
     assert "audit_root_stat.st_uid != RELEASE_BACKEND_UID" in launcher
@@ -199,6 +219,9 @@ def test_release_launcher_forbids_build_and_forces_no_build() -> None:
     assert "FINANCE_EXTERNAL_KNOWLEDGE_ENABLED" in launcher
     assert "NAVER_API_HUB_CLIENT_SECRET_HOST_FILE" in launcher
     assert "forbid inline NAVER API HUB credentials" in launcher
+    assert "approved_corpus_cache_only forbids NAVER API HUB credentials" in launcher
+    assert "persistent_corpus_snapshot" in launcher
+    assert "docker-compose.live-search.yml" in launcher
     assert "forbids command" in launcher
     assert "--force-recreate" in launcher
     assert "--no-recreate" in launcher
@@ -228,17 +251,24 @@ def test_final_release_env_example_pins_public_http_and_hcx_answer_only() -> Non
     assert "FINANCE_BACKEND_FUND_EXECUTION_POLICY=public_fund_v1_approved" in example
     assert "FINANCE_ADAPTIVE_SEMANTIC_ENABLED=true" in example
     assert "FINANCE_EXTERNAL_KNOWLEDGE_ENABLED=true" in example
-    assert "Leave the four values below unset for verified_live_official" in example
+    assert "Leave the eight values below unset for verified_live_official" in example
     assert "# FINANCE_EXTERNAL_DOCUMENT_DENSE_ARTIFACT_HOST_FILE=" in example
+    assert "# FINANCE_EXTERNAL_DOCUMENT_CORPUS_MANIFEST_HOST_FILE=" in example
+    assert "Leave NAVER values unset for approved_corpus_cache_only" in example
+    assert "Live Search\n# overlay and its secrets will not be mounted" in example
 
 
 def test_release_build_context_is_allowlisted_and_base_has_no_mutable_default() -> None:
     root = _repository_root()
-    release_ignore = (root / "src" / "fastapi_backend" / "Dockerfile.release.dockerignore").read_text(
+    release_ignore = (
+        root / "src" / "fastapi_backend" / "Dockerfile.release.dockerignore"
+    ).read_text(encoding="utf-8")
+    base_ignore = (root / "src" / "fastapi_backend" / "Dockerfile.dockerignore").read_text(
         encoding="utf-8"
     )
-    base_ignore = (root / "src" / "fastapi_backend" / "Dockerfile.dockerignore").read_text(encoding="utf-8")
-    dockerfile = (root / "src" / "fastapi_backend" / "Dockerfile.release").read_text(encoding="utf-8")
+    dockerfile = (root / "src" / "fastapi_backend" / "Dockerfile.release").read_text(
+        encoding="utf-8"
+    )
 
     assert release_ignore.splitlines()[0] == "**"
     assert "!src/fastapi_backend/release/agent-release-manifest.json" in release_ignore
@@ -255,7 +285,9 @@ def test_release_build_context_is_allowlisted_and_base_has_no_mutable_default() 
 
 
 def test_backend_image_uses_a_source_discarding_multi_stage_build() -> None:
-    dockerfile = (_repository_root() / "src" / "fastapi_backend" / "Dockerfile").read_text(encoding="utf-8")
+    dockerfile = (_repository_root() / "src" / "fastapi_backend" / "Dockerfile").read_text(
+        encoding="utf-8"
+    )
 
     assert "AS dependency-builder" in dockerfile
     assert "AS runtime" in dockerfile
@@ -342,7 +374,12 @@ def _release_launcher_fixture(
     )
     capture = tmp_path / "docker-arguments.txt"
     fake_bin = (
-        _repository_root() / "src" / "fastapi_backend" / "tests" / "fixtures" / "release_launcher_bin"
+        _repository_root()
+        / "src"
+        / "fastapi_backend"
+        / "tests"
+        / "fixtures"
+        / "release_launcher_bin"
     )
     environment = os.environ.copy()
     environment.update(
@@ -771,8 +808,19 @@ def test_release_launcher_rejects_external_knowledge_artifact_hash_mismatch(
     assert not capture.exists()
 
 
+@pytest.mark.parametrize(
+    ("retrieval_mode", "include_live_credentials", "expects_live_overlay"),
+    [
+        ("approved_corpus_cache_only", False, False),
+        ("approved_corpus_cache_first", True, True),
+        ("approved_corpus_cache_only", True, None),
+    ],
+)
 def test_release_launcher_snapshots_and_auto_assembles_approved_document_cache(
     tmp_path: Path,
+    retrieval_mode: str,
+    include_live_credentials: bool,
+    expects_live_overlay: bool | None,
 ) -> None:
     environment_path, environment, capture, test_launcher = _release_launcher_fixture(tmp_path)
     schema_dense = tmp_path / "schema-dense.json"
@@ -785,22 +833,81 @@ def test_release_launcher_snapshots_and_auto_assembles_approved_document_cache(
     )
     kure_snapshot.mkdir(parents=True)
     schema_dense.write_text("{}\n", encoding="utf-8")
-    schema_dense.chmod(0o444)
+    schema_dense.chmod(0o644)
     kure_manifest.write_text("{}\n", encoding="utf-8")
+    kure_manifest.chmod(0o644)
+
+    corpus_root = tmp_path / "approved-corpus"
+    corpus_document = corpus_root / "documents" / "official.txt"
+    corpus_document.parent.mkdir(parents=True)
+    corpus_document.write_text("공식 승인 문서 원문\n", encoding="utf-8")
+    corpus_document_sha = hashlib.sha256(corpus_document.read_bytes()).hexdigest()
+    normalized_sha = "e" * 64
+    file_manifest_entries = [
+        {
+            "content_sha256": corpus_document_sha,
+            "content_size_bytes": corpus_document.stat().st_size,
+            "document_id": "official-document-001",
+            "normalized_text_sha256": normalized_sha,
+            "relative_path": "documents/official.txt",
+        }
+    ]
+    file_manifest_sha = hashlib.sha256(
+        (
+            json.dumps(
+                file_manifest_entries,
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+            + "\n"
+        ).encode("utf-8")
+    ).hexdigest()
+    corpus_manifest = tmp_path / "approved-corpus-manifest.json"
+    corpus_manifest.write_text(
+        json.dumps(
+            {
+                "manifest_kind": "external_approved_corpus",
+                "documents": file_manifest_entries,
+                "document_count": 1,
+                "total_content_size_bytes": corpus_document.stat().st_size,
+                "file_manifest_sha256": file_manifest_sha,
+            },
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    corpus_manifest.chmod(0o644)
+    corpus_manifest_sha = hashlib.sha256(corpus_manifest.read_bytes()).hexdigest()
 
     dense = tmp_path / "document-dense-approved.json"
     activation = tmp_path / "document-cache-activation.json"
     dense.write_bytes(b'{"approved":"dense"}\n')
-    activation.write_bytes(b'{"approved":"activation"}\n')
-    dense.chmod(0o444)
-    activation.chmod(0o444)
+    activation.write_text(
+        json.dumps(
+            {
+                "approved_corpus_manifest_sha256": corpus_manifest_sha,
+                "approved_corpus_file_manifest_sha256": file_manifest_sha,
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    dense.chmod(0o644)
+    activation.chmod(0o644)
     dense_sha = hashlib.sha256(dense.read_bytes()).hexdigest()
     activation_sha = hashlib.sha256(activation.read_bytes()).hexdigest()
     external_artifact = tmp_path / "external-knowledge-artifact.json"
     external_artifact.write_text(
         json.dumps(
             {
-                "retrieval_mode": "approved_corpus_cache_first",
+                "retrieval_mode": retrieval_mode,
+                "corpus_manifest_sha256": corpus_manifest_sha,
                 "document_dense_sha256": dense_sha,
                 "document_activation_receipt_sha256": activation_sha,
             },
@@ -812,48 +919,56 @@ def test_release_launcher_snapshots_and_auto_assembles_approved_document_cache(
     )
     relations = tmp_path / "external-temporal-relations.json"
     relations.write_text('{"relations":[]}\n', encoding="utf-8")
-    external_artifact.chmod(0o444)
-    relations.chmod(0o444)
+    external_artifact.chmod(0o644)
+    relations.chmod(0o644)
     client_id = tmp_path / "naver-id"
     client_secret = tmp_path / "naver-secret"
     client_id.write_text("client-id", encoding="utf-8")
     client_secret.write_text("client-secret", encoding="utf-8")
     client_id.chmod(0o600)
     client_secret.chmod(0o600)
-    with environment_path.open("a", encoding="utf-8") as stream:
-        stream.write(
-            "\n".join(
-                [
-                    "FINANCE_ADAPTIVE_SEMANTIC_ENABLED=true",
-                    f"FINANCE_SCHEMA_DENSE_INDEX_HOST_FILE={schema_dense}",
-                    "FINANCE_SCHEMA_DENSE_INDEX_SHA256=" + "1" * 64,
-                    "FINANCE_SCHEMA_DENSE_CALIBRATION_REPORT_SHA256=" + "2" * 64,
-                    "FINANCE_SCHEMA_DENSE_MIN_SCORE=0.5",
-                    "FINANCE_SCHEMA_DENSE_HCLX_CANDIDATE_MIN_SCORE=0.3",
-                    "FINANCE_SCHEMA_DENSE_MINIMUM_MARGIN=0.1",
-                    f"FINANCE_KURE_CACHE_HOST_DIR={kure_cache}",
-                    f"FINANCE_KURE_SNAPSHOT_MANIFEST_HOST_FILE={kure_manifest}",
-                    "FINANCE_EXTERNAL_KNOWLEDGE_ENABLED=true",
-                    f"FINANCE_EXTERNAL_KNOWLEDGE_ARTIFACT_HOST_FILE={external_artifact}",
-                    "FINANCE_EXTERNAL_KNOWLEDGE_ARTIFACT_FILE=/run/finance-release/external-knowledge-artifact.json",
-                    "FINANCE_EXTERNAL_KNOWLEDGE_ARTIFACT_SHA256="
-                    + hashlib.sha256(external_artifact.read_bytes()).hexdigest(),
-                    f"FINANCE_EXTERNAL_TEMPORAL_RELATION_HOST_FILE={relations}",
-                    "FINANCE_EXTERNAL_TEMPORAL_RELATION_FILE=/run/finance-release/external-temporal-relations.json",
-                    "FINANCE_EXTERNAL_TEMPORAL_RELATION_SHA256="
-                    + hashlib.sha256(relations.read_bytes()).hexdigest(),
-                    f"FINANCE_EXTERNAL_DOCUMENT_DENSE_ARTIFACT_HOST_FILE={dense}",
-                    "FINANCE_EXTERNAL_DOCUMENT_DENSE_ARTIFACT_FILE=/models/document-dense-approved.json",
-                    f"FINANCE_EXTERNAL_DOCUMENT_CACHE_ACTIVATION_HOST_FILE={activation}",
-                    "FINANCE_EXTERNAL_DOCUMENT_CACHE_ACTIVATION_FILE=/run/finance-release/document-cache-activation.json",
-                    f"NAVER_API_HUB_CLIENT_ID_HOST_FILE={client_id}",
-                    "NAVER_API_HUB_CLIENT_ID_FILE=/run/secrets/naver_api_hub_client_id",
-                    f"NAVER_API_HUB_CLIENT_SECRET_HOST_FILE={client_secret}",
-                    "NAVER_API_HUB_CLIENT_SECRET_FILE=/run/secrets/naver_api_hub_client_secret",
-                ]
-            )
-            + "\n"
+    external_lines = [
+        "FINANCE_ADAPTIVE_SEMANTIC_ENABLED=true",
+        "FINANCE_BACKEND_HCX_SEMANTIC_RESOLVER_ENABLED=true",
+        f"FINANCE_SCHEMA_DENSE_INDEX_HOST_FILE={schema_dense}",
+        "FINANCE_SCHEMA_DENSE_INDEX_SHA256=" + "1" * 64,
+        "FINANCE_SCHEMA_DENSE_CALIBRATION_REPORT_SHA256=" + "2" * 64,
+        "FINANCE_SCHEMA_DENSE_MIN_SCORE=0.5",
+        "FINANCE_SCHEMA_DENSE_HCLX_CANDIDATE_MIN_SCORE=0.3",
+        "FINANCE_SCHEMA_DENSE_MINIMUM_MARGIN=0.1",
+        f"FINANCE_KURE_CACHE_HOST_DIR={kure_cache}",
+        f"FINANCE_KURE_SNAPSHOT_MANIFEST_HOST_FILE={kure_manifest}",
+        "FINANCE_EXTERNAL_KNOWLEDGE_ENABLED=true",
+        f"FINANCE_EXTERNAL_KNOWLEDGE_ARTIFACT_HOST_FILE={external_artifact}",
+        "FINANCE_EXTERNAL_KNOWLEDGE_ARTIFACT_FILE=/run/finance-release/external-knowledge-artifact.json",
+        "FINANCE_EXTERNAL_KNOWLEDGE_ARTIFACT_SHA256="
+        + hashlib.sha256(external_artifact.read_bytes()).hexdigest(),
+        f"FINANCE_EXTERNAL_TEMPORAL_RELATION_HOST_FILE={relations}",
+        "FINANCE_EXTERNAL_TEMPORAL_RELATION_FILE=/run/finance-release/external-temporal-relations.json",
+        "FINANCE_EXTERNAL_TEMPORAL_RELATION_SHA256="
+        + hashlib.sha256(relations.read_bytes()).hexdigest(),
+        f"FINANCE_EXTERNAL_DOCUMENT_DENSE_ARTIFACT_HOST_FILE={dense}",
+        "FINANCE_EXTERNAL_DOCUMENT_DENSE_ARTIFACT_FILE=/models/document-dense-approved.json",
+        f"FINANCE_EXTERNAL_DOCUMENT_CACHE_ACTIVATION_HOST_FILE={activation}",
+        "FINANCE_EXTERNAL_DOCUMENT_CACHE_ACTIVATION_FILE=/run/finance-release/document-cache-activation.json",
+        f"FINANCE_EXTERNAL_DOCUMENT_CORPUS_MANIFEST_HOST_FILE={corpus_manifest}",
+        "FINANCE_EXTERNAL_DOCUMENT_CORPUS_MANIFEST_FILE=/run/finance-release/approved-corpus-manifest.json",
+        f"FINANCE_EXTERNAL_DOCUMENT_CORPUS_HOST_DIR={corpus_root}",
+        "FINANCE_EXTERNAL_DOCUMENT_CORPUS_ROOT=/run/finance-corpus",
+    ]
+    if include_live_credentials:
+        external_lines.extend(
+            [
+                f"NAVER_API_HUB_CLIENT_ID_HOST_FILE={client_id}",
+                "NAVER_API_HUB_CLIENT_ID_FILE=/run/secrets/naver_api_hub_client_id",
+                f"NAVER_API_HUB_CLIENT_SECRET_HOST_FILE={client_secret}",
+                "NAVER_API_HUB_CLIENT_SECRET_FILE=/run/secrets/naver_api_hub_client_secret",
+            ]
         )
+    with environment_path.open("a", encoding="utf-8") as stream:
+        stream.write("\n".join(external_lines) + "\n")
+    captured_release_environment = tmp_path / "captured-release.env"
+    environment["CAPTURE_RELEASE_ENV_FILE"] = str(captured_release_environment)
 
     completed = subprocess.run(
         [str(test_launcher), "config", "--quiet"],
@@ -864,10 +979,62 @@ def test_release_launcher_snapshots_and_auto_assembles_approved_document_cache(
         text=True,
     )
 
+    if expects_live_overlay is None:
+        assert completed.returncode == 1
+        assert "approved_corpus_cache_only forbids NAVER API HUB credentials" in completed.stderr
+        assert not capture.exists()
+        return
     assert completed.returncode == 0, completed.stderr
     arguments = capture.read_text(encoding="utf-8").splitlines()
     assert "src/fastapi_backend/docker-compose.adaptive.yml" in arguments
     assert "src/fastapi_backend/docker-compose.document-cache.yml" in arguments
+    assert (
+        "src/fastapi_backend/docker-compose.live-search.yml" in arguments
+    ) is expects_live_overlay
+    sanitized = dict(
+        line.split("=", 1)
+        for line in captured_release_environment.read_text(encoding="utf-8").splitlines()
+    )
+    sanitized = {name: value.strip("'") for name, value in sanitized.items()}
+    durable_blob_sources = {
+        "FINANCE_SCHEMA_DENSE_INDEX_HOST_FILE": schema_dense,
+        "FINANCE_KURE_SNAPSHOT_MANIFEST_HOST_FILE": kure_manifest,
+        "FINANCE_EXTERNAL_KNOWLEDGE_ARTIFACT_HOST_FILE": external_artifact,
+        "FINANCE_EXTERNAL_TEMPORAL_RELATION_HOST_FILE": relations,
+        "FINANCE_EXTERNAL_DOCUMENT_DENSE_ARTIFACT_HOST_FILE": dense,
+        "FINANCE_EXTERNAL_DOCUMENT_CACHE_ACTIVATION_HOST_FILE": activation,
+    }
+    durable_blob_payloads = {
+        name: original.read_bytes() for name, original in durable_blob_sources.items()
+    }
+    corpus_manifest_payload = corpus_manifest.read_bytes()
+    corpus_document_payload = corpus_document.read_bytes()
+    for original in set(durable_blob_sources.values()):
+        original.unlink()
+    corpus_manifest.unlink()
+    shutil.rmtree(corpus_root)
+    for name, expected_payload in durable_blob_payloads.items():
+        durable = Path(sanitized[name])
+        assert durable.parent == tmp_path / "runtime-artifacts"
+        assert durable.is_file()
+        assert durable.read_bytes() == expected_payload
+        assert durable.name == hashlib.sha256(durable.read_bytes()).hexdigest()
+        assert stat.S_IMODE(durable.stat().st_mode) == 0o444
+        assert durable.stat().st_nlink == 1
+    persistent_corpora = list((tmp_path / "approved-corpora").glob("[0-9a-f]" * 64))
+    assert len(persistent_corpora) == 1
+    persistent_manifest = persistent_corpora[0] / "manifest.json"
+    persistent_document = persistent_corpora[0] / "documents" / "documents" / "official.txt"
+    assert persistent_manifest.read_bytes() == corpus_manifest_payload
+    assert persistent_document.read_bytes() == corpus_document_payload
+    assert stat.S_IMODE(persistent_manifest.stat().st_mode) == 0o444
+    assert stat.S_IMODE(persistent_document.stat().st_mode) == 0o444
+    assert Path(sanitized["FINANCE_EXTERNAL_DOCUMENT_CORPUS_MANIFEST_HOST_FILE"]) == (
+        persistent_manifest
+    )
+    assert Path(sanitized["FINANCE_EXTERNAL_DOCUMENT_CORPUS_HOST_DIR"]) == (
+        persistent_corpora[0] / "documents"
+    )
 
 
 def test_release_launcher_rejects_document_cache_on_live_only_artifact(
@@ -907,6 +1074,10 @@ def test_release_launcher_rejects_document_cache_on_live_only_artifact(
                     "FINANCE_EXTERNAL_DOCUMENT_DENSE_ARTIFACT_FILE=/models/document-dense-approved.json",
                     f"FINANCE_EXTERNAL_DOCUMENT_CACHE_ACTIVATION_HOST_FILE={activation}",
                     "FINANCE_EXTERNAL_DOCUMENT_CACHE_ACTIVATION_FILE=/run/finance-release/document-cache-activation.json",
+                    f"FINANCE_EXTERNAL_DOCUMENT_CORPUS_MANIFEST_HOST_FILE={tmp_path / 'manifest.json'}",
+                    "FINANCE_EXTERNAL_DOCUMENT_CORPUS_MANIFEST_FILE=/run/finance-release/approved-corpus-manifest.json",
+                    f"FINANCE_EXTERNAL_DOCUMENT_CORPUS_HOST_DIR={tmp_path / 'corpus'}",
+                    "FINANCE_EXTERNAL_DOCUMENT_CORPUS_ROOT=/run/finance-corpus",
                     f"NAVER_API_HUB_CLIENT_ID_HOST_FILE={client_id}",
                     "NAVER_API_HUB_CLIENT_ID_FILE=/run/secrets/naver_api_hub_client_id",
                     f"NAVER_API_HUB_CLIENT_SECRET_HOST_FILE={client_secret}",

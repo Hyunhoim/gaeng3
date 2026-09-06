@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
+
 from finance_agent_core.agent.compound_query import (
     CompoundFamilyPlan,
     CompoundFilter,
@@ -143,6 +144,38 @@ def test_explicit_filter_then_rank_sequence_is_not_a_fake_shortlist() -> None:
     assert hints["limit"] == 3
 
 
+def test_month_period_is_not_counted_as_a_shortlist_size() -> None:
+    question = (
+        "국내 ETF 중 3개월 수익률 -11.5 이상, "
+        "20거래일 연환산 변동성 42.47 이하로 "
+        "거른 뒤 순자산총액 상위 3개를 정리해 주세요."
+    )
+
+    assert requires_typed_two_stage_plan(question) is False
+    assert _engine().compile(question, "period-not-shortlist") is None
+    decision = SemanticCoverageGate().evaluate(question, interaction_intent="search")
+    hints = build_lexical_hints(
+        question,
+        ProductFamily.DOMESTIC_ETP.value,
+        force_product_family_hint=True,
+    )
+    assert decision.has_unresolved_semantics is False
+    assert {
+        (item["field"], item["operator"], str(item["value"]))
+        for item in hints["required_constraints"]
+    } >= {
+        ("three_month_return_pct", "gte", "-11.5"),
+        ("twenty_day_volatility_pct", "lte", "42.47"),
+    }
+    assert hints["required_rankings"] == [
+        {
+            "field": "net_asset_total",
+            "direction": "desc",
+            "nulls": "last",
+        }
+    ]
+
+
 @pytest.mark.parametrize(
     "question",
     [
@@ -168,6 +201,67 @@ def test_real_two_stage_still_requires_two_bounded_result_sizes() -> None:
     assert plan.kind == "two_stage"
     assert plan.family_plans[0].shortlist_limit == 50
     assert plan.family_plans[0].limit == 5
+
+
+@pytest.mark.parametrize(
+    ("cue", "order_surface", "expected_direction"),
+    [
+        ("큰", "순", SortDirection.DESC),
+        ("높은", "순으로", SortDirection.DESC),
+        ("작은", "순서로", SortDirection.ASC),
+        ("낮은", "순서대로", SortDirection.ASC),
+    ],
+)
+def test_two_stage_shortlist_accepts_explicit_order_surface_variants(
+    cue: str,
+    order_surface: str,
+    expected_direction: SortDirection,
+) -> None:
+    question = (
+        f"국내 ETF를 최근 거래대금이 {cue} {order_surface} 30개 먼저 추린 다음, "
+        "그 30개 안에서 1년 수익률이 높은 순으로 5개를 다시 골라주세요."
+    )
+
+    assert requires_typed_two_stage_plan(question) is True
+    plan = _engine().compile(question, f"two-stage-{order_surface}")
+    assert plan is not None
+    assert plan.kind == "two_stage"
+    family_plan = plan.family_plans[0]
+    assert family_plan.shortlist_limit == 30
+    assert family_plan.shortlist_direction is expected_direction
+    assert family_plan.limit == 5
+    assert family_plan.direction is SortDirection.DESC
+
+
+def test_two_stage_shortlist_rejects_directionless_first_stage() -> None:
+    question = (
+        "국내 ETF를 최근 거래대금 기준 30개 먼저 추린 다음, "
+        "그 30개 안에서 1년 수익률이 높은 순으로 5개를 다시 골라주세요."
+    )
+
+    assert requires_typed_two_stage_plan(question) is True
+    assert _engine().compile(question, "directionless-first-stage") is None
+
+
+def test_two_stage_monthly_average_shortlist_is_fully_preserved() -> None:
+    question = (
+        "국내 ETF를 1개월 평균 거래대금이 큰 순서로 30개 먼저 추린 다음, "
+        "그 30개 안에서 1년 수익률이 높은 5개를 다시 골라주세요. "
+        "수익률 자료가 없는 상품은 30개 후보를 정한 다음에 빼주세요."
+    )
+
+    assert requires_typed_two_stage_plan(question) is True
+    plan = _engine().compile(question, "monthly-average-two-stage")
+
+    assert plan is not None
+    family_plan = plan.family_plans[0]
+    assert family_plan.shortlist_metric is not None
+    assert family_plan.shortlist_metric.source_fields == ("du_val_1m",)
+    assert family_plan.shortlist_direction is SortDirection.DESC
+    assert family_plan.shortlist_limit == 30
+    assert family_plan.metric.source_fields == ("du_er_1y",)
+    assert family_plan.direction is SortDirection.DESC
+    assert family_plan.limit == 5
 
 
 def test_secondary_metric_availability_is_applied_after_shortlist(

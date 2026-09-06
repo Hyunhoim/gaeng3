@@ -4,7 +4,21 @@ import calendar
 import re
 from datetime import date, timedelta
 
-from finance_agent_core.agent.intent_analysis import IntentAnalysisDraft
+from finance_agent_core.agent.document_reference import (
+    extract_dated_official_document_references,
+)
+from finance_agent_core.agent.intent_analysis import (
+    IntentAnalysisDraft,
+    external_frame_supports_requirement,
+    holding_document_top_n_matches,
+    holding_document_top_n_scope,
+    knowledge_requirement_signal_matches,
+    question_has_knowledge_capability_signal,
+)
+from finance_agent_core.agent.product_family_language import (
+    explicit_etp_market_families,
+    has_standalone_bond_product_scope,
+)
 from finance_agent_core.agent.source_selection import (
     GeneralizedOfficialSourceSelector,
     SourceSelectionSignals,
@@ -16,6 +30,8 @@ from finance_agent_core.config.source_registry import (
 )
 from finance_agent_core.contracts.external_knowledge import (
     CompositeKnowledgeQueryPlan,
+    KnowledgeDocumentTopNScope,
+    KnowledgeEvidenceSelection,
     KnowledgeMatchMode,
     KnowledgeProductSelection,
     KnowledgeRequirement,
@@ -36,46 +52,6 @@ class EvidencePeriodAfterCutoffError(CompositeKnowledgePlanningError):
     reason_code = "evidence_period_after_cutoff"
 
 
-_CAPABILITY_SIGNAL: dict[KnowledgeCapability, re.Pattern[str]] = {
-    KnowledgeCapability.PORTFOLIO_HOLDINGS: re.compile(
-        r"편입|보유|구성\s*종목|담(?:은|긴|고\s*있는)|"
-        r"넣(?:은|고\s*있는)|"
-        r"포함(?:된|한|하고|하는|되어)|(?:들어|담겨)\s*있|들어간|"
-        r"구성\s*종목(?:으)?로\s*둔|가진|가지(?:는|고\s*있는|고\s*있|고)",
-        re.IGNORECASE,
-    ),
-    KnowledgeCapability.CORPORATE_SUBSIDIARY: re.compile(
-        r"자회사|계열사|가족사|그룹사|"
-        r"(?:계열|관계|소속|산하)\s*(?:기업|회사|법인)",
-        re.IGNORECASE,
-    ),
-    KnowledgeCapability.SECTOR_THEME_HISTORY: re.compile(
-        r"테마|섹터|산업|관련|연결|연관|연계|접점|노출|"
-        r"관련\s*(?:된\s*)?(?:국내\s*|해외\s*)?"
-        r"(?:ETF|ETN|ETP|상장\s*지수\s*(?:상품|펀드))|"
-        r"관련\s*(?:투자\s*)?상품|"
-        r"^(?:국내\s*|해외\s*)?(?:ETF|ETN|ETP|상장\s*지수\s*(?:상품|펀드))$|"
-        r"[0-9A-Za-z가-힣&·+._/-]{2,40}\s+(?:국내\s*|해외\s*)?"
-        r"(?:ETF|ETN|ETP)",
-        re.IGNORECASE,
-    ),
-    KnowledgeCapability.FUND_STRUCTURE_STRATEGY_TREND: re.compile(
-        r"구조|조성\s*(?:구조|방식)|설계(?:\s*방식)?|"
-        r"자금\s*(?:조달|배분)\s*구조|(?:투자|운용)\s*(?:전략|방침)|"
-        r"운용\s*기조|(?:판매|모집|출시)(?:\s*(?:동향|현황|일정|"
-        r"완료|종료|진행\s*(?:상황|현황)))|운용\s*(?:동향|방향|방침|계획|현황)|"
-        r"전략\s*동향|(?:향후|앞으로)\s*(?:운용\s*)?(?:일정|계획)|"
-        r"진행\s*(?:상황|현황)",
-        re.IGNORECASE,
-    ),
-    KnowledgeCapability.PRODUCT_RISK_FACTORS: re.compile(
-        r"위험\s*요인|리스크\s*요인|"
-        r"투자\s*위험(?:을|은|이|도)?\s*(?:알려|설명|정리|확인)|"
-        r"손실.{0,12}유의|주의\s*(?:사항|점)|유의\s*(?:사항|점)|"
-        r"원금\s*손실\s*가능성",
-        re.IGNORECASE,
-    ),
-}
 _RECENT_MONTHS = re.compile(r"최근\s*(\d{1,2})\s*개월", re.IGNORECASE)
 _RECENT_DAYS = re.compile(r"(?:최근|지난)\s*(\d{1,3})\s*일", re.IGNORECASE)
 _RECENT_WEEKS = re.compile(r"(?:최근|지난)\s*(\d{1,2})\s*주", re.IGNORECASE)
@@ -85,6 +61,16 @@ _RECENT_QUARTERS = re.compile(
 _RECENT_HALF_YEAR = re.compile(r"(?:최근|지난)\s*(?:반년|반\s*년)", re.IGNORECASE)
 _RECENT_WORD_MONTHS = re.compile(
     r"(?:최근|지난)\s*(한|두|석|세|넉|네|여섯|열두)\s*(?:달|개월)",
+    re.IGNORECASE,
+)
+_ANCHORED_BACK_MONTHS = re.compile(
+    r"(?P<year>20\d{2})\s*년\s*(?P<month>\d{1,2})\s*월\s*"
+    r"(?P<day>\d{1,2})\s*일\s*"
+    r"(?:(?:에서|부터)|(?:을|를)?\s*기준(?:으로|으로부터)?)?\s*"
+    r"(?P<count>\d{1,2}|한|두|석|세|넉|네|여섯|열두)\s*"
+    r"(?:개월|달)(?:을|를)?\s*"
+    r"(?:거슬러\s*올라간|거슬러\s*간|전(?:부터|까지)?(?:의)?)"
+    r"(?:\s*기간)?",
     re.IGNORECASE,
 )
 _KOREAN_MONTH_COUNTS = {
@@ -110,15 +96,41 @@ _EXPLICIT_FROM_TO_MONTH_RANGE = re.compile(
     r"(?:(20\d{2})\s*년\s*)?(\d{1,2})\s*월\s*까지",
     re.IGNORECASE,
 )
+_EXPLICIT_FROM_TO_DAY_RANGE = re.compile(
+    r"(?P<start_year>20\d{2})\s*(?:년\s*|[-/.])"
+    r"(?P<start_month>\d{1,2})\s*(?:월\s*|[-/.])"
+    r"(?P<start_day>\d{1,2})\s*일?\s*부터\s*"
+    r"(?:(?P<end_year>20\d{2})\s*(?:년\s*|[-/.]))?"
+    r"(?P<end_month>\d{1,2})\s*(?:월\s*|[-/.])"
+    r"(?P<end_day>\d{1,2})\s*일?\s*까지",
+    re.IGNORECASE,
+)
 _EXPLICIT_MONTH = re.compile(
     r"(20\d{2})\s*년\s*(\d{1,2})\s*월(?:\s*말)?",
     re.IGNORECASE,
+)
+_KNOWLEDGE_TIME_PATTERNS: tuple[re.Pattern[str], ...] = (
+    _ANCHORED_BACK_MONTHS,
+    _RECENT_MONTHS,
+    _RECENT_DAYS,
+    _RECENT_WEEKS,
+    _RECENT_QUARTERS,
+    _RECENT_HALF_YEAR,
+    _RECENT_WORD_MONTHS,
+    _EXPLICIT_FROM_TO_DAY_RANGE,
+    _EXPLICIT_FROM_TO_MONTH_RANGE,
+    _EXPLICIT_MONTH_RANGE,
+    _SINCE_MONTH,
+    _EXPLICIT_MONTH,
 )
 _LIMIT = re.compile(
     r"(?:TOP\s*(?P<top>\d{1,2})|(?P<count>\d{1,2})\s*(?:개|건)(?:씩)?|"
     r"(?P<word>한|두|세|네|다섯|여섯|일곱|여덟|아홉|열)\s*(?:개|건)(?:씩)?)",
     re.IGNORECASE,
 )
+# A document-internal Top-N is evidence scope, not the number of products the
+# user wants returned.  Parsing is centralized in ``intent_analysis`` so the
+# Planner, coverage gate and Runtime cannot disagree about the same phrase.
 _KOREAN_LIMITS = {
     "한": 1,
     "두": 2,
@@ -131,7 +143,8 @@ _KOREAN_LIMITS = {
     "아홉": 9,
     "열": 10,
 }
-_AUM = re.compile(r"AUM|순\s*자산|운용\s*자산", re.IGNORECASE)
+_NET_ASSET_TOTAL = re.compile(r"순\s*자산\s*총액", re.IGNORECASE)
+_AUM = re.compile(r"AUM|순\s*자산(?!\s*총액)|운용\s*자산", re.IGNORECASE)
 _TOTAL_EXPENSE_RATIO = re.compile(
     r"총\s*보수(?:율)?|연간\s*보수(?:율)?|expense\s*ratio|\bfee\b",
     re.IGNORECASE,
@@ -166,6 +179,7 @@ _TWENTY_DAY_VOLATILITY = re.compile(
     r"20[ -]?day\s*volatility",
     re.IGNORECASE,
 )
+_TRACKING_ERROR = re.compile(r"추적\s*오차(?:율)?|tracking\s*error", re.IGNORECASE)
 _ASCENDING = re.compile(
     r"낮(?:은|게)|적(?:은|게)|작(?:은|게)|오름차순|하위|최저|"
     r"BOTTOM|ascending|lowest|smallest",
@@ -180,14 +194,29 @@ _GOOD_PERFORMANCE_DESCENDING = re.compile(
     r"(?:수익률|성과|실적)(?:이|가)?\s*좋(?:은|게)\s*(?:순|상위|TOP)",
     re.IGNORECASE,
 )
+_EVIDENCE_DATE_ORDERING = re.compile(
+    r"(?P<span>(?P<scope>"
+    r"(?:(?:테마|섹터|산업)(?:\s*(?:연결|관계|관련))?|"
+    r"구성\s*종목|편입|보유|위험\s*요인|리스크\s*요인|"
+    r"펀드\s*(?:구조|전략|동향))?\s*"
+    r"(?:공식\s*)?(?:근거|자료|문서|공시|내역|편입표|출처|reference))"
+    r"(?:의|가|은|는|을|를)?\s*(?:중\s*)?"
+    r"(?:(?P<date_kind>발행|게시|공개|작성|기준)\s*일(?:자)?"
+    r"(?:이|가|은|는)?\s*)?"
+    r"(?P<direction>최신|최근|새로운|오래된|예전)(?:인|한)?\s*"
+    r"(?:순(?:서)?|것부터))",
+    re.IGNORECASE,
+)
 _PERFORMANCE_RANKING = re.compile(
     r"(?:수익률|성과|실적)\s*(?:이\s*)?(?:높은\s*)?(?:순|상위|TOP)|"
     r"(?:순|상위|TOP).{0,8}(?:수익률|성과|실적)",
     re.IGNORECASE,
 )
 _RANK_FIELD_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
+    ("net_asset_total", _NET_ASSET_TOTAL),
     ("aum", _AUM),
     ("total_expense_ratio_pct", _TOTAL_EXPENSE_RATIO),
+    ("tracking_error_pct", _TRACKING_ERROR),
     ("one_day_return_pct", _ONE_DAY_RETURN),
     ("one_month_return_pct", _ONE_MONTH_RETURN),
     ("three_month_return_pct", _THREE_MONTH_RETURN),
@@ -214,6 +243,7 @@ _REQUESTED_PRODUCT_FIELD_PATTERNS: dict[str, re.Pattern[str]] = {
     "daily_volume": _DAILY_VOLUME,
     "investment_region": re.compile(r"투자\s*지역|지역", re.IGNORECASE),
     "manager": re.compile(r"운용사|자산\s*운용사|발행사", re.IGNORECASE),
+    "net_asset_total": _NET_ASSET_TOTAL,
     "one_day_return_pct": _ONE_DAY_RETURN,
     "one_month_return_pct": _ONE_MONTH_RETURN,
     "one_year_return_pct": _ONE_YEAR_RETURN,
@@ -222,6 +252,7 @@ _REQUESTED_PRODUCT_FIELD_PATTERNS: dict[str, re.Pattern[str]] = {
     "three_month_return_pct": _THREE_MONTH_RETURN,
     "ticker": re.compile(r"티커|ticker", re.IGNORECASE),
     "total_expense_ratio_pct": _TOTAL_EXPENSE_RATIO,
+    "tracking_error_pct": _TRACKING_ERROR,
     "twenty_day_volatility_pct": _TWENTY_DAY_VOLATILITY,
 }
 _CORPORATE_PAIR = re.compile(
@@ -247,6 +278,16 @@ _EXPLICIT_ENTITY_LIST = re.compile(
     r"(?<=[0-9A-Za-z가-힣])(?:와|과)\s+|\s(?:및|또는|혹은)\s|[,·ㆍ]",
     re.IGNORECASE,
 )
+_GENERIC_HOLDING_SUBJECT = re.compile(
+    r"^(?:(?:이|그|해당|각|두|세|여러|위|아래|앞선|전술한)\s*)?"
+    r"(?:종목|기업|회사|상품|구성\s*종목)(?:들)?(?:의|이|가|을|를|은|는)?$|"
+    r"^(?:이들|그들|전부|모두|양쪽|둘)(?:의|이|가|을|를|은|는)?$",
+    re.IGNORECASE,
+)
+_HOLDING_PROJECTION_RELATION = re.compile(
+    r"^(?:편입|보유|구성\s*종목)\s*(?:비중|기준일|날짜|시점|순위|정보)$",
+    re.IGNORECASE,
+)
 _CAPABILITY_ORDER = {
     KnowledgeCapability.CORPORATE_SUBSIDIARY: 0,
     KnowledgeCapability.PORTFOLIO_HOLDINGS: 1,
@@ -255,15 +296,6 @@ _CAPABILITY_ORDER = {
     KnowledgeCapability.PRODUCT_RISK_FACTORS: 4,
 }
 _REQUIREMENT_FAMILY_CUES: dict[ProductFamily, re.Pattern[str]] = {
-    ProductFamily.BOND: re.compile(r"(?:원화|국내)?\s*채권", re.IGNORECASE),
-    ProductFamily.DOMESTIC_ETP: re.compile(
-        r"국내\s*(?:ETF|ETN|ETP|상장\s*지수\s*(?:상품|펀드))",
-        re.IGNORECASE,
-    ),
-    ProductFamily.OVERSEAS_ETP: re.compile(
-        r"해외\s*(?:ETF|ETN|ETP|상장\s*지수\s*(?:상품|펀드))",
-        re.IGNORECASE,
-    ),
     ProductFamily.FUND: re.compile(
         r"(?<!상장지수)(?<!상장 지수)(?:공모\s*)?펀드",
         re.IGNORECASE,
@@ -280,7 +312,18 @@ def _requirement_families(
 
     surface = f"{subject} {relation}"
     scoped = tuple(
-        family for family, cue in _REQUIREMENT_FAMILY_CUES.items() if cue.search(surface)
+        sorted(
+            {
+                *explicit_etp_market_families(surface),
+                *((ProductFamily.BOND,) if has_standalone_bond_product_scope(surface) else ()),
+                *(
+                    family
+                    for family, cue in _REQUIREMENT_FAMILY_CUES.items()
+                    if cue.search(surface)
+                ),
+            },
+            key=lambda item: item.value,
+        )
     )
     if scoped:
         allowed = set(global_families)
@@ -315,8 +358,48 @@ def _subtract_months(value: date, months: int) -> date:
     return date(year, month, day)
 
 
+def knowledge_time_evidence_spans(question: str) -> tuple[str, ...]:
+    """Return the literal span owned by an external-evidence time range.
+
+    The ordering intentionally mirrors ``_knowledge_time_range``.  The caller
+    decides whether the parsed range belongs to an external requirement; this
+    helper only preserves the exact user text so the DB prefilter cannot
+    reinterpret ``최근 6개월`` as a six-month product-return condition.
+    """
+
+    document_references = extract_dated_official_document_references(question)
+    if len(document_references) > 1:
+        return tuple(reference.time_evidence_span for reference in document_references)
+    for pattern in _KNOWLEDGE_TIME_PATTERNS:
+        if match := pattern.search(question):
+            return (match.group(0),)
+    return ()
+
+
 def _knowledge_time_range(question: str, cutoff: date) -> KnowledgeTimeRange | None:
     """Normalize bounded temporal language against the signed evidence cutoff."""
+
+    if anchored := _ANCHORED_BACK_MONTHS.search(question):
+        raw_count = anchored.group("count")
+        months = int(raw_count) if raw_count.isdigit() else _KOREAN_MONTH_COUNTS[raw_count]
+        if not 1 <= months <= 60:
+            raise CompositeKnowledgePlanningError("anchored month range is out of bounds")
+        try:
+            end = date(
+                int(anchored.group("year")),
+                int(anchored.group("month")),
+                int(anchored.group("day")),
+            )
+        except ValueError as error:
+            raise CompositeKnowledgePlanningError(
+                "anchored evidence date is invalid"
+            ) from error
+        start = _subtract_months(end, months)
+        if start > cutoff:
+            raise EvidencePeriodAfterCutoffError(
+                "requested evidence period starts after the approved evidence cutoff"
+            )
+        return KnowledgeTimeRange(start=start, end=min(end, cutoff))
 
     if recent := _RECENT_MONTHS.search(question):
         months = int(recent.group(1))
@@ -345,10 +428,32 @@ def _knowledge_time_range(question: str, cutoff: date) -> KnowledgeTimeRange | N
         months = _KOREAN_MONTH_COUNTS[recent.group(1)]
         return KnowledgeTimeRange(start=_subtract_months(cutoff, months), end=cutoff)
 
+    day_range = _EXPLICIT_FROM_TO_DAY_RANGE.search(question)
     from_to_range = _EXPLICIT_FROM_TO_MONTH_RANGE.search(question)
     explicit_range = _EXPLICIT_MONTH_RANGE.search(question)
     explicit_month = _EXPLICIT_MONTH.search(question)
-    if from_to_range is not None:
+    if day_range is not None:
+        start_year = int(day_range.group("start_year"))
+        end_year = int(day_range.group("end_year") or start_year)
+        try:
+            start = date(
+                start_year,
+                int(day_range.group("start_month")),
+                int(day_range.group("start_day")),
+            )
+            end = date(
+                end_year,
+                int(day_range.group("end_month")),
+                int(day_range.group("end_day")),
+            )
+        except ValueError as error:
+            raise CompositeKnowledgePlanningError(
+                "explicit evidence date range is invalid"
+            ) from error
+        if start > end:
+            raise CompositeKnowledgePlanningError("explicit evidence date range is reversed")
+        result = KnowledgeTimeRange(start=start, end=end)
+    elif from_to_range is not None:
         start_year = int(from_to_range.group(1))
         start_month = int(from_to_range.group(2))
         end_year = int(from_to_range.group(3) or start_year)
@@ -455,6 +560,55 @@ def _ranking_choice(question: str) -> tuple[str, SortDirection] | None:
     return next(iter(choices))
 
 
+def _family_aware_ranking_field(
+    field: str,
+    families: tuple[ProductFamily, ...],
+) -> str:
+    """Resolve a shared Korean label without collapsing distinct source facts.
+
+    ``순자산총액`` is the official ``pd_net_tamt`` field for domestic ETPs,
+    while the same surface remains the existing recent-AUM concept for the
+    other supported product families.  A single cross-family ordering cannot
+    honestly use both measures, so keep that request fail-closed.
+    """
+
+    if field == "tracking_error_pct":
+        if set(families) != {ProductFamily.DOMESTIC_ETP}:
+            raise CompositeKnowledgePlanningError(
+                "external tracking-error ranking requires domestic ETP only"
+            )
+        return field
+    if field != "net_asset_total":
+        return field
+    family_set = set(families)
+    if family_set == {ProductFamily.DOMESTIC_ETP}:
+        return field
+    if ProductFamily.DOMESTIC_ETP in family_set:
+        raise CompositeKnowledgePlanningError(
+            "external net-asset-total ranking requires one compatible product family"
+        )
+    return "aum"
+
+
+def _external_product_result_limit(question: str) -> int:
+    """Return only a final product count, excluding evidence-table sizes."""
+
+    document_scopes = holding_document_top_n_matches(question)
+    requested = [
+        (
+            int(match.group("top") or match.group("count"))
+            if match.group("top") or match.group("count")
+            else _KOREAN_LIMITS[match.group("word")]
+        )
+        for match in _LIMIT.finditer(question)
+        if not any(
+            scope[0] <= match.start() and match.end() <= scope[1]
+            for scope in document_scopes
+        )
+    ]
+    return requested[-1] if requested else 1
+
+
 def question_binds_external_ranking(question: str) -> bool:
     """Report whether a direction word is bound to a supported product metric.
 
@@ -466,6 +620,101 @@ def question_binds_external_ranking(question: str) -> bool:
         return _ranking_choice(question) is not None
     except CompositeKnowledgePlanningError:
         return True
+
+
+def _evidence_ordering_capability(scope: str) -> KnowledgeCapability | None:
+    if re.search(r"테마|섹터|산업", scope, re.IGNORECASE):
+        return KnowledgeCapability.SECTOR_THEME_HISTORY
+    if re.search(r"구성\s*종목|편입|보유", scope, re.IGNORECASE):
+        return KnowledgeCapability.PORTFOLIO_HOLDINGS
+    if re.search(r"위험\s*요인|리스크\s*요인", scope, re.IGNORECASE):
+        return KnowledgeCapability.PRODUCT_RISK_FACTORS
+    if re.search(r"펀드\s*(?:구조|전략|동향)", scope, re.IGNORECASE):
+        return KnowledgeCapability.FUND_STRUCTURE_STRATEGY_TREND
+    return None
+
+
+def _compile_evidence_date_selection(
+    question: str,
+    indexed_requirements: tuple[
+        tuple[str, KnowledgeCapability, bool],
+        ...,
+    ],
+) -> KnowledgeEvidenceSelection | None:
+    matches = tuple(_EVIDENCE_DATE_ORDERING.finditer(question))
+    if not matches:
+        return None
+    if len(matches) != 1:
+        raise CompositeKnowledgePlanningError(
+            "multiple evidence-date orderings require clarification"
+        )
+    match = matches[0]
+    explicit_capability = _evidence_ordering_capability(match.group("scope"))
+    candidates = tuple(
+        requirement_id
+        for requirement_id, capability, independent in indexed_requirements
+        if independent
+        and capability
+        in {
+            KnowledgeCapability.PORTFOLIO_HOLDINGS,
+            KnowledgeCapability.SECTOR_THEME_HISTORY,
+            KnowledgeCapability.FUND_STRUCTURE_STRATEGY_TREND,
+            KnowledgeCapability.PRODUCT_RISK_FACTORS,
+        }
+        and (explicit_capability is None or capability is explicit_capability)
+    )
+    if len(candidates) != 1:
+        raise CompositeKnowledgePlanningError(
+            "evidence-date ordering must bind exactly one external requirement"
+        )
+    direction = (
+        SortDirection.ASC
+        if match.group("direction").casefold() in {"오래된", "예전"}
+        else SortDirection.DESC
+    )
+    return KnowledgeEvidenceSelection(
+        order_by=(
+            "as_of"
+            if (match.group("date_kind") or "").casefold() == "기준"
+            else "published_at"
+        ),
+        direction=direction,
+        limit=_external_product_result_limit(question),
+        source_requirement_id=candidates[0],
+        selection_evidence_span=match.group("span"),
+    )
+
+
+def compile_evidence_date_selection(
+    question: str,
+    intent: IntentAnalysisDraft,
+) -> KnowledgeEvidenceSelection | None:
+    """Build the same typed evidence ordering used by the full compiler.
+
+    RoutedService uses this before opening external retrieval so a bare
+    ``최신`` is owned only after it has become a frozen, requirement-bound
+    selection.  No source, product, or fact is authorized here.
+    """
+
+    raw_requirements = _deduplicate_structural_requirements(
+        question,
+        list(intent.knowledge_requirements),
+    )
+    raw_requirements.sort(key=lambda item: _CAPABILITY_ORDER[item.capability])
+    indexed = tuple(
+        (
+            f"need_{index}",
+            item.capability,
+            item.capability is not KnowledgeCapability.CORPORATE_SUBSIDIARY,
+        )
+        for index, item in enumerate(raw_requirements, start=1)
+    )
+    selection = _compile_evidence_date_selection(question, indexed)
+    if selection is not None and _ranking_choice(question) is not None:
+        raise CompositeKnowledgePlanningError(
+            "DB product ranking and evidence-date ordering conflict"
+        )
+    return selection
 
 
 def _holding_match_mode(
@@ -496,6 +745,419 @@ def _holding_match_mode(
     return KnowledgeMatchMode.ANY if any_match else KnowledgeMatchMode.ALL
 
 
+_HOLDING_RESTATEMENT_GRAMMAR_ATOMS = (
+    "으로",
+    "에서",
+    "에게",
+    "부터",
+    "까지",
+    "이나",
+    "나",
+    "의",
+    "이",
+    "가",
+    "은",
+    "는",
+    "을",
+    "를",
+    "와",
+    "과",
+    "도",
+    "에",
+    "로",
+)
+
+# HCX occasionally promotes the predicate/linker part of a Korean clause to a
+# second relation subject (for example, ``... 이력이 *있는* 관련 ETF``).  Such
+# a surface does not name an entity and must never open another official-source
+# search.  Keep this as a small grammar vocabulary, not a product/question
+# allowlist: a real entity remains admissible as soon as any non-grammar text
+# is left after exact tiling.
+_PREDICATE_ONLY_EXTERNAL_SUBJECT_ATOMS = (
+    "관련되어있는",
+    "연결되어있는",
+    "연관되어있는",
+    "편입되어있는",
+    "포함되어있는",
+    "보유하고있는",
+    "담고있는",
+    "가지고있는",
+    "관련있는",
+    "연결있는",
+    "연관있는",
+    "관련된",
+    "연결된",
+    "연관된",
+    "연계된",
+    "편입된",
+    "포함된",
+    "보유한",
+    "담은",
+    "가진",
+    "알려줘",
+    "찾아줘",
+    "보여줘",
+    "정리해줘",
+    "설명해줘",
+    "확인해줘",
+    "관련",
+    "연결",
+    "연관",
+    "연계",
+    "편입",
+    "포함",
+    "보유",
+    "위험요인",
+    "리스크요인",
+    "구성종목",
+    "투자전략",
+    "운용전략",
+    "동향",
+    "구조",
+    "전략",
+    "있는",
+    "없는",
+    "있어",
+    "없어",
+    "존재",
+    "상품",
+    "종목",
+    "기업",
+    "회사",
+    "국내etf",
+    "해외etf",
+    "etf",
+    "etn",
+    "etp",
+    "펀드",
+    "채권",
+    "테마",
+    "섹터",
+    "산업",
+    *_HOLDING_RESTATEMENT_GRAMMAR_ATOMS,
+)
+
+
+def _is_predicate_only_external_subject(value: str) -> bool:
+    """Return true only when a subject is fully made of relation grammar.
+
+    This conservative word-break check prevents a model-created connective
+    from multiplying requirements while preserving unseen entity names.  It
+    deliberately does not use a list of companies, funds, themes, or products.
+    """
+
+    normalized = "".join(character.casefold() for character in value if character.isalnum())
+    if not normalized:
+        return True
+    atoms = tuple(
+        sorted(
+            set(_PREDICATE_ONLY_EXTERNAL_SUBJECT_ATOMS),
+            key=lambda atom: (-len(atom), atom),
+        )
+    )
+    reachable = {0}
+    for offset in range(len(normalized) + 1):
+        if offset not in reachable:
+            continue
+        for atom in atoms:
+            if normalized.startswith(atom, offset):
+                reachable.add(offset + len(atom))
+    return len(normalized) in reachable
+
+
+_GENERIC_DEPENDENT_RISK_SUBJECT = re.compile(
+    r"^(?:(?:이|그|해당|각|두|세|여러|위|아래|앞선|전술한)\s*)?"
+    r"(?:(?:국내|해외)\s*)?(?:상품|종목|ETF|ETN|ETP|펀드)"
+    r"(?:들)?(?:의|이|가|을|를|은|는)?$|"
+    r"^(?:최종\s*)?후보(?:들)?(?:별)?(?:로)?(?:의|이|가|을|를|은|는)?$|"
+    r"^(?:이들|그들|전부|모두|양쪽|둘)(?:의|이|가|을|를|은|는)?$",
+    re.IGNORECASE,
+)
+
+
+def _is_generic_dependent_risk_subject(value: str) -> bool:
+    return (
+        _is_predicate_only_external_subject(value)
+        or _GENERIC_DEPENDENT_RISK_SUBJECT.fullmatch(value.strip()) is not None
+    )
+
+
+def _is_atomic_holding_restatement(
+    subject_key: str,
+    atomic_key: str,
+    relation_keys: set[str],
+) -> bool:
+    """Recognize only an atomic entity plus its already-grounded relation.
+
+    HCX can emit both ``캠브리콘`` and ``캠브리콘이 편입된`` as holding
+    subjects.  The second edge adds no semantics when its complete remainder
+    is tiled by the first edge's literal relation and Korean grammar.  A mere
+    substring is deliberately insufficient: ``한국전력`` must not consume the
+    distinct company ``한국전력기술``.
+    """
+
+    if not atomic_key or subject_key.count(atomic_key) != 1:
+        return False
+    residual = subject_key.replace(atomic_key, "", 1)
+    if not residual:
+        return False
+    relation_atoms = {key for key in relation_keys if key}
+    if not relation_atoms:
+        return False
+    atoms = tuple(
+        sorted(
+            (*relation_atoms, *_HOLDING_RESTATEMENT_GRAMMAR_ATOMS),
+            key=lambda value: (-len(value), value),
+        )
+    )
+    reachable: dict[int, bool] = {0: False}
+    for offset in range(len(residual) + 1):
+        if offset not in reachable:
+            continue
+        used_relation = reachable[offset]
+        for atom in atoms:
+            if residual.startswith(atom, offset):
+                next_offset = offset + len(atom)
+                reachable[next_offset] = reachable.get(next_offset, False) or (
+                    used_relation or atom in relation_atoms
+                )
+    return reachable.get(len(residual), False)
+
+
+_RELATION_CLAUSE_BOUNDARY = re.compile(
+    r"[.!?\u3002\uff01\uff1f;\uff1b\n]"
+    r"|(?:[,\uff0c]\s*)?(?:별도(?:로|의)?|한편|반면|이와\s*별개로|그와\s*별개로)\s+",
+    re.IGNORECASE,
+)
+_INDEPENDENT_RELATION_BOUNDARY = re.compile(
+    r"별도|한편|반면|별개",
+    re.IGNORECASE,
+)
+_DEPENDENT_RISK_ANAPHORA = re.compile(
+    r"(?:각|해당|이들|그들|앞선|전술한|최종\s*후보(?:별)?|후보(?:별)?)\s*"
+    r"(?:상품|ETF|ETN|ETP|펀드|종목)(?:들)?",
+    re.IGNORECASE,
+)
+
+
+def _literal_evidence_window(question: str, subject: str, relation: str) -> tuple[int, int] | None:
+    """Locate the tightest grounded subject/relation pair in the question.
+
+    Intent spans do not carry offsets.  Pairing the nearest literal occurrences
+    gives dependency construction a bounded clause location without trusting
+    model ordering or accepting a subject/relation that is absent from the
+    original question.
+    """
+
+    subjects = tuple(re.finditer(re.escape(subject), question, re.IGNORECASE))
+    relations = tuple(re.finditer(re.escape(relation), question, re.IGNORECASE))
+    if not subjects or not relations:
+        return None
+    candidates = []
+    for subject_match in subjects:
+        for relation_match in relations:
+            start = min(subject_match.start(), relation_match.start())
+            end = max(subject_match.end(), relation_match.end())
+            gap = max(
+                0,
+                relation_match.start() - subject_match.end(),
+                subject_match.start() - relation_match.end(),
+            )
+            candidates.append((gap, end - start, start, end))
+    best_gap, best_width, _, _ = min(candidates)
+    best_windows = {
+        (start, end)
+        for gap, width, start, end in candidates
+        if gap == best_gap and width == best_width
+    }
+    # Intent spans have no offsets.  Repeated identical subject/relation text
+    # therefore cannot be bound to one clause without guessing.  Fail closed
+    # instead of silently attaching the first risk projection to the wrong
+    # product selector.
+    if len(best_windows) != 1:
+        return None
+    start, end = next(iter(best_windows))
+    return start, end
+
+
+def _same_relation_clause(question: str, left_end: int, right_start: int) -> bool:
+    """Require dependency evidence to stay inside one explicit question clause."""
+
+    if left_end > right_start:
+        return True
+    return _RELATION_CLAUSE_BOUNDARY.search(question[left_end:right_start]) is None
+
+
+def _relation_clause_start(question: str, position: int) -> int:
+    boundaries = tuple(_RELATION_CLAUSE_BOUNDARY.finditer(question, 0, position))
+    return boundaries[-1].end() if boundaries else 0
+
+
+def _dependent_selector_indexes_for_risk(
+    question: str,
+    requirements: list,
+    risk_requirement,
+) -> tuple[int, ...]:
+    """Bind a generic risk projection only to its proven local selectors.
+
+    A literal ``상품/ETF의 위험요인`` may project over products selected by a
+    holdings or theme edge.  It must not inherit every selector in the entire
+    question.  Only retained, grounded selectors before the risk span and in
+    the same clause are eligible.  When the question contains more than one
+    risk projection, the previous risk span starts a new dependency segment,
+    preventing two independent selector/risk pairs from becoming one global
+    intersection.
+    """
+
+    risk_window = _literal_evidence_window(
+        question,
+        risk_requirement.subject_span,
+        risk_requirement.relation_span,
+    )
+    if risk_window is None:
+        return ()
+    risk_start, risk_end = risk_window
+    generic_risk_subject = _is_generic_dependent_risk_subject(risk_requirement.subject_span)
+    if generic_risk_subject:
+        # A generic result noun can be shared by the upstream selector and its
+        # risk projection: ``분류명 ETF의 위험요인``.  The tight evidence window
+        # starts at ``ETF``, which incorrectly places the completed theme edge
+        # after the risk anchor.  A unique literal risk predicate is the safe
+        # dependency anchor; repeated predicates remain ambiguous and retain
+        # the fail-closed window above.
+        relation_matches = tuple(
+            re.finditer(
+                re.escape(risk_requirement.relation_span),
+                question,
+                re.IGNORECASE,
+            )
+        )
+        if len(relation_matches) == 1:
+            relation_match = relation_matches[0]
+            if risk_start <= relation_match.start() < risk_end:
+                risk_start = relation_match.start()
+    preceding_boundaries = tuple(_RELATION_CLAUSE_BOUNDARY.finditer(question, 0, risk_start))
+    preceding_boundary = preceding_boundaries[-1] if preceding_boundaries else None
+    risk_clause_start = preceding_boundary.end() if preceding_boundary is not None else 0
+    independent_scope = (
+        preceding_boundary is not None
+        and _INDEPENDENT_RELATION_BOUNDARY.search(preceding_boundary.group(0)) is not None
+    )
+    allows_previous_clause = (
+        _DEPENDENT_RISK_ANAPHORA.search(
+            question[max(risk_clause_start, risk_start - 24) : risk_end]
+        )
+        is not None
+    )
+    dependency_segment_start = risk_clause_start
+    if (
+        not allows_previous_clause
+        and not independent_scope
+        and _GENERIC_DEPENDENT_RISK_SUBJECT.fullmatch(risk_requirement.subject_span.strip())
+    ):
+        # ``A와 B가 들어 있는 ETF를 찾아줘. ETF 손실 유의점도 알려줘``
+        # uses the bare family noun as an ordinary Korean anaphor.  Admit that
+        # previous sentence only when it contains exactly one selector scope.
+        # Multiple independent selector phrases remain unbound rather than
+        # attaching risk evidence to the wrong product set.
+        # A DB-only enrichment sentence can legitimately sit between the
+        # external selector and a trailing generic risk projection.  In that
+        # case the immediately previous sentence contains no external selector,
+        # but the section still has exactly one server-grounded selector scope.
+        # Search back only to the previous risk boundary and require that sole
+        # scope; two independent holdings/theme scopes remain unbound.
+        selector_segment_start = max(
+            (
+                window[1]
+                for other in requirements
+                if other is not risk_requirement
+                and other.capability is KnowledgeCapability.PRODUCT_RISK_FACTORS
+                and (window := _literal_evidence_window(
+                    question,
+                    other.subject_span,
+                    other.relation_span,
+                ))
+                is not None
+                and window[1] <= risk_start
+            ),
+            default=0,
+        )
+        previous_scope_keys = {
+            (
+                candidate.capability,
+                "".join(
+                    character.casefold()
+                    for character in candidate.relation_span
+                    if character.isalnum()
+                ),
+            )
+            for candidate in requirements
+            if candidate.capability
+            in {
+                KnowledgeCapability.PORTFOLIO_HOLDINGS,
+                KnowledgeCapability.SECTOR_THEME_HISTORY,
+            }
+            and (
+                candidate_window := _literal_evidence_window(
+                    question,
+                    candidate.subject_span,
+                    candidate.relation_span,
+                )
+            )
+            is not None
+            and selector_segment_start <= candidate_window[1] <= risk_start
+        }
+        if len(previous_scope_keys) == 1:
+            allows_previous_clause = True
+            dependency_segment_start = selector_segment_start
+    if allows_previous_clause and risk_clause_start:
+        dependency_segment_start = min(
+            dependency_segment_start,
+            _relation_clause_start(question, risk_clause_start - 1),
+        )
+
+    prior_risk_end = 0
+    for other in requirements:
+        if (
+            other is risk_requirement
+            or other.capability is not KnowledgeCapability.PRODUCT_RISK_FACTORS
+        ):
+            continue
+        other_window = _literal_evidence_window(
+            question,
+            other.subject_span,
+            other.relation_span,
+        )
+        if other_window is not None and other_window[1] <= risk_start:
+            prior_risk_end = max(prior_risk_end, other_window[1])
+
+    selector_indexes = []
+    for index, candidate in enumerate(requirements):
+        if candidate.capability not in {
+            KnowledgeCapability.PORTFOLIO_HOLDINGS,
+            KnowledgeCapability.SECTOR_THEME_HISTORY,
+        }:
+            continue
+        candidate_window = _literal_evidence_window(
+            question,
+            candidate.subject_span,
+            candidate.relation_span,
+        )
+        if candidate_window is None:
+            continue
+        _, candidate_end = candidate_window
+        if not max(prior_risk_end, dependency_segment_start) <= candidate_end <= risk_start:
+            continue
+        if not allows_previous_clause and not _same_relation_clause(
+            question,
+            candidate_end,
+            risk_start,
+        ):
+            continue
+        selector_indexes.append(index)
+    return tuple(selector_indexes)
+
+
 def _deduplicate_structural_requirements(question: str, requirements: list) -> list:
     """Drop syntax-expanded restatements while retaining distinct entity edges."""
 
@@ -514,8 +1176,84 @@ def _deduplicate_structural_requirements(question: str, requirements: list) -> l
         for item in requirements
         if item.capability is KnowledgeCapability.PRODUCT_RISK_FACTORS
     ]
-    retained = []
+    atomic_holding_relations: dict[str, set[str]] = {}
     for item in requirements:
+        if (
+            item.capability is not KnowledgeCapability.PORTFOLIO_HOLDINGS
+            or _EXPLICIT_ENTITY_LIST.search(item.subject_span) is not None
+            or _GENERIC_HOLDING_SUBJECT.fullmatch(item.subject_span.strip()) is not None
+        ):
+            continue
+        subject_key = "".join(
+            character.casefold() for character in item.subject_span if character.isalnum()
+        )
+        relation_key = "".join(
+            character.casefold() for character in item.relation_span if character.isalnum()
+        )
+        if not subject_key:
+            continue
+        relation_keys = atomic_holding_relations.setdefault(subject_key, set())
+        if relation_key:
+            relation_keys.add(relation_key)
+            # A provider may include the subject inside the relation evidence.
+            # The remaining literal relation is still safe for exact tiling.
+            if relation_key.count(subject_key) == 1:
+                stripped_relation = relation_key.replace(subject_key, "", 1)
+                if stripped_relation:
+                    relation_keys.add(stripped_relation)
+    atomic_holding_keys = set(atomic_holding_relations)
+    retained = []
+    deferred_generic_risks = []
+    retained_keys: set[tuple[KnowledgeCapability, str, str]] = set()
+    for item in requirements:
+        predicate_only_subject = _is_predicate_only_external_subject(item.subject_span)
+        generic_dependent_risk = (
+            item.capability is KnowledgeCapability.PRODUCT_RISK_FACTORS
+            and _is_generic_dependent_risk_subject(item.subject_span)
+        )
+        if predicate_only_subject or generic_dependent_risk:
+            # A relation predicate without an entity is already represented by
+            # the legitimate requirement for this clause.  Retaining it would
+            # widen the source set, duplicate network work, and can turn one
+            # complete search into an incomplete one.  If it is the only item,
+            # the plan remains non-executable downstream rather than inventing
+            # an entity.
+            #
+            # A generic risk target is decided only after every selector has
+            # passed the normal structural filters below.  Looking at the raw
+            # list here would let a predicate-only/fake selector authorize a
+            # live risk search.
+            if generic_dependent_risk:
+                deferred_generic_risks.append(item)
+            continue
+        subject_key = "".join(
+            character.casefold() for character in item.subject_span if character.isalnum()
+        )
+        if item.capability is KnowledgeCapability.PORTFOLIO_HOLDINGS:
+            if (
+                _GENERIC_HOLDING_SUBJECT.fullmatch(item.subject_span.strip()) is not None
+                or _HOLDING_PROJECTION_RELATION.fullmatch(item.relation_span.strip()) is not None
+            ):
+                continue
+            covered_atomic_keys = {
+                key
+                for key in atomic_holding_keys
+                if key != subject_key and key and key in subject_key
+            }
+            # HCX may restate ``A와 B`` as one holding subject after the
+            # server has already recovered the two literal entities.  Keeping
+            # all three changes ALL/ANY semantics and spends the search budget
+            # twice; retain the atomic edges only.
+            if len(covered_atomic_keys) >= 2:
+                continue
+            if len(covered_atomic_keys) == 1:
+                atomic_key = next(iter(covered_atomic_keys))
+                if _is_atomic_holding_restatement(
+                    subject_key,
+                    atomic_key,
+                    atomic_holding_relations[atomic_key],
+                ):
+                    continue
         if (
             exact_child_holding
             and item.capability is KnowledgeCapability.PORTFOLIO_HOLDINGS
@@ -534,7 +1272,38 @@ def _deduplicate_structural_requirements(question: str, requirements: list) -> l
             >= 2
         ):
             continue
+        relation_key = "".join(
+            character.casefold() for character in item.relation_span if character.isalnum()
+        )
+        deduplication_key = (
+            item.capability,
+            subject_key,
+            "" if item.capability is KnowledgeCapability.PORTFOLIO_HOLDINGS else relation_key,
+        )
+        if deduplication_key in retained_keys:
+            continue
         retained.append(item)
+        retained_keys.add(deduplication_key)
+    dependency_context = [*retained, *deferred_generic_risks]
+    for item in deferred_generic_risks:
+        selector_indexes = _dependent_selector_indexes_for_risk(
+            question,
+            dependency_context,
+            item,
+        )
+        if not selector_indexes:
+            continue
+        subject_key = "".join(
+            character.casefold() for character in item.subject_span if character.isalnum()
+        )
+        relation_key = "".join(
+            character.casefold() for character in item.relation_span if character.isalnum()
+        )
+        deduplication_key = (item.capability, subject_key, relation_key)
+        if deduplication_key in retained_keys:
+            continue
+        retained.append(item)
+        retained_keys.add(deduplication_key)
     return retained
 
 
@@ -595,9 +1364,29 @@ class CompositeKnowledgePlanCompiler:
                 raise CompositeKnowledgePlanningError(
                     "HCX knowledge evidence spans must occur verbatim in the question"
                 )
-            if not _CAPABILITY_SIGNAL[item.capability].search(item.relation_span):
+            frame_backed = external_frame_supports_requirement(
+                question,
+                intent,
+                item,
+            )
+            if not frame_backed and not knowledge_requirement_signal_matches(
+                question,
+                item,
+            ):
                 raise CompositeKnowledgePlanningError(
                     "HCX knowledge capability is not supported by its relation span"
+                )
+            if (
+                item.capability is KnowledgeCapability.SECTOR_THEME_HISTORY
+                and not frame_backed
+                and not question_has_knowledge_capability_signal(
+                    item.capability,
+                    question,
+                    subject=item.subject_span,
+                )
+            ):
+                raise CompositeKnowledgePlanningError(
+                    "theme-history planning requires a theme, sector, or industry cue"
                 )
             key = (item.capability, item.subject_span, item.relation_span)
             if key in unique_keys:
@@ -607,12 +1396,22 @@ class CompositeKnowledgePlanCompiler:
         raw_requirements = _deduplicate_structural_requirements(question, raw_requirements)
         raw_requirements.sort(key=lambda item: _CAPABILITY_ORDER[item.capability])
 
-        time_range = _knowledge_time_range(question, self.registry.evidence_cutoff)
+        document_references = extract_dated_official_document_references(question)
+        has_document_scoped_holdings = (
+            len(document_references) > 1
+            and any(
+                item.capability is KnowledgeCapability.PORTFOLIO_HOLDINGS
+                for item in raw_requirements
+            )
+        )
+        time_range = (
+            None
+            if has_document_scoped_holdings
+            else _knowledge_time_range(question, self.registry.evidence_cutoff)
+        )
+        holding_scope = holding_document_top_n_scope(question)
 
         families = tuple(sorted(set(intent.product_families), key=lambda item: item.value))
-        requirement_ids_by_capability: dict[KnowledgeCapability, list[str]] = {}
-        for index, item in enumerate(raw_requirements, start=1):
-            requirement_ids_by_capability.setdefault(item.capability, []).append(f"need_{index}")
         corporate_requirements = tuple(
             (f"need_{index}", item)
             for index, item in enumerate(raw_requirements, start=1)
@@ -648,19 +1447,38 @@ class CompositeKnowledgePlanCompiler:
                     )
                 )
             elif item.capability is KnowledgeCapability.PRODUCT_RISK_FACTORS:
-                dependencies = tuple(
-                    requirement_id
-                    for capability in (
-                        KnowledgeCapability.PORTFOLIO_HOLDINGS,
-                        KnowledgeCapability.SECTOR_THEME_HISTORY,
+                if _is_generic_dependent_risk_subject(subject_span):
+                    dependencies = tuple(
+                        f"need_{selector_index + 1}"
+                        for selector_index in _dependent_selector_indexes_for_risk(
+                            question,
+                            raw_requirements,
+                            item,
+                        )
                     )
-                    for requirement_id in requirement_ids_by_capability.get(capability, ())
-                )
             requirement_families = _requirement_families(
                 subject_span,
                 relation_span,
                 families,
             )
+            if (
+                item.capability is KnowledgeCapability.PRODUCT_RISK_FACTORS
+                and dependencies
+            ):
+                dependent_families = {
+                    family
+                    for requirement in compiled_requirements
+                    if requirement.requirement_id in dependencies
+                    for family in requirement.product_families
+                }
+                if dependent_families:
+                    # Risk evidence describes the products selected by the
+                    # upstream holdings/theme relation.  A nearby phrase such
+                    # as ``해외 ETF`` must not narrow a cross-family result and
+                    # silently drop the domestic branch.
+                    requirement_families = tuple(
+                        sorted(dependent_families, key=lambda family: family.value)
+                    )
             if not requirement_families:
                 raise CompositeKnowledgePlanningError(
                     "external relation product-family scope conflicts with the request"
@@ -696,6 +1514,17 @@ class CompositeKnowledgePlanCompiler:
                         }
                         else None
                     ),
+                    document_scope=(
+                        KnowledgeDocumentTopNScope(
+                            limit=holding_scope[0],
+                            selection_evidence_span=holding_scope[1],
+                        )
+                        if (
+                            item.capability is KnowledgeCapability.PORTFOLIO_HOLDINGS
+                            and holding_scope is not None
+                        )
+                        else None
+                    ),
                     source_registry_ids=self._source_ids(
                         item.capability,
                         question=question,
@@ -714,23 +1543,31 @@ class CompositeKnowledgePlanCompiler:
                 "theme meaning is subjective; state an explicit related/linked theme condition"
             )
 
+        evidence_selection = _compile_evidence_date_selection(
+            question,
+            tuple(
+                (
+                    requirement.requirement_id,
+                    requirement.capability,
+                    not requirement.depends_on,
+                )
+                for requirement in requirements
+            ),
+        )
         product_selection = None
         ranking_choice = _ranking_choice(question)
+        if evidence_selection is not None and ranking_choice is not None:
+            raise CompositeKnowledgePlanningError(
+                "DB product ranking and evidence-date ordering conflict"
+            )
         if _PERFORMANCE_RANKING.search(question) is not None and ranking_choice is None:
             raise CompositeKnowledgePlanningError(
                 "external performance ranking requires an explicit supported period"
             )
         if ranking_choice is not None:
             rank_field, direction = ranking_choice
-            requested = [
-                (
-                    int(match.group("top") or match.group("count"))
-                    if match.group("top") or match.group("count")
-                    else _KOREAN_LIMITS[match.group("word")]
-                )
-                for match in _LIMIT.finditer(question)
-            ]
-            limit = requested[-1] if requested else 1
+            rank_field = _family_aware_ranking_field(rank_field, families)
+            limit = _external_product_result_limit(question)
             if not 1 <= limit <= 20:
                 raise CompositeKnowledgePlanningError("knowledge result limit is out of bounds")
             product_selection = KnowledgeProductSelection(
@@ -754,6 +1591,7 @@ class CompositeKnowledgePlanCompiler:
             requirements=requirements,
             holding_match_mode=_holding_match_mode(question, requirements),
             product_selection=product_selection,
+            evidence_selection=evidence_selection,
             requested_product_fields=requested_product_fields,
             join_order=tuple(
                 [item.requirement_id for item in requirements] + ["official_product_db"]
@@ -764,4 +1602,5 @@ class CompositeKnowledgePlanCompiler:
 __all__ = [
     "CompositeKnowledgePlanCompiler",
     "CompositeKnowledgePlanningError",
+    "compile_evidence_date_selection",
 ]

@@ -1,22 +1,76 @@
 import hashlib
 import json
+from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 import scripts.compare_sealed_blind as sealed_comparator
+import scripts.run_sealed_lab_blind as sealed_runner
 from scripts.compare_sealed_blind import (
     _compare_phase2,
     _external_evidence_required,
+    _external_exact_metrics,
     _gold_product_identity,
+    _hclx_final_grounding_violations,
     _normalize_filter,
     _phase2_plan_metrics,
     _source_field_map,
 )
 from scripts.run_sealed_lab_blind import (
+    _SELECTION_ARTIFACT_KIND,
+    _SELECTION_METHOD,
+    _build_approved_cache_only_agent,
+    _canonical_sha256,
+    _case_result,
+    _representative_case_ids,
+    _runtime_source_provenance,
+    _validate_case_selection,
     _validate_document_calibration,
+    _validate_mode_arguments,
     _validate_question_only,
     _verify_pre_gold_source_state,
 )
+from tests.conftest import FakeAgentService
+
+
+def test_runtime_source_provenance_matches_mounted_core() -> None:
+    provenance = _runtime_source_provenance()
+
+    assert set(provenance) == {
+        "finance_agent_core_init_sha256",
+        "routed_service_sha256",
+        "finance_agent_core_tree_sha256",
+        "fastapi_backend_app_tree_sha256",
+    }
+    assert all(len(value) == 64 for value in provenance.values())
+
+
+def test_runtime_source_provenance_rejects_legacy_import_path(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    legacy_init = tmp_path / "legacy" / "finance_agent_core" / "__init__.py"
+    legacy_init.parent.mkdir(parents=True)
+    legacy_init.write_text("# stale package\n", encoding="utf-8")
+    monkeypatch.setattr(sealed_runner.finance_agent_core, "__file__", str(legacy_init))
+
+    with pytest.raises(RuntimeError, match="differs from mounted source"):
+        _runtime_source_provenance()
+
+
+def test_blind_runner_does_not_retry_a_non_retryable_failure() -> None:
+    agent = FakeAgentService(error=RuntimeError("private failure"))
+
+    result = _case_result(
+        case={"id": "P5-A-01", "question": "해외 ETF 조회"},
+        agent=agent,
+        calls=[],
+        max_retries=2,
+    )
+
+    assert len(result["attempts"]) == 1
+    assert agent.calls == [("해외 ETF 조회", "P5-A-01")]
 
 
 def _phase2_question_payload() -> dict[str, object]:
@@ -148,6 +202,338 @@ def test_phase5_105_case_question_only_contract_is_supported(tmp_path) -> None:
     assert len(cases) == 105
     assert cases[0]["id"] == "P5-A-01"
     assert cases[-1]["id"] == "P5-C-35"
+
+
+def _case_selection_payload(question_sha256: str, ids: list[str]) -> dict[str, object]:
+    selected = _representative_case_ids(
+        questions_sha256=question_sha256,
+        case_ids=ids,
+    )
+    payload: dict[str, object] = {
+        "schema_version": "1.0",
+        "artifact_kind": _SELECTION_ARTIFACT_KIND,
+        "suite_id": "finance-agent-final-rehearsal-phase5-v1.1-105",
+        "questions_sha256": question_sha256,
+        "selection_method": _SELECTION_METHOD,
+        "case_count": 100,
+        "selected_ids": selected,
+    }
+    payload["selection_sha256"] = _canonical_sha256(payload)
+    return payload
+
+
+def test_post_gold_case_selection_is_deterministic_and_exact(tmp_path: Path) -> None:
+    question_sha256 = "89fb1f174d2da2aa96ffab60ddc0ebd8fdef3b044548f229096c33a8cd8bae70"
+    ids = [
+        f"P5-{set_id}-{index:02d}"
+        for set_id in ("A", "B", "C")
+        for index in range(1, 36)
+    ]
+    payload = _case_selection_payload(question_sha256, ids)
+    path = tmp_path / "selection.json"
+    path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+
+    loaded = _validate_case_selection(
+        path,
+        hashlib.sha256(path.read_bytes()).hexdigest(),
+        suite_id="finance-agent-final-rehearsal-phase5-v1.1-105",
+        questions_sha256=question_sha256,
+        available_case_ids=ids,
+    )
+
+    assert loaded["case_count"] == 100
+    assert len(loaded["selected_ids"]) == 100
+    assert loaded["selected_ids"] == [
+        case_id for case_id in ids if case_id in loaded["selected_ids"]
+    ]
+    assert set(ids).difference(loaded["selected_ids"]) == {
+        "P5-A-04",
+        "P5-B-12",
+        "P5-C-03",
+        "P5-C-16",
+        "P5-C-26",
+    }
+
+
+def test_post_gold_case_selection_rejects_a_different_100_case_subset(
+    tmp_path: Path,
+) -> None:
+    question_sha256 = "8" * 64
+    ids = [
+        f"P5-{set_id}-{index:02d}"
+        for set_id in ("A", "B", "C")
+        for index in range(1, 36)
+    ]
+    payload = _case_selection_payload(question_sha256, ids)
+    selected = list(payload["selected_ids"])
+    omitted = next(case_id for case_id in ids if case_id not in selected)
+    selected[-1] = omitted
+    payload["selected_ids"] = selected
+    canonical = dict(payload)
+    canonical.pop("selection_sha256")
+    payload["selection_sha256"] = _canonical_sha256(canonical)
+    path = tmp_path / "mutated-selection.json"
+    path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+
+    with pytest.raises(RuntimeError, match="deterministic sample"):
+        _validate_case_selection(
+            path,
+            hashlib.sha256(path.read_bytes()).hexdigest(),
+            suite_id="finance-agent-final-rehearsal-phase5-v1.1-105",
+            questions_sha256=question_sha256,
+            available_case_ids=ids,
+        )
+
+
+def test_case_selection_is_forbidden_without_post_gold_mode() -> None:
+    arguments = SimpleNamespace(
+        case_selection_file=Path("/tmp/selection.json"),
+        case_selection_sha256="a" * 64,
+        post_gold_development_regression=False,
+        development_case_ids=None,
+        official_answer_max_inflight=2,
+        external_mode="approved-cache-only",
+        development_unapproved_databases=False,
+    )
+
+    with pytest.raises(SystemExit, match="post-Gold"):
+        _validate_mode_arguments(arguments)
+
+
+def test_approved_cache_only_runner_rejects_live_credentials_before_assembly() -> None:
+    arguments = SimpleNamespace(
+        naver_client_id_file=Path("/run/secrets/naver-id"),
+        naver_client_secret_file=None,
+        pending_corpus_manifest=None,
+        pending_corpus_manifest_sha256=None,
+        relation_artifact_sha256_file=None,
+    )
+
+    with pytest.raises(RuntimeError, match="forbids live"):
+        _build_approved_cache_only_agent(arguments)
+
+
+def test_approved_cache_only_runner_uses_production_assembly_without_live_fallback(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    document_index = tmp_path / "document-dense.json"
+    document_index.write_bytes(b"approved index")
+    captured: dict[str, object] = {}
+
+    class FakeSettings:
+        audit_shutdown_timeout_seconds = 5.0
+
+    class FakeAuditSink:
+        def close(self, *, timeout_seconds: float) -> bool:
+            return timeout_seconds == 5.0
+
+    class FakeDiscovery:
+        production_approved = True
+        live_fallback_enabled = False
+        fallback = None
+        activation_binding_sha256 = "d" * 64
+
+    class FakeRouted:
+        def __init__(self) -> None:
+            self.external_knowledge_runtime = SimpleNamespace(
+                acquisition=SimpleNamespace(discovery_provider=FakeDiscovery())
+            )
+
+    signed = SimpleNamespace(
+        status="activated",
+        artifact=SimpleNamespace(
+            retrieval_mode="approved_corpus_cache_only",
+            document_activation_receipt_sha256="d" * 64,
+        ),
+    )
+    release = SimpleNamespace(
+        manifest=SimpleNamespace(
+            components=SimpleNamespace(
+                knowledge_retrieval=SimpleNamespace(external=signed)
+            )
+        )
+    )
+    sink = FakeAuditSink()
+
+    def fake_settings(**values: object) -> FakeSettings:
+        captured.update(values)
+        return FakeSettings()
+
+    monkeypatch.setattr(sealed_runner, "Settings", fake_settings)
+    monkeypatch.setattr(sealed_runner, "RoutedFinanceAgent", FakeRouted)
+    monkeypatch.setattr(sealed_runner, "CacheFirstOfficialDiscoveryProvider", FakeDiscovery)
+    monkeypatch.setattr(sealed_runner, "resolve_runtime_release", lambda settings: release)
+    monkeypatch.setattr(sealed_runner, "build_audit_sink", lambda settings: sink)
+    monkeypatch.setattr(
+        sealed_runner,
+        "build_production_agent",
+        lambda settings, *, release_guard, audit_sink: FakeRouted(),
+    )
+    monkeypatch.setattr(
+        sealed_runner,
+        "require_approval_guard",
+        lambda service, settings, release_guard, audit_sink: service,
+    )
+    arguments = SimpleNamespace(
+        naver_client_id_file=None,
+        naver_client_secret_file=None,
+        pending_corpus_manifest=None,
+        pending_corpus_manifest_sha256=None,
+        relation_artifact_sha256_file=None,
+        runtime_audit_file=tmp_path / "audit" / "events.jsonl",
+        relation_artifact_sha256="a" * 64,
+        document_dense_index=document_index,
+        document_dense_index_sha256=hashlib.sha256(document_index.read_bytes()).hexdigest(),
+        backend_version="0.1.0",
+        hclx_key_file=tmp_path / "hcx-key",
+        official_answer_max_inflight=2,
+        release_manifest_file=tmp_path / "release.json",
+        deployment_binding_file=tmp_path / "binding.json",
+        deployment_binding_sha256="b" * 64,
+        source_commit="c" * 40,
+        runtime_image_reference="registry/image@sha256:" + "e" * 64,
+        runtime_platform="linux/amd64",
+        schema_dense_index=tmp_path / "schema.json",
+        schema_dense_index_sha256="f" * 64,
+        schema_dense_calibration_sha256="1" * 64,
+        schema_dense_min_score=0.34,
+        schema_dense_hclx_candidate_min_score=0.3,
+        schema_dense_minimum_margin=0.03,
+        kure_snapshot_dir=tmp_path / "snapshot",
+        kure_snapshot_manifest=tmp_path / "snapshot.json",
+        kure_cache_root=tmp_path / "cache",
+        kure_cpu_threads=2,
+        relation_artifact=tmp_path / "relations.json",
+        relation_index=tmp_path / "relations.sqlite3",
+        external_knowledge_artifact_file=tmp_path / "external.json",
+        external_knowledge_artifact_sha256="2" * 64,
+        external_temporal_relation_file=tmp_path / "temporal.json",
+        external_temporal_relation_sha256="3" * 64,
+        document_cache_activation_file=tmp_path / "activation.json",
+        approved_corpus_manifest=tmp_path / "corpus.json",
+        approved_corpus_root=tmp_path / "corpus",
+        bond_db=tmp_path / "bond.sqlite3",
+        domestic_etp_db=tmp_path / "domestic.sqlite3",
+        overseas_etp_db=tmp_path / "overseas.sqlite3",
+        fund_db=tmp_path / "fund.sqlite3",
+    )
+
+    service, calls, discovery, returned_sink = _build_approved_cache_only_agent(arguments)
+
+    assert isinstance(service, FakeRouted)
+    assert calls == []
+    assert isinstance(discovery, FakeDiscovery)
+    assert returned_sink is sink
+    assert captured["app_env"] == "evaluation"
+    assert captured["naver_api_hub_client_id_file"] is None
+    assert captured["naver_api_hub_client_secret_file"] is None
+    assert captured["external_document_corpus_root"] == arguments.approved_corpus_root
+
+
+def test_comparator_accepts_only_the_same_canonical_100_case_selection(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    question_sha256 = "7" * 64
+    all_ids = [
+        f"P5-{set_id}-{index:02d}"
+        for set_id in ("A", "B", "C")
+        for index in range(1, 36)
+    ]
+    selection = _case_selection_payload(question_sha256, all_ids)
+    selected_ids = list(selection["selected_ids"])
+    selection_file_sha256 = "6" * 64
+    predictions = {
+        "artifact_kind": "post_gold_development_regression_predictions",
+        "answer_key_opened": True,
+        "evaluation_kind": "post_gold_development_regression",
+        "suite_id": "finance-agent-final-rehearsal-phase5-v1.1-105",
+        "suite_phase": 5,
+        "questions_sha256": question_sha256,
+        "question_count": 100,
+        "suite_question_count": 105,
+        "case_selection_file_sha256": selection_file_sha256,
+        "case_selection_sha256": selection["selection_sha256"],
+        "case_selection_method": _SELECTION_METHOD,
+        "selected_case_ids": selected_ids,
+        "results": [{"id": case_id} for case_id in selected_ids],
+    }
+    gold = {
+        "suite_id": predictions["suite_id"],
+        "questions_sha256": question_sha256,
+        "cases": [{"id": case_id} for case_id in all_ids],
+    }
+    captured: dict[str, object] = {}
+
+    def fake_compare_phase2(*args: object, **kwargs: object) -> dict[str, object]:
+        captured.update(kwargs)
+        return {"count": len(kwargs["selected_case_ids"])}
+
+    monkeypatch.setattr(sealed_comparator, "_compare_phase2", fake_compare_phase2)
+
+    report = sealed_comparator.compare(
+        predictions,
+        gold,
+        allow_post_gold_development=True,
+        case_selection=selection,
+        case_selection_file_sha256=selection_file_sha256,
+    )
+
+    assert report == {"count": 100}
+    assert captured["selected_case_ids"] == selected_ids
+
+    predictions["case_selection_sha256"] = "5" * 64
+    with pytest.raises(RuntimeError, match="provenance differs"):
+        sealed_comparator.compare(
+            predictions,
+            gold,
+            allow_post_gold_development=True,
+            case_selection=selection,
+            case_selection_file_sha256=selection_file_sha256,
+        )
+
+
+def test_comparator_scores_exact_external_evidence_and_grounding_fields() -> None:
+    expected = {"required_evidence_ids": ["DOC-1"]}
+    catalog = {
+        "DOC-1": {
+            "id": "DOC-1",
+            "url": "https://official.example/report",
+            "publication_date": "2026-08-24",
+            "required_evidence_spans": ["공식 근거 문장"],
+        }
+    }
+    response = {
+        "documents": [
+            {
+                "source_uri": "https://official.example/report",
+                "as_of": "2026-08-24",
+                "text": "앞 문장. 공식 근거 문장. 뒤 문장.",
+            }
+        ],
+        "hclx_final_grounding_violations": [],
+    }
+
+    assert _external_exact_metrics(
+        expected,
+        response,
+        catalog_documents=catalog,
+    ) == {
+        "external_source_uri_exact": True,
+        "external_publication_date_exact": True,
+        "external_evidence_span_exact": True,
+    }
+    assert _hclx_final_grounding_violations({}, response) == 0
+
+    response["documents"][0]["text"] = "근거 문장이 없음"
+    assert (
+        _external_exact_metrics(
+            expected,
+            response,
+            catalog_documents=catalog,
+        )["external_evidence_span_exact"]
+        is False
+    )
 
 
 def test_phase6_150_case_question_only_contract_is_supported(tmp_path) -> None:

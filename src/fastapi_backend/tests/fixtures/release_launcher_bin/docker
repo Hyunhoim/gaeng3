@@ -3,3 +3,15 @@ printf "%s\n" "$@" > "$CAPTURE_FILE"
 if [ -n "${CAPTURE_ENV_FILE:-}" ]; then
     env | sort > "$CAPTURE_ENV_FILE"
 fi
+if [ -n "${CAPTURE_RELEASE_ENV_FILE:-}" ]; then
+    expect_env_file=false
+    for argument in "$@"; do
+        if [ "$expect_env_file" = true ]; then
+            cp "$argument" "$CAPTURE_RELEASE_ENV_FILE"
+            break
+        fi
+        if [ "$argument" = "--env-file" ]; then
+            expect_env_file=true
+        fi
+    done
+fi

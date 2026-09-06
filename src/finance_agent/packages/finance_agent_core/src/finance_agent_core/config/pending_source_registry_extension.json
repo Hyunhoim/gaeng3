@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "extension_id": "official-external-sources-20260824-pending-intake-v2",
-  "base_registry_id": "official-external-sources-20260824-v13",
-  "base_registry_sha256": "a7d4747c058c81da515571c04e567d02e5422e94059aaea8b76a3f50b5fabfc2",
+  "extension_id": "official-external-sources-20260824-pending-intake-v3",
+  "base_registry_id": "official-external-sources-20260824-v14",
+  "base_registry_sha256": "1026785ad5a35b62b5f477fe9fde08aee9f827379d382d96910f47ae69b570f1",
   "entries": [
     {
       "source_id": "globalx-etf-static-official",

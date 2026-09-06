@@ -3,8 +3,10 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import stat
 import unicodedata
+from dataclasses import dataclass
 from datetime import date
 from enum import StrEnum
 from pathlib import Path
@@ -18,6 +20,7 @@ from finance_agent_core.config.source_registry import (
     load_official_source_registry,
 )
 from finance_agent_core.contracts.external_knowledge import (
+    KnowledgeDocumentTopNScope,
     KnowledgePredicate,
     KnowledgeTimeRange,
     predicate_for_capability,
@@ -95,6 +98,163 @@ class ExternalEvidenceReference(TemporalRelationModel):
         return value
 
 
+_BOUNDED_TOP_N_HOLDINGS_HEADING = re.compile(
+    r"^\s*(?:"
+    r"top\s*(?P<english_limit>[1-9]\d?)\s+"
+    r"(?:portfolio\s+)?(?:holdings?|constituents?)(?:\s*\(\s*%\s*\))?"
+    r"|"
+    r"상위\s*(?P<korean_limit>[1-9]\d?)\s*"
+    r"(?:개\s*)?(?:구성\s*종목|보유\s*종목|종목)"
+    r")"
+    r"(?:\s+(?:holdings?\s+subject\s+to\s+change|"
+    r"구성\s*종목(?:은|이)?\s*변경될\s*수\s*있(?:음|습니다)))?\s*$",
+    re.IGNORECASE,
+)
+_BOUNDED_HOLDINGS_TABLE_PREAMBLE = re.compile(
+    r"^\s*(?:holdings?\s+subject\s+to\s+change|"
+    r"(?:name|security|company|constituent|holding)\s+"
+    r"(?:weight(?:\s*\(%\))?|%|percentage)|"
+    r"(?:종목명|구성\s*종목)\s+(?:비중(?:\(%\))?|%))\s*$",
+    re.IGNORECASE,
+)
+_BOUNDED_HOLDING_PERCENT_ROW = re.compile(
+    r"^\s*(?P<name>\S(?:.*?\S)?)\s+"
+    r"(?P<weight>[+-]?\d{1,3}(?:\.\d+)?)\s*%\s*$"
+)
+_HOLDING_ENTITY_SUFFIX = re.compile(
+    r"(?:[\s,.-]+(?:incorporated|inc|corporation|corp|company|co|"
+    r"limited|ltd|plc|holdings?|group|technologies?|technology|"
+    r"class\s+[a-z]|adr))\.?\s*$",
+    re.IGNORECASE,
+)
+
+
+@dataclass(frozen=True, slots=True)
+class BoundedTopNHoldingsSection:
+    """One structurally complete, source-authored Top-N percentage table.
+
+    This is document-structure evidence only.  It carries no authority to bind
+    the document to a provided-DB product; callers must prove that separately.
+    """
+
+    limit: int
+    excerpt: str
+    row_names: tuple[str, ...]
+
+
+def _holding_identity_keys(value: str) -> frozenset[str]:
+    """Return exact labels plus variants with only legal suffixes removed."""
+
+    keys: set[str] = set()
+    surface = " ".join(value.split()).strip()
+    while surface:
+        normalized = _normalize(surface)
+        if normalized:
+            keys.add(normalized)
+        stripped = _HOLDING_ENTITY_SUFFIX.sub("", surface).rstrip(" ,.-")
+        if stripped == surface:
+            break
+        surface = stripped
+    return frozenset(keys)
+
+
+def parse_bounded_top_n_holding_sections(
+    text: str,
+) -> tuple[BoundedTopNHoldingsSection, ...]:
+    """Parse only complete Top-N holdings tables with explicit percentage rows."""
+
+    lines = tuple(line.strip() for line in text.splitlines() if line.strip())
+    sections: dict[tuple[int, str], BoundedTopNHoldingsSection] = {}
+    for heading_index, heading_line in enumerate(lines):
+        heading = _BOUNDED_TOP_N_HOLDINGS_HEADING.fullmatch(heading_line)
+        if heading is None:
+            continue
+        raw_limit = heading.group("english_limit") or heading.group("korean_limit")
+        limit = int(raw_limit)
+        cursor = heading_index + 1
+        preamble_count = 0
+        while (
+            cursor < len(lines)
+            and preamble_count < 3
+            and _BOUNDED_HOLDINGS_TABLE_PREAMBLE.fullmatch(lines[cursor]) is not None
+        ):
+            cursor += 1
+            preamble_count += 1
+        rows: list[tuple[str, str]] = []
+        while cursor < len(lines):
+            row = _BOUNDED_HOLDING_PERCENT_ROW.fullmatch(lines[cursor])
+            if row is None:
+                break
+            name = " ".join(row.group("name").split()).strip()
+            weight = float(row.group("weight"))
+            normalized_name = _normalize(name)
+            if (
+                not 2 <= len(normalized_name) <= 200
+                or not 0.0 < weight <= 100.0
+                or any(normalized_name == existing for existing, _ in rows)
+            ):
+                rows = []
+                break
+            rows.append((normalized_name, name))
+            cursor += 1
+        if len(rows) != limit:
+            continue
+        excerpt = "\n".join(lines[heading_index:cursor])
+        if len(excerpt) > 2000:
+            continue
+        section = BoundedTopNHoldingsSection(
+            limit=limit,
+            excerpt=excerpt,
+            row_names=tuple(row_name for _, row_name in rows),
+        )
+        sections[(limit, excerpt)] = section
+    return tuple(sections[key] for key in sorted(sections))
+
+
+def _bounded_top_n_holding_membership(
+    text: str,
+    subject_labels: tuple[str, ...],
+) -> tuple[int, str] | None:
+    """Prove membership in a complete source-authored Top-N table.
+
+    An unnumbered table proves only that a holding occurs somewhere inside the
+    stated Top-N set; it does not prove the row's exact rank.  The conservative
+    proof therefore returns the heading's N as an upper bound.  A section is
+    admitted only when exactly N unique, positive percentage rows occur before
+    the next non-table line and one whole row identifies the requested entity.
+    """
+
+    requested_keys = frozenset(
+        key for label in subject_labels for key in _holding_identity_keys(label)
+    )
+    if not requested_keys:
+        return None
+    matches = {
+        (section.limit, section.excerpt)
+        for section in parse_bounded_top_n_holding_sections(text)
+        if any(
+            requested_keys.intersection(_holding_identity_keys(row_name))
+            for row_name in section.row_names
+        )
+    }
+    if len(matches) != 1:
+        return None
+    return next(iter(matches))
+
+
+class TemporalRelationDocumentRank(TemporalRelationModel):
+    """Exact document rank or conservative source-evidenced rank upper bound."""
+
+    scope_kind: Literal["document_top_n"] = "document_top_n"
+    position: int = Field(ge=1, le=500)
+    basis: Literal[
+        "explicit_document_rank",
+        "official_ordered_holdings_array",
+        "bounded_top_n_membership",
+    ]
+    evidence_id: str = Field(pattern=r"^[a-z0-9][a-z0-9._:-]{2,159}$")
+
+
 class TemporalRelationRecord(TemporalRelationModel):
     relation_id: str = Field(pattern=r"^[a-z0-9][a-z0-9._:-]{2,159}$")
     capability: KnowledgeCapability
@@ -107,6 +267,12 @@ class TemporalRelationRecord(TemporalRelationModel):
     valid_to: date | None = None
     observed_at: date
     evidence: tuple[ExternalEvidenceReference, ...] = Field(min_length=1, max_length=8)
+    document_rank: TemporalRelationDocumentRank | None = None
+    # An independently evidenced entity may scope a relation without being its
+    # semantic subject or object. For example, an issuer filing can prove
+    # issuer-level risks for one DB-bound bond. Keeping that issuer here avoids
+    # pretending it is an alias of either the bond or the risk claim.
+    scope_entities: tuple[TemporalEntity, ...] = Field(default=(), max_length=8)
 
     @model_validator(mode="after")
     def validate_relation(self) -> TemporalRelationRecord:
@@ -132,6 +298,104 @@ class TemporalRelationRecord(TemporalRelationModel):
             and self.product_id is None
         ):
             raise ValueError("product relation capabilities require an official product reference")
+        if self.document_rank is not None:
+            if self.capability is not KnowledgeCapability.PORTFOLIO_HOLDINGS:
+                raise ValueError("document rank is allowed only for portfolio holdings")
+            rank_evidence = next(
+                (
+                    item
+                    for item in self.evidence
+                    if item.evidence_id == self.document_rank.evidence_id
+                ),
+                None,
+            )
+            if rank_evidence is None:
+                raise ValueError("document rank must name relation evidence")
+            object_labels = tuple(
+                "".join(
+                    character
+                    for character in unicodedata.normalize("NFKC", label).casefold()
+                    if character.isalnum()
+                )
+                for label in self.object.labels()
+            )
+            normalized_rank_excerpt = "".join(
+                character
+                for character in unicodedata.normalize("NFKC", rank_evidence.excerpt).casefold()
+                if character.isalnum()
+            )
+            if not any(label and label in normalized_rank_excerpt for label in object_labels):
+                raise ValueError("document rank evidence does not name the holding")
+            if self.document_rank.basis == "official_ordered_holdings_array":
+                expected_locator = f"pdf.list[{self.document_rank.position - 1}]"
+                if rank_evidence.locator != expected_locator:
+                    raise ValueError("ordered holdings rank differs from its source locator")
+            elif self.document_rank.basis == "explicit_document_rank":
+                position = re.escape(str(self.document_rank.position))
+                ranked_lines = tuple(
+                    line
+                    for line in rank_evidence.excerpt.splitlines()
+                    if re.search(
+                        rf"(?i)^\s*(?:no\.?\s*)?{position}(?:\s*위|[.)]|\s+)",
+                        line,
+                    )
+                    is not None
+                    or re.search(
+                        rf"(?i)(?:순위|rank)\s*[:#]?\s*{position}(?!\d)",
+                        line,
+                    )
+                    is not None
+                )
+                if not any(
+                    label
+                    and label
+                    in "".join(
+                        character
+                        for character in unicodedata.normalize("NFKC", line).casefold()
+                        if character.isalnum()
+                    )
+                    for line in ranked_lines
+                    for label in object_labels
+                ):
+                    raise ValueError("explicit document rank is absent from its evidence")
+            else:
+                membership = _bounded_top_n_holding_membership(
+                    rank_evidence.excerpt,
+                    self.object.labels(),
+                )
+                if membership is None or membership[0] != self.document_rank.position:
+                    raise ValueError("bounded top-N membership is absent from its evidence")
+        if self.scope_entities:
+            entity_keys = [(item.kind.value, item.entity_id) for item in self.scope_entities]
+            if entity_keys != sorted(entity_keys) or len(entity_keys) != len(set(entity_keys)):
+                raise ValueError("relation scope entities must be unique and sorted")
+            if self.capability is not KnowledgeCapability.PRODUCT_RISK_FACTORS:
+                raise ValueError("relation scope entities are allowed only for product risks")
+            if any(item.kind is not TemporalEntityKind.COMPANY for item in self.scope_entities):
+                raise ValueError("product-risk scope entities must be companies")
+            evidence_texts = tuple(
+                "".join(
+                    character
+                    for character in unicodedata.normalize("NFKC", evidence.excerpt).casefold()
+                    if character.isalnum()
+                )
+                for evidence in self.evidence
+            )
+            for entity in self.scope_entities:
+                labels = tuple(
+                    "".join(
+                        character
+                        for character in unicodedata.normalize("NFKC", label).casefold()
+                        if character.isalnum()
+                    )
+                    for label in entity.labels()
+                )
+                if not any(
+                    label and label in evidence_text
+                    for label in labels
+                    for evidence_text in evidence_texts
+                ):
+                    raise ValueError("relation scope entity is absent from its evidence")
         return self
 
     def overlaps(self, time_range: KnowledgeTimeRange | None) -> bool:
@@ -141,6 +405,14 @@ class TemporalRelationRecord(TemporalRelationModel):
         relation_end = self.valid_to or self.observed_at
         requested_start = time_range.start or date.min
         return relation_start <= time_range.end and relation_end >= requested_start
+
+    def satisfies_document_scope(self, scope: KnowledgeDocumentTopNScope | None) -> bool:
+        if scope is None:
+            return True
+        # ``position`` is either an exact rank or, for an unnumbered but
+        # complete Top-N table, the conservative upper bound N.  Consequently
+        # a Top-10 membership can satisfy Top-10/Top-20, never Top-5.
+        return self.document_rank is not None and self.document_rank.position <= scope.limit
 
 
 def _canonical_json_bytes(payload: object) -> bytes:
@@ -176,10 +448,12 @@ class VerifiedTemporalRelationBundle(TemporalRelationModel):
             raise ValueError("temporal relations must be unique and sorted")
         if self.manifest.relation_count != len(self.relations):
             raise ValueError("temporal relation count differs from manifest")
-        digest = hashlib.sha256(
-            _canonical_json_bytes([item.model_dump(mode="json") for item in self.relations])
-        ).hexdigest()
-        if digest != self.manifest.relation_set_sha256:
+        payloads = [item.model_dump(mode="json") for item in self.relations]
+        compatible_digests = {
+            hashlib.sha256(_canonical_json_bytes(variant)).hexdigest()
+            for variant in _compatible_relation_payloads(payloads)
+        }
+        if self.manifest.relation_set_sha256 not in compatible_digests:
             raise ValueError("temporal relation set differs from manifest")
         return self
 
@@ -189,7 +463,17 @@ class TemporalRelationSearchRequest(TemporalRelationModel):
     subject: str = Field(min_length=1, max_length=500)
     product_families: tuple[ProductFamily, ...] = Field(default=(), max_length=4)
     time_range: KnowledgeTimeRange | None = None
+    document_scope: KnowledgeDocumentTopNScope | None = None
     top_k: int = Field(default=20, ge=1, le=50)
+
+    @model_validator(mode="after")
+    def validate_document_scope(self) -> TemporalRelationSearchRequest:
+        if (
+            self.document_scope is not None
+            and self.capability is not KnowledgeCapability.PORTFOLIO_HOLDINGS
+        ):
+            raise ValueError("document top-N scope is allowed only for portfolio holdings")
+        return self
 
 
 def _normalize(value: str) -> str:
@@ -261,7 +545,13 @@ class TemporalRelationStore:
                 continue
             if not relation.overlaps(request.time_range):
                 continue
-            labels = {*relation.subject.labels(), *relation.object.labels()}
+            if not relation.satisfies_document_scope(request.document_scope):
+                continue
+            labels = {
+                *relation.subject.labels(),
+                *relation.object.labels(),
+                *(label for entity in relation.scope_entities for label in entity.labels()),
+            }
             if query not in {_normalize(label) for label in labels}:
                 continue
             matches.append(relation)
@@ -295,6 +585,7 @@ class TemporalRelationStore:
                 or relation.product_family in families
             )
             and relation.overlaps(request.time_range)
+            and relation.satisfies_document_scope(request.document_scope)
         ]
         # Uniqueness is judged on the matched *label*, not the entity: two
         # publishers spell one company differently (``Cambricon Technologies
@@ -304,7 +595,11 @@ class TemporalRelationStore:
         # within the margin makes the match ambiguous.
         label_scores: dict[str, float] = {}
         for relation in eligible:
-            for label in (*relation.subject.labels(), *relation.object.labels()):
+            for label in (
+                *relation.subject.labels(),
+                *relation.object.labels(),
+                *(label for entity in relation.scope_entities for label in entity.labels()),
+            ):
                 folded = "".join(ch for ch in label.casefold() if ch.isalnum())
                 if folded and folded not in label_scores:
                     label_scores[folded] = latin_label_phonetic_score(key, label)
@@ -326,7 +621,11 @@ class TemporalRelationStore:
             for relation in eligible
             if any(
                 "".join(ch for ch in label.casefold() if ch.isalnum()) == winner
-                for label in (*relation.subject.labels(), *relation.object.labels())
+                for label in (
+                    *relation.subject.labels(),
+                    *relation.object.labels(),
+                    *(label for entity in relation.scope_entities for label in entity.labels()),
+                )
             )
         )[: request.top_k]
 
@@ -357,6 +656,49 @@ def seal_temporal_relation_bundle(
 
 def temporal_relation_bundle_bytes(bundle: VerifiedTemporalRelationBundle) -> bytes:
     return _canonical_json_bytes(bundle.model_dump(mode="json"))
+
+
+def _compatible_relation_payloads(
+    payloads: list[dict[str, object]],
+) -> tuple[list[dict[str, object]], ...]:
+    """Return canonical schema-1.0 payload shapes with optional defaults omitted.
+
+    ``document_rank`` and ``scope_entities`` were introduced independently.
+    Bundles sealed between those additions may omit either default while still
+    carrying the other.  Accept only those four exact shapes; no evidence,
+    identity, date, or authority field is relaxed.
+    """
+
+    variants: list[list[dict[str, object]]] = []
+    for omit_empty_rank, omit_empty_scope in (
+        (False, False),
+        (True, False),
+        (False, True),
+        (True, True),
+    ):
+        variant = [dict(payload) for payload in payloads]
+        for payload in variant:
+            if omit_empty_rank and payload.get("document_rank") is None:
+                payload.pop("document_rank", None)
+            if omit_empty_scope and not payload.get("scope_entities"):
+                payload.pop("scope_entities", None)
+        variants.append(variant)
+    return tuple(variants)
+
+
+def _compatible_temporal_relation_bundle_bytes(
+    bundle: VerifiedTemporalRelationBundle,
+) -> frozenset[bytes]:
+    payload = bundle.model_dump(mode="json")
+    return frozenset(
+        _canonical_json_bytes(
+            {
+                "manifest": payload["manifest"],
+                "relations": relations,
+            }
+        )
+        for relations in _compatible_relation_payloads(payload["relations"])
+    )
 
 
 def load_verified_temporal_relation_bundle(
@@ -422,23 +764,26 @@ def load_verified_temporal_relation_bundle(
         bundle = VerifiedTemporalRelationBundle.model_validate_json(data)
     except ValueError as error:
         raise TemporalRelationError("temporal relation bundle schema is invalid") from error
-    if data != temporal_relation_bundle_bytes(bundle):
+    if data not in _compatible_temporal_relation_bundle_bytes(bundle):
         raise TemporalRelationError("temporal relation bundle is not canonical JSON")
     TemporalRelationStore(bundle, registry or load_official_source_registry())
     return bundle
 
 
 __all__ = [
+    "BoundedTopNHoldingsSection",
     "ExternalEvidenceReference",
     "TemporalEntity",
     "TemporalEntityKind",
     "TemporalRelationError",
     "TemporalRelationManifest",
     "TemporalRelationRecord",
+    "TemporalRelationDocumentRank",
     "TemporalRelationSearchRequest",
     "TemporalRelationStore",
     "VerifiedTemporalRelationBundle",
-    "seal_temporal_relation_bundle",
     "load_verified_temporal_relation_bundle",
+    "parse_bounded_top_n_holding_sections",
+    "seal_temporal_relation_bundle",
     "temporal_relation_bundle_bytes",
 ]

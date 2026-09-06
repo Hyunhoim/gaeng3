@@ -885,3 +885,17 @@ def test_official_get_does_not_replay_retryable_failure() -> None:
         (params["question"], params["question_id"]),
         (params["question"], params["question_id"]),
     ]
+
+
+def test_official_get_replays_non_retryable_failure_without_second_execution() -> None:
+    agent = FakeAgentService(error=RuntimeError("PRIVATE_NON_RETRYABLE_FAILURE"))
+    application = create_app(settings=Settings(), agent=agent)
+    params = {"question_id": "Q-NON-RETRYABLE", "question": "해외 ETF 조회"}
+
+    with TestClient(application) as client:
+        first = client.get("/answer", params=params)
+        second = client.get("/answer", params=params)
+
+    assert first.status_code == second.status_code == 503
+    assert first.json() == second.json()
+    assert agent.calls == [(params["question"], params["question_id"])]

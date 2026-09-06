@@ -51,6 +51,7 @@ class _FakeKureEmbedding:
         pooling="cls",
     )
     artifact_gate_evidence = SimpleNamespace(
+        manifest_file_sha256=_SNAPSHOT_SHA256,
         snapshot_file_manifest_sha256=_SNAPSHOT_SHA256,
     )
 
@@ -139,8 +140,11 @@ def _approved_cache(tmp_path: Path):
                     relative_path="documents/fsc.txt",
                     title="국민성장펀드 투자구조",
                     publisher="금융위원회",
+                    source_registry_id="fsc-policy",
                     source_uri="https://www.fsc.go.kr/po010103/86950",
+                    capabilities=(KnowledgeCapability.FUND_STRUCTURE_STRATEGY_TREND,),
                     collected_at_utc=collected,
+                    published_at=date(2026, 5, 21),
                     as_of=date(2026, 5, 21),
                     language="ko",
                     media_type="text/plain",
@@ -197,6 +201,8 @@ def _approved_cache(tmp_path: Path):
         embedding=embedding,
         fallback=fallback,  # type: ignore[arg-type]
         registry=registry,
+        approved_corpus_manifest_path=manifest_path,
+        approved_corpus_root=root,
     )
     return discovery, fallback
 

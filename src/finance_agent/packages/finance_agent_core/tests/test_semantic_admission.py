@@ -100,7 +100,7 @@ def test_hclx_cannot_convert_body_size_evidence_into_holding_cost() -> None:
         evidence_spans=("몸집",),
     )
 
-    with pytest.raises(SemanticResolutionError, match="server-grounded"):
+    with pytest.raises(SemanticResolutionError, match="HCLX and Dense field choices disagree"):
         SemanticResolutionGate().admit(draft, request, source=SpanSource.HCLX)
 
 

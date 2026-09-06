@@ -30,8 +30,7 @@ def _required_cache_arguments(
     missing = [name for name in required if getattr(arguments, name) is None]
     if missing:
         parser.error(
-            "approved_corpus_cache_first requires: "
-            + ", ".join(name.replace("_", "-") for name in missing)
+            f"{arguments.mode} requires: " + ", ".join(name.replace("_", "-") for name in missing)
         )
 
 
@@ -44,6 +43,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         choices=(
             "verified_live_official",
             "verified_live_official_with_relation_graph",
+            "approved_corpus_cache_only",
             "approved_corpus_cache_first",
         ),
         default="verified_live_official",
@@ -118,6 +118,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             expected_activation_receipt_file_sha256=(arguments.document_cache_activation_sha256),
             relation_bundle_path=arguments.approved_temporal_relations,
             expected_relation_bundle_file_sha256=(arguments.approved_temporal_relations_sha256),
+            retrieval_mode=arguments.mode,
         )
     print(f"external_knowledge_artifact_sha256={bootstrap.artifact_file_sha256}")
     print(f"external_temporal_relation_sha256={bootstrap.relation_bundle_file_sha256}")
@@ -125,7 +126,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         "external_temporal_relation_set_sha256="
         f"{bootstrap.relation_bundle.manifest.relation_set_sha256}"
     )
-    if arguments.mode == "approved_corpus_cache_first":
+    if arguments.mode in {
+        "approved_corpus_cache_only",
+        "approved_corpus_cache_first",
+    }:
         print(f"external_document_dense_sha256={bootstrap.document_dense_file_sha256}")
         print(f"external_document_cache_activation_sha256={bootstrap.activation_file_sha256}")
     return 0

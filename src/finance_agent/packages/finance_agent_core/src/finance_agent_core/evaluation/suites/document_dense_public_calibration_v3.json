@@ -1,0 +1,27 @@
+{
+  "schema_version": "1.0",
+  "suite_id": "document-dense-public-calibration-v3",
+  "suite_kind": "public_calibration_not_blind",
+  "cases": [
+    {"id": "DOC-PUB-101", "question": "우리은행 채무증권 발행조건확정 신고서의 위험요인", "expected_document_id": "open-dart-20250620000104"},
+    {"id": "DOC-PUB-102", "question": "하나캐피탈이 발행한 채권의 공식 증권신고서 위험 근거", "expected_document_id": "open-dart-20250707000186"},
+    {"id": "DOC-PUB-103", "question": "SK텔레콤 채무증권 발행조건 확정 자료", "expected_document_id": "open-dart-20250910000621"},
+    {"id": "DOC-PUB-104", "question": "현대제철 채권 발행의 투자 위험을 확인할 증권신고서", "expected_document_id": "open-dart-20260121000497"},
+    {"id": "DOC-PUB-105", "question": "LG유플러스 채무증권 발행조건과 위험요인 공식 공시", "expected_document_id": "open-dart-20260127000429"},
+    {"id": "DOC-PUB-106", "question": "한국중부발전 채권 증권신고서의 위험 관련 근거", "expected_document_id": "open-dart-20260211001111"},
+    {"id": "DOC-PUB-107", "question": "LG전자 채무증권 발행조건확정 신고서", "expected_document_id": "open-dart-20260527000588"},
+    {"id": "DOC-PUB-108", "question": "롯데쇼핑 발행 채권의 증권신고서 위험요인", "expected_document_id": "open-dart-20260609000513"},
+    {"id": "DOC-PUB-109", "question": "대한항공 합병 증권신고서의 공식 위험 근거", "expected_document_id": "open-dart-20260713000459"},
+    {"id": "DOC-PUB-110", "question": "NH투자증권 채무증권 발행조건 확정 공시", "expected_document_id": "open-dart-20260727000377"},
+    {"id": "DOC-PUB-111", "question": "한국전력공사 2026년 6월 반기보고서 자회사 정보", "expected_document_id": "open-dart-20260814002198"},
+    {"id": "DOC-PUB-112", "question": "현대캐피탈 2026년 반기보고서의 종속회사와 위험요인", "expected_document_id": "open-dart-20260814002522"},
+    {"id": "DOC-PUB-113", "question": "삼성카드 반기보고서 2026년 6월 공식 자료", "expected_document_id": "open-dart-20260814003715"},
+    {"id": "DOC-PUB-114", "question": "우리은행 2026년 반기보고서의 자회사 관계", "expected_document_id": "open-dart-20260814003574"},
+    {"id": "DOC-PUB-115", "question": "현대카드 반기보고서에서 확인되는 종속기업", "expected_document_id": "open-dart-20260814003422"},
+    {"id": "DOC-PUB-116", "question": "하나금융지주 2025년 사업보고서 정정 공시", "expected_document_id": "open-dart-20260814004019"},
+    {"id": "DOC-PUB-117", "question": "한국가스공사 2026년 반기보고서 기재정정 자료", "expected_document_id": "open-dart-20260819000378"},
+    {"id": "DOC-PUB-118", "question": "한국수력원자력 반기보고서의 자회사와 사업 위험", "expected_document_id": "open-dart-20260814003151"},
+    {"id": "DOC-PUB-119", "question": "SK이노베이션 2026년 반기보고서 위험요인", "expected_document_id": "open-dart-20260814002500"},
+    {"id": "DOC-PUB-120", "question": "에이치디현대오일뱅크 반기보고서 종속회사 정보", "expected_document_id": "open-dart-20260814001979"}
+  ]
+}

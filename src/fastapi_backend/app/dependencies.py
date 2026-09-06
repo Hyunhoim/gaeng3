@@ -18,7 +18,6 @@ from finance_agent_core.agent.knowledge_service import KnowledgeAgent
 from finance_agent_core.agent.providers.hyperclova import (
     HyperClovaXFinalAnswerProvider,
     HyperClovaXIntentAnalysisProvider,
-    HyperClovaXSemanticResolverProvider,
     HyperClovaXSettings,
     HyperClovaXTransport,
 )
@@ -65,6 +64,8 @@ from finance_agent_core.retrieval.official_acquisition import (
     OfficialEvidenceAcquisitionCoordinator,
 )
 from finance_agent_core.retrieval.official_connector import (
+    OfficialConnectorError,
+    OfficialHttpResponse,
     OfficialSourceConnector,
     UrllibOfficialHttpTransport,
 )
@@ -93,6 +94,20 @@ from app.request_execution import IdempotentRequestCoordinator
 
 _MAX_HCX_API_KEY_FILE_BYTES = 4096
 _RELATION_ARTIFACT_SHA256_FILE_BYTES = 65
+
+
+class _DisabledOfficialHttpTransport:
+    """Fail closed if a sealed evaluation cache ever attempts an HTTP fetch."""
+
+    def fetch(
+        self,
+        url: str,
+        *,
+        timeout_seconds: float,
+        max_bytes: int,
+    ) -> OfficialHttpResponse:
+        del url, timeout_seconds, max_bytes
+        raise OfficialConnectorError("network fetch is disabled for approved corpus cache-only")
 
 
 class AgentService(Protocol):
@@ -167,6 +182,7 @@ def _provider_assembly_matches(
         if (
             provider.model_name != settings.hcx_model
             or not provider.require_execution_structure
+            or provider.allow_entity_alias_repair != settings.hcx_semantic_resolver_enabled
             or provider._client.settings.timeout_seconds != settings.hcx_timeout_seconds
             or type(provider._client.on_call) is not HyperClovaXCallObserver
             or provider._client.on_call.expected_audit_sink is not audit_sink
@@ -174,25 +190,6 @@ def _provider_assembly_matches(
             return False
         transports.append(provider._client.transport)
     elif service.intent_analysis_provider is not None:
-        return False
-
-    semantic_provider = (
-        None
-        if service.adaptive_semantic_resolver is None
-        else service.adaptive_semantic_resolver.hclx_provider
-    )
-    if settings.hcx_semantic_resolver_enabled:
-        if type(semantic_provider) is not HyperClovaXSemanticResolverProvider:
-            return False
-        if (
-            semantic_provider.model_name != settings.hcx_model
-            or semantic_provider._client.settings.timeout_seconds != settings.hcx_timeout_seconds
-            or type(semantic_provider._client.on_call) is not HyperClovaXCallObserver
-            or semantic_provider._client.on_call.expected_audit_sink is not audit_sink
-        ):
-            return False
-        transports.append(semantic_provider._client.transport)
-    elif semantic_provider is not None:
         return False
 
     if settings.answer_provider == "hyperclova":
@@ -306,7 +303,10 @@ def _external_assembly_matches(
     discovery = runtime.acquisition.discovery_provider
     if signed.artifact is None:
         return False
-    if signed.artifact.retrieval_mode == "approved_corpus_cache_first":
+    if signed.artifact.retrieval_mode in {
+        "approved_corpus_cache_only",
+        "approved_corpus_cache_first",
+    }:
         if (
             type(discovery) is not CacheFirstOfficialDiscoveryProvider
             or not discovery.production_approved
@@ -314,6 +314,12 @@ def _external_assembly_matches(
             != signed.artifact.document_activation_receipt_sha256
             or not settings.document_cache_configured
         ):
+            return False
+        connector_transport = runtime.acquisition.connector.transport
+        if signed.artifact.retrieval_mode == "approved_corpus_cache_only":
+            if type(connector_transport) is not _DisabledOfficialHttpTransport:
+                return False
+        elif type(connector_transport) is not UrllibOfficialHttpTransport:
             return False
     elif type(discovery) is not BoundedOfficialDiscoveryProvider:
         return False
@@ -664,7 +670,6 @@ def _load_hcx_api_key(settings: Settings) -> str:
 def _build_adaptive_semantic_resolver(
     settings: Settings,
     *,
-    hclx_provider: HyperClovaXSemanticResolverProvider | None,
     embedding_provider: EmbeddingProvider | None,
 ) -> AdaptiveSemanticResolver | None:
     binding = _load_schema_dense_release(settings)
@@ -687,7 +692,6 @@ def _build_adaptive_semantic_resolver(
     linker = ProductionHybridSchemaLinker(index, policy)
     return AdaptiveSemanticResolver(
         linker,
-        hclx_provider=hclx_provider,
         execution_enabled=settings.hcx_semantic_resolver_enabled,
     )
 
@@ -710,8 +714,6 @@ def _build_external_knowledge_runtime(
     assert settings.external_knowledge_artifact_sha256 is not None
     assert settings.external_temporal_relation_file is not None
     assert settings.external_temporal_relation_sha256 is not None
-    assert settings.naver_api_hub_client_id_file is not None
-    assert settings.naver_api_hub_client_secret_file is not None
     artifact = load_external_knowledge_artifact_release(
         artifact_path=settings.external_knowledge_artifact_file,
         expected_file_sha256=settings.external_knowledge_artifact_sha256,
@@ -750,30 +752,45 @@ def _build_external_knowledge_runtime(
     ):
         raise RuntimeError("relation graph external knowledge requires a non-empty graph")
     relation_store = TemporalRelationStore(bundle, registry)
-    live_discovery = BoundedOfficialDiscoveryProvider(
-        NaverApiHubWebSearchTransport(
-            client_id_file=settings.naver_api_hub_client_id_file,
-            client_secret_file=settings.naver_api_hub_client_secret_file,
-        ),
-        registry,
-    )
-    if artifact.retrieval_mode == "approved_corpus_cache_first":
+    cache_only = artifact.retrieval_mode == "approved_corpus_cache_only"
+    if cache_only:
+        if (
+            settings.naver_api_hub_client_id_file is not None
+            or settings.naver_api_hub_client_secret_file is not None
+        ):
+            raise RuntimeError("approved corpus cache-only mode forbids NAVER API HUB credentials")
+        live_discovery = None
+    else:
+        if (
+            settings.naver_api_hub_client_id_file is None
+            or settings.naver_api_hub_client_secret_file is None
+        ):
+            raise RuntimeError("live external knowledge requires NAVER API HUB credentials")
+        live_discovery = BoundedOfficialDiscoveryProvider(
+            NaverApiHubWebSearchTransport(
+                client_id_file=settings.naver_api_hub_client_id_file,
+                client_secret_file=settings.naver_api_hub_client_secret_file,
+            ),
+            registry,
+        )
+    if artifact.retrieval_mode in {
+        "approved_corpus_cache_only",
+        "approved_corpus_cache_first",
+    }:
         if not settings.document_cache_configured or embedding_provider is None:
             raise RuntimeError("cache-first external knowledge requires approved Document Dense")
         assert settings.external_document_dense_artifact_file is not None
         assert settings.external_document_cache_activation_file is not None
+        assert settings.external_document_corpus_manifest_file is not None
+        assert settings.external_document_corpus_root is not None
         assert artifact.document_activation_receipt_sha256 is not None
         assert artifact.document_dense_sha256 is not None
         assert artifact.document_bm25_sha256 is not None
         assert artifact.embedding_model_revision is not None
         discovery = build_release_pinned_cache_first_discovery(
             activation_receipt_path=settings.external_document_cache_activation_file,
-            expected_activation_receipt_sha256=(
-                artifact.document_activation_receipt_sha256
-            ),
-            document_dense_artifact_path=(
-                settings.external_document_dense_artifact_file
-            ),
+            expected_activation_receipt_sha256=(artifact.document_activation_receipt_sha256),
+            document_dense_artifact_path=(settings.external_document_dense_artifact_file),
             expected_document_dense_sha256=artifact.document_dense_sha256,
             expected_corpus_manifest_sha256=artifact.corpus_manifest_sha256,
             expected_document_bm25_sha256=artifact.document_bm25_sha256,
@@ -781,12 +798,19 @@ def _build_external_knowledge_runtime(
             embedding=embedding_provider,
             fallback=live_discovery,
             registry=registry,
+            approved_corpus_manifest_path=(settings.external_document_corpus_manifest_file),
+            approved_corpus_root=settings.external_document_corpus_root,
+            cache_only_coverage_manifest=coverage if cache_only else None,
         )
     else:
         if settings.document_cache_configured:
             raise RuntimeError("live-only release cannot mount Document Dense cache artifacts")
+        assert live_discovery is not None
         discovery = live_discovery
-    connector = OfficialSourceConnector(UrllibOfficialHttpTransport(), registry)
+    connector = OfficialSourceConnector(
+        _DisabledOfficialHttpTransport() if cache_only else UrllibOfficialHttpTransport(),
+        registry,
+    )
     acquisition = OfficialEvidenceAcquisitionCoordinator(
         relation_store=relation_store,
         discovery_provider=discovery,
@@ -829,7 +853,6 @@ def build_agent(
         raise RuntimeError("evaluation/production Agent assembly requires a resolved release")
     intent_analysis_provider = None
     official_answer_provider = None
-    semantic_resolver_provider = None
     if settings.uses_hyperclova:
         hcx_settings = HyperClovaXSettings(
             model=settings.hcx_model or "",
@@ -843,12 +866,7 @@ def build_agent(
                 transport,
                 on_call=call_observer,
                 require_execution_structure=True,
-            )
-        if settings.hcx_semantic_resolver_enabled:
-            semantic_resolver_provider = HyperClovaXSemanticResolverProvider(
-                hcx_settings,
-                transport,
-                on_call=call_observer,
+                allow_entity_alias_repair=settings.hcx_semantic_resolver_enabled,
             )
         if settings.answer_provider == "hyperclova":
             official_answer_provider = HyperClovaXFinalAnswerProvider(
@@ -872,12 +890,10 @@ def build_agent(
         )
     adaptive_semantic_resolver = _build_adaptive_semantic_resolver(
         settings,
-        hclx_provider=semantic_resolver_provider,
         embedding_provider=embedding_provider,
     )
     knowledge_agent = _build_knowledge_agent(settings, release_guard)
     knowledge_router = DeterministicKnowledgeRouter() if knowledge_agent is not None else None
-    external_knowledge_router = ExternalKnowledgeRouter()
     (
         external_knowledge_runtime,
         external_universe_builder,
@@ -886,6 +902,14 @@ def build_agent(
         settings,
         release_guard,
         embedding_provider=embedding_provider,
+    )
+    # Keep route authority and the signed executor atomic.  With external
+    # knowledge disabled, RoutedFinanceAgent's explicit unavailable branch
+    # compiles a zero-authority plan and returns CANNOT_VERIFY.  Supplying an
+    # executable router without its runtime would instead turn an ordinary
+    # evidence question into a release-mismatch 503.
+    external_knowledge_router = (
+        ExternalKnowledgeRouter() if external_knowledge_runtime is not None else None
     )
     return RoutedFinanceAgent(
         settings.database_paths,

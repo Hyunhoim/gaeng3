@@ -7,6 +7,7 @@ from finance_agent_core.agent.compiler import (
     _ranked_identity_requests_single_winner,
     _remove_exact_detail_projection_ambiguities,
 )
+from finance_agent_core.agent.compound_query import TypedCompoundQueryEngine
 from finance_agent_core.agent.fund_comparison_parser import extract_fund_comparison_fields
 from finance_agent_core.agent.intent_analysis import (
     IntentAnalysisDraft,
@@ -24,7 +25,7 @@ from finance_agent_core.agent.router import IntentRouter
 from finance_agent_core.agent.safety import SafetyDisposition, SafetyEnvelope
 from finance_agent_core.agent.semantic_gate import SemanticCoverageGate
 from finance_agent_core.config import load_field_registry
-from finance_agent_core.contracts.queryplan import ProductFamily, QueryPlan
+from finance_agent_core.contracts.queryplan import ProductFamily, QueryPlan, SortDirection
 from finance_agent_core.contracts.routing import InteractionIntent
 from finance_agent_core.execution.oracle import compile_search_sql
 from finance_agent_core.execution.sql_schema import SQL_FIELDS_BY_FAMILY
@@ -587,14 +588,20 @@ def test_phase2_high_frequency_filter_surfaces_are_deterministic(
 
 
 @pytest.mark.parametrize(
-    ("question", "family", "expected_manager"),
+    ("question", "family", "expected_manager", "expected_operator"),
     [
-        ("미래에셋 운용 국내 ETF", "domestic_etp", "미래에셋"),
-        ("First Trust Advisors LP 운용 ETF", "overseas_etp", "First Trust Advisors LP"),
+        ("미래에셋 운용 국내 ETF", "domestic_etp", "미래에셋", "contains"),
+        (
+            "First Trust Advisors LP 운용 ETF",
+            "overseas_etp",
+            "First Trust Advisors LP",
+            "eq",
+        ),
         (
             "Invesco Capital Management LLC의 해외 ETF",
             "overseas_etp",
             "Invesco Capital Management LLC",
+            "eq",
         ),
     ],
 )
@@ -602,6 +609,7 @@ def test_manager_possessive_and_bare_operation_surfaces(
     question: str,
     family: str,
     expected_manager: str,
+    expected_operator: str,
 ) -> None:
     hints = build_lexical_hints(
         question,
@@ -609,7 +617,7 @@ def test_manager_possessive_and_bare_operation_surfaces(
         force_product_family_hint=True,
     )
 
-    assert ("manager", "contains", expected_manager) in {
+    assert ("manager", expected_operator, expected_manager) in {
         (item["field"], item["operator"], item["value"]) for item in hints["required_constraints"]
     }
 
@@ -1946,8 +1954,8 @@ def test_cross_family_incompatible_field_hint_clarifies_instead_of_http_500() ->
         ServerQueryPlanCompiler({}).compile_family_searches(decision)
 
 
-def test_unsupported_two_cohort_aggregate_clarifies_instead_of_validation_500() -> None:
-    decision = IntentRouter().route(
+def test_two_cohort_mean_comparison_uses_typed_plan_without_validation_500() -> None:
+    plan = TypedCompoundQueryEngine({}, record_cache=object()).compile(  # type: ignore[arg-type]
         "채권종류가 일반회사채인 장내 국내채권과 채권종류가 특수은행채인 "
         "장내 국내채권의 민평금리 분포를 비교해 주세요. 0·빈칸은 빼고 각각 "
         "유효 상품 수, 단순평균, 최솟값과 최댓값을 계산한 뒤 각 집단의 상위 "
@@ -1955,8 +1963,13 @@ def test_unsupported_two_cohort_aggregate_clarifies_instead_of_validation_500() 
         "phase4-two-cohort-no-500",
     )
 
-    with pytest.raises(PlanCompilationBlockedError):
-        ServerQueryPlanCompiler({}).compile(decision)
+    assert plan is not None
+    assert plan.kind == "cohort"
+    assert plan.cohort_mean_direction is SortDirection.DESC
+    assert plan.cohort_mean_difference is True
+    assert len(plan.family_plans) == 2
+    assert all(item.product_family is ProductFamily.BOND for item in plan.family_plans)
+    assert all(item.metric.source_fields == ("applied_yield",) for item in plan.family_plans)
 
 
 @pytest.mark.parametrize(

@@ -20,6 +20,7 @@ from finance_agent_core.agent.providers.hyperclova import (
 _CHAT_COMPLETIONS_V3_BASE_URL = "https://clovastudio.stream.ntruss.com/v3/chat-completions"
 _MAX_RESPONSE_BYTES = 2_000_000
 _REQUEST_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
+_RESET_AFTER_PATTERN = re.compile(r"^(?P<value>[0-9]+(?:\.[0-9]+)?)s$")
 
 
 class _NoRedirectHandler(urllib.request.HTTPRedirectHandler):
@@ -94,7 +95,14 @@ class HyperClovaXHTTPTransport:
         except urllib.error.HTTPError as error:
             try:
                 status_code = _safe_http_error_status(error)
-                return _invalid_response(status_code, request_id)
+                retry_after_seconds = (
+                    _rate_limit_reset_seconds(error.headers) if status_code == 429 else None
+                )
+                return _invalid_response(
+                    status_code,
+                    request_id,
+                    retry_after_seconds=retry_after_seconds,
+                )
             finally:
                 _close_quietly(error)
         except urllib.error.URLError as error:
@@ -171,6 +179,30 @@ def _safe_http_error_status(error: urllib.error.HTTPError) -> int:
     raise ConnectionError("HyperCLOVA X HTTP response status is invalid")
 
 
+def _rate_limit_reset_seconds(headers: object) -> float | None:
+    """Return only a bounded numeric reset delay from documented HCX headers."""
+
+    getter = getattr(headers, "get", None)
+    if getter is None:
+        return None
+    delays: list[float] = []
+    for name in (
+        "x-ratelimit-reset-tokens",
+        "x-ratelimit-reset-requests",
+    ):
+        raw_value = getter(name)
+        if not isinstance(raw_value, str):
+            continue
+        normalized = raw_value.strip().lower()
+        match = _RESET_AFTER_PATTERN.fullmatch(normalized)
+        if match is None:
+            continue
+        value = float(match.group("value"))
+        if 0 <= value <= 60:
+            delays.append(value)
+    return max(delays, default=None)
+
+
 def _decode_success_response(
     raw_body: bytes,
     status_code: int,
@@ -231,12 +263,18 @@ def _decode_usage(value: object) -> HyperClovaXTokenUsage | None:
     )
 
 
-def _invalid_response(status_code: int, request_id: str) -> HyperClovaXTransportResponse:
+def _invalid_response(
+    status_code: int,
+    request_id: str,
+    *,
+    retry_after_seconds: float | None = None,
+) -> HyperClovaXTransportResponse:
     return HyperClovaXTransportResponse(
         status_code=status_code,
         content=None,
         request_id=request_id,
         usage=None,
+        retry_after_seconds=retry_after_seconds,
     )
 
 

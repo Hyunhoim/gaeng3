@@ -26,6 +26,7 @@ from finance_agent_core.release import (
     PublicRelationRetrievalRelease,
     external_knowledge_verifier_contract_sha256,
 )
+from finance_agent_core.retrieval.official_connector import OfficialConnectorError
 from finance_agent_core.retrieval.temporal_relations import (
     seal_temporal_relation_bundle,
 )
@@ -88,6 +89,8 @@ def test_build_agent_defaults_to_deterministic_answer() -> None:
     assert agent.answer_provider is None
     assert agent.capability_execution_overrides == frozenset()
     assert agent.require_approved_databases is False
+    assert agent.external_knowledge_router is None
+    assert agent.external_knowledge_runtime is None
 
 
 @pytest.mark.parametrize("app_env", ["evaluation", "production"])
@@ -188,6 +191,31 @@ def test_approval_guard_rejects_hcx_provider_without_the_bound_call_observer(
     )
     assert isinstance(agent.official_answer_provider, HyperClovaXFinalAnswerProvider)
     agent.official_answer_provider._client.on_call = None
+
+    with pytest.raises(RuntimeError, match="approved RoutedFinanceAgent"):
+        require_approval_guard(
+            agent,
+            settings,
+            release_guard=release,
+            audit_sink=audit,
+        )
+
+    assert audit.close(timeout_seconds=2)
+
+
+def test_approval_guard_rejects_hcx_entity_alias_authority_mismatch(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    key_file, _ = _install_no_call_hcx_transport(tmp_path, monkeypatch)
+    settings = _hcx_settings(CLOVASTUDIO_API_KEY_FILE=key_file)
+    release = stub_resolved_release()
+    audit = BoundedAsyncAuditSink(InMemoryAuditSink(max_events=32), queue_capacity=32)
+    agent = build_agent(settings, release_guard=release, audit_sink=audit)
+
+    assert isinstance(agent.intent_analysis_provider, HyperClovaXIntentAnalysisProvider)
+    assert agent.intent_analysis_provider.allow_entity_alias_repair is False
+    agent.intent_analysis_provider.allow_entity_alias_repair = True
 
     with pytest.raises(RuntimeError, match="approved RoutedFinanceAgent"):
         require_approval_guard(
@@ -465,7 +493,7 @@ def _document_cache_settings_values(tmp_path: Path) -> dict[str, object]:
 
 def test_settings_require_document_cache_artifacts_as_one_release_set(tmp_path: Path) -> None:
     values = _document_cache_settings_values(tmp_path)
-    with pytest.raises(ValidationError, match="both index and activation receipt"):
+    with pytest.raises(ValidationError, match="requires index, activation receipt"):
         Settings(
             **values,
             FINANCE_EXTERNAL_DOCUMENT_DENSE_ARTIFACT_FILE=tmp_path / "dense.json",
@@ -475,13 +503,20 @@ def test_settings_require_document_cache_artifacts_as_one_release_set(tmp_path: 
         **values,
         FINANCE_EXTERNAL_DOCUMENT_DENSE_ARTIFACT_FILE=tmp_path / "dense.json",
         FINANCE_EXTERNAL_DOCUMENT_CACHE_ACTIVATION_FILE=tmp_path / "activation.json",
+        FINANCE_EXTERNAL_DOCUMENT_CORPUS_MANIFEST_FILE=tmp_path / "approved.json",
+        FINANCE_EXTERNAL_DOCUMENT_CORPUS_ROOT=tmp_path / "approved",
     )
     assert settings.document_cache_configured
 
 
-def test_external_runtime_selects_release_pinned_cache_first_builder(
+@pytest.mark.parametrize(
+    "retrieval_mode",
+    ["approved_corpus_cache_first", "approved_corpus_cache_only"],
+)
+def test_external_runtime_selects_release_pinned_cache_builder(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    retrieval_mode: str,
 ) -> None:
     registry = load_official_source_registry()
     coverage = load_approved_knowledge_coverage_manifest()
@@ -492,7 +527,7 @@ def test_external_runtime_selects_release_pinned_cache_first_builder(
         registry=registry,
     )
     external = ExternalKnowledgeArtifactRelease(
-        retrieval_mode="approved_corpus_cache_first",
+        retrieval_mode=retrieval_mode,
         source_registry_sha256=registry.canonical_sha256,
         coverage_manifest_sha256=coverage.canonical_sha256,
         corpus_manifest_sha256=corpus_sha,
@@ -523,15 +558,34 @@ def test_external_runtime_selects_release_pinned_cache_first_builder(
     )
     values = _document_cache_settings_values(tmp_path)
     values["FINANCE_EXTERNAL_KNOWLEDGE_ARTIFACT_SHA256"] = artifact_file_sha
+    if retrieval_mode == "approved_corpus_cache_only":
+        values.pop("NAVER_API_HUB_CLIENT_ID_FILE")
+        values.pop("NAVER_API_HUB_CLIENT_SECRET_FILE")
     settings = Settings(
         **values,
         FINANCE_EXTERNAL_DOCUMENT_DENSE_ARTIFACT_FILE=tmp_path / "dense.json",
         FINANCE_EXTERNAL_DOCUMENT_CACHE_ACTIVATION_FILE=tmp_path / "activation.json",
+        FINANCE_EXTERNAL_DOCUMENT_CORPUS_MANIFEST_FILE=tmp_path / "approved.json",
+        FINANCE_EXTERNAL_DOCUMENT_CORPUS_ROOT=tmp_path / "approved",
     )
-    for name in ("naver-id", "naver-secret"):
-        secret = tmp_path / name
-        secret.write_text("test-secret", encoding="utf-8")
-        secret.chmod(0o600)
+    if retrieval_mode == "approved_corpus_cache_first":
+        for name in ("naver-id", "naver-secret"):
+            secret = tmp_path / name
+            secret.write_text("test-secret", encoding="utf-8")
+            secret.chmod(0o600)
+    else:
+        monkeypatch.setattr(
+            "app.dependencies.NaverApiHubWebSearchTransport",
+            lambda **_kwargs: (_ for _ in ()).throw(
+                AssertionError("cache-only mode created a NAVER transport")
+            ),
+        )
+        monkeypatch.setattr(
+            "app.dependencies.UrllibOfficialHttpTransport",
+            lambda: (_ for _ in ()).throw(
+                AssertionError("cache-only mode created an HTTP transport")
+            ),
+        )
     monkeypatch.setattr(
         "app.dependencies.load_external_knowledge_artifact_release",
         lambda **_kwargs: external,
@@ -546,6 +600,7 @@ def test_external_runtime_selects_release_pinned_cache_first_builder(
         production_approved = True
         activation_binding_sha256 = "b" * 64
         artifact = SimpleNamespace(canonical_sha256="a" * 64)
+        live_fallback_enabled = retrieval_mode == "approved_corpus_cache_first"
 
     def build_cache(**kwargs: object) -> object:
         captured.update(kwargs)
@@ -581,3 +636,36 @@ def test_external_runtime_selects_release_pinned_cache_first_builder(
     assert captured["expected_document_dense_sha256"] == "a" * 64
     assert captured["expected_document_bm25_sha256"] == "9" * 64
     assert captured["embedding"] is embedding
+    assert captured["approved_corpus_manifest_path"] == tmp_path / "approved.json"
+    assert captured["approved_corpus_root"] == tmp_path / "approved"
+    if retrieval_mode == "approved_corpus_cache_only":
+        assert captured["cache_only_coverage_manifest"] is coverage
+        assert captured["fallback"] is None
+        with pytest.raises(OfficialConnectorError, match="network fetch is disabled"):
+            runtime.acquisition.connector.transport.fetch(
+                "https://example.invalid/",
+                timeout_seconds=1.0,
+                max_bytes=1,
+            )
+    else:
+        assert captured["cache_only_coverage_manifest"] is None
+        assert captured["fallback"] is not None
+
+    if retrieval_mode == "approved_corpus_cache_only":
+        credential_values = _document_cache_settings_values(tmp_path)
+        credential_values.update(
+            {
+                "FINANCE_EXTERNAL_KNOWLEDGE_ARTIFACT_SHA256": artifact_file_sha,
+                "FINANCE_EXTERNAL_DOCUMENT_DENSE_ARTIFACT_FILE": tmp_path / "dense.json",
+                "FINANCE_EXTERNAL_DOCUMENT_CACHE_ACTIVATION_FILE": tmp_path / "activation.json",
+                "FINANCE_EXTERNAL_DOCUMENT_CORPUS_MANIFEST_FILE": tmp_path / "approved.json",
+                "FINANCE_EXTERNAL_DOCUMENT_CORPUS_ROOT": tmp_path / "approved",
+            }
+        )
+        settings_with_live_credentials = Settings(**credential_values)
+        with pytest.raises(RuntimeError, match="cache-only mode forbids"):
+            _build_external_knowledge_runtime(
+                settings_with_live_credentials,
+                guard,
+                embedding_provider=embedding,  # type: ignore[arg-type]
+            )

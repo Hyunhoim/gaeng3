@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import re
 import unicodedata
 import urllib.parse
@@ -16,6 +17,7 @@ from finance_agent_core.config.source_registry import (
     OfficialSourceRegistryError,
 )
 from finance_agent_core.contracts.external_knowledge import KnowledgeRequirement
+from finance_agent_core.deadline import RequestDeadlineExceeded
 from finance_agent_core.retrieval.official_connector import (
     BoundedOfficialDiscovery,
     OfficialConnectorError,
@@ -46,6 +48,26 @@ _MAX_FETCH_TIMEOUT_SECONDS = 10.0
 
 
 _CACHE_HIT_LIMIT = 50
+
+
+def _merge_bounded_discovery_candidates(
+    discovered: tuple[OfficialDiscoveryCandidate, ...],
+    seeds: tuple[OfficialDiscoveryCandidate, ...],
+    *,
+    limit: int = 20,
+) -> tuple[OfficialDiscoveryCandidate, ...]:
+    """Keep graph-bound seeds first while enforcing the result DTO budget."""
+
+    merged: list[OfficialDiscoveryCandidate] = []
+    seen_urls: set[str] = set()
+    for candidate in (*seeds, *discovered):
+        if candidate.url in seen_urls:
+            continue
+        seen_urls.add(candidate.url)
+        merged.append(candidate)
+        if len(merged) == limit:
+            break
+    return tuple(merged)
 
 
 class OfficialEvidenceAcquisitionStatus(StrEnum):
@@ -318,6 +340,7 @@ class OfficialEvidenceAcquisitionCoordinator:
         requirement: KnowledgeRequirement,
         *,
         discovery_terms: tuple[str, ...] = (),
+        discovery_product_term_groups: tuple[tuple[str, ...], ...] = (),
         provided_product_surfaces: tuple[str, ...] = (),
         provided_product_evidence_dates: tuple[tuple[str, date], ...] = (),
         top_k: int = 8,
@@ -340,6 +363,23 @@ class OfficialEvidenceAcquisitionCoordinator:
             )
         ):
             raise ValueError("discovery terms must be unique bounded entity text")
+        if (
+            len(discovery_product_term_groups) > 20
+            or any(
+                not group
+                or len(group) > 21
+                or len(group) != len(set(group))
+                or any(
+                    value != value.strip()
+                    or not 2 <= len(value) <= 500
+                    or "http://" in value.casefold()
+                    or "https://" in value.casefold()
+                    for value in group
+                )
+                for group in discovery_product_term_groups
+            )
+        ):
+            raise ValueError("discovery product target groups are invalid or unbounded")
         if (
             len(provided_product_surfaces) > 250_000
             or len(provided_product_surfaces) != len(set(provided_product_surfaces))
@@ -375,6 +415,15 @@ class OfficialEvidenceAcquisitionCoordinator:
         if not 100 <= deadline_ms <= 60_000:
             raise ValueError("acquisition deadline is out of bounds")
         deadline = perf_counter() + deadline_ms / 1000
+        # A named historical factsheet may be published after the holdings
+        # date printed inside it.  ``provided_product_evidence_dates`` binds
+        # that inner date to an exact DB product and the extractor/verifier
+        # checks it again.  Do not incorrectly compare the document's
+        # publication date with that product-local holdings date during URL
+        # discovery or cached-byte materialization.
+        discovery_time_range = (
+            None if provided_product_evidence_dates else requirement.time_range
+        )
         # The relation cache matches whole labels, so a question surface in one
         # script (``캠브리콘``) must also be looked up by its verified search
         # aliases (``Cambricon``).  Aliases only address the lookup; the relation
@@ -390,6 +439,7 @@ class OfficialEvidenceAcquisitionCoordinator:
                         subject=lookup_subject,
                         product_families=requirement.product_families,
                         time_range=requirement.time_range,
+                        document_scope=requirement.document_scope,
                         top_k=_CACHE_HIT_LIMIT,
                     )
                 ):
@@ -401,6 +451,7 @@ class OfficialEvidenceAcquisitionCoordinator:
                     subject=requirement.subject,
                     product_families=requirement.product_families,
                     time_range=requirement.time_range,
+                    document_scope=requirement.document_scope,
                     top_k=_CACHE_HIT_LIMIT,
                 )
             ):
@@ -447,8 +498,16 @@ class OfficialEvidenceAcquisitionCoordinator:
                         dict.fromkeys((requirement.subject, *requirement.search_aliases))
                     ),
                     product_terms=discovery_terms,
+                    entity_term_groups=(
+                        tuple(
+                            dict.fromkeys(
+                                (requirement.subject, *requirement.search_aliases)
+                            )
+                        ),
+                    ),
+                    product_term_groups=discovery_product_term_groups,
                     relation_terms=(requirement.relation_evidence_span,),
-                    time_range=requirement.time_range,
+                    time_range=discovery_time_range,
                     product_surfaces=tuple(provided_product_surfaces),
                 )
                 if type(report) is not OfficialDiscoveryReport:
@@ -475,6 +534,11 @@ class OfficialEvidenceAcquisitionCoordinator:
                     exhaustive=False,
                     failure_codes=(DiscoveryFailureCode.SOURCE_SCOPE_INCOMPLETE,),
                 )
+        except RequestDeadlineExceeded:
+            # The request-wide 270 second boundary owns cancellation and its
+            # Audit outcome.  It must not be rewritten as an ordinary evidence
+            # miss inside one connector stage.
+            raise
         except (OfficialDiscoveryError, TimeoutError):
             return OfficialEvidenceAcquisitionResult(
                 status=OfficialEvidenceAcquisitionStatus.CANNOT_VERIFY,
@@ -505,26 +569,25 @@ class OfficialEvidenceAcquisitionCoordinator:
                 ),
             )
         )
-        if seed_candidates:
-            # Seeds are official page URLs the sealed graph already binds to the
-            # required product (its own evidence), so they outrank any search
-            # result: site search for ``KODEX 코스닥150`` happily returns the
-            # sibling ``코스닥150롱 코스피200숏선물`` page first.
-            seed_urls = {candidate.url for candidate in seed_candidates}
-            discovered_pool = (
-                *seed_candidates,
-                *(candidate for candidate in discovered_pool if candidate.url not in seed_urls),
-            )
+        # Seeds are official page URLs the sealed graph already binds to the
+        # required product (its own evidence), so they outrank any search
+        # result.  Re-apply the global bound after seed injection: otherwise a
+        # full 20-result report plus one seed violates the result DTO and leaks
+        # a raw validation error as HTTP 500.
+        discovered_pool = _merge_bounded_discovery_candidates(
+            tuple(discovered_pool),
+            tuple(seed_candidates),
+        )
 
         def is_time_eligible(candidate: OfficialDiscoveryCandidate) -> bool:
             if (
-                requirement.time_range is None
+                discovery_time_range is None
                 or candidate.published_at is None
                 or (
-                    candidate.published_at <= requirement.time_range.end
+                    candidate.published_at <= discovery_time_range.end
                     and (
-                        requirement.time_range.start is None
-                        or candidate.published_at >= requirement.time_range.start
+                        discovery_time_range.start is None
+                        or candidate.published_at >= discovery_time_range.start
                     )
                 )
             ):
@@ -544,7 +607,7 @@ class OfficialEvidenceAcquisitionCoordinator:
         time_filtered = tuple(
             candidate for candidate in discovered_pool if is_time_eligible(candidate)
         )
-        if requirement.time_range is not None:
+        if discovery_time_range is not None:
             time_filtered = tuple(
                 sorted(
                     time_filtered,
@@ -686,8 +749,73 @@ class OfficialEvidenceAcquisitionCoordinator:
                     continue
 
                 snapshot: OfficialSourceSnapshot | OfficialNavigationSnapshot | None = None
+                # A cache-first provider may materialize the exact frozen
+                # official text selected by BM25+Dense. This avoids refetching
+                # a URL that has since moved, throttles automated clients, or
+                # is temporarily unavailable. Pending corpus bytes require an
+                # explicit lab-only switch in that provider; production cache
+                # materialization is release/approval bound.
+                cached_materializer = getattr(
+                    self.discovery_provider,
+                    "materialize_cached_candidate",
+                    None,
+                )
+                if depth == 0 and callable(cached_materializer):
+                    try:
+                        cached_snapshot = cached_materializer(
+                            candidate,
+                            requirement.capability,
+                        )
+                    except (OfficialConnectorError, OfficialSourceRegistryError):
+                        cached_snapshot = None
+                    cached_snapshot_is_valid = (
+                        isinstance(cached_snapshot, OfficialSourceSnapshot)
+                        and cached_snapshot.source == source
+                        and cached_snapshot.capability is requirement.capability
+                        and cached_snapshot.source_uri == candidate.url
+                        and cached_snapshot.db_ticker == candidate.db_ticker
+                        and bool(cached_snapshot.content)
+                        and hashlib.sha256(cached_snapshot.content).hexdigest()
+                        == cached_snapshot.content_sha256
+                        and cached_snapshot.as_of
+                        <= self.connector.registry.evidence_cutoff
+                        and (
+                            cached_snapshot.published_at is None
+                            or cached_snapshot.as_of
+                            <= cached_snapshot.published_at
+                            <= self.connector.registry.evidence_cutoff
+                        )
+                        and (
+                            discovery_time_range is None
+                            or (
+                                (cached_snapshot.published_at or cached_snapshot.as_of)
+                                <= discovery_time_range.end
+                                and (
+                                    discovery_time_range.start is None
+                                    or (cached_snapshot.published_at or cached_snapshot.as_of)
+                                    >= discovery_time_range.start
+                                )
+                            )
+                        )
+                    )
+                    if cached_snapshot_is_valid:
+                        if len(cached_snapshot.content) <= max_total_bytes - fetched_bytes:
+                            snapshot = cached_snapshot
+                        else:
+                            fetch_failure_codes.add("acquisition_byte_budget_exceeded")
+                            stop_acquisition = True
+                    elif cached_snapshot is not None:
+                        # Cache materialization is an optimization seam, not a
+                        # new trust boundary. Invalid bytes fall back to the
+                        # same connector checks used for a normal URL hit.
+                        fetch_failure_codes.add("cached_snapshot_contract_rejected")
+
+                if stop_acquisition:
+                    frontier.clear()
+                    break
+
                 attempts = 1 if depth == 0 else 2
-                for _attempt in range(attempts):
+                for _attempt in range(attempts if snapshot is None else 0):
                     remaining_seconds = deadline - perf_counter()
                     remaining_bytes = max_total_bytes - fetched_bytes
                     if remaining_seconds <= 0:

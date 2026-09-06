@@ -14,6 +14,7 @@ from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, field_validator, model_validator
 
+from finance_agent_core.config.knowledge_coverage import KnowledgeCapability
 from finance_agent_core.retrieval.models import DocumentInput, DocumentSourceKind
 from finance_agent_core.retrieval.sqlite_fts import (
     SQLiteDocumentIndex,
@@ -150,9 +151,12 @@ class CorpusDocumentSpec(CorpusModel):
     relative_path: str = Field(min_length=1, max_length=4096)
     title: str = Field(min_length=1, max_length=500)
     publisher: str = Field(min_length=1, max_length=300)
+    source_registry_id: str = Field(pattern=r"^[a-z0-9][a-z0-9._-]{2,79}$")
     source_uri: str = Field(min_length=8, max_length=2000)
     source_kind: Literal["external_approved"] = "external_approved"
+    capabilities: tuple[KnowledgeCapability, ...] = Field(min_length=1, max_length=5)
     collected_at_utc: datetime
+    published_at: date | None
     as_of: date
     language: DocumentLanguage
     media_type: SnapshotMediaType
@@ -204,10 +208,26 @@ class CorpusDocumentSpec(CorpusModel):
             raise ValueError("document purposes must be unique and sorted")
         return value
 
+    @field_validator("capabilities")
+    @classmethod
+    def validate_capabilities(
+        cls,
+        value: tuple[KnowledgeCapability, ...],
+    ) -> tuple[KnowledgeCapability, ...]:
+        serialized = [item.value for item in value]
+        if serialized != sorted(serialized) or len(serialized) != len(set(serialized)):
+            raise ValueError("document capabilities must be unique and sorted")
+        return value
+
     @model_validator(mode="after")
     def validate_collection_date(self) -> CorpusDocumentSpec:
         if self.as_of > self.collected_at_utc.date():
             raise ValueError("document as_of cannot be later than collection date")
+        if self.published_at is not None:
+            if self.published_at > self.collected_at_utc.date():
+                raise ValueError("document publication date cannot be later than collection date")
+            if self.as_of > self.published_at:
+                raise ValueError("document as_of cannot follow publication date")
         expected_media_type = (
             "text/markdown" if self.relative_path.endswith(".md") else "text/plain"
         )
@@ -247,7 +267,7 @@ def _validate_reviews(
 
 
 class ExternalCorpusIntakeSpec(CorpusModel):
-    schema_version: Literal["1.0"] = "1.0"
+    schema_version: Literal["1.1"] = "1.1"
     spec_kind: Literal["external_corpus_intake"] = "external_corpus_intake"
     corpus_id: str = Field(pattern=_ID_PATTERN)
     status: Literal["reviewed_for_sealing"] = "reviewed_for_sealing"
@@ -278,7 +298,7 @@ def _document_file_manifest_sha256(
 
 
 class ApprovedCorpusManifest(CorpusModel):
-    schema_version: Literal["1.0"] = "1.0"
+    schema_version: Literal["1.1"] = "1.1"
     manifest_kind: Literal["external_approved_corpus"] = "external_approved_corpus"
     corpus_id: str = Field(pattern=_ID_PATTERN)
     status: Literal["approved_for_bm25"] = "approved_for_bm25"

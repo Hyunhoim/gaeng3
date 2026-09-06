@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from datetime import date
 from enum import StrEnum
 from typing import Literal
@@ -103,6 +104,61 @@ class KnowledgeTimeRange(ExternalKnowledgeContractModel):
         return self
 
 
+class KnowledgeDocumentTopNScope(ExternalKnowledgeContractModel):
+    """Require a relation to occur within an evidenced top-N document list."""
+
+    scope_kind: Literal["document_top_n"] = "document_top_n"
+    limit: int = Field(ge=1, le=50)
+    selection_evidence_span: str = Field(min_length=1, max_length=120)
+
+    @model_validator(mode="after")
+    def validate_literal_scope(self) -> KnowledgeDocumentTopNScope:
+        span = self.selection_evidence_span.strip()
+        if span != self.selection_evidence_span:
+            raise ValueError("document top-N evidence span must be trimmed")
+        if (
+            re.search(
+                r"(?:상위|top|톱|\d+\s*위\s*(?:이내|까지))",
+                span,
+                re.IGNORECASE,
+            )
+            is None
+        ):
+            raise ValueError("document top-N scope requires an explicit ranking cue")
+        numeric_limits = {int(value) for value in re.findall(r"(?<!\d)\d{1,2}(?!\d)", span)}
+        if self.limit not in numeric_limits:
+            raise ValueError("document top-N limit must occur literally in its evidence span")
+        return self
+
+
+class KnowledgeDocumentBinding(ExternalKnowledgeContractModel):
+    """One question-literal document scope bound to one provided-DB product."""
+
+    binding_id: str = Field(pattern=r"^doc_[1-8]$", max_length=5)
+    product_family: ProductFamily
+    product_id: str = Field(min_length=1, max_length=128)
+    product_identity_evidence_span: str = Field(min_length=1, max_length=500)
+    document_reference_evidence_span: str = Field(min_length=1, max_length=220)
+    source_evidence_span: str = Field(min_length=1, max_length=200)
+    time_evidence_span: str = Field(min_length=1, max_length=100)
+    time_range: KnowledgeTimeRange
+    source_registry_ids: tuple[str, ...] = Field(min_length=1, max_length=40)
+
+    @model_validator(mode="after")
+    def validate_binding(self) -> KnowledgeDocumentBinding:
+        literal_spans = (
+            self.product_identity_evidence_span,
+            self.document_reference_evidence_span,
+            self.source_evidence_span,
+            self.time_evidence_span,
+        )
+        if any(value != value.strip() for value in literal_spans):
+            raise ValueError("document binding evidence spans must be trimmed")
+        if self.source_registry_ids != tuple(sorted(set(self.source_registry_ids))):
+            raise ValueError("document binding source IDs must be unique and sorted")
+        return self
+
+
 class KnowledgeRequirement(ExternalKnowledgeContractModel):
     requirement_id: str = Field(pattern=r"^need_[1-9][0-9]?$", max_length=8)
     capability: KnowledgeCapability
@@ -113,6 +169,8 @@ class KnowledgeRequirement(ExternalKnowledgeContractModel):
     relation_evidence_span: str = Field(min_length=1, max_length=120)
     product_families: tuple[ProductFamily, ...] = Field(default=(), max_length=4)
     time_range: KnowledgeTimeRange | None = None
+    document_scope: KnowledgeDocumentTopNScope | None = None
+    document_bindings: tuple[KnowledgeDocumentBinding, ...] = Field(default=(), max_length=8)
     # Keep registry scope bounded by the same hard ceiling as the server-owned
     # search budget. The approved registry may legitimately contain more than
     # twenty capability-compatible publisher paths.
@@ -136,12 +194,39 @@ class KnowledgeRequirement(ExternalKnowledgeContractModel):
             raise ValueError("knowledge dependencies must be sorted")
         if len(self.depends_on) != len(set(self.depends_on)):
             raise ValueError("knowledge dependencies must be unique")
+        if (
+            self.document_scope is not None
+            and self.capability is not KnowledgeCapability.PORTFOLIO_HOLDINGS
+        ):
+            raise ValueError("document top-N scope is allowed only for portfolio holdings")
+        if self.document_bindings:
+            if self.capability is not KnowledgeCapability.PORTFOLIO_HOLDINGS:
+                raise ValueError("document bindings are allowed only for portfolio holdings")
+            if self.time_range is not None:
+                raise ValueError("document bindings cannot share one global time range")
+            expected_ids = tuple(
+                f"doc_{index}" for index in range(1, len(self.document_bindings) + 1)
+            )
+            if tuple(item.binding_id for item in self.document_bindings) != expected_ids:
+                raise ValueError("document binding IDs must be unique and ordered")
+            product_keys = tuple(
+                (item.product_family, item.product_id) for item in self.document_bindings
+            )
+            if len(product_keys) != len(set(product_keys)):
+                raise ValueError("document bindings must target unique provided products")
+            for binding in self.document_bindings:
+                if binding.product_family not in self.product_families:
+                    raise ValueError("document binding product exceeds requirement families")
+                if not set(binding.source_registry_ids).issubset(self.source_registry_ids):
+                    raise ValueError("document binding source exceeds requirement source policy")
         return self
 
 
 ExternalRankingField = Literal[
     "aum",
+    "net_asset_total",
     "total_expense_ratio_pct",
+    "tracking_error_pct",
     "one_day_return_pct",
     "one_month_return_pct",
     "three_month_return_pct",
@@ -157,6 +242,17 @@ class KnowledgeProductSelection(ExternalKnowledgeContractModel):
     direction: SortDirection
     limit: int = Field(ge=1, le=20)
     value_source: Literal["provided_product_database"] = "provided_product_database"
+
+
+class KnowledgeEvidenceSelection(ExternalKnowledgeContractModel):
+    """Order relation-selected products only by verified document dates."""
+
+    order_by: Literal["published_at", "as_of"]
+    direction: SortDirection
+    limit: int = Field(ge=1, le=20)
+    source_requirement_id: str = Field(pattern=r"^need_[1-9][0-9]?$", max_length=8)
+    selection_evidence_span: str = Field(min_length=1, max_length=120)
+    value_source: Literal["verified_external_evidence"] = "verified_external_evidence"
 
 
 class CompositeKnowledgeQueryPlan(ExternalKnowledgeContractModel):
@@ -176,6 +272,7 @@ class CompositeKnowledgeQueryPlan(ExternalKnowledgeContractModel):
     requirements: tuple[KnowledgeRequirement, ...] = Field(min_length=1, max_length=8)
     holding_match_mode: KnowledgeMatchMode = KnowledgeMatchMode.ALL
     product_selection: KnowledgeProductSelection | None = None
+    evidence_selection: KnowledgeEvidenceSelection | None = None
     requested_product_fields: tuple[
         Literal[
             "aum",
@@ -183,6 +280,7 @@ class CompositeKnowledgeQueryPlan(ExternalKnowledgeContractModel):
             "daily_volume",
             "investment_region",
             "manager",
+            "net_asset_total",
             "one_day_return_pct",
             "one_month_return_pct",
             "one_year_return_pct",
@@ -191,10 +289,11 @@ class CompositeKnowledgeQueryPlan(ExternalKnowledgeContractModel):
             "three_month_return_pct",
             "ticker",
             "total_expense_ratio_pct",
+            "tracking_error_pct",
             "twenty_day_volatility_pct",
         ],
         ...,
-    ] = Field(default=(), max_length=15)
+    ] = Field(default=(), max_length=16)
     join_order: tuple[str, ...] = Field(min_length=2, max_length=9)
     execution_authorized: bool = False
 
@@ -218,12 +317,53 @@ class CompositeKnowledgeQueryPlan(ExternalKnowledgeContractModel):
             if requirement.relation_evidence_span not in self.question:
                 raise ValueError("knowledge relation evidence is absent from the question")
             if (
+                requirement.document_scope is not None
+                and requirement.document_scope.selection_evidence_span not in self.question
+            ):
+                raise ValueError("document top-N evidence is absent from the question")
+            if (
                 requirement.time_range is not None
                 and requirement.time_range.end > self.evidence_cutoff
             ):
                 raise ValueError("knowledge time range exceeds the evidence cutoff")
+            for binding in requirement.document_bindings:
+                if binding.product_identity_evidence_span not in self.question:
+                    raise ValueError("document binding product evidence is absent")
+                if binding.document_reference_evidence_span not in self.question:
+                    raise ValueError("document binding reference evidence is absent")
+                if binding.source_evidence_span not in self.question:
+                    raise ValueError("document binding source evidence is absent")
+                if binding.time_evidence_span not in self.question:
+                    raise ValueError("document binding time evidence is absent")
+                if binding.time_range.end > self.evidence_cutoff:
+                    raise ValueError("document binding time exceeds the evidence cutoff")
         if self.requested_product_fields != tuple(sorted(set(self.requested_product_fields))):
             raise ValueError("requested external product fields must be unique and sorted")
+        if self.product_selection is not None and self.evidence_selection is not None:
+            raise ValueError("DB value ranking and evidence-date ordering cannot be combined")
+        if self.evidence_selection is not None:
+            selection = self.evidence_selection
+            if selection.selection_evidence_span not in self.question:
+                raise ValueError("evidence ordering span is absent from the question")
+            requirement = next(
+                (
+                    item
+                    for item in self.requirements
+                    if item.requirement_id == selection.source_requirement_id
+                ),
+                None,
+            )
+            if requirement is None:
+                raise ValueError("evidence ordering refers to an unknown requirement")
+            if requirement.depends_on or requirement.capability not in {
+                KnowledgeCapability.PORTFOLIO_HOLDINGS,
+                KnowledgeCapability.SECTOR_THEME_HISTORY,
+                KnowledgeCapability.FUND_STRUCTURE_STRATEGY_TREND,
+                KnowledgeCapability.PRODUCT_RISK_FACTORS,
+            }:
+                raise ValueError(
+                    "evidence ordering must reference an independent product requirement"
+                )
         holding_count = sum(
             item.capability is KnowledgeCapability.PORTFOLIO_HOLDINGS for item in self.requirements
         )
@@ -259,6 +399,10 @@ class ProvidedProductCandidate(ExternalKnowledgeContractModel):
     product_id: str = Field(min_length=1, max_length=128)
     product_name: str = Field(min_length=1, max_length=500)
     aliases: tuple[str, ...] = Field(default=(), max_length=20)
+    # Typed DB provenance used only for issuer-scoped official evidence.  It is
+    # deliberately not folded into ``aliases``: a corporate filing that names
+    # an issuer is not proof that it names each individual product.
+    source_owner: str | None = Field(default=None, max_length=300)
 
     @field_validator("aliases")
     @classmethod
@@ -268,6 +412,15 @@ class ProvidedProductCandidate(ExternalKnowledgeContractModel):
         if any(not value.strip() or len(value) > 500 for value in values):
             raise ValueError("provided product aliases must be non-blank and bounded")
         return values
+
+    @field_validator("source_owner")
+    @classmethod
+    def validate_source_owner(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        if not value.strip() or value != value.strip():
+            raise ValueError("provided product source owner must be trimmed")
+        return value
 
 
 class ProvidedProductCandidateUniverse(ExternalKnowledgeContractModel):
@@ -423,9 +576,12 @@ __all__ = [
     "ExternalKnowledgeOutcome",
     "ExternalKnowledgeOutcomeStatus",
     "ExternalKnowledgeSearchPlan",
-    "ExternalSearchExecutionReceipt",
-    "ExternalSearchBudget",
     "ExternalRankingField",
+    "ExternalSearchBudget",
+    "ExternalSearchExecutionReceipt",
+    "KnowledgeDocumentBinding",
+    "KnowledgeDocumentTopNScope",
+    "KnowledgeEvidenceSelection",
     "KnowledgeIntentRequirement",
     "KnowledgeMatchMode",
     "KnowledgePredicate",

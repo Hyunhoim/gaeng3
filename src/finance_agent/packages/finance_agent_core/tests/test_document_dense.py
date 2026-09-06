@@ -7,7 +7,11 @@ from types import SimpleNamespace
 
 import pytest
 
-from finance_agent_core.config.knowledge_coverage import KnowledgeCapability
+from finance_agent_core.config.knowledge_coverage import (
+    ApprovedKnowledgeCoverageManifest,
+    KnowledgeCapability,
+    KnowledgeCoverageEntry,
+)
 from finance_agent_core.config.source_registry import load_official_source_registry
 from finance_agent_core.contracts.external_knowledge import KnowledgeTimeRange
 from finance_agent_core.retrieval.corpus import (
@@ -44,7 +48,10 @@ from finance_agent_core.retrieval.official_connector import (
     OfficialHttpResponse,
     OfficialSourceConnector,
 )
-from finance_agent_core.retrieval.official_discovery import OfficialDiscoveryReport
+from finance_agent_core.retrieval.official_discovery import (
+    DiscoveryFailureCode,
+    OfficialDiscoveryReport,
+)
 from finance_agent_core.retrieval.pending_corpus import (
     PendingCorpusCatalog,
     PendingCorpusError,
@@ -55,6 +62,7 @@ from finance_agent_core.retrieval.pending_corpus import (
     rebind_pending_corpus_registry,
 )
 from finance_agent_core.retrieval.schema_dense import EmbeddingProviderMetadata
+from finance_agent_core.retrieval.sqlite_fts import normalize_document_text
 from finance_agent_core.retrieval.temporal_relations import (
     seal_temporal_relation_bundle,
     temporal_relation_bundle_bytes,
@@ -103,7 +111,10 @@ class _FrozenHashProvider:
 
     @property
     def artifact_gate_evidence(self):
-        return SimpleNamespace(snapshot_file_manifest_sha256=_SNAPSHOT_SHA)
+        return SimpleNamespace(
+            manifest_file_sha256=_SNAPSHOT_SHA,
+            snapshot_file_manifest_sha256="f" * 64,
+        )
 
     @staticmethod
     def _vector(text: str) -> list[float]:
@@ -257,11 +268,15 @@ def _pending_root(tmp_path):
     return root
 
 
-def _approved_corpus(tmp_path):
+def _approved_corpus(
+    tmp_path,
+    *,
+    body: str = "국민성장펀드는 정책금융과 민간자금이 함께 참여하는 투자구조입니다.",
+):
     root = tmp_path / "approved"
     (root / "documents").mkdir(parents=True)
     (root / "documents" / "fsc.txt").write_text(
-        "국민성장펀드는 정책금융과 민간자금이 함께 참여하는 투자구조입니다.",
+        body,
         encoding="utf-8",
     )
     collected = datetime(2026, 8, 20, tzinfo=UTC)
@@ -287,8 +302,11 @@ def _approved_corpus(tmp_path):
                 relative_path="documents/fsc.txt",
                 title="국민성장펀드 투자구조",
                 publisher="금융위원회",
+                source_registry_id="fsc-policy",
                 source_uri="https://www.fsc.go.kr/po010103/86950",
+                capabilities=(KnowledgeCapability.FUND_STRUCTURE_STRATEGY_TREND,),
                 collected_at_utc=collected,
+                published_at=date(2026, 5, 21),
                 as_of=date(2026, 5, 21),
                 language="ko",
                 media_type="text/plain",
@@ -309,6 +327,47 @@ def _approved_corpus(tmp_path):
     manifest_path = root / "approved-manifest.json"
     manifest_path.write_bytes(approved_corpus_manifest_bytes(manifest))
     return verify_approved_corpus(manifest_path, root)
+
+
+def _approved_cache_only_coverage(
+    *,
+    corpus_sha256: str,
+    index_sha256: str,
+    capabilities: set[KnowledgeCapability],
+) -> ApprovedKnowledgeCoverageManifest:
+    return ApprovedKnowledgeCoverageManifest(
+        schema_version="1.0",
+        manifest_id="synthetic-approved-cache-only-coverage",
+        dataset_release_id="synthetic-test-dataset",
+        capabilities=tuple(
+            KnowledgeCoverageEntry(
+                capability=capability,
+                status="approved" if capability in capabilities else "not_configured",
+                runtime_execution_enabled=capability in capabilities,
+                allowed_source_kinds=("provided", "external_approved"),
+                corpus_sha256=corpus_sha256 if capability in capabilities else None,
+                index_sha256=index_sha256 if capability in capabilities else None,
+            )
+            for capability in KnowledgeCapability
+        ),
+    )
+
+
+def _approved_live_coverage() -> ApprovedKnowledgeCoverageManifest:
+    return ApprovedKnowledgeCoverageManifest(
+        schema_version="1.0",
+        manifest_id="synthetic-approved-live-coverage",
+        dataset_release_id="synthetic-test-dataset",
+        capabilities=tuple(
+            KnowledgeCoverageEntry(
+                capability=capability,
+                status="approved_live_official",
+                runtime_execution_enabled=True,
+                allowed_source_kinds=("provided", "external_approved"),
+            )
+            for capability in KnowledgeCapability
+        ),
+    )
 
 
 def test_pending_document_dense_is_hash_bound_and_offline_only(tmp_path) -> None:
@@ -461,6 +520,83 @@ def test_document_dense_cache_proposes_only_refetchable_official_urls(tmp_path) 
     assert discovery.cache_queries == 1
     assert discovery.cache_hits == 1
     assert discovery.live_fallback_queries == 0
+
+
+def test_pending_document_cache_cannot_supply_answer_evidence_by_default(tmp_path) -> None:
+    root = _pending_root(tmp_path)
+    provider = _FrozenHashProvider()
+    artifact = build_pending_document_dense_artifact(
+        root,
+        provider=provider,
+        embedding_snapshot_manifest_sha256=_SNAPSHOT_SHA,
+    )
+    fallback = _FallbackDiscovery()
+    discovery = CacheFirstOfficialDiscoveryProvider(
+        index=OfflineHybridDocumentIndex(artifact, provider),
+        artifact=artifact,
+        corpus_manifest=load_pending_corpus_manifest(root / "pending-manifest.json"),
+        corpus_manifest_path=root / "pending-manifest.json",
+        fallback=fallback,  # type: ignore[arg-type]
+        registry=fallback.registry,
+        minimum_dense_score=-1.0,
+        minimum_dense_margin=0.0,
+    )
+    candidate = discovery.discover_report(
+        query="국민성장펀드 투자구조",
+        capability=KnowledgeCapability.FUND_STRUCTURE_STRATEGY_TREND,
+        source_registry_ids=("fsc-policy",),
+        evidence_cutoff=date(2026, 8, 24),
+        top_k=1,
+    ).candidates[0]
+
+    assert (
+        discovery.materialize_cached_candidate(
+            candidate,
+            KnowledgeCapability.FUND_STRUCTURE_STRATEGY_TREND,
+        )
+        is None
+    )
+    assert discovery.cache_evidence_hits == 0
+
+
+def test_explicit_lab_cache_materializes_sha_bound_official_snapshot(tmp_path) -> None:
+    root = _pending_root(tmp_path)
+    provider = _FrozenHashProvider()
+    artifact = build_pending_document_dense_artifact(
+        root,
+        provider=provider,
+        embedding_snapshot_manifest_sha256=_SNAPSHOT_SHA,
+    )
+    fallback = _FallbackDiscovery()
+    discovery = CacheFirstOfficialDiscoveryProvider(
+        index=OfflineHybridDocumentIndex(artifact, provider),
+        artifact=artifact,
+        corpus_manifest=load_pending_corpus_manifest(root / "pending-manifest.json"),
+        corpus_manifest_path=root / "pending-manifest.json",
+        fallback=fallback,  # type: ignore[arg-type]
+        registry=fallback.registry,
+        minimum_dense_score=-1.0,
+        minimum_dense_margin=0.0,
+        allow_pending_snapshot_evidence=True,
+    )
+    candidate = discovery.discover_report(
+        query="국민성장펀드 투자구조",
+        capability=KnowledgeCapability.FUND_STRUCTURE_STRATEGY_TREND,
+        source_registry_ids=("fsc-policy",),
+        evidence_cutoff=date(2026, 8, 24),
+        top_k=1,
+    ).candidates[0]
+
+    snapshot = discovery.materialize_cached_candidate(
+        candidate,
+        KnowledgeCapability.FUND_STRUCTURE_STRATEGY_TREND,
+    )
+
+    assert snapshot is not None
+    assert snapshot.source_uri == candidate.url
+    assert "정책금융과 민간자금" in snapshot.content.decode("utf-8")
+    assert snapshot.content_sha256 == hashlib.sha256(snapshot.content).hexdigest()
+    assert discovery.cache_evidence_hits == 1
 
 
 def test_document_dense_cache_adds_typed_capability_context_not_entity_rules(tmp_path) -> None:
@@ -669,7 +805,10 @@ def test_document_dense_cache_rejects_manifest_substitution(tmp_path) -> None:
         )
 
 
-def test_approved_document_cache_is_release_pinned_and_runtime_eligible(tmp_path) -> None:
+def test_approved_document_cache_is_release_pinned_and_runtime_eligible(
+    tmp_path,
+    monkeypatch,
+) -> None:
     corpus = _approved_corpus(tmp_path)
     provider = _FrozenHashProvider("d14c8a9423946e268a0c9952fecf3a7aabd73bd9")
     registry = load_official_source_registry()
@@ -704,6 +843,8 @@ def test_approved_document_cache_is_release_pinned_and_runtime_eligible(tmp_path
         embedding=provider,
         fallback=fallback,  # type: ignore[arg-type]
         registry=registry,
+        approved_corpus_manifest_path=tmp_path / "approved/approved-manifest.json",
+        approved_corpus_root=tmp_path / "approved",
     )
 
     assert isinstance(discovery.index, ApprovedHybridDocumentIndex)
@@ -713,6 +854,11 @@ def test_approved_document_cache_is_release_pinned_and_runtime_eligible(tmp_path
         (),
         corpus_manifest_sha256=corpus.manifest_sha256,
         registry=registry,
+    )
+    monkeypatch.setattr(
+        "finance_agent_core.retrieval.external_knowledge_release."
+        "load_approved_knowledge_coverage_manifest",
+        _approved_live_coverage,
     )
     release_artifact = build_cache_first_external_knowledge_artifact(
         activation=receipt,
@@ -731,10 +877,124 @@ def test_approved_document_cache_is_release_pinned_and_runtime_eligible(tmp_path
     assert [item.url for item in report.candidates] == ["https://www.fsc.go.kr/po010103/86950"]
     assert fallback.calls == 0
 
+    cache_only_arguments = {
+        "activation_receipt_path": receipt_path,
+        "expected_activation_receipt_sha256": receipt_sha,
+        "document_dense_artifact_path": artifact_path,
+        "expected_document_dense_sha256": artifact_sha,
+        "expected_corpus_manifest_sha256": corpus.manifest_sha256,
+        "expected_document_bm25_sha256": receipt.document_bm25_sha256,
+        "expected_embedding_model_revision": provider.metadata.model_revision,
+        "embedding": provider,
+        "fallback": None,
+        "registry": registry,
+        "approved_corpus_manifest_path": tmp_path / "approved/approved-manifest.json",
+        "approved_corpus_root": tmp_path / "approved",
+    }
+    with pytest.raises(DocumentDiscoveryError, match="approved coverage binding"):
+        build_release_pinned_cache_first_discovery(**cache_only_arguments)
 
+    cache_only = build_release_pinned_cache_first_discovery(
+        **cache_only_arguments,
+        cache_only_coverage_manifest=_approved_cache_only_coverage(
+            corpus_sha256=corpus.manifest_sha256,
+            index_sha256=artifact.canonical_sha256,
+            capabilities={
+                capability for document in receipt.documents for capability in document.capabilities
+            },
+        ),
+    )
+    miss = cache_only.discover_report(
+        query="승인 Corpus에 없는 운용사 문서",
+        capability=KnowledgeCapability.FUND_STRUCTURE_STRATEGY_TREND,
+        source_registry_ids=("samsung-kodex",),
+        evidence_cutoff=date(2026, 8, 24),
+        top_k=1,
+    )
+    assert miss.candidates == ()
+    assert miss.queried_source_registry_ids == ()
+    assert miss.search_query_count == 0
+    assert miss.exhaustive is False
+    assert miss.failure_codes == (DiscoveryFailureCode.SOURCE_SCOPE_INCOMPLETE,)
+    assert cache_only.live_fallback_enabled is False
+    assert cache_only.live_fallback_queries == 0
+
+
+def test_approved_cache_materializes_exact_normalized_snapshot_not_lossy_chunks(
+    tmp_path,
+) -> None:
+    repeated_heading = "KODEX 연금 투자 가이드 공식 반복 제목"
+    body = (
+        f"{repeated_heading}\n\n"
+        + ("국민성장펀드 구조와 투자전략 설명입니다. " * 80)
+        + f"\n\n{repeated_heading}\n\n정책금융과 민간자금이 함께 참여합니다."
+    )
+    corpus = _approved_corpus(tmp_path, body=body)
+    provider = _FrozenHashProvider("d14c8a9423946e268a0c9952fecf3a7aabd73bd9")
+    registry = load_official_source_registry()
+    artifact = build_approved_document_dense_artifact(
+        corpus,
+        provider=provider,
+        embedding_snapshot_manifest_sha256=_SNAPSHOT_SHA,
+    )
+    receipt = build_document_cache_activation_receipt(
+        corpus,
+        artifact,
+        registry=registry,
+        calibration_report_sha256="8" * 64,
+        minimum_dense_score=-1.0,
+        minimum_dense_margin=0.0,
+    )
+    artifact_path = tmp_path / "approved-document-dense.json"
+    receipt_path = tmp_path / "document-cache-activation.json"
+    artifact_sha = write_approved_document_dense_artifact(artifact, artifact_path)
+    receipt_sha = write_document_cache_activation_receipt(receipt, receipt_path)
+    fallback = _FallbackDiscovery()
+    discovery = build_release_pinned_cache_first_discovery(
+        activation_receipt_path=receipt_path,
+        expected_activation_receipt_sha256=receipt_sha,
+        document_dense_artifact_path=artifact_path,
+        expected_document_dense_sha256=artifact_sha,
+        expected_corpus_manifest_sha256=corpus.manifest_sha256,
+        expected_document_bm25_sha256=receipt.document_bm25_sha256,
+        expected_embedding_model_revision=provider.metadata.model_revision,
+        embedding=provider,
+        fallback=fallback,  # type: ignore[arg-type]
+        registry=registry,
+        approved_corpus_manifest_path=tmp_path / "approved/approved-manifest.json",
+        approved_corpus_root=tmp_path / "approved",
+    )
+    candidate = discovery.discover_report(
+        query="국민성장펀드 투자구조",
+        capability=KnowledgeCapability.FUND_STRUCTURE_STRATEGY_TREND,
+        source_registry_ids=("fsc-policy",),
+        evidence_cutoff=date(2026, 8, 24),
+        top_k=1,
+    ).candidates[0]
+
+    snapshot = discovery.materialize_cached_candidate(
+        candidate,
+        KnowledgeCapability.FUND_STRUCTURE_STRATEGY_TREND,
+    )
+
+    assert snapshot is not None
+    materialized = snapshot.content.decode("utf-8")
+    assert materialized.count(repeated_heading) == 2
+    assert materialized == normalize_document_text(corpus.documents[0].text)
+    assert snapshot.content_sha256 == corpus.manifest.documents[0].normalized_text_sha256
+    assert snapshot.approved_document_id == corpus.manifest.documents[0].document_id
+    assert fallback.calls == 0
+
+
+@pytest.mark.parametrize(
+    "retrieval_mode",
+    ["approved_corpus_cache_first", "approved_corpus_cache_only"],
+)
 def test_cache_first_release_cli_requires_and_copies_one_approved_corpus_set(
     tmp_path,
     capsys,
+    monkeypatch,
+    retrieval_mode,
 ) -> None:
     corpus = _approved_corpus(tmp_path)
     provider = _FrozenHashProvider("d14c8a9423946e268a0c9952fecf3a7aabd73bd9")
@@ -753,6 +1013,26 @@ def test_cache_first_release_cli_requires_and_copies_one_approved_corpus_set(
         minimum_dense_margin=0.0,
         top_k=5,
     )
+    if retrieval_mode == "approved_corpus_cache_only":
+        activated_capabilities = {
+            capability for document in activation.documents for capability in document.capabilities
+        }
+        coverage = _approved_cache_only_coverage(
+            corpus_sha256=corpus.manifest_sha256,
+            index_sha256=dense.canonical_sha256,
+            capabilities=activated_capabilities,
+        )
+        monkeypatch.setattr(
+            "finance_agent_core.retrieval.external_knowledge_release."
+            "load_approved_knowledge_coverage_manifest",
+            lambda: coverage,
+        )
+    else:
+        monkeypatch.setattr(
+            "finance_agent_core.retrieval.external_knowledge_release."
+            "load_approved_knowledge_coverage_manifest",
+            _approved_live_coverage,
+        )
     relation_bundle = seal_temporal_relation_bundle(
         (),
         corpus_manifest_sha256=corpus.manifest_sha256,
@@ -777,7 +1057,7 @@ def test_cache_first_release_cli_requires_and_copies_one_approved_corpus_set(
     result = release_cli_main(
         [
             "--mode",
-            "approved_corpus_cache_first",
+            retrieval_mode,
             "--artifact",
             str(external_output),
             "--temporal-relations",
@@ -808,6 +1088,7 @@ def test_cache_first_release_cli_requires_and_copies_one_approved_corpus_set(
     )
 
     assert result == 0
+    assert f'"retrieval_mode":"{retrieval_mode}"'.encode() in external_output.read_bytes()
     assert dense_output.read_bytes() == dense_input.read_bytes()
     assert activation_output.read_bytes() == activation_input.read_bytes()
     assert relation_output.read_bytes() == relation_input.read_bytes()
@@ -932,5 +1213,7 @@ def test_release_pinned_document_cache_rejects_hash_or_pending_substitution(tmp_
             embedding=provider,
             fallback=_FallbackDiscovery(),  # type: ignore[arg-type]
             registry=registry,
+            approved_corpus_manifest_path=tmp_path / "approved/approved-manifest.json",
+            approved_corpus_root=tmp_path / "approved",
         )
     assert receipt_sha == receipt.canonical_sha256

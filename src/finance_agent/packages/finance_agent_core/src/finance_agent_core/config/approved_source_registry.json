@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "registry_id": "official-external-sources-20260824-v13",
+  "registry_id": "official-external-sources-20260824-v14",
   "evidence_cutoff": "2026-08-24",
   "entries": [
     {
@@ -293,6 +293,19 @@
       "selection_aliases": ["Kimi", "Moonshot AI"],
       "discovery_urls": ["https://forum.moonshot.ai/t/kimi-k2-high-speed-model-released/25"],
       "product_families": ["overseas_etp"],
+      "status": "approved_for_live_evidence",
+      "publication_date_required": true
+    },
+    {
+      "source_id": "open-dart-disclosures",
+      "publisher": "금융감독원",
+      "authority": "regulator",
+      "hostname": "dart.fss.or.kr",
+      "path_prefixes": ["/dsaf001/main.do"],
+      "connector_kind": "html",
+      "capabilities": ["corporate_subsidiary", "product_risk_factors"],
+      "selection_aliases": ["DART", "Open DART", "금융감독원", "전자공시시스템"],
+      "product_families": [],
       "status": "approved_for_live_evidence",
       "publication_date_required": true
     },

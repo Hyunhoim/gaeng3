@@ -4,12 +4,15 @@ import hashlib
 import os
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
 
 from finance_agent_core.config.knowledge_coverage import (
+    KnowledgeCapability,
     load_approved_knowledge_coverage_manifest,
 )
 from finance_agent_core.config.source_registry import (
     OfficialSourceRegistry,
+    OfficialSourceRegistryError,
     load_official_source_registry,
 )
 from finance_agent_core.release import (
@@ -17,7 +20,7 @@ from finance_agent_core.release import (
     external_knowledge_artifact_file_bytes,
     external_knowledge_verifier_contract_sha256,
 )
-from finance_agent_core.retrieval.corpus import verify_approved_corpus
+from finance_agent_core.retrieval.corpus import VerifiedApprovedCorpus, verify_approved_corpus
 from finance_agent_core.retrieval.document_dense import (
     ApprovedDocumentDenseArtifact,
     DocumentCacheActivationReceipt,
@@ -26,6 +29,7 @@ from finance_agent_core.retrieval.document_dense import (
     load_approved_document_dense_artifact,
     load_document_cache_activation_receipt,
 )
+from finance_agent_core.retrieval.sqlite_fts import normalize_document_text
 from finance_agent_core.retrieval.temporal_relations import (
     TemporalRelationStore,
     VerifiedTemporalRelationBundle,
@@ -72,6 +76,105 @@ def live_corpus_manifest_sha256() -> str:
     """Corpus hash every live-mode relation bundle must carry (there is no document corpus)."""
 
     return _empty_live_corpus_sha256()
+
+
+def _activation_capabilities(
+    activation: DocumentCacheActivationReceipt,
+) -> frozenset[KnowledgeCapability]:
+    return frozenset(
+        capability for document in activation.documents for capability in document.capabilities
+    )
+
+
+def _verify_cache_capability_boundary(
+    *,
+    activation: DocumentCacheActivationReceipt,
+    relation_bundle: VerifiedTemporalRelationBundle,
+) -> frozenset[KnowledgeCapability]:
+    """Return capabilities genuinely represented by the sealed cache inputs."""
+
+    capabilities = _activation_capabilities(activation)
+    if not capabilities:
+        raise ValueError("document activation receipt has no cache-search capability")
+    relation_capabilities = {item.capability for item in relation_bundle.relations}
+    if not relation_capabilities.issubset(capabilities):
+        raise ValueError("temporal relations claim a capability absent from the document cache")
+    return capabilities
+
+
+def _verify_activation_against_corpus(
+    *,
+    activation: DocumentCacheActivationReceipt,
+    corpus: VerifiedApprovedCorpus,
+    registry: OfficialSourceRegistry,
+) -> None:
+    """Re-prove that receipt metadata and authorities name the verified snapshots."""
+
+    approved = {item.approval.document_id: item.approval for item in corpus.documents}
+    activated = {item.document_id: item for item in activation.documents}
+    if set(approved) != set(activated):
+        raise ValueError("document activation and approved corpus document sets differ")
+    for document_id, source in approved.items():
+        receipt_source = activated[document_id]
+        if (
+            receipt_source.title != source.title
+            or receipt_source.publisher != source.publisher
+            or receipt_source.source_registry_id != source.source_registry_id
+            or receipt_source.source_uri != source.source_uri
+            or receipt_source.capabilities != source.capabilities
+            or receipt_source.published_at != source.published_at
+            or receipt_source.as_of != source.as_of
+            or receipt_source.content_sha256 != source.content_sha256
+            or receipt_source.normalized_text_sha256 != source.normalized_text_sha256
+        ):
+            raise ValueError("document activation metadata differs from approved corpus")
+        try:
+            authorities = tuple(
+                registry.authorize_url(source.source_uri, capability)
+                for capability in receipt_source.capabilities
+            )
+        except OfficialSourceRegistryError as error:
+            raise ValueError("document activation exceeds Source Registry authority") from error
+        if any(
+            item.source_id != receipt_source.source_registry_id
+            or item.publisher != source.publisher
+            for item in authorities
+        ):
+            raise ValueError("document activation Source Registry identity differs")
+
+
+def _verify_relations_against_corpus(
+    *,
+    relation_bundle: VerifiedTemporalRelationBundle,
+    corpus: VerifiedApprovedCorpus,
+) -> None:
+    """Bind every relation claim to one exact approved snapshot and excerpt."""
+
+    documents = {item.approval.document_id: item for item in corpus.documents}
+    normalized_text = {
+        item.approval.document_id: normalize_document_text(item.text)
+        for item in corpus.documents
+    }
+    for relation in relation_bundle.relations:
+        for evidence in relation.evidence:
+            verified = documents.get(evidence.document_id)
+            if verified is None:
+                raise ValueError("temporal relation cites a document absent from the corpus")
+            source = verified.approval
+            if (
+                relation.capability not in source.capabilities
+                or evidence.source_registry_id != source.source_registry_id
+                or evidence.title != source.title
+                or evidence.publisher != source.publisher
+                or evidence.source_uri != source.source_uri
+                or evidence.published_at != source.published_at
+                or evidence.as_of != source.as_of
+                or evidence.content_sha256 != source.normalized_text_sha256
+            ):
+                raise ValueError("temporal relation evidence differs from the approved corpus")
+            excerpt = normalize_document_text(evidence.excerpt)
+            if not excerpt or excerpt not in normalized_text[evidence.document_id]:
+                raise ValueError("temporal relation excerpt is absent from the approved corpus")
 
 
 def _verified_relation_graph(
@@ -165,6 +268,10 @@ def build_cache_first_external_knowledge_artifact(
     *,
     activation: DocumentCacheActivationReceipt,
     relation_bundle: VerifiedTemporalRelationBundle,
+    retrieval_mode: Literal[
+        "approved_corpus_cache_only",
+        "approved_corpus_cache_first",
+    ] = "approved_corpus_cache_first",
 ) -> ExternalKnowledgeArtifactRelease:
     """Bind an approved Document Dense cache to the existing external runtime."""
 
@@ -178,13 +285,26 @@ def build_cache_first_external_knowledge_artifact(
         != activation.approved_corpus_manifest_sha256
     ):
         raise ValueError("cache-first external artifacts do not share one trust boundary")
-    if not all(
-        entry.status == "approved_live_official" and entry.runtime_execution_enabled
-        for entry in coverage.capabilities
-    ):
-        raise ValueError("every external capability must remain approved for live fallback")
+    cache_capabilities = _verify_cache_capability_boundary(
+        activation=activation,
+        relation_bundle=relation_bundle,
+    )
+    if retrieval_mode == "approved_corpus_cache_first":
+        if not all(
+            entry.status == "approved_live_official" and entry.runtime_execution_enabled
+            for entry in coverage.capabilities
+        ):
+            raise ValueError("every external capability must remain approved for live fallback")
+    elif retrieval_mode == "approved_corpus_cache_only":
+        coverage.require_cache_only_binding(
+            capabilities=cache_capabilities,
+            corpus_manifest_sha256=activation.approved_corpus_manifest_sha256,
+            document_dense_artifact_sha256=activation.document_dense_artifact_sha256,
+        )
+    else:  # pragma: no cover - type checkers prevent unsupported callers
+        raise ValueError("unsupported approved corpus retrieval mode")
     return ExternalKnowledgeArtifactRelease(
-        retrieval_mode="approved_corpus_cache_first",
+        retrieval_mode=retrieval_mode,
         source_registry_sha256=registry.canonical_sha256,
         coverage_manifest_sha256=coverage.canonical_sha256,
         corpus_manifest_sha256=activation.approved_corpus_manifest_sha256,
@@ -208,6 +328,10 @@ def build_cache_first_external_knowledge_bootstrap(
     expected_activation_receipt_file_sha256: str,
     relation_bundle_path: str | Path,
     expected_relation_bundle_file_sha256: str,
+    retrieval_mode: Literal[
+        "approved_corpus_cache_only",
+        "approved_corpus_cache_first",
+    ] = "approved_corpus_cache_first",
 ) -> CacheFirstExternalKnowledgeBootstrap:
     """Verify and bind a complete approved corpus cache without changing approval state.
 
@@ -237,6 +361,15 @@ def build_cache_first_external_knowledge_bootstrap(
         expected_file_sha256=expected_relation_bundle_file_sha256,
         registry=registry,
     )
+    _verify_activation_against_corpus(
+        activation=activation,
+        corpus=corpus,
+        registry=registry,
+    )
+    _verify_relations_against_corpus(
+        relation_bundle=relation_bundle,
+        corpus=corpus,
+    )
 
     if (
         dense.manifest.source_manifest_sha256 != corpus.manifest_sha256
@@ -248,8 +381,6 @@ def build_cache_first_external_knowledge_bootstrap(
         or activation.embedding_snapshot_manifest_sha256
         != dense.manifest.embedding_snapshot_manifest_sha256
         or activation.provider != dense.manifest.provider
-        or {item.document_id for item in activation.documents}
-        != {item.document_id for item in corpus.manifest.documents}
         or relation_bundle.manifest.corpus_manifest_sha256 != corpus.manifest_sha256
     ):
         raise ValueError("cache-first inputs do not describe one approved corpus release")
@@ -257,6 +388,7 @@ def build_cache_first_external_knowledge_bootstrap(
     artifact = build_cache_first_external_knowledge_artifact(
         activation=activation,
         relation_bundle=relation_bundle,
+        retrieval_mode=retrieval_mode,
     )
     artifact_bytes = external_knowledge_artifact_file_bytes(artifact)
     dense_bytes = approved_document_dense_artifact_bytes(dense)
@@ -359,6 +491,10 @@ def write_cache_first_external_knowledge_bootstrap(
     expected_activation_receipt_file_sha256: str,
     relation_bundle_path: str | Path,
     expected_relation_bundle_file_sha256: str,
+    retrieval_mode: Literal[
+        "approved_corpus_cache_only",
+        "approved_corpus_cache_first",
+    ] = "approved_corpus_cache_first",
 ) -> CacheFirstExternalKnowledgeBootstrap:
     bootstrap = build_cache_first_external_knowledge_bootstrap(
         approved_corpus_manifest_path=approved_corpus_manifest_path,
@@ -370,6 +506,7 @@ def write_cache_first_external_knowledge_bootstrap(
         expected_activation_receipt_file_sha256=(expected_activation_receipt_file_sha256),
         relation_bundle_path=relation_bundle_path,
         expected_relation_bundle_file_sha256=expected_relation_bundle_file_sha256,
+        retrieval_mode=retrieval_mode,
     )
     _write_new_read_only_files(
         (

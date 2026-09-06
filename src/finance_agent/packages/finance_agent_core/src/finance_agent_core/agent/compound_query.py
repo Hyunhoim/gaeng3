@@ -17,6 +17,7 @@ from finance_agent_core.agent.product_identity import (
     DatabaseProductIdentityMatch,
     DatabaseProductIdentityMatcher,
     normalize_database_identity,
+    unresolved_identity_like_spans,
 )
 from finance_agent_core.agent.semantic_aliases import filter_alias_matches, rank_alias_matches
 from finance_agent_core.config import (
@@ -178,6 +179,10 @@ class TypedCompoundPlan:
     family_plans: tuple[CompoundFamilyPlan, ...]
     excluded_families: tuple[CompoundFamilyExclusion, ...] = ()
     hclx_structure_spans: tuple[str, ...] = ()
+    # Optional deterministic comparison over two already verified cohort
+    # means. It never changes either cohort or its representative TOP-K.
+    cohort_mean_direction: SortDirection | None = None
+    cohort_mean_difference: bool = False
 
     @property
     def product_families(self) -> tuple[ProductFamily, ...]:
@@ -220,6 +225,10 @@ class CompoundFamilyExecution:
     shortlist_ids: tuple[str, ...]
     metric_values: tuple[Decimal | str, ...]
     aggregate_summary: tuple[int, Decimal, Decimal, Decimal] | None = None
+    # Canonical value required by a Registry comparison scope.  At present
+    # this carries the one verified trading currency shared by every value in
+    # a cohort; it is independently compared across cohorts before rendering.
+    comparison_scope_value: str | None = None
     grouped_aggregates: tuple[CompoundGroupResult, ...] = ()
     # One value per returned product, aligned with ``products`` and
     # ``metric_values``.  Qualified counts are recorded before per-group
@@ -271,6 +280,14 @@ class AggregateThresholdUnavailableError(RuntimeError):
         super().__init__("aggregate threshold requires at least one usable source value")
 
 
+class CohortComparisonUnavailableError(RuntimeError):
+    """A requested cohort winner/difference cannot be computed atomically."""
+
+    def __init__(self, reason_code: str) -> None:
+        self.reason_code = reason_code
+        super().__init__("cohort comparison requires complete, directly comparable values")
+
+
 @dataclass(frozen=True, slots=True)
 class CompoundAuthorizationReceipt:
     """Server-owned proof that one frozen compound plan may execute.
@@ -288,6 +305,7 @@ class CompoundAuthorizationReceipt:
     plan_sha256: str
     prior_reason_code: str
     covered_unresolved_spans: tuple[str, ...]
+    canonical_clause_ids: tuple[str, ...]
     validated_field_ids: tuple[str, ...]
     authorized_intent: str
     authorized_families: tuple[str, ...]
@@ -341,6 +359,124 @@ class _DatabaseRelativeAnchor:
     product_family: ProductFamily
     identity_spans: tuple[tuple[int, int], ...]
     equal_source_fields: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class _AnchorRelativeClauseCoverage:
+    """Canonical proof that every executable anchor clause was preserved.
+
+    This ledger is intentionally derived from DB-bound identity and typed
+    fields, not from a Router reason code.  It is used only for the explicit
+    ``reference product -> relative thresholds -> ranked other products``
+    grammar.  A missing identity, cohort filter, relative condition, ranking
+    field/direction/count, or anchor exclusion prevents the ledger from being
+    created and therefore cannot gain execution authority.
+    """
+
+    product_family: ProductFamily
+    anchor_lookup_product_id: str
+    anchor_public_product_id: str
+    filters: tuple[CompoundFilter, ...]
+    relative_clauses: tuple[tuple[CompoundMetric, str], ...]
+    ranking_metric: CompoundMetric
+    ranking_direction: SortDirection
+    ranking_limit: int
+    projection_fields: tuple[str, ...]
+
+    @property
+    def clause_ids(self) -> tuple[str, ...]:
+        def metric_id(metric: CompoundMetric) -> str:
+            return ":".join(
+                (metric.kind, *metric.source_fields, format(metric.scale, "f"))
+            )
+
+        filter_ids = tuple(
+            "filter:"
+            + ":".join(
+                (
+                    item.source_field,
+                    item.operator,
+                    json.dumps(
+                        item.value,
+                        default=str,
+                        ensure_ascii=False,
+                        sort_keys=True,
+                        separators=(",", ":"),
+                    ),
+                )
+            )
+            for item in self.filters
+        )
+        relative_ids = tuple(
+            f"relative:{metric_id(metric)}:{operator}"
+            for metric, operator in self.relative_clauses
+        )
+        return (
+            f"anchor:{self.product_family.value}:{self.anchor_lookup_product_id}",
+            *filter_ids,
+            *relative_ids,
+            f"ranking:{metric_id(self.ranking_metric)}",
+            f"direction:{self.ranking_direction.value}",
+            f"limit:{self.ranking_limit}",
+            *(f"projection:{source}" for source in self.projection_fields),
+            f"exclude_anchor:{self.anchor_lookup_product_id}",
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class _NamedSetClauseCoverage:
+    """Canonical proof for a closed, exact provided-DB comparison set.
+
+    Product names can contain words that resemble a family, metric or result
+    count (for example ``채권혼합`` or ``TOP10``).  Once every listed identity
+    is matched exactly to the frozen ID set, those name-internal tokens must
+    not override the explicit ranking clause.  Conversely, a partial or open
+    product list never creates this ledger and therefore remains fail-closed.
+    """
+
+    product_family: ProductFamily
+    product_ids: tuple[str, ...]
+    ranking_metric: CompoundMetric
+    ranking_direction: SortDirection
+    ranking_limit: int
+    projection_fields: tuple[str, ...]
+
+    @property
+    def clause_ids(self) -> tuple[str, ...]:
+        def metric_id(metric: CompoundMetric) -> str:
+            return ":".join(
+                (metric.kind, *metric.source_fields, format(metric.scale, "f"))
+            )
+
+        return (
+            *(
+                f"named_product:{self.product_family.value}:{product_id}"
+                for product_id in self.product_ids
+            ),
+            f"ranking:{metric_id(self.ranking_metric)}",
+            f"direction:{self.ranking_direction.value}",
+            f"limit:{self.ranking_limit}",
+            *(f"projection:{source}" for source in self.projection_fields),
+            "identity_scope:closed",
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class _CanonicalFamilyClauseCoverage:
+    """One family-local clause reproduced from the frozen compound plan.
+
+    HCX can conservatively return a complete staged or parallel clause as one
+    ``UNRESOLVED`` span even though the deterministic compiler has preserved
+    every filter, shortlist and final ranking.  This record is created only
+    after independently reproducing that exact family plan from its own text
+    segment.  It therefore closes a representation gap without letting one
+    family's meaning authorize another family's clause.
+    """
+
+    product_family: ProductFamily
+    segment_start: int
+    segment_end: int
+    plan: CompoundFamilyPlan
 
 
 _TABLE_BY_FAMILY = {
@@ -1344,6 +1480,126 @@ _ANCHOR_MARKER_WITH_WRAPPERS = (
     + r"[\s\"'`‘’“”「」『』()\[\]{},，:：]*"
 )
 _ANCHOR_EQUAL_RELATION = r"(?:같(?:은|고|되|으면서|으며)?|동일(?:한|하고|하며|하면서)?)"
+_ANCHOR_DECLARATION_SUFFIX = (
+    r"(?:을|를)?\s*(?:(?:비교|검색)\s*)?"
+    r"기준(?:점|\s*상품|\s*종목)?(?:으로)?\s*"
+    r"(?:삼(?:아|고)|잡(?:아|고)|정(?:해|하고)|두(?:고|어)|"
+    r"설정(?:해|하고)?|보(?:고|면)|비교|$)"
+)
+_ANAPHORIC_ANCHOR_OWNER = (
+    r"(?:이|그|해당)\s*(?:기준\s*)?"
+    r"(?:상품|종목|펀드|ETF|ETN|ETP|채권)"
+)
+
+
+def _anaphoric_anchor_relative_specs(
+    text: str,
+    family: ProductFamily,
+) -> tuple[tuple[CompoundMetric, str], ...] | None:
+    """Canonicalize every explicit anaphoric reference threshold.
+
+    The function recognizes a grammatical relation owned by an already
+    declared reference product, for example ``이 상품 이상인 3개월
+    수익률과 이 상품 이하인 보수``.  It returns ``None`` as soon as one
+    conjunct names an unsupported metric; retaining only the recognized half
+    would widen the requested cohort.
+    """
+
+    next_clause = (
+        rf"(?:과|와|및|[,;·ㆍ/])\s*{_ANAPHORIC_ANCHOR_OWNER}\s*"
+        r"(?:이상|이하|초과|미만)인"
+    )
+    terminal = r"(?:을|를)?\s*(?:동시에|모두|함께)\s*(?:만족|충족)"
+    pattern = re.compile(
+        rf"{_ANAPHORIC_ANCHOR_OWNER}\s*"
+        r"(?P<operator>이상|이하|초과|미만)인\s*"
+        rf"(?P<label>.{{1,80}}?)(?=\s*(?:{next_clause}|{terminal}))",
+        re.IGNORECASE,
+    )
+    result: list[tuple[CompoundMetric, str]] = []
+    for match in pattern.finditer(text):
+        metric = _metric_from_label(match.group("label"), family)
+        if metric is None:
+            return None
+        clause = (
+            metric,
+            {
+                "이상": "gte",
+                "이하": "lte",
+                "초과": "gt",
+                "미만": "lt",
+            }[match.group("operator")],
+        )
+        if clause not in result:
+            result.append(clause)
+
+    # Field-first Korean is equally explicit: ``순자산이 이 상품 이상인``
+    # and ``종가가 이 상품보다 큰``. Resolve only Registry-owned metric
+    # surfaces immediately followed by the anaphoric owner and comparator;
+    # a free adjective or an unknown field cannot create a clause.
+    owner_suffix = re.compile(
+        rf"\s*(?:이|가|은|는)?\s*{_ANAPHORIC_ANCHOR_OWNER}\s*"
+        r"(?:(?P<bound>이상|이하|초과|미만)인|"
+        r"(?:보다|대비)\s*(?:더\s*)?"
+        r"(?P<relative>큰|작은|높은|낮은|많은|적은|긴|짧은))",
+        re.IGNORECASE,
+    )
+    for _start, end, source_field in _ordered_metric_mentions(text, family):
+        matched = owner_suffix.match(text[end:])
+        if matched is None:
+            continue
+        if matched.group("bound") is not None:
+            operator = {
+                "이상": "gte",
+                "이하": "lte",
+                "초과": "gt",
+                "미만": "lt",
+            }[matched.group("bound")]
+        else:
+            operator = (
+                "gt"
+                if matched.group("relative") in {"큰", "높은", "많은", "긴"}
+                else "lt"
+            )
+        clause = (CompoundMetric("field", (source_field,)), operator)
+        if clause not in result:
+            result.append(clause)
+
+    # Also support the owner-first comparative form ``이 상품보다 종가가
+    # 큰``. The bounded label is independently resolved and an unknown label
+    # rejects the whole canonical proof.
+    owner_first = re.compile(
+        rf"{_ANAPHORIC_ANCHOR_OWNER}\s*(?:보다|대비)\s*",
+        re.IGNORECASE,
+    )
+    owner_first_relation = re.compile(
+        r"\s*(?:이|가|은|는)?\s*(?:더\s*)?"
+        r"(?P<relative>큰|작은|높은|낮은|많은|적은|긴|짧은)",
+        re.IGNORECASE,
+    )
+    for owner in owner_first.finditer(text):
+        tail = text[owner.end() :]
+        mentions = _ordered_metric_mentions(tail, family)
+        if not mentions:
+            continue
+        start, end, source_field = mentions[0]
+        # The metric must immediately own the post-anchor clause. This avoids
+        # consuming ``큰 다른 상품을 <ranking field> 작은 순`` as a second
+        # reference threshold.
+        if tail[:start].strip():
+            continue
+        relation = owner_first_relation.match(tail[end:])
+        if relation is None:
+            continue
+        operator = (
+            "gt"
+            if relation.group("relative") in {"큰", "높은", "많은", "긴"}
+            else "lt"
+        )
+        clause = (CompoundMetric("field", (source_field,)), operator)
+        if clause not in result:
+            result.append(clause)
+    return tuple(result)
 
 
 def _anchor_equal_source_fields(
@@ -1506,7 +1762,11 @@ _DERIVED_METRICS: tuple[tuple[re.Pattern[str], str, tuple[str, ...], Decimal], .
         Decimal("100"),
     ),
     (
-        re.compile(r"시가\s*대비\s*종가\s*변화율"),
+        re.compile(
+            r"시가\s*대비\s*종가\s*변화율"
+            r"(?:\s*\(\s*\(?\s*종가\s*[-\u2212]\s*시가\s*\)?\s*/\s*"
+            r"시가\s*(?:[\u00d7xX*]\s*100)?\s*\))?"
+        ),
         "relative_change",
         ("du_clpr", "du_opr"),
         Decimal("100"),
@@ -1641,6 +1901,12 @@ def _compound_plan_payload(plan: TypedCompoundPlan) -> dict[str, object]:
         "question": plan.question,
         "interaction_intent": plan.interaction_intent.value,
         "kind": plan.kind,
+        "cohort_mean_direction": (
+            None
+            if plan.cohort_mean_direction is None
+            else plan.cohort_mean_direction.value
+        ),
+        "cohort_mean_difference": plan.cohort_mean_difference,
         "hclx_structure_spans": list(plan.hclx_structure_spans),
         "excluded_families": [
             {
@@ -2396,6 +2662,98 @@ _KOREAN_SMALL_COUNTS = {
 }
 
 
+def _closed_named_set_count(
+    question: str,
+    identity_spans: tuple[tuple[int, int], ...],
+    *,
+    logical_product_count: int,
+) -> int | None:
+    """Return the explicitly closed identity-set size, never an open cohort.
+
+    Two safe surfaces are supported: an explicit ``후보를 이 세 상품으로만
+    한정`` declaration, and the ordinary ``A와 B 중`` comparison grammar.
+    Identity text is masked first so a number inside an official product name
+    cannot become the set cardinality.
+    """
+
+    if not identity_spans:
+        return None
+    masked = _mask_anchor_identity_surfaces(question, identity_spans)
+    count = r"(?P<count>\d+|한|두|세|셋|네|넷|다섯|여섯|일곱|여덟|아홉|열)"
+    explicit = re.search(
+        rf"(?:후보|대상)(?:를|은|는)?\s*(?:이|다음|아래|위)?\s*"
+        rf"{count}\s*(?:개\s*)?(?:상품|종목|펀드|ETF|ETN|ETP|채권)"
+        r"(?:으?로)?만\s*(?:한정|제한)",
+        masked,
+        re.IGNORECASE,
+    )
+    if explicit is not None:
+        raw = explicit.group("count")
+        return int(raw) if raw.isdigit() else _KOREAN_SMALL_COUNTS[raw]
+
+    first_start = min(start for start, _end in identity_spans)
+    last_end = max(end for _start, end in identity_spans)
+    if re.match(r"\s*(?:중|끼리)(?![가-힣])", question[last_end:]) is not None:
+        return logical_product_count
+    # ``A하고 B를 비교`` is a closed set when the DB matcher resolved
+    # exactly two logical products, only a coordination particle remains
+    # between their identity groups, and the second identity is followed
+    # directly by a compare verb. Open-set markers such as ``등`` or
+    # ``포함`` deliberately do not match this grammar.
+    if logical_product_count == 2:
+        between = masked[first_start:last_end]
+        compact_between = re.sub(
+            r"[\s()\[\]{},.:;/'\"`‘’“”「」『』_\-]+",
+            "",
+            between,
+        )
+        comparison = re.match(
+            r"[\s()\[\]{},.:;/'\"`‘’“”「」『』_\-]*"
+            r"(?:을|를|은|는)?\s*(?:서로\s*)?(?:비교|대조)",
+            question[last_end:],
+            re.IGNORECASE,
+        )
+        if compact_between in {"와", "과", "하고", "및", "랑", "이랑"} and (
+            comparison is not None
+        ):
+            trailing_clause = question[last_end + comparison.end() :]
+            open_extension = re.search(
+                r"(?:등(?:도|을|이|과|와)?(?:\s|$)|포함(?:해|하|해서|하고|한)?|그\s*외|"
+                r"다른\s*(?:상품|종목|펀드|ETF|ETN|ETP|채권)(?:도|을|를|과|와)?|"
+                r"추가(?:로|적인)?\s*(?:상품|종목|펀드|ETF|ETN|ETP|채권)?)",
+                trailing_clause,
+                re.IGNORECASE,
+            )
+            if open_extension is None:
+                return 2
+    closed_suffix = re.match(
+        rf"\s*(?:{count}\s*(?:개\s*)?"
+        r"(?:상품|종목|펀드|ETF|ETN|ETP|채권))?\s*만\s*"
+        r"(?:놓고|대상(?:으로)?|비교|대조|한정|제한)",
+        question[last_end:],
+        re.IGNORECASE,
+    )
+    if closed_suffix is not None:
+        raw = closed_suffix.group("count")
+        if raw is not None:
+            return int(raw) if raw.isdigit() else _KOREAN_SMALL_COUNTS[raw]
+        declared = re.search(
+            rf"(?:다음|이|아래|위)?\s*{count}\s*(?:개\s*)?"
+            r"(?:상품|종목|펀드|ETF|ETN|ETP|채권)[^.;:!?]{0,40}$",
+            question[:first_start],
+            re.IGNORECASE,
+        )
+        if declared is not None:
+            declared_raw = declared.group("count")
+            return (
+                int(declared_raw)
+                if declared_raw.isdigit()
+                else _KOREAN_SMALL_COUNTS[declared_raw]
+            )
+        return logical_product_count
+    return None
+
+
 def _has_grouped_product_topk_surface(text: str) -> bool:
     """Prove that a TOP-K is requested *inside every group*.
 
@@ -2958,17 +3316,14 @@ def _merge_clause_filters(
                     for item in same_field
                 )
             ):
-                # ``미래에셋 운용 국내 ETF`` is a manager-name prefix, not
-                # proof that the raw manager cell equals that short brand
-                # literally.  The family scope and the common Linker own the
-                # same user span; keep the Linker's more faithful CONTAINS
-                # predicate instead of treating the two encodings as a
-                # conflicting hard filter.
-                filters = [
-                    item
-                    for item in filters
-                    if item.source_field != "cu_fund_mgmt_co"
-                ]
+                # ``X 운용 국내 ETF`` explicitly labels X as the manager
+                # value.  Keep that exact family-scope predicate.  Replacing
+                # it with CONTAINS also admits malformed manager cells that
+                # merely begin with the brand and then contain the whole
+                # product name, changing both the candidate universe and the
+                # ranking.  Free-form ``운용사에 X가 포함`` wording remains
+                # owned by the Linker and may still compile to CONTAINS.
+                continue
             elif linked.operator in range_operators and all(
                 item.operator in range_operators for item in same_field
             ):
@@ -3102,9 +3457,80 @@ def _shortlist_spec(
     return None if parsed is None else parsed[:3]
 
 
+_COMPLETE_CALCULATION_INPUTS = re.compile(
+    r"(?:"
+    r"계산\s*입력값|"
+    r"계산(?:에)?\s*(?:쓸|사용할|필요한)\s*값|"
+    r"산출(?:에)?\s*(?:쓸|사용할|필요한)?\s*(?:입력)?값"
+    r")\s*(?:이|가)?\s*(?:모두|전부)\s*"
+    r"(?:있는|존재하는|갖춘|갖춰진)"
+)
+
+
+def _with_complete_calculation_inputs(
+    filters: tuple[CompoundFilter, ...],
+    text: str,
+    *metrics: CompoundMetric,
+) -> tuple[CompoundFilter, ...]:
+    """Seal an explicit all-inputs-present request into the executable plan.
+
+    Missing and numeric zero are unavailable under the organizer's data rule.
+    When the user explicitly asks for products with every calculation input,
+    those values must therefore be filtered before the first shortlist.  The
+    signed ``neq 0`` filters also let the independent verifier reproduce that
+    ordering without interpreting prose again.
+    """
+
+    if _COMPLETE_CALCULATION_INPUTS.search(text) is None:
+        return filters
+    result = list(filters)
+    for field in dict.fromkeys(
+        source_field for metric in metrics for source_field in metric.source_fields
+    ):
+        availability = CompoundFilter(field, "neq", 0)
+        if availability not in result:
+            result.append(availability)
+    return tuple(result)
+
+
 _STAGED_COUNT_SURFACE = re.compile(
     r"(?:\d+|한|두|세|셋|네|넷|다섯|여섯|일곱|여덟|아홉|열)\s*"
-    r"(?:개|종목|상품)"
+    # ``3개월 수익률`` is a period, not a three-product shortlist.
+    # The missing lexical boundary used to pair that prefix with the final
+    # ``상위 3개`` and force an ordinary filter+rank query into the
+    # two-stage compiler, producing a false CLARIFY.
+    r"(?:개(?!월|년)|종목|상품)"
+)
+
+# Only syntax which the canonical two-stage parser may consume is removable
+# from an HCX ``UNRESOLVED`` span.  Field/filter literals are subtracted
+# separately below; any remaining content word is therefore an unowned
+# condition and keeps the request fail-closed.
+_TWO_STAGE_STRUCTURAL_SURFACE = re.compile(
+    r"(?:상위|하위|최상단|최하단|높은|낮은|큰|작은|많은|적은|짧은|긴|"
+    r"가까운|먼(?!저)|빠른|늦은)(?:\s*순(?:서)?(?:대로|으로)?)?|"
+    r"(?:내림차순|오름차순)(?:으로)?|"
+    r"(?:먼저|우선|1\s*(?:차|단계)|예선|후보(?:로|를)?)|"
+    r"(?:추린|추리고|추려|고른|고르고|골라|뽑은|뽑고|뽑아|"
+    r"선별한|선별하고|남긴|남기고|남겨|거른|거르고|걸러|"
+    r"좁힌|좁히고|한정한|한정하고|줄인|줄이고|만든|만들고)|"
+    r"(?:그\s*(?:중|안|집합)|이\s*(?:안|후보|집합)|"
+    r"가운데서|안에서|중에서|중)|"
+    r"(?:다음|뒤|후)(?:에)?|"
+    r"(?:고르되|골라내되|뽑되|선택하되|선정하되|선별하되|정리하되)|"
+    r"(?:다시\s*)?(?:골라|고르|뽑아|뽑|선정|선별|추려|추리|"
+    r"남겨|남기|보여|알려|찾아|제시|나열|정리|조회|선택)"
+    r"(?:\s*(?:줘|주세요|주십시오|달라|세요|해\s*주세요))?|"
+    r"(?:상품|종목|결과|목록|리스트)|"
+    r"(?:각각|상품군별로|서로\s*다른\s*계산)|"
+    r"(?:첫째|둘째|셋째|넷째)",
+    re.IGNORECASE,
+)
+_TWO_STAGE_GRAMMAR_ONLY_TOKEN = re.compile(
+    r"(?:이|가|은|는|을|를|의|에|에서|에는|으로|로|와|과|및|하고|"
+    r"이고|이며|인|인데|것|만|씩|도|부터|까지|해|주세요|주십시오|"
+    r"수행|수행해|하지|마세요)",
+    re.IGNORECASE,
 )
 _STAGED_TRANSITION_SURFACE = re.compile(
     r"(?:만\s*)?(?:먼저|우선|1\s*(?:차|단계)|예선|후보(?:로|를)?|"
@@ -3113,6 +3539,7 @@ _STAGED_TRANSITION_SURFACE = re.compile(
     r"좁힌|좁히고|한정한|한정하고|줄인|줄이고|만든|만들고)|"
     r"그\s*(?:중|안|집합)|이\s*(?:안|후보|집합)|안에서|가운데서|중(?:에서)?)"
 )
+_SHORTLIST_ORDER_SURFACE = r"순(?:서(?:대로|로)?|으로)?"
 
 
 def requires_typed_two_stage_plan(question: str) -> bool:
@@ -3192,7 +3619,7 @@ def _shortlist_spec_with_span(
         re.compile(
             rf"(?P<label>.{{1,140}}?)(?:이|가|은|는)?\s*"
             r"(?P<cue>큰|작은|높은|낮은|많은|적은|짧은|긴|빠른|늦은)\s*"
-            r"(?:순(?:서)?(?:대로|으로)?\s*)?"
+            rf"(?:{_SHORTLIST_ORDER_SURFACE}\s*)?"
             r"(?:장내\s*)?(?:국내\s*채권|원화\s*채권|채권|국내\s*ETF|"
             r"국내\s*(?:ETN|ETP)|해외\s*(?:ETF|ETN|ETP)|"
             rf"공모\s*펀드|펀드)\s*{count}\s*"
@@ -3204,6 +3631,7 @@ def _shortlist_spec_with_span(
         re.compile(
             rf"(?P<label>.{{1,140}}?)(?:이|가|은|는)?\s*"
             r"(?P<cue>큰|작은|높은|낮은|많은|적은|짧은|긴|빠른|늦은)\s*"
+            rf"(?:{_SHORTLIST_ORDER_SURFACE}\s*)?"
             rf"{count}\s*(?:개|종목|상품)"
         ),
     )
@@ -3328,6 +3756,73 @@ def _rank_spec(
     }
     raw_count = match.group("count")
     return metric, direction, int(raw_count) if raw_count.isdigit() else count_values[raw_count]
+
+
+def _named_set_rank_spec(
+    question: str,
+    family: ProductFamily,
+    *,
+    identity_count: int,
+) -> tuple[CompoundMetric, SortDirection, int] | None:
+    """Bind one explicit rank clause to a closed exact-identity set."""
+
+    ranking = _rank_spec(question, family)
+    if ranking is None:
+        winner = re.search(
+            r"(.{1,120}?)(?:이|가)?\s*(?:더\s*)?(높은|낮은|큰|작은)\s*"
+            r"(?:상품|종목|펀드|ETF|채권|쪽|것)(?:이|은|가)?",
+            question,
+            flags=re.IGNORECASE,
+        )
+        if winner is not None:
+            metric = _metric_from_label(winner.group(1), family)
+            if metric is not None:
+                ranking = (
+                    metric,
+                    (
+                        SortDirection.ASC
+                        if winner.group(2) in {"낮은", "작은"}
+                        else SortDirection.DESC
+                    ),
+                    identity_count,
+                )
+    if ranking is None:
+        pair_order = re.search(
+            r"(.{1,100}?)(?:이|가)?\s*(큰|작은|높은|낮은)\s*"
+            r"(?:쪽|것|상품)?부터\s*둘\s*다",
+            question,
+        )
+        if pair_order is not None:
+            metric = _metric_from_label(pair_order.group(1), family)
+            if metric is not None:
+                ranking = (
+                    metric,
+                    (
+                        SortDirection.ASC
+                        if pair_order.group(2) in {"작은", "낮은"}
+                        else SortDirection.DESC
+                    ),
+                    2,
+                )
+    if ranking is None:
+        return None
+    metric, direction, parsed_limit = ranking
+    return metric, direction, min(parsed_limit, identity_count)
+
+
+def _named_set_projection_fields(
+    question: str,
+    family: ProductFamily,
+) -> tuple[str, ...] | None:
+    """Return the explicitly requested companion field, or ``None`` on loss."""
+
+    projection_match = re.search(r"각\s*상품의\s*(.+?)(?:도|을|를)\s*", question)
+    if projection_match is None:
+        return ()
+    projection_metric = _metric_from_label(projection_match.group(1), family)
+    if projection_metric is None:
+        return None
+    return projection_metric.source_fields
 
 
 def _aggregate_threshold_spec(
@@ -3635,16 +4130,54 @@ def _explicit_rank_direction(text: str) -> SortDirection | None:
     return SortDirection.ASC if matches[-1].group("asc") else SortDirection.DESC
 
 
+_SHARED_LOCAL_METRIC_REFERENCE = re.compile(
+    r"(?:"
+    r"(?:각각(?:의)?|상품군별(?:로)?|종류별(?:로)?|"
+    r"각\s*(?:상품군|시장)(?:에서|의)?)"
+    r".{0,24}?(?:각자(?:의)?|자기(?:의)?|해당)?\s*(?:기준\s*)?"
+    r"|(?:각자(?:의)?|자기(?:의)?)\s*(?:기준\s*)?"
+    r")(?P<placeholder>수치|값|지표)",
+    re.IGNORECASE,
+)
+
+
+def _shared_local_metric_reference_owns_span(question: str, span: str) -> bool:
+    """Return whether ``span`` is the literal placeholder in a shared anaphor.
+
+    The caller must still prove that every family has exactly one preceding
+    numeric field and that the frozen plan ranks by that same field.  Keeping
+    the literal ownership check here prevents an unrelated ``수치`` elsewhere
+    in the question from borrowing authority from a later shared suffix.
+    """
+
+    start = question.find(span)
+    if start < 0 or question.find(span, start + 1) >= 0:
+        return False
+    end = start + len(span)
+    return any(
+        match.start("placeholder") <= start
+        and end <= match.end("placeholder")
+        for match in _SHARED_LOCAL_METRIC_REFERENCE.finditer(question)
+    )
+
+
 def _shared_parallel_order(question: str) -> tuple[SortDirection, int] | None:
     """Parse one explicitly shared direction/count for clause-local metrics."""
 
-    if re.search(r"(?:각각|상품군별(?:로)?|각\s*(?:상품군|시장))", question) is None:
+    if (
+        re.search(
+            r"(?:각각|각자|상품군별(?:로)?|종류별(?:로)?|각\s*(?:상품군|시장))",
+            question,
+        )
+        is None
+        and _SHARED_LOCAL_METRIC_REFERENCE.search(question) is None
+    ):
         return None
     limit = _final_limit(question)
     if limit is None:
         return None
     shared_tail = re.search(
-        r"(?:각각|상품군별(?:로)?|각\s*(?:상품군|시장)).{0,36}?"
+        r"(?:각각|각자|상품군별(?:로)?|종류별(?:로)?|각\s*(?:상품군|시장)).{0,36}?"
         r"(?P<order>상위|하위|높은|낮은|큰|작은|많은|적은|"
         r"내림차순|오름차순)",
         question,
@@ -4329,6 +4862,12 @@ class TypedCompoundQueryEngine:
                 return None
             if shortlist_limit < limit:
                 return None
+            filters = _with_complete_calculation_inputs(
+                filters,
+                segment,
+                shortlist_metric,
+                metric,
+            )
             plans.append(
                 CompoundFamilyPlan(
                     product_family=family,
@@ -4588,16 +5127,15 @@ class TypedCompoundQueryEngine:
         """
 
         shared_scope = re.search(
-            r"(?:각각|각\s*(?:상품군|시장|지표)(?:에서|가)?|상품군별(?:로)?|"
+            r"(?:각각|각자|각\s*(?:상품군|시장|지표)(?:에서|가)?|상품군별(?:로)?|"
             r"종류별(?:로)?|따로(?:\s*(?:계산|정렬|보여|추출))?|구분해서|나눠|"
             r"각각.{0,24}?(?:각자|자기)\s*(?:기준|지표|수치))",
             question,
         )
-        if shared_scope is None:
+        if shared_scope is None and _SHARED_LOCAL_METRIC_REFERENCE.search(question) is None:
             return None
-        self_metric = re.search(
-            r"(?:각\s*지표가?|각자(?:의)?\s*(?:기준|지표|수치)|"
-            r"자기\s*(?:기준|지표|수치))",
+        self_metric = _SHARED_LOCAL_METRIC_REFERENCE.search(question) or re.search(
+            r"각\s*지표가?",
             question,
         )
         if self_metric is not None:
@@ -4904,7 +5442,9 @@ class TypedCompoundQueryEngine:
             match
             for match in related
             if re.match(
-                r"\s*(?:\)|\]|[’”'\"])?\s*(?:보다|대비|의\s*.{1,60}?(?:을|를)?\s*"
+                r"\s*(?:(?:,\s*(?:장내|장외))?\)|\]|[’”'\"])?\s*(?:"
+                + _ANCHOR_DECLARATION_SUFFIX
+                + r"|보다|대비|의\s*.{1,60}?(?:을|를)?\s*"
                 r"(?:넘는|웃도는|웃돌(?:고|며|는)|초과하는|밑도는|미만인))",
                 question[match.end :],
                 re.IGNORECASE,
@@ -5031,13 +5571,21 @@ class TypedCompoundQueryEngine:
             anchor_public_id = anchor_literal
             equal_source_fields = ()
             semantic_segment = segment
+        canonical_anaphoric_specs = _anaphoric_anchor_relative_specs(
+            semantic_segment,
+            family,
+        )
+        if canonical_anaphoric_specs is None:
+            return None
         if self.database_paths and database_anchor is None:
             resolved_anchor = self._resolve_identity(anchor_public_id)
             if resolved_anchor is None or resolved_anchor[1] is not family:
                 return None
             anchor_lookup_id = resolved_anchor[0]
             anchor_public_id = resolved_anchor[0]
-        relative_specs: list[tuple[CompoundMetric, str]] = []
+        relative_specs: list[tuple[CompoundMetric, str]] = list(
+            canonical_anaphoric_specs
+        )
         for match in re.finditer(
             r"이\s*상품\s*(이상|이하|초과|미만)인\s*(.{1,60}?)(?=과\s*이\s*상품|와\s*이\s*상품|을\s*동시에|를\s*동시에|\s*동시에)",
             segment,
@@ -5045,12 +5593,14 @@ class TypedCompoundQueryEngine:
             metric = _metric_from_label(match.group(2), family)
             if metric is None:
                 return None
-            relative_specs.append(
-                (
-                    metric,
-                    {"이상": "gte", "이하": "lte", "초과": "gt", "미만": "lt"}[match.group(1)],
-                )
+            pair = (
+                metric,
+                {"이상": "gte", "이하": "lte", "초과": "gt", "미만": "lt"}[
+                    match.group(1)
+                ],
             )
+            if pair not in relative_specs:
+                relative_specs.append(pair)
         # Natural relative clauses may place multiple metrics after one
         # anchor: ``VOO보다 보수율은 낮고 AUM은 작은``.  Parse every
         # conjunction-local metric instead of authorizing only the first one.
@@ -5402,11 +5952,42 @@ class TypedCompoundQueryEngine:
             requested_summaries.add("sum")
         if requested_summaries != {"count", "mean", "minimum", "maximum"}:
             return None
-        if re.search(
-            r"평균(?:이|가)?\s*더\s*(?:큰|작은|높은|낮은)\s*집단|"
-            r"(?:집단|그룹|묶음)(?:\s*간|끼리의?)?\s*평균\s*차이|평균\s*차이",
+        winner_cues = {
+            match.group("cue")
+            for match in re.finditer(
+                r"평균(?:값)?(?:이|가)?\s*더\s*"
+                r"(?P<cue>큰|작은|높은|낮은)\s*"
+                r"(?:집단|그룹|묶음|쪽)",
+                question,
+                re.IGNORECASE,
+            )
+        }
+        if len(winner_cues) > 1:
+            return None
+        cohort_mean_direction = None
+        if winner_cues:
+            cohort_mean_direction = (
+                SortDirection.DESC
+                if next(iter(winner_cues)) in {"큰", "높은"}
+                else SortDirection.ASC
+            )
+        cohort_mean_difference = re.search(
+            r"(?:집단|그룹|묶음)(?:\s*간|끼리의?)?\s*평균(?:값)?\s*"
+            r"(?:간\s*)?(?:차이|격차)|평균(?:값)?\s*(?:간\s*)?(?:차이|격차)",
             question,
-        ):
+            re.IGNORECASE,
+        ) is not None
+        # Other between-cohort statistics remain outside this narrow typed
+        # contract. Never substitute a mean comparison for max/min/sum/median.
+        if re.search(
+            r"(?:중앙값|중위수|합계|총합|최솟값|최소값|최댓값|최대값)"
+            r"(?:이|가)?\s*더\s*(?:큰|작은|높은|낮은)\s*"
+            r"(?:집단|그룹|묶음|쪽)|"
+            r"(?:중앙값|중위수|합계|총합|최솟값|최소값|최댓값|최대값)\s*"
+            r"(?:차이|격차)",
+            question,
+            re.IGNORECASE,
+        ) is not None:
             return None
         representative = re.search(
             r"(?P<direction>상위|하위)\s*"
@@ -5436,16 +6017,34 @@ class TypedCompoundQueryEngine:
         if representative_limit != 3:
             return None
         metric_surface = question[: distribution.start()]
+        segments = _plan_segments(question)
+        if len(segments) != 2:
+            return None
+        last_family_end = max(scope.end for scope in matches)
         plans: list[CompoundFamilyPlan] = []
-        for scope in matches:
+        for scope, segment in segments:
             family = scope.product_family
             metric = _metric_from_label(metric_surface, family)
             if metric is None:
                 return None
+            local_text = _shared_compound_text(
+                question,
+                scope,
+                segment,
+                last_family_end=last_family_end,
+            )
+            filters = _compiled_clause_filters(
+                scope,
+                local_text,
+                extra_represented_source_fields=metric.source_fields,
+            )
+            if filters is None:
+                return None
+            filters = _without_dataset_label_filter(scope, filters, local_text)
             plans.append(
                 CompoundFamilyPlan(
                     product_family=family,
-                    filters=scope.filters,
+                    filters=filters,
                     metric=metric,
                     direction=SortDirection.DESC,
                     limit=3,
@@ -5458,6 +6057,8 @@ class TypedCompoundQueryEngine:
             interaction_intent=InteractionIntent.AGGREGATE,
             kind="cohort",
             family_plans=tuple(plans),
+            cohort_mean_direction=cohort_mean_direction,
+            cohort_mean_difference=cohort_mean_difference,
         )
 
     def _compile_family_summary_aggregate(
@@ -6204,53 +6805,17 @@ class TypedCompoundQueryEngine:
         ):
             return None
         family = resolved[0][1]
-        ranking = _rank_spec(question, family)
-        if ranking is None:
-            winner = re.search(
-                r"(.{1,120}?)(?:이|가)?\s*(?:더\s*)?(높은|낮은|큰|작은)\s*"
-                r"(?:상품|종목|펀드|ETF|채권|쪽|것)(?:이|은|가)?",
-                question,
-                flags=re.IGNORECASE,
-            )
-            if winner is not None:
-                metric = _metric_from_label(winner.group(1), family)
-                if metric is not None:
-                    ranking = (
-                        metric,
-                        (
-                            SortDirection.ASC
-                            if winner.group(2) in {"낮은", "작은"}
-                            else SortDirection.DESC
-                        ),
-                        len(resolved),
-                    )
-        if ranking is None:
-            pair_order = re.search(
-                r"(.{1,100}?)(?:이|가)?\s*(큰|작은|높은|낮은)\s*"
-                r"(?:쪽|것|상품)?부터\s*둘\s*다",
-                question,
-            )
-            if pair_order is not None:
-                metric = _metric_from_label(pair_order.group(1), family)
-                if metric is not None:
-                    ranking = (
-                        metric,
-                        (
-                            SortDirection.ASC
-                            if pair_order.group(2) in {"작은", "낮은"}
-                            else SortDirection.DESC
-                        ),
-                        2,
-                    )
+        ranking = _named_set_rank_spec(
+            question,
+            family,
+            identity_count=len(resolved),
+        )
         if ranking is None:
             return None
-        metric, direction, parsed_limit = ranking
-        projection_match = re.search(r"각\s*상품의\s*(.+?)(?:도|을|를)\s*", question)
-        projection_metric = (
-            None
-            if projection_match is None
-            else _metric_from_label(projection_match.group(1), family)
-        )
+        metric, direction, limit = ranking
+        projection_fields = _named_set_projection_fields(question, family)
+        if projection_fields is None:
+            return None
         return TypedCompoundPlan(
             question_id=request_id,
             question=question,
@@ -6266,10 +6831,8 @@ class TypedCompoundQueryEngine:
                     filters=self._identity_filters(family),
                     metric=metric,
                     direction=direction,
-                    limit=min(parsed_limit, len(resolved)),
-                    projection_fields=(
-                        () if projection_metric is None else projection_metric.source_fields
-                    ),
+                    limit=limit,
+                    projection_fields=projection_fields,
                     include_product_ids=tuple(item[0] for item in resolved),
                     identity_scope_active=True,
                 ),
@@ -6355,6 +6918,38 @@ class TypedCompoundQueryEngine:
         if compound.question != decision.draft.question:
             raise ValueError("compound plan question differs from the routed request")
         validated_fields = self._validate_compound_plan(compound)
+        anchor_clause_coverage = self._anchor_relative_clause_coverage(compound)
+        if (
+            self._requires_anchor_relative_clause_coverage(compound)
+            and anchor_clause_coverage is None
+        ):
+            return decision, None
+        named_set_clause_coverage = self._named_set_clause_coverage(compound)
+        if compound.kind == "named_pair" and named_set_clause_coverage is None:
+            return decision, None
+        canonical_clause_ids = (
+            anchor_clause_coverage.clause_ids
+            if anchor_clause_coverage is not None
+            else (
+                named_set_clause_coverage.clause_ids
+                if named_set_clause_coverage is not None
+                else ()
+            )
+        )
+        canonical_anchor_scope = (
+            anchor_clause_coverage is not None
+            and self._anchor_route_matches_canonical_scope(
+                decision,
+                anchor_clause_coverage,
+            )
+        )
+        canonical_named_set_scope = (
+            named_set_clause_coverage is not None
+            and self._named_set_route_matches_canonical_scope(
+                decision,
+                named_set_clause_coverage,
+            )
+        )
 
         typed_field_gap = (
             decision.disposition is RouteDisposition.UNSUPPORTED
@@ -6365,6 +6960,7 @@ class TypedCompoundQueryEngine:
                     compound.kind == "field_relative_ranking"
                     and bool(compound.family_plans[0].field_comparisons)
                 )
+                or canonical_anchor_scope
                 or self._is_supported_anchor_relative_gap(decision, compound)
             )
         )
@@ -6381,13 +6977,41 @@ class TypedCompoundQueryEngine:
         # receipt.
         if unresolved_spans:
             if not all(
-                self._unresolved_span_is_proven(span, compound)
+                self._canonical_ledger_proves_unresolved_span(
+                    span,
+                    compound,
+                    anchor_clause_coverage=anchor_clause_coverage,
+                    named_set_clause_coverage=named_set_clause_coverage,
+                )
                 for span in unresolved_spans
             ):
                 return decision, None
             covered_spans = unresolved_spans
         if decision.disposition is RouteDisposition.EXECUTE:
-            authorized = self.rewrite_decision(decision, compound)
+            if canonical_named_set_scope and (
+                set(decision.draft.product_families)
+                != set(compound.requested_product_families)
+                or decision.draft.intent is not compound.interaction_intent
+                or decision.query_plan_intent is not Intent.SEARCH
+                or decision.draft.requested_limit
+                not in {None, compound.family_plans[0].limit}
+            ):
+                authorized = self._canonical_named_set_route_decision(
+                    decision,
+                    compound,
+                )
+            elif canonical_anchor_scope and (
+                set(decision.draft.product_families)
+                != set(compound.requested_product_families)
+                or decision.draft.intent is not InteractionIntent.SEARCH
+                or decision.query_plan_intent is not Intent.SEARCH
+            ):
+                authorized = self._canonical_anchor_route_decision(
+                    decision,
+                    compound,
+                )
+            else:
+                authorized = self.rewrite_decision(decision, compound)
         elif decision.disposition is RouteDisposition.CLARIFY or typed_field_gap:
             # A compound-family representation gap does not erase unrelated
             # semantic leftovers.  Every unresolved surface must be proven by
@@ -6399,6 +7023,16 @@ class TypedCompoundQueryEngine:
                 # to close only after the dedicated grammar has bound both
                 # explicit fields, relation direction, gap direction and
                 # result size into a reproducible typed plan.
+                pass
+            elif canonical_anchor_scope:
+                # The canonical ledger, rather than a changing Router reason
+                # string, proves this narrow reference-product grammar.  Any
+                # genuinely unresolved surface was already rejected above.
+                pass
+            elif canonical_named_set_scope:
+                # DB-owned names may contain family/metric/count-like tokens.
+                # The closed-set ledger proves that those tokens are identity
+                # text and that the actual comparison clause is complete.
                 pass
             elif decision.reason_code == "semantic_coverage_incomplete":
                 if not unresolved_spans:
@@ -6412,6 +7046,7 @@ class TypedCompoundQueryEngine:
                 if not (
                     self._is_supported_cross_family_gap(decision, compound)
                     or self._is_supported_aggregate_threshold_gap(decision, compound)
+                    or canonical_anchor_scope
                     or self._is_supported_anchor_relative_gap(decision, compound)
                     or self._is_supported_grouped_topk_gap(decision, compound)
                 ):
@@ -6423,6 +7058,8 @@ class TypedCompoundQueryEngine:
                 compound.requested_product_families
             ) and not (
                 self._is_supported_cross_family_gap(decision, compound)
+                or canonical_anchor_scope
+                or canonical_named_set_scope
                 or self._is_supported_grouped_topk_gap(decision, compound)
             ):
                 return decision, None
@@ -6436,6 +7073,7 @@ class TypedCompoundQueryEngine:
                 compound.interaction_intent is InteractionIntent.AGGREGATE
                 and compound.kind
                 not in {
+                    "cohort",
                     "grouped_aggregate",
                     "family_count_aggregate",
                     "family_summary_aggregate",
@@ -6452,6 +7090,7 @@ class TypedCompoundQueryEngine:
                 return decision, None
             if (
                 decision.draft.requested_limit is not None
+                and not canonical_named_set_scope
                 and decision.draft.requested_limit
                 not in {
                     item.limit for item in compound.family_plans
@@ -6468,26 +7107,37 @@ class TypedCompoundQueryEngine:
                 }
             ):
                 return decision, None
-            authorized = RouteDecision(
-                draft=decision.draft.model_copy(
-                    update={
-                        "intent": compound.interaction_intent,
-                        "product_families": list(compound.product_families),
-                    }
-                ),
-                disposition=RouteDisposition.EXECUTE,
-                reason_code="typed_compound_plan_authorized",
-                reason=(
-                    "서버가 질문의 필드·조건·계산·정렬·개수를 모두 Typed Compound "
-                    "Plan으로 검증해 제한적으로 실행을 승인"
-                ),
-                query_plan_intent=(
-                    Intent.AGGREGATE
-                    if compound.interaction_intent is InteractionIntent.AGGREGATE
-                    else Intent.SEARCH
-                ),
-                capability_matrix_version=decision.capability_matrix_version,
-            )
+            if canonical_named_set_scope:
+                authorized = self._canonical_named_set_route_decision(
+                    decision,
+                    compound,
+                )
+            elif canonical_anchor_scope:
+                authorized = self._canonical_anchor_route_decision(
+                    decision,
+                    compound,
+                )
+            else:
+                authorized = RouteDecision(
+                    draft=decision.draft.model_copy(
+                        update={
+                            "intent": compound.interaction_intent,
+                            "product_families": list(compound.product_families),
+                        }
+                    ),
+                    disposition=RouteDisposition.EXECUTE,
+                    reason_code="typed_compound_plan_authorized",
+                    reason=(
+                        "서버가 질문의 필드·조건·계산·정렬·개수를 모두 Typed Compound "
+                        "Plan으로 검증해 제한적으로 실행을 승인"
+                    ),
+                    query_plan_intent=(
+                        Intent.AGGREGATE
+                        if compound.interaction_intent is InteractionIntent.AGGREGATE
+                        else Intent.SEARCH
+                    ),
+                    capability_matrix_version=decision.capability_matrix_version,
+                )
         else:
             return decision, None
 
@@ -6497,6 +7147,7 @@ class TypedCompoundQueryEngine:
             "plan_sha256": _compound_plan_sha256(compound),
             "prior_reason_code": decision.reason_code,
             "covered_unresolved_spans": list(covered_spans),
+            "canonical_clause_ids": list(canonical_clause_ids),
             "validated_field_ids": list(validated_fields),
             "authorized_disposition": authorized.disposition.value,
             "authorized_intent": authorized.draft.intent.value,
@@ -6523,6 +7174,7 @@ class TypedCompoundQueryEngine:
             plan_sha256=receipt_payload["plan_sha256"],
             prior_reason_code=decision.reason_code,
             covered_unresolved_spans=covered_spans,
+            canonical_clause_ids=canonical_clause_ids,
             validated_field_ids=validated_fields,
             authorized_intent=authorized.draft.intent.value,
             authorized_families=tuple(
@@ -6653,6 +7305,493 @@ class TypedCompoundQueryEngine:
         routed_families = set(decision.draft.product_families)
         return not routed_families or routed_families == {plan.product_family}
 
+    def _named_set_clause_coverage(
+        self,
+        compound: TypedCompoundPlan,
+    ) -> _NamedSetClauseCoverage | None:
+        """Rebuild a complete exact-product comparison as canonical clauses.
+
+        The proof is independent of Router residual text.  Every mentioned DB
+        identity must map to exactly one frozen product, the set must be
+        explicitly closed, and all non-identity metric/filter language must
+        reproduce the typed plan one-for-one.
+        """
+
+        if (
+            compound.kind != "named_pair"
+            or len(compound.family_plans) != 1
+            or compound.excluded_families
+        ):
+            return None
+        plan = compound.family_plans[0]
+        expected_intent = (
+            InteractionIntent.COMPARE
+            if len(plan.include_product_ids) == 2
+            else InteractionIntent.SEARCH
+        )
+        if (
+            compound.interaction_intent is not expected_intent
+            or not plan.identity_scope_active
+            or not 2 <= len(plan.include_product_ids) <= 20
+            or plan.filters != self._identity_filters(plan.product_family)
+            or plan.exclude_product_ids
+            or plan.relative_filters
+            or plan.shortlist_metric is not None
+            or plan.shortlist_limit is not None
+            or plan.field_comparisons
+            or plan.aggregations
+            or plan.aggregate_threshold is not None
+        ):
+            return None
+
+        expected_by_key = self._canonical_plan_identity_keys(
+            plan.product_family,
+            plan.include_product_ids,
+        )
+        if expected_by_key is None:
+            return None
+        matches = self.database_identity_matcher.find(compound.question)
+        if (
+            not matches
+            or any(not match.is_unique for match in matches)
+            or unresolved_identity_like_spans(compound.question, matches)
+        ):
+            return None
+
+        represented_ids: set[str] = set()
+        for match in matches:
+            owned_ids = {
+                expected_by_key[key]
+                for candidate in match.candidates
+                if candidate.product_family is plan.product_family
+                for key in (
+                    (
+                        candidate.product_family,
+                        normalize_database_identity(candidate.canonical_literal),
+                    ),
+                )
+                if key in expected_by_key
+            }
+            if len(owned_ids) != 1:
+                return None
+            represented_ids.update(owned_ids)
+        if represented_ids != set(plan.include_product_ids):
+            return None
+
+        identity_spans = tuple((match.start, match.end) for match in matches)
+        closed_count = _closed_named_set_count(
+            compound.question,
+            identity_spans,
+            logical_product_count=len(represented_ids),
+        )
+        if closed_count != len(plan.include_product_ids):
+            return None
+        semantic_text = _mask_anchor_identity_surfaces(
+            compound.question,
+            identity_spans,
+        )
+
+        ranking = _named_set_rank_spec(
+            semantic_text,
+            plan.product_family,
+            identity_count=len(plan.include_product_ids),
+        )
+        if ranking != (plan.metric, plan.direction, plan.limit):
+            return None
+        projection_fields = _named_set_projection_fields(
+            semantic_text,
+            plan.product_family,
+        )
+        if projection_fields is None or projection_fields != plan.projection_fields:
+            return None
+
+        represented_metric_sources = tuple(
+            dict.fromkeys((*plan.metric.source_fields, *plan.projection_fields))
+        )
+        mentioned_metric_sources = tuple(
+            dict.fromkeys(
+                source
+                for _start, _end, source in _ordered_metric_mentions(
+                    semantic_text,
+                    plan.product_family,
+                )
+            )
+        )
+        if set(mentioned_metric_sources) != set(represented_metric_sources):
+            return None
+
+        scope = _FamilyScope(
+            start=0,
+            end=len(semantic_text),
+            product_family=plan.product_family,
+            filters=(),
+        )
+        filters = _compiled_clause_filters(
+            scope,
+            semantic_text,
+            extra_represented_source_fields=represented_metric_sources,
+        )
+        if filters is None:
+            return None
+        filters = _without_dataset_label_filter(scope, filters, semantic_text)
+        if filters != plan.filters:
+            redundant_family_filters = tuple(
+                item for item in filters if item not in plan.filters
+            )
+            if (
+                tuple(item for item in filters if item in plan.filters)
+                != plan.filters
+                or not redundant_family_filters
+                or any(
+                    item not in _base_family_filters(plan.product_family)
+                    for item in redundant_family_filters
+                )
+                or not self._named_set_satisfies_filters(
+                    plan,
+                    redundant_family_filters,
+                )
+            ):
+                return None
+
+        return _NamedSetClauseCoverage(
+            product_family=plan.product_family,
+            product_ids=plan.include_product_ids,
+            ranking_metric=plan.metric,
+            ranking_direction=plan.direction,
+            ranking_limit=plan.limit,
+            projection_fields=plan.projection_fields,
+        )
+
+    def _canonical_plan_identity_keys(
+        self,
+        family: ProductFamily,
+        product_ids: tuple[str, ...],
+    ) -> dict[tuple[ProductFamily, str], str] | None:
+        """Map every frozen ID to its DB-owned logical product identity.
+
+        A product name, ISIN/ticker and physical bond row ID are representation
+        aliases, not different products.  Resolve the frozen plan IDs through
+        the same approved-DB matcher and compare their canonical logical keys;
+        collisions remain fail-closed.
+        """
+
+        expected: dict[tuple[ProductFamily, str], str] = {}
+        for product_id in product_ids:
+            resolved = self.database_identity_matcher.resolve_literal(
+                product_id,
+                family=family,
+            )
+            if resolved is None or not resolved.is_unique:
+                return None
+            keys = {
+                (
+                    candidate.product_family,
+                    normalize_database_identity(candidate.canonical_literal),
+                )
+                for candidate in resolved.candidates
+                if candidate.product_family is family
+            }
+            if len(keys) != 1:
+                return None
+            key = next(iter(keys))
+            if key in expected and expected[key] != product_id:
+                return None
+            expected[key] = product_id
+        return expected if len(expected) == len(product_ids) else None
+
+    def _named_set_satisfies_filters(
+        self,
+        plan: CompoundFamilyPlan,
+        filters: tuple[CompoundFilter, ...],
+    ) -> bool:
+        """Verify a redundant family label against every exact product row."""
+
+        source_fields = tuple(dict.fromkeys(item.source_field for item in filters))
+        records = self._load_records(
+            plan.product_family,
+            filters=filters,
+            source_fields=source_fields,
+            product_ids=plan.include_product_ids,
+            identity_scope_active=True,
+        )
+        represented = {
+            normalize_database_identity(
+                _execution_product_id(record, plan.product_family, "named_pair")
+            )
+            for record in records
+        }
+        expected = {
+            normalize_database_identity(product_id)
+            for product_id in plan.include_product_ids
+        }
+        return represented == expected
+
+    def _named_set_route_matches_canonical_scope(
+        self,
+        decision: RouteDecision,
+        coverage: _NamedSetClauseCoverage,
+    ) -> bool:
+        """Accept shallow route noise only when every mention is DB-owned."""
+
+        routed_families = set(decision.draft.product_families)
+        if routed_families and coverage.product_family not in routed_families:
+            return False
+        expected = self._canonical_plan_identity_keys(
+            coverage.product_family,
+            coverage.product_ids,
+        )
+        if expected is None:
+            return False
+        for mention in decision.draft.product_mentions:
+            match = self.database_identity_matcher.resolve_literal(
+                mention,
+                family=coverage.product_family,
+            )
+            if match is None or not match.is_unique:
+                return False
+            represented = {
+                (
+                    candidate.product_family,
+                    normalize_database_identity(candidate.canonical_literal),
+                )
+                for candidate in match.candidates
+                if (
+                    candidate.product_family,
+                    normalize_database_identity(candidate.canonical_literal),
+                )
+                in expected
+            }
+            if len(represented) != 1:
+                return False
+        return True
+
+    @staticmethod
+    def _canonical_named_set_route_decision(
+        decision: RouteDecision,
+        compound: TypedCompoundPlan,
+    ) -> RouteDecision:
+        """Normalize Router name-internal noise after the closed-set proof."""
+
+        plan = compound.family_plans[0]
+        return RouteDecision(
+            draft=decision.draft.model_copy(
+                update={
+                    "intent": compound.interaction_intent,
+                    "product_families": [plan.product_family],
+                    "product_mentions": list(plan.include_product_ids),
+                    "requested_limit": plan.limit,
+                }
+            ),
+            disposition=RouteDisposition.EXECUTE,
+            reason_code="typed_named_set_authorized",
+            reason=(
+                "정확히 지명된 상품 집합·정렬 필드·방향·개수·출력 필드를 "
+                "서버가 canonical clause ledger로 모두 검증해 실행"
+            ),
+            query_plan_intent=Intent.SEARCH,
+            capability_matrix_version=decision.capability_matrix_version,
+        )
+
+    def _anchor_relative_clause_coverage(
+        self,
+        compound: TypedCompoundPlan,
+    ) -> _AnchorRelativeClauseCoverage | None:
+        """Rebuild the complete anaphoric anchor request as canonical clauses.
+
+        Router output is deliberately not consulted here.  Exact DB identity,
+        the family-local filter parser and the typed rank parser independently
+        reproduce the request.  This lets a complete request survive a shallow
+        Router family/wording mismatch while retaining fail-closed behavior if
+        even one conjunction disappeared from the frozen plan.
+        """
+
+        if (
+            compound.kind != "anchor_relative"
+            or compound.interaction_intent is not InteractionIntent.SEARCH
+            or len(compound.family_plans) != 1
+        ):
+            return None
+        plan = compound.family_plans[0]
+        anchor = self._database_relative_anchor_context(
+            compound.question,
+            family=plan.product_family,
+        )
+        if anchor is None or anchor.equal_source_fields:
+            # Equality-owned anchor searches have their own established
+            # authorization path.  This ledger is deliberately narrow: one
+            # declared reference row and explicit anaphoric thresholds.
+            return None
+        if plan.exclude_product_ids != (anchor.lookup_product_id,):
+            return None
+
+        segments = _plan_segments(compound.question)
+        if len(segments) != 1 or segments[0][0].product_family is not plan.product_family:
+            return None
+        scope, segment = segments[0]
+        semantic_segment = _mask_anchor_identity_surfaces(
+            segment,
+            anchor.identity_spans,
+        )
+
+        relative_clauses = _anaphoric_anchor_relative_specs(
+            semantic_segment,
+            plan.product_family,
+        )
+        if not relative_clauses:
+            # The exact DB identity itself can own the comparative clause:
+            # ``<product name>보다 <metric>이 높은/낮은``.  The compiler
+            # already accepts this ordinary Korean form, so the independent
+            # authorization ledger must be able to reproduce the same field
+            # and direction instead of requiring the user to repeat
+            # ``이 상품보다``.  An unknown metric still fails closed.
+            direct = re.search(
+                rf"{re.escape(anchor.surface)}\s*(?:보다|대비)\s*"
+                r"(.{1,60}?)(?:이|가|은|는)?\s*"
+                r"(큰|작은|높은|낮은|많은|적은)",
+                segment,
+                re.IGNORECASE,
+            )
+            if direct is not None:
+                metric = _metric_from_label(direct.group(1), plan.product_family)
+                if metric is None:
+                    return None
+                relation = direct.group(2)
+                relative_clauses = (
+                    (
+                        metric,
+                        (
+                            "gt"
+                            if relation in {"큰", "높은", "많은"}
+                            else "lt"
+                        ),
+                    ),
+                )
+        if not relative_clauses:
+            return None
+        frozen_relative = tuple(
+            (metric, operator)
+            for metric, operator, _threshold in plan.relative_filters
+        )
+        if relative_clauses != frozen_relative:
+            return None
+        relative_sources = tuple(
+            dict.fromkeys(
+                source
+                for metric, _operator in relative_clauses
+                for source in metric.source_fields
+            )
+        )
+        if plan.projection_fields != relative_sources:
+            return None
+
+        ranking = _rank_spec(semantic_segment, plan.product_family)
+        if ranking != (plan.metric, plan.direction, plan.limit):
+            return None
+        filters = _compiled_clause_filters(
+            scope,
+            semantic_segment,
+            extra_represented_source_fields=tuple(
+                dict.fromkeys((*relative_sources, *plan.metric.source_fields))
+            ),
+            allow_owned_anchor_comparison=True,
+        )
+        if filters is None:
+            return None
+        filters = _without_dataset_label_filter(scope, filters, semantic_segment)
+        if filters != plan.filters:
+            return None
+
+        # Inclusive relative thresholds would include the reference row.  In
+        # that case the user must explicitly request another product (or say
+        # to exclude the reference); silently removing it would change intent.
+        explicit_exclusion = re.search(
+            r"(?:다른|나머지)\s*(?:상품|종목|펀드|ETF|ETN|ETP|채권)|"
+            r"(?:기준\s*)?(?:상품|종목|펀드|ETF|ETN|ETP|채권)\s*"
+            r"(?:은|는|을|를)?\s*(?:제외|빼고|제외하고)",
+            semantic_segment,
+            re.IGNORECASE,
+        )
+        if explicit_exclusion is None and any(
+            operator in {"gte", "lte"} for _metric, operator in relative_clauses
+        ):
+            return None
+
+        return _AnchorRelativeClauseCoverage(
+            product_family=plan.product_family,
+            anchor_lookup_product_id=anchor.lookup_product_id,
+            anchor_public_product_id=anchor.public_product_id,
+            filters=plan.filters,
+            relative_clauses=relative_clauses,
+            ranking_metric=plan.metric,
+            ranking_direction=plan.direction,
+            ranking_limit=plan.limit,
+            projection_fields=plan.projection_fields,
+        )
+
+    def _requires_anchor_relative_clause_coverage(
+        self,
+        compound: TypedCompoundPlan,
+    ) -> bool:
+        """Identify the reference-declaration grammar governed by the ledger."""
+
+        if compound.kind != "anchor_relative" or len(compound.family_plans) != 1:
+            return False
+        anchor = self._database_relative_anchor_context(
+            compound.question,
+            family=compound.family_plans[0].product_family,
+        )
+        if anchor is None or anchor.equal_source_fields:
+            return False
+        # Every explicit non-equality reference threshold uses the same
+        # canonical clause ledger, regardless of whether Korean places the
+        # metric before or after ``이 상품``. This both closes the previous
+        # field-first false block and prevents a compiler-only plan from
+        # bypassing clause-by-clause authorization.
+        return bool(compound.family_plans[0].relative_filters)
+
+    @staticmethod
+    def _anchor_route_matches_canonical_scope(
+        decision: RouteDecision,
+        coverage: _AnchorRelativeClauseCoverage,
+    ) -> bool:
+        """Allow only Router scope that contains the DB-proven anchor family."""
+
+        routed_families = set(decision.draft.product_families)
+        if routed_families and coverage.product_family not in routed_families:
+            return False
+        allowed_mentions = {
+            normalize_database_identity(coverage.anchor_lookup_product_id),
+            normalize_database_identity(coverage.anchor_public_product_id),
+        }
+        return all(
+            normalize_database_identity(mention) in allowed_mentions
+            for mention in decision.draft.product_mentions
+        )
+
+    @staticmethod
+    def _canonical_anchor_route_decision(
+        decision: RouteDecision,
+        compound: TypedCompoundPlan,
+    ) -> RouteDecision:
+        """Normalize a shallow route only after the canonical ledger passed."""
+
+        return RouteDecision(
+            draft=decision.draft.model_copy(
+                update={
+                    "intent": InteractionIntent.SEARCH,
+                    "product_families": list(compound.product_families),
+                }
+            ),
+            disposition=RouteDisposition.EXECUTE,
+            reason_code="typed_anchor_relative_authorized",
+            reason=(
+                "정확한 기준 상품·필터·상대 조건·정렬·개수·기준 상품 제외를 "
+                "서버가 canonical clause ledger로 모두 검증해 검색으로 실행"
+            ),
+            query_plan_intent=Intent.SEARCH,
+            capability_matrix_version=decision.capability_matrix_version,
+        )
+
     def _unresolved_span_is_proven(
         self,
         span: str,
@@ -6694,22 +7833,31 @@ class TypedCompoundQueryEngine:
                 for match in self.database_identity_matcher.find(compound.question)
             )
 
-        cross_identity_proven = False
-        if compound.kind == "cross_family_named_comparison":
+        named_identity_proven = False
+        if compound.kind in {"cross_family_named_comparison", "named_pair"}:
             span_identity = normalize_database_identity(span).strip(
                 "\"'`‘’“”「」『』()[]{} "
             )
             expected = {
-                (plan.product_family, product_id)
+                (plan.product_family, normalize_database_identity(product_id))
                 for plan in plans
                 for product_id in plan.include_product_ids
             }
-            cross_identity_proven = any(
+            named_identity_proven = any(
                 match.is_unique
                 and span_identity
                 and span_identity in normalize_database_identity(match.surface)
                 and any(
-                    (candidate.product_family, candidate.product_id) in expected
+                    (
+                        candidate.product_family,
+                        normalize_database_identity(candidate.product_id),
+                    )
+                    in expected
+                    or (
+                        candidate.product_family,
+                        normalize_database_identity(candidate.canonical_literal),
+                    )
+                    in expected
                     for candidate in match.candidates
                 )
                 for match in self.database_identity_matcher.find(compound.question)
@@ -6822,20 +7970,17 @@ class TypedCompoundQueryEngine:
             and (derived_proven or (arithmetic_only and explicit_derived_plan))
         )
         local_metric_placeholder = bool(
-            re.fullmatch(r"(?:이가은는을를)?(?:수치|값|지표)", normalized)
+            re.fullmatch(r"(?:수치|값|지표)(?:이|가|은|는|을|를)?", normalized)
             and len(plans) > 1
-            and re.search(
-                r"(?:각각|각자|자기).{0,16}?(?:기준|수치|값|지표)",
-                compound.question,
-            )
-            is not None
+            and _shared_local_metric_reference_owns_span(compound.question, span)
+            and (shared_order := _shared_parallel_order(compound.question)) is not None
             and all(
                 plan.metric.kind == "field"
                 and len(
                     {
                         item.source_field
                         for item in plan.filters
-                        if item not in _base_family_filters(plan.product_family)
+                        if item.operator in {"gt", "gte", "lt", "lte", "between"}
                     }
                 )
                 == 1
@@ -6843,8 +7988,9 @@ class TypedCompoundQueryEngine:
                 in {
                     item.source_field
                     for item in plan.filters
-                    if item not in _base_family_filters(plan.product_family)
+                    if item.operator in {"gt", "gte", "lt", "lte", "between"}
                 }
+                and (plan.direction, plan.limit) == shared_order
                 for plan in plans
             )
         )
@@ -6856,6 +8002,31 @@ class TypedCompoundQueryEngine:
             )
             and any(
                 item.shortlist_metric is not None and item.shortlist_limit is not None
+                for item in plans
+            )
+        )
+        complete_calculation_inputs_surface = bool(
+            compound.kind == "two_stage"
+            and _COMPLETE_CALCULATION_INPUTS.search(span) is not None
+            and all(
+                (
+                    required_fields := tuple(
+                        dict.fromkeys(
+                            (
+                                *item.metric.source_fields,
+                                *(
+                                    item.shortlist_metric.source_fields
+                                    if item.shortlist_metric is not None
+                                    else ()
+                                ),
+                            )
+                        )
+                    )
+                )
+                and all(
+                    CompoundFilter(field, "neq", 0) in item.filters
+                    for field in required_fields
+                )
                 for item in plans
             )
         )
@@ -7033,7 +8204,7 @@ class TypedCompoundQueryEngine:
             )
         return (
             anchor_identity_proven
-            or cross_identity_proven
+            or named_identity_proven
             or anchor_equality_proven
             or metric_proven
             or derived_proven
@@ -7045,6 +8216,7 @@ class TypedCompoundQueryEngine:
             or metric_placeholder_surface
             or local_metric_placeholder
             or shortlist_surface
+            or complete_calculation_inputs_surface
             or grouped_aggregate_surface
             or grouped_product_topk_surface
             or family_count_surface
@@ -7052,6 +8224,1120 @@ class TypedCompoundQueryEngine:
             or aggregate_threshold_surface
             or field_comparison_surface
         )
+
+    def _canonical_family_clause_coverages(
+        self,
+        compound: TypedCompoundPlan,
+    ) -> tuple[_CanonicalFamilyClauseCoverage, ...]:
+        """Rebuild every supported family clause without consulting HCX.
+
+        The full plan is already recompiled during authorization.  Bounded,
+        parallel and cohort requests therefore need only an exact, ordered
+        mapping from each server-owned family segment to the corresponding
+        frozen plan.  For a two-stage request this method additionally
+        reconstructs every family plan from its local clause.  In every case
+        the exhaustive literal ledger below must still prove each HCX span;
+        merely belonging to a segment never grants authority.  A missing or
+        cross-family clause produces no coverage record.
+        """
+
+        if compound.kind not in {
+            "bounded",
+            "cohort",
+            "derived_ranking",
+            "parallel",
+            "two_stage",
+        } or compound.excluded_families:
+            return ()
+        segments = _plan_segments(compound.question)
+        if len(segments) != len(compound.family_plans):
+            return ()
+        if compound.kind in {"bounded", "cohort", "derived_ranking", "parallel"}:
+            recompiled = self.compile(compound.question, compound.question_id)
+            if recompiled is None or recompiled != replace(
+                compound,
+                hclx_structure_spans=(),
+            ):
+                return ()
+            coverages: list[_CanonicalFamilyClauseCoverage] = []
+            search_from = 0
+            for (scope, segment), plan in zip(
+                segments,
+                compound.family_plans,
+                strict=True,
+            ):
+                if plan.product_family is not scope.product_family:
+                    return ()
+                segment_start = compound.question.find(segment, search_from)
+                if segment_start < 0:
+                    return ()
+                segment_end = segment_start + len(segment)
+                search_from = segment_end
+                coverages.append(
+                    _CanonicalFamilyClauseCoverage(
+                        product_family=scope.product_family,
+                        segment_start=segment_start,
+                        segment_end=segment_end,
+                        plan=plan,
+                    )
+                )
+            return tuple(coverages)
+
+        plan_by_family = {
+            item.product_family: item for item in compound.family_plans
+        }
+        if len(plan_by_family) != len(compound.family_plans):
+            return ()
+        shared_exclusion = _shared_exclusion_prefix(compound.question, segments)
+        coverages: list[_CanonicalFamilyClauseCoverage] = []
+        search_from = 0
+        for index, (scope, segment) in enumerate(segments):
+            plan = plan_by_family.get(scope.product_family)
+            if plan is None:
+                return ()
+            segment_start = compound.question.find(segment, search_from)
+            if segment_start < 0:
+                return ()
+            segment_end = segment_start + len(segment)
+            search_from = segment_end
+            local_text = (
+                f"{shared_exclusion} {segment}"
+                if index > 0 and shared_exclusion
+                else segment
+            )
+            filters = _compiled_clause_filters(scope, local_text)
+            shortlist = _shortlist_spec_with_span(segment, scope.product_family)
+            if filters is None or shortlist is None:
+                return ()
+            (
+                shortlist_metric,
+                shortlist_direction,
+                shortlist_limit,
+                shortlist_end,
+            ) = shortlist
+            final_text = segment[shortlist_end:]
+            metric = _derived_metric(final_text, scope.product_family)
+            final_ranking = _rank_spec(final_text, scope.product_family)
+            if metric is None and final_ranking is not None:
+                metric, direction, limit = final_ranking
+            else:
+                direction = _direction(final_text)
+                limit = _final_limit(final_text)
+            if shortlist_metric is None or metric is None or limit is None:
+                return ()
+            filters = _with_complete_calculation_inputs(
+                filters,
+                segment,
+                shortlist_metric,
+                metric,
+            )
+            rebuilt = CompoundFamilyPlan(
+                product_family=scope.product_family,
+                filters=filters,
+                metric=metric,
+                direction=direction,
+                limit=limit,
+                shortlist_metric=shortlist_metric,
+                shortlist_limit=shortlist_limit,
+                shortlist_direction=shortlist_direction,
+            )
+            if rebuilt != plan:
+                return ()
+            coverages.append(
+                _CanonicalFamilyClauseCoverage(
+                    product_family=scope.product_family,
+                    segment_start=segment_start,
+                    segment_end=segment_end,
+                    plan=plan,
+                )
+            )
+        return tuple(coverages)
+
+    def _compound_span_has_only_owned_literals(
+        self,
+        span: str,
+        compound: TypedCompoundPlan,
+        owner: _CanonicalFamilyClauseCoverage,
+    ) -> bool:
+        """Subtract parser-owned literals and reject every content residue.
+
+        Recompiling a plan proves the fields which *were* parsed, but it does
+        not prove that the parser consumed every word.  This ledger therefore
+        masks only literal ranges tied to the frozen family plan.  Grammar and
+        presentation tokens are removed through a closed vocabulary; an
+        unknown modifier such as ``친환경`` or ``로고 색깔`` remains visible and
+        prevents a receipt even when a known metric occurs later in the span.
+        """
+
+        absolute_start = compound.question.find(span)
+        if absolute_start < 0:
+            return False
+        characters = list(span)
+
+        def own(start: int, end: int) -> None:
+            left = max(0, start)
+            right = min(len(characters), end)
+            if left < right:
+                characters[left:right] = " " * (right - left)
+
+        def own_absolute(start: int, end: int) -> None:
+            own(start - absolute_start, end - absolute_start)
+
+        family = owner.product_family
+        plan = owner.plan
+        filter_sources = {item.source_field for item in plan.filters}
+        metric_sources = {
+            *plan.metric.source_fields,
+            *(plan.shortlist_metric.source_fields if plan.shortlist_metric else ()),
+        }
+        represented_sources = {*filter_sources, *metric_sources}
+
+        # Family/cohort literals are already parsed into a concrete scope and
+        # its filters.  Own only matching ranges inside this exact family
+        # segment, never another family's noun elsewhere in the question.
+        for scope in _compound_family_matches(compound.question):
+            if (
+                scope.product_family is family
+                and owner.segment_start <= scope.start < scope.end <= owner.segment_end
+            ):
+                own_absolute(scope.start, scope.end)
+
+        def own_numeric_bound(alias_end: int, source_field: str) -> None:
+            suffix = span[alias_end:]
+            operators = {
+                "이상": "gte",
+                "이하": "lte",
+                "초과": "gt",
+                "미만": "lt",
+                "최소": "gte",
+                "적어도": "gte",
+                "최대": "lte",
+                "많아야": "lte",
+            }
+            trailing = re.match(
+                r"\s*(?:이|가|은|는)?\s*"
+                r"(?:(?P<prefix>최소|최대|적어도|많아야)\s*)?"
+                r"(?P<value>[-+]?\d[\d,]*(?:\.\d+)?)\s*%?\s*"
+                r"(?P<suffix>이상|이하|초과|미만)?"
+                r"(?:인|이고|이며)?",
+                suffix,
+            )
+            if trailing is None:
+                return
+            operator_word = trailing.group("prefix") or trailing.group("suffix")
+            if operator_word is None:
+                return
+            raw_value = trailing.group("value").replace(",", "")
+            value: int | float = (
+                float(raw_value) if "." in raw_value else int(raw_value)
+            )
+            if CompoundFilter(source_field, operators[operator_word], value) in plan.filters:
+                own(alias_end, alias_end + trailing.end())
+
+        # Own exact field/alias literals only when their source column occurs
+        # in this frozen plan.  Numeric predicate text is owned only when the
+        # same operator/value tuple is present in the plan filters.
+        for pattern, mapping in _METRIC_ALIASES:
+            source_field = mapping.get(family)
+            if source_field not in represented_sources:
+                continue
+            for match in pattern.finditer(span):
+                own(match.start(), match.end())
+                if source_field in filter_sources:
+                    own_numeric_bound(match.end(), source_field)
+
+        for capability in ("queryable", "sortable"):
+            for mention in registry_field_mentions(span, family.value, capability):
+                source_field = _CANONICAL_TO_SOURCE.get((family, mention.field_id))
+                if source_field not in represented_sources:
+                    continue
+                own(mention.start, mention.end)
+                if source_field in filter_sources:
+                    own_numeric_bound(mention.end, source_field)
+
+        for alias in rank_alias_matches(span, family):
+            source_field = _CANONICAL_TO_SOURCE.get((family, alias.field_id))
+            if source_field in metric_sources:
+                own(alias.start, alias.end)
+        for alias in filter_alias_matches(span, family):
+            source_field = _CANONICAL_TO_SOURCE.get((family, alias.field_id))
+            if (
+                source_field in filter_sources
+                and CompoundFilter(source_field, alias.operator, alias.value)
+                in plan.filters
+            ):
+                own(alias.start, alias.end)
+
+        expected_metrics = {
+            plan.metric,
+            *(tuple((plan.shortlist_metric,)) if plan.shortlist_metric else ()),
+        }
+        for pattern, kind, fields, scale in _DERIVED_METRICS:
+            metric = CompoundMetric(
+                "subtract" if kind == "subtract_domestic" else kind,
+                fields,
+                scale,
+            )
+            if metric not in expected_metrics:
+                continue
+            for match in pattern.finditer(span):
+                own(match.start(), match.end())
+
+        required_fields = tuple(
+            dict.fromkeys(
+                (
+                    *plan.metric.source_fields,
+                    *(plan.shortlist_metric.source_fields if plan.shortlist_metric else ()),
+                )
+            )
+        )
+        if required_fields and all(
+            CompoundFilter(field, "neq", 0) in plan.filters
+            for field in required_fields
+        ):
+            for match in _COMPLETE_CALCULATION_INPUTS.finditer(span):
+                own(match.start(), match.end())
+
+        # A derived metric owns only its closed result noun/unit.  This closes
+        # model/server segmentation differences such as ``뺀 차이(%p)`` while
+        # preventing an arbitrary suffix from hiding behind a valid formula.
+        derived_result_suffix = {
+            "subtract": re.compile(
+                r"\s*(?:차이|격차)?\s*(?:\(\s*(?:%p|퍼센트\s*포인트|"
+                r"거래\s*통화\s*기준)\s*\)|%p|퍼센트\s*포인트)?"
+                r"(?:이|가|은|는|을|를)?",
+                re.IGNORECASE,
+            ),
+            "add": re.compile(r"\s*(?:합계|총합)?(?:이|가|은|는|을|를)?"),
+            "ratio": re.compile(r"\s*(?:비율|배수)?(?:이|가|은|는|을|를)?"),
+            "relative_change": re.compile(
+                r"\s*(?:변화율)?(?:\(\s*%\s*\))?(?:이|가|은|는|을|를)?"
+            ),
+        }
+        owner_segment = compound.question[owner.segment_start : owner.segment_end]
+        exact_derived_metrics: set[CompoundMetric] = set()
+        for pattern, kind, fields, scale in _DERIVED_METRICS:
+            metric = CompoundMetric(
+                "subtract" if kind == "subtract_domestic" else kind,
+                fields,
+                scale,
+            )
+            if metric not in expected_metrics or pattern.search(owner_segment) is None:
+                continue
+            exact_derived_metrics.add(metric)
+            for match in pattern.finditer(span):
+                suffix = derived_result_suffix[metric.kind].match(span, match.end())
+                if suffix is not None:
+                    own(match.end(), suffix.end())
+
+        arithmetic_word = re.fullmatch(
+            r"\s*(?P<word>차이|격차|합계|총합|비율|배수|변화율)\s*",
+            span,
+        )
+        if arithmetic_word is not None:
+            allowed_kind = {
+                "차이": "subtract",
+                "격차": "subtract",
+                "합계": "add",
+                "총합": "add",
+                "비율": "ratio",
+                "배수": "ratio",
+                "변화율": "relative_change",
+            }[arithmetic_word.group("word")]
+            if any(metric.kind == allowed_kind for metric in exact_derived_metrics):
+                own(0, len(span))
+
+        # Structural literals acquire no field authority by themselves. Bind
+        # every requested count and ranking direction to one frozen stage
+        # before removing the surrounding selection grammar. This prevents a
+        # valid field from hiding a second ``상위 99개`` or the opposite tail.
+        stages = [(plan.limit, plan.direction)]
+        if plan.shortlist_limit is not None and plan.shortlist_metric is not None:
+            stages.append((plan.shortlist_limit, plan.shortlist_direction))
+        count_matches: list[tuple[re.Match[str], int]] = []
+        for count_match in _STAGED_COUNT_SURFACE.finditer(span):
+            raw_count = re.match(
+                r"\s*(\d+|한|두|세|셋|네|넷|다섯|여섯|일곱|여덟|아홉|열)",
+                count_match.group(0),
+            )
+            if raw_count is None:
+                return False
+            literal = raw_count.group(1)
+            count = int(literal) if literal.isdigit() else _KOREAN_SMALL_COUNTS.get(literal)
+            if count is None or not any(stage_count == count for stage_count, _ in stages):
+                return False
+            count_matches.append((count_match, count))
+
+        direction_pattern = re.compile(
+            r"(?P<desc>상위|최상단|높은|큰|많은|긴|먼|늦은)|"
+            r"(?P<asc>하위|최하단|낮은|작은|적은|짧은|가까운|빠른)",
+            re.IGNORECASE,
+        )
+        for direction_match in direction_pattern.finditer(span):
+            requested_direction = (
+                SortDirection.DESC
+                if direction_match.group("desc") is not None
+                else SortDirection.ASC
+            )
+            following_counts = [
+                (count_match.start() - direction_match.end(), count)
+                for count_match, count in count_matches
+                if 0 <= count_match.start() - direction_match.end() <= 32
+            ]
+            if following_counts:
+                nearest_distance = min(item[0] for item in following_counts)
+                nearest_counts = {
+                    count for distance, count in following_counts if distance == nearest_distance
+                }
+                allowed_directions = {
+                    stage_direction
+                    for stage_count, stage_direction in stages
+                    if stage_count in nearest_counts
+                }
+            else:
+                allowed_directions = {stage_direction for _, stage_direction in stages}
+            if requested_direction not in allowed_directions:
+                return False
+
+        for count_match, _count in count_matches:
+            own(count_match.start(), count_match.end())
+        for match in _TWO_STAGE_STRUCTURAL_SURFACE.finditer(span):
+            own(match.start(), match.end())
+        for match in re.finditer(r"따로", span):
+            if len(compound.family_plans) < 2 or compound.kind not in {
+                "parallel",
+                "two_stage",
+            }:
+                return False
+            own(match.start(), match.end())
+
+        residual = "".join(characters)
+        tokens = re.findall(
+            r"[-+]?\d+(?:[.,]\d+)*|[^\W_]+(?:[._/\-][^\W_]+)*",
+            residual,
+            re.UNICODE,
+        )
+        return all(
+            _TWO_STAGE_GRAMMAR_ONLY_TOKEN.fullmatch(token) is not None
+            for token in tokens
+        )
+
+    def _canonical_family_clause_proves_unresolved_span(
+        self,
+        span: str,
+        compound: TypedCompoundPlan,
+    ) -> bool:
+        """Accept one long HCX span only inside one fully rebuilt family clause.
+
+        The model's ``UNRESOLVED`` label is advisory, but its literal text is
+        not ignored.  The ordinary semantic gate is rerun on that exact span;
+        every issue it finds must itself be positively owned by the same
+        family plan.  Subjective additions such as popularity or safety have
+        no typed owner and continue to block the entire request.
+        """
+
+        start = compound.question.find(span)
+        if start < 0 or compound.question.find(span, start + 1) >= 0:
+            return False
+        end = start + len(span)
+        owners = tuple(
+            item
+            for item in self._canonical_family_clause_coverages(compound)
+            if item.segment_start <= start and end <= item.segment_end
+        )
+        if len(owners) != 1:
+            return False
+        owner = owners[0]
+        local_compound = replace(
+            compound,
+            # Direction and metric proof must be evaluated against the
+            # owning family clause.  Keeping the full coordinated question
+            # here lets a later family clause overwrite the local ranking
+            # direction (for example DESC domestically, ASC overseas).
+            question=compound.question[owner.segment_start : owner.segment_end],
+            family_plans=(owner.plan,),
+            excluded_families=(),
+        )
+        # A coordinated suffix can contain the field-neutral placeholder
+        # ``수치/값/지표`` once while each preceding family clause owns a
+        # different explicit numeric field.  The placeholder is not local to
+        # the final textual segment even though Korean places the suffix
+        # there.  Admit only the exact placeholder whose literal position is
+        # inside the shared anaphor, and only when the complete multi-family
+        # plan proves every local field, direction and limit.
+        if (
+            _shared_local_metric_reference_owns_span(compound.question, span)
+            and self._unresolved_span_is_proven(span, compound)
+        ):
+            return True
+        # The exhaustive literal ledger below is the positive proof for this
+        # canonical two-stage clause. A narrower metric-only pre-gate used to
+        # reject filter-only HCX segments even when the same exact
+        # field/operator/value was already rebuilt into the frozen server plan.
+        # HCX status is advisory here; no semantic token is accepted unless the
+        # literal ledger and the independent SemanticCoverageGate both agree.
+        if not self._compound_span_has_only_owned_literals(
+            span,
+            compound,
+            owner,
+        ):
+            return False
+
+        # Import lazily: semantic_gate deliberately imports the compound
+        # grammar inside its evaluation path to avoid module-init cycles.
+        from finance_agent_core.agent.semantic_gate import SemanticCoverageGate
+
+        residual = SemanticCoverageGate().evaluate(
+            span,
+            interaction_intent=compound.interaction_intent.value,
+        )
+        # Unsupported actions are terminal.  A metric word inside the same
+        # model span can never turn one into an executable database request.
+        if residual.unsupported_spans:
+            return False
+        issues = tuple(
+            dict.fromkeys(
+                (
+                    *residual.ambiguity_spans,
+                    *residual.schema_link_gap_spans,
+                )
+            )
+        )
+        return all(
+            self._unresolved_span_is_proven(issue, local_compound)
+            for issue in issues
+        )
+
+    @staticmethod
+    def _canonical_cohort_summary_proves_unresolved_span(
+        span: str,
+        compound: TypedCompoundPlan,
+    ) -> bool:
+        """Prove one HCX summary fragment from the typed cohort contract.
+
+        ``_compile_cohort`` accepts exactly count/mean/min/max plus a three-row
+        representative ranking.  HCX often labels those output nouns as
+        ``UNRESOLVED`` because they are aggregate projections rather than one
+        database field.  They are advisory only when the literal fragment
+        names exactly the calculation already sealed in the reproducible
+        cohort plan.  Unknown statistics, directions and result sizes remain
+        unowned and therefore fail closed.
+        """
+
+        if (
+            compound.kind != "cohort"
+            or len(compound.family_plans) != 2
+            or not span.strip()
+            or compound.question.count(span) != 1
+        ):
+            return False
+        plans = compound.family_plans
+        stripped = span.strip()
+        span_start = compound.question.find(span)
+        span_end = span_start + len(span)
+        distribution_marker = re.search(r"분포", compound.question)
+        if distribution_marker is None:
+            return False
+        suffix = r"(?:도|를|을|은|는|이|가)?(?:\s*(?:알려|보여|제시|계산)해)?"
+        punctuation = r"\s*[.,;:!?]?\s*"
+        distribution = re.fullmatch(
+            r"\s*(?P<metric>.+?)(?:이|가|은|는|을|를)?\s*"
+            r"분포(?:를|을)?\s*(?:비교(?:해)?(?:\s*(?:주세요|줘))?)?"
+            r"\s*[.,;:!?]?\s*",
+            stripped,
+            re.IGNORECASE,
+        )
+        if distribution is not None:
+            metric_surface = distribution.group("metric").strip()
+
+            def exact_metric_owned(plan: CompoundFamilyPlan) -> bool:
+                sources = {
+                    mapping[plan.product_family]
+                    for pattern, mapping in _METRIC_ALIASES
+                    if plan.product_family in mapping
+                    and (match := pattern.search(metric_surface)) is not None
+                    and match.start() == 0
+                    and match.end() == len(metric_surface)
+                }
+                sources.update(
+                    source
+                    for mention in registry_field_mentions(
+                        metric_surface,
+                        plan.product_family.value,
+                        "sortable",
+                    )
+                    if mention.start == 0
+                    and mention.end == len(metric_surface)
+                    and (
+                        source := _CANONICAL_TO_SOURCE.get(
+                            (plan.product_family, mention.field_id)
+                        )
+                    )
+                    is not None
+                )
+                return plan.metric.kind == "field" and sources == {
+                    plan.metric.source_fields[0]
+                }
+
+            if (
+                span_start <= distribution_marker.start() < span_end
+                and all(exact_metric_owned(item) for item in plans)
+            ):
+                return True
+        # Summary projections belong only to the common tail after the
+        # explicit metric-distribution clause. A matching word inside a cohort
+        # name or family scope is data, not an aggregate request.
+        if span_start < distribution_marker.end():
+            return False
+        if re.fullmatch(
+            rf"(?:각(?:각)?\s*(?:집단|그룹|묶음)(?:의)?\s*)?"
+            rf"(?:유효\s*)?(?:상품|종목|펀드)\s*(?:수|개수|건수){suffix}{punctuation}",
+            stripped,
+            re.IGNORECASE,
+        ) is not None:
+            return True
+        if re.fullmatch(
+            rf"(?:각(?:각)?\s*(?:집단|그룹|묶음)(?:의)?\s*)?"
+            rf"(?:단순\s*)?평균(?:값|치)?{suffix}{punctuation}",
+            stripped,
+            re.IGNORECASE,
+        ) is not None:
+            return True
+        if re.fullmatch(
+            rf"(?:각(?:각)?\s*(?:집단|그룹|묶음)(?:의)?\s*)?"
+            rf"(?:최솟값|최소값){suffix}{punctuation}",
+            stripped,
+            re.IGNORECASE,
+        ) is not None:
+            return True
+        if re.fullmatch(
+            rf"(?:각(?:각)?\s*(?:집단|그룹|묶음)(?:의)?\s*)?"
+            rf"(?:최댓값|최대값|최고값){suffix}{punctuation}",
+            stripped,
+            re.IGNORECASE,
+        ) is not None:
+            return True
+
+        representative = re.fullmatch(
+            r"\s*(?:각(?:각)?\s*)?(?:집단|그룹|묶음)(?:의)?\s*"
+            r"(?P<direction>상위|하위)\s*"
+            r"(?P<count>\d+|한|두|세|셋|네|넷|다섯|여섯|일곱|여덟|아홉|열)\s*개"
+            r"(?:도|를|을|은|는|이|가)?"
+            r"(?:\s*(?:알려|보여|제시)(?:해)?\s*(?:주세요|줘)?)?"
+            r"\s*[.,;:!?]?\s*",
+            stripped,
+            re.IGNORECASE,
+        )
+        if representative is not None:
+            raw_count = representative.group("count")
+            count = (
+                int(raw_count)
+                if raw_count.isdigit()
+                else _KOREAN_SMALL_COUNTS.get(raw_count)
+            )
+            direction = (
+                SortDirection.DESC
+                if representative.group("direction") == "상위"
+                else SortDirection.ASC
+            )
+            return count is not None and all(
+                item.limit == count and item.direction is direction
+                for item in plans
+            )
+
+        winner = re.fullmatch(
+            r"\s*평균(?:값)?(?:이|가)?\s*더\s*"
+            r"(?P<direction>큰|높은|작은|낮은)\s*"
+            r"(?:집단|그룹|묶음|쪽)(?:도|를|을|은|는|이|가)?"
+            r"(?:\s*(?:알려|보여|제시)(?:해)?\s*(?:주세요|줘)?)?"
+            r"\s*[.,;:!?]?\s*",
+            stripped,
+            re.IGNORECASE,
+        )
+        if winner is not None:
+            direction = (
+                SortDirection.DESC
+                if winner.group("direction") in {"큰", "높은"}
+                else SortDirection.ASC
+            )
+            return compound.cohort_mean_direction is direction
+        if re.fullmatch(
+            r"\s*(?:집단|그룹|묶음)(?:\s*간|끼리의?)?\s*"
+            r"평균(?:값)?\s*(?:간\s*)?(?:차이|격차)|"
+            r"\s*평균(?:값)?\s*(?:간\s*)?(?:차이|격차)\s*",
+            stripped,
+            re.IGNORECASE,
+        ) is not None:
+            return compound.cohort_mean_difference
+
+        summary_bundle = re.fullmatch(
+            r"\s*(?:각각\s*)?(?:유효\s*)?(?:상품|종목|펀드)\s*수\s*"
+            r"[,，·ㆍ/]\s*(?:단순\s*)?평균\s*[,，·ㆍ/]\s*"
+            r"(?:최솟값|최소값)\s*(?:과|와|및|[,，·ㆍ/])\s*"
+            r"(?:최댓값|최대값|최고값)(?:을|를)?\s*"
+            r"(?:계산(?:한|하고|해)?\s*(?:뒤|후)(?:에)?\s*)?"
+            r"(?:(?:각(?:각)?\s*)?(?:집단|그룹|묶음)(?:의)?\s*"
+            r"(?P<direction>상위|하위)\s*"
+            r"(?P<count>\d+|한|두|세|셋|네|넷|다섯|여섯|일곱|여덟|아홉|열)\s*개"
+            r"(?:도|를|을|은|는)?\s*(?:알려|보여|제시)(?:해)?"
+            r"\s*(?:주세요|줘)?)?\s*[.,;:!?]?\s*",
+            stripped,
+            re.IGNORECASE,
+        )
+        if summary_bundle is not None:
+            raw_count = summary_bundle.group("count")
+            if raw_count is None:
+                return True
+            count = (
+                int(raw_count)
+                if raw_count.isdigit()
+                else _KOREAN_SMALL_COUNTS.get(raw_count)
+            )
+            direction = (
+                SortDirection.DESC
+                if summary_bundle.group("direction") == "상위"
+                else SortDirection.ASC
+            )
+            return count is not None and all(
+                item.limit == count and item.direction is direction
+                for item in plans
+            )
+
+        comparison_bundle = re.fullmatch(
+            r"\s*평균(?:값)?(?:이|가)?\s*더\s*"
+            r"(?P<direction>큰|높은|작은|낮은)\s*"
+            r"(?:집단|그룹|묶음|쪽)(?:과|와|및)\s*"
+            r"(?:(?:집단|그룹|묶음)(?:\s*간|끼리의?)?\s*)?"
+            r"평균(?:값)?\s*(?:간\s*)?(?:차이|격차)"
+            r"(?:까지|도)?(?:\s*(?:알려|보여|제시)(?:해)?)?"
+            r"(?:\s*(?:주세요|줘|부탁드립니다))?\s*[.,;:!?]?\s*",
+            stripped,
+            re.IGNORECASE,
+        )
+        if comparison_bundle is not None:
+            direction = (
+                SortDirection.DESC
+                if comparison_bundle.group("direction") in {"큰", "높은"}
+                else SortDirection.ASC
+            )
+            return (
+                compound.cohort_mean_direction is direction
+                and compound.cohort_mean_difference
+            )
+        return False
+
+    def _canonical_ledger_proves_unresolved_span(
+        self,
+        span: str,
+        compound: TypedCompoundPlan,
+        *,
+        anchor_clause_coverage: _AnchorRelativeClauseCoverage | None,
+        named_set_clause_coverage: _NamedSetClauseCoverage | None,
+    ) -> bool:
+        """Treat HCX clause status as advisory only after server reconstruction.
+
+        HCX may leave a long product identity or a complete typed scope clause
+        unresolved.  Those labels cannot veto a plan when the frozen database
+        identity and the canonical clause ledger independently reproduce the
+        same literal text.  Conversely, a standalone semantic leftover (for
+        example a subjective popularity criterion) matches neither proof and
+        remains fail-closed.
+        """
+
+        if self._canonical_cohort_summary_proves_unresolved_span(span, compound):
+            return True
+
+        span_start = compound.question.find(span)
+        if (
+            span_start >= 0
+            and compound.question.find(span, span_start + 1) < 0
+            and any(
+                item.segment_start <= span_start
+                and span_start + len(span) <= item.segment_end
+                for item in self._canonical_family_clause_coverages(compound)
+            )
+        ):
+            # A unique span inside a fully reconstructed two-stage clause must
+            # pass the complete clause-local residual check.  Do not fall back
+            # to the older "one recognized token is enough" proof: that would
+            # let a valid metric hide a subjective suffix in the same HCX span.
+            return self._canonical_family_clause_proves_unresolved_span(
+                span,
+                compound,
+            )
+        coverage_family = (
+            anchor_clause_coverage.product_family
+            if anchor_clause_coverage is not None
+            else (
+                named_set_clause_coverage.product_family
+                if named_set_clause_coverage is not None
+                else None
+            )
+        )
+        if coverage_family is None:
+            # The legacy atomic proof recognizes useful fragments such as a
+            # metric noun or direction, but one recognized fragment must not
+            # hide an unrelated criterion in the same HCX clause.  Re-run the
+            # ordinary coverage gate over the complete literal and require
+            # every residual issue to have its own positive plan proof.
+            from finance_agent_core.agent.semantic_gate import SemanticCoverageGate
+
+            coverage = SemanticCoverageGate().evaluate(
+                span,
+                interaction_intent=compound.interaction_intent.value,
+            )
+            if coverage.unsupported_spans:
+                return False
+            issues = tuple(
+                dict.fromkeys(
+                    (
+                        *coverage.ambiguity_spans,
+                        *coverage.schema_link_gap_spans,
+                    )
+                )
+            )
+            return self._unresolved_span_is_proven(span, compound) and all(
+                self._unresolved_span_is_proven(issue, compound)
+                for issue in issues
+            )
+
+        # HCX commonly emits the identity-set declaration, the anchor
+        # declaration, or the reference-value presentation request as one
+        # conservative UNRESOLVED clause.  These clauses carry no new query
+        # semantics when (and only when) their exact count/grammar reproduces
+        # the already frozen canonical ledger.  Intercept them before the
+        # older atomic proof so a recognized identity or metric cannot hide
+        # extra words in the same model span.
+        if (
+            named_set_clause_coverage is not None
+            and re.search(r"(?:후보|대상).{0,80}?(?:한정|제한)", span) is not None
+        ):
+            return self._canonical_named_set_declaration_is_owned(
+                span,
+                compound,
+                named_set_clause_coverage,
+            )
+        if (
+            anchor_clause_coverage is not None
+            and re.search(
+                r"기준\s*(?:상품|종목|펀드|ETF|ETN|ETP|채권).{0,32}"
+                r"(?:수치|값|지표)",
+                span,
+                re.IGNORECASE,
+            )
+            is not None
+        ):
+            return self._canonical_anchor_projection_is_owned(
+                span,
+                anchor_clause_coverage,
+            )
+        if (
+            anchor_clause_coverage is not None
+            and re.search(
+                r"(?:기준(?:점)?\s*(?:으로|을|를|삼|잡|정)|"
+                r"(?:을|를)\s*기준(?:점)?(?:으로)?)",
+                span,
+                re.IGNORECASE,
+            )
+            is not None
+        ):
+            if self._canonical_anchor_declaration_is_owned(
+                span,
+                compound,
+                anchor_clause_coverage,
+            ):
+                return True
+            # HCX may merge the complete anchor declaration with the first
+            # adjacent metric into one unresolved clause.  Prove the two
+            # literal pieces independently instead of rejecting the request
+            # because of model-dependent sentence segmentation.  Trying only
+            # real whitespace/punctuation boundaries and requiring the prefix
+            # to satisfy the exact declaration grammar prevents a product
+            # name containing the word ``기준`` from acquiring authority.
+            split_points = {
+                match.end()
+                for match in re.finditer(r"(?:[.;:：!?]\s*|\s+)", span)
+            }
+            for split_at in sorted(split_points):
+                declaration = span[:split_at].strip()
+                remainder = span[split_at:].strip()
+                if not remainder or not self._canonical_anchor_declaration_is_owned(
+                    declaration,
+                    compound,
+                    anchor_clause_coverage,
+                ):
+                    continue
+                return self._canonical_ledger_proves_unresolved_span(
+                    remainder,
+                    compound,
+                    anchor_clause_coverage=anchor_clause_coverage,
+                    named_set_clause_coverage=named_set_clause_coverage,
+                )
+            return False
+
+        if self._canonical_identity_span_is_owned(
+            span,
+            compound,
+            anchor_clause_coverage=anchor_clause_coverage,
+            named_set_clause_coverage=named_set_clause_coverage,
+        ):
+            return True
+        if anchor_clause_coverage is not None and re.fullmatch(
+            r"\s*(?:이|그|해당)?\s*(?:기준\s*)?"
+            r"(?:상품|종목|펀드|ETF|ETN|ETP|채권)\s*"
+            r"(?:보다|대비|이상|이하|초과|미만)(?:인)?\s*",
+            span,
+            re.IGNORECASE,
+        ) is not None:
+            # Some shallow gates return only the relational marker
+            # (``상품보다``) as a residual. It carries no independent field,
+            # operator or threshold once the full anchor clause ledger has
+            # reproduced those items exactly.
+            return True
+        if self._unresolved_span_is_proven(span, compound):
+            return True
+        if anchor_clause_coverage is None:
+            return False
+
+        # A scope clause is accepted only when the ordinary deterministic
+        # parser reconstructs at least one exact filter already present in the
+        # canonical anchor ledger.  Merely mentioning a product family is not
+        # enough, and no new filter can be introduced by the model.
+        scopes = tuple(
+            item
+            for item in _compound_family_matches(span)
+            if item.product_family is coverage_family
+        )
+        if len(scopes) != 1:
+            return False
+        scope = scopes[0]
+        parsed = _compiled_clause_filters(
+            scope,
+            span,
+            extra_represented_source_fields=tuple(
+                dict.fromkeys(
+                    (
+                        *anchor_clause_coverage.ranking_metric.source_fields,
+                        *(
+                            source
+                            for metric, _operator in anchor_clause_coverage.relative_clauses
+                            for source in metric.source_fields
+                        ),
+                    )
+                )
+            ),
+            allow_owned_anchor_comparison=True,
+        )
+        if parsed is None:
+            return False
+        parsed = _without_dataset_label_filter(scope, parsed, span)
+        return bool(parsed) and all(
+            item in anchor_clause_coverage.filters for item in parsed
+        )
+
+    def _masked_canonical_identity_span(
+        self,
+        span: str,
+        compound: TypedCompoundPlan,
+        *,
+        expected: set[tuple[ProductFamily, str]],
+    ) -> tuple[str, bool] | None:
+        """Mask only unique DB identities owned by the frozen ledger.
+
+        ``_mask_anchor_identity_surfaces`` also removes a closed annotation
+        shell such as ``(ticker, 장내)``.  Reusing it here is important: the
+        venue is part of the printed reference identity, not a second cohort
+        filter.  A different or ambiguous DB identity inside the same HCX
+        span is rejected rather than silently left for punctuation cleanup.
+        """
+
+        start = compound.question.find(span)
+        if start < 0 or compound.question.find(span, start + 1) >= 0:
+            return None
+        end = start + len(span)
+        owned_ranges: list[tuple[int, int]] = []
+        for match in self.database_identity_matcher.find(compound.question):
+            if match.start < start or match.end > end:
+                continue
+            if not match.is_unique:
+                return None
+            candidate_keys = {
+                (
+                    candidate.product_family,
+                    normalize_database_identity(candidate.canonical_literal),
+                )
+                for candidate in match.candidates
+            }
+            represented = candidate_keys.intersection(expected)
+            if not represented:
+                # This is a real provided-DB identity, but not one frozen in
+                # the canonical set/anchor.  It can never be presentation
+                # noise for the current plan.
+                return None
+            if len(represented) != 1:
+                return None
+            owned_ranges.append((match.start - start, match.end - start))
+        masked = _mask_anchor_identity_surfaces(span, tuple(owned_ranges))
+        return masked, bool(owned_ranges)
+
+    def _canonical_named_set_declaration_is_owned(
+        self,
+        span: str,
+        compound: TypedCompoundPlan,
+        coverage: _NamedSetClauseCoverage,
+    ) -> bool:
+        """Prove one exact closed-set declaration without trusting HCX."""
+
+        expected_map = self._canonical_plan_identity_keys(
+            coverage.product_family,
+            coverage.product_ids,
+        )
+        if expected_map is None:
+            return False
+        masked_result = self._masked_canonical_identity_span(
+            span,
+            compound,
+            expected=set(expected_map),
+        )
+        if masked_result is None:
+            return False
+        masked, _contains_identity = masked_result
+        count = r"(?P<count>\d+|한|두|세|셋|네|넷|다섯|여섯|일곱|여덟|아홉|열)"
+        declaration = re.fullmatch(
+            rf"\s*(?:후보|대상)(?:를|은|는)?\s*"
+            rf"(?:이|다음|아래|위)?\s*{count}\s*(?:개\s*)?"
+            r"(?:상품|종목|펀드|ETF|ETN|ETP|채권)(?:으?로)?만\s*"
+            r"(?:한정|제한)(?:할게요|하겠습니다|합니다|했어요|해요|"
+            r"해\s*주세요|해주세요)?\s*[:：]?\s*"
+            r"(?:[,，.;:：·ㆍ/()\[\]{}\s]*)",
+            masked,
+            re.IGNORECASE,
+        )
+        if declaration is None:
+            return False
+        raw_count = declaration.group("count")
+        declared_count = (
+            int(raw_count)
+            if raw_count.isdigit()
+            else _KOREAN_SMALL_COUNTS.get(raw_count)
+        )
+        return declared_count == len(coverage.product_ids)
+
+    def _canonical_anchor_declaration_is_owned(
+        self,
+        span: str,
+        compound: TypedCompoundPlan,
+        coverage: _AnchorRelativeClauseCoverage,
+    ) -> bool:
+        """Prove only the grammatical declaration of one DB-bound anchor."""
+
+        expected_map = self._canonical_plan_identity_keys(
+            coverage.product_family,
+            (coverage.anchor_public_product_id,),
+        )
+        if expected_map is None:
+            return False
+        masked_result = self._masked_canonical_identity_span(
+            span,
+            compound,
+            expected=set(expected_map),
+        )
+        if masked_result is None:
+            return False
+        masked, _contains_identity = masked_result
+        return re.fullmatch(
+            r"\s*(?:을|를)?\s*(?:(?:비교|검색)\s*)?"
+            r"기준(?:점|\s*상품|\s*종목)?(?:으로)?\s*"
+            r"(?:(?:삼아|삼고|잡아|잡고|정해|정하고|두고|두어|"
+            r"설정해|설정하고)"
+            r"(?:\s*(?:주세요|주십시오|둘게요|할게요|합니다|해요))?"
+            r")?"
+            r"\s*[.;:：!?]?\s*",
+            masked,
+            re.IGNORECASE,
+        ) is not None
+
+    @staticmethod
+    def _canonical_anchor_projection_is_owned(
+        span: str,
+        coverage: _AnchorRelativeClauseCoverage,
+    ) -> bool:
+        """Prove an anaphoric request for the exact reference thresholds."""
+
+        relative_sources = tuple(
+            dict.fromkeys(
+                source
+                for metric, _operator in coverage.relative_clauses
+                for source in metric.source_fields
+            )
+        )
+        if (
+            not relative_sources
+            or coverage.projection_fields != relative_sources
+        ):
+            return False
+        count = r"(?P<count>\d+|한|두|세|셋|네|넷|다섯|여섯|일곱|여덟|아홉|열)"
+        projection = re.fullmatch(
+            rf"\s*(?:이|그|해당)?\s*기준\s*"
+            r"(?:상품|종목|펀드|ETF|ETN|ETP|채권)(?:의)?\s*"
+            rf"{count}\s*(?:개\s*)?(?:수치|값|지표)"
+            r"(?:도|를|을|은|는)?(?:\s*(?:함께|같이))?"
+            r"(?:\s*(?:적어|표시해|보여|알려|제공해)"
+            r"(?:\s*(?:주세요|주십시오|줘요|줘)|주세요|주십시오)?)?"
+            r"\s*[.;:：!?]?\s*",
+            span,
+            re.IGNORECASE,
+        )
+        if projection is None:
+            return False
+        raw_count = projection.group("count")
+        requested_count = (
+            int(raw_count)
+            if raw_count.isdigit()
+            else _KOREAN_SMALL_COUNTS.get(raw_count)
+        )
+        return requested_count == len(relative_sources)
+
+    def _canonical_identity_span_is_owned(
+        self,
+        span: str,
+        compound: TypedCompoundPlan,
+        *,
+        anchor_clause_coverage: _AnchorRelativeClauseCoverage | None,
+        named_set_clause_coverage: _NamedSetClauseCoverage | None,
+    ) -> bool:
+        """Prove that a whole HCX span contains only frozen DB identities."""
+
+        expected: set[tuple[ProductFamily, str]] = set()
+        if anchor_clause_coverage is not None:
+            anchor_keys = self._canonical_plan_identity_keys(
+                anchor_clause_coverage.product_family,
+                (anchor_clause_coverage.anchor_public_product_id,),
+            )
+            if anchor_keys is None:
+                return False
+            expected.update(anchor_keys)
+        if named_set_clause_coverage is not None:
+            named_keys = self._canonical_plan_identity_keys(
+                named_set_clause_coverage.product_family,
+                named_set_clause_coverage.product_ids,
+            )
+            if named_keys is None:
+                return False
+            expected.update(named_keys)
+        if not expected:
+            return False
+        masked_result = self._masked_canonical_identity_span(
+            span,
+            compound,
+            expected=expected,
+        )
+        if masked_result is None:
+            return False
+        residual, contains_identity = masked_result
+        if not contains_identity:
+            return False
+        return re.sub(r"[\s()\[\]{},.:;/'\"`‘’“”「」『』_\-]+", "", residual) == ""
 
     @staticmethod
     def _validate_metric(
@@ -7116,6 +9402,34 @@ class TypedCompoundQueryEngine:
             raise ValueError("compound plan is not reproducible by the server compiler")
 
         registry = load_field_registry()
+        if compound.cohort_mean_direction is not None or compound.cohort_mean_difference:
+            if compound.kind != "cohort" or len(compound.family_plans) != 2:
+                raise ValueError("cohort mean comparison requires exactly two cohorts")
+            cohort_canonical_fields: set[str] = set()
+            cohort_units: set[str] = set()
+            for cohort_plan in compound.family_plans:
+                if cohort_plan.metric.kind != "field" or len(
+                    cohort_plan.metric.source_fields
+                ) != 1:
+                    raise ValueError("cohort mean comparison requires one source metric")
+                canonical = _SOURCE_TO_CANONICAL.get(
+                    (cohort_plan.product_family, cohort_plan.metric.source_fields[0])
+                )
+                if canonical is None:
+                    raise ValueError("cohort mean metric has no canonical mapping")
+                definition = registry.require_field(
+                    canonical,
+                    [cohort_plan.product_family.value],
+                )
+                if (
+                    definition.value_type is not ValueType.NUMBER
+                    or not definition.aggregatable
+                ):
+                    raise ValueError("cohort mean metric is not aggregatable")
+                cohort_canonical_fields.add(canonical)
+                cohort_units.add(definition.unit)
+            if len(cohort_canonical_fields) != 1 or len(cohort_units) != 1:
+                raise ValueError("cohort means use incompatible metrics")
         validated: list[str] = []
         global_metric_ids: set[str] = set()
         global_directions: set[SortDirection] = set()
@@ -7696,6 +10010,27 @@ class TypedCompoundQueryEngine:
                     query_plan_intent=Intent.AGGREGATE,
                     capability_matrix_version=decision.capability_matrix_version,
                 )
+            if (
+                compound.kind == "cohort"
+                and compound.interaction_intent is InteractionIntent.AGGREGATE
+                and decision.draft.intent is InteractionIntent.SEARCH
+                and decision.query_plan_intent is Intent.SEARCH
+                and set(compound.requested_product_families)
+                == set(decision.draft.product_families)
+            ):
+                return RouteDecision(
+                    draft=decision.draft.model_copy(
+                        update={"intent": InteractionIntent.AGGREGATE}
+                    ),
+                    disposition=RouteDisposition.EXECUTE,
+                    reason_code="typed_cohort_aggregate_authorized",
+                    reason=(
+                        "두 집단의 범위·동일 수치·집계·대표 상품·평균 비교를 "
+                        "서버가 Typed Compound Plan으로 완전히 검증해 집계로 실행"
+                    ),
+                    query_plan_intent=Intent.AGGREGATE,
+                    capability_matrix_version=decision.capability_matrix_version,
+                )
             if not (
                 compound.kind == "aggregate_threshold"
                 and compound.interaction_intent is InteractionIntent.SEARCH
@@ -7740,6 +10075,17 @@ class TypedCompoundQueryEngine:
 
     def execute(self, compound: TypedCompoundPlan) -> CompoundExecution:
         executions = tuple(self._execute_family(compound, item) for item in compound.family_plans)
+        if compound.kind == "cohort" and (
+            compound.cohort_mean_direction is not None
+            or compound.cohort_mean_difference
+        ):
+            scope_values = {item.comparison_scope_value for item in executions}
+            if any(value is not None for value in scope_values) and (
+                None in scope_values or len(scope_values) != 1
+            ):
+                raise CohortComparisonUnavailableError(
+                    "cohort_comparison_scope_mismatch"
+                )
         global_rows: tuple[tuple[int, object, ProductEvidence, Decimal | str], ...] = ()
         if compound.kind == "global_ranking":
             combined: list[tuple[int, object, ProductEvidence, Decimal | str]] = []
@@ -7763,17 +10109,21 @@ class TypedCompoundQueryEngine:
                         _public_product_id(
                             item[1], compound.family_plans[item[0]].product_family
                         ),
+                        str(item[1].product_id),
                     )
                 )
             elif all(isinstance(item[3], str) for item in combined):
                 combined.sort(
                     key=lambda item: (
-                        str(item[3]).casefold(),
                         compound.family_plans[item[0]].product_family.value,
                         _public_product_id(
                             item[1], compound.family_plans[item[0]].product_family
                         ),
-                    ),
+                        str(item[1].product_id),
+                    )
+                )
+                combined.sort(
+                    key=lambda item: str(item[3]).casefold(),
                     reverse=direction is SortDirection.DESC,
                 )
             else:
@@ -7941,6 +10291,53 @@ class TypedCompoundQueryEngine:
                     f"[근거: {record.source_id} 원본 행 {record.source_row}, "
                     f"기준일 {record.dynamic_as_of.isoformat()}]"
                 )
+        if compound.kind == "cohort" and (
+            compound.cohort_mean_direction is not None
+            or compound.cohort_mean_difference
+        ):
+            summaries = tuple(item.aggregate_summary for item in executions)
+            if len(summaries) != 2 or any(item is None for item in summaries):
+                lines.append("집단 평균 비교: 유효한 수치가 없어 확인할 수 없습니다.")
+            else:
+                first = summaries[0]
+                second = summaries[1]
+                assert first is not None and second is not None
+                first_mean = first[1]
+                second_mean = second[1]
+                first_label = (
+                    executions[0].plan.cohort_label
+                    or executions[0].plan.product_family.value
+                )
+                second_label = (
+                    executions[1].plan.cohort_label
+                    or executions[1].plan.product_family.value
+                )
+                comparison_parts: list[str] = []
+                if compound.cohort_mean_direction is not None:
+                    if first_mean == second_mean:
+                        comparison_parts.append(
+                            f"두 집단의 평균이 같습니다({first_mean})."
+                        )
+                    else:
+                        choose_first = (
+                            first_mean > second_mean
+                            if compound.cohort_mean_direction is SortDirection.DESC
+                            else first_mean < second_mean
+                        )
+                        winner = first_label if choose_first else second_label
+                        direction_label = (
+                            "큰"
+                            if compound.cohort_mean_direction is SortDirection.DESC
+                            else "작은"
+                        )
+                        comparison_parts.append(
+                            f"평균이 더 {direction_label} 집단은 {winner}입니다."
+                        )
+                if compound.cohort_mean_difference:
+                    comparison_parts.append(
+                        f"두 집단 평균 차이는 {abs(first_mean - second_mean)}입니다."
+                    )
+                lines.append("집단 평균 비교: " + " ".join(comparison_parts))
         return CompoundExecution(
             plan=compound,
             families=executions,
@@ -8019,9 +10416,27 @@ class TypedCompoundQueryEngine:
         validated_fields = self._validate_compound_plan(compound)
         if receipt.validated_field_ids != validated_fields:
             raise ValueError("compound authorization validated fields changed")
+        anchor_clause_coverage = self._anchor_relative_clause_coverage(compound)
+        named_set_clause_coverage = self._named_set_clause_coverage(compound)
+        canonical_clause_ids = (
+            anchor_clause_coverage.clause_ids
+            if anchor_clause_coverage is not None
+            else (
+                named_set_clause_coverage.clause_ids
+                if named_set_clause_coverage is not None
+                else ()
+            )
+        )
+        if receipt.canonical_clause_ids != canonical_clause_ids:
+            raise ValueError("compound authorization canonical clause coverage changed")
         if any(
             span not in compound.question
-            or not self._unresolved_span_is_proven(span, compound)
+            or not self._canonical_ledger_proves_unresolved_span(
+                span,
+                compound,
+                anchor_clause_coverage=anchor_clause_coverage,
+                named_set_clause_coverage=named_set_clause_coverage,
+            )
             for span in receipt.covered_unresolved_spans
         ):
             raise ValueError("compound authorization semantic coverage changed")
@@ -8031,6 +10446,7 @@ class TypedCompoundQueryEngine:
             "plan_sha256": receipt.plan_sha256,
             "prior_reason_code": receipt.prior_reason_code,
             "covered_unresolved_spans": list(receipt.covered_unresolved_spans),
+            "canonical_clause_ids": list(receipt.canonical_clause_ids),
             "validated_field_ids": list(receipt.validated_field_ids),
             "authorized_disposition": RouteDisposition.EXECUTE.value,
             "authorized_intent": receipt.authorized_intent,
@@ -8088,6 +10504,7 @@ class TypedCompoundQueryEngine:
                         if item.aggregate_summary is None
                         else [str(value) for value in item.aggregate_summary]
                     ),
+                    "comparison_scope_value": item.comparison_scope_value,
                     "aggregate_threshold_evidence": (
                         None
                         if item.aggregate_threshold_evidence is None
@@ -8163,6 +10580,26 @@ class TypedCompoundQueryEngine:
         compound: TypedCompoundPlan,
         plan: CompoundFamilyPlan,
     ) -> CompoundFamilyExecution:
+        comparison_scope_source = None
+        if compound.kind == "cohort" and (
+            compound.cohort_mean_direction is not None
+            or compound.cohort_mean_difference
+        ):
+            canonical_metric = _SOURCE_TO_CANONICAL.get(
+                (plan.product_family, plan.metric.source_fields[0])
+            )
+            if canonical_metric is None:
+                raise ValueError("cohort comparison metric has no canonical mapping")
+            metric_definition = load_field_registry().require_field(
+                canonical_metric,
+                [plan.product_family.value],
+            )
+            if "trading_currency" in metric_definition.comparison_scope:
+                comparison_scope_source = _CANONICAL_TO_SOURCE.get(
+                    (plan.product_family, "trading_currency")
+                )
+                if comparison_scope_source is None:
+                    raise ValueError("cohort comparison has no trading-currency field")
         source_fields = tuple(
             dict.fromkeys(
                 (
@@ -8192,6 +10629,7 @@ class TypedCompoundQueryEngine:
                         else ()
                     ),
                     *(item.source_field for item in plan.aggregations),
+                    *((comparison_scope_source,) if comparison_scope_source else ()),
                 )
             )
         )
@@ -8300,6 +10738,7 @@ class TypedCompoundQueryEngine:
                 key=lambda item: (
                     shortlist_factor * item[1],
                     _public_product_id(item[0], plan.product_family),
+                    item[0].product_id,
                 ),
             )[: plan.shortlist_limit]
             shortlist_ids = tuple(
@@ -8336,6 +10775,35 @@ class TypedCompoundQueryEngine:
                 candidates.append((record, metric_value, None))
             candidate_count = len(candidates)
 
+        comparison_scope_value = None
+        if compound.kind == "cohort" and (
+            compound.cohort_mean_direction is not None
+            or compound.cohort_mean_difference
+        ):
+            if not candidates:
+                raise CohortComparisonUnavailableError("cohort_metric_values_unavailable")
+            if comparison_scope_source is not None:
+                currency_definition = load_field_registry().require_field(
+                    "trading_currency",
+                    [plan.product_family.value],
+                )
+                currencies: set[str] = set()
+                for record, _metric_value_for_sort, _shortlist_value in candidates:
+                    normalized_currency = _normalized_evidence_value(
+                        _raw_value(record, comparison_scope_source),
+                        currency_definition,
+                    )
+                    if normalized_currency is None:
+                        raise CohortComparisonUnavailableError(
+                            "cohort_trading_currency_unavailable"
+                        )
+                    currencies.add(str(normalized_currency).strip().casefold())
+                if len(currencies) != 1:
+                    raise CohortComparisonUnavailableError(
+                        "cohort_trading_currency_not_uniform"
+                    )
+                comparison_scope_value = next(iter(currencies))
+
         if compound.kind in {
             "named_pair",
             "cross_family_named_comparison",
@@ -8367,16 +10835,24 @@ class TypedCompoundQueryEngine:
                 key=lambda item: (
                     factor
                     * (item[1] if isinstance(item[1], Decimal) else Decimal("0")),
+                    _public_product_id(item[0], plan.product_family),
                     item[0].product_id,
                 ),
             )[: plan.limit]
         elif all(isinstance(item[1], str) for item in candidates):
-            ranked = sorted(
+            # Metric direction must never reverse the deterministic tie-break.
+            # Seed public product-ID ascending order, then rely on Python's
+            # stable sort for the requested text-metric direction.
+            public_id_ordered = sorted(
                 candidates,
                 key=lambda item: (
-                    str(item[1]).casefold(),
                     _public_product_id(item[0], plan.product_family),
+                    item[0].product_id,
                 ),
+            )
+            ranked = sorted(
+                public_id_ordered,
+                key=lambda item: str(item[1]).casefold(),
                 reverse=plan.direction is SortDirection.DESC,
             )[: plan.limit]
         else:
@@ -8445,6 +10921,7 @@ class TypedCompoundQueryEngine:
             shortlist_ids=shortlist_ids,
             metric_values=metric_values,
             aggregate_summary=aggregate_summary,
+            comparison_scope_value=comparison_scope_value,
             aggregate_threshold_evidence=threshold_evidence,
         )
 
@@ -9534,6 +12011,7 @@ class TypedCompoundQueryEngine:
 
 __all__ = [
     "AggregateThresholdUnavailableError",
+    "CohortComparisonUnavailableError",
     "CompoundAuthorizationReceipt",
     "CompoundAggregateThreshold",
     "CompoundAggregateThresholdEvidence",

@@ -25,6 +25,9 @@ _PRESENTATION_ONLY_SENTENCE = re.compile(
     r"반환\s*순서를\s*검산할\s*수\s*있도록|"
     r"상품군\s*사이의\s*단위를\s*억지로\s*맞추지\s*말고|"
     r"서로\s*다른\s*지표를\s*(?:직접\s*)?(?:합산하지|합치지)\s*말고|"
+    r"(?:두|각|여러)?\s*(?:표|목록|결과)(?:를|는)?\s*"
+    r"(?:하나의|한|단일)\s*[^.!?]{1,40}?\s*순위(?:로|에)?\s*"
+    r"(?:합치|섞|통합)지는?\s*(?:마세요|말아\s*주세요|말아줘|말 것)|"
     r"단위가\s*다른\s*값은\s*직접\s*(?:합산하지|합치지)\s*말고|"
     r"서로\s*다른\s*(?:수치의\s*)?단위를\s*답변에서\s*분명히\s*구분|"
     r"서로\s*다른\s*기간이나\s*금리를\s*하나의\s*숫자로\s*환산하지\s*말|"
@@ -56,6 +59,20 @@ _PRESENTATION_ONLY_SENTENCE = re.compile(
 )
 
 
+# Conversational preambles can share a sentence with the real query
+# (``...확인하고 싶은데 국내 ETF에서 ...``).  Mask only the bounded
+# preamble span; treating it as a presentation-only *sentence* would erase
+# every following filter and ranking condition.
+_INLINE_CONVERSATIONAL_PREAMBLE = re.compile(
+    r"(?:상품|투자\s*대안)\s*선택\s*전에\s*(?:먼저|우선|일단)\s*"
+    r"(?:확인하고|확인해\s*보고|살펴보고|검토해\s*보고|"
+    r"확인|살펴보|검토해\s*보)\s*"
+    r"(?:싶(?:습니다|어요|은데|어서)?|하려(?:고|는지)?|하겠습니다)"
+    r"(?:\s*[,，])?",
+    re.IGNORECASE,
+)
+
+
 # A result-projection list is sometimes appended to the actual query in the
 # same sentence (for example, "... TOP 5를 만들고 ID·실제 값·후보 수를
 # 밝혀 주세요").  It is presentation-only only when at least one identity
@@ -72,11 +89,27 @@ _INLINE_RESULT_PROJECTION = re.compile(
 )
 
 
+# A non-combination display constraint is often appended after a comma to a
+# sentence that also contains real shortlist instructions. Mask only that
+# negative tail; a positive ``한 순위로 합쳐 주세요`` never matches.
+_INLINE_NON_MERGE = re.compile(
+    r"(?:[,;]\s*)?(?:두|각|여러)?\s*(?:표|목록|결과)(?:를|는)?\s*"
+    r"(?:하나의|한|단일)\s*[^.!?]{1,40}?\s*순위(?:로|에)?\s*"
+    r"(?:합치|섞|통합)지는?\s*(?:마세요|말아\s*주세요|말아줘|말 것)",
+    re.IGNORECASE,
+)
+
+
 def mask_response_presentation(question: str) -> str:
     """Blank audited response-format spans while preserving character offsets."""
 
     masked = list(question)
-    for pattern in (_PRESENTATION_ONLY_SENTENCE, _INLINE_RESULT_PROJECTION):
+    for pattern in (
+        _INLINE_CONVERSATIONAL_PREAMBLE,
+        _PRESENTATION_ONLY_SENTENCE,
+        _INLINE_RESULT_PROJECTION,
+        _INLINE_NON_MERGE,
+    ):
         snapshot = "".join(masked)
         for match in pattern.finditer(snapshot):
             masked[match.start() : match.end()] = " " * (match.end() - match.start())

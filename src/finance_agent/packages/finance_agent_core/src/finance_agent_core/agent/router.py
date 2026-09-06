@@ -145,7 +145,14 @@ _UNSUPPORTED = re.compile(
 )
 _EXTERNAL_POLICY = re.compile(r"세율|세금|과세|거래\s*수수료", re.IGNORECASE)
 _UNAVAILABLE_MARKET_DATA = re.compile(
-    r"배당.*(?:가장|최대)|"
+    # Keep the unavailable dividend metric local to its own ranking clause.
+    # An official product name can contain ``배당`` while a later ``최대
+    # 2개`` is merely the result limit; an unbounded ``.*`` used to join those
+    # unrelated surfaces and turn a valid DB search into UNSUPPORTED.
+    r"배당(?:금|률|수익률)?(?:이|가)?\s*(?:가장|제일|최대|최고)\s*"
+    r"(?:높|크|많)|"
+    r"(?:가장|제일|최대|최고)\s*(?:높|크|많)[^,.;!?]{0,12}?"
+    r"배당(?:금|률|수익률)?|"
     r"하락장.*잘\s*버티|"
     r"시장\s*전망",
     re.IGNORECASE,

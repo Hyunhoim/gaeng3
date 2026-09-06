@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from time import perf_counter
 
+from finance_agent_core.agent.external_control_language import (
+    build_external_cannot_verify_narrative,
+)
 from finance_agent_core.agent.external_knowledge_router import (
     ExternalKnowledgeRouteDecision,
     ExternalKnowledgeRouteDisposition,
@@ -17,12 +20,6 @@ from finance_agent_core.observability import (
     AuditOutcome,
     AuditStage,
     current_request_audit,
-)
-
-_EVIDENCE_CANNOT_VERIFY = (
-    "현재 공식 외부 자료 검색과 근거 검증을 끝까지 완료하지 못해 제공 데이터 내 "
-    "해당 상품의 존재 여부를 확인할 수 없습니다. 일부 조건을 무시한 상품 검색은 "
-    "수행하지 않았습니다."
 )
 
 
@@ -51,6 +48,10 @@ def external_knowledge_route_to_backend(
     started = perf_counter()
     if decision.disposition is ExternalKnowledgeRouteDisposition.KNOWLEDGE_SEARCH:
         assert decision.plan is not None
+        narrative = build_external_cannot_verify_narrative(
+            decision.plan,
+            reason_codes=(decision.reason_code,),
+        )
         families = sorted(
             {
                 family
@@ -64,7 +65,7 @@ def external_knowledge_route_to_backend(
             status=BackendStatus.CANNOT_VERIFY,
             intent=decision.plan.interaction_intent,
             product_families=families,
-            answer=_EVIDENCE_CANNOT_VERIFY,
+            answer=narrative.answer,
             query_plan=decision.plan,
             candidate_count=None,
             products=[],

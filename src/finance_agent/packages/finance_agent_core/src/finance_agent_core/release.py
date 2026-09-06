@@ -238,6 +238,7 @@ class PublicDocumentRetrievalRelease(ReleaseModel):
 class ExternalKnowledgeArtifactRelease(ReleaseModel):
     artifact_kind: Literal["official_external_knowledge"] = "official_external_knowledge"
     retrieval_mode: Literal[
+        "approved_corpus_cache_only",
         "approved_corpus_cache_first",
         "verified_live_official",
         "verified_live_official_with_relation_graph",
@@ -259,7 +260,10 @@ class ExternalKnowledgeArtifactRelease(ReleaseModel):
 
     @model_validator(mode="after")
     def validate_retrieval_mode(self) -> ExternalKnowledgeArtifactRelease:
-        if self.retrieval_mode == "approved_corpus_cache_first":
+        if self.retrieval_mode in {
+            "approved_corpus_cache_only",
+            "approved_corpus_cache_first",
+        }:
             if (
                 self.document_bm25_sha256 is None
                 or self.document_dense_sha256 is None
@@ -359,6 +363,11 @@ class RuntimeFeatureRelease(ReleaseModel):
         adaptive = self.retrieval.schema_dense == "activated_kure_candidate_only"
         if self.model.semantic_resolver_operation_enabled and not adaptive:
             raise ValueError("HCLX Semantic Resolver requires activated Schema Dense")
+        if (
+            self.model.semantic_resolver_operation_enabled
+            and not self.model.intent_analysis_operation_enabled
+        ):
+            raise ValueError("HCLX Semantic Resolver requires HCLX Intent analysis")
         return self
 
 
@@ -885,6 +894,16 @@ def build_release_components(inputs: RuntimeReleaseInputs) -> AgentReleaseCompon
         raise AgentReleaseError(
             AgentReleaseCode.RUNTIME_MISMATCH,
             "HCLX Semantic Resolver requires activated Schema Dense",
+        )
+    if inputs.schema_dense_enabled and not inputs.hcx_semantic_resolver_enabled:
+        raise AgentReleaseError(
+            AgentReleaseCode.RUNTIME_MISMATCH,
+            "activated Schema Dense requires HCLX Semantic Resolver in a final release",
+        )
+    if inputs.hcx_semantic_resolver_enabled and not inputs.hcx_intent_analysis_enabled:
+        raise AgentReleaseError(
+            AgentReleaseCode.RUNTIME_MISMATCH,
+            "HCLX Semantic Resolver requires HCLX Intent analysis",
         )
     if inputs.hcx_semantic_resolver_enabled and inputs.hcx_model != "HCX-007":
         raise AgentReleaseError(

@@ -58,8 +58,6 @@ services:
       FINANCE_EXTERNAL_KNOWLEDGE_ARTIFACT_SHA256: ${FINANCE_EXTERNAL_KNOWLEDGE_ARTIFACT_SHA256:-}
       FINANCE_EXTERNAL_TEMPORAL_RELATION_FILE: ${FINANCE_EXTERNAL_TEMPORAL_RELATION_FILE:-}
       FINANCE_EXTERNAL_TEMPORAL_RELATION_SHA256: ${FINANCE_EXTERNAL_TEMPORAL_RELATION_SHA256:-}
-      NAVER_API_HUB_CLIENT_ID_FILE: ${NAVER_API_HUB_CLIENT_ID_FILE:-}
-      NAVER_API_HUB_CLIENT_SECRET_FILE: ${NAVER_API_HUB_CLIENT_SECRET_FILE:-}
       FINANCE_AUDIT_MODE: jsonl
       FINANCE_AUDIT_FILE: /audit/events.jsonl
       FINANCE_AUDIT_QUEUE_CAPACITY: ${FINANCE_AUDIT_QUEUE_CAPACITY:-2048}
@@ -93,18 +91,10 @@ services:
     secrets:
       - source: clovastudio_api_key
         target: clovastudio_api_key
-      - source: naver_api_hub_client_id
-        target: naver_api_hub_client_id
-      - source: naver_api_hub_client_secret
-        target: naver_api_hub_client_secret
 
 secrets:
   clovastudio_api_key:
     file: ${CLOVASTUDIO_API_KEY_HOST_FILE:-/dev/null}
-  naver_api_hub_client_id:
-    file: ${NAVER_API_HUB_CLIENT_ID_HOST_FILE:-/dev/null}
-  naver_api_hub_client_secret:
-    file: ${NAVER_API_HUB_CLIENT_SECRET_HOST_FILE:-/dev/null}
 
 volumes:
   finance-data:

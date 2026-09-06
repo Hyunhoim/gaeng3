@@ -49,6 +49,29 @@ class _FactQuery:
     quality_column: str | None = None
     currency_required: bool = False
     as_of_column: str = "dynamic_as_of"
+    from_source_json: bool = False
+    default_quality: QualityStatus = QualityStatus.VALID
+
+    @property
+    def storage_column(self) -> str:
+        return "source_values_json" if self.from_source_json else self.source_column
+
+    @property
+    def value_sql(self) -> str:
+        if not self.from_source_json:
+            return self.source_column
+        if not self.source_column.replace("_", "").isalnum():
+            raise ValueError("unsafe official fact source column")
+        path = f"$.{self.source_column}"
+        # SQLite casts a comma-formatted string such as ``1,234`` to ``1``.
+        # Accept only JSON numeric primitives so a malformed or schema-drifted
+        # source value is omitted instead of silently changing a ranking.
+        return (
+            f"CASE WHEN json_type(source_values_json, '{path}') "
+            "IN ('integer', 'real') THEN "
+            f"ROUND(CAST(json_extract(source_values_json, '{path}') AS REAL), 8) "
+            "ELSE NULL END"
+        )
 
 
 _RANK_QUERY: dict[str, dict[ProductFamily, _FactQuery]] = {
@@ -67,6 +90,16 @@ _RANK_QUERY: dict[str, dict[ProductFamily, _FactQuery]] = {
             True,
         ),
     },
+    "net_asset_total": {
+        ProductFamily.DOMESTIC_ETP: _FactQuery(
+            "pd_net_tamt",
+            1.0,
+            "source_currency_amount",
+            currency_required=True,
+            from_source_json=True,
+            default_quality=QualityStatus.PARTIAL,
+        ),
+    },
     "total_expense_ratio_pct": {
         ProductFamily.DOMESTIC_ETP: _FactQuery(
             "total_expense_ratio_micro_pct",
@@ -79,6 +112,14 @@ _RANK_QUERY: dict[str, dict[ProductFamily, _FactQuery]] = {
             1_000_000.0,
             "pct_point",
             "total_expense_ratio_quality",
+        ),
+    },
+    "tracking_error_pct": {
+        ProductFamily.DOMESTIC_ETP: _FactQuery(
+            "tracking_error_hundredth_pct",
+            100.0,
+            "pct_point",
+            "tracking_error_quality",
         ),
     },
     "one_day_return_pct": {
@@ -242,6 +283,14 @@ class SqliteOfficialProductFactProvider:
             self.source_ids = {
                 family: registry.datasets[family.value].source_id for family in self.database_paths
             }
+        self._table_columns: dict[ProductFamily, frozenset[str]] = {}
+        for family, path in self.database_paths.items():
+            table = _IDENTITY_QUERY[family][0]
+            with connect_read_only(path) as connection:
+                self._table_columns[family] = frozenset(
+                    str(row[1])
+                    for row in connection.execute(f"PRAGMA table_info({table})").fetchall()
+                )
 
     def fetch(
         self,
@@ -249,7 +298,12 @@ class SqliteOfficialProductFactProvider:
         selection: KnowledgeProductSelection | None,
         requested_fields: tuple[str, ...] = (),
     ) -> tuple[OfficialProductFact, ...]:
-        keys = tuple(sorted(set(product_keys), key=lambda item: (item[0].value, item[1])))
+        # Evidence-date ordering is already verified before this DB join.  Keep
+        # that deterministic order when no provided-DB numeric ranking is
+        # requested; a set/sort here would silently erase the user's ordering.
+        keys = tuple(dict.fromkeys(product_keys))
+        if selection is not None:
+            keys = tuple(sorted(set(keys), key=lambda item: (item[0].value, item[1])))
         rank_facts: list[OfficialProductFact] = []
         selected_keys = keys
         if selection is not None:
@@ -258,6 +312,8 @@ class SqliteOfficialProductFactProvider:
                 if family not in family_query:
                     continue
                 query = family_query[family]
+                if query.storage_column not in self._table_columns.get(family, ()):
+                    continue
                 fact = self._fetch_field(
                     family,
                     product_id,
@@ -295,6 +351,15 @@ class SqliteOfficialProductFactProvider:
         # already carry canonical product identity, so avoid a duplicate name
         # field on that path.
         requested = set(requested_fields)
+        # Bond and ETP public identities differ from the normalized internal
+        # product key.  Always carry the official ticker into ProductEvidence
+        # so public responses, cross-family joins and evaluation all refer to
+        # the organizer's source identity rather than an internal prefix.
+        if any(
+            "ticker" in self._table_columns.get(family, ())
+            for family, _product_id in selected_keys
+        ):
+            requested.add("ticker")
         if selection is None:
             requested.add("product_name")
         if selection is not None:
@@ -306,6 +371,8 @@ class SqliteOfficialProductFactProvider:
                 if family not in family_query:
                     continue
                 query = family_query[family]
+                if query.storage_column not in self._table_columns.get(family, ()):
+                    continue
                 fact = self._fetch_field(
                     family,
                     product_id,
@@ -337,13 +404,13 @@ class SqliteOfficialProductFactProvider:
         quality_sql = (
             f"{query.quality_column} AS field_quality"
             if query.quality_column is not None
-            else "'VALID' AS field_quality"
+            else f"'{query.default_quality.value}' AS field_quality"
         )
         with connect_read_only(self.database_paths[family]) as connection:
             row = connection.execute(
                 f"""
                 SELECT product_id, product_name, source_row,
-                       {query.source_column} AS value, {query.as_of_column} AS as_of,
+                       {query.value_sql} AS value, {query.as_of_column} AS as_of,
                        {currency_sql}, {quality_sql}
                 FROM {table}
                 WHERE product_id = ? AND is_quarantined = 0

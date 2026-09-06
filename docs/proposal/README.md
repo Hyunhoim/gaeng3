@@ -1,8 +1,8 @@
 # 기술 제안서 작성 허브
 
-상태: 초안 v0.3 · P0-10 관계 검색 공개 릴리스 로컬 검증 반영
+상태: 과제상세소개자료 8개 항목 정렬본 · im-not-ai 보수 윤문 완료
 
-기준일: 2026-08-20
+기준일: 2026-09-04
 
 제출 마감: 2026-09-06
 
@@ -37,7 +37,11 @@ AI 구현 세부사항은 `src/finance_agent/docs/`에 유지하고, 이곳에�
 
 | 문서 | 역할 | 상태 |
 | --- | --- | --- |
-| [기술 제안서 원문](technical-proposal.md) | 공식 7개 항목을 따르는 팀 공통 원고 | 초안 v0.5 · P0-10 로컬 검증 반영 |
+| [im-not-ai 윤문본](technical-proposal-task-detail-aligned-humanized-2026-09-04.md) | 요청된 01 제안 요약~08 부록 구조를 유지하고 어색한 AI 문체를 보수적으로 다듬은 최신 원고 | Humanize KR v2.3.2 · 검사 통과 |
+| [im-not-ai 윤문본 Word](finance-product-agent-technical-proposal-task-detail-aligned-humanized-2026-09-04.docx) | 윤문 내용을 반영한 편집 가능한 Word 초안 | 8개 장·표·도식 유지 |
+| [윤문 전 정렬본](technical-proposal-task-detail-aligned-2026-09-04.md) | 사실·수치 비교를 위한 윤문 전 원고 | v1.0 · `d356d4b` 기준 |
+| [윤문 전 정렬본 Word](finance-product-agent-technical-proposal-task-detail-aligned-2026-09-04.docx) | 윤문 전 Word 초안 | v1.0 · 8개 장 정렬 |
+| [기존 기술 제안서 원문](technical-proposal.md) | 2026-08-20 기준 장문 원고와 근거 서술 참고 | 참고용 · 최신 제출 구조는 위 정렬본 사용 |
 | [예선 1등 실행 전략](competition-strategy.md) | 공식 배점에 맞춘 우선순위·Qwen 실험·기술 채택 기준 | 실행 중 |
 | [제안서 근거 맵](evidence-map.md) | 제안서 주장과 코드·평가 결과의 연결 | 활성 |
 | [연구 근거](research-basis.md) | 탑티어 연구에서 차용한 원칙과 실제 구현·한계의 구분 | 활성 |

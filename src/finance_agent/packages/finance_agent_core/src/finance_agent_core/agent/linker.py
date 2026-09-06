@@ -13,10 +13,15 @@ from finance_agent_core.agent.field_language import (
 )
 from finance_agent_core.agent.numeric_language import requested_result_limit
 from finance_agent_core.agent.presentation import semantic_query_surface
+from finance_agent_core.agent.product_identity import (
+    DatabaseProductIdentityMatch,
+    mask_database_product_identity_spans,
+)
 from finance_agent_core.agent.safety import normalize_user_question
 from finance_agent_core.agent.semantic_aliases import (
     explicit_product_name_order,
     filter_alias_matches,
+    numeric_field_reference_aliases,
     rank_alias_matches,
     ranking_cue_spans,
     ranking_intent_present,
@@ -189,6 +194,42 @@ def _looks_like_schema_scope(value: str) -> bool:
         value.strip(),
         flags=re.IGNORECASE,
     ) is not None
+
+
+_COMPLETE_MANAGER_LITERAL = re.compile(
+    r"(?:"
+    r"(?:자산|투자자산|집합투자|투자신탁)?운용(?:주식회사|㈜)?|"
+    r"(?:asset\s+management|capital\s+management|fund\s+advis(?:or|er)s?|"
+    r"advis(?:or|er)s?|management|investments?)"
+    r"(?:\s*,?\s*(?:llc|l\.?p\.?|inc\.?|ltd\.?|plc|corp\.?|"
+    r"corporation|company|co\.?|ag|s\.?a\.?))?|"
+    r"(?:llc|l\.?p\.?|inc\.?|ltd\.?|plc|corp\.?|corporation|ag|s\.?a\.?)"
+    r")$",
+    re.IGNORECASE,
+)
+
+
+def _natural_manager_operator(
+    value: str,
+    exact_manager_values: frozenset[str] = frozenset(),
+) -> str:
+    """Use equality for a complete legal name, not for a shortened brand.
+
+    ``키움 운용 ETF`` is a shortened surface and may need bounded substring
+    matching against a legal source value.  ``First Trust Advisors LP 운용
+    ETF`` supplies the complete literal; widening it changes the requested
+    candidate universe.  Explicit ``포함``/``들어간`` wording is handled by
+    the dedicated text grammar and remains ``CONTAINS``.
+    """
+
+    normalized = re.sub(r"\s+", " ", value).strip(" ,.;:()[]{}")
+    normalized_key = normalized.casefold()
+    return (
+        "eq"
+        if normalized_key in exact_manager_values
+        or _COMPLETE_MANAGER_LITERAL.search(normalized)
+        else "contains"
+    )
 
 
 def _explicit_name_order_direction(question: str) -> str | None:
@@ -618,6 +659,19 @@ def _merge_registry_numeric_fields(
         for phrase in registry_field_phrases(definition):
             if phrase not in phrases:
                 phrases.append(phrase)
+    return [(field, tuple(phrases)) for field, phrases in merged.items()]
+
+
+def _merge_typed_numeric_field_references(
+    numeric_fields: list[tuple[str, tuple[str, ...]]],
+    family: str,
+) -> list[tuple[str, tuple[str, ...]]]:
+    """Merge colloquial field names without inventing numeric predicates."""
+
+    merged = {field: list(aliases) for field, aliases in numeric_fields}
+    for field, aliases in numeric_field_reference_aliases(family):
+        phrases = merged.setdefault(field, [])
+        phrases.extend(alias for alias in aliases if alias not in phrases)
     return [(field, tuple(phrases)) for field, phrases in merged.items()]
 
 
@@ -1559,8 +1613,24 @@ def build_lexical_hints(
     product_family_hint: str | None = None,
     *,
     force_product_family_hint: bool = False,
+    exact_identity_matches: tuple[DatabaseProductIdentityMatch, ...] = (),
+    exact_manager_values: tuple[str, ...] = (),
 ) -> dict[str, Any]:
+    if product_family_hint is None and exact_identity_matches:
+        matched_families = {
+            candidate.product_family.value
+            for match in exact_identity_matches
+            for candidate in match.candidates
+        }
+        if len(matched_families) == 1:
+            product_family_hint = next(iter(matched_families))
+    question = mask_database_product_identity_spans(question, exact_identity_matches)
     question = semantic_query_surface(normalize_user_question(question))
+    normalized_exact_managers = frozenset(
+        re.sub(r"\s+", " ", value).strip(" ,.;:()[]{}").casefold()
+        for value in exact_manager_values
+        if value.strip()
+    )
     question = re.sub(
         r"(?m)(?:^|(?<=[.!?])\s+)"
         r"순위값의\s*방향이\s*높은\s*순인지\s*낮은\s*순인지"
@@ -2078,7 +2148,11 @@ def build_lexical_hints(
             manager_value = _literal_actor_value(natural_manager.group("value"))
             if manager_value:
                 required[:] = [item for item in required if item["field"] != "manager"]
-                add("manager", manager_value, "contains")
+                add(
+                    "manager",
+                    manager_value,
+                    _natural_manager_operator(manager_value, normalized_exact_managers),
+                )
 
         # The noun ``이름`` belongs to its nearest labelled field.  Without
         # this owner, ``운용사 이름에 Vanguard가 들어간`` is captured by the
@@ -2420,7 +2494,11 @@ def build_lexical_hints(
             manager_value = _literal_actor_value(manager.group(1))
             if manager_value:
                 required[:] = [item for item in required if item["field"] != "manager"]
-                add("manager", manager_value, "contains")
+                add(
+                    "manager",
+                    manager_value,
+                    _natural_manager_operator(manager_value, normalized_exact_managers),
+                )
         bare_manager = re.search(
             r"(?:^|[.!?。]\s*|(?:첫째|둘째|셋째|넷째),?\s*)"
             r"([0-9A-Za-z가-힣&·+_ -]{2,60}?)\s+운용\s+(?:국내\s*)?(?:ETF|ETN)",
@@ -2438,7 +2516,11 @@ def build_lexical_hints(
                 is None
             ):
                 required[:] = [item for item in required if item["field"] != "manager"]
-                add("manager", manager_value, "contains")
+                add(
+                    "manager",
+                    manager_value,
+                    _natural_manager_operator(manager_value, normalized_exact_managers),
+                )
         stated_manager = re.search(
             r"([0-9A-Za-z가-힣&·+._/-]{1,40})(?:가|이)\s*"
             r"운용사(?:로)?\s*(?:적힌|표시|기재)(?:된|되어)?",
@@ -3010,7 +3092,11 @@ def build_lexical_hints(
             manager_value = _literal_actor_value(manager.group(1))
             if manager_value:
                 required[:] = [item for item in required if item["field"] != "manager"]
-                add("manager", manager_value, "contains")
+                add(
+                    "manager",
+                    manager_value,
+                    _natural_manager_operator(manager_value, normalized_exact_managers),
+                )
         bare_manager = re.search(
             r"(?:^|[.!?。]\s*|(?:첫째|둘째|셋째|넷째),?\s*)"
             r"([0-9A-Za-z가-힣&·+._ -]{2,80}?)"
@@ -3029,7 +3115,11 @@ def build_lexical_hints(
                 is None
             ):
                 required[:] = [item for item in required if item["field"] != "manager"]
-                add("manager", manager_value, "contains")
+                add(
+                    "manager",
+                    manager_value,
+                    _natural_manager_operator(manager_value, normalized_exact_managers),
+                )
         inverse_short_status = re.search(
             r"(?:인버스\s*(?:또는|·|/)?\s*숏|인버스·숏)\s*여부"
             r"(?:가|는|은|이)?\s*[:：]?\s*(Y|N|예|아니오)",
@@ -3427,6 +3517,7 @@ def build_lexical_hints(
         )
     if family is not None:
         numeric_fields = _merge_registry_numeric_fields(numeric_fields, family)
+        numeric_fields = _merge_typed_numeric_field_references(numeric_fields, family)
     if family == "domestic_etp" and re.search(r"순\s*자산\s*총액", question):
         # 국내 ETP에는 최근 AUM(du_last_aum)과 공식 순자산총액
         # (pd_net_tamt)이 별도 field다. 긴 명시 표현을 짧은 '순자산'
@@ -4211,7 +4302,11 @@ def build_lexical_hints(
         referential_direction = re.search(
             r"(?:TOP|BOTTOM)\s*\d*|"
             r"(?:(?:그|이|해당)\s*(?:값|수치)(?:이|가|은|는)?\s*)?"
-            r"(?:높은|낮은|큰|작은|많은|적은)\s*순",
+            r"(?:높은|낮은|큰|작은|많은|적은)\s*순|"
+            r"(?:중|가운데)\s*(?:가장|제일)\s*"
+            r"(?:높은|낮은|큰|작은|많은|적은|저렴한|비싼)\s*"
+            r"(?:\d+|한|두|세|셋|네|넷|다섯|여섯|일곱|여덟|아홉|열)\s*"
+            r"(?:개|종목|상품)",
             question,
             flags=re.IGNORECASE,
         )
@@ -4649,7 +4744,8 @@ def build_lexical_hints(
                         span.strip() in ranking_surface
                         and re.fullmatch(
                             r"(?:가장\s*|제일\s*)?(?:높은|낮은|큰|작은|많은|적은|"
-                            r"긴|짧은|빠른|오래된|상위|하위|오름차순|내림차순)",
+                            r"긴|짧은|빠른|오래된|저렴(?:한)?|싼|비싼|상위|하위|"
+                            r"오름차순|내림차순)",
                             span.strip(),
                             flags=re.IGNORECASE,
                         )
@@ -4917,7 +5013,13 @@ def canonicalize_query_plan_payload(
     payload: dict[str, Any],
     *,
     force_product_family_hint: bool = False,
+    exact_identity_matches: tuple[DatabaseProductIdentityMatch, ...] = (),
+    exact_manager_values: tuple[str, ...] = (),
 ) -> dict[str, Any]:
+    linking_question = mask_database_product_identity_spans(
+        question,
+        exact_identity_matches,
+    )
     raw_families = payload.get("product_families")
     product_family_hint = (
         raw_families[0]
@@ -4930,6 +5032,8 @@ def canonicalize_query_plan_payload(
         question,
         product_family_hint,
         force_product_family_hint=force_product_family_hint,
+        exact_identity_matches=exact_identity_matches,
+        exact_manager_values=exact_manager_values,
     )
     family = hints["product_family"]
     if family is None:
@@ -4942,7 +5046,7 @@ def canonicalize_query_plan_payload(
         family,
     )
     rankings = hints["required_rankings"]
-    explicitly_requested_fields = _explicit_projection_fields(question, family)
+    explicitly_requested_fields = _explicit_projection_fields(linking_question, family)
     payload["constraints"] = constraints
     constraint_expression = _constraint_expression_payload(
         constraints,
@@ -4999,6 +5103,17 @@ def canonicalize_query_plan_payload(
     return payload
 
 
-def canonicalize_linked_query_plan(question: str, plan: QueryPlan) -> QueryPlan:
-    payload = canonicalize_query_plan_payload(question, plan.model_dump(mode="json"))
+def canonicalize_linked_query_plan(
+    question: str,
+    plan: QueryPlan,
+    *,
+    exact_identity_matches: tuple[DatabaseProductIdentityMatch, ...] = (),
+    exact_manager_values: tuple[str, ...] = (),
+) -> QueryPlan:
+    payload = canonicalize_query_plan_payload(
+        question,
+        plan.model_dump(mode="json"),
+        exact_identity_matches=exact_identity_matches,
+        exact_manager_values=exact_manager_values,
+    )
     return QueryPlan.model_validate(payload)

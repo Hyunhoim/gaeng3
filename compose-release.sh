@@ -7,6 +7,7 @@ RELEASE_SNAPSHOT_DIR="$(mktemp -d "${TMPDIR:-/tmp}/finance-agent-release.XXXXXXX
 RELEASE_ENV_SNAPSHOT="$RELEASE_SNAPSHOT_DIR/release.env"
 RELEASE_ADAPTIVE_MARKER="$RELEASE_SNAPSHOT_DIR/adaptive.enabled"
 RELEASE_DOCUMENT_CACHE_MARKER="$RELEASE_SNAPSHOT_DIR/document-cache.enabled"
+RELEASE_LIVE_SEARCH_MARKER="$RELEASE_SNAPSHOT_DIR/live-search.enabled"
 
 cleanup_release_snapshot() {
     chmod -R u+rwX -- "$RELEASE_SNAPSHOT_DIR" 2>/dev/null || true
@@ -31,10 +32,11 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import stat
 import sys
 import tempfile
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 environment = {}
 for raw_line in Path(sys.argv[1]).read_text(encoding="utf-8").splitlines():
@@ -118,6 +120,10 @@ allowed = {
     "FINANCE_EXTERNAL_DOCUMENT_DENSE_ARTIFACT_FILE",
     "FINANCE_EXTERNAL_DOCUMENT_CACHE_ACTIVATION_HOST_FILE",
     "FINANCE_EXTERNAL_DOCUMENT_CACHE_ACTIVATION_FILE",
+    "FINANCE_EXTERNAL_DOCUMENT_CORPUS_MANIFEST_HOST_FILE",
+    "FINANCE_EXTERNAL_DOCUMENT_CORPUS_MANIFEST_FILE",
+    "FINANCE_EXTERNAL_DOCUMENT_CORPUS_HOST_DIR",
+    "FINANCE_EXTERNAL_DOCUMENT_CORPUS_ROOT",
     "NAVER_API_HUB_CLIENT_ID_HOST_FILE",
     "NAVER_API_HUB_CLIENT_ID_FILE",
     "NAVER_API_HUB_CLIENT_SECRET_HOST_FILE",
@@ -173,6 +179,8 @@ external_required = {
     "FINANCE_EXTERNAL_TEMPORAL_RELATION_HOST_FILE",
     "FINANCE_EXTERNAL_TEMPORAL_RELATION_FILE",
     "FINANCE_EXTERNAL_TEMPORAL_RELATION_SHA256",
+}
+live_search_required = {
     "NAVER_API_HUB_CLIENT_ID_HOST_FILE",
     "NAVER_API_HUB_CLIENT_ID_FILE",
     "NAVER_API_HUB_CLIENT_SECRET_HOST_FILE",
@@ -183,6 +191,10 @@ document_cache_required = {
     "FINANCE_EXTERNAL_DOCUMENT_DENSE_ARTIFACT_FILE",
     "FINANCE_EXTERNAL_DOCUMENT_CACHE_ACTIVATION_HOST_FILE",
     "FINANCE_EXTERNAL_DOCUMENT_CACHE_ACTIVATION_FILE",
+    "FINANCE_EXTERNAL_DOCUMENT_CORPUS_MANIFEST_HOST_FILE",
+    "FINANCE_EXTERNAL_DOCUMENT_CORPUS_MANIFEST_FILE",
+    "FINANCE_EXTERNAL_DOCUMENT_CORPUS_HOST_DIR",
+    "FINANCE_EXTERNAL_DOCUMENT_CORPUS_ROOT",
 }
 configured_document_cache = {
     name for name in document_cache_required if environment.get(name)
@@ -192,6 +204,15 @@ if configured_document_cache and configured_document_cache != document_cache_req
     raise SystemExit(
         "incomplete Document Dense release settings: "
         + ", ".join(missing_document_cache)
+    )
+configured_live_search = {
+    name for name in live_search_required if environment.get(name)
+}
+if configured_live_search and configured_live_search != live_search_required:
+    missing_live_search = sorted(live_search_required - configured_live_search)
+    raise SystemExit(
+        "incomplete NAVER API HUB release settings: "
+        + ", ".join(missing_live_search)
     )
 if external_knowledge_enabled == "true":
     missing_external = sorted(name for name in external_required if not environment.get(name))
@@ -204,8 +225,6 @@ if external_knowledge_enabled == "true":
         "FINANCE_EXTERNAL_TEMPORAL_RELATION_FILE": (
             "/run/finance-release/external-temporal-relations.json"
         ),
-        "NAVER_API_HUB_CLIENT_ID_FILE": "/run/secrets/naver_api_hub_client_id",
-        "NAVER_API_HUB_CLIENT_SECRET_FILE": "/run/secrets/naver_api_hub_client_secret",
     }
     if any(environment[name] != value for name, value in expected_container_paths.items()):
         raise SystemExit("external knowledge container paths differ from the release contract")
@@ -218,7 +237,7 @@ if external_knowledge_enabled == "true":
 else:
     unexpected_external = sorted(
         name
-        for name in external_required | document_cache_required
+        for name in external_required | document_cache_required | live_search_required
         if environment.get(name)
     )
     if unexpected_external:
@@ -281,6 +300,8 @@ if adaptive_semantic not in {"true", "false"}:
     raise SystemExit("FINANCE_ADAPTIVE_SEMANTIC_ENABLED must be true or false")
 if hcx_semantic_resolver == "true" and adaptive_semantic != "true":
     raise SystemExit("HCLX Semantic Resolver requires adaptive semantic mode")
+if adaptive_semantic == "true" and hcx_semantic_resolver != "true":
+    raise SystemExit("final adaptive release requires HCLX Semantic Resolver")
 uses_hcx = (
     answer_provider == "hyperclova"
     or hcx_intent_analysis == "true"
@@ -380,7 +401,10 @@ if adaptive_semantic == "true":
         ):
             raise SystemExit(name + " is not a secure immutable artifact")
 
-    require_adaptive_file("FINANCE_SCHEMA_DENSE_INDEX_HOST_FILE", immutable=True)
+    # GitHub artifact download normalizes ordinary files to 0644.  Accept that
+    # transport form only long enough to hash-address and install the bytes into
+    # the root-controlled immutable Runtime store below.
+    require_adaptive_file("FINANCE_SCHEMA_DENSE_INDEX_HOST_FILE", immutable=False)
     require_adaptive_file(
         "FINANCE_KURE_SNAPSHOT_MANIFEST_HOST_FILE",
         immutable=False,
@@ -482,6 +506,9 @@ def read_secure(source, label, *, max_bytes=2 * 1024 * 1024, immutable=False):
     return payload
 
 document_cache_enabled = False
+live_search_enabled = False
+approved_corpus_manifest = None
+approved_corpus_manifest_payload = None
 if external_knowledge_enabled == "true":
     external_payload = read_secure(
         Path(environment["FINANCE_EXTERNAL_KNOWLEDGE_ARTIFACT_HOST_FILE"]),
@@ -515,14 +542,19 @@ if external_knowledge_enabled == "true":
         raise SystemExit("external knowledge artifact must be a JSON object")
     retrieval_mode = external_artifact.get("retrieval_mode")
     if retrieval_mode not in {
+        "approved_corpus_cache_only",
         "verified_live_official",
         "approved_corpus_cache_first",
+        "verified_live_official_with_relation_graph",
     }:
         raise SystemExit("external knowledge retrieval mode is invalid")
-    if retrieval_mode == "approved_corpus_cache_first":
+    if retrieval_mode in {
+        "approved_corpus_cache_only",
+        "approved_corpus_cache_first",
+    }:
         if configured_document_cache != document_cache_required:
             raise SystemExit(
-                "approved_corpus_cache_first requires complete Document Dense artifacts"
+                retrieval_mode + " requires complete Document Dense artifacts"
             )
         if adaptive_semantic != "true":
             raise SystemExit("Document Dense release requires adaptive semantic mode")
@@ -533,6 +565,10 @@ if external_knowledge_enabled == "true":
             "FINANCE_EXTERNAL_DOCUMENT_CACHE_ACTIVATION_FILE": (
                 "/run/finance-release/document-cache-activation.json"
             ),
+            "FINANCE_EXTERNAL_DOCUMENT_CORPUS_MANIFEST_FILE": (
+                "/run/finance-release/approved-corpus-manifest.json"
+            ),
+            "FINANCE_EXTERNAL_DOCUMENT_CORPUS_ROOT": "/run/finance-corpus",
         }
         if any(
             environment[name] != value
@@ -553,6 +589,7 @@ if external_knowledge_enabled == "true":
                 2 * 1024 * 1024,
             ),
         )
+        activation_payload = None
         for source_name, artifact_hash_name, max_bytes in document_hashes:
             expected_document_sha256 = external_artifact.get(artifact_hash_name)
             if (
@@ -566,34 +603,172 @@ if external_knowledge_enabled == "true":
                 Path(environment[source_name]),
                 source_name,
                 max_bytes=max_bytes,
-                immutable=True,
+                immutable=False,
             )
             if hashlib.sha256(document_payload).hexdigest() != expected_document_sha256:
                 raise SystemExit(source_name + " differs from the signed external artifact")
+            if source_name == "FINANCE_EXTERNAL_DOCUMENT_CACHE_ACTIVATION_HOST_FILE":
+                activation_payload = document_payload
             del document_payload
+
+        expected_corpus_manifest_sha256 = external_artifact.get("corpus_manifest_sha256")
+        if (
+            not isinstance(expected_corpus_manifest_sha256, str)
+            or re.fullmatch(r"[0-9a-f]{64}", expected_corpus_manifest_sha256) is None
+        ):
+            raise SystemExit(
+                "external knowledge artifact lacks an approved corpus manifest binding"
+            )
+        approved_corpus_manifest_payload = read_secure(
+            Path(environment["FINANCE_EXTERNAL_DOCUMENT_CORPUS_MANIFEST_HOST_FILE"]),
+            "FINANCE_EXTERNAL_DOCUMENT_CORPUS_MANIFEST_HOST_FILE",
+            immutable=False,
+        )
+        if (
+            hashlib.sha256(approved_corpus_manifest_payload).hexdigest()
+            != expected_corpus_manifest_sha256
+        ):
+            raise SystemExit(
+                "approved corpus manifest differs from the signed external artifact"
+            )
+        try:
+            approved_corpus_manifest = json.loads(
+                approved_corpus_manifest_payload,
+                object_pairs_hook=strict_object,
+            )
+            activation = json.loads(
+                activation_payload,
+                object_pairs_hook=strict_object,
+            )
+        except (UnicodeError, json.JSONDecodeError, ValueError, TypeError) as error:
+            raise SystemExit("approved corpus release inputs are not strict JSON") from error
+        if not isinstance(approved_corpus_manifest, dict) or not isinstance(activation, dict):
+            raise SystemExit("approved corpus release inputs must be JSON objects")
+        documents = approved_corpus_manifest.get("documents")
+        document_count = approved_corpus_manifest.get("document_count")
+        total_content_size_bytes = approved_corpus_manifest.get(
+            "total_content_size_bytes"
+        )
+        file_manifest_sha256 = approved_corpus_manifest.get("file_manifest_sha256")
+        if (
+            approved_corpus_manifest.get("manifest_kind") != "external_approved_corpus"
+            or not isinstance(documents, list)
+            or not 1 <= len(documents) <= 1000
+            or document_count != len(documents)
+            or not isinstance(total_content_size_bytes, int)
+            or isinstance(total_content_size_bytes, bool)
+            or not 0 < total_content_size_bytes <= 128 * 1024 * 1024
+            or not isinstance(file_manifest_sha256, str)
+            or re.fullmatch(r"[0-9a-f]{64}", file_manifest_sha256) is None
+        ):
+            raise SystemExit("approved corpus manifest has invalid release metadata")
+        file_entries = []
+        document_ids = []
+        relative_paths = []
+        computed_total_size = 0
+        for document in documents:
+            if not isinstance(document, dict):
+                raise SystemExit("approved corpus manifest contains an invalid document")
+            document_id = document.get("document_id")
+            relative_path = document.get("relative_path")
+            content_size = document.get("content_size_bytes")
+            content_sha256 = document.get("content_sha256")
+            normalized_sha256 = document.get("normalized_text_sha256")
+            if (
+                not isinstance(document_id, str)
+                or re.fullmatch(r"[a-z0-9][a-z0-9._-]{2,127}", document_id) is None
+                or not isinstance(relative_path, str)
+                or "\\" in relative_path
+                or "\x00" in relative_path
+                or PurePosixPath(relative_path).is_absolute()
+                or PurePosixPath(relative_path).as_posix() != relative_path
+                or any(part in {"", ".", ".."} for part in relative_path.split("/"))
+                or PurePosixPath(relative_path).suffix.casefold() not in {".txt", ".md"}
+                or not isinstance(content_size, int)
+                or isinstance(content_size, bool)
+                or not 0 < content_size <= 16 * 1024 * 1024
+                or not isinstance(content_sha256, str)
+                or re.fullmatch(r"[0-9a-f]{64}", content_sha256) is None
+                or not isinstance(normalized_sha256, str)
+                or re.fullmatch(r"[0-9a-f]{64}", normalized_sha256) is None
+            ):
+                raise SystemExit("approved corpus manifest contains an invalid document")
+            document_ids.append(document_id)
+            relative_paths.append(relative_path)
+            computed_total_size += content_size
+            file_entries.append(
+                {
+                    "content_sha256": content_sha256,
+                    "content_size_bytes": content_size,
+                    "document_id": document_id,
+                    "normalized_text_sha256": normalized_sha256,
+                    "relative_path": relative_path,
+                }
+            )
+        canonical_file_entries = (
+            json.dumps(
+                file_entries,
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+            + "\n"
+        ).encode("utf-8")
+        if (
+            document_ids != sorted(document_ids)
+            or len(set(document_ids)) != len(document_ids)
+            or len(set(relative_paths)) != len(relative_paths)
+            or computed_total_size != total_content_size_bytes
+            or hashlib.sha256(canonical_file_entries).hexdigest()
+            != file_manifest_sha256
+            or activation.get("approved_corpus_manifest_sha256")
+            != expected_corpus_manifest_sha256
+            or activation.get("approved_corpus_file_manifest_sha256")
+            != file_manifest_sha256
+        ):
+            raise SystemExit("approved corpus release trust bindings differ")
         document_cache_enabled = True
     elif configured_document_cache:
         raise SystemExit("live-only external knowledge rejects Document Dense artifacts")
 
-    for secret_name in (
-        "NAVER_API_HUB_CLIENT_ID_HOST_FILE",
-        "NAVER_API_HUB_CLIENT_SECRET_HOST_FILE",
-    ):
-        secret_path = Path(environment[secret_name])
-        try:
-            secret_stat = secret_path.stat(follow_symlinks=False)
-        except OSError:
-            raise SystemExit("NAVER API HUB release secret is unavailable") from None
-        if (
-            not secret_path.is_absolute()
-            or not stat.S_ISREG(secret_stat.st_mode)
-            or secret_path.is_symlink()
-            or secret_stat.st_uid != RELEASE_BACKEND_UID
-            or secret_stat.st_nlink != 1
-            or secret_stat.st_mode & 0o077
-            or not 0 < secret_stat.st_size <= 4096
+    if retrieval_mode == "approved_corpus_cache_only":
+        if configured_live_search:
+            raise SystemExit(
+                "approved_corpus_cache_only forbids NAVER API HUB credentials"
+            )
+    else:
+        if configured_live_search != live_search_required:
+            raise SystemExit(retrieval_mode + " requires complete NAVER API HUB credentials")
+        expected_live_paths = {
+            "NAVER_API_HUB_CLIENT_ID_FILE": "/run/secrets/naver_api_hub_client_id",
+            "NAVER_API_HUB_CLIENT_SECRET_FILE": "/run/secrets/naver_api_hub_client_secret",
+        }
+        if any(
+            environment[name] != value for name, value in expected_live_paths.items()
         ):
-            raise SystemExit("NAVER API HUB release secret must be an owner-only regular file")
+            raise SystemExit("NAVER API HUB container paths differ from the release contract")
+        for secret_name in (
+            "NAVER_API_HUB_CLIENT_ID_HOST_FILE",
+            "NAVER_API_HUB_CLIENT_SECRET_HOST_FILE",
+        ):
+            secret_path = Path(environment[secret_name])
+            try:
+                secret_stat = secret_path.stat(follow_symlinks=False)
+            except OSError:
+                raise SystemExit("NAVER API HUB release secret is unavailable") from None
+            if (
+                not secret_path.is_absolute()
+                or not stat.S_ISREG(secret_stat.st_mode)
+                or secret_path.is_symlink()
+                or secret_stat.st_uid != RELEASE_BACKEND_UID
+                or secret_stat.st_nlink != 1
+                or secret_stat.st_mode & 0o077
+                or not 0 < secret_stat.st_size <= 4096
+            ):
+                raise SystemExit(
+                    "NAVER API HUB release secret must be an owner-only regular file"
+                )
+        live_search_enabled = True
 
 data = read_secure(binding_path, "FINANCE_DEPLOYMENT_BINDING_HOST_FILE")
 if hashlib.sha256(data).hexdigest() != expected:
@@ -633,6 +808,15 @@ if adaptive_semantic == "true":
 
 if document_cache_enabled:
     marker = snapshot_root / "document-cache.enabled"
+    descriptor = os.open(
+        marker,
+        os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+        0o400,
+    )
+    os.close(descriptor)
+
+if live_search_enabled:
+    marker = snapshot_root / "live-search.enabled"
     descriptor = os.open(
         marker,
         os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
@@ -743,7 +927,321 @@ def persistent_binding_snapshot(source_name):
         raise SystemExit("persistent DeploymentBinding snapshot is invalid")
     environment[source_name] = str(target)
 
+def persistent_runtime_blob(source_name, *, max_bytes=2 * 1024 * 1024):
+    """Install one verified Runtime mount source at its immutable content address.
+
+    GitHub's artifact transport does not preserve 0444 modes.  Input files may
+    therefore be owner-writable, but never group/other-writable, while they are
+    read and fingerprinted.  The installed copy is root-owned 0444 and survives
+    launcher cleanup, container restart, and Docker daemon restart.
+    """
+
+    payload = read_secure(
+        Path(environment[source_name]),
+        source_name,
+        max_bytes=max_bytes,
+    )
+    digest = hashlib.sha256(payload).hexdigest()
+    persistent_root = PERSISTENT_BINDING_ROOT.parent / "runtime-artifacts"
+    try:
+        persistent_root.mkdir(mode=0o700, parents=True, exist_ok=True)
+        root_info = persistent_root.stat(follow_symlinks=False)
+    except OSError:
+        raise SystemExit("persistent Runtime artifact root is unavailable") from None
+    if (
+        not persistent_root.is_absolute()
+        or persistent_root.is_symlink()
+        or not stat.S_ISDIR(root_info.st_mode)
+        or root_info.st_uid != os.geteuid()
+        or root_info.st_mode & (stat.S_IRWXG | stat.S_IRWXO)
+    ):
+        raise SystemExit("persistent Runtime artifact root is not owner-only")
+
+    target = persistent_root / digest
+    descriptor, temporary_name = tempfile.mkstemp(
+        prefix=".runtime-artifact.",
+        dir=persistent_root,
+    )
+    temporary = Path(temporary_name)
+    created = False
+    try:
+        view = memoryview(payload)
+        while view:
+            written = os.write(descriptor, view)
+            if written <= 0:
+                raise SystemExit("cannot create persistent Runtime artifact")
+            view = view[written:]
+        os.fchmod(descriptor, 0o444)
+        os.fsync(descriptor)
+        os.close(descriptor)
+        descriptor = -1
+        try:
+            os.link(temporary, target, follow_symlinks=False)
+            created = True
+        except FileExistsError:
+            pass
+    finally:
+        if descriptor >= 0:
+            os.close(descriptor)
+        temporary.unlink(missing_ok=True)
+    if created:
+        directory = os.open(
+            persistent_root,
+            os.O_RDONLY | os.O_CLOEXEC | getattr(os, "O_DIRECTORY", 0),
+        )
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)
+
+    current = read_secure(
+        target,
+        "persistent Runtime artifact",
+        max_bytes=max_bytes,
+        immutable=True,
+    )
+    target_info = target.stat(follow_symlinks=False)
+    if (
+        current != payload
+        or target_info.st_uid != os.geteuid()
+        or target_info.st_nlink != 1
+        or stat.S_IMODE(target_info.st_mode) != 0o444
+        or target.name != hashlib.sha256(current).hexdigest()
+    ):
+        raise SystemExit("persistent Runtime artifact is invalid")
+    environment[source_name] = str(target)
+
+def read_corpus_document(root_descriptor, relative_path, expected_size):
+    parts = relative_path.split("/")
+    current = os.dup(root_descriptor)
+    try:
+        for part in parts[:-1]:
+            following = os.open(
+                part,
+                os.O_RDONLY
+                | os.O_CLOEXEC
+                | os.O_NOFOLLOW
+                | getattr(os, "O_DIRECTORY", 0),
+                dir_fd=current,
+            )
+            info = os.fstat(following)
+            if not stat.S_ISDIR(info.st_mode):
+                os.close(following)
+                raise SystemExit("approved corpus path contains a non-directory")
+            os.close(current)
+            current = following
+        descriptor = os.open(
+            parts[-1],
+            os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW,
+            dir_fd=current,
+        )
+        try:
+            before = os.fstat(descriptor)
+            if (
+                not stat.S_ISREG(before.st_mode)
+                or before.st_nlink != 1
+                or before.st_size != expected_size
+            ):
+                raise SystemExit("approved corpus document has an unsafe file identity")
+            chunks = []
+            remaining = expected_size
+            while remaining:
+                chunk = os.read(descriptor, min(1024 * 1024, remaining))
+                if not chunk:
+                    break
+                chunks.append(chunk)
+                remaining -= len(chunk)
+            payload = b"".join(chunks)
+            after = os.fstat(descriptor)
+            identity = lambda value: (
+                value.st_dev,
+                value.st_ino,
+                value.st_mode,
+                value.st_uid,
+                value.st_nlink,
+                value.st_size,
+                value.st_mtime_ns,
+                value.st_ctime_ns,
+            )
+            if len(payload) != expected_size or identity(before) != identity(after):
+                raise SystemExit("approved corpus document changed while reading")
+            return payload
+        finally:
+            os.close(descriptor)
+    except OSError:
+        raise SystemExit("approved corpus document is unavailable or unsafe") from None
+    finally:
+        os.close(current)
+
+def write_snapshot_payload(path, payload, mode):
+    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    descriptor = os.open(
+        path,
+        os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+        mode,
+    )
+    try:
+        os.fchmod(descriptor, mode)
+        view = memoryview(payload)
+        while view:
+            written = os.write(descriptor, view)
+            if written <= 0:
+                raise SystemExit("cannot create immutable corpus snapshot")
+            view = view[written:]
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+def validate_persistent_corpus_bundle(bundle, manifest_payload, documents):
+    try:
+        bundle_info = bundle.stat(follow_symlinks=False)
+        documents_root = bundle / "documents"
+        documents_info = documents_root.stat(follow_symlinks=False)
+    except OSError:
+        raise SystemExit("persistent approved corpus snapshot is unavailable") from None
+    if (
+        bundle.is_symlink()
+        or documents_root.is_symlink()
+        or not stat.S_ISDIR(bundle_info.st_mode)
+        or not stat.S_ISDIR(documents_info.st_mode)
+        or bundle_info.st_uid != os.geteuid()
+        or documents_info.st_uid != os.geteuid()
+        or stat.S_IMODE(bundle_info.st_mode) != 0o555
+        or stat.S_IMODE(documents_info.st_mode) != 0o555
+    ):
+        raise SystemExit("persistent approved corpus snapshot is not immutable")
+    current_manifest = read_secure(
+        bundle / "manifest.json",
+        "persistent approved corpus manifest",
+        immutable=True,
+    )
+    if current_manifest != manifest_payload:
+        raise SystemExit("persistent approved corpus manifest differs")
+    for document in documents:
+        relative_path = document["relative_path"]
+        candidate = documents_root.joinpath(*relative_path.split("/"))
+        payload = read_secure(
+            candidate,
+            "persistent approved corpus document",
+            max_bytes=16 * 1024 * 1024,
+            immutable=True,
+        )
+        if (
+            len(payload) != document["content_size_bytes"]
+            or hashlib.sha256(payload).hexdigest() != document["content_sha256"]
+        ):
+            raise SystemExit("persistent approved corpus document differs")
+
+def persistent_corpus_snapshot():
+    source_root = Path(environment["FINANCE_EXTERNAL_DOCUMENT_CORPUS_HOST_DIR"])
+    try:
+        source_info = source_root.stat(follow_symlinks=False)
+    except OSError:
+        raise SystemExit("FINANCE_EXTERNAL_DOCUMENT_CORPUS_HOST_DIR is unavailable") from None
+    if (
+        not source_root.is_absolute()
+        or source_root.is_symlink()
+        or not stat.S_ISDIR(source_info.st_mode)
+        or source_info.st_mode & (stat.S_IWGRP | stat.S_IWOTH)
+    ):
+        raise SystemExit("FINANCE_EXTERNAL_DOCUMENT_CORPUS_HOST_DIR is unsafe")
+    root_descriptor = os.open(
+        source_root,
+        os.O_RDONLY
+        | os.O_CLOEXEC
+        | os.O_NOFOLLOW
+        | getattr(os, "O_DIRECTORY", 0),
+    )
+    try:
+        payloads = []
+        for document in approved_corpus_manifest["documents"]:
+            payload = read_corpus_document(
+                root_descriptor,
+                document["relative_path"],
+                document["content_size_bytes"],
+            )
+            if hashlib.sha256(payload).hexdigest() != document["content_sha256"]:
+                raise SystemExit("approved corpus document differs from its manifest")
+            payloads.append((document, payload))
+    finally:
+        os.close(root_descriptor)
+
+    persistent_root = PERSISTENT_BINDING_ROOT.parent / "approved-corpora"
+    try:
+        persistent_root.mkdir(mode=0o700, parents=True, exist_ok=True)
+        root_info = persistent_root.stat(follow_symlinks=False)
+    except OSError:
+        raise SystemExit("persistent approved corpus root is unavailable") from None
+    if (
+        persistent_root.is_symlink()
+        or not stat.S_ISDIR(root_info.st_mode)
+        or root_info.st_uid != os.geteuid()
+        or root_info.st_mode & (stat.S_IRWXG | stat.S_IRWXO)
+    ):
+        raise SystemExit("persistent approved corpus root is not owner-only")
+
+    manifest_sha256 = hashlib.sha256(approved_corpus_manifest_payload).hexdigest()
+    bundle = persistent_root / manifest_sha256
+    if not bundle.exists():
+        staging = Path(tempfile.mkdtemp(prefix=".approved-corpus.", dir=persistent_root))
+        try:
+            documents_root = staging / "documents"
+            documents_root.mkdir(mode=0o700)
+            write_snapshot_payload(
+                staging / "manifest.json",
+                approved_corpus_manifest_payload,
+                0o444,
+            )
+            for document, payload in payloads:
+                target = documents_root.joinpath(*document["relative_path"].split("/"))
+                write_snapshot_payload(target, payload, 0o444)
+            for directory_name, directories, _files in os.walk(staging, topdown=False):
+                directory = Path(directory_name)
+                for child in directories:
+                    os.chmod(directory / child, 0o555)
+                os.chmod(directory, 0o555)
+            try:
+                os.rename(staging, bundle)
+            except FileExistsError:
+                shutil.rmtree(staging)
+            directory = os.open(
+                persistent_root,
+                os.O_RDONLY | os.O_CLOEXEC | getattr(os, "O_DIRECTORY", 0),
+            )
+            try:
+                os.fsync(directory)
+            finally:
+                os.close(directory)
+        except Exception:
+            if staging.exists():
+                chmod_targets = sorted(
+                    (path for path in staging.rglob("*") if path.is_dir()),
+                    key=lambda path: len(path.parts),
+                )
+                os.chmod(staging, 0o700)
+                for target in chmod_targets:
+                    os.chmod(target, 0o700)
+                shutil.rmtree(staging)
+            raise
+    validate_persistent_corpus_bundle(
+        bundle,
+        approved_corpus_manifest_payload,
+        approved_corpus_manifest["documents"],
+    )
+    environment["FINANCE_EXTERNAL_DOCUMENT_CORPUS_MANIFEST_HOST_FILE"] = str(
+        bundle / "manifest.json"
+    )
+    environment["FINANCE_EXTERNAL_DOCUMENT_CORPUS_HOST_DIR"] = str(
+        bundle / "documents"
+    )
+
 persistent_binding_snapshot("FINANCE_DEPLOYMENT_BINDING_HOST_FILE")
+if adaptive_semantic == "true":
+    persistent_runtime_blob(
+        "FINANCE_SCHEMA_DENSE_INDEX_HOST_FILE",
+        max_bytes=128 * 1024 * 1024,
+    )
+    persistent_runtime_blob("FINANCE_KURE_SNAPSHOT_MANIFEST_HOST_FILE")
 snapshot_file("FINANCE_RELEASE_MANIFEST_HOST_FILE", "agent-release-manifest.json")
 snapshot_file(
     "FINANCE_RELEASE_MANIFEST_SIGSTORE_BUNDLE_HOST_FILE",
@@ -754,26 +1252,21 @@ snapshot_file(
     "deployment-binding.sigstore.json",
 )
 if external_knowledge_enabled == "true":
-    snapshot_file(
+    persistent_runtime_blob(
         "FINANCE_EXTERNAL_KNOWLEDGE_ARTIFACT_HOST_FILE",
-        "external-knowledge-artifact.json",
     )
-    snapshot_file(
+    persistent_runtime_blob(
         "FINANCE_EXTERNAL_TEMPORAL_RELATION_HOST_FILE",
-        "external-temporal-relations.json",
         max_bytes=64 * 1024 * 1024,
     )
 if document_cache_enabled:
-    snapshot_file(
+    persistent_corpus_snapshot()
+    persistent_runtime_blob(
         "FINANCE_EXTERNAL_DOCUMENT_DENSE_ARTIFACT_HOST_FILE",
-        "document-dense-approved.json",
         max_bytes=512 * 1024 * 1024,
-        immutable=True,
     )
-    snapshot_file(
+    persistent_runtime_blob(
         "FINANCE_EXTERNAL_DOCUMENT_CACHE_ACTIVATION_HOST_FILE",
-        "document-cache-activation.json",
-        immutable=True,
     )
 
 output = Path(sys.argv[2])
@@ -846,6 +1339,10 @@ unset APP_ENV \
     FINANCE_EXTERNAL_DOCUMENT_DENSE_ARTIFACT_FILE \
     FINANCE_EXTERNAL_DOCUMENT_CACHE_ACTIVATION_HOST_FILE \
     FINANCE_EXTERNAL_DOCUMENT_CACHE_ACTIVATION_FILE \
+    FINANCE_EXTERNAL_DOCUMENT_CORPUS_MANIFEST_HOST_FILE \
+    FINANCE_EXTERNAL_DOCUMENT_CORPUS_MANIFEST_FILE \
+    FINANCE_EXTERNAL_DOCUMENT_CORPUS_HOST_DIR \
+    FINANCE_EXTERNAL_DOCUMENT_CORPUS_ROOT \
     NAVER_API_HUB_CLIENT_ID \
     NAVER_API_HUB_CLIENT_ID_HOST_FILE \
     NAVER_API_HUB_CLIENT_ID_FILE \
@@ -996,6 +1493,9 @@ if [ -f "$RELEASE_ADAPTIVE_MARKER" ]; then
 fi
 if [ -f "$RELEASE_DOCUMENT_CACHE_MARKER" ]; then
     compose_files+=( -f src/fastapi_backend/docker-compose.document-cache.yml )
+fi
+if [ -f "$RELEASE_LIVE_SEARCH_MARKER" ]; then
+    compose_files+=( -f src/fastapi_backend/docker-compose.live-search.yml )
 fi
 
 docker compose \

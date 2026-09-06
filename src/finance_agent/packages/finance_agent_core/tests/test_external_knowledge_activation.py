@@ -14,9 +14,13 @@ from finance_agent_core.agent.external_search_planning import (
 )
 from finance_agent_core.agent.intent_analysis import (
     IntentAnalysisDraft,
+    holding_document_top_n_scope,
     sanitize_server_authorized_knowledge_draft,
 )
-from finance_agent_core.agent.knowledge_planning import CompositeKnowledgePlanCompiler
+from finance_agent_core.agent.knowledge_planning import (
+    CompositeKnowledgePlanCompiler,
+    CompositeKnowledgePlanningError,
+)
 from finance_agent_core.agent.source_selection import SourceSelectionSignals
 from finance_agent_core.config.knowledge_coverage import (
     ApprovedKnowledgeCoverageManifest,
@@ -255,6 +259,61 @@ def test_server_lexical_family_scope_overrides_hclx_external_guess() -> None:
     ]
 
 
+def test_compiler_drops_only_atomic_holding_relation_restatement() -> None:
+    question = "캠브리콘이 편입된 중국 반도체 해외 ETF를 알려줘."
+    draft = IntentAnalysisDraft(
+        intent=InteractionIntent.SEARCH,
+        product_families=[ProductFamily.OVERSEAS_ETP],
+        evidence_spans=[],
+        needs_clarification=False,
+        knowledge_requirements=[
+            KnowledgeIntentRequirement(
+                capability=KnowledgeCapability.PORTFOLIO_HOLDINGS,
+                subject_span="캠브리콘",
+                relation_span="편입된",
+            ),
+            KnowledgeIntentRequirement(
+                capability=KnowledgeCapability.PORTFOLIO_HOLDINGS,
+                subject_span="캠브리콘이 편입된",
+                relation_span="캠브리콘이 편입된",
+            ),
+        ],
+    )
+
+    plan = CompositeKnowledgePlanCompiler().compile(question, "holding-restatement", draft)
+
+    assert [item.subject_evidence_span for item in plan.requirements] == ["캠브리콘"]
+
+
+def test_compiler_keeps_distinct_company_whose_name_contains_another() -> None:
+    question = "한국전력과 한국전력기술이 편입된 해외 ETF를 알려줘."
+    draft = IntentAnalysisDraft(
+        intent=InteractionIntent.SEARCH,
+        product_families=[ProductFamily.OVERSEAS_ETP],
+        evidence_spans=[],
+        needs_clarification=False,
+        knowledge_requirements=[
+            KnowledgeIntentRequirement(
+                capability=KnowledgeCapability.PORTFOLIO_HOLDINGS,
+                subject_span="한국전력",
+                relation_span="편입된",
+            ),
+            KnowledgeIntentRequirement(
+                capability=KnowledgeCapability.PORTFOLIO_HOLDINGS,
+                subject_span="한국전력기술",
+                relation_span="편입된",
+            ),
+        ],
+    )
+
+    plan = CompositeKnowledgePlanCompiler().compile(question, "holding-distinct-company", draft)
+
+    assert [item.subject_evidence_span for item in plan.requirements] == [
+        "한국전력",
+        "한국전력기술",
+    ]
+
+
 def test_bare_etf_external_scope_keeps_both_provided_etp_families() -> None:
     question = "최근 6개월 동안 우주항공 테마와 연결 이력이 있는 ETF를 정리해줘."
     draft = IntentAnalysisDraft(
@@ -265,7 +324,14 @@ def test_bare_etf_external_scope_keeps_both_provided_etp_families() -> None:
         knowledge_requirements=[],
     )
 
-    sanitized = sanitize_server_authorized_knowledge_draft(question, draft)
+    # The lexical Router currently uses domestic ETP as the default for a bare
+    # ``ETF``.  External evidence must still preserve the generic two-market
+    # scope instead of inheriting that implementation default.
+    sanitized = sanitize_server_authorized_knowledge_draft(
+        question,
+        draft,
+        fallback_families=(ProductFamily.DOMESTIC_ETP,),
+    )
 
     assert sanitized.product_families == [
         ProductFamily.DOMESTIC_ETP,
@@ -322,6 +388,7 @@ def test_server_builds_explicit_subsidiary_holding_and_risk_chain() -> None:
         "ecopro-corporate",
         "ecopro-official-brochures",
         "kind-corporate-disclosures",
+        "open-dart-disclosures",
     )
     assert plan.requirements[1].source_registry_ids == (
         "samsungfund-kodex-newsroom",
@@ -407,6 +474,29 @@ def test_source_selection_accepts_bounded_subject_prefix_of_registry_alias() -> 
     assert plan.requirements[0].source_registry_ids == ("moonshot-ai-official-forum",)
 
 
+def test_composite_compiler_rejects_a_loose_relation_without_theme_context() -> None:
+    question = "ALFA ETF와 연결 이력이 있는 상품을 찾아줘."
+    draft = IntentAnalysisDraft(
+        intent=InteractionIntent.SEARCH,
+        product_families=[ProductFamily.DOMESTIC_ETP],
+        evidence_spans=[],
+        needs_clarification=False,
+        knowledge_requirements=[
+            KnowledgeIntentRequirement(
+                capability=KnowledgeCapability.SECTOR_THEME_HISTORY,
+                subject_span="ALFA ETF",
+                relation_span="연결 이력이 있는",
+            )
+        ],
+    )
+
+    with pytest.raises(
+        CompositeKnowledgePlanningError,
+        match="requires a theme, sector, or industry cue",
+    ):
+        CompositeKnowledgePlanCompiler().compile(question, "theme-defense", draft)
+
+
 def test_hclx_cannot_invent_subject_but_can_propose_bounded_cross_script_alias() -> None:
     question = (
         "2026년 6월 말 KraneShares 공식 보유내역에서 캠브리콘 편입이 확인되는 "
@@ -439,7 +529,7 @@ def test_hclx_cannot_invent_subject_but_can_propose_bounded_cross_script_alias()
     assert sanitized.knowledge_requirements[0].search_aliases == ("Cambricon",)
 
 
-def test_hclx_can_bridge_grounded_non_adjacent_holding_syntax() -> None:
+def test_ranked_holding_position_compiles_only_with_typed_ordinal_scope() -> None:
     question = (
         "세 공식 팩트시트에서 상위 종목을 확인하고 Apple·삼성전자 중 하나 이상이 "
         "상위 10개에 들어 있는 ETF만 추려 주세요."
@@ -463,14 +553,370 @@ def test_hclx_can_bridge_grounded_non_adjacent_holding_syntax() -> None:
 
     sanitized = sanitize_server_authorized_knowledge_draft(question, draft)
 
-    assert [item.model_dump(mode="json") for item in sanitized.knowledge_requirements] == [
-        {
-            "capability": "portfolio_holdings",
-            "subject_span": "Apple·삼성전자",
-            "relation_span": "상위 10개에 들어 있는",
-            "search_aliases": [],
-        }
+    assert [item.subject_span for item in sanitized.knowledge_requirements] == [
+        "Apple",
+        "삼성전자",
     ]
+    plan = CompositeKnowledgePlanCompiler().compile(
+        question,
+        "ranked-holding-scope",
+        sanitized,
+    )
+    assert all(
+        requirement.document_scope is not None
+        and requirement.document_scope.limit == 10
+        and requirement.document_scope.selection_evidence_span in question
+        for requirement in plan.requirements
+    )
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        "공식 팩트시트의 상위 10개 구성표를 대조해 Aurora Corp를 담은 ETF를 찾아줘.",
+        "운용사 팩트시트 상위 10개 표를 모두 확인해서 Aurora Corp가 포함됐는지 알려줘.",
+        "두 공식 가이드북의 상위 10개에서 공통 종목을 구해 ETF를 역으로 찾아줘.",
+    ],
+)
+def test_document_top_n_parser_accepts_general_table_surfaces(question: str) -> None:
+    assert holding_document_top_n_scope(question) is not None
+    assert holding_document_top_n_scope(question)[0] == 10
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        "공식 팩트시트에서 삼성전자를 보유한 ETF 중 AUM 상위 10개에 들어 있는 상품",
+        "공식 문서와 대조한 ETF 가운데 1년 수익률 상위 10개에 포함된 상품",
+    ],
+)
+def test_document_top_n_parser_rejects_product_ranking_surfaces(question: str) -> None:
+    assert holding_document_top_n_scope(question) is None
+
+
+def test_document_top_n_parser_accepts_named_membership_question() -> None:
+    question = (
+        "운용사가 공개한 2분기 가이드에서 상품 설명을 확인해 주세요. "
+        "같은 자료의 상위 10개에 알파전자와 베타소재 두 종목이 모두 있는지 검증해 주세요."
+    )
+
+    scope = holding_document_top_n_scope(question)
+
+    assert scope is not None
+    assert scope[0] == 10
+    assert scope[1] == "상위 10개에"
+
+    draft = IntentAnalysisDraft(
+        intent=InteractionIntent.SEARCH,
+        product_families=[ProductFamily.DOMESTIC_ETP],
+        evidence_spans=[],
+        needs_clarification=False,
+        knowledge_requirements=[],
+    )
+    sanitized = sanitize_server_authorized_knowledge_draft(question, draft)
+    holdings = [
+        item
+        for item in sanitized.knowledge_requirements
+        if item.capability is KnowledgeCapability.PORTFOLIO_HOLDINGS
+    ]
+    assert [item.subject_span for item in holdings] == ["알파전자", "베타소재"]
+    assert len({item.relation_span for item in holdings}) == 1
+    plan = CompositeKnowledgePlanCompiler().compile(
+        question,
+        "named-document-membership",
+        sanitized,
+    )
+    assert all(
+        item.document_scope is not None and item.document_scope.limit == 10
+        for item in plan.requirements
+        if item.capability is KnowledgeCapability.PORTFOLIO_HOLDINGS
+    )
+
+
+@pytest.mark.parametrize(
+    "entity_list",
+    [
+        "알파전자, 베타소재",
+        "알파전자，베타소재",
+        "알파전자 및 베타소재",
+        "알파전자와 베타소재",
+    ],
+)
+def test_document_membership_list_separators_share_one_authority(
+    entity_list: str,
+) -> None:
+    question = (
+        "운용사 공식 가이드에서 상품 설명을 확인하고, 같은 자료의 "
+        f"상위 10개에 {entity_list} 두 종목이 모두 있는지 검증해 주세요."
+    )
+    draft = IntentAnalysisDraft(
+        intent=InteractionIntent.SEARCH,
+        product_families=[ProductFamily.DOMESTIC_ETP],
+        evidence_spans=[],
+        needs_clarification=False,
+        knowledge_requirements=[],
+    )
+
+    sanitized = sanitize_server_authorized_knowledge_draft(question, draft)
+    holdings = [
+        item
+        for item in sanitized.knowledge_requirements
+        if item.capability is KnowledgeCapability.PORTFOLIO_HOLDINGS
+    ]
+
+    assert [item.subject_span for item in holdings] == ["알파전자", "베타소재"]
+    assert all(item.relation_span in question for item in holdings)
+
+
+def test_named_membership_wording_does_not_reclassify_product_metric_ranking() -> None:
+    question = (
+        "공식 가이드와 대조한 국내 ETF 중 AUM 상위 10개에 "
+        "알파 ETF와 베타 ETF 두 상품이 모두 있는지 알려 주세요."
+    )
+
+    assert holding_document_top_n_scope(question) is None
+    draft = IntentAnalysisDraft(
+        intent=InteractionIntent.SEARCH,
+        product_families=[ProductFamily.DOMESTIC_ETP],
+        evidence_spans=[],
+        needs_clarification=False,
+        knowledge_requirements=[],
+    )
+    sanitized = sanitize_server_authorized_knowledge_draft(question, draft)
+    assert all(
+        item.capability is not KnowledgeCapability.PORTFOLIO_HOLDINGS
+        for item in sanitized.knowledge_requirements
+    )
+
+
+def test_dependent_risk_requirement_inherits_cross_family_relation_scope() -> None:
+    question = (
+        "공식 구성표에서 Aurora Corp가 들어 있는 국내·해외 ETF를 찾고 "
+        "최종 후보별 손실 관련 유의점을 알려줘."
+    )
+    draft = IntentAnalysisDraft(
+        intent=InteractionIntent.SEARCH,
+        product_families=[ProductFamily.DOMESTIC_ETP, ProductFamily.OVERSEAS_ETP],
+        evidence_spans=[],
+        needs_clarification=False,
+        knowledge_requirements=[
+            KnowledgeIntentRequirement(
+                capability=KnowledgeCapability.PORTFOLIO_HOLDINGS,
+                subject_span="Aurora Corp",
+                relation_span="들어 있는",
+            ),
+            KnowledgeIntentRequirement(
+                capability=KnowledgeCapability.PRODUCT_RISK_FACTORS,
+                subject_span="해외 ETF",
+                relation_span="손실 관련 유의점",
+            ),
+        ],
+    )
+
+    plan = CompositeKnowledgePlanCompiler().compile(question, "risk-family-union", draft)
+    risk = next(
+        item
+        for item in plan.requirements
+        if item.capability is KnowledgeCapability.PRODUCT_RISK_FACTORS
+    )
+    assert set(risk.product_families) == {
+        ProductFamily.DOMESTIC_ETP,
+        ProductFamily.OVERSEAS_ETP,
+    }
+
+
+def test_confirm_all_table_boundary_preserves_one_hyphenated_entity() -> None:
+    question = (
+        "두 공식 팩트시트의 상위 10개 표를 모두 확인해서 "
+        "Northstar Holdings Inc-adr가 포함된 ETF가 있는지 찾아줘."
+    )
+    draft = IntentAnalysisDraft(
+        intent=InteractionIntent.SEARCH,
+        product_families=[ProductFamily.DOMESTIC_ETP, ProductFamily.OVERSEAS_ETP],
+        evidence_spans=[],
+        needs_clarification=False,
+        knowledge_requirements=[],
+    )
+
+    sanitized = sanitize_server_authorized_knowledge_draft(question, draft)
+    subjects = [
+        item.subject_span
+        for item in sanitized.knowledge_requirements
+        if item.capability is KnowledgeCapability.PORTFOLIO_HOLDINGS
+    ]
+    assert subjects == ["Northstar Holdings Inc-adr"]
+
+
+def test_server_parser_separates_source_products_from_target_holdings() -> None:
+    question = (
+        "ALFA, BETA 두 상품의 2025-03-31 기준 공식 상위 10개 편입 종목을 보면 "
+        "Gamma Corp, Delta Inc 두 종목이 모두 들어 있는 ETF를 찾아줘."
+    )
+    draft = IntentAnalysisDraft(
+        intent=InteractionIntent.SEARCH,
+        product_families=[ProductFamily.OVERSEAS_ETP],
+        evidence_spans=[],
+        needs_clarification=False,
+        knowledge_requirements=[],
+    )
+
+    sanitized = sanitize_server_authorized_knowledge_draft(
+        question,
+        draft,
+        product_mentions=("ALFA", "BETA"),
+    )
+
+    assert [
+        item.subject_span for item in sanitized.knowledge_requirements
+        if item.capability is KnowledgeCapability.PORTFOLIO_HOLDINGS
+    ] == ["Gamma Corp", "Delta Inc"]
+
+
+def test_source_product_role_does_not_cross_a_sentence_boundary() -> None:
+    question = (
+        "ALFA ETF를 비교해줘. "
+        "BETA 공식 편입표에서 ALFA를 담은 ETF를 찾아줘."
+    )
+    draft = IntentAnalysisDraft(
+        intent=InteractionIntent.SEARCH,
+        product_families=[ProductFamily.OVERSEAS_ETP],
+        evidence_spans=[],
+        needs_clarification=False,
+        knowledge_requirements=[],
+    )
+
+    sanitized = sanitize_server_authorized_knowledge_draft(
+        question,
+        draft,
+        product_mentions=("ALFA", "BETA"),
+    )
+
+    assert any(
+        item.capability is KnowledgeCapability.PORTFOLIO_HOLDINGS
+        and item.subject_span == "ALFA"
+        for item in sanitized.knowledge_requirements
+    )
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        "새희망펀드가 어떤 형태로 설계되어 있는 상품인지 설명해줘.",
+        "새희망펀드가 어떤 방식으로 조성된 상품인지 알려줘.",
+    ],
+)
+def test_named_fund_structure_paraphrases_are_server_recovered(question: str) -> None:
+    draft = IntentAnalysisDraft(
+        intent=InteractionIntent.UNSUPPORTED,
+        product_families=[],
+        evidence_spans=[],
+        needs_clarification=False,
+        knowledge_requirements=[],
+    )
+
+    sanitized = sanitize_server_authorized_knowledge_draft(
+        question,
+        draft,
+        fallback_families=(ProductFamily.FUND,),
+        product_mentions=("새희망펀드",),
+    )
+
+    assert sanitized.intent is InteractionIntent.SEARCH
+    assert [item.capability for item in sanitized.knowledge_requirements] == [
+        KnowledgeCapability.FUND_STRUCTURE_STRATEGY_TREND
+    ]
+    plan = CompositeKnowledgePlanCompiler().compile(
+        question,
+        "fund-structure-paraphrase",
+        sanitized,
+    )
+    assert [item.capability for item in plan.requirements] == [
+        KnowledgeCapability.FUND_STRUCTURE_STRATEGY_TREND
+    ]
+
+
+def test_fund_structure_hcx_proposal_cannot_reclassify_an_etf_profile() -> None:
+    question = "ALPHA 200 ETF는 어떤 방식으로 구성된 상품인지 알려줘."
+    draft = IntentAnalysisDraft(
+        intent=InteractionIntent.SEARCH,
+        product_families=[ProductFamily.DOMESTIC_ETP],
+        evidence_spans=[],
+        needs_clarification=False,
+        knowledge_requirements=[
+            KnowledgeIntentRequirement(
+                capability=KnowledgeCapability.FUND_STRUCTURE_STRATEGY_TREND,
+                subject_span="ALPHA 200 ETF",
+                relation_span="어떤 방식으로 구성된",
+            )
+        ],
+    )
+
+    sanitized = sanitize_server_authorized_knowledge_draft(
+        question,
+        draft,
+        fallback_families=(ProductFamily.DOMESTIC_ETP,),
+        product_mentions=("ALPHA 200 ETF",),
+    )
+
+    assert all(
+        item.capability is not KnowledgeCapability.FUND_STRUCTURE_STRATEGY_TREND
+        for item in sanitized.knowledge_requirements
+    )
+
+
+@pytest.mark.parametrize(
+    ("question", "fallback", "expected"),
+    [
+        (
+            "회사 A를 보유한 ETF와 공모펀드를 알려줘",
+            (ProductFamily.DOMESTIC_ETP, ProductFamily.OVERSEAS_ETP, ProductFamily.FUND),
+            {
+                ProductFamily.DOMESTIC_ETP,
+                ProductFamily.OVERSEAS_ETP,
+                ProductFamily.FUND,
+            },
+        ),
+        (
+            "회사 A를 보유한 ETF와 채권을 알려줘",
+            (ProductFamily.DOMESTIC_ETP, ProductFamily.BOND),
+            {
+                ProductFamily.BOND,
+                ProductFamily.DOMESTIC_ETP,
+                ProductFamily.OVERSEAS_ETP,
+            },
+        ),
+        (
+            "회사 A를 보유한 ETF를 알려줘",
+            (ProductFamily.DOMESTIC_ETP,),
+            {ProductFamily.DOMESTIC_ETP, ProductFamily.OVERSEAS_ETP},
+        ),
+        (
+            "회사 A를 보유한 국내 ETF와 공모펀드를 알려줘",
+            (ProductFamily.DOMESTIC_ETP, ProductFamily.FUND),
+            {ProductFamily.DOMESTIC_ETP, ProductFamily.FUND},
+        ),
+    ],
+)
+def test_generic_etp_expansion_preserves_other_explicit_product_families(
+    question: str,
+    fallback: tuple[ProductFamily, ...],
+    expected: set[ProductFamily],
+) -> None:
+    draft = IntentAnalysisDraft(
+        intent=InteractionIntent.SEARCH,
+        product_families=list(fallback),
+        evidence_spans=[],
+        needs_clarification=False,
+        knowledge_requirements=[],
+    )
+
+    sanitized = sanitize_server_authorized_knowledge_draft(
+        question,
+        draft,
+        fallback_families=fallback,
+    )
+
+    assert set(sanitized.product_families) == expected
 
 
 def test_related_etp_parser_does_not_promote_connective_as_theme_subject() -> None:
@@ -592,18 +1038,12 @@ def test_live_official_release_does_not_claim_bm25_or_document_dense() -> None:
         )
 
 
-def test_live_external_bootstrap_is_empty_cache_and_hash_bound() -> None:
-    bootstrap = build_live_external_knowledge_bootstrap()
-
-    assert bootstrap.artifact.retrieval_mode == "verified_live_official"
-    assert bootstrap.relation_bundle.relations == ()
-    assert bootstrap.relation_bundle.manifest.relation_count == 0
-    assert (
-        bootstrap.artifact.temporal_relation_sha256
-        == bootstrap.relation_bundle.manifest.relation_set_sha256
-    )
-    assert len(bootstrap.artifact_file_sha256) == 64
-    assert len(bootstrap.relation_bundle_file_sha256) == 64
+def test_live_external_bootstrap_cannot_borrow_cache_only_release_authority() -> None:
+    with pytest.raises(
+        ValueError,
+        match="every external capability must be approved for official live search",
+    ):
+        build_live_external_knowledge_bootstrap()
 
 
 def test_explicit_product_identity_narrows_only_its_official_family() -> None:

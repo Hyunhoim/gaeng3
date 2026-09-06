@@ -13,7 +13,9 @@ from finance_agent_core.evaluation.schema_embedding_artifacts import (
     load_verified_schema_embedding_cpu_provider,
 )
 from finance_agent_core.retrieval.document_dense import (
+    ApprovedHybridDocumentIndex,
     OfflineHybridDocumentIndex,
+    load_approved_document_dense_artifact,
     load_document_dense_artifact,
 )
 
@@ -33,6 +35,7 @@ class DocumentCalibrationSuite(CalibrationModel):
     suite_id: Literal[
         "document-dense-public-calibration-v1",
         "document-dense-public-calibration-v2",
+        "document-dense-public-calibration-v3",
     ]
     suite_kind: Literal["public_calibration_not_blind"]
     cases: tuple[DocumentCalibrationCase, ...] = Field(min_length=1, max_length=200)
@@ -70,7 +73,10 @@ def _rank(hits, expected_document_id: str) -> int | None:
 
 def evaluate_document_dense_public_calibration(
     suite: DocumentCalibrationSuite,
-    index: OfflineHybridDocumentIndex,
+    index: OfflineHybridDocumentIndex | ApprovedHybridDocumentIndex,
+    *,
+    minimum_dense_score: float = 0.55,
+    minimum_dense_margin: float = 0.03,
 ) -> dict[str, object]:
     ranks: dict[str, list[int | None]] = {"bm25": [], "dense": [], "hybrid_rrf": []}
     results: list[dict[str, object]] = []
@@ -93,12 +99,22 @@ def evaluate_document_dense_public_calibration(
                 "document_ranks": case_ranks,
             }
         )
+    metrics = {channel: _metrics(values) for channel, values in ranks.items()}
+    activation_passed = metrics["hybrid_rrf"]["recall_at_5"] >= 0.8
     return {
         "schema_version": "1.0",
         "report_kind": "document_dense_public_calibration_not_blind",
         "suite_id": suite.suite_id,
         "case_count": len(suite.cases),
-        "metrics": {channel: _metrics(values) for channel, values in ranks.items()},
+        "metrics": metrics,
+        "selected_policy": {
+            "minimum_dense_score": minimum_dense_score,
+            "minimum_dense_margin": minimum_dense_margin,
+        },
+        "activation_gate": {
+            "passed": activation_passed,
+            "minimum_hybrid_recall_at_5": 0.8,
+        },
         "cases": results,
     }
 
@@ -120,26 +136,50 @@ def main() -> int:
     )
     parser.add_argument("--suite", type=Path, required=True)
     parser.add_argument("--artifact", type=Path, required=True)
+    parser.add_argument(
+        "--artifact-kind",
+        choices=("pending", "approved"),
+        default="pending",
+    )
+    parser.add_argument("--artifact-sha256")
     parser.add_argument("--snapshot-dir", type=Path, required=True)
     parser.add_argument("--snapshot-manifest", type=Path, required=True)
     parser.add_argument("--trusted-cache-root", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--cpu-threads", type=int, default=2)
+    parser.add_argument("--minimum-dense-score", type=float, default=0.55)
+    parser.add_argument("--minimum-dense-margin", type=float, default=0.03)
     arguments = parser.parse_args()
     suite = DocumentCalibrationSuite.model_validate_json(arguments.suite.read_bytes())
-    artifact = load_document_dense_artifact(arguments.artifact)
+    if arguments.artifact_kind == "approved":
+        if arguments.artifact_sha256 is None:
+            parser.error("--artifact-sha256 is required for an approved artifact")
+        artifact = load_approved_document_dense_artifact(
+            arguments.artifact,
+            expected_file_sha256=arguments.artifact_sha256,
+        )
+        index_type = ApprovedHybridDocumentIndex
+        provider_mode = "production"
+    else:
+        if arguments.artifact_sha256 is not None:
+            parser.error("--artifact-sha256 is only accepted for an approved artifact")
+        artifact = load_document_dense_artifact(arguments.artifact)
+        index_type = OfflineHybridDocumentIndex
+        provider_mode = "shadow"
     provider = load_verified_schema_embedding_cpu_provider(
         alias="kure-v1",
         snapshot_dir=arguments.snapshot_dir,
         manifest_path=arguments.snapshot_manifest,
         trusted_cache_root=arguments.trusted_cache_root,
-        mode="shadow",
+        mode=provider_mode,
         batch_size=8,
         cpu_threads=arguments.cpu_threads,
     )
     report = evaluate_document_dense_public_calibration(
         suite,
-        OfflineHybridDocumentIndex(artifact, provider),
+        index_type(artifact, provider),
+        minimum_dense_score=arguments.minimum_dense_score,
+        minimum_dense_margin=arguments.minimum_dense_margin,
     )
     report["artifact_sha256"] = artifact.canonical_sha256
     data = (json.dumps(report, ensure_ascii=False, sort_keys=True, indent=2) + "\n").encode("utf-8")

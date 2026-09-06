@@ -11,6 +11,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+import finance_agent_core
 from finance_agent_core.agent.adaptive_semantic import AdaptiveSemanticResolver
 from finance_agent_core.agent.backend_adapter import execute_answer_request
 from finance_agent_core.agent.external_knowledge_router import ExternalKnowledgeRouter
@@ -24,7 +25,6 @@ from finance_agent_core.agent.providers.hyperclova import (
     HyperClovaXCallRecord,
     HyperClovaXFinalAnswerProvider,
     HyperClovaXIntentAnalysisProvider,
-    HyperClovaXSemanticResolverProvider,
     HyperClovaXSettings,
 )
 from finance_agent_core.agent.providers.hyperclova_http import HyperClovaXHTTPTransport
@@ -74,11 +74,20 @@ from finance_agent_core.retrieval.temporal_relations import TemporalRelationStor
 from finance_agent_core.storage.approval import require_approved_database_paths
 
 from app.config import Settings
-from app.dependencies import _build_knowledge_agent
+from app.dependencies import (
+    _build_knowledge_agent,
+    build_audit_sink,
+    require_approval_guard,
+    resolve_runtime_release,
+)
+from app.dependencies import build_agent as build_production_agent
 
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _COMMIT = re.compile(r"^[0-9a-f]{40}$")
 _MAX_SECRET_BYTES = 16 * 1024
+_REPRESENTATIVE_CASE_COUNT = 100
+_SELECTION_ARTIFACT_KIND = "post_gold_representative_case_selection"
+_SELECTION_METHOD = "lowest_sha256_of_questions_sha256_colon_case_id"
 _SUPPORTED_SUITES = {
     "finance-agent-independent-holdout-v2-300": {
         "id_prefix": "IH",
@@ -198,6 +207,28 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _source_tree_sha256(root: Path) -> str:
+    """Bind every runtime source file, including safe untracked development files."""
+
+    digest = hashlib.sha256()
+    for path in sorted(
+        (
+            item
+            for item in root.rglob("*")
+            if item.is_file()
+            and not item.is_symlink()
+            and "__pycache__" not in item.parts
+            and item.suffix != ".pyc"
+        ),
+        key=lambda item: item.relative_to(root).as_posix(),
+    ):
+        relative = path.relative_to(root).as_posix().encode("utf-8")
+        digest.update(len(relative).to_bytes(4, "big"))
+        digest.update(relative)
+        digest.update(bytes.fromhex(_sha256(path)))
+    return digest.hexdigest()
+
+
 def _canonical_sha256(value: object) -> str:
     payload = json.dumps(
         value,
@@ -207,6 +238,84 @@ def _canonical_sha256(value: object) -> str:
         allow_nan=False,
     ).encode("utf-8")
     return hashlib.sha256(payload).hexdigest()
+
+
+def _representative_case_ids(
+    *,
+    questions_sha256: str,
+    case_ids: list[str],
+    case_count: int = _REPRESENTATIVE_CASE_COUNT,
+) -> list[str]:
+    """Select a deterministic Gold-independent sample and preserve suite order."""
+
+    if len(case_ids) < case_count or len(case_ids) != len(set(case_ids)):
+        raise RuntimeError("case selection source IDs are invalid")
+    ranked = sorted(
+        case_ids,
+        key=lambda case_id: (
+            hashlib.sha256(f"{questions_sha256}:{case_id}".encode()).hexdigest(),
+            case_id,
+        ),
+    )
+    selected = set(ranked[:case_count])
+    return [case_id for case_id in case_ids if case_id in selected]
+
+
+def _validate_case_selection(
+    path: Path,
+    expected_file_sha256: str,
+    *,
+    suite_id: str,
+    questions_sha256: str,
+    available_case_ids: list[str],
+) -> dict[str, Any]:
+    """Load one canonical post-Gold sample without consulting answer labels."""
+
+    if not path.is_absolute() or not path.is_file() or path.is_symlink():
+        raise RuntimeError("case selection must be an absolute regular file")
+    if _sha256(path) != expected_file_sha256:
+        raise RuntimeError("case selection file SHA-256 differs")
+    try:
+        payload = json.loads(path.read_bytes())
+    except (OSError, ValueError) as error:
+        raise RuntimeError("case selection file is invalid") from error
+    if not isinstance(payload, dict):
+        raise TypeError("case selection file must be a JSON object")
+    required = {
+        "schema_version",
+        "artifact_kind",
+        "suite_id",
+        "questions_sha256",
+        "selection_method",
+        "case_count",
+        "selected_ids",
+        "selection_sha256",
+    }
+    if set(payload) != required:
+        raise RuntimeError("case selection schema differs")
+    selected_ids = payload.get("selected_ids")
+    if (
+        payload.get("schema_version") != "1.0"
+        or payload.get("artifact_kind") != _SELECTION_ARTIFACT_KIND
+        or payload.get("suite_id") != suite_id
+        or payload.get("questions_sha256") != questions_sha256
+        or payload.get("selection_method") != _SELECTION_METHOD
+        or payload.get("case_count") != _REPRESENTATIVE_CASE_COUNT
+        or not isinstance(selected_ids, list)
+        or any(not isinstance(value, str) for value in selected_ids)
+    ):
+        raise RuntimeError("case selection contract differs")
+    expected_ids = _representative_case_ids(
+        questions_sha256=questions_sha256,
+        case_ids=available_case_ids,
+    )
+    if selected_ids != expected_ids:
+        raise RuntimeError("case selection IDs differ from the deterministic sample")
+    canonical = dict(payload)
+    claimed_sha256 = canonical.pop("selection_sha256")
+    if claimed_sha256 != _canonical_sha256(canonical):
+        raise RuntimeError("case selection canonical SHA-256 differs")
+    return payload
 
 
 def _require_sha256(value: str, *, label: str) -> str:
@@ -226,6 +335,39 @@ def _verify_pre_gold_source_state(arguments: argparse.Namespace) -> str | None:
     if actual != expected:
         raise RuntimeError("pre-Gold development diff SHA-256 differs")
     return actual
+
+
+def _runtime_source_provenance() -> dict[str, str]:
+    """Prove that the runner imports Core from the mounted source tree.
+
+    Recording a requested Git commit is insufficient when an old image or
+    legacy ``PYTHONPATH`` actually supplies the imported package.  In a source
+    checkout, refuse that mismatch before opening the sealed questions and
+    bind the two execution-critical modules by SHA-256. Installed production
+    images have no sibling source tree and retain the immutable-image trust
+    boundary instead.
+    """
+
+    core_init = Path(finance_agent_core.__file__).resolve()
+    core_root = core_init.parent
+    source_root = Path(__file__).resolve().parents[2]
+    expected_core_root = (
+        source_root / "finance_agent" / "packages" / "finance_agent_core" / "src"
+        / "finance_agent_core"
+    )
+    if expected_core_root.is_dir() and core_root != expected_core_root.resolve():
+        raise RuntimeError("runtime finance_agent_core import differs from mounted source")
+    routed_service = core_root / "agent" / "routed_service.py"
+    if not routed_service.is_file():
+        raise RuntimeError("runtime routed service source is unavailable")
+    return {
+        "finance_agent_core_init_sha256": _sha256(core_init),
+        "routed_service_sha256": _sha256(routed_service),
+        "finance_agent_core_tree_sha256": _source_tree_sha256(core_root),
+        "fastapi_backend_app_tree_sha256": _source_tree_sha256(
+            Path(__file__).resolve().parents[1] / "app"
+        ),
+    }
 
 
 def _validate_question_only(
@@ -433,9 +575,14 @@ def _validate_document_calibration(arguments: argparse.Namespace) -> None:
         raise RuntimeError("Document Dense public calibration quality gate failed")
 
 
-def _build_agent(
+def _build_lab_live_agent(
     arguments: argparse.Namespace,
-) -> tuple[RoutedFinanceAgent, list[HyperClovaXCallRecord], CacheFirstOfficialDiscoveryProvider]:
+) -> tuple[
+    RoutedFinanceAgent,
+    list[HyperClovaXCallRecord],
+    CacheFirstOfficialDiscoveryProvider,
+    Any | None,
+]:
     database_paths = _database_paths(arguments)
     hcx_settings = HyperClovaXSettings(model="HCX-007", timeout_seconds=45.0)
     calls: list[HyperClovaXCallRecord] = []
@@ -470,11 +617,6 @@ def _build_agent(
     schema_linker = ProductionHybridSchemaLinker(
         DenseSchemaIndex(schema_artifact, embedding),
         policy,
-    )
-    semantic_provider = HyperClovaXSemanticResolverProvider(
-        hcx_settings,
-        transport,
-        on_call=calls.append,
     )
 
     knowledge_settings = Settings(
@@ -519,6 +661,11 @@ def _build_agent(
         registry=registry,
         minimum_dense_score=arguments.document_dense_min_score,
         minimum_dense_margin=arguments.document_dense_minimum_margin,
+        # This runner is an explicitly post-Gold, non-release laboratory
+        # regression.  It may evaluate the SHA-bound pending corpus bytes, but
+        # the release constructor remains fail-closed until independent corpus
+        # approval produces a DocumentCacheActivationReceipt.
+        allow_pending_snapshot_evidence=True,
     )
     acquisition = OfficialEvidenceAcquisitionCoordinator(
         relation_store=relation_store,
@@ -541,6 +688,7 @@ def _build_agent(
             transport,
             on_call=calls.append,
             require_execution_structure=True,
+            allow_entity_alias_repair=True,
         ),
         official_answer_provider=HyperClovaXFinalAnswerProvider(
             hcx_settings,
@@ -561,11 +709,203 @@ def _build_agent(
         external_search_plan_compiler=ExternalSearchPlanCompiler(registry),
         adaptive_semantic_resolver=AdaptiveSemanticResolver(
             schema_linker,
-            hclx_provider=semantic_provider,
             execution_enabled=True,
         ),
     )
-    return agent, calls, document_discovery
+    return agent, calls, document_discovery, None
+
+
+def _required_path(arguments: argparse.Namespace, name: str) -> Path:
+    value = getattr(arguments, name, None)
+    if not isinstance(value, Path):
+        raise TypeError(f"approved cache-only mode requires --{name.replace('_', '-')}")
+    return value
+
+
+def _required_text(arguments: argparse.Namespace, name: str) -> str:
+    value = getattr(arguments, name, None)
+    if not isinstance(value, str) or not value:
+        raise RuntimeError(f"approved cache-only mode requires --{name.replace('_', '-')}")
+    return value
+
+
+def _build_approved_cache_only_agent(
+    arguments: argparse.Namespace,
+) -> tuple[
+    RoutedFinanceAgent,
+    list[HyperClovaXCallRecord],
+    CacheFirstOfficialDiscoveryProvider,
+    Any,
+]:
+    """Assemble the signed production path while forbidding every live input."""
+
+    forbidden = {
+        "naver-client-id-file": getattr(arguments, "naver_client_id_file", None),
+        "naver-client-secret-file": getattr(arguments, "naver_client_secret_file", None),
+        "pending-corpus-manifest": getattr(arguments, "pending_corpus_manifest", None),
+        "pending-corpus-manifest-sha256": getattr(
+            arguments,
+            "pending_corpus_manifest_sha256",
+            None,
+        ),
+        "relation-artifact-sha256-file": getattr(
+            arguments,
+            "relation_artifact_sha256_file",
+            None,
+        ),
+    }
+    configured_forbidden = sorted(name for name, value in forbidden.items() if value is not None)
+    if configured_forbidden:
+        raise RuntimeError(
+            "approved cache-only mode forbids live, pending, and sidecar trust inputs: "
+            + ", ".join(configured_forbidden)
+        )
+
+    runtime_audit_file = _required_path(arguments, "runtime_audit_file")
+    if runtime_audit_file.exists() or runtime_audit_file.is_symlink():
+        raise RuntimeError("approved cache-only runtime audit file must not already exist")
+    relation_artifact_sha256 = _required_text(arguments, "relation_artifact_sha256")
+    _require_sha256(relation_artifact_sha256, label="relation artifact")
+    if _sha256(arguments.document_dense_index) != arguments.document_dense_index_sha256:
+        raise RuntimeError("approved Document Dense artifact SHA-256 differs")
+
+    settings = Settings(
+        app_env="evaluation",
+        app_version=arguments.backend_version,
+        answer_provider="hyperclova",
+        hcx_query_plan_enabled=False,
+        hcx_intent_analysis_enabled=True,
+        hcx_semantic_resolver_enabled=True,
+        llm_mode="evaluation",
+        llm_provider="hyperclova",
+        hcx_model="HCX-007",
+        hcx_timeout_seconds=45.0,
+        clovastudio_api_key_file=arguments.hclx_key_file,
+        official_answer_timeout_seconds=270.0,
+        official_answer_max_inflight=arguments.official_answer_max_inflight,
+        web_concurrency=1,
+        audit_mode="jsonl",
+        audit_file=runtime_audit_file,
+        audit_queue_capacity=2_048,
+        audit_shutdown_timeout_seconds=5.0,
+        audit_fsync_each_event=True,
+        fund_execution_policy="public_fund_v1_approved",
+        release_manifest_file=_required_path(arguments, "release_manifest_file"),
+        deployment_binding_file=_required_path(arguments, "deployment_binding_file"),
+        deployment_binding_sha256=_required_text(arguments, "deployment_binding_sha256"),
+        source_commit=arguments.source_commit,
+        runtime_image_reference=_required_text(arguments, "runtime_image_reference"),
+        runtime_platform=arguments.runtime_platform,
+        dense_schema_linker_enabled=True,
+        adaptive_semantic_enabled=True,
+        schema_dense_index_file=arguments.schema_dense_index,
+        schema_dense_index_sha256=arguments.schema_dense_index_sha256,
+        schema_dense_calibration_report_sha256=(arguments.schema_dense_calibration_sha256),
+        schema_dense_min_score=arguments.schema_dense_min_score,
+        schema_dense_hclx_candidate_min_score=(
+            arguments.schema_dense_hclx_candidate_min_score
+        ),
+        schema_dense_minimum_margin=arguments.schema_dense_minimum_margin,
+        schema_dense_top_k=10,
+        kure_snapshot_dir=arguments.kure_snapshot_dir,
+        kure_snapshot_manifest_file=arguments.kure_snapshot_manifest,
+        kure_trusted_cache_root=arguments.kure_cache_root,
+        kure_cpu_threads=arguments.kure_cpu_threads,
+        kure_batch_size=16,
+        product_dense_enabled=False,
+        relation_retrieval_artifact_file=arguments.relation_artifact,
+        relation_retrieval_artifact_sha256=relation_artifact_sha256,
+        relation_index_file=arguments.relation_index,
+        external_knowledge_enabled=True,
+        external_knowledge_artifact_file=_required_path(
+            arguments,
+            "external_knowledge_artifact_file",
+        ),
+        external_knowledge_artifact_sha256=_required_text(
+            arguments,
+            "external_knowledge_artifact_sha256",
+        ),
+        external_temporal_relation_file=_required_path(
+            arguments,
+            "external_temporal_relation_file",
+        ),
+        external_temporal_relation_sha256=_required_text(
+            arguments,
+            "external_temporal_relation_sha256",
+        ),
+        external_document_dense_artifact_file=arguments.document_dense_index,
+        external_document_cache_activation_file=_required_path(
+            arguments,
+            "document_cache_activation_file",
+        ),
+        external_document_corpus_manifest_file=_required_path(
+            arguments,
+            "approved_corpus_manifest",
+        ),
+        external_document_corpus_root=_required_path(
+            arguments,
+            "approved_corpus_root",
+        ),
+        naver_api_hub_client_id_file=None,
+        naver_api_hub_client_secret_file=None,
+        bond_db=arguments.bond_db,
+        domestic_etp_db=arguments.domestic_etp_db,
+        overseas_etp_db=arguments.overseas_etp_db,
+        fund_db=arguments.fund_db,
+    )
+    release_guard = resolve_runtime_release(settings)
+    if release_guard is None:
+        raise RuntimeError("approved cache-only mode requires a resolved signed release")
+    audit_sink = build_audit_sink(settings)
+    if audit_sink is None:
+        raise RuntimeError("approved cache-only mode requires durable JSONL audit")
+    try:
+        service = build_production_agent(
+            settings,
+            release_guard=release_guard,
+            audit_sink=audit_sink,
+        )
+        service = require_approval_guard(
+            service,
+            settings,
+            release_guard,
+            audit_sink,
+        )
+        if type(service) is not RoutedFinanceAgent:
+            raise RuntimeError("approved cache-only runtime Agent type differs")
+        runtime = service.external_knowledge_runtime
+        signed = release_guard.manifest.components.knowledge_retrieval.external
+        if runtime is None or signed.artifact is None:
+            raise RuntimeError("approved cache-only external Runtime is missing")
+        discovery = runtime.acquisition.discovery_provider
+        if (
+            signed.status != "activated"
+            or signed.artifact.retrieval_mode != "approved_corpus_cache_only"
+            or type(discovery) is not CacheFirstOfficialDiscoveryProvider
+            or not discovery.production_approved
+            or discovery.live_fallback_enabled
+            or discovery.fallback is not None
+            or discovery.activation_binding_sha256
+            != signed.artifact.document_activation_receipt_sha256
+        ):
+            raise RuntimeError("signed external Runtime is not approved cache-only")
+    except Exception:
+        audit_sink.close(timeout_seconds=settings.audit_shutdown_timeout_seconds)
+        raise
+    return service, [], discovery, audit_sink
+
+
+def _build_agent(
+    arguments: argparse.Namespace,
+) -> tuple[
+    RoutedFinanceAgent,
+    list[HyperClovaXCallRecord],
+    CacheFirstOfficialDiscoveryProvider,
+    Any | None,
+]:
+    if arguments.external_mode == "approved-cache-only":
+        return _build_approved_cache_only_agent(arguments)
+    return _build_lab_live_agent(arguments)
 
 
 def _case_result(
@@ -598,6 +938,12 @@ def _case_result(
         )
         final_adapter = adapter
         if adapter.http_status_code == 200:
+            break
+        if adapter.response.error is not None and not adapter.response.error.retryable:
+            # A programming/contract failure cannot heal on an immediate
+            # retry.  Repeating the whole request needlessly repeats HCLX
+            # Intent and the bounded Semantic Resolver.  Transient provider
+            # errors keep their existing retry budget.
             break
         if attempt_number <= max_retries:
             time.sleep(0.25 * attempt_number)
@@ -654,11 +1000,20 @@ def _parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--image-id", type=str, required=True)
     parser.add_argument(
+        "--external-mode",
+        choices=("lab-live-pending", "approved-cache-only"),
+        default="lab-live-pending",
+        help=(
+            "use the legacy post-Gold lab path or the exact signed production "
+            "cache-only assembly"
+        ),
+    )
+    parser.add_argument(
         "--runner-sha256", type=lambda v: _require_sha256(v, label="runner"), required=True
     )
     parser.add_argument("--hclx-key-file", type=Path, required=True)
-    parser.add_argument("--naver-client-id-file", type=Path, required=True)
-    parser.add_argument("--naver-client-secret-file", type=Path, required=True)
+    parser.add_argument("--naver-client-id-file", type=Path)
+    parser.add_argument("--naver-client-secret-file", type=Path)
     parser.add_argument("--bond-db", type=Path, required=True)
     parser.add_argument("--domestic-etp-db", type=Path, required=True)
     parser.add_argument("--overseas-etp-db", type=Path, required=True)
@@ -672,7 +1027,11 @@ def _parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument("--relation-artifact", type=Path, required=True)
-    parser.add_argument("--relation-artifact-sha256-file", type=Path, required=True)
+    parser.add_argument("--relation-artifact-sha256-file", type=Path)
+    parser.add_argument(
+        "--relation-artifact-sha256",
+        type=lambda v: _require_sha256(v, label="relation artifact"),
+    )
     parser.add_argument("--relation-index", type=Path, required=True)
     parser.add_argument("--schema-dense-index", type=Path, required=True)
     parser.add_argument(
@@ -693,7 +1052,7 @@ def _parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--schema-dense-min-score", type=float, default=0.340015)
     parser.add_argument("--schema-dense-hclx-candidate-min-score", type=float, default=0.3)
-    parser.add_argument("--schema-dense-minimum-margin", type=float, default=0.042771)
+    parser.add_argument("--schema-dense-minimum-margin", type=float, default=0.034684)
     parser.add_argument("--kure-snapshot-dir", type=Path, required=True)
     parser.add_argument("--kure-snapshot-manifest", type=Path, required=True)
     parser.add_argument("--kure-cache-root", type=Path, required=True)
@@ -704,18 +1063,44 @@ def _parser() -> argparse.ArgumentParser:
         type=lambda v: _require_sha256(v, label="Document Dense index"),
         required=True,
     )
-    parser.add_argument("--document-dense-calibration-file", type=Path, required=True)
+    parser.add_argument("--document-dense-calibration-file", type=Path)
     parser.add_argument(
         "--document-dense-calibration-sha256",
         type=lambda v: _require_sha256(v, label="Document Dense calibration"),
-        required=True,
     )
-    parser.add_argument("--pending-corpus-manifest", type=Path, required=True)
+    parser.add_argument("--pending-corpus-manifest", type=Path)
     parser.add_argument(
         "--pending-corpus-manifest-sha256",
         type=lambda v: _require_sha256(v, label="pending corpus manifest"),
-        required=True,
     )
+    parser.add_argument("--release-manifest-file", type=Path)
+    parser.add_argument("--deployment-binding-file", type=Path)
+    parser.add_argument(
+        "--deployment-binding-sha256",
+        type=lambda v: _require_sha256(v, label="deployment binding"),
+    )
+    parser.add_argument("--runtime-image-reference")
+    parser.add_argument(
+        "--runtime-platform",
+        choices=("linux/amd64", "linux/arm64"),
+        default="linux/amd64",
+    )
+    parser.add_argument("--backend-version", default="0.1.0")
+    parser.add_argument("--runtime-audit-file", type=Path)
+    parser.add_argument("--external-knowledge-artifact-file", type=Path)
+    parser.add_argument(
+        "--external-knowledge-artifact-sha256",
+        type=lambda v: _require_sha256(v, label="external knowledge artifact"),
+    )
+    parser.add_argument("--external-temporal-relation-file", type=Path)
+    parser.add_argument(
+        "--external-temporal-relation-sha256",
+        type=lambda v: _require_sha256(v, label="external temporal relation"),
+    )
+    parser.add_argument("--document-cache-activation-file", type=Path)
+    parser.add_argument("--approved-corpus-manifest", type=Path)
+    parser.add_argument("--approved-corpus-root", type=Path)
+    parser.add_argument("--official-answer-max-inflight", type=int, default=2)
     parser.add_argument("--document-dense-min-score", type=float, default=0.55)
     parser.add_argument("--document-dense-minimum-margin", type=float, default=0.03)
     parser.add_argument("--discovery-timeout-seconds", type=float, default=5.0)
@@ -740,11 +1125,56 @@ def _parser() -> argparse.ArgumentParser:
             "remains the default"
         ),
     )
+    parser.add_argument(
+        "--case-selection-file",
+        type=Path,
+        help="canonical deterministic 100-case selection manifest (post-Gold only)",
+    )
+    parser.add_argument(
+        "--case-selection-sha256",
+        type=lambda v: _require_sha256(v, label="case selection"),
+    )
     return parser
+
+
+def _validate_mode_arguments(arguments: argparse.Namespace) -> None:
+    selection_configured = (
+        arguments.case_selection_file is not None,
+        arguments.case_selection_sha256 is not None,
+    )
+    if selection_configured[0] != selection_configured[1]:
+        raise SystemExit("case selection file and SHA-256 must be set together")
+    if any(selection_configured) and not arguments.post_gold_development_regression:
+        raise SystemExit("case selection is allowed only for a post-Gold regression")
+    if arguments.development_case_ids and any(selection_configured):
+        raise SystemExit("development case IDs and canonical case selection are mutually exclusive")
+    if not 1 <= arguments.official_answer_max_inflight <= 8:
+        raise SystemExit("official answer max inflight must be between one and eight")
+    if arguments.external_mode == "lab-live-pending":
+        required = {
+            "naver client ID file": arguments.naver_client_id_file,
+            "naver client secret file": arguments.naver_client_secret_file,
+            "relation artifact SHA-256 file": arguments.relation_artifact_sha256_file,
+            "pending corpus manifest": arguments.pending_corpus_manifest,
+            "pending corpus manifest SHA-256": arguments.pending_corpus_manifest_sha256,
+            "Document Dense calibration file": arguments.document_dense_calibration_file,
+            "Document Dense calibration SHA-256": (
+                arguments.document_dense_calibration_sha256
+            ),
+        }
+        missing = sorted(label for label, value in required.items() if value is None)
+        if missing:
+            raise SystemExit("lab live/pending mode requires " + ", ".join(missing))
+        if arguments.relation_artifact_sha256 is not None:
+            raise SystemExit("lab live/pending mode requires the SHA sidecar, not a direct hash")
+        return
+    if arguments.development_unapproved_databases:
+        raise SystemExit("approved cache-only mode forbids unapproved databases")
 
 
 def main(argv: list[str] | None = None) -> int:
     arguments = _parser().parse_args(argv)
+    _validate_mode_arguments(arguments)
     if _COMMIT.fullmatch(arguments.source_commit) is None:
         raise SystemExit("source commit must be a 40-character lowercase Git SHA")
     if (
@@ -754,6 +1184,7 @@ def main(argv: list[str] | None = None) -> int:
         raise SystemExit("image ID must be a sha256 digest")
     if _sha256(Path(__file__)) != arguments.runner_sha256:
         raise SystemExit("runner SHA-256 differs")
+    runtime_source_provenance = _runtime_source_provenance()
     if not 0 <= arguments.max_retries <= 2:
         raise SystemExit("max retries must be between zero and two")
     if arguments.post_gold_development_regression != bool(arguments.development_diff_sha256):
@@ -774,49 +1205,94 @@ def main(argv: list[str] | None = None) -> int:
 
     # The question-only file is the last input opened. All executable code,
     # models, indexes, credentials and DB trust boundaries must assemble first.
-    agent, calls, document_discovery = _build_agent(arguments)
+    agent, calls, document_discovery, audit_sink = _build_agent(arguments)
     if arguments.preflight_only:
-        print(
-            json.dumps(
-                {
-                    "preflight": "passed_without_opening_question_only",
-                    "source_commit": arguments.source_commit,
-                    "development_diff_sha256": arguments.development_diff_sha256,
-                    "pre_gold_development_diff_sha256": verified_pre_gold_diff,
-                    "image_id": arguments.image_id,
-                    "hclx_model": "HCX-007",
-                    "schema_dense_policy_sha256": (
-                        agent.adaptive_semantic_resolver.schema_linker.policy.policy_sha256
-                    ),
-                    "source_registry_sha256": (load_official_source_registry().canonical_sha256),
-                    "document_cache_queries": document_discovery.cache_queries,
-                    "hclx_calls": len(calls),
-                },
-                sort_keys=True,
-            ),
-            flush=True,
-        )
+        try:
+            print(
+                json.dumps(
+                    {
+                        "preflight": "passed_without_opening_question_only",
+                        "source_commit": arguments.source_commit,
+                        "development_diff_sha256": arguments.development_diff_sha256,
+                        "pre_gold_development_diff_sha256": verified_pre_gold_diff,
+                        "image_id": arguments.image_id,
+                        "runtime_source_provenance": runtime_source_provenance,
+                        "external_mode": arguments.external_mode,
+                        "document_cache_production_approved": (
+                            document_discovery.production_approved
+                        ),
+                        "document_live_fallback_enabled": (
+                            document_discovery.live_fallback_enabled
+                        ),
+                        "hclx_model": "HCX-007",
+                        "schema_dense_policy_sha256": (
+                            agent.adaptive_semantic_resolver.schema_linker.policy.policy_sha256
+                        ),
+                        "source_registry_sha256": (
+                            load_official_source_registry().canonical_sha256
+                        ),
+                        "document_cache_queries": document_discovery.cache_queries,
+                        "document_cache_evidence_hits": (
+                            document_discovery.cache_evidence_hits
+                        ),
+                        "hclx_calls": len(calls),
+                    },
+                    sort_keys=True,
+                ),
+                flush=True,
+            )
+        finally:
+            if audit_sink is not None and not audit_sink.close(timeout_seconds=5.0):
+                raise RuntimeError("runtime audit did not close cleanly")
         return 0
-    # Re-check after all runtime inputs assemble. A concurrent edit must never
-    # cross the boundary between the sealed source state and question exposure.
-    verified_pre_gold_diff = _verify_pre_gold_source_state(arguments)
-    suite_metadata, cases = _validate_question_only(
-        arguments.questions,
-        arguments.questions_sha256,
-    )
-    if arguments.development_case_ids:
-        requested_ids = [
-            value.strip() for value in arguments.development_case_ids.split(",") if value.strip()
-        ]
-        if not requested_ids or len(requested_ids) != len(set(requested_ids)):
-            raise SystemExit("development case IDs must be a non-empty unique list")
-        by_id = {case["id"]: case for case in cases}
-        if any(case_id not in by_id for case_id in requested_ids):
-            raise SystemExit("development case ID is outside the sealed suite")
-        cases = [by_id[case_id] for case_id in requested_ids]
+    try:
+        # Re-check after all runtime inputs assemble. A concurrent edit must never
+        # cross the boundary between the sealed source state and question exposure.
+        verified_pre_gold_diff = _verify_pre_gold_source_state(arguments)
+        if _runtime_source_provenance() != runtime_source_provenance:
+            raise RuntimeError("runtime source changed during preflight")
+        suite_metadata, cases = _validate_question_only(
+            arguments.questions,
+            arguments.questions_sha256,
+        )
+        case_selection: dict[str, Any] | None = None
+        if arguments.case_selection_file is not None:
+            case_selection = _validate_case_selection(
+                arguments.case_selection_file,
+                arguments.case_selection_sha256,
+                suite_id=suite_metadata["suite_id"],
+                questions_sha256=arguments.questions_sha256,
+                available_case_ids=[case["id"] for case in cases],
+            )
+            selected_ids = set(case_selection["selected_ids"])
+            cases = [case for case in cases if case["id"] in selected_ids]
+        if arguments.development_case_ids:
+            requested_ids = [
+                value.strip()
+                for value in arguments.development_case_ids.split(",")
+                if value.strip()
+            ]
+            if not requested_ids or len(requested_ids) != len(set(requested_ids)):
+                raise SystemExit("development case IDs must be a non-empty unique list")
+            by_id = {case["id"]: case for case in cases}
+            if any(case_id not in by_id for case_id in requested_ids):
+                raise SystemExit("development case ID is outside the sealed suite")
+            cases = [by_id[case_id] for case_id in requested_ids]
+    except BaseException:
+        if audit_sink is not None:
+            audit_sink.close(timeout_seconds=5.0)
+        raise
     created_at = datetime.now(UTC).isoformat().replace("+00:00", "Z")
     results: list[dict[str, Any]] = []
-    journal = _open_new_journal(arguments.journal)
+    try:
+        journal = _open_new_journal(arguments.journal)
+        if audit_sink is not None:
+            audit_sink.start()
+    except BaseException:
+        if audit_sink is not None:
+            audit_sink.close(timeout_seconds=5.0)
+        raise
+    audit_flush_succeeded = True
     try:
         for index, case in enumerate(cases, start=1):
             result = _case_result(
@@ -851,6 +1327,10 @@ def main(argv: list[str] | None = None) -> int:
         journal.close()
         if arguments.journal.exists():
             arguments.journal.chmod(0o400)
+        if audit_sink is not None:
+            audit_flush_succeeded = audit_sink.close(timeout_seconds=5.0)
+    if not audit_flush_succeeded:
+        raise RuntimeError("runtime audit did not flush cleanly")
 
     database_paths = _database_paths(arguments)
     post_gold = arguments.post_gold_development_regression
@@ -876,8 +1356,21 @@ def main(argv: list[str] | None = None) -> int:
         "development_diff_sha256": arguments.development_diff_sha256,
         "pre_gold_development_diff_sha256": verified_pre_gold_diff,
         "image_id": arguments.image_id,
+        "runtime_source_provenance": runtime_source_provenance,
         "runner_sha256": arguments.runner_sha256,
         "questions_sha256": arguments.questions_sha256,
+        "case_selection_file_sha256": (
+            arguments.case_selection_sha256 if case_selection is not None else None
+        ),
+        "case_selection_sha256": (
+            case_selection["selection_sha256"] if case_selection is not None else None
+        ),
+        "case_selection_method": (
+            case_selection["selection_method"] if case_selection is not None else None
+        ),
+        "selected_case_ids": (
+            case_selection["selected_ids"] if case_selection is not None else None
+        ),
         "suite_id": suite_metadata["suite_id"],
         "suite_phase": suite_metadata["phase"],
         "phase1_reference": suite_metadata["phase1_reference"],
@@ -894,26 +1387,89 @@ def main(argv: list[str] | None = None) -> int:
             else "release_approved"
         ),
         "schema_dense_index_sha256": arguments.schema_dense_index_sha256,
-        "schema_dense_activation_policy_sha256": agent.adaptive_semantic_resolver.schema_linker.policy.policy_sha256,
+        "schema_dense_activation_policy_sha256": (
+            agent.adaptive_semantic_resolver.schema_linker.policy.policy_sha256
+        ),
         "schema_dense_calibration_sha256": arguments.schema_dense_calibration_sha256,
         "schema_dense_calibration_file_sha256": (arguments.schema_dense_calibration_file_sha256),
         "kure_snapshot_manifest_sha256": _sha256(arguments.kure_snapshot_manifest),
         "document_dense_index_sha256": arguments.document_dense_index_sha256,
-        "document_dense_calibration_sha256": (arguments.document_dense_calibration_sha256),
-        "pending_corpus_manifest_sha256": arguments.pending_corpus_manifest_sha256,
-        "relation_artifact_sha256": _sha256(arguments.relation_artifact),
-        "relation_artifact_sha256_file_sha256": _sha256(arguments.relation_artifact_sha256_file),
+        "document_dense_calibration_sha256": (
+            arguments.document_dense_calibration_sha256
+            if arguments.external_mode == "lab-live-pending"
+            else None
+        ),
+        "pending_corpus_manifest_sha256": (
+            arguments.pending_corpus_manifest_sha256
+            if arguments.external_mode == "lab-live-pending"
+            else None
+        ),
+        "approved_corpus_manifest_sha256": (
+            _sha256(arguments.approved_corpus_manifest)
+            if arguments.external_mode == "approved-cache-only"
+            else None
+        ),
+        "document_cache_activation_sha256": (
+            _sha256(arguments.document_cache_activation_file)
+            if arguments.external_mode == "approved-cache-only"
+            else None
+        ),
+        "relation_artifact_sha256": (
+            arguments.relation_artifact_sha256
+            if arguments.external_mode == "approved-cache-only"
+            else _sha256(arguments.relation_artifact)
+        ),
+        "relation_artifact_sha256_file_sha256": (
+            _sha256(arguments.relation_artifact_sha256_file)
+            if arguments.external_mode == "lab-live-pending"
+            else None
+        ),
         "relation_index_sha256": _sha256(arguments.relation_index),
+        "external_mode": arguments.external_mode,
+        "release_manifest_sha256": (
+            _sha256(arguments.release_manifest_file)
+            if arguments.external_mode == "approved-cache-only"
+            else None
+        ),
+        "deployment_binding_sha256": (
+            arguments.deployment_binding_sha256
+            if arguments.external_mode == "approved-cache-only"
+            else None
+        ),
+        "external_knowledge_artifact_sha256": (
+            arguments.external_knowledge_artifact_sha256
+            if arguments.external_mode == "approved-cache-only"
+            else None
+        ),
+        "external_temporal_relation_sha256": (
+            arguments.external_temporal_relation_sha256
+            if arguments.external_mode == "approved-cache-only"
+            else None
+        ),
+        "runtime_audit_sha256": (
+            _sha256(arguments.runtime_audit_file)
+            if arguments.external_mode == "approved-cache-only"
+            else None
+        ),
         "source_registry_sha256": load_official_source_registry().canonical_sha256,
         "hclx_model": "HCX-007",
         "feature_state": {
             "hclx_intent": "on",
             "ontology_lexical": "on",
-            "schema_dense": "on_candidate_only",
-            "hclx_semantic_resolver": "on_bounded_candidate_selection",
+            "schema_dense": "on_hclx_gap_fallback_candidate",
+            "hclx_semantic_frame": "on_primary_bounded_structure",
+            "semantic_admission": "on_server_verified_sequential",
             "sql_python_verifier": "on",
-            "official_external_live_search": "on",
-            "document_dense": "on_url_candidate_cache_only",
+            "official_external_live_search": (
+                "off_signed_cache_only"
+                if arguments.external_mode == "approved-cache-only"
+                else "on"
+            ),
+            "document_dense": (
+                "on_release_pinned_approved_cache"
+                if arguments.external_mode == "approved-cache-only"
+                else "on_lab_sha_bound_snapshot_evidence_pending_release_approval"
+            ),
             "provided_db_intersection": "on",
             "hclx_grounded_answer": "on",
             "qwen": "absent",
@@ -922,6 +1478,7 @@ def main(argv: list[str] | None = None) -> int:
         "document_discovery_stats": {
             "cache_queries": document_discovery.cache_queries,
             "cache_hits": document_discovery.cache_hits,
+            "cache_evidence_hits": document_discovery.cache_evidence_hits,
             "live_fallback_queries": document_discovery.live_fallback_queries,
         },
         "results": results,

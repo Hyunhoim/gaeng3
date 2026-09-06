@@ -1,0 +1,48 @@
+{
+  "schema_version": "1.0",
+  "policy_id": "open-dart-capability-whitelist-20260824-v1",
+  "evidence_cutoff": "2026-08-24",
+  "max_documents_per_corporation": 3,
+  "rules": [
+    {
+      "capability": "corporate_subsidiary",
+      "enabled": true,
+      "allowed_pblntf_types": ["A", "B"],
+      "allowed_pblntf_detail_types": [],
+      "report_name_terms_any": ["반기보고서", "분기보고서", "사업보고서"],
+      "report_name_terms_excluded": []
+    },
+    {
+      "capability": "fund_structure_strategy_trend",
+      "enabled": false,
+      "allowed_pblntf_types": [],
+      "allowed_pblntf_detail_types": [],
+      "report_name_terms_any": [],
+      "report_name_terms_excluded": []
+    },
+    {
+      "capability": "portfolio_holdings",
+      "enabled": false,
+      "allowed_pblntf_types": [],
+      "allowed_pblntf_detail_types": [],
+      "report_name_terms_any": [],
+      "report_name_terms_excluded": []
+    },
+    {
+      "capability": "product_risk_factors",
+      "enabled": true,
+      "allowed_pblntf_types": ["A", "C"],
+      "allowed_pblntf_detail_types": [],
+      "report_name_terms_any": ["반기보고서", "분기보고서", "사업보고서", "증권신고서"],
+      "report_name_terms_excluded": []
+    },
+    {
+      "capability": "sector_theme_history",
+      "enabled": false,
+      "allowed_pblntf_types": [],
+      "allowed_pblntf_detail_types": [],
+      "report_name_terms_any": [],
+      "report_name_terms_excluded": []
+    }
+  ]
+}

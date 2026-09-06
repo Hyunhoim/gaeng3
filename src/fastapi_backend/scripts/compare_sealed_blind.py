@@ -14,6 +14,9 @@ from typing import Any
 from finance_agent_core.config import load_field_registry
 
 _SHA256 = re.compile(r"[0-9a-f]{64}")
+_REPRESENTATIVE_CASE_COUNT = 100
+_SELECTION_ARTIFACT_KIND = "post_gold_representative_case_selection"
+_SELECTION_METHOD = "lowest_sha256_of_questions_sha256_colon_case_id"
 
 _SUPPORTED_SUITES = {
     "finance-agent-independent-holdout-v2-300": ("IH", 300, "phase1"),
@@ -49,15 +52,19 @@ _BACKEND_RESULT_STATUS = {
 }
 
 
-def _expected_ids(suite_id: str, prefix: str, case_count: int) -> set[str]:
+def _expected_ids_ordered(suite_id: str, prefix: str, case_count: int) -> list[str]:
     if suite_id == "finance-agent-final-rehearsal-phase5-v1.1-105":
-        return {
+        return [
             f"{prefix}-{set_id}-{index:02d}"
             for set_id in ("A", "B", "C")
             for index in range(1, 36)
-        }
+        ]
     width = _SUITE_ID_WIDTHS.get(suite_id, 3)
-    return {f"{prefix}-{index:0{width}d}" for index in range(1, case_count + 1)}
+    return [f"{prefix}-{index:0{width}d}" for index in range(1, case_count + 1)]
+
+
+def _expected_ids(suite_id: str, prefix: str, case_count: int) -> set[str]:
+    return set(_expected_ids_ordered(suite_id, prefix, case_count))
 
 
 def _sha256(path: Path) -> str:
@@ -88,6 +95,90 @@ def _canonical_sha256(value: object) -> str:
         allow_nan=False,
     ).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
+
+
+def _representative_case_ids(
+    *,
+    questions_sha256: str,
+    case_ids: list[str],
+    case_count: int = _REPRESENTATIVE_CASE_COUNT,
+) -> list[str]:
+    """Select a deterministic Gold-independent sample and preserve suite order."""
+
+    if len(case_ids) < case_count or len(case_ids) != len(set(case_ids)):
+        raise RuntimeError("case selection source IDs are invalid")
+    ranked = sorted(
+        case_ids,
+        key=lambda case_id: (
+            hashlib.sha256(f"{questions_sha256}:{case_id}".encode()).hexdigest(),
+            case_id,
+        ),
+    )
+    selected = set(ranked[:case_count])
+    return [case_id for case_id in case_ids if case_id in selected]
+
+
+def _validated_selection_ids(
+    payload: dict[str, Any],
+    *,
+    suite_id: str,
+    questions_sha256: str,
+    available_case_ids: list[str],
+) -> list[str]:
+    required = {
+        "schema_version",
+        "artifact_kind",
+        "suite_id",
+        "questions_sha256",
+        "selection_method",
+        "case_count",
+        "selected_ids",
+        "selection_sha256",
+    }
+    selected_ids = payload.get("selected_ids")
+    if (
+        set(payload) != required
+        or payload.get("schema_version") != "1.0"
+        or payload.get("artifact_kind") != _SELECTION_ARTIFACT_KIND
+        or payload.get("suite_id") != suite_id
+        or payload.get("questions_sha256") != questions_sha256
+        or payload.get("selection_method") != _SELECTION_METHOD
+        or payload.get("case_count") != _REPRESENTATIVE_CASE_COUNT
+        or not isinstance(selected_ids, list)
+        or any(not isinstance(value, str) for value in selected_ids)
+    ):
+        raise RuntimeError("case selection contract differs")
+    expected_ids = _representative_case_ids(
+        questions_sha256=questions_sha256,
+        case_ids=available_case_ids,
+    )
+    if selected_ids != expected_ids:
+        raise RuntimeError("case selection IDs differ from the deterministic sample")
+    canonical = dict(payload)
+    claimed_sha256 = canonical.pop("selection_sha256")
+    if claimed_sha256 != _canonical_sha256(canonical):
+        raise RuntimeError("case selection canonical SHA-256 differs")
+    return selected_ids
+
+
+def _validate_case_selection(
+    path: Path,
+    expected_file_sha256: str,
+    *,
+    suite_id: str,
+    questions_sha256: str,
+    available_case_ids: list[str],
+) -> dict[str, Any]:
+    """Validate the exact post-Gold 100-case sampling contract."""
+
+    payload = _load_json(path, expected_file_sha256, "case selection")
+    _validated_selection_ids(
+        payload,
+        suite_id=suite_id,
+        questions_sha256=questions_sha256,
+        available_case_ids=available_case_ids,
+    )
+    return payload
 
 
 def _write_new(path: Path, payload: object) -> None:
@@ -257,6 +348,202 @@ def _external_evidence_required(expected: dict[str, Any]) -> bool:
         if isinstance(status_basis, dict)
         else False
     )
+
+
+def _external_catalog_documents(gold: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    catalog = gold.get("external_evidence_catalog")
+    if not isinstance(catalog, dict):
+        return {}
+    raw_documents = catalog.get("documents", ())
+    if isinstance(raw_documents, dict):
+        documents = []
+        for document_id, value in raw_documents.items():
+            if isinstance(value, dict):
+                document = dict(value)
+                document.setdefault("id", document_id)
+                documents.append(document)
+    elif isinstance(raw_documents, list):
+        documents = [value for value in raw_documents if isinstance(value, dict)]
+    else:
+        return {}
+    return {
+        str(document["id"]): document
+        for document in documents
+        if document.get("id") is not None
+    }
+
+
+def _catalog_evidence_spans(document: dict[str, Any]) -> tuple[str, ...]:
+    for field in ("required_evidence_spans", "evidence_spans", "required_spans"):
+        raw = document.get(field)
+        if isinstance(raw, str) and raw:
+            return (raw,)
+        if isinstance(raw, list) and raw and all(isinstance(value, str) for value in raw):
+            return tuple(value for value in raw if value)
+    raw = document.get("evidence_span")
+    return (raw,) if isinstance(raw, str) and raw else ()
+
+
+def _external_exact_metrics(
+    expected: dict[str, Any],
+    response: dict[str, Any],
+    *,
+    catalog_documents: dict[str, dict[str, Any]],
+) -> dict[str, bool | None]:
+    """Score exact official-evidence attributes only when Gold supplies them."""
+
+    raw_required = expected.get("required_evidence_ids")
+    if not isinstance(raw_required, list) or not raw_required:
+        return {
+            "external_source_uri_exact": None,
+            "external_publication_date_exact": None,
+            "external_evidence_span_exact": None,
+        }
+    required = [catalog_documents.get(str(value)) for value in raw_required]
+    required_documents = [value for value in required if isinstance(value, dict)]
+    observed_documents = [
+        value for value in response.get("documents", ()) if isinstance(value, dict)
+    ]
+
+    expected_uris = [
+        str(value["url"])
+        for value in required_documents
+        if isinstance(value.get("url"), str) and value["url"]
+    ]
+    observed_uris = {
+        str(value["source_uri"])
+        for value in observed_documents
+        if isinstance(value.get("source_uri"), str)
+    }
+    uri_exact = (
+        all(value in observed_uris for value in expected_uris) if expected_uris else None
+    )
+
+    publication_checks: list[bool] = []
+    span_checks: list[bool] = []
+    for document in required_documents:
+        source_uri = document.get("url")
+        matching = [
+            value for value in observed_documents if value.get("source_uri") == source_uri
+        ]
+        publication_date = next(
+            (
+                document.get(field)
+                for field in ("publication_date", "published_at", "as_of")
+                if document.get(field) is not None
+            ),
+            None,
+        )
+        if publication_date is not None:
+            publication_checks.append(
+                any(
+                    str(
+                        value.get("metadata", {}).get("published_at", value.get("as_of"))
+                        if isinstance(value.get("metadata"), dict)
+                        else value.get("as_of")
+                    )
+                    == str(publication_date)
+                    for value in matching
+                )
+            )
+        spans = _catalog_evidence_spans(document)
+        if spans:
+            texts = [str(value.get("text", "")) for value in matching]
+            span_checks.append(all(any(span in text for text in texts) for span in spans))
+    return {
+        "external_source_uri_exact": uri_exact,
+        "external_publication_date_exact": (
+            all(publication_checks) if publication_checks else None
+        ),
+        "external_evidence_span_exact": all(span_checks) if span_checks else None,
+    }
+
+
+def _hclx_final_grounding_violations(
+    observed: dict[str, Any], response: dict[str, Any]
+) -> int | None:
+    """Read an explicit runner/verifier field without inferring hidden model state."""
+
+    for container in (observed, response):
+        if "hclx_final_grounding_violations" not in container:
+            continue
+        raw = container["hclx_final_grounding_violations"]
+        if isinstance(raw, list):
+            return len(raw)
+        if isinstance(raw, int) and not isinstance(raw, bool) and raw >= 0:
+            return raw
+        raise RuntimeError("HCLX final grounding violations field is invalid")
+    return None
+
+
+def _update_exact_evidence_totals(
+    totals: Counter[str],
+    external_exact: dict[str, bool | None],
+    grounding_violations: int | None,
+) -> None:
+    for key, value in external_exact.items():
+        if value is not None:
+            totals[f"{key}_applicable"] += 1
+            totals[key] += value is True
+    if grounding_violations is not None:
+        totals["hclx_final_grounding_applicable"] += 1
+        totals["hclx_final_grounding_exact"] += grounding_violations == 0
+        totals["hclx_final_grounding_violation_count"] += grounding_violations
+
+
+def _exact_evidence_counts(totals: Counter[str]) -> dict[str, int]:
+    return {
+        "external_source_uri_exact_applicable": totals[
+            "external_source_uri_exact_applicable"
+        ],
+        "external_publication_date_exact_applicable": totals[
+            "external_publication_date_exact_applicable"
+        ],
+        "external_evidence_span_exact_applicable": totals[
+            "external_evidence_span_exact_applicable"
+        ],
+        "hclx_final_grounding_applicable": totals["hclx_final_grounding_applicable"],
+        "hclx_final_grounding_violation_count": totals[
+            "hclx_final_grounding_violation_count"
+        ],
+    }
+
+
+def _exact_evidence_metrics(totals: Counter[str]) -> dict[str, float]:
+    metrics: dict[str, float] = {}
+    for key in (
+        "external_source_uri_exact",
+        "external_publication_date_exact",
+        "external_evidence_span_exact",
+    ):
+        metrics[f"{key}_accuracy"] = round(
+            _safe_ratio(totals[key], totals[f"{key}_applicable"]), 6
+        )
+    metrics["hclx_final_grounding_pass_rate"] = round(
+        _safe_ratio(
+            totals["hclx_final_grounding_exact"],
+            totals["hclx_final_grounding_applicable"],
+        ),
+        6,
+    )
+    return metrics
+
+
+def _exact_evidence_failures(cases: list[dict[str, Any]]) -> dict[str, list[str]]:
+    return {
+        "external_source_uri_mismatch": [
+            item["id"] for item in cases if item["external_source_uri_exact"] is False
+        ],
+        "external_publication_date_mismatch": [
+            item["id"] for item in cases if item["external_publication_date_exact"] is False
+        ],
+        "external_evidence_span_mismatch": [
+            item["id"] for item in cases if item["external_evidence_span_exact"] is False
+        ],
+        "hclx_final_grounding_violation": [
+            item["id"] for item in cases if item["hclx_final_grounding_exact"] is False
+        ],
+    }
 
 
 def _f1(precision: float, recall: float) -> float:
@@ -469,6 +756,9 @@ def _compare_phase2(
     gold: dict[str, Any],
     *,
     allow_post_gold_development: bool = False,
+    selected_case_ids: list[str] | None = None,
+    case_selection: dict[str, Any] | None = None,
+    case_selection_file_sha256: str | None = None,
 ) -> dict[str, Any]:
     suite_id = str(predictions["suite_id"])
     suite_contract = _SUPPORTED_SUITES.get(suite_id)
@@ -476,12 +766,20 @@ def _compare_phase2(
         raise RuntimeError("prediction suite is not a registered Phase 2-style contract")
     id_prefix, case_count, _ = suite_contract
     expected_ids = _expected_ids(suite_id, id_prefix, case_count)
+    evaluation_ids = (
+        _expected_ids_ordered(suite_id, id_prefix, case_count)
+        if selected_case_ids is None
+        else selected_case_ids
+    )
+    evaluation_count = len(evaluation_ids)
+    evaluation_id_set = set(evaluation_ids)
     prediction_by_id = {item["id"]: item for item in predictions["results"]}
     gold_by_id = {item["id"]: item for item in gold.get("cases", ())}
-    if set(prediction_by_id) != expected_ids or set(gold_by_id) != expected_ids:
+    if set(prediction_by_id) != evaluation_id_set or set(gold_by_id) != expected_ids:
         raise RuntimeError("Phase 2 Gold or prediction IDs differ")
 
     source_fields = _source_field_map()
+    catalog_documents = _external_catalog_documents(gold)
     totals = Counter()
     by_category: dict[str, Counter[str]] = defaultdict(Counter)
     by_scope: dict[str, Counter[str]] = defaultdict(Counter)
@@ -494,7 +792,7 @@ def _compare_phase2(
     provider_outcomes = Counter()
     cases: list[dict[str, Any]] = []
 
-    for case_id in sorted(expected_ids):
+    for case_id in evaluation_ids:
         expected = gold_by_id[case_id]
         observed = prediction_by_id[case_id]
         response = observed["backend_response"]
@@ -551,6 +849,12 @@ def _compare_phase2(
         )
         external_required = _external_evidence_required(expected)
         external_documents_present = bool(response.get("documents"))
+        external_exact = _external_exact_metrics(
+            expected,
+            response,
+            catalog_documents=catalog_documents,
+        )
+        grounding_violations = _hclx_final_grounding_violations(observed, response)
         outcome_exact = (
             disposition_exact
             and result_status_exact is not False
@@ -584,6 +888,7 @@ def _compare_phase2(
                 "http_200": observed["http_status"] == 200,
             }
         )
+        _update_exact_evidence_totals(totals, external_exact, grounding_violations)
         for key, value in plan_metrics.items():
             if value is not None:
                 metric = key.removesuffix("_exact")
@@ -623,6 +928,11 @@ def _compare_phase2(
                 **plan_metrics,
                 "external_evidence_required": external_required,
                 "external_documents_present": external_documents_present,
+                **external_exact,
+                "hclx_final_grounding_violations": grounding_violations,
+                "hclx_final_grounding_exact": (
+                    None if grounding_violations is None else grounding_violations == 0
+                ),
                 "false_execution": false_execution,
                 "false_block": false_block,
                 "outcome_exact": outcome_exact,
@@ -671,20 +981,21 @@ def _compare_phase2(
         "image_id": predictions["image_id"],
         "regression_composition": predictions.get("regression_composition"),
         "counts": {
-            "cases": case_count,
+            "cases": evaluation_count,
             "execute": execute_total,
             "cross_family": sum(item["query_scope"] == "cross_family" for item in cases),
             "cross_family_execute": totals["cross_family_execute"],
             "external_evidence_required": totals["external_required"],
+            **_exact_evidence_counts(totals),
             "http_200": totals["http_200"],
         },
         "metrics": {
-            "disposition_accuracy": round(totals["disposition_exact"] / case_count, 6),
+            "disposition_accuracy": round(totals["disposition_exact"] / evaluation_count, 6),
             "result_status_accuracy": round(
                 _safe_ratio(totals["result_status_exact"], totals["result_status_applicable"]), 6
             ),
-            "outcome_exact_accuracy": round(totals["outcome_exact"] / case_count, 6),
-            "strict_exact_accuracy": round(totals["strict_exact"] / case_count, 6),
+            "outcome_exact_accuracy": round(totals["outcome_exact"] / evaluation_count, 6),
+            "strict_exact_accuracy": round(totals["strict_exact"] / evaluation_count, 6),
             "product_micro_precision": round(micro_precision, 6),
             "product_micro_recall": round(micro_recall, 6),
             "product_micro_f1": round(_f1(micro_precision, micro_recall), 6),
@@ -719,8 +1030,9 @@ def _compare_phase2(
             "external_evidence_presence_rate": round(
                 _safe_ratio(totals["external_documents_present"], totals["external_required"]), 6
             ),
-            "false_execution_rate": round(totals["false_execution"] / case_count, 6),
-            "false_block_rate": round(totals["false_block"] / case_count, 6),
+            **_exact_evidence_metrics(totals),
+            "false_execution_rate": round(totals["false_execution"] / evaluation_count, 6),
+            "false_block_rate": round(totals["false_block"] / evaluation_count, 6),
             "latency_ms_p50": _percentile(latencies, 0.50),
             "latency_ms_p95": _percentile(latencies, 0.95),
             "latency_ms_p99": _percentile(latencies, 0.99),
@@ -748,9 +1060,17 @@ def _compare_phase2(
                 for item in cases
                 if item["external_evidence_required"] and not item["outcome_exact"]
             ],
+            **_exact_evidence_failures(cases),
         },
         "cases": cases,
     }
+    if case_selection is not None:
+        report["case_selection"] = {
+            "file_sha256": case_selection_file_sha256,
+            "selection_sha256": case_selection["selection_sha256"],
+            "selection_method": case_selection["selection_method"],
+            "selected_ids": case_selection["selected_ids"],
+        }
     report["report_sha256"] = _canonical_sha256(report)
     return report
 
@@ -760,8 +1080,12 @@ def compare(
     gold: dict[str, Any],
     *,
     allow_post_gold_development: bool = False,
+    case_selection: dict[str, Any] | None = None,
+    case_selection_file_sha256: str | None = None,
 ) -> dict[str, Any]:
     artifact_kind = predictions.get("artifact_kind")
+    if (case_selection is None) != (case_selection_file_sha256 is None):
+        raise RuntimeError("case selection and its file SHA-256 must be provided together")
     if allow_post_gold_development:
         if (
             predictions.get("answer_key_opened") is not True
@@ -780,9 +1104,46 @@ def compare(
     if suite_contract is None or gold.get("suite_id") != suite_id:
         raise RuntimeError("Gold suite differs")
     id_prefix, case_count, comparator = suite_contract
+    full_ordered_ids = _expected_ids_ordered(suite_id, id_prefix, case_count)
+    selected_case_ids: list[str] | None = None
+    if case_selection is not None:
+        if not allow_post_gold_development:
+            raise RuntimeError("case selection is allowed only for post-Gold development")
+        if (
+            case_selection_file_sha256 is None
+            or _SHA256.fullmatch(case_selection_file_sha256) is None
+        ):
+            raise RuntimeError("case selection file SHA-256 is missing or invalid")
+        selected_case_ids = _validated_selection_ids(
+            case_selection,
+            suite_id=suite_id,
+            questions_sha256=str(predictions.get("questions_sha256", "")),
+            available_case_ids=full_ordered_ids,
+        )
+        if (
+            predictions.get("case_selection_file_sha256") != case_selection_file_sha256
+            or predictions.get("case_selection_sha256")
+            != case_selection["selection_sha256"]
+            or predictions.get("case_selection_method") != _SELECTION_METHOD
+            or predictions.get("selected_case_ids") != selected_case_ids
+            or predictions.get("suite_question_count") != case_count
+        ):
+            raise RuntimeError("prediction case selection provenance differs")
+    elif any(
+        predictions.get(field) is not None
+        for field in (
+            "case_selection_file_sha256",
+            "case_selection_sha256",
+            "case_selection_method",
+            "selected_case_ids",
+        )
+    ):
+        raise RuntimeError("prediction carries an unverified case selection")
+    evaluation_ids = full_ordered_ids if selected_case_ids is None else selected_case_ids
+    evaluation_count = len(evaluation_ids)
     if (
-        predictions.get("question_count") != case_count
-        or len(predictions.get("results", ())) != case_count
+        predictions.get("question_count") != evaluation_count
+        or len(predictions.get("results", ())) != evaluation_count
     ):
         raise RuntimeError("prediction count differs")
     composition = predictions.get("regression_composition")
@@ -797,7 +1158,7 @@ def compare(
             or not isinstance(targeted, int)
             or unchanged < 0
             or targeted <= 0
-            or unchanged + targeted != case_count
+            or unchanged + targeted != evaluation_count
             or not isinstance(source_hashes, list)
             or not source_hashes
             or any(_SHA256.fullmatch(str(value)) is None for value in source_hashes)
@@ -808,7 +1169,7 @@ def compare(
     prediction_by_id = {item["id"]: item for item in predictions["results"]}
     gold_by_id = {item["id"]: item for item in gold.get("cases", ())}
     expected_ids = _expected_ids(suite_id, id_prefix, case_count)
-    if set(prediction_by_id) != expected_ids or set(gold_by_id) != expected_ids:
+    if set(prediction_by_id) != set(evaluation_ids) or set(gold_by_id) != expected_ids:
         raise RuntimeError("Gold or prediction IDs differ")
 
     if comparator in {"phase2", "phase2_style"}:
@@ -816,9 +1177,13 @@ def compare(
             predictions,
             gold,
             allow_post_gold_development=allow_post_gold_development,
+            selected_case_ids=selected_case_ids,
+            case_selection=case_selection,
+            case_selection_file_sha256=case_selection_file_sha256,
         )
 
     source_fields = _source_field_map()
+    catalog_documents = _external_catalog_documents(gold)
     cases = []
     totals = Counter()
     category_totals: dict[str, Counter[str]] = defaultdict(Counter)
@@ -830,7 +1195,7 @@ def compare(
     operation_counts = Counter()
     provider_outcomes = Counter()
 
-    for case_id in sorted(expected_ids):
+    for case_id in evaluation_ids:
         expected = gold_by_id[case_id]
         observed = prediction_by_id[case_id]
         response = observed["backend_response"]
@@ -950,6 +1315,12 @@ def compare(
         )
         external_required = bool(expected["expected_status_basis"]["external_evidence_required"])
         documents_present = bool(response.get("documents") or response.get("citations"))
+        external_exact = _external_exact_metrics(
+            expected,
+            response,
+            catalog_documents=catalog_documents,
+        )
+        grounding_violations = _hclx_final_grounding_violations(observed, response)
         case_metrics = {
             "id": case_id,
             "category": expected["category"],
@@ -975,6 +1346,11 @@ def compare(
             "expected_product_count": len(expected_ids_ordered),
             "predicted_product_count": len(observed_ids_ordered),
             "documents_or_citations_present": documents_present,
+            **external_exact,
+            "hclx_final_grounding_violations": grounding_violations,
+            "hclx_final_grounding_exact": (
+                None if grounding_violations is None else grounding_violations == 0
+            ),
             "duration_ms": observed["duration_ms"],
             "provider_operations": [item["operation"] for item in observed["provider_calls"]],
             "provider_outcomes": [item["outcome"] for item in observed["provider_calls"]],
@@ -1006,6 +1382,7 @@ def compare(
             aggregate_flags["candidate_count_exact"] = candidate_count_exact
             aggregate_flags["product_order_exact"] = product_order_exact
         totals.update(aggregate_flags)
+        _update_exact_evidence_totals(totals, external_exact, grounding_violations)
         category_totals[expected["category"]].update(
             {
                 "total": 1,
@@ -1018,7 +1395,9 @@ def compare(
             operation_counts[record["operation"]] += 1
             provider_outcomes[f"{record['operation']}:{record['outcome']}"] += 1
 
-    execute_total = sum(1 for item in gold["cases"] if item["expected_disposition"] == "execute")
+    execute_total = sum(
+        1 for case_id in evaluation_ids if gold_by_id[case_id]["expected_disposition"] == "execute"
+    )
     result_applicable = totals["result_status_applicable"]
     micro_precision = _safe_ratio(product_tp, product_tp + product_fp)
     micro_recall = _safe_ratio(product_tp, product_tp + product_fn)
@@ -1043,27 +1422,32 @@ def compare(
         "image_id": predictions["image_id"],
         "regression_composition": composition,
         "counts": {
-            "cases": case_count,
+            "cases": evaluation_count,
             "execute": execute_total,
             "external_evidence_required": totals["external_required"],
+            **_exact_evidence_counts(totals),
             "http_200": totals["http_200"],
         },
         "metrics": {
-            "disposition_accuracy": round(totals["disposition_exact"] / case_count, 6),
+            "disposition_accuracy": round(totals["disposition_exact"] / evaluation_count, 6),
             "result_status_accuracy": round(
                 _safe_ratio(totals["result_status_exact"], result_applicable), 6
             ),
-            "outcome_exact_accuracy": round(totals["outcome_exact"] / case_count, 6),
-            "strict_exact_accuracy": round(totals["strict_exact"] / case_count, 6),
+            "outcome_exact_accuracy": round(totals["outcome_exact"] / evaluation_count, 6),
+            "strict_exact_accuracy": round(totals["strict_exact"] / evaluation_count, 6),
             "product_micro_precision": round(micro_precision, 6),
             "product_micro_recall": round(micro_recall, 6),
             "product_micro_f1": round(_f1(micro_precision, micro_recall), 6),
-            "product_macro_precision": round(sum(macro_precision) / execute_total, 6),
-            "product_macro_recall": round(sum(macro_recall) / execute_total, 6),
-            "product_macro_f1": round(sum(macro_f1) / execute_total, 6),
-            "product_order_exact_accuracy": round(totals["product_order_exact"] / execute_total, 6),
+            "product_macro_precision": round(
+                _safe_ratio(sum(macro_precision), execute_total), 6
+            ),
+            "product_macro_recall": round(_safe_ratio(sum(macro_recall), execute_total), 6),
+            "product_macro_f1": round(_safe_ratio(sum(macro_f1), execute_total), 6),
+            "product_order_exact_accuracy": round(
+                _safe_ratio(totals["product_order_exact"], execute_total), 6
+            ),
             "candidate_count_exact_accuracy": round(
-                totals["candidate_count_exact"] / execute_total, 6
+                _safe_ratio(totals["candidate_count_exact"], execute_total), 6
             ),
             "queryplan_operation_accuracy": round(
                 _safe_ratio(totals["operation_exact"], totals["operation_applicable"]), 6
@@ -1094,6 +1478,7 @@ def compare(
                 _safe_ratio(totals["external_documents_present"], totals["external_required"]),
                 6,
             ),
+            **_exact_evidence_metrics(totals),
             "latency_ms_p50": _percentile(latencies, 0.50),
             "latency_ms_p95": _percentile(latencies, 0.95),
             "latency_ms_p99": _percentile(latencies, 0.99),
@@ -1126,9 +1511,17 @@ def compare(
                 for item in cases
                 if item["external_evidence_required"] and not item["outcome_exact"]
             ],
+            **_exact_evidence_failures(cases),
         },
         "cases": cases,
     }
+    if case_selection is not None:
+        report["case_selection"] = {
+            "file_sha256": case_selection_file_sha256,
+            "selection_sha256": case_selection["selection_sha256"],
+            "selection_method": case_selection["selection_method"],
+            "selected_ids": case_selection["selected_ids"],
+        }
     report["report_sha256"] = _canonical_sha256(report)
     return report
 
@@ -1141,21 +1534,52 @@ def main() -> int:
     parser.add_argument("--gold-sha256", required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument(
+        "--case-selection-file",
+        type=Path,
+        help="canonical deterministic 100-case selection manifest (post-Gold only)",
+    )
+    parser.add_argument(
+        "--case-selection-sha256",
+        help="byte SHA-256 of --case-selection-file",
+    )
+    parser.add_argument(
         "--allow-post-gold-development",
         action="store_true",
         help="compare an explicitly labelled post-Gold development regression",
     )
     arguments = parser.parse_args()
+    if (arguments.case_selection_file is None) != (
+        arguments.case_selection_sha256 is None
+    ):
+        parser.error("case selection file and SHA-256 must be provided together")
+    if arguments.case_selection_file is not None and not arguments.allow_post_gold_development:
+        parser.error("case selection is allowed only with --allow-post-gold-development")
     predictions = _load_json(
         arguments.predictions,
         arguments.predictions_sha256,
         "predictions",
     )
+    case_selection = None
+    if arguments.case_selection_file is not None:
+        suite_id = str(predictions.get("suite_id", ""))
+        suite_contract = _SUPPORTED_SUITES.get(suite_id)
+        if suite_contract is None:
+            raise RuntimeError("prediction suite is not registered")
+        id_prefix, case_count, _ = suite_contract
+        case_selection = _validate_case_selection(
+            arguments.case_selection_file,
+            str(arguments.case_selection_sha256),
+            suite_id=suite_id,
+            questions_sha256=str(predictions.get("questions_sha256", "")),
+            available_case_ids=_expected_ids_ordered(suite_id, id_prefix, case_count),
+        )
     gold = _load_json(arguments.gold, arguments.gold_sha256, "Gold")
     report = compare(
         predictions,
         gold,
         allow_post_gold_development=arguments.allow_post_gold_development,
+        case_selection=case_selection,
+        case_selection_file_sha256=arguments.case_selection_sha256,
     )
     _write_new(arguments.output, report)
     print(
