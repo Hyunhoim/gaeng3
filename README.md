@@ -14,8 +14,8 @@
 | --- | --- |
 | 소스코드 | `src/`, `requirements.txt`, 이 README |
 | Ontology | [`ontology/`](ontology/) — `common.ttl` `bond_kr.ttl` `etf_kr.ttl` `etf_gl.ttl` `fund_pub.ttl` |
-| 기술 제안서 | [`docs/technical-proposal.pdf`](docs/technical-proposal.pdf) · [부록: 수집·적재 Flow, 활용 로직, 검증·재현 절차](docs/technical-proposal-appendix.md) |
-| 평가용 API | `GET http://101.79.25.57/answer` · [API 명세서](docs/api-specification.md) |
+| 기술 제안서 | [`docs/기술_제안서.pdf`](docs/기술_제안서.pdf) · [부록: 수집·적재 Flow, 활용 로직, 검증·재현 절차](docs/기술_제안서_부록.md) |
+| 평가용 API | `GET http://101.79.25.57/answer` · [API 명세서](docs/평가용_API_서버_정보.md) |
 
 ## 평가용 API
 

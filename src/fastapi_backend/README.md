@@ -1,7 +1,7 @@
 # fastapi_backend
 
 `finance_agent_core`를 HTTP API로 제공하는 FastAPI Backend. 전체 실행은 [루트 README](../../README.md),
-요청·응답 JSON 스키마는 [API 명세서](../../docs/api-specification.md)를 따른다.
+요청·응답 JSON 스키마는 [API 명세서](../../docs/평가용_API_서버_정보.md)를 따른다.
 이 문서는 Backend의 책임, HTTP 계약, 평가 서버 배포, 테스트만 다룬다.
 
 ## 1. 역할
