@@ -4,8 +4,11 @@ import json
 import sqlite3
 from pathlib import Path
 
+from finance_agent_core.agent.linker import build_lexical_hints
 from finance_agent_core.agent.product_identity import (
+    DatabaseProductIdentityMatch,
     DatabaseProductIdentityMatcher,
+    mask_database_product_identity_spans,
     unresolved_identity_like_spans,
 )
 from finance_agent_core.agent.routed_service import RoutedFinanceAgent
@@ -75,6 +78,233 @@ def test_database_identity_does_not_authorize_invented_name_continuation(tmp_pat
     matches = matcher.find("KODEX 200 가짜 ETF의 상세 정보를 보여줘")
 
     assert matches == ()
+
+
+def test_labeled_six_digit_domestic_codes_resolve_only_from_approved_aq_tickers(
+    tmp_path: Path,
+) -> None:
+    path = _identity_database(
+        tmp_path / "domestic.sqlite3",
+        table="domestic_etp_products",
+        rows=[
+            (
+                "KR7000000001",
+                "샘플 글로벌성장 상품",
+                "샘플 글로벌성장",
+                "A123456",
+                "KR7000000001",
+            ),
+            (
+                "KR7000000002",
+                "샘플 단기채권 상품",
+                "샘플 단기채권",
+                "Q654321",
+                "KR7000000002",
+            ),
+        ],
+    )
+    matcher = DatabaseProductIdentityMatcher({ProductFamily.DOMESTIC_ETP: path})
+
+    a_match = matcher.find("국내 ETF 종목코드가 123456인 상품의 정보를 알려줘")
+    q_match = matcher.find("국내 ETN 티커 654321의 상세를 보여줘")
+
+    assert [(match.surface, match.product_ids) for match in a_match] == [
+        ("123456", ("KR7000000001",))
+    ]
+    assert [(match.surface, match.product_ids) for match in q_match] == [
+        ("654321", ("KR7000000002",))
+    ]
+
+
+def test_bare_six_digit_values_never_become_domestic_product_identities(
+    tmp_path: Path,
+) -> None:
+    path = _identity_database(
+        tmp_path / "domestic.sqlite3",
+        table="domestic_etp_products",
+        rows=[
+            (
+                "KR7000000001",
+                "샘플 글로벌성장 상품",
+                "샘플 글로벌성장",
+                "A123456",
+                "KR7000000001",
+            )
+        ],
+    )
+    matcher = DatabaseProductIdentityMatcher({ProductFamily.DOMESTIC_ETP: path})
+
+    assert matcher.find("순자산이 123456 이상인 국내 ETF를 찾아줘") == ()
+    assert matcher.find("기준일은 202608이고 국내 ETF를 조회해줘") == ()
+    assert matcher.find("123456의 상세 정보를 보여줘") == ()
+    assert matcher.find("티커 123456A의 상세 정보를 보여줘") == ()
+
+
+def test_exact_database_name_is_masked_before_field_and_residual_linking(
+    tmp_path: Path,
+) -> None:
+    official_name = "KODEX 1년은행양도성예금증서액티브(합성)"
+    path = _identity_database(
+        tmp_path / "domestic.sqlite3",
+        table="domestic_etp_products",
+        rows=[
+            (
+                "KR7000000001",
+                official_name,
+                official_name,
+                "A123456",
+                "KR7000000001",
+            )
+        ],
+    )
+    matcher = DatabaseProductIdentityMatcher({ProductFamily.DOMESTIC_ETP: path})
+    question = f"{official_name} ETF의 상세 정보를 알려줘"
+
+    matches = matcher.find(question)
+    assert [match.surface for match in matches] == [official_name]
+
+    # Without the DB boundary, words inside the name look like an independent
+    # strategy filter and an unresolved invented product name.
+    unmasked = build_lexical_hints(
+        question,
+        "domestic_etp",
+        force_product_family_hint=True,
+    )
+    assert any(
+        item["field"] == "strategy" for item in unmasked["required_constraints"]
+    )
+    assert unmasked["ambiguity_spans"]
+
+    masked_question = mask_database_product_identity_spans(question, matches)
+    assert len(masked_question) == len(question)
+    assert masked_question[matches[0].start : matches[0].end].strip() == ""
+    assert masked_question[matches[0].end :] == question[matches[0].end :]
+
+    hints = build_lexical_hints(
+        question,
+        exact_identity_matches=matches,
+    )
+    assert hints["product_family"] == "domestic_etp"
+    assert not any(
+        item["field"] == "strategy" for item in hints["required_constraints"]
+    )
+    assert hints["ambiguity_spans"] == []
+
+
+def test_identity_mask_rejects_a_match_object_from_another_question() -> None:
+    question = "액티브 ETF를 보여줘"
+    stale = DatabaseProductIdentityMatch(
+        surface="합성 ETF",
+        start=0,
+        end=6,
+        normalized_alias="합성 etf",
+        candidates=(),
+    )
+
+    assert mask_database_product_identity_spans(question, (stale,)) == question
+
+
+def test_exact_manager_values_use_eq_but_explicit_partial_search_uses_contains() -> None:
+    exact = build_lexical_hints(
+        "미래에셋이 운용하는 국내 ETF를 보여줘",
+        "domestic_etp",
+        force_product_family_hint=True,
+        exact_manager_values=("미래에셋", "삼성"),
+    )
+    partial = build_lexical_hints(
+        "운용사 이름에 미래에셋이 포함된 국내 ETF를 보여줘",
+        "domestic_etp",
+        force_product_family_hint=True,
+        exact_manager_values=("미래에셋", "삼성"),
+    )
+
+    exact_constraints = {
+        tuple(item[key] for key in ("field", "operator", "value"))
+        for item in exact["required_constraints"]
+    }
+    partial_constraints = {
+        tuple(item[key] for key in ("field", "operator", "value"))
+        for item in partial["required_constraints"]
+    }
+    assert exact_constraints >= {
+        ("manager", "eq", "미래에셋")
+    }
+    assert partial_constraints >= {
+        ("manager", "contains", "미래에셋")
+    }
+
+
+def test_matching_name_and_labeled_code_coalesce_as_one_domestic_product(
+    tmp_path: Path,
+) -> None:
+    path = _identity_database(
+        tmp_path / "domestic.sqlite3",
+        table="domestic_etp_products",
+        rows=[
+            (
+                "KR7000000001",
+                "샘플 글로벌성장 상품",
+                "샘플 글로벌성장",
+                "A123456",
+                "KR7000000001",
+            )
+        ],
+    )
+    matcher = DatabaseProductIdentityMatcher({ProductFamily.DOMESTIC_ETP: path})
+    question = (
+        "종목코드 123456인 샘플 글로벌성장 ETF의 운용사 정보를 알려줘"
+    )
+
+    matches = matcher.find(question)
+
+    assert [match.surface for match in matches] == ["123456", "샘플 글로벌성장"]
+    assert {
+        (candidate.product_family, candidate.product_id)
+        for match in matches
+        for candidate in match.candidates
+    } == {(ProductFamily.DOMESTIC_ETP, "KR7000000001")}
+
+    agent = RoutedFinanceAgent({ProductFamily.DOMESTIC_ETP: path})
+    routed = agent.router.route_with_planning(
+        question,
+        "identity-domestic-code-name",
+    ).route_decision
+    bound = agent._bind_database_product_identities(routed)
+
+    assert bound.reason_code != "multiple_product_identities_unbound"
+    assert bound.draft.product_mentions == ["KR7000000001"]
+
+
+def test_unknown_or_colliding_labeled_domestic_code_is_never_guessed(
+    tmp_path: Path,
+) -> None:
+    path = _identity_database(
+        tmp_path / "domestic.sqlite3",
+        table="domestic_etp_products",
+        rows=[
+            (
+                "KR7000000001",
+                "샘플 성장 상품",
+                "샘플 성장",
+                "A111111",
+                "KR7000000001",
+            ),
+            (
+                "KR7000000002",
+                "샘플 방어 상품",
+                "샘플 방어",
+                "Q111111",
+                "KR7000000002",
+            ),
+        ],
+    )
+    matcher = DatabaseProductIdentityMatcher({ProductFamily.DOMESTIC_ETP: path})
+
+    collision = matcher.find("종목번호 111111의 상세 정보를 알려줘")
+
+    assert len(collision) == 1
+    assert collision[0].is_unique is False
+    assert matcher.find("종목코드 999999의 상세 정보를 알려줘") == ()
 
 
 def test_database_identity_preserves_exact_alias_order_across_and_conjunction(

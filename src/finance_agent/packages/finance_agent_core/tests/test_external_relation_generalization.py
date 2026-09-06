@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import sqlite3
 from datetime import date
 
@@ -11,7 +12,10 @@ from finance_agent_core.agent.intent_analysis import (
     has_external_knowledge_surface,
     sanitize_server_authorized_knowledge_draft,
 )
-from finance_agent_core.agent.knowledge_planning import CompositeKnowledgePlanCompiler
+from finance_agent_core.agent.knowledge_planning import (
+    CompositeKnowledgePlanCompiler,
+    CompositeKnowledgePlanningError,
+)
 from finance_agent_core.config import QualityStatus
 from finance_agent_core.config.knowledge_coverage import KnowledgeCapability
 from finance_agent_core.config.source_registry import load_official_source_registry
@@ -51,7 +55,9 @@ _SHA_B = "b" * 64
 _AS_OF = date(2026, 8, 23)
 _RANK_UNITS = {
     "aum": "source_currency_amount",
+    "net_asset_total": "source_currency_amount",
     "total_expense_ratio_pct": "pct_point",
+    "tracking_error_pct": "pct_point",
     "one_day_return_pct": "pct_point",
     "one_month_return_pct": "pct_point",
     "three_month_return_pct": "pct_point",
@@ -516,6 +522,120 @@ def test_external_ranking_compiler_supports_generalized_db_metrics(
 
 
 @pytest.mark.parametrize(
+    ("family", "family_surface", "metric_surface", "expected_field"),
+    [
+        (
+            ProductFamily.DOMESTIC_ETP,
+            "국내 ETF",
+            "순자산총액이 높은 순",
+            "net_asset_total",
+        ),
+        (
+            ProductFamily.DOMESTIC_ETP,
+            "국내 ETF",
+            "일간 순자산총액이 높은 순",
+            "net_asset_total",
+        ),
+        (
+            ProductFamily.DOMESTIC_ETP,
+            "국내 ETF",
+            "순자산이 높은 순",
+            "aum",
+        ),
+        (
+            ProductFamily.OVERSEAS_ETP,
+            "해외 ETF",
+            "순자산총액이 높은 순",
+            "aum",
+        ),
+    ],
+)
+def test_external_net_asset_total_ranking_is_family_aware(
+    family: ProductFamily,
+    family_surface: str,
+    metric_surface: str,
+    expected_field: str,
+) -> None:
+    question = f"네뷸라소재를 보유한 {family_surface}를 {metric_surface}으로 4개 보여줘."
+    draft = IntentAnalysisDraft(
+        intent=InteractionIntent.SEARCH,
+        product_families=[family],
+        evidence_spans=[],
+        needs_clarification=False,
+        knowledge_requirements=[
+            KnowledgeIntentRequirement(
+                capability=KnowledgeCapability.PORTFOLIO_HOLDINGS,
+                subject_span="네뷸라소재",
+                relation_span="보유한",
+            )
+        ],
+    )
+
+    plan = CompositeKnowledgePlanCompiler().compile(
+        question,
+        f"family-aware-{family.value}-{expected_field}",
+        draft,
+    )
+
+    assert plan.product_selection == KnowledgeProductSelection(
+        rank_field=expected_field,
+        direction=SortDirection.DESC,
+        limit=4,
+    )
+    assert plan.requested_product_fields == (
+        ("net_asset_total",) if "총액" in metric_surface else ("aum",)
+    )
+
+
+def test_external_plan_preserves_requested_tracking_error_as_db_evidence() -> None:
+    question = (
+        "네뷸라소재를 보유한 국내 ETF 중 추적오차율 0.5 이하 상품의 "
+        "순자산을 알려줘."
+    )
+    draft = IntentAnalysisDraft(
+        intent=InteractionIntent.SEARCH,
+        product_families=[ProductFamily.DOMESTIC_ETP],
+        evidence_spans=[],
+        needs_clarification=False,
+        knowledge_requirements=[
+            KnowledgeIntentRequirement(
+                capability=KnowledgeCapability.PORTFOLIO_HOLDINGS,
+                subject_span="네뷸라소재",
+                relation_span="보유한",
+            )
+        ],
+    )
+
+    plan = CompositeKnowledgePlanCompiler().compile(
+        question,
+        "external-tracking-error-evidence",
+        draft,
+    )
+
+    assert plan.requested_product_fields == ("aum", "tracking_error_pct")
+
+
+def test_external_net_asset_total_ranking_rejects_incompatible_mixed_scope() -> None:
+    question = "네뷸라소재를 보유한 국내외 ETF를 순자산총액이 높은 순으로 보여줘."
+    draft = IntentAnalysisDraft(
+        intent=InteractionIntent.SEARCH,
+        product_families=[ProductFamily.DOMESTIC_ETP, ProductFamily.OVERSEAS_ETP],
+        evidence_spans=[],
+        needs_clarification=False,
+        knowledge_requirements=[
+            KnowledgeIntentRequirement(
+                capability=KnowledgeCapability.PORTFOLIO_HOLDINGS,
+                subject_span="네뷸라소재",
+                relation_span="보유한",
+            )
+        ],
+    )
+
+    with pytest.raises(CompositeKnowledgePlanningError, match="one compatible product family"):
+        CompositeKnowledgePlanCompiler().compile(question, "mixed-net-asset-total", draft)
+
+
+@pytest.mark.parametrize(
     ("question", "mode"),
     [
         (
@@ -843,6 +963,7 @@ def test_holding_and_theme_requirements_intersect_before_db_facts() -> None:
 _NUMERIC_COLUMNS = {
     "aum": ("aum_minor_units", 100),
     "total_expense_ratio_pct": ("total_expense_ratio_micro_pct", 1_000_000),
+    "tracking_error_pct": ("tracking_error_hundredth_pct", 100),
     "one_day_return_pct": ("one_day_return_micro_pct", 1_000_000),
     "one_month_return_pct": ("one_month_return_micro_pct", 1_000_000),
     "three_month_return_pct": ("three_month_return_micro_pct", 1_000_000),
@@ -858,6 +979,7 @@ def _synthetic_product_db(path) -> None:
         return (
             column.removesuffix("_minor_units")
             .removesuffix("_hundredth_units")
+            .removesuffix("_hundredth_pct")
             .removesuffix("_eight_decimal_pct")
             .removesuffix("_micro_pct")
             + "_quality"
@@ -934,6 +1056,58 @@ def _synthetic_product_db(path) -> None:
         connection.close()
 
 
+def _synthetic_net_asset_total_db(path) -> None:
+    connection = sqlite3.connect(path)
+    try:
+        connection.execute(
+            """
+            CREATE TABLE domestic_etp_products (
+                product_id TEXT PRIMARY KEY,
+                product_name TEXT NOT NULL,
+                source_row INTEGER NOT NULL,
+                source_values_json TEXT NOT NULL,
+                is_quarantined INTEGER NOT NULL,
+                trading_currency TEXT NOT NULL,
+                static_as_of TEXT NOT NULL,
+                dynamic_as_of TEXT NOT NULL,
+                aum_minor_units INTEGER,
+                aum_quality TEXT NOT NULL
+            )
+            """
+        )
+        for source_row, product_id, net_asset_total, aum in (
+            (2, "P1", 300, 100),
+            (3, "P2", 100, 300),
+            (4, "P3", "1,000", 400),
+        ):
+            connection.execute(
+                """
+                INSERT INTO domestic_etp_products (
+                    product_id, product_name, source_row, source_values_json,
+                    is_quarantined, trading_currency, static_as_of, dynamic_as_of,
+                    aum_minor_units, aum_quality
+                ) VALUES (?, ?, ?, ?, 0, 'KRW', ?, ?, ?, 'VALID')
+                """,
+                (
+                    product_id,
+                    f"Synthetic {product_id}",
+                    source_row,
+                    json.dumps(
+                        {
+                            "pd_net_tamt": net_asset_total,
+                            "du_last_aum": aum,
+                        }
+                    ),
+                    _AS_OF.isoformat(),
+                    _AS_OF.isoformat(),
+                    aum * 100,
+                ),
+            )
+        connection.commit()
+    finally:
+        connection.close()
+
+
 @pytest.mark.parametrize("field", tuple(_NUMERIC_COLUMNS))
 @pytest.mark.parametrize(
     ("direction", "expected"),
@@ -972,3 +1146,65 @@ def test_official_db_is_sole_numeric_rank_authority_and_excludes_zero_missing_qu
         "LOW": QualityStatus.VALID,
         "HIGH": QualityStatus.PARTIAL,
     }
+
+
+def test_domestic_net_asset_total_ranking_reads_pd_net_tamt_and_verifies(tmp_path) -> None:
+    database = tmp_path / "synthetic-net-asset-total.sqlite3"
+    _synthetic_net_asset_total_db(database)
+    provider = SqliteOfficialProductFactProvider(
+        {ProductFamily.DOMESTIC_ETP: database},
+        verify_approved_databases=False,
+    )
+    question = "오로라소재를 보유한 국내 ETF를 순자산총액이 높은 순으로 보여줘."
+    requirement = _requirement(
+        "need_1",
+        KnowledgeCapability.PORTFOLIO_HOLDINGS,
+        "오로라소재",
+    )
+    plan = CompositeKnowledgeQueryPlan(
+        question_id="net-asset-total-source",
+        question=question,
+        interaction_intent=InteractionIntent.SEARCH,
+        evidence_cutoff=date(2026, 8, 24),
+        requirements=(requirement,),
+        product_selection=KnowledgeProductSelection(
+            rank_field="net_asset_total",
+            direction=SortDirection.DESC,
+            limit=2,
+        ),
+        join_order=("need_1", "official_product_db"),
+    )
+    relations = (
+        _holding("aurora-p1", "오로라소재", "P1"),
+        _holding("aurora-p2", "오로라소재", "P2"),
+    )
+
+    execution = _execute(plan, relations, provider)
+    rank_facts = execution.evidence.product_facts
+
+    assert execution.verification.passed
+    assert [item.product_id for item in rank_facts] == ["P1", "P2"]
+    assert [item.normalized_value for item in rank_facts] == [300.0, 100.0]
+    assert all(item.canonical_field == "net_asset_total" for item in rank_facts)
+    assert all(item.source_columns == ("pd_net_tamt",) for item in rank_facts)
+    assert all(item.quality is QualityStatus.PARTIAL for item in rank_facts)
+
+
+def test_net_asset_total_rejects_a_non_numeric_json_value(tmp_path) -> None:
+    database = tmp_path / "synthetic-net-asset-total-types.sqlite3"
+    _synthetic_net_asset_total_db(database)
+    provider = SqliteOfficialProductFactProvider(
+        {ProductFamily.DOMESTIC_ETP: database},
+        verify_approved_databases=False,
+    )
+
+    facts = provider.fetch(
+        tuple((ProductFamily.DOMESTIC_ETP, item) for item in ("P1", "P2", "P3")),
+        KnowledgeProductSelection(
+            rank_field="net_asset_total",
+            direction=SortDirection.DESC,
+            limit=3,
+        ),
+    )
+
+    assert [item.product_id for item in facts] == ["P1", "P2"]

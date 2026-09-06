@@ -2,26 +2,20 @@ from __future__ import annotations
 
 import re
 import unicodedata
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from threading import RLock
 
+from finance_agent_core.agent.document_reference import (
+    DOMESTIC_ETP_BRANDS,
+    extract_dated_official_document_references,
+    overlaps_dated_document_reference,
+)
 from finance_agent_core.contracts.queryplan import ProductFamily
 from finance_agent_core.storage.sqlite import connect_read_only
 
-_DOMESTIC_ETP_BRANDS = (
-    "TIGER",
-    "KODEX",
-    "ACE",
-    "RISE",
-    "SOL",
-    "HANARO",
-    "TIMEFOLIO",
-    "ARIRANG",
-    "KBSTAR",
-)
-_BRAND = "|".join(_DOMESTIC_ETP_BRANDS)
+_BRAND = "|".join(DOMESTIC_ETP_BRANDS)
 _BRANDED_PRODUCT = re.compile(
     rf"(?P<name>\b(?:{_BRAND})\b(?:\s+[0-9A-Za-z가-힣&·+._/-]+){{1,10}}?)"
     r"(?=\s+(?:(?:국내|해외)\s*)?(?:ETF|ETN|ETP)(?:\s|$)|"
@@ -141,6 +135,17 @@ _IDENTITY_CONTEXT_AFTER = re.compile(
     r"(?:한|두|세|네|다섯|여섯|일곱|여덟|아홉|열|\d+)\s*"
     r"(?:개|종목|상품)(?:을|를|이|가|은|는)?(?=\s|[,.;:!?]|$))"
 )
+_IDENTITY_FAMILY_QUALIFIER_AFTER = re.compile(
+    # An approved short name can naturally be followed by its generic market
+    # kind (``... ETF의 운용사``).  The kind is accepted only when it is
+    # immediately followed by a Korean particle and/or known read grammar;
+    # whitespace plus an invented name continuation is still not a boundary.
+    r"^\s*(?:(?:국내|해외)\s*)?(?:ETF|ETN|ETP)"
+    r"(?:의|이|가|은|는|을|를|와|과|에|에서|으로|로|도|보다|대비|중|부터|까지)?"
+    r"\s*(?:[?!.,;:()\[\]{}'\"“”‘’]|$|정보|상세|비교|조회|검색|확인|"
+    r"알려|보여|찾아|수익률|보수|순자산|AUM|가격|종가|위험|운용사|발행사)",
+    re.IGNORECASE,
+)
 _IDENTITY_CONTEXT_BEFORE = re.compile(
     r"(?:^|\s|[?!.,;:()\[\]{}'\"“”‘’]|상품명|종목명|이름|명칭)$"
 )
@@ -160,6 +165,16 @@ _LABELED_PRODUCT_IDENTIFIER = re.compile(
     r"티커|ISIN"
     r")(?:가|는|은|이)?\s*[:：=]?\s*"
     r"[\"'“‘]?(?P<identity>[A-Z0-9][A-Z0-9._:-]{1,47})[\"'”’]?",
+    re.IGNORECASE,
+)
+_LABELED_DOMESTIC_ETP_DISPLAY_CODE = re.compile(
+    # The organizer-facing domestic display code omits the DB's A/Q prefix.
+    # Never scan a bare six-digit number as an identity: only this explicit
+    # label grammar may request the derived alias.
+    r"(?:종목\s*(?:코드|번호)|티커)"
+    r"(?:가|는|은|이)?\s*[:：=]?\s*"
+    r"[\"'“‘]?(?P<code>[0-9]{6})[\"'”’]?"
+    r"(?![0-9A-Za-z])",
     re.IGNORECASE,
 )
 _PLAIN_IDENTITY_LOOKUP_ACTION = re.compile(
@@ -301,6 +316,48 @@ class DatabaseProductIdentityMatch:
             (item.product_family, item.canonical_literal) for item in self.candidates
         }
         return len(logical_products) == 1
+
+
+def mask_database_product_identity_spans(
+    question: str,
+    matches: Iterable[DatabaseProductIdentityMatch],
+) -> str:
+    """Hide only DB-proven identity spans while preserving source offsets.
+
+    Official product names can contain field-like words such as ``1년``,
+    ``채권``, ``혼합자산``, ``액티브`` or ``합성``.  Once the exact literal is
+    matched against the approved database, those words belong to the identity
+    and must not become separate filters, rankings, or residual spans.
+
+    Stale or fabricated match objects are ignored unless ``surface`` is the
+    exact slice of this question.  This helper grants no lookup authority by
+    itself; callers must still bind the candidate product ID separately.
+    """
+
+    verified_spans = sorted(
+        {
+            (match.start, match.end)
+            for match in matches
+            if 0 <= match.start < match.end <= len(question)
+            and question[match.start : match.end] == match.surface
+        }
+    )
+    if not verified_spans:
+        return question
+
+    merged: list[tuple[int, int]] = []
+    for start, end in verified_spans:
+        if merged and start <= merged[-1][1]:
+            merged[-1] = (merged[-1][0], max(merged[-1][1], end))
+        else:
+            merged.append((start, end))
+
+    characters = list(question)
+    for start, end in merged:
+        for index in range(start, end):
+            if not characters[index].isspace():
+                characters[index] = " "
+    return "".join(characters)
 
 
 @dataclass(frozen=True, slots=True)
@@ -492,7 +549,53 @@ class DatabaseProductIdentityMatcher:
         ) and (
             end == len(question)
             or _IDENTITY_CONTEXT_AFTER.match(after) is not None
+            or _IDENTITY_FAMILY_QUALIFIER_AFTER.match(after) is not None
         )
+
+    @staticmethod
+    def _labeled_domestic_etp_display_code_matches(
+        question: str,
+        index: _IdentityIndex,
+    ) -> list[DatabaseProductIdentityMatch]:
+        """Resolve labelled six-digit codes from approved A/Q DB tickers only."""
+
+        matches: list[DatabaseProductIdentityMatch] = []
+        for labeled in _LABELED_DOMESTIC_ETP_DISPLAY_CODE.finditer(question):
+            code = labeled.group("code")
+            candidates_by_product: dict[
+                tuple[ProductFamily, str], DatabaseProductIdentityCandidate
+            ] = {}
+            for prefix in ("a", "q"):
+                for candidate in index.aliases.get(f"{prefix}{code}", ()):
+                    if (
+                        candidate.product_family is ProductFamily.DOMESTIC_ETP
+                        and candidate.alias_kind == "ticker"
+                    ):
+                        candidates_by_product.setdefault(
+                            (candidate.product_family, candidate.product_id),
+                            candidate,
+                        )
+            if not candidates_by_product:
+                continue
+            start, end = labeled.span("code")
+            matches.append(
+                DatabaseProductIdentityMatch(
+                    surface=question[start:end],
+                    start=start,
+                    end=end,
+                    normalized_alias=code,
+                    candidates=tuple(
+                        sorted(
+                            candidates_by_product.values(),
+                            key=lambda item: (
+                                item.product_family.value,
+                                item.product_id,
+                            ),
+                        )
+                    ),
+                )
+            )
+        return matches
 
     @staticmethod
     def _corroborate_adjacent_aliases(
@@ -559,7 +662,7 @@ class DatabaseProductIdentityMatcher:
         normalized, offsets = _normalized_question_with_offsets(question)
         if not normalized or not offsets or not index.aliases:
             return ()
-        matches: list[DatabaseProductIdentityMatch] = []
+        matches = self._labeled_domestic_etp_display_code_matches(question, index)
         for start in range(len(normalized)):
             if start > 0 and normalized[start - 1].isalnum():
                 continue
@@ -687,6 +790,7 @@ def extract_named_product_mentions(question: str) -> list[str]:
     """Extract narrow product-name surfaces without guessing a DB identity."""
 
     matches: list[tuple[int, int, str]] = []
+    document_references = extract_dated_official_document_references(question)
     exact_spans = [
         (match.start("name"), match.end("name"), match.group("name").strip())
         for match in _EXPLICIT_BRANDED_NAME.finditer(question)
@@ -702,6 +806,11 @@ def extract_named_product_mentions(question: str) -> list[str]:
         if not any(
             match.start() < exact_end and exact_start < match.end()
             for exact_start, exact_end, _ in exact_spans
+        )
+        and not overlaps_dated_document_reference(
+            match.start(),
+            match.end(),
+            document_references,
         )
     )
     for match in _NAMED_FUND.finditer(question):
@@ -750,6 +859,7 @@ __all__ = [
     "is_domestic_etp_brand_question",
     "is_named_product_mention",
     "is_quoted_product_mention",
+    "mask_database_product_identity_spans",
     "normalize_database_identity",
     "unresolved_identity_like_spans",
 ]

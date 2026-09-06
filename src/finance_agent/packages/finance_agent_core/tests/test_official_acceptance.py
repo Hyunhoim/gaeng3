@@ -95,7 +95,7 @@ def _healthy_body() -> dict[str, object]:
         "ready_product_families": families,
         "missing_product_families": [],
         "unavailable_product_families": [],
-        "fund_execution_policy": "locked",
+        "fund_execution_policy": "public_fund_v1_approved",
     }
 
 

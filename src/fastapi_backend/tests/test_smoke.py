@@ -189,13 +189,14 @@ def test_validate_answer_checks_relation_plan_and_evidence_kind() -> None:
     assert "citation kind differs" in validate_answer(case, 200, body)
 
 
-def test_official_smoke_keeps_public_fund_locked() -> None:
-    case = next(item for item in OFFICIAL_CASES if item.case_id == "official-fund-locked")
+def test_official_smoke_keeps_public_fund_enabled() -> None:
+    case = next(item for item in OFFICIAL_CASES if item.case_id == "official-fund-enabled")
 
-    assert case.expected_trace_status == "unsupported"
-    assert case.expected_intent == "unsupported"
+    assert case.expected_trace_status == "success"
+    assert case.expected_intent == "search"
     assert case.expected_families == ("fund",)
-    assert case.expected_empty_context is True
+    assert case.expected_evidence is True
+    assert case.expected_empty_context is False
 
 
 def test_official_smoke_requires_verified_evidence_for_success() -> None:

@@ -13,7 +13,11 @@ from finance_agent_core.agent.external_search_planning import (
     ProvidedProductUniverseBuilder,
 )
 from finance_agent_core.agent.intent_analysis import IntentAnalysisDraft
-from finance_agent_core.config.knowledge_coverage import KnowledgeCapability
+from finance_agent_core.config.knowledge_coverage import (
+    ApprovedKnowledgeCoverageManifest,
+    KnowledgeCapability,
+    KnowledgeCoverageEntry,
+)
 from finance_agent_core.contracts.backend import BackendAgentRequest, BackendStatus
 from finance_agent_core.contracts.external_knowledge import ExternalKnowledgeOutcomeStatus
 from finance_agent_core.contracts.queryplan import Intent, ProductFamily, SortDirection
@@ -272,6 +276,48 @@ def test_fresh_cross_family_clauses_keep_local_filters_ranking_and_korean_limit(
     assert [len(item.products) for item in result.family_searches] == [2, 2]
 
 
+@pytest.mark.parametrize(
+    "shared_tail",
+    [
+        "각각 해당 값이 높은 순으로 두 개씩 정리해 주세요.",
+        "상품군별로 자기 기준 지표가 큰 순서대로 두 개씩 정리해 주세요.",
+    ],
+)
+def test_cross_family_clause_local_metric_anaphora_reuses_each_explicit_field(
+    sample_database,
+    domestic_sample_database,
+    shared_tail: str,
+) -> None:
+    result = _plain_agent(sample_database, domestic_sample_database).answer(
+        "국내 ETF 쪽은 일거래대금 700000 이상, "
+        f"해외 ETF 쪽은 AUM 2500 이상만 대상으로 잡아 {shared_tail}",
+        "fresh-local-anaphora-e2e",
+    )
+
+    assert result.status == "executed", result.decision
+    plans = [item.query_plan for item in result.family_searches]
+    assert [item.limit for item in plans] == [2, 2]
+    assert [item.ranking[0].field for item in plans] == ["daily_trading_value", "aum"]
+    assert [item.ranking[0].direction for item in plans] == [
+        SortDirection.DESC,
+        SortDirection.DESC,
+    ]
+
+
+def test_cross_family_metric_anaphora_with_two_local_numeric_fields_stays_blocked(
+    sample_database,
+    domestic_sample_database,
+) -> None:
+    result = _plain_agent(sample_database, domestic_sample_database).answer(
+        "국내 ETF 쪽은 일거래대금 700000 이상이고 순자산 1000 이상, "
+        "해외 ETF 쪽은 AUM 2500 이상만 대상으로 잡아 "
+        "각각 해당 수치가 큰 순서로 두 개씩 정리해 주세요.",
+        "fresh-local-anaphora-ambiguous-e2e",
+    )
+
+    assert result.status != "executed"
+
+
 def test_fresh_derived_ranking_is_executed_from_two_db_fields(
     domestic_sample_database,
 ) -> None:
@@ -502,10 +548,42 @@ def external_e2e_agent(sample_database, domestic_sample_database) -> RoutedFinan
             verify_approved_databases=False,
         ),
     )
+    # Keep this sealed-relation integration fixture independent from whichever
+    # capability subset the deployable coverage manifest currently enables.
+    # The explicit fixture policy grants only the closed capabilities proven
+    # by the in-memory official relation bundle above.
+    fixture_coverage = ApprovedKnowledgeCoverageManifest(
+        schema_version="1.0",
+        manifest_id="final-generalization-e2e-fixture",
+        dataset_release_id="fixture-20260824",
+        capabilities=tuple(
+            KnowledgeCoverageEntry(
+                capability=capability,
+                status=(
+                    "approved_live_official"
+                    if capability
+                    in {
+                        KnowledgeCapability.PORTFOLIO_HOLDINGS,
+                        KnowledgeCapability.SECTOR_THEME_HISTORY,
+                        KnowledgeCapability.PRODUCT_RISK_FACTORS,
+                    }
+                    else "not_configured"
+                ),
+                runtime_execution_enabled=capability
+                in {
+                    KnowledgeCapability.PORTFOLIO_HOLDINGS,
+                    KnowledgeCapability.SECTOR_THEME_HISTORY,
+                    KnowledgeCapability.PRODUCT_RISK_FACTORS,
+                },
+                allowed_source_kinds=("provided", "external_approved"),
+            )
+            for capability in KnowledgeCapability
+        ),
+    )
     return RoutedFinanceAgent(
         paths,
         intent_analysis_provider=_ServerCompatibleIntentProvider(),
-        external_knowledge_router=ExternalKnowledgeRouter(),
+        external_knowledge_router=ExternalKnowledgeRouter(coverage=fixture_coverage),
         external_knowledge_runtime=runtime,
         external_universe_builder=ProvidedProductUniverseBuilder(
             paths,

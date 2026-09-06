@@ -332,7 +332,7 @@ class SemanticResolutionDraft(SemanticModel):
     decision: ResolutionDecision
     selected_field_id: str = Field(min_length=2, max_length=127)
     operation: ResolutionOperation
-    direction: SortDirection
+    direction: SortDirection | None = None
     reason_code: Literal[
         "candidate_context_match",
         "multiple_interpretations",
@@ -350,6 +350,10 @@ class SemanticResolutionDraft(SemanticModel):
                 raise ValueError("resolved drafts require grounded evidence spans")
             if self.ambiguity_reason:
                 raise ValueError("resolved drafts cannot include an ambiguity reason")
+            if self.operation is ResolutionOperation.RANK and self.direction is None:
+                raise ValueError("ranking drafts require direction")
+            if self.operation is not ResolutionOperation.RANK and self.direction is not None:
+                raise ValueError("non-ranking drafts cannot carry direction")
         else:
             if self.evidence_spans:
                 raise ValueError("control drafts cannot include evidence spans")
@@ -371,9 +375,10 @@ class SemanticResolutionReceipt(SemanticModel):
     product_family: ProductFamily
     field_id: str = Field(pattern=_FIELD_ID_PATTERN)
     operation: ResolutionOperation
-    direction: SortDirection
+    direction: SortDirection | None = None
     admitted_candidate_ids: tuple[str, ...] = Field(min_length=1, max_length=10)
     hard_filter_lock_sha256: str = Field(pattern=_SHA256_PATTERN)
+    constraint_sha256: str | None = Field(default=None, pattern=_SHA256_PATTERN)
     receipt_sha256: str = Field(pattern=_SHA256_PATTERN)
 
     @staticmethod
@@ -388,7 +393,8 @@ class SemanticResolutionReceipt(SemanticModel):
         request: SemanticResolutionRequest,
         field_id: str,
         operation: ResolutionOperation,
-        direction: SortDirection,
+        direction: SortDirection | None,
+        constraint: Constraint | None = None,
     ) -> SemanticResolutionReceipt:
         values = {
             "source": source.value,
@@ -399,10 +405,14 @@ class SemanticResolutionReceipt(SemanticModel):
             "product_family": request.product_family.value,
             "field_id": field_id,
             "operation": operation.value,
-            "direction": direction.value,
+            "direction": None if direction is None else direction.value,
             "admitted_candidate_ids": [item.field_id for item in request.candidates],
             "hard_filter_lock_sha256": request.hard_filter_lock_sha256,
         }
+        if constraint is not None:
+            values["constraint_sha256"] = canonical_sha256(
+                constraint.model_dump(mode="json")
+            )
         return cls(
             source=source,
             request_id_sha256=values["request_id_sha256"],
@@ -413,6 +423,7 @@ class SemanticResolutionReceipt(SemanticModel):
             direction=direction,
             admitted_candidate_ids=tuple(values["admitted_candidate_ids"]),
             hard_filter_lock_sha256=request.hard_filter_lock_sha256,
+            constraint_sha256=values.get("constraint_sha256"),
             receipt_sha256=canonical_sha256(values),
         )
 
@@ -425,14 +436,24 @@ class SemanticResolutionReceipt(SemanticModel):
             "product_family": self.product_family.value,
             "field_id": self.field_id,
             "operation": self.operation.value,
-            "direction": self.direction.value,
+            "direction": None if self.direction is None else self.direction.value,
             "admitted_candidate_ids": list(self.admitted_candidate_ids),
             "hard_filter_lock_sha256": self.hard_filter_lock_sha256,
         }
+        if self.constraint_sha256 is not None:
+            values["constraint_sha256"] = self.constraint_sha256
         if self.receipt_sha256 != canonical_sha256(values):
             raise ValueError("semantic resolution receipt SHA-256 differs")
         if self.field_id not in self.admitted_candidate_ids:
             raise ValueError("semantic receipt field is outside the admitted candidates")
+        if self.operation is ResolutionOperation.RANK and self.direction is None:
+            raise ValueError("semantic ranking receipt requires direction")
+        if self.operation is not ResolutionOperation.RANK and self.direction is not None:
+            raise ValueError("non-ranking semantic receipt cannot carry direction")
+        if (self.operation is ResolutionOperation.FILTER) != (
+            self.constraint_sha256 is not None
+        ):
+            raise ValueError("semantic filter receipt requires one bound constraint")
         return self
 
 
@@ -475,14 +496,45 @@ class SemanticResolutionGate:
             product_family=request.product_family,
             operation=draft.operation.value,
         )
-        if not server_evidence.supported:
+        if server_evidence.supported:
+            if not evidence_spans_are_grounded(
+                draft.evidence_spans,
+                residual_span=request.evidence_context,
+                server_evidence=server_evidence.evidence_spans,
+            ):
+                raise SemanticResolutionError("semantic resolver evidence is not grounded")
+        elif source is SpanSource.HCLX:
+            # For wording absent from the hand-authored semantic rules, require
+            # Dense and HCLX to agree on one unique top-scoring field.  The
+            # model must quote the unresolved user text itself; surrounding
+            # context cannot be used to manufacture field evidence.
+            dense_candidates = tuple(
+                candidate
+                for candidate in request.candidates
+                if candidate.dense_score is not None
+            )
+            if not dense_candidates:
+                raise SemanticResolutionError("semantic resolver lacks Dense evidence")
+            highest_score = max(
+                candidate.dense_score for candidate in dense_candidates
+                if candidate.dense_score is not None
+            )
+            top_fields = {
+                candidate.field_id
+                for candidate in dense_candidates
+                if candidate.dense_score == highest_score
+            }
+            if top_fields != {draft.selected_field_id}:
+                raise SemanticResolutionError("HCLX and Dense field choices disagree")
+            if not draft.evidence_spans or any(
+                not span.strip() or span not in request.residual_span
+                for span in draft.evidence_spans
+            ):
+                raise SemanticResolutionError(
+                    "unseen semantic evidence is outside the unresolved span"
+                )
+        else:
             raise SemanticResolutionError("semantic resolver lacks server-grounded field evidence")
-        if not evidence_spans_are_grounded(
-            draft.evidence_spans,
-            residual_span=request.evidence_context,
-            server_evidence=server_evidence.evidence_spans,
-        ):
-            raise SemanticResolutionError("semantic resolver evidence is not grounded")
 
         definition = load_field_registry().require_field(
             draft.selected_field_id,
@@ -502,6 +554,67 @@ class SemanticResolutionGate:
             field_id=draft.selected_field_id,
             operation=draft.operation,
             direction=draft.direction,
+        )
+
+    def admit_hclx_frame(
+        self,
+        draft: SemanticResolutionDraft,
+        request: SemanticResolutionRequest,
+        *,
+        constraint: Constraint | None = None,
+    ) -> SemanticResolutionReceipt:
+        """Admit a primary HCX frame without requiring a prior embedding call.
+
+        HCX still receives no value or SQL authority.  The field is selected
+        from the closed Registry enum, the operation is checked against the
+        Registry, the quoted evidence must be a literal residual span, and
+        ranking direction must match the server-parsed direction.  Numeric,
+        date, identifier and limit values remain in ``HardFilterLock``.
+        """
+
+        if draft.decision is not ResolutionDecision.RESOLVE:
+            raise SemanticResolutionError("HCLX semantic frame abstained")
+        if draft.selected_field_id not in {
+            candidate.field_id for candidate in request.candidates
+        }:
+            raise SemanticResolutionError("HCLX frame selected a field outside Registry scope")
+        if draft.operation not in request.allowed_operations:
+            raise SemanticResolutionError("HCLX frame selected an unapproved operation")
+        if (
+            request.expected_direction is not None
+            and draft.direction is not request.expected_direction
+        ):
+            raise SemanticResolutionError("HCLX frame changed the server direction")
+        if not draft.evidence_spans or any(
+            not span.strip() or span not in request.residual_span
+            for span in draft.evidence_spans
+        ):
+            raise SemanticResolutionError("HCLX frame evidence is outside the residual span")
+
+        definition = load_field_registry().require_field(
+            draft.selected_field_id,
+            [request.product_family.value],
+        )
+        capability = {
+            ResolutionOperation.RANK: definition.sortable,
+            ResolutionOperation.PROJECT: definition.selectable,
+            ResolutionOperation.FILTER: definition.queryable,
+            ResolutionOperation.AGGREGATE: definition.aggregatable,
+        }[draft.operation]
+        if not capability:
+            raise SemanticResolutionError("HCLX frame selected an incapable field")
+        if draft.operation is ResolutionOperation.FILTER:
+            if constraint is None or constraint.field != draft.selected_field_id:
+                raise SemanticResolutionError("HCLX filter frame lacks a server constraint")
+        elif constraint is not None:
+            raise SemanticResolutionError("non-filter HCLX frame carried a constraint")
+        return SemanticResolutionReceipt.create(
+            source=SpanSource.HCLX,
+            request=request,
+            field_id=draft.selected_field_id,
+            operation=draft.operation,
+            direction=draft.direction,
+            constraint=constraint,
         )
 
 
@@ -543,8 +656,8 @@ class AdaptivePlanningDecisionV2(SemanticModel):
             if not self.dense_allowed or self.hclx_resolver_allowed or self.receipt_sha256 is None:
                 raise ValueError("Schema Dense path requires only Dense resolver authority")
         elif self.path is ResolutionPath.HCLX:
-            if not self.dense_allowed or not self.hclx_resolver_allowed:
-                raise ValueError("HCLX path requires prior Dense candidate authority")
+            if self.dense_allowed or not self.hclx_resolver_allowed:
+                raise ValueError("primary HCLX frame path cannot carry Dense authority")
             if self.receipt_sha256 is None:
                 raise ValueError("HCLX path requires a semantic receipt")
         return self
@@ -557,7 +670,7 @@ class AdaptivePlanningDecisionV2(SemanticModel):
                 if receipt.source is SpanSource.SCHEMA_DENSE
                 else ResolutionPath.HCLX
             ),
-            dense_allowed=True,
+            dense_allowed=receipt.source is SpanSource.SCHEMA_DENSE,
             hclx_resolver_allowed=receipt.source is SpanSource.HCLX,
             compiler_allowed=True,
             sql_allowed=True,

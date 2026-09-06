@@ -541,3 +541,58 @@ def test_colloquial_numeric_filter_and_rank_are_both_preserved(
     assert [(item.field, item.direction.value) for item in plan.ranking] == [
         (rank_field, "desc")
     ]
+
+
+@pytest.mark.parametrize(
+    ("question", "family", "value"),
+    [
+        (
+            "미국 상장 ETF 중 몸집이 100억 달러 이상인 상품을 몸집 큰 순으로 5개 보여줘.",
+            "overseas_etp",
+            10_000_000_000,
+        ),
+        (
+            "국내 ETF 중 덩치가 2조원 넘는 상품을 덩치 큰 순서로 4개 알려줘.",
+            "domestic_etp",
+            2_000_000_000_000,
+        ),
+        (
+            "공모펀드 중 체급 최소 80억원인 상품을 체급 큰 순으로 3개 찾아줘.",
+            "fund",
+            8_000_000_000,
+        ),
+    ],
+)
+def test_colloquial_aum_numeric_bound_and_ranking_are_both_preserved(
+    question: str,
+    family: str,
+    value: int,
+) -> None:
+    plan = _compile_search(question, f"colloquial-aum-bound-{family}")
+
+    assert [item.value for item in plan.product_families] == [family]
+    assert any(
+        item.field == "aum" and item.operator.value in {"gt", "gte"} and item.value == value
+        for item in plan.constraints
+    )
+    assert [(item.field, item.direction.value) for item in plan.ranking] == [
+        ("aum", "desc")
+    ]
+
+
+def test_two_colloquial_numeric_fields_keep_separate_owners() -> None:
+    plan = _compile_search(
+        "미국 상장 ETF 중 몸집이 100억 달러 이상이고 보수 부담이 연 0.10% 이하인 "
+        "상품을 몸집 큰 순서로 5개 보여줘.",
+        "colloquial-aum-and-fee",
+    )
+
+    constraints = {
+        (item.field, item.operator.value, item.value) for item in plan.constraints
+    }
+    assert ("aum", "gte", 10_000_000_000) in constraints
+    assert ("total_expense_ratio_pct", "lte", 0.1) in constraints
+    assert [(item.field, item.direction.value) for item in plan.ranking] == [
+        ("aum", "desc")
+    ]
+    assert plan.limit == 5

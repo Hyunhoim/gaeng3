@@ -8,7 +8,9 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from finance_agent_core.agent.routed_service import RoutedAgentResult
+from finance_agent_core.answering.independent_sections import IndependentSectionBundle
 from finance_agent_core.contracts.external_knowledge import CompositeKnowledgeQueryPlan
+from finance_agent_core.contracts.independent_hybrid import IndependentHybridPlan
 from finance_agent_core.contracts.knowledge import KnowledgeQueryPlan
 from finance_agent_core.contracts.queryplan import ProductFamily, QueryPlan
 from finance_agent_core.contracts.routing import InteractionIntent
@@ -76,7 +78,9 @@ class BackendError(BackendContractModel):
 
 
 class SourceCitation(BackendContractModel):
-    citation_id: str = Field(min_length=1, max_length=300)
+    # Independent hybrid answers prefix IDs with their section namespace.
+    # The previous 300-character bound applied to the unqualified ID.
+    citation_id: str = Field(min_length=1, max_length=400)
     kind: Literal[
         "product_field",
         "comparison_field",
@@ -118,7 +122,9 @@ class BackendAgentResponse(BackendContractModel):
     intent: InteractionIntent
     product_families: list[ProductFamily] = Field(max_length=4)
     answer: str = Field(min_length=1)
-    query_plan: QueryPlan | KnowledgeQueryPlan | CompositeKnowledgeQueryPlan | None
+    query_plan: (
+        QueryPlan | KnowledgeQueryPlan | CompositeKnowledgeQueryPlan | IndependentHybridPlan | None
+    )
     candidate_count: int | None = Field(default=None, ge=0)
     products: list[ProductEvidence]
     comparisons: list[ComparisonEvidence] = Field(default_factory=list)
@@ -135,6 +141,7 @@ class BackendAgentResponse(BackendContractModel):
     source_manifest: DatabaseManifest | None
     family_searches: list[BackendFamilySearch] = Field(default_factory=list, max_length=4)
     source_manifests: list[DatabaseManifest] = Field(default_factory=list, max_length=4)
+    independent_sections: IndependentSectionBundle | None = None
 
     @model_validator(mode="after")
     def validate_state(self) -> BackendAgentResponse:
@@ -144,6 +151,76 @@ class BackendAgentResponse(BackendContractModel):
             raise ValueError("citation IDs must be unique")
         if len(self.as_of_dates) != len(set(self.as_of_dates)):
             raise ValueError("as_of_dates must be unique")
+        is_independent_hybrid = isinstance(self.query_plan, IndependentHybridPlan)
+        if is_independent_hybrid != (self.independent_sections is not None):
+            raise ValueError(
+                "independent hybrid plan and section bundle must be published together"
+            )
+        if is_independent_hybrid:
+            assert isinstance(self.query_plan, IndependentHybridPlan)
+            assert self.independent_sections is not None
+            bundle = self.independent_sections
+            if self.candidate_count is not None:
+                raise ValueError("independent sections cannot publish a cross-section count")
+            if self.source_manifest is not None or self.family_searches or self.source_manifests:
+                raise ValueError(
+                    "independent sections keep source authority inside their section contract"
+                )
+            if self.clarification is not None or self.error is not None:
+                raise ValueError("complete independent sections cannot contain control state")
+            if self.status not in {BackendStatus.SUCCESS, BackendStatus.NOT_FOUND}:
+                raise ValueError("independent sections require a complete public status")
+            expected_status = (
+                BackendStatus.NOT_FOUND
+                if all(section.status.value == "not_found" for section in bundle.sections)
+                else BackendStatus.SUCCESS
+            )
+            if self.status is not expected_status:
+                raise ValueError("independent section statuses and public status differ")
+            expected_plan_hashes = (
+                self.query_plan.external_section.subplan.plan_sha256,
+                self.query_plan.database_section.subplan.plan_sha256,
+            )
+            if tuple(section.plan_sha256 for section in bundle.sections) != expected_plan_hashes:
+                raise ValueError("independent section plan hashes changed")
+            bundle_citation_ids = tuple(item.citation_id for item in bundle.citations)
+            if tuple(item.citation_id for item in self.citations) != bundle_citation_ids:
+                raise ValueError("public citations must preserve independent section order")
+            citations_by_id = {item.citation_id: item for item in self.citations}
+            for section_citation in bundle.citations:
+                if (
+                    tuple(citations_by_id[section_citation.citation_id].evidence_refs)
+                    != section_citation.evidence_refs
+                ):
+                    raise ValueError("public and section citation evidence references differ")
+            qualified_product_ids: list[str] = []
+            for product in self.products:
+                families = {
+                    family
+                    for field in product.fields
+                    for family in (
+                        field.source_key.get("product_family"),
+                        field.source_dataset,
+                    )
+                    if family in {item.value for item in ProductFamily}
+                }
+                if len(families) != 1:
+                    raise ValueError(
+                        "independent section products require one evidence-bound family"
+                    )
+                qualified_product_ids.append(f"{families.pop()}:{product.product_id}")
+            expected_product_ids = [
+                product_id for section in bundle.sections for product_id in section.product_ids
+            ]
+            if qualified_product_ids != expected_product_ids:
+                raise ValueError(
+                    "products must preserve family-qualified independent section order"
+                )
+            if not (
+                self.answer == bundle.deterministic_answer
+                or self.answer.endswith(f"\n{bundle.deterministic_answer}")
+            ):
+                raise ValueError("independent section answer body changed")
         if self.family_searches:
             if len(self.family_searches) < 2:
                 raise ValueError("compound response requires at least two family searches")
@@ -212,9 +289,7 @@ class BackendAgentResponse(BackendContractModel):
             # explain *why* NOT_FOUND is trustworthy; they must never carry a
             # product or turn a plain SQL empty result into web evidence.
             if self.documents or self.citations or self.as_of_dates:
-                document_evidence_ids = {
-                    document.evidence_id for document in self.documents
-                }
+                document_evidence_ids = {document.evidence_id for document in self.documents}
                 cited_evidence_ids = {
                     evidence_ref
                     for citation in self.citations
@@ -231,15 +306,23 @@ class BackendAgentResponse(BackendContractModel):
                     and cited_evidence_ids == document_evidence_ids
                 )
                 if not (
-                    isinstance(self.query_plan, CompositeKnowledgeQueryPlan)
-                    and verified_document_intersection
+                    (
+                        isinstance(self.query_plan, CompositeKnowledgeQueryPlan)
+                        and verified_document_intersection
+                    )
+                    or is_independent_hybrid
                 ):
                     raise ValueError(
                         "only external-knowledge not_found may contain source evidence"
                     )
-                if not self.documents or not self.citations:
+                if not is_independent_hybrid and (not self.documents or not self.citations):
                     raise ValueError("external not_found evidence requires documents and citations")
-            if self.candidate_count != 0:
+            if is_independent_hybrid:
+                if self.candidate_count is not None:
+                    raise ValueError(
+                        "independent not_found sections cannot publish a cross-section count"
+                    )
+            elif self.candidate_count != 0:
                 raise ValueError("not_found response requires candidate_count=0")
         elif self.status is BackendStatus.CANNOT_VERIFY:
             if (
@@ -254,6 +337,7 @@ class BackendAgentResponse(BackendContractModel):
                 or self.source_manifest is not None
                 or self.family_searches
                 or self.source_manifests
+                or self.independent_sections is not None
             ):
                 raise ValueError("cannot_verify response cannot contain asserted evidence")
             if self.candidate_count is not None:
@@ -288,6 +372,7 @@ class BackendAgentResponse(BackendContractModel):
                 or self.source_manifest is not None
                 or self.family_searches
                 or self.source_manifests
+                or self.independent_sections is not None
             ):
                 raise ValueError("clarification response cannot contain executed state")
             if self.answer_mode is not BackendAnswerMode.CONTROL or self.fallback_used:
@@ -308,6 +393,7 @@ class BackendAgentResponse(BackendContractModel):
                 or self.source_manifest is not None
                 or self.family_searches
                 or self.source_manifests
+                or self.independent_sections is not None
             ):
                 raise ValueError("unsupported response cannot contain control or executed state")
             if self.candidate_count is not None:
@@ -332,6 +418,7 @@ class BackendAgentResponse(BackendContractModel):
                 or self.source_manifest is not None
                 or self.family_searches
                 or self.source_manifests
+                or self.independent_sections is not None
             ):
                 raise ValueError("error response cannot contain executed or control evidence")
             if self.answer_mode is not BackendAnswerMode.CONTROL or self.fallback_used:

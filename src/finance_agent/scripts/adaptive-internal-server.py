@@ -2,9 +2,9 @@
 """Run a loopback-only Adaptive Semantic evaluation server.
 
 This helper is not a deployment entrypoint. It assembles the production KURE
-artifact and the real HCLX Semantic Resolver behind the normal official GET
-adapter so a frozen internal suite can measure the feature-enabled path without
-touching the shared 18001 service.
+artifact and the real HCLX Intent/Semantic Frame provider behind the normal
+official GET adapter so a frozen internal suite can measure the feature-enabled
+path without touching the shared service.
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ from finance_agent_core.agent.adaptive_semantic import AdaptiveSemanticResolver
 from finance_agent_core.agent.providers import (
     HyperClovaXCallRecord,
     HyperClovaXHTTPTransport,
-    HyperClovaXSemanticResolverProvider,
+    HyperClovaXIntentAnalysisProvider,
     HyperClovaXSettings,
 )
 from finance_agent_core.contracts.queryplan import ProductFamily
@@ -115,13 +115,15 @@ def main() -> None:
     index = DenseSchemaIndex(artifact, provider)
     linker = ProductionHybridSchemaLinker(index, policy)
     hclx_records: list[HyperClovaXCallRecord] = []
-    hclx_provider = HyperClovaXSemanticResolverProvider(
+    intent_provider = HyperClovaXIntentAnalysisProvider(
         HyperClovaXSettings(
             model="HCX-007",
             timeout_seconds=arguments.hclx_timeout_seconds,
         ),
         HyperClovaXHTTPTransport(api_key=_load_key_file(arguments.api_key_file)),
         on_call=hclx_records.append,
+        require_execution_structure=True,
+        allow_entity_alias_repair=True,
     )
     print("[adaptive-eval] assemble four-dataset Agent", file=sys.stderr, flush=True)
     database_paths = {
@@ -129,11 +131,11 @@ def main() -> None:
     }
     agent = RoutedFinanceAgent(
         database_paths,
+        intent_analysis_provider=intent_provider,
         capability_execution_overrides={ProductFamily.FUND},
         require_approved_databases=True,
         adaptive_semantic_resolver=AdaptiveSemanticResolver(
             linker,
-            hclx_provider=hclx_provider,
             execution_enabled=True,
         ),
     )
@@ -154,12 +156,16 @@ def main() -> None:
         return JSONResponse(
             {
                 "schema_dense_query_calls": provider.query_calls,
-                "hclx_semantic_calls": len(hclx_records),
-                "hclx_semantic_successes": sum(
-                    item.outcome == "success" for item in hclx_records
+                "hclx_intent_calls": sum(
+                    item.operation == "intent_analysis" for item in hclx_records
                 ),
-                "hclx_semantic_timeouts": sum(
-                    item.outcome == "timed_out" for item in hclx_records
+                "hclx_intent_successes": sum(
+                    item.operation == "intent_analysis" and item.outcome == "success"
+                    for item in hclx_records
+                ),
+                "hclx_intent_timeouts": sum(
+                    item.operation == "intent_analysis" and item.outcome == "timed_out"
+                    for item in hclx_records
                 ),
             }
         )

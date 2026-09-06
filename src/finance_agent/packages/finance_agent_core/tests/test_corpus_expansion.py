@@ -104,6 +104,7 @@ def test_pending_intake_registry_cannot_change_production_source_authority() -> 
         "vanguard-etf-official",
         "wisdomtree-etf-official",
     }.issubset(production_source_ids)
+    assert "open-dart-disclosures" in production_source_ids
     assert intake.canonical_sha256 != production.canonical_sha256
 
 

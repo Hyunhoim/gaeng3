@@ -4,6 +4,7 @@ import re
 from dataclasses import dataclass
 from typing import Any, Literal
 
+from finance_agent_core.config import ValueType
 from finance_agent_core.config.registry import load_field_registry
 from finance_agent_core.contracts.queryplan import ProductFamily, SortDirection
 
@@ -68,6 +69,24 @@ class FilterAliasMatch:
     start: int
     end: int
     evidence_source: str
+    policy_version: Literal["typed-alias-v2"] = TYPED_ALIAS_POLICY_VERSION
+
+
+@dataclass(frozen=True, slots=True)
+class NumericFieldReferenceRule:
+    """Family-scoped field names that may own an adjacent numeric bound.
+
+    These aliases select only the field referenced by an explicit number and
+    comparison operator.  They never create a value or operator themselves,
+    which keeps colloquial field names in the shared typed registry without
+    granting a bare word SQL authority.
+    """
+
+    rule_id: str
+    families: frozenset[ProductFamily]
+    field_id: str
+    aliases: tuple[str, ...]
+    evidence_source: str = "field-registry-v1.5"
     policy_version: Literal["typed-alias-v2"] = TYPED_ALIAS_POLICY_VERSION
 
 
@@ -182,8 +201,16 @@ def _referential_rank_rules(
     so this does not grant a bare adjective any execution authority.
     """
 
+    # A reference must either be explicitly anaphoric (``그 값``) or begin at
+    # a lexical boundary.  Without this boundary, the bare alternative ``값``
+    # could match the suffix of a different metric such as ``시장체력값`` and
+    # wrongly let an earlier numeric filter steal the later ranking cue.
+    reference = (
+        rf"(?:(?:그|해당)\s*(?:{reference_pattern})|"
+        rf"(?<![0-9A-Za-z가-힣])(?:{reference_pattern}))"
+    )
     stem = (
-        rf"(?:{field_pattern}).{{0,64}}?(?:그\s*)?(?:{reference_pattern})"
+        rf"(?:{field_pattern}).{{0,64}}?{reference}"
         r"(?:이|가|은|는|을|를)?\s*(?:(?:중|가운데)(?:에서|서)?\s*)?"
         r"(?:가장\s*)?"
     )
@@ -208,6 +235,16 @@ def _referential_rank_rules(
 _ETP_FAMILIES = (ProductFamily.DOMESTIC_ETP, ProductFamily.OVERSEAS_ETP)
 _ETP_AND_FUND = (*_ETP_FAMILIES, ProductFamily.FUND)
 _DOMESTIC_ETP_AND_FUND = (ProductFamily.DOMESTIC_ETP, ProductFamily.FUND)
+
+
+NUMERIC_FIELD_REFERENCE_RULES: tuple[NumericFieldReferenceRule, ...] = (
+    NumericFieldReferenceRule(
+        rule_id="product.aum.colloquial_numeric_reference",
+        families=frozenset(_ETP_AND_FUND),
+        field_id="aum",
+        aliases=("체급", "덩치", "몸집"),
+    ),
+)
 
 
 SEMANTIC_ALIAS_RULES: tuple[SemanticAliasRule, ...] = (
@@ -1879,6 +1916,7 @@ def validate_typed_alias_registry() -> None:
     rule_ids = [
         *(rule.rule_id for rule in SEMANTIC_ALIAS_RULES),
         *(rule.rule_id for rule in FILTER_ALIAS_RULES),
+        *(rule.rule_id for rule in NUMERIC_FIELD_REFERENCE_RULES),
     ]
     if len(rule_ids) != len(set(rule_ids)):
         raise RuntimeError("typed alias registry rule IDs must be unique")
@@ -1896,6 +1934,32 @@ def validate_typed_alias_registry() -> None:
             definition = field_registry.require_field(rule.field_id, [family.value])
             if not definition.sortable:
                 raise RuntimeError(f"typed rank alias field is not sortable: {rule.rule_id}")
+    for rule in NUMERIC_FIELD_REFERENCE_RULES:
+        if not rule.families or not rule.field_id or not rule.aliases:
+            raise RuntimeError(f"numeric field-reference alias is incomplete: {rule.rule_id}")
+        if len(rule.aliases) != len(set(rule.aliases)):
+            raise RuntimeError(f"numeric field-reference aliases repeat: {rule.rule_id}")
+        for family in rule.families:
+            definition = field_registry.require_field(rule.field_id, [family.value])
+            if definition.value_type is not ValueType.NUMBER or not definition.queryable:
+                raise RuntimeError(
+                    f"numeric field-reference alias is not queryable: {rule.rule_id}"
+                )
+
+
+def numeric_field_reference_aliases(
+    product_family: ProductFamily | str,
+) -> tuple[tuple[str, tuple[str, ...]], ...]:
+    """Return typed numeric field names admitted for one product family."""
+
+    family = ProductFamily(product_family)
+    merged: dict[str, list[str]] = {}
+    for rule in NUMERIC_FIELD_REFERENCE_RULES:
+        if family not in rule.families:
+            continue
+        values = merged.setdefault(rule.field_id, [])
+        values.extend(alias for alias in rule.aliases if alias not in values)
+    return tuple((field, tuple(aliases)) for field, aliases in sorted(merged.items()))
 
 
 validate_typed_alias_registry()
@@ -1925,15 +1989,18 @@ def explicit_product_name_order(question: str) -> bool:
 
 __all__ = [
     "FILTER_ALIAS_RULES",
+    "NUMERIC_FIELD_REFERENCE_RULES",
     "SEMANTIC_ALIAS_RULES",
     "FilterAliasMatch",
     "FilterAliasRule",
+    "NumericFieldReferenceRule",
     "SemanticAliasMatch",
     "SemanticAliasRule",
     "TYPED_ALIAS_POLICY_VERSION",
     "TypedAliasMatch",
     "explicit_product_name_order",
     "filter_alias_matches",
+    "numeric_field_reference_aliases",
     "rank_alias_matches",
     "ranking_cue_spans",
     "ranking_intent_present",

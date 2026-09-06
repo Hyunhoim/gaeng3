@@ -11,6 +11,7 @@ artifacts/*
 artifacts/evaluation/*
 !artifacts/evaluation/kure-internal-codex-calibration-v1.summary.json
 !artifacts/evaluation/kure-schema-dense-p1-selective-20260824.json
+!artifacts/evaluation/kure-schema-dense-calibration-registry18-20260905.json
 !artifacts/evaluation/schema-embedding/
 artifacts/evaluation/schema-embedding/*
 !artifacts/evaluation/schema-embedding/snapshot-manifests/
@@ -24,6 +25,7 @@ artifacts/runtime/holdings-graph/*
 !artifacts/runtime/schema-dense/
 artifacts/runtime/schema-dense/*
 !artifacts/runtime/schema-dense/kure-schema-dense-production-v1.json
+!artifacts/runtime/schema-dense/kure-schema-dense-production-v8-registry18-calibrated-20260905.json
 
 # Local research material pending redistribution review
 docs/research/**/audit-bundle/

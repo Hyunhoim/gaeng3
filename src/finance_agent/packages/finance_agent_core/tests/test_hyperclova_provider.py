@@ -116,6 +116,54 @@ def test_hcx_client_maps_http_status_without_exposing_body(
     assert records[0].outcome == outcome
 
 
+def test_hcx_client_retries_one_header_bound_rate_limit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    waits: list[float] = []
+    monkeypatch.setattr(
+        "finance_agent_core.agent.providers.hyperclova._wait_for_rate_limit_reset",
+        waits.append,
+    )
+    records: list[HyperClovaXCallRecord] = []
+    transport = FakeHyperClovaXTransport(
+        {
+            **_response(None, status_code=429),
+            "retry_after_seconds": 1.5,
+        },
+        _response("ok"),
+    )
+    client = HyperClovaXClient(_settings(), transport, on_call=records.append)
+
+    assert _complete(client) == {"value": "ok"}
+    assert waits == [1.5]
+    assert len(transport.requests) == 2
+    assert [record.outcome for record in records] == ["rate_limited", "success"]
+
+
+def test_hcx_client_stops_after_one_header_bound_rate_limit_retry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    waits: list[float] = []
+    monkeypatch.setattr(
+        "finance_agent_core.agent.providers.hyperclova._wait_for_rate_limit_reset",
+        waits.append,
+    )
+    records: list[HyperClovaXCallRecord] = []
+    limited = {
+        **_response(None, status_code=429),
+        "retry_after_seconds": 1.5,
+    }
+    transport = FakeHyperClovaXTransport(limited, limited)
+    client = HyperClovaXClient(_settings(), transport, on_call=records.append)
+
+    with pytest.raises(HyperClovaXRateLimitError):
+        _complete(client)
+
+    assert waits == [1.5]
+    assert len(transport.requests) == 2
+    assert [record.outcome for record in records] == ["rate_limited", "rate_limited"]
+
+
 @pytest.mark.parametrize(
     ("failure", "error_type", "outcome"),
     [

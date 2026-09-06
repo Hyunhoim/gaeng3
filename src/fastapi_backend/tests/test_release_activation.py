@@ -140,6 +140,10 @@ FINANCE_EXTERNAL_DOCUMENT_DENSE_ARTIFACT_HOST_FILE='/release/document-dense.json
 FINANCE_EXTERNAL_DOCUMENT_DENSE_ARTIFACT_FILE='/models/document-dense-approved.json'
 FINANCE_EXTERNAL_DOCUMENT_CACHE_ACTIVATION_HOST_FILE='/release/document-cache-activation.json'
 FINANCE_EXTERNAL_DOCUMENT_CACHE_ACTIVATION_FILE='/run/finance-release/document-cache-activation.json'
+FINANCE_EXTERNAL_DOCUMENT_CORPUS_MANIFEST_HOST_FILE='/release/approved-corpus-manifest.json'
+FINANCE_EXTERNAL_DOCUMENT_CORPUS_MANIFEST_FILE='/run/finance-release/approved-corpus-manifest.json'
+FINANCE_EXTERNAL_DOCUMENT_CORPUS_HOST_DIR='/release/approved-corpus'
+FINANCE_EXTERNAL_DOCUMENT_CORPUS_ROOT='/run/finance-corpus'
 """,
         encoding="utf-8",
     )
@@ -149,6 +153,45 @@ FINANCE_EXTERNAL_DOCUMENT_CACHE_ACTIVATION_FILE='/run/finance-release/document-c
 
     assert command.count("src/fastapi_backend/docker-compose.adaptive.yml") == 1
     assert command.count("src/fastapi_backend/docker-compose.document-cache.yml") == 1
+
+
+def test_compose_command_adds_live_search_overlay_only_for_complete_profile(
+    tmp_path: Path,
+) -> None:
+    disabled = tmp_path / "live-disabled.env"
+    disabled.write_text("FINANCE_ADAPTIVE_SEMANTIC_ENABLED='false'\n", encoding="utf-8")
+    disabled.chmod(0o600)
+    enabled = tmp_path / "live-enabled.env"
+    enabled.write_text(
+        """NAVER_API_HUB_CLIENT_ID_HOST_FILE='/release/naver-id'
+NAVER_API_HUB_CLIENT_ID_FILE='/run/secrets/naver_api_hub_client_id'
+NAVER_API_HUB_CLIENT_SECRET_HOST_FILE='/release/naver-secret'
+NAVER_API_HUB_CLIENT_SECRET_FILE='/run/secrets/naver_api_hub_client_secret'
+""",
+        encoding="utf-8",
+    )
+    enabled.chmod(0o600)
+
+    disabled_command = release_activation._compose_command(disabled, _compose_arguments())
+    enabled_command = release_activation._compose_command(enabled, _compose_arguments())
+
+    assert "src/fastapi_backend/docker-compose.live-search.yml" not in disabled_command
+    assert enabled_command.count("src/fastapi_backend/docker-compose.live-search.yml") == 1
+
+
+def test_compose_command_rejects_partial_live_search_profile(tmp_path: Path) -> None:
+    env_file = tmp_path / "partial-live.env"
+    env_file.write_text(
+        "NAVER_API_HUB_CLIENT_ID_HOST_FILE='/release/naver-id'\n",
+        encoding="utf-8",
+    )
+    env_file.chmod(0o600)
+
+    with pytest.raises(
+        release_activation.ReleaseActivationError,
+        match="NAVER API HUB release profile is incomplete",
+    ):
+        release_activation._compose_command(env_file, _compose_arguments())
 
 
 def test_compose_command_rejects_partial_document_cache_profile(tmp_path: Path) -> None:

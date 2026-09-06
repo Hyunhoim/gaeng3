@@ -620,6 +620,122 @@ def test_risk_statement_in_a_catalogue_does_not_spill_to_neighbour_product() -> 
     assert "ALPHA 테스트 ETF" in relations[0].evidence[0].excerpt
 
 
+def test_narrowed_dependency_universe_does_not_turn_catalogue_into_single_product() -> None:
+    """A selected product key cannot erase the source's multi-product structure."""
+
+    alpha = ProvidedProductCandidate(
+        product_family=ProductFamily.DOMESTIC_ETP,
+        product_id="KR7000000001",
+        product_name="ALPHA 전력 ETF",
+        aliases=("000001", "A000001"),
+    )
+    body = """
+    <html><body>
+      <p>종목코드 000001</p>
+      <p>ALPHA 전력 ETF는 환율 변동 위험으로 손실이 발생할 수 있습니다.</p>
+      <p>종목코드 000002</p>
+      <p>BETA 우주 ETF는 레버리지 위험으로 큰 손실이 발생할 수 있습니다.</p>
+    </body></html>
+    """
+    # This is the shape used by a dependent risk lookup after a prior holding
+    # relation has selected exactly one provided-DB product.
+    narrowed_universe = ProvidedProductCandidateUniverse(
+        candidates=(alpha,),
+        database_sha256s={ProductFamily.DOMESTIC_ETP: _SHA_A},
+        candidate_filter_sha256=_SHA_B,
+        explicit_identity_bound=True,
+    )
+
+    relations = VerifiedLiveRelationExtractor().extract(
+        _risk_snapshot(body),
+        _risk_requirement("ALPHA 전력 ETF의 위험요인을 알려줘.", "ALPHA 전력 ETF"),
+        narrowed_universe,
+    )
+
+    assert relations
+    excerpts = "\n".join(
+        evidence.excerpt for relation in relations for evidence in relation.evidence
+    )
+    assert "ALPHA 전력 ETF" in excerpts
+    assert "BETA 우주 ETF" not in excerpts
+
+
+def test_catalogue_scope_accepts_new_alphanumeric_domestic_code_without_sibling_risk() -> None:
+    product = ProvidedProductCandidate(
+        product_family=ProductFamily.DOMESTIC_ETP,
+        product_id="KR7000098F01",
+        product_name="ALPHA 차세대 ETF",
+        aliases=("0098F0", "A0098F0"),
+    )
+    body = """
+    <html><body>
+      <p>종목코드 0098F0</p>
+      <p>ALPHA 차세대 ETF</p>
+      <p>이 금융상품은 시장가격 변동으로 원금 손실이 발생할 수 있습니다.</p>
+      <p>종목코드 123456</p>
+      <p>BETA 레버리지 ETF는 레버리지 위험으로 큰 손실이 발생할 수 있습니다.</p>
+    </body></html>
+    """
+    universe = ProvidedProductCandidateUniverse(
+        candidates=(product,),
+        database_sha256s={ProductFamily.DOMESTIC_ETP: _SHA_A},
+        candidate_filter_sha256=_SHA_B,
+        explicit_identity_bound=True,
+    )
+
+    relations = VerifiedLiveRelationExtractor().extract(
+        _risk_snapshot(body),
+        _risk_requirement("ALPHA 차세대 ETF의 위험요인을 알려줘.", "ALPHA 차세대 ETF"),
+        universe,
+    )
+
+    excerpts = "\n".join(
+        evidence.excerpt for relation in relations for evidence in relation.evidence
+    )
+    assert "시장가격 변동" in excerpts
+    assert "레버리지 위험" not in excerpts
+
+
+def test_explicit_catalogue_compliance_notice_is_global_but_product_sections_are_not() -> None:
+    product = ProvidedProductCandidate(
+        product_family=ProductFamily.DOMESTIC_ETP,
+        product_id="KR7000000021",
+        product_name="ALPHA 전력 ETF",
+        aliases=("000021", "A000021"),
+    )
+    body = """
+    <html><body>
+      <p>종목코드 000021</p><p>ALPHA 전력 ETF</p><p>전력 설비 기업에 투자합니다.</p>
+      <p>종목코드 000022</p>
+      <p>BETA 우주 ETF는 레버리지 위험으로 큰 손실이 발생할 수 있습니다.</p>
+      <p>Compliance Notice</p>
+      <p>금융투자상품은 자산가격 변동에 따라 투자원금의 손실이 발생할 수 있습니다.</p>
+    </body></html>
+    """
+    universe = ProvidedProductCandidateUniverse(
+        candidates=(product,),
+        database_sha256s={ProductFamily.DOMESTIC_ETP: _SHA_A},
+        candidate_filter_sha256=_SHA_B,
+        explicit_identity_bound=True,
+    )
+
+    relations = VerifiedLiveRelationExtractor().extract(
+        _risk_snapshot(body),
+        _risk_requirement(
+            "ALPHA 전력 ETF의 위험요인과 손실 유의점을 알려줘.",
+            "ALPHA 전력 ETF",
+        ),
+        universe,
+    )
+
+    excerpts = "\n".join(
+        evidence.excerpt for relation in relations for evidence in relation.evidence
+    )
+    assert "투자원금의 손실" in excerpts
+    assert "BETA 우주 ETF" not in excerpts
+    assert "레버리지 위험" not in excerpts
+
+
 def test_single_product_risk_document_cannot_bind_to_another_requested_product() -> None:
     alpha = ProvidedProductCandidate(
         product_family=ProductFamily.DOMESTIC_ETP,
@@ -750,3 +866,61 @@ def test_holdings_table_line_window_keeps_exact_product_and_entity_binding() -> 
     }
     assert "Aurora Solar ETF" in relations[0].evidence[0].excerpt
     assert "Zythera Corporation" in relations[0].evidence[0].excerpt
+
+
+def test_multi_fund_schedule_never_uses_search_title_as_holding_owner() -> None:
+    """A search-result title is not ownership proof for a multi-fund report."""
+
+    product = ProvidedProductCandidate(
+        product_family=ProductFamily.OVERSEAS_ETP,
+        product_id="AMX:KWEB.K",
+        product_name="KraneShares CSI China Internet ETF",
+        aliases=("KWEB", "KWEB.K"),
+    )
+    universe = ProvidedProductCandidateUniverse(
+        candidates=(product,),
+        database_sha256s={ProductFamily.OVERSEAS_ETP: _SHA_A},
+        candidate_filter_sha256=_SHA_B,
+    )
+    requirement = KnowledgeRequirement(
+        requirement_id="need_1",
+        capability=KnowledgeCapability.PORTFOLIO_HOLDINGS,
+        predicate="holds_company",
+        subject="Cambricon",
+        subject_evidence_span="캠브리콘",
+        relation_evidence_span="편입된",
+        product_families=(ProductFamily.OVERSEAS_ETP,),
+        source_registry_ids=("kraneshares-main-product",),
+    )
+    filler = "unrelated portfolio accounting line\n" * 160
+    body = f"""
+    Schedule of Investments (Unaudited) June 30, 2024
+    KraneShares CICC China 5G & Semiconductor Index ETF
+    Portfolio Holdings
+    {filler}
+    Cambricon Technologies, Cl A  6,260  170,346
+    Schedule of Investments (Unaudited) June 30, 2024
+    KraneShares Electric Vehicles & Future Mobility ETF
+    Portfolio Holdings
+    Another Company  1,000  10,000
+    """.encode()
+    url = (
+        "https://kraneshares.com/resources/compliance/"
+        "2024_08_22_multi_fund_schedule.of.investments.pdf"
+    )
+    registry = load_official_source_registry()
+    snapshot = OfficialSourceSnapshot(
+        source=registry.authorize_url(url, KnowledgeCapability.PORTFOLIO_HOLDINGS),
+        capability=KnowledgeCapability.PORTFOLIO_HOLDINGS,
+        source_uri=url,
+        title="KraneShares 90% KWEB Defined Outcome ETF | KBUF",
+        content_type="text/plain",
+        content=body,
+        content_sha256=hashlib.sha256(body).hexdigest(),
+        published_at=date(2024, 8, 22),
+        as_of=date(2024, 6, 30),
+    )
+
+    relations = VerifiedLiveRelationExtractor().extract(snapshot, requirement, universe)
+
+    assert relations == ()

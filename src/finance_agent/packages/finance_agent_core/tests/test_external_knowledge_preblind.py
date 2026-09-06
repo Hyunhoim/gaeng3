@@ -16,7 +16,7 @@ from finance_agent_core.retrieval.document_dense import (
 from finance_agent_core.retrieval.schema_dense import EmbeddingProviderMetadata
 
 
-def test_preblind_gate_accepts_release_approved_live_activation(tmp_path) -> None:
+def test_legacy_live_preblind_gate_rejects_cache_only_release(tmp_path) -> None:
     text = "공식 문서의 공개 calibration 전용 chunk"
     vector = (1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
     chunk = DocumentDenseChunk(
@@ -82,8 +82,8 @@ def test_preblind_gate_accepts_release_approved_live_activation(tmp_path) -> Non
         public_calibration_report_path=calibration_path,
     )
 
-    assert report.status == "ready_for_independent_blind"
+    assert report.status == "blocked"
     assert report.independent_blind_executed is False
     assert report.production_execution_enabled is True
-    assert report.checks["coverage_execution_is_approved_live_official"]
-    assert report.blockers == ()
+    assert not report.checks["coverage_execution_is_approved_live_official"]
+    assert "coverage_execution_is_approved_live_official" in report.blockers

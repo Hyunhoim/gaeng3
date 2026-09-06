@@ -2,8 +2,12 @@ from __future__ import annotations
 
 import pytest
 
-from finance_agent_core.agent.product_identity import unresolved_identity_like_spans
+from finance_agent_core.agent.product_identity import (
+    extract_named_product_mentions,
+    unresolved_identity_like_spans,
+)
 from finance_agent_core.agent.router import _product_mentions
+from finance_agent_core.agent.semantic_gate import SemanticCoverageGate
 
 
 @pytest.mark.parametrize(
@@ -121,3 +125,43 @@ def test_exact_quoted_product_name_remains_an_identity() -> None:
     question = "상품명 'TIGER 미국S&P500'의 순자산을 알려줘."
 
     assert _product_mentions(question) == ["TIGER 미국S&P500"]
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        "KODEX 2026년 2분기 가이드에서 전력기기 ETF 설명을 확인해줘.",
+        "TIGER 2025년 3월 팩트시트에서 상위 구성종목을 확인해줘.",
+        "TIGER 2025년 3월 말 팩트시트에서 상위 구성종목을 확인해줘.",
+        "SOL 2026년 8월 24일 기준 공식 문서에서 구성종목을 확인해줘.",
+        "ACE 2026년 상반기 공식 자료에서 테마 연결 이력을 찾아줘.",
+        "Global X 2025년 3월 말 팩트시트에서 편입 종목을 확인해줘.",
+        "PLUS 2026년 8월 공식 자료에서 테마 설명을 확인해줘.",
+        "KOSEF 2026년 2분기 보고서에서 구성종목을 확인해줘.",
+        "TIME 2026년 상반기 공식 문서에서 운용 동향을 확인해줘.",
+        "SPDR 2025년 12월 팩트시트에서 편입 종목을 확인해줘.",
+    ],
+)
+def test_dated_brand_document_reference_is_not_a_product_identity(question: str) -> None:
+    assert extract_named_product_mentions(question) == []
+    assert not any(
+        "202" in span
+        for span in SemanticCoverageGate().evaluate(
+            question,
+            interaction_intent="search",
+        ).ambiguity_spans
+    )
+
+
+@pytest.mark.parametrize(
+    ("question", "expected"),
+    [
+        ("KODEX 200 정보를 알려줘.", ["KODEX 200"]),
+        ("KODEX 새로운성장 ETF 정보를 알려줘.", ["KODEX 새로운성장"]),
+    ],
+)
+def test_real_or_unknown_branded_product_name_remains_hard_identity(
+    question: str,
+    expected: list[str],
+) -> None:
+    assert extract_named_product_mentions(question) == expected

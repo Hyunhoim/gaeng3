@@ -16,7 +16,11 @@ class SemanticFieldRule:
     positive: tuple[re.Pattern[str], ...]
     forbidden: tuple[re.Pattern[str], ...] = ()
     families: frozenset[ProductFamily] = frozenset(ProductFamily)
-    operations: frozenset[SemanticOperation] = frozenset({"rank"})
+    # A field phrase has the same meaning when it owns a ranking or a numeric
+    # threshold. FILTER still receives no Dense-only execution authority: the
+    # adaptive resolver requires an HCX literal number/operator frame and the
+    # server reparses both before issuing a receipt.
+    operations: frozenset[SemanticOperation] = frozenset({"rank", "filter"})
     deterministic_anchor: bool = False
 
 

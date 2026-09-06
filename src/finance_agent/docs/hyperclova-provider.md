@@ -1,6 +1,6 @@
 # HyperCLOVA X provider 계약
 
-마지막 갱신: 2026-08-25
+마지막 갱신: 2026-09-06
 
 이 문서는 HyperCLOVA X provider, 공식 HTTP transport와 FastAPI 연결 경계를
 설명한다. 2026-08-11 NAVER Cloud 공식 문서 기준 endpoint·Bearer 인증·Structured
@@ -9,9 +9,11 @@ Outputs 요청과 응답 형식을 반영했다. 2026-08-14에는 QueryPlan을 �
 timeout 1회와 출력 예산 보완 뒤 DETAIL·SEARCH 성공 2회를 확인했으며, 이 결과는
 연구실 검증이지 clean NCP release 또는 HCLX planning 품질 증거가 아니다.
 
-2026-08-24 운영 공지에 따라 현재 공식 runtime은 모든 평가 요청에서 HCLX의 제한된
-Intent 분석과 최종 답변 생성을 모두 필수로 사용한다. 위 answer-only 실호출 기록은 과거
-배선의 증거이며, 새 두-operation 배선의 실제 과금 호출·NCP 배포 검증은 별도 수행 대상이다.
+2026-08-24 운영 공지에 따라 현재 공식 runtime은 SafetyEnvelope를 통과한 모든 평가
+요청에서 HCLX의 Intent와 제한된 Semantic Frame(질문의 의미 절을 닫힌 DTO로 표현한
+구조), 최종 답변 생성을 사용한다. SafetyEnvelope가 차단한 공격·금지 질문은 HCLX에
+보내지 않는다. 위 answer-only 실호출 기록은 과거 배선의 증거이며, 현재 동결 후보의
+실제 과금 호출·서명 Release·NCP 배포 검증은 별도 수행 대상이다.
 
 평가용 `GET /answer`와 다섯 문자열 응답 계약은 별도 Backend adapter가 담당한다.
 HCLX는 그 안에서 검증된 결과를 제한된 문장으로 표현하며, 공식 데이터 검색·수치·
@@ -32,10 +34,11 @@ API가 없는 동안 이 경계를 테스트하면 다음 문제를 미리 차�
 ## 2. 현재 구조
 
 ```text
-Intent analysis / 선택적 Semantic Resolver / final answer provider
-                              │
-                              ▼
-                     HyperClovaXClient
+ Intent + bounded Semantic Frame provider    final answer provider
+                    │                              │
+                    └──────────────┬───────────────┘
+                                   ▼
+                          HyperClovaXClient
              설정 gate · schema 검사 · 오류 정규화
                               │
                               ▼
@@ -50,25 +53,29 @@ provider는 API URL, 인증 header, 응답 wire 구조를 직접 알지 못한�
 서비스 형식으로 변환하도록 분리했다. 실제 transport는 공식 host만 사용하고 redirect를
 따르지 않으며, 상위 Agent와 verifier 계약은 그대로 유지한다.
 
-공식 runtime의 `IntentAnalysisDraft`는 intent·상품군·질문 원문의 evidence span·
-clarification 여부만 포함한다. field·filter·정렬·limit·SQL을 표현할 수 없으므로 HCLX가
-실행 계획을 직접 만들 수 없다. 서버의 Ontology·Lexical·Schema Dense 경로가 만든 해석과
-HCLX Intent가 충돌하면 Oracle을 실행하지 않고 `CLARIFY` 또는 `UNSUPPORTED`로 종료한다.
+공식 runtime의 `IntentAnalysisDraft`는 intent·상품군·질문 원문의 evidence span과 함께
+`execution_clauses` Semantic Frame을 포함한다. Frame은 질문에 실제 존재하는 span,
+registry가 허용한 field·operation·operator·direction 후보만 표현할 수 있으며 SQL이나
+상품 결과를 만들 권한은 없다. Lexical은 명시 조건을 먼저 잠그고 HCLX Frame을 우선
+검사한다. HCLX가 한정된 필드 의미를 누락했거나 서버 검증을 통과하지 못한 경우에만
+KURE Schema Dense가 후보를 제안한다. 서버가 각 단계의 제안을 원문 span·상품군·단위·
+filter 불변조건과 대조한 뒤 Typed QueryPlan을 확정한다. 충돌·누락은 Oracle 실행 전에
+`CLARIFY` 또는 `UNSUPPORTED`로 종료한다.
 
-전체 `HyperClovaXQueryPlanProvider` 구현은 과거 실험·호환성 테스트를 위해 Core에 격리되어
-있지만 FastAPI production 조립에서 제거됐다. `FINANCE_BACKEND_HCX_QUERY_PLAN_ENABLED=true`는
-설정·Release trust·launcher에서 모두 거부한다. 공모펀드 비교 초안과 기존 grounded-answer
-provider도 공식 조립 권한이 없으며, 공식 답변은 모든 상태를 다루는 전용 final provider만 쓴다.
+별도 `HyperClovaXSemanticResolverProvider`와 전체 `HyperClovaXQueryPlanProvider` 구현은
+과거 계약 회귀를 위해 Core에 격리되어 있지만 FastAPI production 조립에는 연결되지 않는다.
+`FINANCE_BACKEND_HCX_QUERY_PLAN_ENABLED=true`는 설정·Release trust·launcher에서 모두
+거부한다. 공식 답변은 모든 상태를 다루는 전용 final provider만 쓴다.
 
 ## 3. 공식 runtime에서 HyperCLOVA X가 맡는 역할
 
 | operation | provider | 입력과 출력 |
 | --- | --- | --- |
-| `intent_analysis` | `HyperClovaXIntentAnalysisProvider` | 자연어 질문 → 실행 권한이 없는 제한된 Intent DTO |
-| `semantic_resolver` | `HyperClovaXSemanticResolverProvider` | 서버가 허용한 Dense field 후보 중 하나 선택 또는 `CLARIFY` |
+| `intent_analysis` | `HyperClovaXIntentAnalysisProvider` | 자연어 질문 → Intent와 원문에 결속된 제한형 Semantic Frame 후보 |
+| 선택적 entity alias repair | 위 Intent provider 내부의 bounded call | 외부 공식 검색에 필요한 엔티티의 보수적 영문 철자 후보만 제안; 실패해도 Intent를 바꾸지 않음 |
 | `final_answer` | `HyperClovaXFinalAnswerProvider` | 검증된 본문 hash를 보존하며 허용된 최종 lead 생성 |
 
-세 경로 모두 모델 출력 뒤에 HCX JSON schema를 서버에서 다시 검사하고 Pydantic
+두 provider의 모든 모델 출력은 HCX JSON schema를 서버에서 다시 검사하고 Pydantic
 계약 검증도 수행한다. 서버 재검증은 object shape·type·enum·anyOf·범위·배열 길이를
 확인하며 undeclared field를 거절한다. 따라서 Structured Outputs가 잘못 동작해도
 허용되지 않은 intent·field·`lead`는 통과할 수 없다. 최종 응답은 HCLX가 돌려준 본문
@@ -101,7 +108,10 @@ evaluation/production에서는 거부한다.
 2. `FINANCE_BACKEND_HCX_INTENT_ANALYSIS_ENABLED=true`
 3. `FINANCE_BACKEND_HCX_QUERY_PLAN_ENABLED=false`
 4. `FINANCE_AGENT_LLM_MODE`가 `APP_ENV`와 같고 `LLM_PROVIDER=hyperclova`
-5. `HCX_MODEL=HCX-007`, credential은 승인된 key file만 사용
+5. `FINANCE_BACKEND_HCX_SEMANTIC_RESOLVER_ENABLED=true`는 별도 field Resolver 호출을
+   조립하는 스위치가 아니라, 검증된 Semantic Frame·KURE candidate 결합 및 제한된
+   외부 entity alias repair 권한을 Release와 일치시키는 호환 설정이다.
+6. `HCX_MODEL=HCX-007`, credential은 승인된 key file만 사용
 
 이 조합은 Settings, production assembly guard, AgentReleaseManifest, Release trust,
 Compose launcher, immutable workflow에서 독립적으로 대조한다. 실제 endpoint는 보안을 위해
@@ -134,6 +144,7 @@ transport가 돌려주는 정규화 응답은 다음 항목으로 제한한다.
 - 구조화 출력 문자열
 - 안전한 request ID
 - input·output·total token usage
+- 429일 때 공식 이용량 초기화 헤더에서 엄격하게 정규화한 최대 60초의 대기시간
 
 Direct v3 body에는 system/user message, `maxCompletionTokens`, 고정 생성 옵션,
 `thinking: {"effort": "none"}`와
@@ -165,10 +176,15 @@ token usage만 기록하고 prompt와 응답 content는 기록하지 않는다. 
 검사까지 통과했음을 뜻한다. 잘못된 JSON·필드·enum은 `response_error`로 집계하며,
 이후 상품 evidence와 최종 문장 검증 결과는 별도의 Verifier 사건으로 기록한다.
 
-필수 Intent provider와 final provider의 timeout·인증 실패·429·5xx·schema 오류는 상위
-request 경계로 그대로 전파한다. 즉, HCLX 호출 실패를 성공이나 deterministic fallback으로
-숨기지 않는다. 공식 GET은 timeout을 504, 나머지 provider 오류를 503으로 반환해 주최 측의
-재시도 계약과 일치시킨다. 단,
+429는 공식 `x-ratelimit-reset-tokens`와 `x-ratelimit-reset-requests`가 `0~60s`
+형식으로 검증되고 전체 요청 마감시간이 충분할 때만 취소 가능한 대기 후 정확히 한 번
+재호출한다. 원시 header·오류 body는 상위 계층이나 Audit에 전달하지 않는다. 초기화
+헤더가 없거나 변조됐거나 두 번째 호출도 429이면 즉시 기존 오류 계약으로 종료한다.
+
+필수 Intent provider와 final provider의 timeout·인증 실패·복구되지 않은 429·5xx·schema
+오류는 상위 request 경계로 그대로 전파한다. 즉, HCLX 호출 실패를 성공이나 deterministic
+fallback으로 숨기지 않는다. 공식 GET은 timeout을 504, 나머지 provider 오류를 503으로
+반환해 주최 측의 재시도 계약과 일치시킨다. 단,
 Intent provider가 정상 응답했지만 서버의 안전한 route와 다르면 오류 fallback이 아니라
 의도 충돌로 보고 Oracle 실행 전에 `CLARIFY`로 종료한다.
 
@@ -179,11 +195,12 @@ Intent provider가 정상 응답했지만 서버의 안전한 route와 다르면
 
 - 공식 mode와 provider 조합 외 실행 차단
 - `HCX-` 모델 ID와 timeout 범위 검증
-- `intent_analysis`, `semantic_resolver`, `final_answer`의 structured request와 schema subset
-- Intent DTO가 field·filter·정렬·limit·SQL을 표현할 수 없는지 확인
-- Semantic Resolver가 서버 제공 후보 밖 field를 선택하지 못하는지 확인
+- `intent_analysis`, 선택적 entity alias repair, `final_answer`의 structured request와 schema subset
+- Semantic Frame이 원문 밖 span·registry 밖 field·SQL·상품 결과를 만들 수 없는지 확인
+- HCLX Frame과 Schema Dense 후보가 서버의 잠긴 filter·상품군·단위·방향을 바꾸지 못하는지 확인
 - final provider가 검증 본문 SHA-256과 허용 lead만 반환하는지 확인
 - 401·403·429·500, timeout, 연결 실패의 오류 매핑
+- 공식 429 초기화 헤더의 엄격한 파싱, 요청 마감시간 내 1회 재호출, 두 번째 429 종료
 - 오류 본문·질문·prompt가 예외와 call record에 노출되지 않는지 확인
 - 잘못된 transport 응답, JSON, extra field를 fail-closed로 차단
 - 공식 URL·header·camelCase body와 HCX-007 Structured Outputs 변환
@@ -244,10 +261,12 @@ hash 오류는 안전한 error DTO와 HTTP 503으로 변환된다. 필수 HCLX �
 
 ## 10. 최종 evaluation 동결과 남은 외부 검증
 
-최종 evaluation은 **HCLX Intent 분석과 final generation을 항상 ON**으로 고정한다.
-HCLX 전체 QueryPlan과 grounded planning, Product Dense는 OFF다. Schema Dense는 승인된
-candidate-only adaptive 정책 안에서만 동작하고 HCLX Semantic Resolver는 별도 활성화 전까지
-OFF다. 공모펀드는 `public_fund_v1_approved` Release에서만 실행한다.
+최종 evaluation은 **SafetyEnvelope를 통과한 요청의 HCLX Intent+Semantic Frame 분석과
+final generation을 항상 ON**으로 고정한다. HCLX 전체 QueryPlan과 별도 runtime
+Semantic Resolver, grounded planning, Product Dense는 OFF다. Schema Dense는 Registry
+1.8의 승인 candidate-only 정책 안에서 HCLX Frame이 누락·거부된 미해결 의미에만 최대
+한 번 호출하며, 서버가 최종 의미와 QueryPlan을 검증한다.
+공모펀드는 `public_fund_v1_approved` Release에서만 실행한다.
 
 남은 필수 작업은 다음 네 가지다.
 
@@ -255,15 +274,19 @@ OFF다. 공모펀드는 `public_fund_v1_approved` Release에서만 실행한다.
    서명을 발급한다.
 2. 그 exact image를 NCP에 기동해 공인 IP의 `/health`와 공식 `GET /answer`를 검증한다.
 3. 실제 HCLX Intent+final 정상·timeout·429·5xx가 새 Audit와 no-fallback 계약을
-   지키는지 최소 호출로 확인한다.
+   지키는지 최소 호출로 확인한다. 특히 이번에 추가한 초기화 헤더 기반 1회 복구는
+   실제 테스트 키의 TPM 한도에서도 별도로 재확인한다.
 4. 서명된 새 generation Binding을 사용해 N-1 → N → N-1 rollback과 순차 요청
    p50·p95·p99·payload·memory를 측정한다.
 
 현재 정확한 상태는 “공식 HTTP transport·FastAPI Intent+final 배선과 fake/no-network
-장애 계약 검증 완료; 새 배선의 실제 과금 호출과 clean signed NCP release 검증 대기”다.
+장애 계약 검증 완료; HCX post-Gold 표본에서 Intent+final 정상 호출을 확인하고 연속 호출의
+TPM 429를 재현했으며, 초기화 헤더 기반 1회 복구는 자동 계약 테스트를 통과한 상태”다.
+해당 복구의 실제 API 재확인과 clean signed NCP release 검증은 남아 있다.
 
 공식 근거:
 
 - [CLOVA Studio API 개요](https://api.ncloud-docs.com/docs/ai-naver-clovastudio-summary)
 - [Structured Outputs](https://api.ncloud-docs.com/docs/clovastudio-chatcompletionsv3-so)
 - [API 키](https://guide.ncloud-docs.com/docs/clovastudio-apikey)
+- [CLOVA Studio 이용량 제어 정책](https://guide.ncloud-docs.com/docs/clovastudio-ratelimiting)

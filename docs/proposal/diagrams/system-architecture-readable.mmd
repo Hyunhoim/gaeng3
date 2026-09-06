@@ -1,0 +1,130 @@
+%% Mermaid raw source
+%% Mermaid Live Editor/API에는 이 파일의 내용만 입력합니다.
+%% Markdown용 코드 블록 표시는 포함하지 않습니다.
+
+flowchart TB
+    REQUEST["사용자 질의"]
+    RESPONSE["검증된 API 응답"]
+
+    subgraph SYSTEM["금융상품 Agent 시스템 경계 - 동일 Backend 프로세스"]
+        direction TB
+
+        subgraph CORE["핵심 요청 처리 경로"]
+            direction LR
+
+            subgraph ACCESS["① 접근 계층"]
+                direction TB
+                API["API 요청 수신<br/>FastAPI · Pydantic DTO"]
+                CONTROL["요청 실행 통제<br/>single-flight · replay · deadline"]
+                API --> CONTROL
+            end
+
+            subgraph MEANING["② 의미·권한 계층"]
+                direction TB
+                SAFETY["안전 정책 검사<br/>SafetyEnvelope"]
+                INTENT["질문 의도 구조화<br/>HCX-007 IntentDraft"]
+                GROUND["금융 의미 접지<br/>Ontology/Lexical · KURE-v1"]
+                PLAN["실행계획·권한 확정<br/>Typed Plans · Authority Gate"]
+                SAFETY --> INTENT
+                INTENT --> GROUND
+                GROUND --> PLAN
+            end
+
+            subgraph EXECUTION["③ 실행·검색 계층"]
+                direction TB
+                ROUTE{"실행 경로 선택<br/>Executor Routing"}
+                SQL["정형 검색·비교·집계<br/>SQLite Oracle · Decimal"]
+                RELATION["상품·구성종목 관계<br/>SQLite FTS5/BM25"]
+                EXTERNAL["공식 문서 근거<br/>KURE+RRF · NAVER 검색 API"]
+                ROUTE -->|정형 데이터| SQL
+                ROUTE -->|제공 관계| RELATION
+                ROUTE -->|외부 근거| EXTERNAL
+            end
+
+            subgraph ANSWER["④ 검증·답변 계층"]
+                direction TB
+                VERIFY["경로별 독립 검증<br/>Result · Aggregate · External"]
+                EVIDENCE["검증 근거 묶음<br/>Typed Evidence Bundle"]
+                RENDER["근거 기반 본문 고정<br/>Deterministic Renderer"]
+                FINAL["최종 표현·해시 검증<br/>FinalAnswerDraft"]
+                DTO["공식 응답 변환<br/>5-string JSON DTO"]
+                VERIFY --> EVIDENCE
+                EVIDENCE --> RENDER
+                RENDER --> FINAL
+                FINAL --> DTO
+            end
+        end
+
+        subgraph TRUST["⑤ 데이터·배포 신뢰 계층 - 전체 경로의 공통 기반"]
+            direction LR
+            SOURCE["공식 원천 XLSX 8개"]
+            DB["읽기 전용 SQLite 4개"]
+            INDEX["FTS5/BM25 · KURE 색인"]
+            RELEASE["Release Manifest<br/>DeploymentBinding · OCI digest"]
+            AUDIT["AuditEvent JSONL<br/>event_sequence · fsync"]
+            SOURCE --> DB
+            SOURCE --> INDEX
+            RELEASE --> AUDIT
+        end
+    end
+
+    subgraph DEPENDENCIES["외부 의존성 - 직접 실행 권한 없음"]
+        direction LR
+        HCX["의도·의미·표현 보조<br/>CLOVA Studio HCX-007"]
+        NAVER["공식 출처 제한 검색<br/>NAVER 검색 API · WebKR"]
+        DOCUMENTS["승인 공식 원문<br/>Source Registry · HTML/PDF/JSON"]
+    end
+
+    REQUEST --> API
+    CONTROL --> SAFETY
+    PLAN --> ROUTE
+    SQL --> VERIFY
+    RELATION --> VERIFY
+    EXTERNAL --> VERIFY
+    DTO --> RESPONSE
+
+    DB -.-> SQL
+    INDEX -.-> RELATION
+    INDEX -.-> EXTERNAL
+    RELEASE -.-> CONTROL
+    CONTROL -.-> AUDIT
+    PLAN -.-> AUDIT
+    VERIFY -.-> AUDIT
+    DTO -.-> AUDIT
+
+    HCX -.-> INTENT
+    HCX -.-> GROUND
+    HCX -.-> FINAL
+    NAVER -.-> EXTERNAL
+    DOCUMENTS -.-> EXTERNAL
+
+    class REQUEST,RESPONSE client
+    class API,CONTROL access
+    class SAFETY,INTENT,GROUND meaning
+    class PLAN authority
+    class ROUTE router
+    class SQL,RELATION execution
+    class EXTERNAL externalSearch
+    class VERIFY,EVIDENCE,RENDER,FINAL,DTO answer
+    class SOURCE,DB,INDEX,RELEASE,AUDIT trust
+    class HCX,NAVER,DOCUMENTS dependency
+
+    classDef client fill:#0B2E59,stroke:#0B2E59,color:#FFFFFF,stroke-width:2px
+    classDef access fill:#EAF4FF,stroke:#2F80ED,color:#13243B,stroke-width:1.5px
+    classDef meaning fill:#F1EEFF,stroke:#7463D6,color:#13243B,stroke-width:1.5px
+    classDef authority fill:#6556B5,stroke:#51449A,color:#FFFFFF,stroke-width:2px
+    classDef router fill:#0A8291,stroke:#066E7A,color:#FFFFFF,stroke-width:2px
+    classDef execution fill:#E9F8FA,stroke:#0A8291,color:#13243B,stroke-width:1.5px
+    classDef externalSearch fill:#EAF8F1,stroke:#1B8A62,color:#13243B,stroke-width:1.5px
+    classDef answer fill:#ECF8F3,stroke:#19735B,color:#13243B,stroke-width:1.5px
+    classDef trust fill:#FFF6E8,stroke:#C47A16,color:#13243B,stroke-width:1.5px
+    classDef dependency fill:#F7F9FC,stroke:#8B9AAF,color:#31445A,stroke-width:1.2px
+
+    style SYSTEM fill:#FFFFFF,stroke:#0B2E59,stroke-width:2px
+    style CORE fill:#F8FAFD,stroke:#D8E1EB,stroke-width:1px
+    style ACCESS fill:#F8FBFF,stroke:#9FC7F2,stroke-width:1px
+    style MEANING fill:#FBFAFF,stroke:#C7BFF0,stroke-width:1px
+    style EXECUTION fill:#F7FCFC,stroke:#9ED7DD,stroke-width:1px
+    style ANSWER fill:#F7FCFA,stroke:#A6D8C6,stroke-width:1px
+    style TRUST fill:#FFFBF4,stroke:#E1B777,stroke-width:1.5px
+    style DEPENDENCIES fill:#FAFBFD,stroke:#AAB7C5,stroke-width:1px

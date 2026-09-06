@@ -51,3 +51,8 @@ src/finance_agent/reports/internal-100-*.html
 # Generated immutable release artifacts. They are built only from a clean
 # checkout and distributed through the deployment control plane, not Git.
 src/fastapi_backend/release/*.json
+
+# Local Codex/research workspaces. These may contain official databases,
+# raw corpora, evaluation predictions, model caches, or approval receipts.
+/_workspace/
+/finance_agent/

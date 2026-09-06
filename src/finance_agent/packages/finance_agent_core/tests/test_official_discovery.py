@@ -15,6 +15,7 @@ from finance_agent_core.contracts.queryplan import ProductFamily
 from finance_agent_core.retrieval.official_acquisition import (
     OfficialEvidenceAcquisitionCoordinator,
     OfficialEvidenceAcquisitionStatus,
+    _merge_bounded_discovery_candidates,
 )
 from finance_agent_core.retrieval.official_connector import (
     OfficialDiscoveryCandidate,
@@ -31,6 +32,26 @@ from finance_agent_core.retrieval.temporal_relations import (
     TemporalRelationStore,
     seal_temporal_relation_bundle,
 )
+
+
+def test_seed_candidates_keep_priority_without_exceeding_result_budget() -> None:
+    discovered = tuple(
+        OfficialDiscoveryCandidate(
+            url=f"https://issuer.example/docs/result-{index}.pdf",
+            title=f"result {index}",
+        )
+        for index in range(20)
+    )
+    seed = OfficialDiscoveryCandidate(
+        url="https://issuer.example/docs/seed.pdf",
+        title="verified graph seed",
+    )
+
+    merged = _merge_bounded_discovery_candidates(discovered, (seed,))
+
+    assert len(merged) == 20
+    assert merged[0] == seed
+    assert len({candidate.url for candidate in merged}) == 20
 
 
 def _registry(source_count: int) -> OfficialSourceRegistry:
@@ -190,6 +211,71 @@ def test_discovery_seeds_require_subject_relevance_for_multi_publisher_search() 
         "site:alpha.example Zythera holdings",
         "site:beta.example Zythera holdings",
     ]
+
+
+def test_live_discovery_excludes_snapshot_intake_sources() -> None:
+    registry = OfficialSourceRegistry(
+        schema_version="1.0",
+        registry_id="test-live-discovery-source-status",
+        evidence_cutoff=date(2026, 8, 24),
+        entries=(
+            OfficialSourceEntry(
+                source_id="live-source",
+                publisher="Live Publisher",
+                authority="asset_manager",
+                hostname="live.example",
+                path_prefixes=("/docs/",),
+                connector_kind="html",
+                capabilities=(KnowledgeCapability.PORTFOLIO_HOLDINGS,),
+                product_families=("domestic_etp",),
+                status="approved_for_live_evidence",
+                publication_date_required=False,
+            ),
+            OfficialSourceEntry(
+                source_id="snapshot-source",
+                publisher="Snapshot Publisher",
+                authority="asset_manager",
+                hostname="snapshot.example",
+                path_prefixes=("/docs/",),
+                connector_kind="html",
+                capabilities=(KnowledgeCapability.PORTFOLIO_HOLDINGS,),
+                discovery_urls=("https://snapshot.example/docs/catalog",),
+                product_families=("domestic_etp",),
+                status="approved_for_snapshot_intake",
+                publication_date_required=False,
+            ),
+        ),
+    )
+    transport = _FakeSearchTransport(
+        {
+            "live.example": (
+                OfficialDiscoveryCandidate(
+                    url="https://live.example/docs/holdings",
+                    title="official holdings",
+                ),
+            ),
+            "snapshot.example": (
+                OfficialDiscoveryCandidate(
+                    url="https://snapshot.example/docs/holdings",
+                    title="snapshot holdings",
+                ),
+            ),
+        }
+    )
+
+    report = BoundedOfficialDiscoveryProvider(transport, registry).discover_report(
+        query="AI ETF holdings",
+        capability=KnowledgeCapability.PORTFOLIO_HOLDINGS,
+        source_registry_ids=("live-source", "snapshot-source"),
+        evidence_cutoff=registry.evidence_cutoff,
+        top_k=2,
+    )
+
+    assert transport.queries == ["site:live.example AI ETF holdings"]
+    assert [item.url for item in report.candidates] == [
+        "https://live.example/docs/holdings"
+    ]
+    assert report.queried_source_registry_ids == ("live-source",)
 
 
 def test_kind_registry_admits_only_the_approved_official_disclosure_viewer() -> None:

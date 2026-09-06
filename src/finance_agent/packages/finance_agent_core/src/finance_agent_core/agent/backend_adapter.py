@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, model_validator
 from finance_agent_core.agent.external_knowledge_router import (
     ExternalKnowledgeRouteDecision,
 )
+from finance_agent_core.agent.hybrid_query import HybridExecutionAborted
 from finance_agent_core.agent.knowledge_router import (
     KnowledgeRouteDecision,
     KnowledgeRoutedExecutionError,
@@ -163,12 +164,22 @@ def _finalize_with_official_hclx(
         # candidate_count on verified external-knowledge responses and causes
         # the fail-closed AuditEvent contract to reject the terminal HCLX events.
         returned_product_count = len(response.products)
+        audit_candidate_count = response.candidate_count
+        if audit_candidate_count is None and response.independent_sections is not None:
+            # The public hybrid contract deliberately has no cross-section
+            # candidate count.  AuditEvent still requires its internal bound
+            # to cover every returned product, so use the sum of the two
+            # already verified section counts without exposing it in the DTO.
+            audit_candidate_count = sum(
+                section.candidate_count or 0 for section in response.independent_sections.sections
+            )
+        audit_candidate_count = audit_candidate_count or 0
         audit.emit(
             stage=AuditStage.HCLX,
             outcome=AuditOutcome.SUCCEEDED,
             reason_code="final_generation_completed",
             duration_ms=composition.generation_latency_ms,
-            candidate_count=response.candidate_count or 0,
+            candidate_count=audit_candidate_count,
             result_count=returned_product_count,
             evidence_count=context.evidence_count,
         )
@@ -177,7 +188,7 @@ def _finalize_with_official_hclx(
             outcome=AuditOutcome.SUCCEEDED,
             reason_code="final_generation_verified",
             duration_ms=0,
-            candidate_count=response.candidate_count or 0,
+            candidate_count=audit_candidate_count,
             result_count=returned_product_count,
             evidence_count=context.evidence_count,
         )
@@ -455,6 +466,9 @@ def execute_answer_request(
             from finance_agent_core.agent.external_knowledge_router import (
                 ExternalKnowledgeRouteDecision,
             )
+            from finance_agent_core.agent.independent_hybrid_result_adapter import (
+                independent_hybrid_result_to_backend,
+            )
             from finance_agent_core.agent.knowledge_backend_adapter import (
                 knowledge_result_to_backend,
                 knowledge_route_control_to_backend,
@@ -462,6 +476,7 @@ def execute_answer_request(
             from finance_agent_core.agent.knowledge_service import KnowledgeAgentResult
             from finance_agent_core.agent.routed_service import (
                 ExactIdentityNotFoundResult,
+                IndependentHybridAgentResult,
                 RoutedAgentResult,
             )
             from finance_agent_core.execution.external_knowledge_runtime import (
@@ -470,6 +485,8 @@ def execute_answer_request(
 
             if type(public_result) is RoutedAgentResult:
                 response = routed_result_to_backend(public_result)
+            elif type(public_result) is IndependentHybridAgentResult:
+                response = independent_hybrid_result_to_backend(public_result)
             elif type(public_result) is ExactIdentityNotFoundResult:
                 response = BackendAgentResponse(
                     request_id=public_result.request_id,
@@ -539,6 +556,11 @@ def execute_answer_request(
                 actual_error = error.cause
             elif isinstance(error, KnowledgeRoutedExecutionError):
                 trusted_decision = error.decision
+                actual_error = error.cause
+            elif isinstance(error, HybridExecutionAborted) and error.cause is not None:
+                # Preserve the existing timeout/provider/dataset HTTP mapping.
+                # The wrapper means only that atomic publication was aborted;
+                # it must not erase the verified infrastructure cause.
                 actual_error = error.cause
             mapping = _map_error(actual_error)
             return AnswerAdapterResult(

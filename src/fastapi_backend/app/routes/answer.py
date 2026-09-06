@@ -69,9 +69,17 @@ class OfficialJsonResponse(JSONResponse):
 
 
 def _cache_official_result(result: AnswerAdapterResult) -> bool:
-    """Replay HTTP 200 outcomes only; every provider 5xx remains retryable upstream."""
+    """Replay successful and explicitly non-retryable outcomes.
 
-    return result.http_status_code == 200
+    The evaluator can retry a 5xx twice. Re-running a deterministic contract
+    failure would repeat HCLX Intent and Schema Dense/Resolver work without any
+    chance of recovery. Provider timeout/rate-limit/service failures remain
+    marked retryable and are deliberately executed again.
+    """
+
+    return result.http_status_code == 200 or (
+        result.response.error is not None and result.response.error.retryable is False
+    )
 
 
 def _idempotency_terminal_reason(
@@ -268,12 +276,25 @@ async def official_answer(
         BackendStatus.SUCCESS,
         BackendStatus.NOT_FOUND,
     }:
+        # Independent external/DB sections intentionally do not publish one
+        # cross-section candidate count.  Audit still needs a non-lossy count
+        # that is at least the returned product count, so use the sum of the
+        # independently verified section counts only inside observability.
+        audit_candidate_count = result.response.candidate_count
+        if (
+            audit_candidate_count is None
+            and result.response.independent_sections is not None
+        ):
+            audit_candidate_count = sum(
+                section.candidate_count or 0
+                for section in result.response.independent_sections.sections
+            )
         audit.emit(
             stage=AuditStage.SERIALIZATION,
             outcome=AuditOutcome.SUCCEEDED,
             reason_code="official_dto_built",
             duration_ms=(perf_counter() - official_dto_started) * 1000,
-            candidate_count=result.response.candidate_count or 0,
+            candidate_count=audit_candidate_count or 0,
             result_count=len(result.response.products),
             evidence_count=len(
                 {

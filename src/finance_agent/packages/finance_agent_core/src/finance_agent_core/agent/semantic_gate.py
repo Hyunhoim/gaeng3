@@ -3,6 +3,10 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
+from finance_agent_core.agent.document_reference import (
+    extract_dated_official_document_references,
+    overlaps_dated_document_reference,
+)
 from finance_agent_core.agent.field_language import registry_field_mentions
 from finance_agent_core.agent.presentation import mask_response_presentation
 from finance_agent_core.agent.safety import (
@@ -226,7 +230,9 @@ _VAGUE_STABILITY = re.compile(
     re.IGNORECASE,
 )
 _GENERIC_PREFERENCE = re.compile(
-    r"대표적(?:인|이다)?|인기\s*(?:있는|많은)|효율(?:이|가)?\s*높(?:은|다)?|"
+    r"대표적(?:인|이다)?|"
+    r"인기(?:도(?:가|는|를|도)?|가\s*(?:높|많)(?:은|다)?|\s*(?:있는|많은))|"
+    r"효율(?:이|가)?\s*높(?:은|다)?|"
     r"부담(?:이|가)?\s*(?:(?:적|작)(?:은|다)?|덜(?:한|하다)?|"
     r"없(?:는|다)?|되지\s*않(?:는|다)?)|"
     r"무난(?:한|하다)?|유망(?:한|하다)?|알짜(?:인|다)?|"
@@ -1068,7 +1074,7 @@ class SemanticCoverageGate:
             }
             if len(numeric_owners) > 1:
                 ambiguities.append(numeric_referent.group(0))
-        named_anchor_relative = re.search(
+        direct_named_anchor_relative = re.search(
             r"(?<![A-Z0-9])(?:A?\d{6}|KR[A-Z0-9]{10}|"
             r"(?!(?:ETF|ETN)\b)[A-Z][A-Z0-9.]{1,19})"
             r"(?:\)|\s)*(?:보다|대비)",
@@ -1081,6 +1087,36 @@ class SemanticCoverageGate:
             normalized,
             re.IGNORECASE,
         ) is not None
+        # Natural Korean often declares an exact reference product first and
+        # places the metric before the anaphor later: ``A(ID)를 기준으로 ...
+        # 종가가 이 상품보다 큰``.  This only prevents a shallow false
+        # UNSUPPORTED; DB identity and every executable clause are still
+        # proven by the Compound compiler and authorization ledger.
+        declared_anchor = re.search(
+            r"(?<![A-Z0-9])(?:A?\d{6}|KR[A-Z0-9]{10}|"
+            r"(?!(?:ETF|ETN)\b)[A-Z][A-Z0-9.]{1,19})"
+            r"(?:\)|\]|[’”'\"])?\s*(?:을|를)?\s*"
+            r"(?:비교\s*)?기준(?:점|\s*상품|\s*종목)?(?:으로)?",
+            normalized,
+            re.IGNORECASE,
+        )
+        anaphoric_relative = re.search(
+            r"(?:"
+            r"(?:이|그|해당)\s*(?:기준\s*)?"
+            r"(?:상품|종목|펀드|ETF|ETN|ETP|채권)\s*"
+            r"(?:(?:이상|이하|초과|미만)인|(?:보다|대비))|"
+            r"[^,.;!?]{1,64}?(?:이|가|은|는)\s*"
+            r"(?:이|그|해당)\s*(?:기준\s*)?"
+            r"(?:상품|종목|펀드|ETF|ETN|ETP|채권)\s*"
+            r"(?:(?:이상|이하|초과|미만)인|(?:보다|대비)\s*"
+            r"(?:더\s*)?(?:큰|작은|높은|낮은|많은|적은|긴|짧은))"
+            r")",
+            normalized,
+            re.IGNORECASE,
+        )
+        named_anchor_relative = direct_named_anchor_relative or (
+            declared_anchor is not None and anaphoric_relative is not None
+        )
         repeated_metric_surfaces = {
             re.sub(r"\s+", "", item.group(0)).casefold() for item in directional_metrics
         }
@@ -1122,6 +1158,22 @@ class SemanticCoverageGate:
             ambiguities.append(normalized[left.start() : right.end()])
         for match in _UNDERSPECIFIED_DECISION_RULE.finditer(normalized):
             if not _overlaps_any(match.start(), match.end(), alias_ranges):
+                ambiguities.append(match.group(0))
+
+        # Subjective preferences are ambiguous for every read intent, not only
+        # SEARCH.  Keeping this check below the DETAIL/COMPARE early return let
+        # an extra criterion such as ``인기도도 함께 반영`` disappear from a
+        # closed comparison while the named products and numeric metric still
+        # executed.  A Registry-backed alias may still own the same literal.
+        for match in _GENERIC_PREFERENCE.finditer(normalized):
+            popularity = match.group(0).casefold().startswith("인기")
+            if (
+                popularity
+                and not _overlaps_any(match.start(), match.end(), alias_ranges)
+            ) or (
+                not popularity
+                and not _covered_by_resolved_alias(match.start(), match.end(), alias_ranges)
+            ):
                 ambiguities.append(match.group(0))
 
         # Routed DETAIL/COMPARE/EXPLAIN requests have dedicated fail-closed parsers
@@ -1205,10 +1257,6 @@ class SemanticCoverageGate:
             ambiguities.append(match.group(0))
         if match := _VAGUE_STABILITY.search(normalized):
             ambiguities.append(match.group(0))
-        for match in _GENERIC_PREFERENCE.finditer(normalized):
-            if not _covered_by_resolved_alias(match.start(), match.end(), alias_ranges):
-                ambiguities.append(match.group(0))
-
         for match in _UNMAPPED_METRIC.finditer(normalized):
             if not _metric_has_explicit_mapping(normalized, match) and not _overlaps_any(
                 match.start(), match.end(), alias_ranges
@@ -1368,7 +1416,17 @@ class SemanticCoverageGate:
         if interaction_intent in {None, "search"}:
             explicit_name_filter = _EXPLICIT_NAME_FILTER.search(normalized) is not None
             batch_families = set(alias_families)
-            if _BRANDED_PRODUCT.search(normalized) is not None:
+            document_references = extract_dated_official_document_references(normalized)
+            branded_product_matches = tuple(
+                match
+                for match in _BRANDED_PRODUCT.finditer(normalized)
+                if not overlaps_dated_document_reference(
+                    match.start(),
+                    match.end(),
+                    document_references,
+                )
+            )
+            if branded_product_matches:
                 batch_families.add(ProductFamily.DOMESTIC_ETP)
             family_identity_batch = (
                 _PER_FAMILY_IDENTITY_BATCH.search(normalized) is not None
@@ -1378,8 +1436,8 @@ class SemanticCoverageGate:
                 for match in _QUOTED_PRODUCT.finditer(normalized):
                     if match.group(1).strip().upper() not in {"ETF", "ETN", "ETP"}:
                         ambiguities.append(match.group(0))
-                if (match := _BRANDED_PRODUCT.search(normalized)) and not family_identity_batch:
-                    ambiguities.append(match.group(0))
+                if branded_product_matches and not family_identity_batch:
+                    ambiguities.append(branded_product_matches[0].group(0))
                 if match := _UNLABELED_PRODUCT_NAME.search(normalized):
                     ambiguities.append(match.group(0))
 

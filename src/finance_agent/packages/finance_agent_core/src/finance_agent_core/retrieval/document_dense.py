@@ -52,6 +52,21 @@ _KOREAN_QUERY_SUFFIXES = (
     "과",
     "도",
 )
+_APPROVED_RETRIEVAL_CHUNKS_PER_DOCUMENT = 6
+_APPROVED_RETRIEVAL_CUES: dict[KnowledgeCapability, tuple[re.Pattern[str], ...]] = {
+    KnowledgeCapability.PRODUCT_RISK_FACTORS: (
+        re.compile(r"투자\s*위험|위험\s*요인|원금.{0,12}손실", re.IGNORECASE),
+        re.compile(
+            r"(?:신용|금리|시장|가격|유동성|환율|통화|집중|산업).{0,12}(?:위험|리스크)",
+            re.IGNORECASE,
+        ),
+        re.compile(r"risk\s*factors?|risk\s+of\s+(?:loss|capital)", re.IGNORECASE),
+    ),
+    KnowledgeCapability.CORPORATE_SUBSIDIARY: (
+        re.compile(r"자회사|종속\s*(?:회사|기업)|계열\s*회사", re.IGNORECASE),
+        re.compile(r"관계\s*기업|지배\s*(?:기업|회사)|subsidiar", re.IGNORECASE),
+    ),
+}
 
 
 class DocumentDenseError(RuntimeError):
@@ -168,19 +183,15 @@ class ApprovedDocumentDenseManifest(DocumentDenseModel):
     """Production-candidate index built only from a verified approved corpus."""
 
     schema_version: Literal["1.0"] = "1.0"
-    index_kind: Literal["document_dense_approved_corpus"] = (
-        "document_dense_approved_corpus"
-    )
+    index_kind: Literal["document_dense_approved_corpus"] = "document_dense_approved_corpus"
     scope: Literal["production_candidate"] = "production_candidate"
     production_enabled: StrictBool = True
-    activation_status: Literal["approved_cache_candidate_only"] = (
-        "approved_cache_candidate_only"
-    )
+    activation_status: Literal["approved_cache_candidate_only"] = "approved_cache_candidate_only"
     source_corpus_status: Literal["approved_for_bm25"] = "approved_for_bm25"
     source_manifest_sha256: str = Field(pattern=_SHA256_PATTERN)
     source_text_manifest_sha256: str = Field(pattern=_SHA256_PATTERN)
     embedding_snapshot_manifest_sha256: str = Field(pattern=_SHA256_PATTERN)
-    chunking_version: Literal["document-chunk-v1"] = "document-chunk-v1"
+    chunking_version: Literal["document-retrieval-cue-v2"] = "document-retrieval-cue-v2"
     max_chars: int = Field(ge=100, le=2000)
     overlap_chars: int = Field(ge=0, le=500)
     document_count: int = Field(gt=0, le=1000)
@@ -226,12 +237,14 @@ class ApprovedDocumentDenseArtifact(DocumentDenseModel):
 class ApprovedDocumentCacheSource(DocumentDenseModel):
     document_id: str = Field(pattern=r"^[a-z0-9][a-z0-9._-]{2,127}$")
     title: str = Field(min_length=1, max_length=500)
+    publisher: str = Field(min_length=1, max_length=300)
     source_registry_id: str = Field(pattern=r"^[a-z0-9][a-z0-9._-]{2,79}$")
     source_uri: str = Field(min_length=8, max_length=2000)
     capabilities: tuple[KnowledgeCapability, ...] = Field(min_length=1, max_length=5)
     published_at: date | None = None
     as_of: date
     content_sha256: str = Field(pattern=_SHA256_PATTERN)
+    normalized_text_sha256: str = Field(pattern=_SHA256_PATTERN)
 
     @model_validator(mode="after")
     def validate_source(self) -> ApprovedDocumentCacheSource:
@@ -246,9 +259,11 @@ class ApprovedDocumentCacheSource(DocumentDenseModel):
 class DocumentCacheActivationReceipt(DocumentDenseModel):
     """Explicit release boundary between approved corpus artifacts and Runtime."""
 
-    schema_version: Literal["1.0"] = "1.0"
+    schema_version: Literal["1.1"] = "1.1"
     receipt_kind: Literal["document_cache_activation"] = "document_cache_activation"
-    status: Literal["approved_cache_candidate_only"] = "approved_cache_candidate_only"
+    status: Literal["approved_cache_with_snapshot_evidence"] = (
+        "approved_cache_with_snapshot_evidence"
+    )
     source_registry_sha256: str = Field(pattern=_SHA256_PATTERN)
     evidence_cutoff: date
     approved_corpus_manifest_sha256: str = Field(pattern=_SHA256_PATTERN)
@@ -274,6 +289,11 @@ class DocumentCacheActivationReceipt(DocumentDenseModel):
             raise ValueError("approved cache documents must be unique and sorted")
         if any(item.as_of > self.evidence_cutoff for item in self.documents):
             raise ValueError("approved cache document exceeds the evidence cutoff")
+        if any(
+            item.published_at is not None and item.published_at > self.evidence_cutoff
+            for item in self.documents
+        ):
+            raise ValueError("approved cache publication exceeds the evidence cutoff")
         if self.provider.provider_kind != "frozen_model":
             raise ValueError("approved cache requires a frozen embedding provider")
         return self
@@ -318,9 +338,7 @@ def fuse_document_hits_rrf(
             # appearances outrank an exact top-1 hit from either channel. A
             # smaller constant preserves strong semantic or exact lexical
             # anchors while still rewarding agreement between both channels.
-            scores[hit.document_id] = scores.get(hit.document_id, 0.0) + 1 / (
-                10 + document_rank
-            )
+            scores[hit.document_id] = scores.get(hit.document_id, 0.0) + 1 / (10 + document_rank)
             key = (document_rank, channel_priority, hit.chunk_id)
             if key < representative_keys.get(hit.document_id, (10**9, 10**9, "")):
                 representatives[hit.document_id] = hit
@@ -441,9 +459,27 @@ def build_approved_document_dense_artifact(
     for verified in corpus.documents:
         document = verified.approval
         text = normalize_document_text(verified.text)
-        for ordinal, value in enumerate(
-            chunk_document(text, max_chars=max_chars, overlap_chars=overlap_chars)
-        ):
+        all_chunks = chunk_document(text, max_chars=max_chars, overlap_chars=overlap_chars)
+        scored: list[tuple[int, int]] = []
+        for source_ordinal, value in enumerate(all_chunks):
+            score = sum(
+                min(len(pattern.findall(value)), 8)
+                for capability in document.capabilities
+                for pattern in _APPROVED_RETRIEVAL_CUES.get(capability, ())
+            )
+            if score:
+                scored.append((score, source_ordinal))
+        selected_ordinals = {0}
+        selected_ordinals.update(
+            source_ordinal
+            for _score, source_ordinal in sorted(
+                scored,
+                key=lambda item: (-item[0], item[1]),
+            )[: _APPROVED_RETRIEVAL_CHUNKS_PER_DOCUMENT - 1]
+        )
+        selected_chunks = tuple(all_chunks[item] for item in sorted(selected_ordinals))
+        capability_context = " ".join(item.value for item in document.capabilities)
+        for ordinal, value in enumerate(selected_chunks):
             chunk = DocumentDenseChunk(
                 chunk_id=f"{document.document_id}:{ordinal:04d}",
                 document_id=document.document_id,
@@ -453,7 +489,9 @@ def build_approved_document_dense_artifact(
                 text_sha256=hashlib.sha256(value.encode("utf-8")).hexdigest(),
             )
             chunks.append(chunk)
-            embedding_texts.append(f"제목: {document.title}\n본문: {value}")
+            embedding_texts.append(
+                f"문서 유형: {capability_context}\n제목: {document.title}\n본문: {value}"
+            )
     vectors = provider.embed_documents(embedding_texts)
     if len(vectors) != len(chunks):
         raise DocumentDenseError("embedding provider returned a different vector count")
@@ -475,31 +513,6 @@ def build_approved_document_dense_artifact(
     return ApprovedDocumentDenseArtifact(manifest=manifest, records=records)
 
 
-_PURPOSE_CAPABILITY: dict[str, KnowledgeCapability] = {
-    "corporate_relation": KnowledgeCapability.CORPORATE_SUBSIDIARY,
-    "holdings": KnowledgeCapability.PORTFOLIO_HOLDINGS,
-    "product_structure": KnowledgeCapability.FUND_STRUCTURE_STRATEGY_TREND,
-    "risk": KnowledgeCapability.PRODUCT_RISK_FACTORS,
-    "theme": KnowledgeCapability.SECTOR_THEME_HISTORY,
-    "trend": KnowledgeCapability.FUND_STRUCTURE_STRATEGY_TREND,
-}
-
-
-def _approved_capabilities(
-    *,
-    document_id: str,
-    purposes: Sequence[str],
-    overrides: Mapping[str, Sequence[KnowledgeCapability]] | None,
-) -> tuple[KnowledgeCapability, ...]:
-    configured = None if overrides is None else overrides.get(document_id)
-    values = (
-        tuple(configured)
-        if configured is not None
-        else tuple(_PURPOSE_CAPABILITY[item] for item in purposes if item in _PURPOSE_CAPABILITY)
-    )
-    return tuple(sorted(set(values), key=lambda item: item.value))
-
-
 def build_document_cache_activation_receipt(
     corpus: VerifiedApprovedCorpus,
     artifact: ApprovedDocumentDenseArtifact,
@@ -515,10 +528,7 @@ def build_document_cache_activation_receipt(
 
     if artifact.manifest.source_manifest_sha256 != corpus.manifest_sha256:
         raise DocumentDenseError("approved index and corpus manifests differ")
-    if (
-        artifact.manifest.source_text_manifest_sha256
-        != corpus.manifest.file_manifest_sha256
-    ):
+    if artifact.manifest.source_text_manifest_sha256 != corpus.manifest.file_manifest_sha256:
         raise DocumentDenseError("approved index and corpus file manifests differ")
     artifact_document_ids = {record.chunk.document_id for record in artifact.records}
     if artifact_document_ids != {item.approval.document_id for item in corpus.documents}:
@@ -526,34 +536,47 @@ def build_document_cache_activation_receipt(
     documents: list[ApprovedDocumentCacheSource] = []
     for verified in corpus.documents:
         source = verified.approval
-        capabilities = _approved_capabilities(
-            document_id=source.document_id,
-            purposes=source.purposes,
-            overrides=capability_overrides,
+        capabilities = source.capabilities
+        configured = (
+            None if capability_overrides is None else capability_overrides.get(source.document_id)
         )
-        if not capabilities:
-            continue
+        if configured is not None and tuple(configured) != capabilities:
+            raise DocumentDenseError("activation cannot override approved corpus capabilities")
         try:
+            declared_source = registry.require_source_id(source.source_registry_id)
             authorized = tuple(
-                registry.authorize_url(source.source_uri, capability)
-                for capability in capabilities
+                registry.authorize_url(source.source_uri, capability) for capability in capabilities
             )
         except OfficialSourceRegistryError as error:
             raise DocumentDenseError(
                 "approved corpus URL is not authorized for its capabilities"
             ) from error
-        if len({item.source_id for item in authorized}) != 1:
-            raise DocumentDenseError("approved corpus URL crosses Source Registry authorities")
+        if (
+            len({item.source_id for item in authorized}) != 1
+            or authorized[0].source_id != source.source_registry_id
+            or declared_source.publisher != source.publisher
+        ):
+            raise DocumentDenseError(
+                "approved corpus source metadata differs from the Source Registry"
+            )
+        if declared_source.publication_date_required and source.published_at is None:
+            raise DocumentDenseError("approved corpus lacks a required publication date")
+        if source.as_of > registry.evidence_cutoff or (
+            source.published_at is not None and source.published_at > registry.evidence_cutoff
+        ):
+            raise DocumentDenseError("approved corpus metadata exceeds the evidence cutoff")
         documents.append(
             ApprovedDocumentCacheSource(
                 document_id=source.document_id,
                 title=source.title,
+                publisher=source.publisher,
                 source_registry_id=authorized[0].source_id,
                 source_uri=source.source_uri,
                 capabilities=capabilities,
-                published_at=None,
+                published_at=source.published_at,
                 as_of=source.as_of,
                 content_sha256=source.content_sha256,
+                normalized_text_sha256=source.normalized_text_sha256,
             )
         )
     if not documents:
@@ -566,9 +589,7 @@ def build_document_cache_activation_receipt(
         document_dense_artifact_sha256=artifact.canonical_sha256,
         document_dense_vector_payload_sha256=artifact.manifest.vector_payload_sha256,
         document_bm25_sha256=_lexical_payload_sha256(artifact.records),
-        embedding_snapshot_manifest_sha256=(
-            artifact.manifest.embedding_snapshot_manifest_sha256
-        ),
+        embedding_snapshot_manifest_sha256=(artifact.manifest.embedding_snapshot_manifest_sha256),
         provider=artifact.manifest.provider,
         calibration_report_sha256=calibration_report_sha256,
         minimum_dense_score=minimum_dense_score,

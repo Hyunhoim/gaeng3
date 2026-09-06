@@ -50,15 +50,16 @@ jobs:
       FINAL_HCX_SEMANTIC_RESOLVER_ENABLED: "true"
       FINAL_ADAPTIVE_SEMANTIC_ENABLED: "true"
       FINAL_FUND_EXECUTION_POLICY: public_fund_v1_approved
-      FINAL_SCHEMA_DENSE_INDEX_SHA256: c215649fdfb3ed21c7122987a5b4ddd6101993871039ddf6b1e7165c08860358
-      FINAL_SCHEMA_DENSE_CALIBRATION_REPORT_SHA256: 25f854e88f8a11ca4d65e381af67303ac1cad375bc2eb44d5e7b4063aeb5b458
-      FINAL_SCHEMA_DENSE_CALIBRATION_ARTIFACT_SHA256: 68978674def32d8613b3e0fd20c624ada9ebc9b6330f64ea172836ac5b31932b
+      FINAL_SCHEMA_DENSE_INDEX_SHA256: 2807195ef8c233ab3218ff742a4f53e11728aa63b56bbeb6dce62bb178f6ae57
+      FINAL_SCHEMA_DENSE_CALIBRATION_REPORT_SHA256: 8c41295bf0746bf395b0898863b406f18f6cbd8a42a4cc379069e88ab85c3a09
+      FINAL_SCHEMA_DENSE_CALIBRATION_ARTIFACT_SHA256: 7c748c44235b56471c7b7aa9a33b558a5b53a33ffe9669e3aae682c53d344446
+      FINAL_SCHEMA_DENSE_ACTIVATION_POLICY_SHA256: 09536fbc6cb781d022cd480b6256638b7d771224430447011a6fc8b62837c4c1
       FINAL_SCHEMA_DENSE_MIN_SCORE: "0.340015"
       FINAL_SCHEMA_DENSE_HCLX_CANDIDATE_MIN_SCORE: "0.3"
-      FINAL_SCHEMA_DENSE_MINIMUM_MARGIN: "0.042771"
+      FINAL_SCHEMA_DENSE_MINIMUM_MARGIN: "0.034684"
       FINAL_SCHEMA_DENSE_TOP_K: "10"
-      TRACKED_SCHEMA_DENSE_INDEX: ${{ github.workspace }}/src/finance_agent/artifacts/runtime/schema-dense/kure-schema-dense-production-v6-margin42771-20260902.json
-      TRACKED_SCHEMA_DENSE_CALIBRATION_REPORT: ${{ github.workspace }}/src/finance_agent/artifacts/evaluation/kure-schema-dense-p1-selective-v17-registry16-phase6-recall-20260902.json
+      TRACKED_SCHEMA_DENSE_INDEX: ${{ github.workspace }}/src/finance_agent/artifacts/runtime/schema-dense/kure-schema-dense-production-v8-registry18-calibrated-20260905.json
+      TRACKED_SCHEMA_DENSE_CALIBRATION_REPORT: ${{ github.workspace }}/src/finance_agent/artifacts/evaluation/kure-schema-dense-calibration-registry18-20260905.json
       TRACKED_KURE_SNAPSHOT_MANIFEST: ${{ github.workspace }}/src/finance_agent/artifacts/evaluation/schema-embedding/snapshot-manifests/kure-v1-d14c8a9423946e268a0c9952fecf3a7aabd73bd9-snapshot-v2.json
       FINAL_KURE_SNAPSHOT_MANIFEST_SHA256: caa502227d3ed92bb1b5290fc7bced2202c99b70f6846e448c4608551498004c
       # Empty means verified_live_official. Cache-first can be selected only
@@ -82,6 +83,10 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 1
+          # Cache-first releases may use a separately reviewed Document Dense
+          # blob larger than GitHub's ordinary file limit. The pointer and
+          # downloaded object must both belong to this exact commit.
+          lfs: true
           persist-credentials: false
 
       - name: Validate protected source and all operator inputs
@@ -216,7 +221,8 @@ jobs:
             python3 -c 'import hashlib,json,os,pathlib; p=pathlib.Path(os.environ["TRACKED_SCHEMA_DENSE_CALIBRATION_REPORT"]); d=json.loads(p.read_text(encoding="utf-8")); claimed=d.pop("report_sha256"); canonical=json.dumps(d,ensure_ascii=False,sort_keys=True,separators=(",",":")); actual=hashlib.sha256(canonical.encode("utf-8")).hexdigest(); assert claimed == actual == os.environ["FINAL_SCHEMA_DENSE_CALIBRATION_REPORT_SHA256"]'
           TRACKED_SCHEMA_DENSE_INDEX="$TRACKED_SCHEMA_DENSE_INDEX" \
           PACKAGED_FIELD_REGISTRY="$GITHUB_WORKSPACE/src/finance_agent/packages/finance_agent_core/src/finance_agent_core/config/field_registry.yaml" \
-            python3 -c 'import hashlib,json,os,pathlib,re; index=json.loads(pathlib.Path(os.environ["TRACKED_SCHEMA_DENSE_INDEX"]).read_text(encoding="utf-8")); registry=pathlib.Path(os.environ["PACKAGED_FIELD_REGISTRY"]).read_bytes(); version=re.search(rb"^schema_version:\s*\"([^\"]+)\"",registry,re.MULTILINE); assert version is not None; manifest=index["manifest"]; assert manifest["field_registry_sha256"] == hashlib.sha256(registry).hexdigest(); assert manifest["field_registry_schema_version"] == version.group(1).decode("ascii")'
+          FINAL_SCHEMA_DENSE_ACTIVATION_POLICY_SHA256="$FINAL_SCHEMA_DENSE_ACTIVATION_POLICY_SHA256" \
+            python3 -c 'import hashlib,json,os,pathlib,re; index=json.loads(pathlib.Path(os.environ["TRACKED_SCHEMA_DENSE_INDEX"]).read_text(encoding="utf-8")); registry=pathlib.Path(os.environ["PACKAGED_FIELD_REGISTRY"]).read_bytes(); version=re.search(rb"^schema_version:\s*\"([^\"]+)\"",registry,re.MULTILINE); assert version is not None; manifest=index["manifest"]; assert manifest["field_registry_sha256"] == hashlib.sha256(registry).hexdigest(); assert manifest["field_registry_schema_version"] == version.group(1).decode("ascii") == "1.8"; assert manifest["activation_policy_sha256"] == os.environ["FINAL_SCHEMA_DENSE_ACTIVATION_POLICY_SHA256"]; assert manifest["activation_status"] == "approved_candidate_only"; assert manifest["production_enabled"] is True'
           test "$(sha256sum "$TRACKED_KURE_SNAPSHOT_MANIFEST" | cut -d ' ' -f 1)" = \
             "$FINAL_KURE_SNAPSHOT_MANIFEST_SHA256"
           install -m 0444 "$TRACKED_SCHEMA_DENSE_INDEX" \
@@ -274,7 +280,8 @@ jobs:
             --artifact "$RELEASE_OUTPUT_DIR/external-knowledge-artifact.json"
             --temporal-relations "$RELEASE_OUTPUT_DIR/external-temporal-relations.json"
           )
-          if [ "$external_mode" = "approved_corpus_cache_first" ]; then
+          if [ "$external_mode" = "approved_corpus_cache_first" ] || \
+             [ "$external_mode" = "approved_corpus_cache_only" ]; then
             required_cache_inputs=(
               APPROVED_DOCUMENT_CORPUS_ROOT
               APPROVED_DOCUMENT_CORPUS_MANIFEST
@@ -294,7 +301,6 @@ jobs:
             done
             tracked_cache_paths=(
               "$APPROVED_DOCUMENT_CORPUS_MANIFEST"
-              "$APPROVED_DOCUMENT_DENSE_ARTIFACT"
               "$APPROVED_DOCUMENT_CACHE_ACTIVATION"
               "$APPROVED_EXTERNAL_TEMPORAL_RELATIONS"
             )
@@ -308,6 +314,37 @@ jobs:
               }
               test -f "$GITHUB_WORKSPACE/$tracked_relative"
             done
+            case "$APPROVED_DOCUMENT_DENSE_ARTIFACT" in
+              /*|../*|*/../*|*/..) echo "Approved Document Dense path is outside the checkout" >&2; exit 1 ;;
+            esac
+            # The current approved candidate is about 435 MB. It must not be
+            # copied into ordinary Git or reconstructed from a developer's
+            # /tmp directory. Approved cache modes stay fail-closed until an
+            # independently approved Git LFS object is committed and the
+            # protected Environment pins its exact content SHA-256.
+            git ls-files --error-unmatch -- "$APPROVED_DOCUMENT_DENSE_ARTIFACT" >/dev/null || {
+              echo "Approved Document Dense pointer is not tracked by the release commit" >&2
+              exit 1
+            }
+            dense_lfs_filter="$(git check-attr filter -- "$APPROVED_DOCUMENT_DENSE_ARTIFACT" | sed 's/^.*: filter: //')"
+            test "$dense_lfs_filter" = "lfs" || {
+              echo "Approved Document Dense artifact must be materialized from Git LFS" >&2
+              exit 1
+            }
+            git cat-file blob "HEAD:$APPROVED_DOCUMENT_DENSE_ARTIFACT" | \
+              grep -Fqx "oid sha256:$APPROVED_DOCUMENT_DENSE_ARTIFACT_SHA256" || {
+              echo "Document Dense LFS object ID does not match the protected SHA-256" >&2
+              exit 1
+            }
+            test -f "$GITHUB_WORKSPACE/$APPROVED_DOCUMENT_DENSE_ARTIFACT"
+            test "$(sha256sum "$GITHUB_WORKSPACE/$APPROVED_DOCUMENT_DENSE_ARTIFACT" | cut -d ' ' -f 1)" = \
+              "$APPROVED_DOCUMENT_DENSE_ARTIFACT_SHA256"
+            test "$(sha256sum "$GITHUB_WORKSPACE/$APPROVED_DOCUMENT_CORPUS_MANIFEST" | cut -d ' ' -f 1)" = \
+              "$APPROVED_DOCUMENT_CORPUS_MANIFEST_SHA256"
+            test "$(sha256sum "$GITHUB_WORKSPACE/$APPROVED_DOCUMENT_CACHE_ACTIVATION" | cut -d ' ' -f 1)" = \
+              "$APPROVED_DOCUMENT_CACHE_ACTIVATION_SHA256"
+            test "$(sha256sum "$GITHUB_WORKSPACE/$APPROVED_EXTERNAL_TEMPORAL_RELATIONS" | cut -d ' ' -f 1)" = \
+              "$APPROVED_EXTERNAL_TEMPORAL_RELATIONS_SHA256"
             case "$APPROVED_DOCUMENT_CORPUS_ROOT" in
               /*|../*|*/../*|*/..) echo "Approved corpus root is outside the checkout" >&2; exit 1 ;;
             esac
@@ -352,6 +389,165 @@ jobs:
             "$RUNNER_TEMP/release-venv/bin/python" \
             -m finance_agent_core.retrieval.external_knowledge_release_cli \
             "${external_arguments[@]}"
+          if [ "$external_mode" = "approved_corpus_cache_first" ] || \
+             [ "$external_mode" = "approved_corpus_cache_only" ]; then
+            APPROVED_CORPUS_MANIFEST_SOURCE="$GITHUB_WORKSPACE/$APPROVED_DOCUMENT_CORPUS_MANIFEST" \
+            APPROVED_CORPUS_SOURCE_ROOT="$GITHUB_WORKSPACE/$APPROVED_DOCUMENT_CORPUS_ROOT" \
+            APPROVED_CORPUS_REPOSITORY_ROOT="$APPROVED_DOCUMENT_CORPUS_ROOT" \
+            APPROVED_CORPUS_RELEASE_ROOT="$RELEASE_OUTPUT_DIR/approved-corpus" \
+            APPROVED_CORPUS_RELEASE_MANIFEST="$RELEASE_OUTPUT_DIR/approved-corpus-manifest.json" \
+              python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          import stat
+          import subprocess
+          from pathlib import Path, PurePosixPath
+
+          repository_root = Path(os.environ["GITHUB_WORKSPACE"]).resolve(strict=True)
+          source_manifest = Path(os.environ["APPROVED_CORPUS_MANIFEST_SOURCE"])
+          repository_relative_root_value = os.environ["APPROVED_CORPUS_REPOSITORY_ROOT"]
+          repository_relative_root = PurePosixPath(repository_relative_root_value)
+          if (
+              repository_relative_root.is_absolute()
+              or repository_relative_root.as_posix() != repository_relative_root_value
+              or any(
+                  part in {"", ".", ".."}
+                  for part in repository_relative_root_value.split("/")
+              )
+          ):
+              raise RuntimeError("approved corpus root is not a canonical repository path")
+          source_root = Path(os.environ["APPROVED_CORPUS_SOURCE_ROOT"]).resolve(strict=True)
+          try:
+              source_root.relative_to(repository_root)
+          except ValueError as error:
+              raise RuntimeError("approved corpus root escaped the release checkout") from error
+          release_root = Path(os.environ["APPROVED_CORPUS_RELEASE_ROOT"])
+          release_manifest = Path(os.environ["APPROVED_CORPUS_RELEASE_MANIFEST"])
+          manifest_bytes = source_manifest.read_bytes()
+          manifest = json.loads(manifest_bytes)
+          documents = manifest["documents"]
+          release_root.mkdir(mode=0o755)
+
+          def command_output(*arguments: str) -> bytes:
+              completed = subprocess.run(
+                  arguments,
+                  cwd=repository_root,
+                  check=False,
+                  stdout=subprocess.PIPE,
+                  stderr=subprocess.PIPE,
+              )
+              if completed.returncode != 0:
+                  raise RuntimeError("cannot verify approved corpus Git identity")
+              return completed.stdout
+
+          def require_head_tracked_document(
+              repository_path: str,
+              payload: bytes,
+              expected_sha256: str,
+              expected_size: int,
+          ) -> None:
+              entries = [
+                  entry
+                  for entry in command_output(
+                      "git", "ls-tree", "-z", "HEAD", "--", repository_path
+                  ).split(b"\0")
+                  if entry
+              ]
+              if len(entries) != 1 or b"\t" not in entries[0]:
+                  raise RuntimeError("approved corpus document is not tracked by HEAD")
+              identity, encoded_path = entries[0].split(b"\t", 1)
+              try:
+                  mode, object_type, _object_id = identity.decode("ascii").split(" ", 2)
+                  tracked_path = encoded_path.decode("utf-8")
+              except (UnicodeError, ValueError) as error:
+                  raise RuntimeError("approved corpus Git identity is invalid") from error
+              if (
+                  mode not in {"100644", "100755"}
+                  or object_type != "blob"
+                  or tracked_path != repository_path
+              ):
+                  raise RuntimeError(
+                      "approved corpus document must be a regular file tracked by HEAD"
+                  )
+
+              attribute = command_output(
+                  "git", "check-attr", "filter", "--", repository_path
+              ).decode("utf-8").rstrip("\n")
+              head_blob = command_output("git", "cat-file", "blob", f"HEAD:{repository_path}")
+              if attribute.endswith(": filter: lfs"):
+                  expected_pointer = (
+                      "version https://git-lfs.github.com/spec/v1\n"
+                      f"oid sha256:{expected_sha256}\n"
+                      f"size {expected_size}\n"
+                  ).encode("ascii")
+                  if head_blob != expected_pointer:
+                      raise RuntimeError(
+                          "approved corpus Git LFS pointer differs from the manifest"
+                      )
+              elif head_blob != payload:
+                  raise RuntimeError(
+                      "approved corpus materialized bytes differ from the HEAD blob"
+                  )
+
+          def write_exact(path: Path, payload: bytes) -> None:
+              path.parent.mkdir(mode=0o755, parents=True, exist_ok=True)
+              descriptor = os.open(
+                  path,
+                  os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0),
+                  0o444,
+              )
+              try:
+                  os.fchmod(descriptor, 0o444)
+                  view = memoryview(payload)
+                  while view:
+                      written = os.write(descriptor, view)
+                      if written <= 0:
+                          raise RuntimeError("cannot copy approved corpus snapshot")
+                      view = view[written:]
+                  os.fsync(descriptor)
+              finally:
+                  os.close(descriptor)
+
+          write_exact(release_manifest, manifest_bytes)
+          for document in documents:
+              relative = document["relative_path"]
+              pure = PurePosixPath(relative)
+              if (
+                  pure.is_absolute()
+                  or pure.as_posix() != relative
+                  or any(part in {"", ".", ".."} for part in relative.split("/"))
+              ):
+                  raise RuntimeError("approved corpus contains an unsafe path")
+              source = source_root.joinpath(*relative.split("/")).resolve(strict=True)
+              if source_root not in source.parents or source.is_symlink():
+                  raise RuntimeError("approved corpus snapshot escaped its root")
+              info = source.stat(follow_symlinks=False)
+              if not stat.S_ISREG(info.st_mode):
+                  raise RuntimeError("approved corpus snapshot is not a regular file")
+              data = source.read_bytes()
+              if (
+                  len(data) != document["content_size_bytes"]
+                  or hashlib.sha256(data).hexdigest() != document["content_sha256"]
+              ):
+                  raise RuntimeError("approved corpus snapshot differs from its manifest")
+              repository_path = (
+                  repository_relative_root.joinpath(*relative.split("/")).as_posix()
+              )
+              require_head_tracked_document(
+                  repository_path,
+                  data,
+                  document["content_sha256"],
+                  document["content_size_bytes"],
+              )
+              write_exact(release_root.joinpath(*relative.split("/")), data)
+          for directory, children, _files in os.walk(release_root, topdown=False):
+              current = Path(directory)
+              for child in children:
+                  os.chmod(current / child, 0o555)
+              os.chmod(current, 0o555)
+          PY
+          fi
           external_knowledge_artifact_sha256="$(
             sha256sum "$RELEASE_OUTPUT_DIR/external-knowledge-artifact.json" | cut -d ' ' -f 1
           )"
@@ -616,9 +812,12 @@ jobs:
           )
           if [ -f "$RELEASE_OUTPUT_DIR/document-dense-approved.json" ]; then
             test -f "$RELEASE_OUTPUT_DIR/document-cache-activation.json"
+            test -f "$RELEASE_OUTPUT_DIR/approved-corpus-manifest.json"
+            test -d "$RELEASE_OUTPUT_DIR/approved-corpus"
             release_knowledge_blobs+=(
               "$RELEASE_OUTPUT_DIR/document-dense-approved.json"
               "$RELEASE_OUTPUT_DIR/document-cache-activation.json"
+              "$RELEASE_OUTPUT_DIR/approved-corpus-manifest.json"
             )
           fi
           for blob in "${release_knowledge_blobs[@]}"; do
@@ -674,12 +873,20 @@ jobs:
           )
           if [ -f "$RELEASE_OUTPUT_DIR/document-dense-approved.json" ]; then
             test -f "$RELEASE_OUTPUT_DIR/document-cache-activation.json"
+            test -f "$RELEASE_OUTPUT_DIR/approved-corpus-manifest.json"
+            test -d "$RELEASE_OUTPUT_DIR/approved-corpus"
             release_artifacts+=(
               "$RELEASE_OUTPUT_DIR/document-dense-approved.json"
               "$RELEASE_OUTPUT_DIR/document-cache-activation.json"
+              "$RELEASE_OUTPUT_DIR/approved-corpus-manifest.json"
             )
+            while IFS= read -r -d '' corpus_file; do
+              release_artifacts+=("$corpus_file")
+            done < <(find "$RELEASE_OUTPUT_DIR/approved-corpus" -type f -print0 | sort -z)
           else
             test ! -e "$RELEASE_OUTPUT_DIR/document-cache-activation.json"
+            test ! -e "$RELEASE_OUTPUT_DIR/approved-corpus-manifest.json"
+            test ! -e "$RELEASE_OUTPUT_DIR/approved-corpus"
           fi
           sha256sum "${release_artifacts[@]}" \
             > "$RELEASE_OUTPUT_DIR/release-artifacts.sha256"
@@ -695,6 +902,8 @@ jobs:
             src/fastapi_backend/release/external-temporal-relations.json
             src/fastapi_backend/release/document-dense-approved.json
             src/fastapi_backend/release/document-cache-activation.json
+            src/fastapi_backend/release/approved-corpus-manifest.json
+            src/fastapi_backend/release/approved-corpus
             src/fastapi_backend/release/release-metadata.json
             src/fastapi_backend/release/release-artifacts.sha256
             src/fastapi_backend/release/release-image-inspect.json
@@ -717,5 +926,7 @@ jobs:
             src/fastapi_backend/release/document-dense-approved-verification.txt
             src/fastapi_backend/release/document-cache-activation.sigstore.json
             src/fastapi_backend/release/document-cache-activation-verification.txt
+            src/fastapi_backend/release/approved-corpus-manifest.sigstore.json
+            src/fastapi_backend/release/approved-corpus-manifest-verification.txt
           if-no-files-found: error
           retention-days: 90

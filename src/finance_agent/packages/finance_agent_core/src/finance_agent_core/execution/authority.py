@@ -726,6 +726,7 @@ class PlanAuthorityGate:
             AdaptivePlanningDecisionV2,
             ResolutionOperation,
             SemanticResolutionReceipt,
+            canonical_sha256,
         )
 
         if type(planning_decision) is not AdaptivePlanningDecisionV2:
@@ -763,6 +764,13 @@ class PlanAuthorityGate:
             )
         elif receipt.operation is ResolutionOperation.PROJECT:
             admitted = receipt.field_id in plan.projection
+        elif receipt.operation is ResolutionOperation.FILTER:
+            admitted = any(
+                constraint.field == receipt.field_id
+                and canonical_sha256(constraint.model_dump(mode="json"))
+                == receipt.constraint_sha256
+                for constraint in plan.constraints
+            )
         else:
             admitted = False
         if not admitted:

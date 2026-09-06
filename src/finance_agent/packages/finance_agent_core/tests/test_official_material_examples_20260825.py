@@ -1,8 +1,12 @@
+"""Historical 2026-08-25 pre-corpus contract; excluded from the current freeze gate."""
+
 from __future__ import annotations
 
 import hashlib
 import json
 from pathlib import Path
+
+import pytest
 
 from finance_agent_core.agent import RoutedFinanceAgent, execute_answer_request
 from finance_agent_core.agent.router import IntentRouter
@@ -20,6 +24,8 @@ _SUITE_PATH = (
     / "official-material-examples-8-20260825.json"
 )
 _FROZEN_SUITE_SHA256 = "aaa58625595fa7266d9304312dcaa2e0e2cc5a53f900367b04e93047d1dfe759"
+
+pytestmark = pytest.mark.historical_contract
 
 
 def _suite() -> dict[str, object]:
@@ -128,12 +134,27 @@ def test_exact_product_name_alias_resolves_its_family_and_canonical_id(
     ] == [expected.product_id]
 
 
-def test_external_knowledge_capabilities_use_live_official_authority_without_fake_corpus() -> None:
+def test_external_knowledge_capabilities_use_only_approved_cache_authority() -> None:
     manifest = load_approved_knowledge_coverage_manifest()
 
     assert manifest.dataset_release_id == "miraeasset-ai-festival-2026-20260824-v5"
     assert {entry.capability for entry in manifest.capabilities} == set(KnowledgeCapability)
-    assert all(entry.status == "approved_live_official" for entry in manifest.capabilities)
-    assert all(entry.runtime_execution_enabled for entry in manifest.capabilities)
-    assert all(entry.corpus_sha256 is None for entry in manifest.capabilities)
-    assert all(entry.index_sha256 is None for entry in manifest.capabilities)
+    enabled = tuple(entry for entry in manifest.capabilities if entry.runtime_execution_enabled)
+    disabled = tuple(
+        entry for entry in manifest.capabilities if not entry.runtime_execution_enabled
+    )
+
+    assert {entry.capability for entry in enabled} == {
+        KnowledgeCapability.CORPORATE_SUBSIDIARY,
+        KnowledgeCapability.PRODUCT_RISK_FACTORS,
+    }
+    assert all(entry.status == "approved" for entry in enabled)
+    assert len({entry.corpus_sha256 for entry in enabled}) == 1
+    assert len({entry.index_sha256 for entry in enabled}) == 1
+    assert all(entry.corpus_sha256 is not None for entry in enabled)
+    assert all(entry.index_sha256 is not None for entry in enabled)
+
+    assert all(entry.status == "not_configured" for entry in disabled)
+    assert all(entry.corpus_sha256 is None for entry in disabled)
+    assert all(entry.index_sha256 is None for entry in disabled)
+    assert all(entry.status != "approved_live_official" for entry in manifest.capabilities)

@@ -556,6 +556,8 @@ class BoundedOfficialDiscoveryProvider:
         max_queries: int | None = None,
         entity_terms: tuple[str, ...] = (),
         product_terms: tuple[str, ...] = (),
+        entity_term_groups: tuple[tuple[str, ...], ...] = (),
+        product_term_groups: tuple[tuple[str, ...], ...] = (),
         relation_terms: tuple[str, ...] = (),
         time_range: KnowledgeTimeRange | None = None,
         product_surfaces: tuple[str, ...] = (),
@@ -565,18 +567,39 @@ class BoundedOfficialDiscoveryProvider:
         if not 1 <= top_k <= 20:
             raise ValueError("top_k must be between 1 and 20")
         entries = order_entries_for_entity_script(
-            self.registry.entries_for_capability(
-                capability,
-                source_registry_ids=source_registry_ids,
+            tuple(
+                entry
+                for entry in self.registry.entries_for_capability(
+                    capability,
+                    source_registry_ids=source_registry_ids,
+                )
+                if entry.status == "approved_for_live_evidence"
             ),
             entity_terms=entity_terms,
             product_surfaces=product_surfaces,
         )
+        # Snapshot-intake sources may enter an approved immutable corpus after
+        # review, but they are never live-search authorities. A registry that
+        # contains only intake sources therefore produces a bounded empty miss
+        # without issuing a network request.
+        if not entries:
+            return OfficialDiscoveryReport(
+                candidates=(),
+                queried_source_registry_ids=(),
+                search_query_count=0,
+                exhaustive=False,
+                failure_codes=(DiscoveryFailureCode.SOURCE_SCOPE_INCOMPLETE,),
+            )
         query_budget = len(entries) if max_queries is None else max_queries
         if not 1 <= query_budget <= 40:
             raise ValueError("max_queries must be between 1 and 40")
         entity_terms = tuple(dict.fromkeys(item.strip() for item in entity_terms if item.strip()))
         product_terms = tuple(dict.fromkeys(item.strip() for item in product_terms if item.strip()))
+        # Target grouping is consumed by the cache-first orchestrator. The live
+        # provider still accepts the typed contract so a forced cache-miss path
+        # cannot fail by signature, while its concrete query remains bounded by
+        # the already narrowed flat entity/product terms.
+        _ = entity_term_groups, product_term_groups
         relation_terms = tuple(
             dict.fromkeys(item.strip() for item in relation_terms if item.strip())
         )

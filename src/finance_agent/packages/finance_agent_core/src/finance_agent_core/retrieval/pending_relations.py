@@ -7,9 +7,24 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, model_validator
 
+from finance_agent_core.config.source_registry import (
+    OfficialSourceRegistry,
+    OfficialSourceRegistryError,
+)
+from finance_agent_core.retrieval.corpus import (
+    VerifiedApprovedCorpus,
+    approved_corpus_manifest_bytes,
+)
 from finance_agent_core.retrieval.pending_corpus import load_pending_corpus_manifest
-from finance_agent_core.retrieval.sqlite_fts import normalize_document_text
-from finance_agent_core.retrieval.temporal_relations import TemporalRelationRecord
+from finance_agent_core.retrieval.sqlite_fts import (
+    normalize_document_text,
+    sha256_document_text,
+)
+from finance_agent_core.retrieval.temporal_relations import (
+    TemporalRelationRecord,
+    VerifiedTemporalRelationBundle,
+    seal_temporal_relation_bundle,
+)
 
 
 class PendingRelationError(RuntimeError):
@@ -109,8 +124,118 @@ def verify_pending_relation_candidates(
     )
 
 
+def promote_pending_relations_to_approved_corpus(
+    pending: PendingTemporalRelationBundle,
+    approved_corpus: VerifiedApprovedCorpus,
+    *,
+    registry: OfficialSourceRegistry,
+) -> VerifiedTemporalRelationBundle:
+    """Rebind reviewed relation candidates to an already verified corpus.
+
+    This function grants no document or relation approval.  It accepts only an
+    existing ``VerifiedApprovedCorpus``, re-proves each pending evidence record
+    against that corpus and the current Source Registry, then changes the
+    evidence hash from the staged text-file bytes to the canonical normalized
+    text bytes used by an approved cache-only release.
+    """
+
+    canonical_manifest_sha256 = hashlib.sha256(
+        approved_corpus_manifest_bytes(approved_corpus.manifest)
+    ).hexdigest()
+    if canonical_manifest_sha256 != approved_corpus.manifest_sha256:
+        raise PendingRelationError("approved corpus manifest trust anchor differs")
+
+    manifest_documents = {item.document_id: item for item in approved_corpus.manifest.documents}
+    verified_documents = {item.approval.document_id: item for item in approved_corpus.documents}
+    if set(manifest_documents) != set(verified_documents) or any(
+        verified_documents[document_id].approval != approval
+        for document_id, approval in manifest_documents.items()
+    ):
+        raise PendingRelationError("verified approved corpus document set differs")
+
+    normalized_documents: dict[str, str] = {}
+    for document_id, verified in verified_documents.items():
+        normalized = normalize_document_text(verified.text)
+        if (
+            not normalized
+            or sha256_document_text(normalized) != verified.approval.normalized_text_sha256
+        ):
+            raise PendingRelationError("verified approved corpus normalized text differs")
+        normalized_documents[document_id] = normalized
+
+    promoted_relations: list[TemporalRelationRecord] = []
+    for relation in pending.relations:
+        promoted_evidence = []
+        for evidence in relation.evidence:
+            verified = verified_documents.get(evidence.document_id)
+            if verified is None:
+                raise PendingRelationError(
+                    "relation cites a document absent from the approved corpus"
+                )
+            source = verified.approval
+            if relation.capability not in source.capabilities:
+                raise PendingRelationError(
+                    "relation capability is absent from the approved corpus document"
+                )
+            if (
+                evidence.source_registry_id != source.source_registry_id
+                or evidence.document_id != source.document_id
+                or evidence.title != source.title
+                or evidence.publisher != source.publisher
+                or evidence.source_uri != source.source_uri
+                or evidence.published_at != source.published_at
+                or evidence.as_of != source.as_of
+            ):
+                raise PendingRelationError(
+                    "relation evidence metadata differs from the approved corpus"
+                )
+            # Pending relation evidence names the exact staged UTF-8 text file.
+            # The approved release instead names its normalized canonical text.
+            # Requiring the former before replacing it prevents an arbitrary
+            # hash from borrowing the approved document's authority.
+            if evidence.content_sha256 != source.content_sha256:
+                raise PendingRelationError("pending relation evidence content SHA-256 differs")
+            try:
+                authority = registry.authorize_url(
+                    source.source_uri,
+                    relation.capability,
+                )
+            except OfficialSourceRegistryError as error:
+                raise PendingRelationError(
+                    "approved relation source exceeds the current Source Registry"
+                ) from error
+            if (
+                authority.source_id != source.source_registry_id
+                or authority.publisher != source.publisher
+            ):
+                raise PendingRelationError(
+                    "approved relation source identity differs from the current registry"
+                )
+            excerpt = normalize_document_text(evidence.excerpt)
+            if not excerpt or excerpt not in normalized_documents[source.document_id]:
+                raise PendingRelationError("relation excerpt is absent from the approved corpus")
+            promoted_evidence.append(
+                evidence.model_copy(
+                    update={
+                        "document_id": source.document_id,
+                        "content_sha256": source.normalized_text_sha256,
+                    }
+                )
+            )
+        promoted_relations.append(
+            relation.model_copy(update={"evidence": tuple(promoted_evidence)})
+        )
+
+    return seal_temporal_relation_bundle(
+        tuple(promoted_relations),
+        corpus_manifest_sha256=approved_corpus.manifest_sha256,
+        registry=registry,
+    )
+
+
 __all__ = [
     "PendingRelationError",
     "PendingTemporalRelationBundle",
+    "promote_pending_relations_to_approved_corpus",
     "verify_pending_relation_candidates",
 ]

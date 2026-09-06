@@ -38,8 +38,12 @@ from finance_agent_core.contracts.backend import BackendAgentRequest, BackendSta
 from finance_agent_core.contracts.external_knowledge import (
     ExternalKnowledgeOutcome,
     ExternalKnowledgeOutcomeStatus,
+    KnowledgeDocumentTopNScope,
     KnowledgeIntentRequirement,
+    KnowledgePredicate,
     KnowledgeProductSelection,
+    KnowledgeRequirement,
+    KnowledgeTimeRange,
     ProvidedProductCandidate,
     ProvidedProductCandidateUniverse,
 )
@@ -82,7 +86,10 @@ from finance_agent_core.retrieval.official_discovery import (
     OfficialDiscoveryReport,
 )
 from finance_agent_core.retrieval.official_live_evidence import (
+    OfficialLiveEvidenceError,
     VerifiedLiveRelationExtractor,
+    _bounded_ascii_tail_truncations,
+    extract_official_snapshot_text,
 )
 from finance_agent_core.retrieval.temporal_relations import (
     ExternalEvidenceReference,
@@ -96,6 +103,143 @@ from finance_agent_core.storage.identity_cache import ProductIdentityRecord
 
 _SHA_A = "a" * 64
 _SHA_B = "b" * 64
+
+
+def test_official_pdf_ascii_tail_recovery_is_narrowly_bounded() -> None:
+    assert _bounded_ascii_tail_truncations("Samsung Electronics") == (
+        "Samsung Electronic",
+        "Samsung Electroni",
+        "Samsung Electron",
+    )
+    assert _bounded_ascii_tail_truncations("Global X") == ()
+    assert _bounded_ascii_tail_truncations("Electronics") == ()
+
+
+def _official_text_snapshot(content: bytes, content_type: str) -> OfficialSourceSnapshot:
+    return OfficialSourceSnapshot(
+        source=load_official_source_registry().entries[0],
+        capability=KnowledgeCapability.PORTFOLIO_HOLDINGS,
+        source_uri="https://example.com/evidence",
+        title="Official text evidence",
+        content_type=content_type,
+        content=content,
+        content_sha256=hashlib.sha256(content).hexdigest(),
+        published_at=date(2026, 8, 24),
+        as_of=date(2026, 8, 24),
+    )
+
+
+def test_official_evidence_id_binds_exact_span_not_query_local_ordinal() -> None:
+    snapshot = _official_text_snapshot("국민성장펀드 공식 자료".encode(), "text/plain")
+
+    structure_id = live_evidence_module._exact_evidence_id(
+        snapshot,
+        locator="extracted chunk 0",
+        excerpt="국민성장펀드의 투자 구조를 설명합니다.",
+        discriminator="fund_structure_strategy_trend:fund:KR5000000000:국민성장펀드",
+    )
+    strategy_id = live_evidence_module._exact_evidence_id(
+        snapshot,
+        locator="extracted chunk 0",
+        excerpt="국민성장펀드의 투자 전략과 운용 동향을 설명합니다.",
+        discriminator="fund_structure_strategy_trend:fund:KR5000000000:국민성장펀드",
+    )
+
+    assert structure_id != strategy_id
+    assert structure_id == live_evidence_module._exact_evidence_id(
+        snapshot,
+        locator="extracted chunk 0",
+        excerpt="국민성장펀드의 투자 구조를 설명합니다.",
+        discriminator="fund_structure_strategy_trend:fund:KR5000000000:국민성장펀드",
+    )
+
+
+@pytest.mark.parametrize("content_type", ["text/plain", "text/csv", "application/csv"])
+def test_malformed_official_text_uses_typed_evidence_failure(content_type: str) -> None:
+    content = b"\xff\xfeinvalid-utf8"
+    snapshot = _official_text_snapshot(content, content_type)
+
+    with pytest.raises(OfficialLiveEvidenceError, match="text extraction failed"):
+        extract_official_snapshot_text(snapshot)
+
+
+@pytest.mark.parametrize(
+    ("content_type", "encoding"),
+    [
+        ("text/plain; charset=CP949", "cp949"),
+        ("text/csv; charset='euc-kr'", "euc-kr"),
+        ("application/csv; charset=ms949", "cp949"),
+    ],
+)
+def test_official_korean_text_uses_declared_allowlisted_charset(
+    content_type: str,
+    encoding: str,
+) -> None:
+    content = "상품명,구성종목\n공식ETF,삼성전자".encode(encoding)
+
+    extracted = extract_official_snapshot_text(
+        _official_text_snapshot(content, content_type)
+    )
+
+    assert "상품명,구성종목" in extracted
+    assert "공식ETF,삼성전자" in extracted
+
+
+def test_official_cp949_html_is_strictly_decoded_before_parsing() -> None:
+    content = (
+        "<html><body><p>공식 구성종목: 삼성전자</p></body></html>".encode("cp949")
+    )
+
+    extracted = extract_official_snapshot_text(
+        _official_text_snapshot(content, 'text/html; charset="windows-949"')
+    )
+
+    assert extracted == "공식 구성종목: 삼성전자"
+
+
+def test_official_legacy_html_can_use_an_allowlisted_meta_charset() -> None:
+    content = (
+        '<html><head><meta charset="euc-kr"></head>'
+        "<body><p>공식 구성종목: 가상기업</p></body></html>"
+    ).encode("euc-kr")
+
+    extracted = extract_official_snapshot_text(
+        _official_text_snapshot(content, "text/html")
+    )
+
+    assert "공식 구성종목: 가상기업" in extracted
+
+
+def test_official_html_rejects_an_unapproved_meta_charset() -> None:
+    content = b'<html><head><meta charset="shift_jis"></head><body>x</body></html>'
+
+    with pytest.raises(OfficialLiveEvidenceError, match="text extraction failed"):
+        extract_official_snapshot_text(_official_text_snapshot(content, "text/html"))
+
+
+@pytest.mark.parametrize(
+    "content_type",
+    [
+        "text/plain; charset=iso-8859-1",
+        "text/html; charset=",
+        "text/plain; charset=utf-8; charset=cp949",
+    ],
+)
+def test_official_text_rejects_unsupported_malformed_or_conflicting_charset(
+    content_type: str,
+) -> None:
+    snapshot = _official_text_snapshot(b"official evidence", content_type)
+
+    with pytest.raises(OfficialLiveEvidenceError, match="text extraction failed"):
+        extract_official_snapshot_text(snapshot)
+
+
+def test_official_html_without_charset_fails_closed_on_non_utf8_bytes() -> None:
+    content = "<p>공식 구성종목</p>".encode("cp949")
+    snapshot = _official_text_snapshot(content, "text/html")
+
+    with pytest.raises(OfficialLiveEvidenceError, match="text extraction failed"):
+        extract_official_snapshot_text(snapshot)
 
 
 def test_external_backend_adapter_keeps_cross_family_identity_and_source_quality() -> None:
@@ -155,6 +299,21 @@ def test_external_backend_adapter_keeps_cross_family_identity_and_source_quality
             trading_currency="USD",
             source_database_sha256=_SHA_B,
         ),
+        OfficialProductFact(
+            evidence_id="provided:overseas_etp:SAME:ticker",
+            product_family=ProductFamily.OVERSEAS_ETP,
+            product_id="SAME",
+            product_name="Overseas Synthetic ETF",
+            canonical_field="ticker",
+            normalized_value="SAME.O",
+            as_of=date(2026, 8, 23),
+            source_dataset="overseas_etp",
+            source_id="PREF02N001",
+            source_row=2,
+            source_columns=("ticker",),
+            unit="text",
+            source_database_sha256=_SHA_B,
+        ),
     )
     result = ExternalKnowledgeRuntimeResult.model_construct(
         outcome=ExternalKnowledgeOutcome(
@@ -173,7 +332,11 @@ def test_external_backend_adapter_keeps_cross_family_identity_and_source_quality
         candidate_universe=SimpleNamespace(),
         acquisitions=(),
         execution=SimpleNamespace(
-            evidence=SimpleNamespace(product_facts=facts, relations=())
+            evidence=SimpleNamespace(
+                product_facts=facts,
+                relations=(),
+                requirement_relations={},
+            )
         ),
         identity_evidence=(),
     )
@@ -189,7 +352,8 @@ def test_external_backend_adapter_keeps_cross_family_identity_and_source_quality
         "overseas_etp",
     ]
     assert backend.products[0].fields[0].quality is QualityStatus.PARTIAL
-    assert len({item.citation_id for item in backend.citations}) == 2
+    assert backend.products[1].ticker == "SAME.O"
+    assert len({item.citation_id for item in backend.citations}) == 3
 
 
 def _intent(
@@ -446,13 +610,22 @@ def test_external_outcome_states_cannot_be_mislabeled() -> None:
         )
 
 
-def test_live_source_scopes_and_coverage_activate_external_execution_together() -> None:
+def test_cache_only_source_scopes_and_coverage_activate_only_approved_capabilities() -> None:
     registry = load_official_source_registry()
-    assert registry.registry_id == "official-external-sources-20260824-v13"
+    assert registry.registry_id == "official-external-sources-20260824-v14"
     assert {entry.status for entry in registry.entries} == {"approved_for_live_evidence"}
     coverage = load_approved_knowledge_coverage_manifest()
+    enabled = {
+        entry.capability
+        for entry in coverage.capabilities
+        if entry.runtime_execution_enabled
+    }
+    assert enabled == {
+        KnowledgeCapability.CORPORATE_SUBSIDIARY,
+        KnowledgeCapability.PRODUCT_RISK_FACTORS,
+    }
     assert all(
-        entry.status == "approved_live_official" and entry.runtime_execution_enabled
+        entry.status == ("approved" if entry.runtime_execution_enabled else "not_configured")
         for entry in coverage.capabilities
     )
 
@@ -602,6 +775,53 @@ def test_short_alias_does_not_create_a_false_product_intersection() -> None:
 
     assert false_match == ()
     assert [item.product_id for item in exact_match] == ["P-2"]
+
+
+def test_domestic_display_code_alias_is_added_only_for_one_db_owner() -> None:
+    records = {
+        ProductFamily.DOMESTIC_ETP: (
+            ProductIdentityRecord(
+                product_family="domestic_etp",
+                product_id="KR7000000001",
+                product_name="고유 코드 ETF",
+                ticker="A091160",
+                isin=None,
+                short_name=None,
+                public_offering=None,
+                is_quarantined=False,
+            ),
+            ProductIdentityRecord(
+                product_family="domestic_etp",
+                product_id="KR7000000002",
+                product_name="충돌 A ETF",
+                ticker="A123456",
+                isin=None,
+                short_name=None,
+                public_offering=None,
+                is_quarantined=False,
+            ),
+            ProductIdentityRecord(
+                product_family="domestic_etp",
+                product_id="KR7000000003",
+                product_name="충돌 Q ETN",
+                ticker="Q123456",
+                isin=None,
+                short_name=None,
+                public_offering=None,
+                is_quarantined=False,
+            ),
+        )
+    }
+
+    universe = build_provided_candidate_universe(
+        records,
+        database_sha256s={ProductFamily.DOMESTIC_ETP: _SHA_A},
+    )
+    aliases = {item.product_id: item.aliases for item in universe.candidates}
+
+    assert aliases["KR7000000001"] == ("091160", "A091160")
+    assert "123456" not in aliases["KR7000000002"]
+    assert "123456" not in aliases["KR7000000003"]
 
 
 @pytest.mark.parametrize(
@@ -795,9 +1015,14 @@ def test_ric_base_uniqueness_is_qualified_by_product_family() -> None:
 
 
 def test_cache_hit_executes_only_the_provided_db_intersection() -> None:
+    relation = _holding_relation()
+    evidence_without_publication_date = relation.evidence[0].model_copy(
+        update={"published_at": None}
+    )
+    relation = relation.model_copy(update={"evidence": (evidence_without_publication_date,)})
     store = TemporalRelationStore(
         seal_temporal_relation_bundle(
-            (_holding_relation(),),
+            (relation,),
             corpus_manifest_sha256=_SHA_B,
         )
     )
@@ -832,6 +1057,13 @@ def test_cache_hit_executes_only_the_provided_db_intersection() -> None:
     assert result.outcome.verified_product_ids == ("KSTR",)
     assert result.execution is not None
     assert result.execution.verification.passed
+    backend = external_knowledge_result_to_backend(result)
+    assert backend.status is BackendStatus.SUCCESS
+    assert backend.documents[0].metadata == {
+        "publisher": "KraneShares",
+        "source_registry_id": "kraneshares-product",
+        "locator": "holdings table",
+    }
 
 
 def test_candidate_plan_cannot_be_escalated_by_the_runtime_boolean() -> None:
@@ -1003,6 +1235,32 @@ def test_missing_optional_product_field_preserves_verified_product_identity(tmp_
     ]
 
 
+def test_external_product_facts_always_include_available_public_ticker(tmp_path) -> None:
+    database = tmp_path / "overseas-public-ticker.sqlite3"
+    _minimal_overseas_identity_database(database)
+    connection = sqlite3.connect(database)
+    try:
+        connection.execute("ALTER TABLE overseas_etp_products ADD COLUMN ticker TEXT")
+        connection.execute(
+            "UPDATE overseas_etp_products SET ticker = ? WHERE product_id = ?",
+            ("KSTR.O", "KSTR"),
+        )
+        connection.commit()
+    finally:
+        connection.close()
+    provider = SqliteOfficialProductFactProvider(
+        {ProductFamily.OVERSEAS_ETP: database},
+        verify_approved_databases=False,
+    )
+
+    facts = provider.fetch(((ProductFamily.OVERSEAS_ETP, "KSTR"),), None)
+
+    assert [(item.canonical_field, item.normalized_value) for item in facts] == [
+        ("product_name", "KraneShares SSE STAR Market 50 Index ETF"),
+        ("ticker", "KSTR.O"),
+    ]
+
+
 def test_unsupported_ranking_basis_is_cannot_verify_not_not_found(tmp_path) -> None:
     database = tmp_path / "overseas-identity.sqlite3"
     _minimal_overseas_identity_database(database)
@@ -1155,6 +1413,7 @@ def test_document_cache_exact_span_miss_retries_bounded_live_discovery() -> None
             self.connector = OfficialSourceConnector(_UnusedTransport(), registry)
             self.relation_store = store
             self.discovery_provider = object.__new__(CacheFirstOfficialDiscoveryProvider)
+            self.discovery_provider.live_fallback_enabled = True
             self.calls: list[bool] = []
 
         def acquire(self, requirement, **kwargs):
@@ -1203,6 +1462,146 @@ def test_document_cache_exact_span_miss_retries_bounded_live_discovery() -> None
     assert result.outcome.status is ExternalKnowledgeOutcomeStatus.SUCCESS
     assert result.outcome.verified_product_keys == (
         (ProductFamily.OVERSEAS_ETP, "KSTR"),
+    )
+
+
+def test_document_cache_rejected_urls_retry_bounded_live_discovery() -> None:
+    """A cached URL fetch failure must not suppress the bounded live provider."""
+
+    registry = load_official_source_registry()
+    source_uri = "https://www.fsc.go.kr/po010103/86950"
+    source = registry.authorize_url(
+        source_uri,
+        KnowledgeCapability.FUND_STRUCTURE_STRATEGY_TREND,
+    )
+    content = (
+        "합성성장펀드의 구조는 정책자금과 민간자금을 함께 운용하는 방식입니다."
+    ).encode()
+    live = OfficialSourceSnapshot(
+        source=source,
+        capability=KnowledgeCapability.FUND_STRUCTURE_STRATEGY_TREND,
+        source_uri=source_uri,
+        title="합성성장펀드 공식 구조 자료",
+        content_type="text/plain",
+        content=content,
+        content_sha256=hashlib.sha256(content).hexdigest(),
+        published_at=date(2026, 5, 21),
+        as_of=date(2026, 5, 21),
+    )
+    store = TemporalRelationStore(
+        seal_temporal_relation_bundle((), corpus_manifest_sha256=_SHA_B, registry=registry),
+        registry,
+    )
+
+    class RejectedCacheThenLiveAcquisition:
+        def __init__(self) -> None:
+            self.connector = OfficialSourceConnector(_UnusedTransport(), registry)
+            self.relation_store = store
+            self.discovery_provider = object.__new__(CacheFirstOfficialDiscoveryProvider)
+            self.discovery_provider.live_fallback_enabled = True
+            self.calls: list[tuple[bool, int, int, int]] = []
+
+        def acquire(self, requirement, **kwargs):
+            del requirement
+            forced = bool(kwargs.get("force_live_discovery", False))
+            self.calls.append(
+                (
+                    forced,
+                    kwargs["max_search_queries"],
+                    kwargs["max_fetches"],
+                    kwargs["max_total_bytes"],
+                )
+            )
+            if not forced:
+                return OfficialEvidenceAcquisitionResult(
+                    status=OfficialEvidenceAcquisitionStatus.CANNOT_VERIFY,
+                    discovered_candidate_count=1,
+                    rejected_candidate_count=1,
+                    search_complete=False,
+                    failure_codes=("all_candidates_rejected", "search_not_exhaustive"),
+                    search_query_count=0,
+                    fetch_count=1,
+                    fetched_bytes=0,
+                )
+            return OfficialEvidenceAcquisitionResult(
+                status=OfficialEvidenceAcquisitionStatus.LIVE_EVIDENCE_CANDIDATE,
+                snapshots=(live,),
+                discovered_candidate_count=1,
+                rejected_candidate_count=0,
+                search_complete=False,
+                failure_codes=("live_evidence_requires_verification",),
+                search_query_count=1,
+                fetch_count=1,
+                fetched_bytes=len(content),
+            )
+
+    class SyntheticFactProvider:
+        def fetch(self, product_keys, selection, requested_fields):
+            assert product_keys == ((ProductFamily.FUND, "SYNTH-FUND-001"),)
+            assert selection is None
+            assert requested_fields == ()
+            return (
+                OfficialProductFact(
+                    evidence_id="provided-fund-synth-name",
+                    product_family=ProductFamily.FUND,
+                    product_id="SYNTH-FUND-001",
+                    product_name="합성성장펀드",
+                    canonical_field="product_name",
+                    normalized_value="합성성장펀드",
+                    as_of=date(2026, 8, 22),
+                    source_dataset="fund",
+                    source_id="PRFD01N001",
+                    source_row=2,
+                    source_columns=("product_name",),
+                    unit="text",
+                    trading_currency=None,
+                    source_database_sha256=_SHA_A,
+                ),
+            )
+
+    question = "합성성장펀드의 구조를 알려줘."
+    candidate_plan = CompositeKnowledgePlanCompiler(registry).compile(
+        question,
+        "cache-rejected-url-live-retry",
+        _intent(
+            question,
+            capability=KnowledgeCapability.FUND_STRUCTURE_STRATEGY_TREND,
+            subject="합성성장펀드",
+            relation="구조",
+            family=ProductFamily.FUND,
+        ),
+    )
+    universe = ProvidedProductCandidateUniverse(
+        candidates=(
+            ProvidedProductCandidate(
+                product_family=ProductFamily.FUND,
+                product_id="SYNTH-FUND-001",
+                product_name="합성성장펀드",
+            ),
+        ),
+        database_sha256s={ProductFamily.FUND: _SHA_A},
+        candidate_filter_sha256=_SHA_B,
+        explicit_identity_bound=True,
+    )
+    search_plan = ExternalSearchPlanCompiler(registry).compile(
+        candidate_plan.model_copy(update={"execution_authorized": True}),
+        universe,
+    )
+    acquisition = RejectedCacheThenLiveAcquisition()
+    runtime = ExternalKnowledgeRuntime(
+        acquisition=acquisition,  # type: ignore[arg-type]
+        product_fact_provider=SyntheticFactProvider(),  # type: ignore[arg-type]
+    )
+
+    result = runtime.execute(search_plan, universe)
+
+    assert [item[0] for item in acquisition.calls] == [False, True]
+    assert acquisition.calls[1][1] <= acquisition.calls[0][1]
+    assert acquisition.calls[1][2] < acquisition.calls[0][2]
+    assert acquisition.calls[1][3] <= acquisition.calls[0][3]
+    assert result.outcome.status is ExternalKnowledgeOutcomeStatus.SUCCESS
+    assert result.outcome.verified_product_keys == (
+        (ProductFamily.FUND, "SYNTH-FUND-001"),
     )
 
 
@@ -1256,6 +1655,160 @@ def test_acquisition_force_live_bypasses_document_cache_discovery() -> None:
     assert provider.live_calls == 1
     assert result.status is OfficialEvidenceAcquisitionStatus.CANNOT_VERIFY
     assert result.search_query_count == 1
+
+
+def test_product_bound_inner_date_does_not_filter_later_official_publication() -> None:
+    registry = load_official_source_registry()
+    store = TemporalRelationStore(
+        seal_temporal_relation_bundle((), corpus_manifest_sha256=_SHA_B, registry=registry),
+        registry,
+    )
+    url = "https://engage.kraneshares.com/s/b264ceb1/kstr-presentation/"
+    body = (
+        b'<html><head><meta property="article:published_time" '
+        b'content="2025-04-15T09:00:00+09:00"></head><body>'
+        b"AIQ holdings as of March 31, 2025 include Samsung Electronics."
+        b"</body></html>"
+    )
+    candidate = OfficialDiscoveryCandidate(
+        url=url,
+        title="AIQ official factsheet",
+        published_at=date(2025, 4, 15),
+        db_ticker="AIQ",
+    )
+
+    class CapturingDiscovery:
+        def __init__(self) -> None:
+            self.time_range = object()
+
+        def discover_report(self, **kwargs):
+            self.time_range = kwargs["time_range"]
+            return OfficialDiscoveryReport(
+                candidates=(candidate,),
+                queried_source_registry_ids=("kraneshares-product",),
+                search_query_count=1,
+                exhaustive=False,
+            )
+
+    discovery = CapturingDiscovery()
+    acquisition = OfficialEvidenceAcquisitionCoordinator(
+        relation_store=store,
+        discovery_provider=discovery,  # type: ignore[arg-type]
+        connector=OfficialSourceConnector(
+            _FixedHttpTransport(
+                OfficialHttpResponse(
+                    status_code=200,
+                    final_url=url,
+                    content_type="text/html",
+                    body=body,
+                )
+            ),
+            registry,
+        ),
+    )
+    question = "2025년 3월 말 기준 삼성전자를 편입한 해외 ETF를 알려 주세요."
+    requirement = (
+        CompositeKnowledgePlanCompiler(registry)
+        .compile(
+            question,
+            "product-bound-inner-date",
+            _intent(
+                question,
+                capability=KnowledgeCapability.PORTFOLIO_HOLDINGS,
+                subject="삼성전자",
+                relation="편입한",
+                family=ProductFamily.OVERSEAS_ETP,
+            ),
+        )
+        .requirements[0]
+        .model_copy(
+            update={
+                "time_range": KnowledgeTimeRange(
+                    start=date(2025, 3, 31),
+                    end=date(2025, 3, 31),
+                )
+            }
+        )
+    )
+
+    result = acquisition.acquire(
+        requirement,
+        provided_product_surfaces=("AIQ",),
+        provided_product_evidence_dates=(("aiq", date(2025, 3, 31)),),
+    )
+
+    assert discovery.time_range is None
+    assert result.status is OfficialEvidenceAcquisitionStatus.LIVE_EVIDENCE_CANDIDATE
+    assert [snapshot.as_of for snapshot in result.snapshots] == [date(2025, 3, 31)]
+
+
+def test_exact_catalogue_section_date_owns_holding_relation_interval() -> None:
+    registry = load_official_source_registry()
+    url = "https://www.samsungfund.com/upload/kodex/newsroom/20260416171916907.pdf"
+    source = registry.authorize_url(url, KnowledgeCapability.PORTFOLIO_HOLDINGS)
+    text = """종목코드 091160
+('26.03.31 기준)
+구성종목 상위 10종목
+1 SK하이닉스 26.3
+2 삼성전자 22.0
+종목코드 999999
+('26.03.31 기준)
+구성종목 상위 10종목
+1 다른회사 10.0
+"""
+    content = text.encode()
+    snapshot = OfficialSourceSnapshot(
+        source=source,
+        capability=KnowledgeCapability.PORTFOLIO_HOLDINGS,
+        source_uri=url,
+        title="2026년 2분기 KODEX 연금투자 가이드북",
+        content_type="text/plain",
+        content=content,
+        content_sha256=hashlib.sha256(content).hexdigest(),
+        published_at=date(2026, 4, 16),
+        as_of=date(2026, 4, 16),
+    )
+    requirement = KnowledgeRequirement(
+        requirement_id="need_1",
+        capability=KnowledgeCapability.PORTFOLIO_HOLDINGS,
+        predicate=KnowledgePredicate.HOLDS_COMPANY,
+        subject="삼성전자",
+        subject_evidence_span="삼성전자",
+        relation_evidence_span="들어 있는",
+        product_families=(ProductFamily.DOMESTIC_ETP,),
+        time_range=KnowledgeTimeRange(
+            start=date(2026, 3, 31),
+            end=date(2026, 3, 31),
+        ),
+        document_scope=KnowledgeDocumentTopNScope(
+            limit=10,
+            selection_evidence_span="상위 10종목",
+        ),
+        source_registry_ids=(source.source_id,),
+    )
+    universe = ProvidedProductCandidateUniverse(
+        candidates=(
+            ProvidedProductCandidate(
+                product_family=ProductFamily.DOMESTIC_ETP,
+                product_id="KR7091160002",
+                product_name="삼성 KODEX 반도체 증권상장지수투자신탁[주식]",
+                aliases=("091160", "A091160"),
+            ),
+        ),
+        database_sha256s={ProductFamily.DOMESTIC_ETP: _SHA_A},
+        candidate_filter_sha256=_SHA_B,
+        explicit_identity_bound=True,
+    )
+
+    relations = VerifiedLiveRelationExtractor().extract(snapshot, requirement, universe)
+
+    assert relations
+    assert {item.valid_from for item in relations} == {date(2026, 3, 31)}
+    assert {item.valid_to for item in relations} == {date(2026, 3, 31)}
+    assert {item.observed_at for item in relations} == {date(2026, 4, 16)}
+    assert {
+        evidence.as_of for relation in relations for evidence in relation.evidence
+    } == {date(2026, 3, 31)}
 
 
 def test_verified_external_identity_with_empty_provided_db_intersection_is_not_found() -> None:
@@ -1766,6 +2319,143 @@ def test_linked_kodex_identity_and_risk_pdf_keep_two_exact_evidence_spans() -> N
     assert {item.product_id for item in relations} == {"KR7461950003"}
     assert all(len(item.evidence) == 2 for item in relations)
     assert {item.source_uri for item in relations[0].evidence} == {page_url, risk_url}
+
+
+def test_single_product_factsheet_does_not_promote_etf_constituent_to_owner() -> None:
+    registry = load_official_source_registry()
+    url = "https://investments.miraeasset.com/tigeretf/upload/etf/general-owner-test.pdf"
+    body = (
+        "미래에셋 TIGER 2차전지TOP10 레버리지 증권상장지수투자신탁(주식-파생형)\n"
+        "TIGER 2차전지TOP10레버리지\n(412570)\n기본정보\n"
+        "상위 10종목\n1 TIGER 2차전지TOP10 23.57\n"
+        "2 에코프로비엠 15.64\n* 포트폴리오 구성종목 내역입니다."
+    ).encode()
+    snapshot = OfficialSourceSnapshot(
+        source=registry.authorize_url(url, KnowledgeCapability.PORTFOLIO_HOLDINGS),
+        capability=KnowledgeCapability.PORTFOLIO_HOLDINGS,
+        source_uri=url,
+        title="단일 상품 공식 팩트시트",
+        content_type="text/html",
+        content=body,
+        content_sha256=hashlib.sha256(body).hexdigest(),
+        published_at=date(2026, 8, 20),
+        as_of=date(2026, 8, 20),
+    )
+    question = "에코프로비엠을 편입한 국내 ETF를 알려줘."
+    requirement = (
+        CompositeKnowledgePlanCompiler()
+        .compile(
+            question,
+            "factsheet-owner-holdings",
+            _intent(
+                question,
+                capability=KnowledgeCapability.PORTFOLIO_HOLDINGS,
+                subject="에코프로비엠",
+                relation="편입한",
+                family=ProductFamily.DOMESTIC_ETP,
+            ),
+        )
+        .requirements[0]
+    )
+    owner = ProvidedProductCandidate(
+        product_family=ProductFamily.DOMESTIC_ETP,
+        product_id="KR7412570004",
+        product_name=(
+            "미래에셋 TIGER 2차전지TOP10레버리지 증권상장지수투자신탁(주식-파생형)"
+        ),
+        aliases=("A412570", "TIGER 2차전지TOP10레버리지"),
+    )
+    constituent = ProvidedProductCandidate(
+        product_family=ProductFamily.DOMESTIC_ETP,
+        product_id="KR7364980003",
+        product_name="미래에셋 TIGER 2차전지TOP10 증권상장지수투자신탁(주식)",
+        aliases=("A364980", "TIGER 2차전지TOP10"),
+    )
+    universe = ProvidedProductCandidateUniverse(
+        candidates=(constituent, owner),
+        database_sha256s={ProductFamily.DOMESTIC_ETP: _SHA_A},
+        candidate_filter_sha256=_SHA_B,
+    )
+
+    relations = VerifiedLiveRelationExtractor().extract_many(
+        (snapshot,), requirement, universe
+    )
+
+    assert {item.product_id for item in relations} == {owner.product_id}
+    all_evidence = tuple(item for relation in relations for item in relation.evidence)
+    assert any(
+        owner.product_name.replace(" ", "")[:12] in evidence.excerpt.replace(" ", "")
+        for evidence in all_evidence
+    )
+    assert any("에코프로비엠" in item.excerpt for item in all_evidence)
+
+
+def test_single_product_factsheet_recognizes_official_original_capital_loss_wording() -> None:
+    registry = load_official_source_registry()
+    url = "https://investments.miraeasset.com/tigeretf/upload/etf/general-risk-test.pdf"
+    body = (
+        "미래에셋 TIGER 2차전지TOP10 레버리지 증권상장지수투자신탁(주식-파생형)\n"
+        "TIGER 2차전지TOP10레버리지\n(412570)\n기본정보\n"
+        "상위 10종목\n1 TIGER 2차전지TOP10 23.57\n"
+        "ETF는 실적배당상품이며 원본의 손실이 발생할 수 있습니다."
+    ).encode()
+    snapshot = OfficialSourceSnapshot(
+        source=registry.authorize_url(url, KnowledgeCapability.PRODUCT_RISK_FACTORS),
+        capability=KnowledgeCapability.PRODUCT_RISK_FACTORS,
+        source_uri=url,
+        title="단일 상품 공식 팩트시트",
+        content_type="text/html",
+        content=body,
+        content_sha256=hashlib.sha256(body).hexdigest(),
+        published_at=date(2026, 8, 20),
+        as_of=date(2026, 8, 20),
+    )
+    owner = ProvidedProductCandidate(
+        product_family=ProductFamily.DOMESTIC_ETP,
+        product_id="KR7412570004",
+        product_name=(
+            "미래에셋 TIGER 2차전지TOP10레버리지 증권상장지수투자신탁(주식-파생형)"
+        ),
+        aliases=("A412570", "TIGER 2차전지TOP10레버리지"),
+    )
+    constituent = ProvidedProductCandidate(
+        product_family=ProductFamily.DOMESTIC_ETP,
+        product_id="KR7364980003",
+        product_name="미래에셋 TIGER 2차전지TOP10 증권상장지수투자신탁(주식)",
+        aliases=("A364980", "TIGER 2차전지TOP10"),
+    )
+    question = f"{owner.product_name}의 위험요인을 알려줘."
+    requirement = (
+        CompositeKnowledgePlanCompiler()
+        .compile(
+            question,
+            "factsheet-owner-risk",
+            _intent(
+                question,
+                capability=KnowledgeCapability.PRODUCT_RISK_FACTORS,
+                subject=owner.product_name,
+                relation="위험요인",
+                family=ProductFamily.DOMESTIC_ETP,
+            ),
+        )
+        .requirements[0]
+    )
+    universe = ProvidedProductCandidateUniverse(
+        candidates=(constituent, owner),
+        database_sha256s={ProductFamily.DOMESTIC_ETP: _SHA_A},
+        candidate_filter_sha256=_SHA_B,
+    )
+
+    relations = VerifiedLiveRelationExtractor().extract_many(
+        (snapshot,), requirement, universe
+    )
+
+    assert {item.product_id for item in relations} == {owner.product_id}
+    assert any(
+        "원본의 손실" in evidence.excerpt
+        for item in relations
+        for evidence in item.evidence
+    )
 
 
 def test_theme_relation_does_not_spill_to_neighbouring_products_in_one_table() -> None:

@@ -171,6 +171,9 @@ class OfficialSourceSnapshot:
     published_at: date | None
     as_of: date
     db_ticker: str | None = None
+    # Present only when the bytes came from a verified approved corpus. Live
+    # HTTP snapshots keep ``None`` and retain their existing derived IDs.
+    approved_document_id: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

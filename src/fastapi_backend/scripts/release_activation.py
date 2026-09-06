@@ -508,6 +508,10 @@ def _compose_command(env_file: Path, arguments: list[str]) -> list[str]:
         environment.get("FINANCE_EXTERNAL_DOCUMENT_DENSE_ARTIFACT_FILE", ""),
         environment.get("FINANCE_EXTERNAL_DOCUMENT_CACHE_ACTIVATION_HOST_FILE", ""),
         environment.get("FINANCE_EXTERNAL_DOCUMENT_CACHE_ACTIVATION_FILE", ""),
+        environment.get("FINANCE_EXTERNAL_DOCUMENT_CORPUS_MANIFEST_HOST_FILE", ""),
+        environment.get("FINANCE_EXTERNAL_DOCUMENT_CORPUS_MANIFEST_FILE", ""),
+        environment.get("FINANCE_EXTERNAL_DOCUMENT_CORPUS_HOST_DIR", ""),
+        environment.get("FINANCE_EXTERNAL_DOCUMENT_CORPUS_ROOT", ""),
     )
     if any(document_cache_values) and not all(document_cache_values):
         raise ReleaseActivationError("Document Dense release profile is incomplete")
@@ -515,6 +519,16 @@ def _compose_command(env_file: Path, arguments: list[str]) -> list[str]:
         if adaptive != "true":
             raise ReleaseActivationError("Document Dense release requires adaptive semantics")
         compose_files.extend(["-f", "src/fastapi_backend/docker-compose.document-cache.yml"])
+    live_search_values = (
+        environment.get("NAVER_API_HUB_CLIENT_ID_HOST_FILE", ""),
+        environment.get("NAVER_API_HUB_CLIENT_ID_FILE", ""),
+        environment.get("NAVER_API_HUB_CLIENT_SECRET_HOST_FILE", ""),
+        environment.get("NAVER_API_HUB_CLIENT_SECRET_FILE", ""),
+    )
+    if any(live_search_values) and not all(live_search_values):
+        raise ReleaseActivationError("NAVER API HUB release profile is incomplete")
+    if all(live_search_values):
+        compose_files.extend(["-f", "src/fastapi_backend/docker-compose.live-search.yml"])
     return [
         "docker",
         "compose",

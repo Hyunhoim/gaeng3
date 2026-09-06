@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Iterable
 from enum import StrEnum
 from functools import lru_cache
 from importlib.resources import files
@@ -33,8 +34,11 @@ class KnowledgeCoverageEntry(BaseModel):
         if self.status == "not_configured":
             if self.runtime_execution_enabled or self.corpus_sha256 or self.index_sha256:
                 raise ValueError("unconfigured knowledge cannot carry runtime authority")
-        elif self.status == "approved" and (not self.corpus_sha256 or not self.index_sha256):
-            raise ValueError("approved knowledge requires corpus and index SHA-256")
+        elif self.status == "approved":
+            if not self.corpus_sha256 or not self.index_sha256:
+                raise ValueError("approved knowledge requires corpus and index SHA-256")
+            if "external_approved" not in self.allowed_source_kinds:
+                raise ValueError("approved cached knowledge requires approved external sources")
         elif self.status == "approved_live_official":
             if not self.runtime_execution_enabled:
                 raise ValueError("live official knowledge must be enabled explicitly")
@@ -64,6 +68,48 @@ class ApprovedKnowledgeCoverageManifest(BaseModel):
 
     def require(self, capability: KnowledgeCapability) -> KnowledgeCoverageEntry:
         return next(entry for entry in self.capabilities if entry.capability is capability)
+
+    def require_cache_only_binding(
+        self,
+        *,
+        capabilities: Iterable[KnowledgeCapability],
+        corpus_manifest_sha256: str,
+        document_dense_artifact_sha256: str,
+    ) -> None:
+        """Authorize one immutable cache without borrowing live-search authority.
+
+        For ``status=approved`` entries, ``corpus_sha256`` is the canonical
+        approved-corpus manifest hash and ``index_sha256`` is the canonical
+        approved Document Dense artifact hash.  The activation receipt binds
+        that Dense artifact to its BM25 payload and calibration policy; callers
+        must verify the receipt independently before invoking this method.
+
+        Only capabilities represented by the activation receipt may be
+        executable.  This prevents a live-only or unrelated approved entry
+        from granting evaluation cache authority.
+        """
+
+        activated = frozenset(capabilities)
+        if not activated:
+            raise ValueError("cache-only coverage requires at least one activated capability")
+        if not activated.issubset(set(KnowledgeCapability)):
+            raise ValueError("cache-only coverage contains an unknown capability")
+        for entry in self.capabilities:
+            if entry.capability in activated:
+                if (
+                    entry.status != "approved"
+                    or not entry.runtime_execution_enabled
+                    or "external_approved" not in entry.allowed_source_kinds
+                    or entry.corpus_sha256 != corpus_manifest_sha256
+                    or entry.index_sha256 != document_dense_artifact_sha256
+                ):
+                    raise ValueError(
+                        "cache-only capability is not bound to the approved corpus and index"
+                    )
+            elif entry.runtime_execution_enabled:
+                raise ValueError(
+                    "cache-only coverage enables a capability absent from the activation receipt"
+                )
 
     @property
     def canonical_sha256(self) -> str:

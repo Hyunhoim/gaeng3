@@ -6,7 +6,9 @@ from decimal import Decimal
 import pytest
 
 from finance_agent_core.agent.compound_query import (
+    CohortComparisonUnavailableError,
     CompoundFamilyPlan,
+    CompoundFilter,
     CompoundMetric,
     TypedCompoundPlan,
     TypedCompoundQueryEngine,
@@ -503,6 +505,148 @@ def test_duplicate_public_identity_uses_first_eligible_ranking_row(
         "KR0000000002",
     ]
     assert execution.metric_values == (Decimal("5.4"), Decimal("5.1"))
+
+
+def test_overseas_equal_numeric_metric_ties_use_public_ticker_order(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Exchange-qualified storage IDs must not decide public result order."""
+
+    engine = _engine()
+    records = (
+        _record("AMX:BIV", ticker="BIV", values={"du_last_aum": "100"}),
+        _record("AMX:BLV", ticker="BLV", values={"du_last_aum": "100"}),
+        _record("AMX:BSV", ticker="BSV", values={"du_last_aum": "100"}),
+        _record("NAS:BND.O", ticker="BND.O", values={"du_last_aum": "100"}),
+    )
+    monkeypatch.setattr(engine, "_load_records", lambda *_args, **_kwargs: records)
+    family_plan = CompoundFamilyPlan(
+        product_family=ProductFamily.OVERSEAS_ETP,
+        filters=(),
+        metric=CompoundMetric("field", ("du_last_aum",)),
+        direction=SortDirection.DESC,
+        limit=4,
+    )
+    plan = TypedCompoundPlan(
+        question_id="overseas-public-ticker-tie",
+        question="해외 ETF AUM이 같은 경우 공개 티커 순으로 4개",
+        interaction_intent=InteractionIntent.SEARCH,
+        kind="bounded",
+        family_plans=(family_plan,),
+    )
+
+    execution = engine.execute(plan).families[0]
+
+    assert execution.candidate_count == 4
+    assert [record.ticker for record in execution.product_records] == [
+        "BIV",
+        "BLV",
+        "BND.O",
+        "BSV",
+    ]
+
+
+def test_cohort_mean_comparison_rejects_different_trading_currencies(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    engine = _engine()
+    records = {
+        ProductFamily.DOMESTIC_ETP: (
+            _record(
+                "A091160",
+                ticker="A091160",
+                values={"du_last_aum": "100", "pd_curr_cd": "CURR_CD_KRW"},
+            ),
+        ),
+        ProductFamily.OVERSEAS_ETP: (
+            _record(
+                "NAS:BND.O",
+                ticker="BND.O",
+                values={"du_last_aum": "100", "pd_trd_ccy": "USD"},
+            ),
+        ),
+    }
+    monkeypatch.setattr(
+        engine,
+        "_load_records",
+        lambda family, **_kwargs: records[family],
+    )
+    plan = TypedCompoundPlan(
+        question_id="cross-currency-cohort",
+        question="국내 ETF와 해외 ETF AUM 평균 비교",
+        interaction_intent=InteractionIntent.AGGREGATE,
+        kind="cohort",
+        family_plans=(
+            CompoundFamilyPlan(
+                product_family=ProductFamily.DOMESTIC_ETP,
+                filters=(),
+                metric=CompoundMetric("field", ("du_last_aum",)),
+                direction=SortDirection.DESC,
+                limit=3,
+            ),
+            CompoundFamilyPlan(
+                product_family=ProductFamily.OVERSEAS_ETP,
+                filters=(),
+                metric=CompoundMetric("field", ("du_last_aum",)),
+                direction=SortDirection.DESC,
+                limit=3,
+            ),
+        ),
+        cohort_mean_direction=SortDirection.DESC,
+        cohort_mean_difference=True,
+    )
+
+    with pytest.raises(
+        CohortComparisonUnavailableError,
+        match="directly comparable",
+    ):
+        engine.execute(plan)
+
+
+def test_cohort_mean_comparison_rejects_an_empty_metric_cohort(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    engine = _engine()
+    alpha = CompoundFamilyPlan(
+        product_family=ProductFamily.FUND,
+        filters=(CompoundFilter("or_attr_desc", "eq", "알파"),),
+        metric=CompoundMetric("field", ("sale_co_rwrd_r",)),
+        direction=SortDirection.DESC,
+        limit=3,
+        cohort_label="알파",
+    )
+    beta = CompoundFamilyPlan(
+        product_family=ProductFamily.FUND,
+        filters=(CompoundFilter("or_attr_desc", "eq", "베타"),),
+        metric=CompoundMetric("field", ("sale_co_rwrd_r",)),
+        direction=SortDirection.DESC,
+        limit=3,
+        cohort_label="베타",
+    )
+    monkeypatch.setattr(
+        engine,
+        "_load_records",
+        lambda _family, *, filters, **_kwargs: (
+            ()
+            if filters == alpha.filters
+            else (_record("FUND-BETA", values={"sale_co_rwrd_r": "0.5"}),)
+        ),
+    )
+    plan = TypedCompoundPlan(
+        question_id="empty-cohort",
+        question="두 공모펀드 집단의 판매회사보수 평균 비교",
+        interaction_intent=InteractionIntent.AGGREGATE,
+        kind="cohort",
+        family_plans=(alpha, beta),
+        cohort_mean_direction=SortDirection.DESC,
+        cohort_mean_difference=True,
+    )
+
+    with pytest.raises(
+        CohortComparisonUnavailableError,
+        match="complete, directly comparable",
+    ):
+        engine.execute(plan)
 
 
 def test_parallel_family_local_metric_wins_over_coordinated_prefix() -> None:

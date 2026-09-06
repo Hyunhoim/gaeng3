@@ -27,6 +27,7 @@ from finance_agent_core.contracts.external_knowledge import KnowledgeIntentRequi
 from finance_agent_core.contracts.queryplan import ProductFamily
 from finance_agent_core.contracts.routing import InteractionIntent
 from finance_agent_core.execution.external_knowledge_executor import (
+    ExternalKnowledgeExecutionError,
     ExternalKnowledgeExecutor,
 )
 from finance_agent_core.execution.external_knowledge_verifier import (
@@ -215,6 +216,7 @@ def _evidence(
     *,
     content_sha256: str = _SHA_A,
     as_of: date = date(2026, 8, 22),
+    excerpt: str = "공식 원문에서 확인된 관계 근거",
 ) -> ExternalEvidenceReference:
     return ExternalEvidenceReference(
         evidence_id=evidence_id,
@@ -227,7 +229,7 @@ def _evidence(
         as_of=as_of,
         content_sha256=content_sha256,
         locator="section 1",
-        excerpt="공식 원문에서 확인된 관계 근거",
+        excerpt=excerpt,
     )
 
 
@@ -416,6 +418,34 @@ def test_public_api_classifies_incomplete_external_search_as_cannot_verify() -> 
     assert "safe_cannot_verify_response" in official.think_trace
 
 
+def test_public_api_without_external_runtime_returns_cannot_verify_not_503() -> None:
+    question = "캠브리콘이 편입된 중국 반도체 해외 ETF를 알려줘."
+    draft = _intent(
+        question,
+        [(KnowledgeCapability.PORTFOLIO_HOLDINGS, "캠브리콘", "편입된")],
+        [ProductFamily.OVERSEAS_ETP],
+    )
+    agent = RoutedFinanceAgent(
+        {},
+        intent_analysis_provider=_FixedIntentProvider(draft),
+        external_knowledge_router=None,
+        external_knowledge_runtime=None,
+    )
+
+    result = execute_answer_request(
+        agent,
+        BackendAgentRequest(request_id="external-runtime-disabled", question=question),
+    )
+
+    assert result.http_status_code == 200
+    assert result.response.status is BackendStatus.CANNOT_VERIFY
+    assert result.response.query_plan is not None
+    assert result.response.query_plan.plan_kind == "composite_external_knowledge"
+    assert not result.response.query_plan.execution_authorized
+    assert result.response.products == []
+    assert result.response.documents == []
+
+
 def test_verified_external_relation_precedes_db_ranking_fast_path() -> None:
     question = (
         "에코프로의 자회사를 편입한 국내 ETF 중 순자산이 큰 상품의 "
@@ -528,7 +558,7 @@ def test_public_example_types_compile_to_non_executable_composite_plans(
         assert plan.requirements[2].depends_on == ("need_2",)
 
 
-def test_normal_external_question_enters_approved_live_execution() -> None:
+def test_normal_external_question_waits_for_approved_cache_evidence() -> None:
     question = "캠브리콘을 편입한 중국 반도체 해외 ETF를 찾아줘."
     decision = ExternalKnowledgeRouter().route(
         question,
@@ -540,10 +570,10 @@ def test_normal_external_question_enters_approved_live_execution() -> None:
         ),
     )
 
-    assert decision.disposition is ExternalKnowledgeRouteDisposition.EXECUTE
-    assert decision.reason_code == "external_knowledge_authorized"
+    assert decision.disposition is ExternalKnowledgeRouteDisposition.KNOWLEDGE_SEARCH
+    assert decision.reason_code == "approved_evidence_required"
     assert decision.plan is not None
-    assert decision.plan.execution_authorized is True
+    assert decision.plan.execution_authorized is False
 
 
 def test_temporal_relation_store_requires_cutoff_and_exact_entity_aliases() -> None:
@@ -950,6 +980,7 @@ def test_external_knowledge_executor_joins_sealed_relation_and_verifier() -> Non
                 "https://www.fsc.go.kr/po010103/86950",
                 "금융위원회",
                 as_of=date(2026, 5, 21),
+                excerpt="국민성장펀드는 정부와 민간이 함께 출자하는 구조로 조성됩니다.",
             ),
         ),
     )
@@ -972,3 +1003,278 @@ def test_external_knowledge_executor_joins_sealed_relation_and_verifier() -> Non
 
     assert execution.verification.passed
     assert execution.evidence.requirement_relations == {"need_1": ("rel-fund-structure",)}
+
+
+def test_fund_requirements_keep_structure_and_sales_trend_evidence_separate() -> None:
+    question = "국민성장펀드의 구조와 판매 진행 상황을 알려줘"
+    plan = CompositeKnowledgePlanCompiler().compile(
+        question,
+        "fund-dimension-separation",
+        _intent(
+            question,
+            [
+                (
+                    KnowledgeCapability.FUND_STRUCTURE_STRATEGY_TREND,
+                    "국민성장펀드",
+                    "구조",
+                ),
+                (
+                    KnowledgeCapability.FUND_STRUCTURE_STRATEGY_TREND,
+                    "국민성장펀드",
+                    "판매 진행 상황",
+                ),
+            ],
+            [ProductFamily.FUND],
+            interaction_intent=InteractionIntent.EXPLAIN,
+        ),
+    )
+    subject = _entity("fund-national-growth", TemporalEntityKind.FUND, "국민성장펀드")
+    structure = TemporalRelationRecord(
+        relation_id="rel-fund-structure",
+        capability=KnowledgeCapability.FUND_STRUCTURE_STRATEGY_TREND,
+        predicate="describes_fund_structure_trend",
+        subject=subject,
+        object=_entity("structure", TemporalEntityKind.POLICY_EVENT, "투자 구조"),
+        observed_at=date(2026, 5, 21),
+        evidence=(
+            _evidence(
+                "ev-fund-structure",
+                "fsc-policy",
+                "https://www.fsc.go.kr/po010103/86950",
+                "금융위원회",
+                as_of=date(2026, 5, 21),
+                excerpt="국민성장펀드는 정부와 민간이 함께 출자하는 구조로 조성됩니다.",
+            ),
+        ),
+    )
+    sales_trend = TemporalRelationRecord(
+        relation_id="rel-fund-sales-trend",
+        capability=KnowledgeCapability.FUND_STRUCTURE_STRATEGY_TREND,
+        predicate="describes_fund_structure_trend",
+        subject=subject,
+        object=_entity("sales", TemporalEntityKind.POLICY_EVENT, "판매 진행 상황"),
+        observed_at=date(2026, 5, 29),
+        evidence=(
+            _evidence(
+                "ev-fund-sales-trend",
+                "fsc-policy",
+                "https://www.fsc.go.kr/po010102/87009",
+                "금융위원회",
+                as_of=date(2026, 5, 29),
+                excerpt="국민성장펀드 판매가 완료됐으며 향후 운용 일정이 진행될 예정입니다.",
+            ),
+        ),
+    )
+
+    class _NoProductFacts:
+        def fetch(self, product_keys, selection, requested_fields):
+            assert product_keys == ()
+            assert selection is None
+            assert requested_fields == ()
+            return ()
+
+    execution = ExternalKnowledgeExecutor(
+        relation_store=TemporalRelationStore(
+            seal_temporal_relation_bundle(
+                (structure, sales_trend), corpus_manifest_sha256=_SHA_B
+            )
+        ),
+        product_fact_provider=_NoProductFacts(),
+        approved_product_ids=set(),
+    ).execute(plan)
+
+    assert execution.verification.passed
+    assert execution.evidence.requirement_relations == {
+        "need_1": ("rel-fund-structure",),
+        "need_2": ("rel-fund-sales-trend",),
+    }
+
+    swapped = execution.evidence.model_copy(
+        update={
+            "requirement_relations": {
+                "need_1": ("rel-fund-sales-trend",),
+                "need_2": ("rel-fund-sales-trend",),
+            }
+        }
+    )
+    rejected = ExternalKnowledgeEvidenceVerifier().verify(
+        swapped,
+        approved_product_ids=set(),
+    )
+    assert not rejected.passed
+    assert not rejected.checks["requirement_scope"]
+
+
+def test_external_evidence_publication_order_is_stable_and_independently_verified() -> None:
+    question = (
+        "우주항공 테마와 연결된 국내 ETF를 테마 연결 공식 근거의 "
+        "발행일이 최신인 순서로 최대 2개 알려줘."
+    )
+    plan = CompositeKnowledgePlanCompiler().compile(
+        question,
+        "evidence-publication-order",
+        _intent(
+            question,
+            [
+                (
+                    KnowledgeCapability.SECTOR_THEME_HISTORY,
+                    "우주항공 테마",
+                    "우주항공 테마와 연결된",
+                )
+            ],
+            [ProductFamily.DOMESTIC_ETP],
+        ),
+    )
+    theme = _entity("theme-space", TemporalEntityKind.THEME, "우주항공 테마")
+
+    def relation(product_id: str, published_at: date | None) -> TemporalRelationRecord:
+        product = _entity(
+            f"product-{product_id.casefold()}",
+            TemporalEntityKind.PRODUCT,
+            f"ETF {product_id}",
+        )
+        evidence = _evidence(
+            f"ev-theme-{product_id.casefold()}",
+            (
+                "samsungfund-kodex-newsroom"
+                if published_at is not None
+                else "ace-etf-official"
+            ),
+            (
+                "https://www.samsungfund.com/upload/kodex/newsroom/20260416171916907.pdf"
+                if published_at is not None
+                else "https://www.aceetf.co.kr/fund"
+            ),
+            "삼성자산운용" if published_at is not None else "한국투자신탁운용",
+            as_of=date(2026, 8, 22),
+        ).model_copy(update={"published_at": published_at})
+        return TemporalRelationRecord(
+            relation_id=f"rel-theme-{product_id.casefold()}",
+            capability=KnowledgeCapability.SECTOR_THEME_HISTORY,
+            predicate="theme_related",
+            subject=theme,
+            object=product,
+            product_family=ProductFamily.DOMESTIC_ETP,
+            product_id=product_id,
+            observed_at=date(2026, 8, 22),
+            evidence=(evidence,),
+        )
+
+    relations = (
+        relation("A100001", date(2026, 4, 1)),
+        relation("A100002", date(2026, 7, 1)),
+        relation("A100003", None),
+    )
+    store = TemporalRelationStore(
+        seal_temporal_relation_bundle(relations, corpus_manifest_sha256=_SHA_B)
+    )
+
+    class _OrderedProductFacts:
+        def fetch(self, product_keys, selection, requested_fields):
+            assert selection is None
+            assert requested_fields == ()
+            return tuple(
+                OfficialProductFact(
+                    evidence_id=f"provided-name-{product_id.casefold()}",
+                    product_family=family,
+                    product_id=product_id,
+                    product_name=f"ETF {product_id}",
+                    canonical_field="product_name",
+                    normalized_value=f"ETF {product_id}",
+                    as_of=date(2026, 8, 22),
+                    source_dataset="domestic_etp",
+                    source_id="PREF01N001",
+                    source_row=index + 2,
+                    source_columns=("prd_nm",),
+                    unit="text",
+                    source_database_sha256=_SHA_A,
+                )
+                for index, (family, product_id) in enumerate(product_keys)
+            )
+
+    approved = {
+        (ProductFamily.DOMESTIC_ETP, "A100001"),
+        (ProductFamily.DOMESTIC_ETP, "A100002"),
+        (ProductFamily.DOMESTIC_ETP, "A100003"),
+    }
+    executor = ExternalKnowledgeExecutor(
+        relation_store=store,
+        product_fact_provider=_OrderedProductFacts(),
+        approved_product_ids=approved,
+    )
+    execution = executor.execute(plan)
+
+    assert [fact.product_id for fact in execution.evidence.product_facts] == [
+        "A100002",
+        "A100001",
+    ]
+    assert execution.verification.passed
+
+    tampered = execution.evidence.model_copy(
+        update={"product_facts": tuple(reversed(execution.evidence.product_facts))}
+    )
+    rejected = ExternalKnowledgeEvidenceVerifier().verify(
+        tampered,
+        approved_product_ids=approved,
+    )
+    assert not rejected.passed
+    assert not rejected.checks["evidence_date_order"]
+
+
+def test_publication_order_does_not_fall_back_to_as_of() -> None:
+    question = (
+        "우주항공 테마와 연결된 국내 ETF를 테마 연결 공식 근거의 "
+        "게시일이 최신인 순서로 알려줘."
+    )
+    plan = CompositeKnowledgePlanCompiler().compile(
+        question,
+        "missing-publication-order",
+        _intent(
+            question,
+            [
+                (
+                    KnowledgeCapability.SECTOR_THEME_HISTORY,
+                    "우주항공 테마",
+                    "우주항공 테마와 연결된",
+                )
+            ],
+            [ProductFamily.DOMESTIC_ETP],
+        ),
+    )
+    relation = TemporalRelationRecord(
+        relation_id="rel-theme-no-published-at",
+        capability=KnowledgeCapability.SECTOR_THEME_HISTORY,
+        predicate="theme_related",
+        subject=_entity("theme-space-missing", TemporalEntityKind.THEME, "우주항공 테마"),
+        object=_entity("product-a100004", TemporalEntityKind.PRODUCT, "ETF A100004"),
+        product_family=ProductFamily.DOMESTIC_ETP,
+        product_id="A100004",
+        observed_at=date(2026, 8, 22),
+        evidence=(
+            _evidence(
+                "ev-theme-no-published-at",
+                "ace-etf-official",
+                "https://www.aceetf.co.kr/fund",
+                "한국투자신탁운용",
+                as_of=date(2026, 8, 22),
+            ).model_copy(update={"published_at": None}),
+        ),
+    )
+
+    class _UnexpectedFacts:
+        def fetch(self, product_keys, selection, requested_fields):
+            raise AssertionError((product_keys, selection, requested_fields))
+
+    executor = ExternalKnowledgeExecutor(
+        relation_store=TemporalRelationStore(
+            seal_temporal_relation_bundle((relation,), corpus_manifest_sha256=_SHA_B)
+        ),
+        product_fact_provider=_UnexpectedFacts(),
+        approved_product_ids={(ProductFamily.DOMESTIC_ETP, "A100004")},
+    )
+
+    with pytest.raises(
+        ExternalKnowledgeExecutionError,
+        match="verified external evidence could not resolve the requested ordering",
+    ):
+        executor.execute(plan)

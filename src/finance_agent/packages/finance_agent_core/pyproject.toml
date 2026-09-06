@@ -61,8 +61,11 @@ finance-evaluate-approved-sql = "finance_agent_core.evaluation.approved_sql_base
 finance-benchmark-bm25-contract = "finance_agent_core.evaluation.bm25_contract_benchmark_cli:main"
 finance-corpus = "finance_agent_core.retrieval.corpus_cli:main"
 finance-collect-pending-corpus = "finance_agent_core.retrieval.pending_corpus_cli:main"
+finance-collect-open-dart = "finance_agent_core.retrieval.open_dart_cli:main"
 finance-expand-pending-corpus = "finance_agent_core.retrieval.corpus_expansion_cli:main"
 finance-build-pending-document-dense = "finance_agent_core.retrieval.document_dense_cli:main"
+finance-build-approved-document-dense = "finance_agent_core.retrieval.approved_document_dense_cli:main"
+finance-calibrate-document-dense = "finance_agent_core.evaluation.document_dense_calibration:main"
 finance-check-external-preblind = "finance_agent_core.evaluation.external_knowledge_preblind:main"
 finance-relations = "finance_agent_core.retrieval.relation_cli:main"
 finance-build-agent-release = "finance_agent_core.release_cli:main"
@@ -81,6 +84,7 @@ where = ["src"]
     "approved_source_registry.json",
     "pending_source_registry_extension.json",
     "external_knowledge_source_catalog.json",
+    "open_dart_filing_policy.json",
 ]
 "finance_agent_core.contracts" = ["queryplan.hcx.schema.json"]
 "finance_agent_core.contracts.examples" = ["*.json"]
@@ -94,6 +98,9 @@ where = ["src"]
 [tool.pytest.ini_options]
 addopts = "-ra"
 testpaths = ["tests"]
+markers = [
+    "historical_contract: frozen historical behavior that is not part of the current release gate",
+]
 
 [tool.ruff]
 line-length = 100

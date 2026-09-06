@@ -11,6 +11,10 @@ from finance_agent_core.agent.external_knowledge_router import ExternalKnowledge
 from finance_agent_core.agent.intent_analysis import (
     IntentAnalysisDraft,
     IntentExecutionClause,
+    SemanticFrameDirection,
+    SemanticFrameOperation,
+    SemanticFrameStatus,
+    semantic_frame_clause_is_schema_admissible,
     verify_intent_analysis,
 )
 from finance_agent_core.agent.providers import (
@@ -241,6 +245,52 @@ class _OmittedOverseasRelationTransport(_MissingOverseasEntityAliasTransport):
         return super().complete(request)
 
 
+class _MisidentifiedDocumentSubjectTransport(_MissingOverseasEntityAliasTransport):
+    def complete(self, request: HyperClovaXStructuredRequest) -> object:
+        self.requests.append(request)
+        if request.operation == "intent_analysis":
+            content = json.dumps(
+                {
+                    "schema_version": "1.0",
+                    "intent": "search",
+                    "product_families": ["domestic_etp", "overseas_etp"],
+                    "evidence_spans": ["삼성전자", "국내·해외 ETF"],
+                    "needs_clarification": False,
+                    "knowledge_requirements": [
+                        {
+                            "capability": "portfolio_holdings",
+                            "subject_span": "Global X 팩트시트의 AIQ",
+                            "relation_span": "상위 10개 종목",
+                            "search_aliases": [],
+                        }
+                    ],
+                },
+                ensure_ascii=False,
+            )
+        elif request.operation == "semantic_resolver":
+            assert "삼성전자" in request.user_prompt
+            content = json.dumps(
+                {
+                    "schema_version": "1.0",
+                    "aliases": [
+                        {
+                            "subject_span": "삼성전자",
+                            "search_aliases": ["Samsung Electronics"],
+                        }
+                    ],
+                },
+                ensure_ascii=False,
+            )
+        else:
+            raise AssertionError(f"unexpected operation: {request.operation}")
+        return {
+            "status_code": 200,
+            "content": content,
+            "request_id": f"misidentified-document-{len(self.requests)}",
+            "usage": {"input_tokens": 10, "output_tokens": 5, "total_tokens": 15},
+        }
+
+
 class _EmptyThenRepairedAliasTransport(_OmittedOverseasRelationTransport):
     def __init__(self) -> None:
         super().__init__()
@@ -468,7 +518,7 @@ def test_official_intent_provider_uses_one_hcx_repair_for_invalid_shape() -> Non
     ]
     assert transport.requests[1].schema_name == "finance_intent_analysis_repair"
     assert "knowledge_requirements" not in transport.requests[1].response_schema["properties"]
-    assert transport.requests[1].max_output_tokens == 768
+    assert transport.requests[1].max_output_tokens == 2048
 
 
 def test_official_intent_provider_literalizes_spacing_and_drops_clause_family_drift() -> None:
@@ -520,6 +570,117 @@ def test_official_intent_provider_literalizes_spacing_and_drops_clause_family_dr
     assert len(draft.execution_clauses) == 1
     assert draft.execution_clauses[0].text_span == "국내 ETF를 순자산 큰 순으로 3개"
     assert draft.execution_clauses[0].product_families == [ProductFamily.DOMESTIC_ETP]
+
+
+def test_official_intent_provider_parses_closed_full_semantic_frame() -> None:
+    class FullFrameTransport:
+        def complete(self, request: HyperClovaXStructuredRequest) -> object:
+            return {
+                "status_code": 200,
+                "content": json.dumps(
+                    {
+                        "schema_version": "1.0",
+                        "semantic_frame_version": "2.0",
+                        "intent": "search",
+                        "product_families": ["overseas_etp"],
+                        "evidence_spans": ["해외 ETF"],
+                        "needs_clarification": False,
+                        "knowledge_requirements": [],
+                        "execution_clauses": [
+                            {
+                                "sequence": 1,
+                                "role": "filter",
+                                "text_span": "돈그릇이 100억 이상인",
+                                "product_families": ["overseas_etp"],
+                                "semantic_status": "resolved",
+                                "field_id": "aum",
+                                "operation": "filter",
+                                "operator": "gte",
+                                "direction": "none",
+                                "field_span": "돈그릇",
+                                "value_span": "100억",
+                                "limit_span": "",
+                                "subject_span": "",
+                                "knowledge_capability": "none",
+                            }
+                        ],
+                    },
+                    ensure_ascii=False,
+                ),
+                "request_id": "full-frame",
+                "usage": {"input_tokens": 10, "output_tokens": 5, "total_tokens": 15},
+            }
+
+    provider = HyperClovaXIntentAnalysisProvider(
+        HyperClovaXSettings(model="HCX-007", timeout_seconds=10),
+        FullFrameTransport(),
+        require_execution_structure=True,
+    )
+
+    draft = provider.analyze_intent(
+        "돈그릇이 100억 이상인 해외 ETF 3개 알려줘",
+        "intent-full-frame",
+    )
+
+    clause = draft.execution_clauses[0]
+    assert draft.semantic_frame_version == "2.0"
+    assert clause.field_id == "aum"
+    assert clause.operation.value == "filter"
+    assert clause.operator.value == "gte"
+    assert clause.field_span == "돈그릇"
+    assert clause.value_span == "100억"
+
+
+def test_official_intent_provider_downgrades_invalid_clause_meaning_only() -> None:
+    class InvalidScopeMeaningTransport:
+        def complete(self, request: HyperClovaXStructuredRequest) -> object:
+            return {
+                "status_code": 200,
+                "content": json.dumps(
+                    {
+                        "schema_version": "1.0",
+                        "semantic_frame_version": "2.0",
+                        "intent": "search",
+                        "product_families": ["overseas_etp"],
+                        "evidence_spans": ["해외 ETF"],
+                        "needs_clarification": False,
+                        "knowledge_requirements": [],
+                        "execution_clauses": [
+                            {
+                                "sequence": 1,
+                                "role": "scope",
+                                "text_span": "해외 ETF",
+                                "product_families": ["overseas_etp"],
+                                "semantic_status": "resolved",
+                                "field_id": "__none__",
+                                "operation": "none",
+                                "operator": "none",
+                                "direction": "none",
+                                "field_span": "",
+                                "value_span": "",
+                                "limit_span": "",
+                                "subject_span": "",
+                                "knowledge_capability": "none",
+                            }
+                        ],
+                    },
+                    ensure_ascii=False,
+                ),
+                "request_id": "invalid-scope-meaning",
+                "usage": {"input_tokens": 10, "output_tokens": 5, "total_tokens": 15},
+            }
+
+    provider = HyperClovaXIntentAnalysisProvider(
+        HyperClovaXSettings(model="HCX-007", timeout_seconds=10),
+        InvalidScopeMeaningTransport(),
+        require_execution_structure=True,
+    )
+
+    draft = provider.analyze_intent("해외 ETF 3개 보여줘", "invalid-scope-meaning")
+
+    assert draft.intent is InteractionIntent.SEARCH
+    assert draft.execution_clauses[0].semantic_status.value == "not_applicable"
+    assert draft.execution_clauses[0].field_id == "__none__"
 
 
 def test_official_intent_provider_requires_structure_for_every_executable_question() -> None:
@@ -613,6 +774,45 @@ def test_official_intent_provider_repairs_server_relation_when_hcx_omits_it() ->
     assert draft.knowledge_requirements[0].search_aliases == ("Cambricon",)
 
 
+def test_alias_repair_uses_server_relation_when_hcx_misreads_document_subject() -> None:
+    transport = _MisidentifiedDocumentSubjectTransport()
+    provider = HyperClovaXIntentAnalysisProvider(
+        HyperClovaXSettings(model="HCX-007", timeout_seconds=10),
+        transport,
+    )
+    question = (
+        "Global X 팩트시트의 AIQ에 나온 상위 10개 종목을 확인하고, "
+        "그중 삼성전자 종목이 상위 10개에 들어 있는 국내·해외 ETF만 추려주세요."
+    )
+
+    draft = provider.analyze_intent(question, "intent-document-subject-alias-repair")
+
+    assert [request.operation for request in transport.requests] == [
+        "intent_analysis",
+        "semantic_resolver",
+    ]
+    assert [(item.subject_span, item.search_aliases) for item in draft.knowledge_requirements] == [
+        ("삼성전자", ("Samsung Electronics",)),
+    ]
+
+
+def test_official_intent_provider_does_not_call_alias_resolver_without_release_authority() -> None:
+    transport = _OmittedOverseasRelationTransport()
+    provider = HyperClovaXIntentAnalysisProvider(
+        HyperClovaXSettings(model="HCX-007", timeout_seconds=10),
+        transport,
+        allow_entity_alias_repair=False,
+    )
+
+    draft = provider.analyze_intent(
+        "KraneShares 공식 보유내역에서 캠브리콘 편입이 확인되는 해외 ETF를 알려줘.",
+        "intent-alias-repair-disabled",
+    )
+
+    assert [request.operation for request in transport.requests] == ["intent_analysis"]
+    assert draft.knowledge_requirements == []
+
+
 def test_official_intent_provider_retries_one_empty_entity_alias_proposal() -> None:
     transport = _EmptyThenRepairedAliasTransport()
     provider = HyperClovaXIntentAnalysisProvider(
@@ -646,7 +846,7 @@ def test_official_intent_provider_does_not_repair_false_database_relation() -> N
     )
 
     assert len(transport.requests) == 1
-    assert transport.requests[0].max_output_tokens == 1024
+    assert transport.requests[0].max_output_tokens == 2048
     assert draft.intent.value == "search"
 
 
@@ -910,6 +1110,17 @@ def test_intent_prompt_defines_korean_product_family_mapping_and_search_boundary
     assert "단순 질문을 포함해 항상" in prompt
 
 
+def test_intent_prompt_scopes_field_catalog_to_explicit_family() -> None:
+    full_prompt = build_intent_analysis_system_prompt()
+    overseas_prompt = build_intent_analysis_system_prompt("해외 ETF를 AUM 큰 순으로")
+
+    assert len(overseas_prompt) < len(full_prompt)
+    assert "\noverseas_etp|" in overseas_prompt
+    assert "\nbond|" not in overseas_prompt
+    assert "\ndomestic_etp|" not in overseas_prompt
+    assert "\nfund|" not in overseas_prompt
+
+
 def test_intent_verifier_treats_multi_family_order_as_semantically_irrelevant() -> None:
     question = "국내 ETF와 공모펀드를 1년 수익률 순으로 보여줘."
     route = RouteDecision(
@@ -937,6 +1148,153 @@ def test_intent_verifier_treats_multi_family_order_as_semantically_irrelevant() 
 
     assert verification.passed
     assert verification.reason_code == "intent_analysis_verified"
+
+
+def test_intent_semantic_rank_accepts_exact_limit_in_separate_presentation_clause() -> None:
+    question = "국내 ETF를 순자산이 큰 순으로 보여줘. 3개만 알려줘."
+    route = RouteDecision(
+        draft=MinimalQueryDraft(
+            request_id="official-intent-separated-limit-001",
+            question=question,
+            intent=InteractionIntent.SEARCH,
+            product_families=[ProductFamily.DOMESTIC_ETP],
+            product_mentions=[],
+        ),
+        disposition=RouteDisposition.EXECUTE,
+        reason_code="capability_executable",
+        reason="server-owned route is executable",
+        query_plan_intent=Intent.SEARCH,
+        capability_matrix_version="1.0",
+    )
+    draft = IntentAnalysisDraft(
+        intent=InteractionIntent.SEARCH,
+        product_families=[ProductFamily.DOMESTIC_ETP],
+        evidence_spans=["국내 ETF"],
+        needs_clarification=False,
+        execution_clauses=[
+            IntentExecutionClause(
+                sequence=1,
+                role="ranking",
+                text_span="순자산이 큰 순으로",
+                product_families=[ProductFamily.DOMESTIC_ETP],
+                semantic_status=SemanticFrameStatus.RESOLVED,
+                field_id="aum",
+                operation=SemanticFrameOperation.RANK,
+                direction=SemanticFrameDirection.DESC,
+                field_span="순자산",
+                limit_span="3개",
+            ),
+            IntentExecutionClause(
+                sequence=2,
+                role="presentation",
+                text_span="3개만 알려줘",
+                product_families=[ProductFamily.DOMESTIC_ETP],
+            ),
+        ],
+    )
+
+    assert verify_intent_analysis(question, route, draft).passed
+
+
+def test_intent_semantic_rank_drops_cross_clause_limit_hint_as_advisory() -> None:
+    question = "국내 ETF를 순자산이 큰 순으로 보여줘. 3개만 알려줘."
+    route = RouteDecision(
+        draft=MinimalQueryDraft(
+            request_id="official-intent-separated-limit-forged-001",
+            question=question,
+            intent=InteractionIntent.SEARCH,
+            product_families=[ProductFamily.DOMESTIC_ETP],
+            product_mentions=[],
+        ),
+        disposition=RouteDisposition.EXECUTE,
+        reason_code="capability_executable",
+        reason="server-owned route is executable",
+        query_plan_intent=Intent.SEARCH,
+        capability_matrix_version="1.0",
+    )
+    draft = IntentAnalysisDraft(
+        intent=InteractionIntent.SEARCH,
+        product_families=[ProductFamily.DOMESTIC_ETP],
+        evidence_spans=["국내 ETF"],
+        needs_clarification=False,
+        execution_clauses=[
+            IntentExecutionClause(
+                sequence=1,
+                role="ranking",
+                text_span="순자산이 큰 순으로",
+                product_families=[ProductFamily.DOMESTIC_ETP],
+                semantic_status=SemanticFrameStatus.RESOLVED,
+                field_id="aum",
+                operation=SemanticFrameOperation.RANK,
+                direction=SemanticFrameDirection.DESC,
+                field_span="순자산",
+                limit_span="3개",
+            ),
+            IntentExecutionClause(
+                sequence=2,
+                role="relation",
+                text_span="3개만 알려줘",
+                product_families=[ProductFamily.DOMESTIC_ETP],
+            ),
+        ],
+    )
+
+    verification = verify_intent_analysis(question, route, draft)
+
+    assert verification.passed
+    assert verification.reason_code == "intent_analysis_semantic_frame_schema_advisory"
+    assert not semantic_frame_clause_is_schema_admissible(
+        draft,
+        draft.execution_clauses[0],
+    )
+
+
+def test_repeated_limit_attached_to_neighbouring_clause_is_advisory() -> None:
+    """Repeated family-local counts cannot make HCX segmentation a veto."""
+
+    question = (
+        "해외 ETF 중 거래량 상위 14개를 먼저 추리고, 공모펀드 중 "
+        "순자산 상위 14개를 먼저 추려주세요."
+    )
+    route = RouteDecision(
+        draft=MinimalQueryDraft(
+            request_id="official-intent-repeated-limit-001",
+            question=question,
+            intent=InteractionIntent.SEARCH,
+            product_families=[ProductFamily.OVERSEAS_ETP, ProductFamily.FUND],
+            product_mentions=[],
+        ),
+        disposition=RouteDisposition.EXECUTE,
+        reason_code="cross_family_search_executable",
+        reason="server-owned compound route is executable",
+        query_plan_intent=Intent.SEARCH,
+        capability_matrix_version="1.0",
+    )
+    clause = IntentExecutionClause(
+        sequence=1,
+        role="ranking",
+        text_span="해외 ETF 중 거래량 상위",
+        product_families=[ProductFamily.OVERSEAS_ETP],
+        semantic_status=SemanticFrameStatus.RESOLVED,
+        field_id="trading_volume",
+        operation=SemanticFrameOperation.RANK,
+        direction=SemanticFrameDirection.DESC,
+        field_span="거래량",
+        limit_span="14개",
+    )
+    draft = IntentAnalysisDraft(
+        intent=InteractionIntent.SEARCH,
+        product_families=[ProductFamily.OVERSEAS_ETP, ProductFamily.FUND],
+        evidence_spans=[],
+        needs_clarification=False,
+        execution_clauses=[clause],
+    )
+
+    verification = verify_intent_analysis(question, route, draft)
+
+    assert verification.passed
+    assert verification.reason_code == "intent_analysis_semantic_frame_schema_advisory"
+    assert not semantic_frame_clause_is_schema_admissible(draft, clause)
 
 
 def test_grounded_hclx_partial_filter_restating_is_advisory_to_server_plan() -> None:
@@ -1271,3 +1629,49 @@ def test_hclx_intent_disagreement_is_audited_but_cannot_veto_server_execution() 
 
     assert verification.passed
     assert verification.reason_code == "intent_analysis_advisory_clarification"
+
+
+def test_hclx_schema_family_mistake_is_advisory_to_server_verified_identity() -> None:
+    question = "국내 ETF 상품코드 123456의 20거래일 연환산 변동성을 알려줘."
+    route = RouteDecision(
+        draft=MinimalQueryDraft(
+            request_id="official-intent-schema-family-advisory-001",
+            question=question,
+            intent=InteractionIntent.DETAIL,
+            product_families=[ProductFamily.DOMESTIC_ETP],
+            product_mentions=["123456"],
+        ),
+        disposition=RouteDisposition.EXECUTE,
+        reason_code="exact_product_identity",
+        reason="server-owned DB identity is executable",
+        query_plan_intent=Intent.SEARCH,
+        capability_matrix_version="1.0",
+    )
+    draft = IntentAnalysisDraft(
+        intent=InteractionIntent.SEARCH,
+        product_families=[ProductFamily.FUND],
+        evidence_spans=["123456", "20거래일 연환산 변동성"],
+        needs_clarification=False,
+        execution_clauses=[
+            IntentExecutionClause(
+                sequence=1,
+                role="projection",
+                text_span="20거래일 연환산 변동성",
+                product_families=[ProductFamily.FUND],
+                semantic_status=SemanticFrameStatus.RESOLVED,
+                field_id="twenty_day_volatility_pct",
+                operation=SemanticFrameOperation.PROJECT,
+                field_span="20거래일 연환산 변동성",
+            )
+        ],
+    )
+
+    verification = verify_intent_analysis(
+        question,
+        route,
+        draft,
+        require_execution_structure=True,
+    )
+
+    assert verification.passed
+    assert verification.reason_code == "intent_analysis_semantic_frame_schema_advisory"

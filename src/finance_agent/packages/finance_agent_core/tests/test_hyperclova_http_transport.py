@@ -207,6 +207,43 @@ def test_http_transport_normalizes_http_errors_without_reading_body(
     assert secret not in repr(result)
 
 
+def test_http_transport_carries_only_bounded_rate_limit_reset_metadata() -> None:
+    headers = Message()
+    headers["x-ratelimit-reset-tokens"] = "23s"
+    headers["x-ratelimit-reset-requests"] = "1.5s"
+    error = urllib.error.HTTPError(
+        "https://clovastudio.stream.ntruss.com/v3/chat-completions/HCX-007",
+        429,
+        "rate limited",
+        headers,
+        None,
+    )
+
+    result = _transport(FakeOpener(error)).complete(_semantic_request())
+
+    assert result.status_code == 429
+    assert result.retry_after_seconds == 23
+
+
+@pytest.mark.parametrize("reset_value", ["", "23", "nan", "61s", "secret"])
+def test_http_transport_rejects_untrusted_rate_limit_reset_values(
+    reset_value: str,
+) -> None:
+    headers = Message()
+    headers["x-ratelimit-reset-tokens"] = reset_value
+    error = urllib.error.HTTPError(
+        "https://clovastudio.stream.ntruss.com/v3/chat-completions/HCX-007",
+        429,
+        "rate limited",
+        headers,
+        None,
+    )
+
+    result = _transport(FakeOpener(error)).complete(_semantic_request())
+
+    assert result.retry_after_seconds is None
+
+
 @pytest.mark.parametrize(
     ("reason", "error_type"),
     [

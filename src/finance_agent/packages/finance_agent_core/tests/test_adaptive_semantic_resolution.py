@@ -7,11 +7,24 @@ from threading import Event, Thread
 
 import pytest
 
-from finance_agent_core.agent.adaptive_semantic import AdaptiveSemanticResolver
+from finance_agent_core.agent.adaptive_semantic import (
+    AdaptiveSemanticResolver,
+    promote_hclx_semantic_gap_trace,
+)
 from finance_agent_core.agent.compiler import (
     PlanCompilationBlockedError,
     ServerQueryPlanCompiler,
 )
+from finance_agent_core.agent.intent_analysis import (
+    IntentAnalysisDraft,
+    IntentExecutionClause,
+    SemanticFrameDirection,
+    SemanticFrameOperation,
+    SemanticFrameOperator,
+    SemanticFrameStatus,
+    semantic_frame_clause_is_schema_admissible,
+)
+from finance_agent_core.agent.linker import canonicalize_query_plan_payload
 from finance_agent_core.agent.providers import (
     HyperClovaXSemanticResolverProvider,
     HyperClovaXSettings,
@@ -30,10 +43,19 @@ from finance_agent_core.agent.semantic_resolution import (
     SemanticResolutionRequest,
     SpanSource,
 )
-from finance_agent_core.contracts.queryplan import ProductFamily, SortDirection
+from finance_agent_core.contracts.queryplan import (
+    ConstraintOperator,
+    ProductFamily,
+    QueryPlan,
+    SortDirection,
+)
 from finance_agent_core.contracts.routing import InteractionIntent, RouteDisposition
 from finance_agent_core.deadline import RequestDeadlineExceeded
-from finance_agent_core.domain import DatabaseManifest, NormalizedDomesticEtpRecord
+from finance_agent_core.domain import (
+    DatabaseManifest,
+    NormalizedDomesticEtpRecord,
+    NormalizedOverseasEtpRecord,
+)
 from finance_agent_core.evaluation.schema_embedding_artifacts import (
     SchemaEmbeddingArtifactGateEvidence,
     load_schema_embedding_candidate_link,
@@ -45,7 +67,14 @@ from finance_agent_core.observability import (
     InMemoryAuditSink,
     MetricCounter,
 )
-from finance_agent_core.release import RuntimeReleaseInputs, build_release_components
+from finance_agent_core.release import (
+    AgentReleaseError,
+    ModelRelease,
+    RetrievalRelease,
+    RuntimeFeatureRelease,
+    RuntimeReleaseInputs,
+    build_release_components,
+)
 from finance_agent_core.retrieval.schema_adaptive import ProductionHybridSchemaLinker
 from finance_agent_core.retrieval.schema_dense import (
     DenseSchemaIndex,
@@ -84,6 +113,7 @@ class _KureContractProvider:
         self.query_target = query_target
         self._vectors: dict[str, list[float]] = {}
         self.query_calls = 0
+        self.query_texts: list[str] = []
 
     @property
     def metadata(self) -> EmbeddingProviderMetadata:
@@ -117,6 +147,7 @@ class _KureContractProvider:
 
     def embed_query(self, text: str) -> list[float]:
         self.query_calls += 1
+        self.query_texts.append(text)
         return self._vectors[self.query_target]
 
 
@@ -177,11 +208,14 @@ def test_uncalibrated_sortable_fields_never_receive_dense_auto_authority(
         operation=ResolutionOperation.RANK,
     )
 
-    assert policy.has_explicit_threshold(
-        product_family=family,
-        field_id=field_id,
-        operation="rank",
-    ) is False
+    assert (
+        policy.has_explicit_threshold(
+            product_family=family,
+            field_id=field_id,
+            operation="rank",
+        )
+        is False
+    )
     assert threshold.semantic_group == "global_fallback"
     assert threshold.auto_admit is False
     assert linked.status.value == "abstain"
@@ -204,11 +238,14 @@ def test_calibration_gap_can_remain_hclx_candidate_only() -> None:
         operation=ResolutionOperation.RANK,
     )
 
-    assert policy.has_explicit_threshold(
-        product_family=family,
-        field_id=field_id,
-        operation="rank",
-    ) is False
+    assert (
+        policy.has_explicit_threshold(
+            product_family=family,
+            field_id=field_id,
+            operation="rank",
+        )
+        is False
+    )
     assert linked.status.value == "abstain"
     assert linked.reason_code == "hclx_review_required"
     assert linked.hclx_eligible is True
@@ -310,7 +347,11 @@ def test_kure_dense_resolves_only_schema_field_then_server_compiles_and_executes
         "adaptive-e2e",
     )
 
-    assert result.status == "executed", result
+    assert result.status == "executed", (
+        result.decision.reason_code,
+        result.answer,
+        result.query_plan,
+    )
     assert result.query_plan is not None
     assert [(item.field, item.direction.value) for item in result.query_plan.ranking] == [
         ("aum", "desc")
@@ -355,9 +396,702 @@ def test_clear_lexical_fast_path_never_calls_kure(
         adaptive_semantic_resolver=AdaptiveSemanticResolver(linker),
     ).answer("국내 ETF를 AUM 큰 순으로 3개 보여줘", "adaptive-fast-path")
 
-    assert result.status == "executed"
+    assert result.status == "executed", result
     assert result.query_plan is not None
     assert result.query_plan.ranking[0].field == "aum"
+    assert provider.query_calls == 0
+
+
+def _search_frame(
+    *,
+    family: ProductFamily,
+    text_span: str,
+    field_span: str,
+    field_id: str,
+    operation: SemanticFrameOperation,
+    direction: SemanticFrameDirection = SemanticFrameDirection.NONE,
+    operator: SemanticFrameOperator = SemanticFrameOperator.NONE,
+    value_span: str = "",
+) -> IntentAnalysisDraft:
+    return IntentAnalysisDraft(
+        intent=InteractionIntent.SEARCH,
+        product_families=[family],
+        evidence_spans=[],
+        needs_clarification=False,
+        execution_clauses=[
+            IntentExecutionClause(
+                sequence=1,
+                role=("ranking" if operation is SemanticFrameOperation.RANK else "filter"),
+                text_span=text_span,
+                product_families=[family],
+                semantic_status=SemanticFrameStatus.RESOLVED,
+                field_id=field_id,
+                operation=operation,
+                operator=operator,
+                direction=direction,
+                field_span=field_span,
+                value_span=value_span,
+            )
+        ],
+    )
+
+
+def test_complete_deterministic_plan_is_not_reopened_by_hclx_frame() -> None:
+    question = "장내 MBS 중 듀레이션이 6 이하인 상품을 발행잔액 낮은 것부터 5개 알려줘"
+    trace = IntentRouter(adaptive_semantic_enabled=True).route_with_planning(
+        question,
+        "complete-fast-path",
+    )
+    draft = _search_frame(
+        family=ProductFamily.BOND,
+        text_span="발행잔액 낮은 것부터",
+        field_span="발행잔액",
+        field_id="issue_amount",
+        operation=SemanticFrameOperation.RANK,
+        direction=SemanticFrameDirection.ASC,
+    )
+
+    promoted = promote_hclx_semantic_gap_trace(
+        trace.route_decision,
+        trace,
+        draft,
+    )
+
+    assert trace.planning_decision.path.value == "deterministic_fast"
+    assert promoted is trace
+
+
+class _FixedIntentProvider:
+    provider_name = "synthetic-hclx-intent"
+    model_name = "HCX-007"
+    require_execution_structure = True
+
+    def __init__(self, draft: IntentAnalysisDraft) -> None:
+        self.draft = draft
+        self.calls = 0
+
+    def analyze_intent(self, question: str, question_id: str) -> IntentAnalysisDraft:
+        assert question
+        assert question_id
+        self.calls += 1
+        return self.draft
+
+
+def test_primary_grounded_hclx_frame_skips_dense() -> None:
+    linker, provider = _production_linker()
+    trace = IntentRouter(adaptive_semantic_enabled=True).route_with_planning(
+        "미해결척도가 큰 국내 ETF를 3개 보여줘",
+        "hclx-frame-primary",
+    )
+    draft = _search_frame(
+        family=ProductFamily.DOMESTIC_ETP,
+        text_span="미해결척도가 큰",
+        field_span="미해결척도",
+        field_id="aum",
+        operation=SemanticFrameOperation.RANK,
+        direction=SemanticFrameDirection.DESC,
+    )
+
+    outcome = AdaptiveSemanticResolver(linker).resolve(trace, intent_draft=draft)
+
+    assert outcome.status == "resolved"
+    assert outcome.reason_code == "hclx_server_grounded"
+    assert outcome.hclx_frame_used is True
+    assert outcome.dense_attempted is False
+    assert outcome.receipt is not None
+    assert outcome.receipt.source is SpanSource.HCLX
+    assert outcome.receipt.field_id == "aum"
+    assert provider.query_calls == 0
+
+
+def test_hclx_frame_can_reopen_only_semantic_coverage_clarification() -> None:
+    original = IntentRouter(adaptive_semantic_enabled=False).route_with_planning(
+        "미해결척도가 큰 국내 ETF를 3개 보여줘",
+        "hclx-frame-bridge",
+    )
+    draft = _search_frame(
+        family=ProductFamily.DOMESTIC_ETP,
+        text_span="미해결척도가 큰",
+        field_span="미해결척도",
+        field_id="aum",
+        operation=SemanticFrameOperation.RANK,
+        direction=SemanticFrameDirection.DESC,
+    )
+
+    promoted = promote_hclx_semantic_gap_trace(
+        original.route_decision,
+        original,
+        draft,
+    )
+
+    assert original.route_decision.disposition is RouteDisposition.CLARIFY
+    assert promoted.route_decision.disposition is RouteDisposition.EXECUTE
+    assert promoted.planning_decision.path.value == "schema_link_shadow"
+    assert promoted.planning_decision.sql_allowed is False
+
+
+def test_hclx_frame_can_own_a_direction_only_coverage_residual() -> None:
+    question = "시장 체력이 상대적으로 더 큰 국내 ETF 3개 보여줘"
+    original = IntentRouter(adaptive_semantic_enabled=True).route_with_planning(
+        question,
+        "hclx-direction-only-residual",
+    )
+    draft = _search_frame(
+        family=ProductFamily.DOMESTIC_ETP,
+        text_span="시장 체력이 상대적으로 더 큰",
+        field_span="시장 체력",
+        field_id="aum",
+        operation=SemanticFrameOperation.RANK,
+        direction=SemanticFrameDirection.DESC,
+    )
+
+    promoted = promote_hclx_semantic_gap_trace(
+        original.route_decision,
+        original,
+        draft,
+    )
+    linker, provider = _production_linker()
+    outcome = AdaptiveSemanticResolver(linker).resolve(promoted, intent_draft=draft)
+
+    assert original.route_decision.disposition is RouteDisposition.CLARIFY
+    assert original.planning_decision.unresolved_spans == ("큰",)
+    assert promoted.route_decision.disposition is RouteDisposition.EXECUTE
+    assert outcome.status == "resolved"
+    assert outcome.receipt is not None
+    assert outcome.receipt.field_id == "aum"
+    assert provider.query_calls == 0
+
+
+@pytest.mark.parametrize(
+    ("text_span", "direction"),
+    [
+        ("시장 체력이 상대적으로 더 큰", SemanticFrameDirection.DESC),
+        ("시장 체력이 상대적으로 더 적은", SemanticFrameDirection.ASC),
+    ],
+)
+def test_hclx_direction_uses_inflected_cues_not_substrings(
+    text_span: str,
+    direction: SemanticFrameDirection,
+) -> None:
+    draft = _search_frame(
+        family=ProductFamily.DOMESTIC_ETP,
+        text_span=text_span,
+        field_span="시장 체력",
+        field_id="aum",
+        operation=SemanticFrameOperation.RANK,
+        direction=direction,
+    )
+
+    assert semantic_frame_clause_is_schema_admissible(
+        draft,
+        draft.execution_clauses[0],
+    )
+
+
+def test_verified_hclx_clause_survives_advisory_intent_and_family_superset() -> None:
+    question = "총보수가 0.5% 이하이면서 시장 체력이 상대적으로 더 큰 국내 ETF 3개 보여줘"
+    original = IntentRouter(adaptive_semantic_enabled=True).route_with_planning(
+        question,
+        "hclx-advisory-top-level-drift",
+    )
+    clause = IntentExecutionClause(
+        sequence=1,
+        role="ranking",
+        text_span="시장 체력이 상대적으로 더 큰",
+        product_families=[ProductFamily.DOMESTIC_ETP],
+        semantic_status=SemanticFrameStatus.RESOLVED,
+        field_id="aum",
+        operation=SemanticFrameOperation.RANK,
+        direction=SemanticFrameDirection.DESC,
+        field_span="시장 체력",
+    )
+    draft = IntentAnalysisDraft(
+        intent=InteractionIntent.COMPARE,
+        product_families=[
+            ProductFamily.DOMESTIC_ETP,
+            ProductFamily.OVERSEAS_ETP,
+        ],
+        evidence_spans=[],
+        needs_clarification=False,
+        execution_clauses=[clause],
+    )
+
+    promoted = promote_hclx_semantic_gap_trace(
+        original.route_decision,
+        original,
+        draft,
+    )
+    linker, provider = _production_linker()
+    outcome = AdaptiveSemanticResolver(linker).resolve(promoted, intent_draft=draft)
+
+    assert original.planning_decision.path.value == "deterministic_fast"
+    assert promoted.route_decision.draft.product_families == [ProductFamily.DOMESTIC_ETP]
+    assert promoted.route_decision.draft.intent is InteractionIntent.SEARCH
+    assert promoted.planning_decision.path.value == "schema_link_shadow"
+    assert promoted.planning_decision.unresolved_spans == ("시장 체력이 상대적으로 더 큰",)
+    assert outcome.status == "resolved"
+    assert outcome.receipt is not None
+    assert outcome.receipt.field_id == "aum"
+    assert outcome.hclx_frame_used is True
+    assert provider.query_calls == 0
+
+
+def test_hclx_clause_cannot_promote_a_server_family_it_did_not_name() -> None:
+    question = "총보수가 0.5% 이하이면서 시장 체력이 상대적으로 더 큰 국내 ETF 3개 보여줘"
+    original = IntentRouter(adaptive_semantic_enabled=True).route_with_planning(
+        question,
+        "hclx-wrong-family",
+    )
+    draft = _search_frame(
+        family=ProductFamily.OVERSEAS_ETP,
+        text_span="시장 체력이 상대적으로 더 큰",
+        field_span="시장 체력",
+        field_id="aum",
+        operation=SemanticFrameOperation.RANK,
+        direction=SemanticFrameDirection.DESC,
+    )
+
+    unchanged = promote_hclx_semantic_gap_trace(
+        original.route_decision,
+        original,
+        draft,
+    )
+
+    assert unchanged is original
+
+
+def test_hclx_clause_with_empty_scope_cannot_borrow_a_different_draft_family() -> None:
+    clause = IntentExecutionClause(
+        sequence=1,
+        role="ranking",
+        text_span="시장 체력이 큰",
+        product_families=[],
+        semantic_status=SemanticFrameStatus.RESOLVED,
+        field_id="aum",
+        operation=SemanticFrameOperation.RANK,
+        direction=SemanticFrameDirection.DESC,
+        field_span="시장 체력",
+    )
+    draft = IntentAnalysisDraft(
+        intent=InteractionIntent.SEARCH,
+        product_families=[ProductFamily.OVERSEAS_ETP],
+        evidence_spans=[],
+        needs_clarification=False,
+        execution_clauses=[clause],
+    )
+
+    matched = AdaptiveSemanticResolver._matching_hclx_clause(
+        draft,
+        residual_text="시장 체력이 큰",
+        family=ProductFamily.DOMESTIC_ETP,
+    )
+
+    assert matched is None
+
+
+def test_public_fast_path_reopens_one_hclx_only_rank_without_dense(
+    domestic_sample_database: tuple[
+        Path,
+        list[NormalizedDomesticEtpRecord],
+        DatabaseManifest,
+    ],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    path, _, _ = domestic_sample_database
+    question = "총보수가 0.5% 이하이면서 시장 체력이 상대적으로 더 큰 국내 ETF 3개 보여줘"
+    draft = IntentAnalysisDraft(
+        intent=InteractionIntent.SEARCH,
+        product_families=[ProductFamily.DOMESTIC_ETP],
+        evidence_spans=["총보수", "0.5%", "시장 체력", "국내 ETF", "3개"],
+        needs_clarification=False,
+        execution_clauses=[
+            IntentExecutionClause(
+                sequence=1,
+                role="filter",
+                text_span="총보수가 0.5% 이하",
+                product_families=[ProductFamily.DOMESTIC_ETP],
+                semantic_status=SemanticFrameStatus.RESOLVED,
+                field_id="total_expense_ratio_pct",
+                operation=SemanticFrameOperation.FILTER,
+                operator=SemanticFrameOperator.LTE,
+                field_span="총보수",
+                value_span="0.5%",
+            ),
+            IntentExecutionClause(
+                sequence=2,
+                role="ranking",
+                text_span="시장 체력이 상대적으로 더 큰",
+                product_families=[ProductFamily.DOMESTIC_ETP],
+                semantic_status=SemanticFrameStatus.RESOLVED,
+                field_id="aum",
+                operation=SemanticFrameOperation.RANK,
+                direction=SemanticFrameDirection.DESC,
+                field_span="시장 체력",
+            ),
+        ],
+    )
+    intent_provider = _FixedIntentProvider(draft)
+    linker, embedding_provider = _production_linker()
+    resolver = AdaptiveSemanticResolver(linker)
+    semantic_outcomes = []
+    original_resolve = resolver.resolve
+
+    def record_resolution(*args, **kwargs):
+        outcome = original_resolve(*args, **kwargs)
+        semantic_outcomes.append(outcome)
+        return outcome
+
+    monkeypatch.setattr(resolver, "resolve", record_resolution)
+    agent = RoutedFinanceAgent(
+        {ProductFamily.DOMESTIC_ETP: path},
+        intent_analysis_provider=intent_provider,
+        adaptive_semantic_resolver=resolver,
+    )
+
+    initial_trace = agent.router.route_with_planning(question, "public-fast-hclx-gap")
+    bound_decision = agent._resolve_exact_identity_family(
+        agent._bind_database_product_identities(initial_trace.route_decision)
+    )
+    promoted_trace = promote_hclx_semantic_gap_trace(
+        bound_decision,
+        initial_trace,
+        draft,
+    )
+    assert promoted_trace.planning_decision.path.value == "schema_link_shadow", (
+        initial_trace.planning_decision.model_dump(mode="json"),
+        bound_decision.model_dump(mode="json"),
+    )
+
+    result = agent._answer_public_atomically(question, "public-fast-hclx-gap")
+
+    assert result.status == "executed", (
+        result.decision.reason_code,
+        result.answer,
+        result.query_plan,
+        [(item.status, item.reason_code) for item in semantic_outcomes],
+    )
+    assert result.query_plan is not None
+    constraints = {item.field: item for item in result.query_plan.constraints}
+    assert constraints["total_expense_ratio_pct"].value == 0.5
+    assert constraints["product_type"].value == "ETF"
+    assert [(item.field, item.direction.value) for item in result.query_plan.ranking] == [
+        ("aum", "desc")
+    ]
+    assert result.query_plan.limit == 3
+    assert intent_provider.calls == 1
+    assert embedding_provider.query_calls == 0
+    assert [(item.status, item.reason_code) for item in semantic_outcomes] == [
+        ("resolved", "hclx_server_grounded")
+    ]
+
+
+def test_full_hclx_filter_frame_restores_unmapped_numeric_condition(
+    sample_database: tuple[
+        Path,
+        list[NormalizedOverseasEtpRecord],
+        DatabaseManifest,
+    ],
+) -> None:
+    question = "돈그릇이 100억 이상인 해외 ETF 3개 알려줘"
+    original = IntentRouter(adaptive_semantic_enabled=True).route_with_planning(
+        question,
+        "hclx-frame-filter",
+    )
+    draft = _search_frame(
+        family=ProductFamily.OVERSEAS_ETP,
+        text_span="돈그릇이 100억 이상인",
+        field_span="돈그릇",
+        field_id="aum",
+        operation=SemanticFrameOperation.FILTER,
+        operator=SemanticFrameOperator.GTE,
+        value_span="100억",
+    )
+    promoted = promote_hclx_semantic_gap_trace(
+        original.route_decision,
+        original,
+        draft,
+    )
+    linker, provider = _production_linker()
+    outcome = AdaptiveSemanticResolver(linker).resolve(promoted, intent_draft=draft)
+
+    assert outcome.status == "resolved"
+    assert outcome.reason_code == "hclx_filter_server_grounded"
+    assert outcome.dense_attempted is False
+    assert provider.query_calls == 0
+    assert len(outcome.semantic_constraints) == 1
+    constraint = outcome.semantic_constraints[0]
+    assert constraint.field == "aum"
+    assert constraint.operator is ConstraintOperator.GTE
+    assert constraint.value == 10_000_000_000
+    plan = ServerQueryPlanCompiler({}).compile_with_semantic_resolution(
+        promoted.route_decision,
+        hard_filter_lock=outcome.hard_filter_lock,
+        receipts=(outcome.receipt,),
+        semantic_constraints=outcome.semantic_constraints,
+    )
+    assert any(
+        item.field == "aum"
+        and item.operator is ConstraintOperator.GTE
+        and item.value == 10_000_000_000
+        for item in plan.constraints
+    )
+    validated = PlanAuthorityGate(
+        {ProductFamily.OVERSEAS_ETP: sample_database[0]},
+        require_approved_databases=False,
+    ).validate_routed(
+        plan,
+        promoted.route_decision,
+        planning_decision=outcome.planning_decision,
+        semantic_receipts=(outcome.receipt,),
+    )
+    assert validated.receipt.planning_policy_version == "adaptive-semantic-v2"
+
+
+def test_grounded_hclx_filter_does_not_consult_irrelevant_dense_candidate() -> None:
+    question = "돈그릇이 100억 이상인 해외 ETF 3개 알려줘"
+    original = IntentRouter(adaptive_semantic_enabled=True).route_with_planning(
+        question,
+        "hclx-filter-dense-disagreement",
+    )
+    draft = _search_frame(
+        family=ProductFamily.OVERSEAS_ETP,
+        text_span="돈그릇이 100억 이상인",
+        field_span="돈그릇",
+        field_id="aum",
+        operation=SemanticFrameOperation.FILTER,
+        operator=SemanticFrameOperator.GTE,
+        value_span="100억",
+    )
+    promoted = promote_hclx_semantic_gap_trace(
+        original.route_decision,
+        original,
+        draft,
+    )
+    linker, provider = _production_linker(
+        _KureContractProvider(query_target="total_expense_ratio_pct")
+    )
+
+    outcome = AdaptiveSemanticResolver(linker).resolve(promoted, intent_draft=draft)
+
+    assert outcome.status == "resolved"
+    assert outcome.reason_code == "hclx_filter_server_grounded"
+    assert outcome.dense_attempted is False
+    assert provider.query_calls == 0
+
+
+@pytest.mark.parametrize(
+    ("operator", "operator_text"),
+    [
+        (SemanticFrameOperator.GTE, ">="),
+        (SemanticFrameOperator.GT, ">"),
+        (SemanticFrameOperator.LTE, "<="),
+        (SemanticFrameOperator.LT, "<"),
+        (SemanticFrameOperator.EQ, "="),
+    ],
+)
+def test_hclx_numeric_filter_accepts_only_its_exact_ascii_operator(
+    operator: SemanticFrameOperator,
+    operator_text: str,
+) -> None:
+    clause = _search_frame(
+        family=ProductFamily.OVERSEAS_ETP,
+        text_span=f"AUM {operator_text} 10000000000",
+        field_span="AUM",
+        field_id="aum",
+        operation=SemanticFrameOperation.FILTER,
+        operator=operator,
+        value_span="10000000000",
+    ).execution_clauses[0]
+
+    constraint = AdaptiveSemanticResolver._server_numeric_constraint(
+        clause,
+        family=ProductFamily.OVERSEAS_ETP,
+    )
+
+    assert constraint.operator.value == operator.value
+
+
+@pytest.mark.parametrize(
+    ("operator", "operator_text"),
+    [
+        (SemanticFrameOperator.GT, ">="),
+        (SemanticFrameOperator.EQ, ">="),
+        (SemanticFrameOperator.LT, "<="),
+        (SemanticFrameOperator.EQ, "<="),
+    ],
+)
+def test_hclx_numeric_filter_rejects_ascii_operator_prefix_collisions(
+    operator: SemanticFrameOperator,
+    operator_text: str,
+) -> None:
+    clause = _search_frame(
+        family=ProductFamily.OVERSEAS_ETP,
+        text_span=f"AUM {operator_text} 10000000000",
+        field_span="AUM",
+        field_id="aum",
+        operation=SemanticFrameOperation.FILTER,
+        operator=operator,
+        value_span="10000000000",
+    ).execution_clauses[0]
+
+    with pytest.raises(SemanticResolutionError, match="operator lacks literal evidence"):
+        AdaptiveSemanticResolver._server_numeric_constraint(
+            clause,
+            family=ProductFamily.OVERSEAS_ETP,
+        )
+
+
+@pytest.mark.parametrize(
+    ("field_id", "value_span"),
+    [
+        ("aum", "5%"),
+        ("aum", "6개월"),
+        ("total_expense_ratio_pct", "5억"),
+        ("total_expense_ratio_pct", "5달러"),
+    ],
+)
+def test_hclx_numeric_filter_rejects_units_incompatible_with_registry(
+    field_id: str,
+    value_span: str,
+) -> None:
+    clause = _search_frame(
+        family=ProductFamily.OVERSEAS_ETP,
+        text_span=f"{field_id} {value_span} 이상",
+        field_span=field_id,
+        field_id=field_id,
+        operation=SemanticFrameOperation.FILTER,
+        operator=SemanticFrameOperator.GTE,
+        value_span=value_span,
+    ).execution_clauses[0]
+
+    with pytest.raises(SemanticResolutionError, match="unit differs from Registry"):
+        AdaptiveSemanticResolver._server_numeric_constraint(
+            clause,
+            family=ProductFamily.OVERSEAS_ETP,
+        )
+
+
+def test_hclx_amount_currency_must_be_preserved_by_the_base_plan() -> None:
+    clause = _search_frame(
+        family=ProductFamily.OVERSEAS_ETP,
+        text_span="돈그릇이 100억 달러 이상",
+        field_span="돈그릇",
+        field_id="aum",
+        operation=SemanticFrameOperation.FILTER,
+        operator=SemanticFrameOperator.GTE,
+        value_span="100억 달러",
+    ).execution_clauses[0]
+    base_plan = QueryPlan.model_validate(
+        canonicalize_query_plan_payload(
+            "돈그릇이 100억 원 이상인 해외 ETF 3개 알려줘",
+            {
+                "question_id": "hclx-filter-currency-mismatch",
+                "product_families": ["overseas_etp"],
+            },
+            force_product_family_hint=True,
+        )
+    )
+
+    with pytest.raises(SemanticResolutionError, match="hard-filter lock"):
+        AdaptiveSemanticResolver._server_numeric_constraint(
+            clause,
+            family=ProductFamily.OVERSEAS_ETP,
+            base_plan=base_plan,
+        )
+
+
+def test_hclx_domestic_etp_krw_amount_accepts_intrinsic_currency() -> None:
+    clause = _search_frame(
+        family=ProductFamily.DOMESTIC_ETP,
+        text_span="돈그릇이 100억 원 이상",
+        field_span="돈그릇",
+        field_id="aum",
+        operation=SemanticFrameOperation.FILTER,
+        operator=SemanticFrameOperator.GTE,
+        value_span="100억 원",
+    ).execution_clauses[0]
+    base_plan = QueryPlan.model_validate(
+        canonicalize_query_plan_payload(
+            "돈그릇이 100억 원 이상인 국내 ETF 3개 알려줘",
+            {
+                "question_id": "hclx-domestic-intrinsic-krw",
+                "product_families": ["domestic_etp"],
+            },
+            force_product_family_hint=True,
+        )
+    )
+
+    constraint = AdaptiveSemanticResolver._server_numeric_constraint(
+        clause,
+        family=ProductFamily.DOMESTIC_ETP,
+        base_plan=base_plan,
+    )
+
+    assert constraint.field == "aum"
+    assert constraint.value == 10_000_000_000
+
+
+def test_hclx_domestic_etp_foreign_amount_cannot_use_intrinsic_krw() -> None:
+    clause = _search_frame(
+        family=ProductFamily.DOMESTIC_ETP,
+        text_span="돈그릇이 100억 달러 이상",
+        field_span="돈그릇",
+        field_id="aum",
+        operation=SemanticFrameOperation.FILTER,
+        operator=SemanticFrameOperator.GTE,
+        value_span="100억 달러",
+    ).execution_clauses[0]
+    base_plan = QueryPlan.model_validate(
+        canonicalize_query_plan_payload(
+            "돈그릇이 100억 달러 이상인 국내 ETF 3개 알려줘",
+            {
+                "question_id": "hclx-domestic-foreign-currency",
+                "product_families": ["domestic_etp"],
+            },
+            force_product_family_hint=True,
+        )
+    )
+
+    with pytest.raises(SemanticResolutionError, match="hard-filter lock"):
+        AdaptiveSemanticResolver._server_numeric_constraint(
+            clause,
+            family=ProductFamily.DOMESTIC_ETP,
+            base_plan=base_plan,
+        )
+
+
+def test_unmapped_numeric_condition_cannot_execute_when_hclx_omits_frame() -> None:
+    question = "돈그릇이 100억 달러 이상인 해외 ETF 3개 알려줘"
+    router = IntentRouter(adaptive_semantic_enabled=True)
+    decision = router.route(
+        question,
+        "hclx-frame-missing-compiler",
+    )
+
+    with pytest.raises(PlanCompilationBlockedError, match="수치 조건"):
+        ServerQueryPlanCompiler({}).compile(decision)
+
+    trace = router.route_with_planning(question, "hclx-frame-missing-resolver")
+    grounded_draft = _search_frame(
+        family=ProductFamily.OVERSEAS_ETP,
+        text_span="돈그릇이 100억 달러 이상인",
+        field_span="돈그릇",
+        field_id="aum",
+        operation=SemanticFrameOperation.FILTER,
+        operator=SemanticFrameOperator.GTE,
+        value_span="100억 달러",
+    )
+    promoted = promote_hclx_semantic_gap_trace(
+        trace.route_decision,
+        trace,
+        grounded_draft,
+    )
+    linker, provider = _production_linker()
+    outcome = AdaptiveSemanticResolver(linker).resolve(promoted, intent_draft=None)
+
+    assert outcome.status == "clarify"
+    assert outcome.reason_code == "hclx_filter_frame_unresolved"
+    assert outcome.dense_attempted is False
     assert provider.query_calls == 0
 
 
@@ -376,22 +1110,13 @@ class _FakeTransport:
         }
 
 
-def test_uncalibrated_field_can_only_resolve_through_hclx_candidate_review(
+def test_uncalibrated_dense_fallback_never_triggers_a_second_hclx_call(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     policy = _policy()
     linker, _ = _production_linker(
         _KureContractProvider(query_target="risk_level"),
         policy,
-    )
-    transport = _FakeTransport(
-        '{"decision":"resolve","selected_field_id":"risk_level","operation":"rank",'
-        '"direction":"asc","reason_code":"candidate_context_match",'
-        '"evidence_spans":["미해결척도"],"ambiguity_reason":""}'
-    )
-    hclx = HyperClovaXSemanticResolverProvider(
-        HyperClovaXSettings(model="HCX-CONTRACT-TEST", timeout_seconds=10),
-        transport,
     )
     monkeypatch.setattr(
         "finance_agent_core.retrieval.schema_adaptive.constrain_semantic_candidate_fields",
@@ -420,17 +1145,81 @@ def test_uncalibrated_field_can_only_resolve_through_hclx_candidate_review(
         "adaptive-uncalibrated-hclx-review",
     )
 
-    outcome = AdaptiveSemanticResolver(
-        linker,
-        hclx_provider=hclx,
-    ).resolve(trace)
+    outcome = AdaptiveSemanticResolver(linker).resolve(trace)
+
+    assert outcome.status == "clarify"
+    assert outcome.reason_code == "semantic_field_evidence_missing"
+    assert outcome.receipt is None
+
+
+def test_unseen_rank_wording_requires_the_primary_hclx_frame() -> None:
+    linker, dense_provider = _production_linker(_KureContractProvider(query_target="aum"))
+    trace = IntentRouter(adaptive_semantic_enabled=True).route_with_planning(
+        "시장체력값이 높은 국내 ETF를 3개 보여줘",
+        "adaptive-unseen-consensus",
+    )
+
+    draft = _search_frame(
+        family=ProductFamily.DOMESTIC_ETP,
+        text_span="시장체력값이 높은",
+        field_span="시장체력값",
+        field_id="aum",
+        operation=SemanticFrameOperation.RANK,
+        direction=SemanticFrameDirection.DESC,
+    )
+    outcome = AdaptiveSemanticResolver(linker).resolve(trace, intent_draft=draft)
 
     assert outcome.status == "resolved"
-    assert outcome.reason_code == "hclx_semantic_resolution_admitted"
+    assert outcome.reason_code == "hclx_server_grounded"
     assert outcome.receipt is not None
-    assert outcome.receipt.field_id == "risk_level"
-    assert outcome.receipt.source is SpanSource.HCLX
-    assert len(transport.requests) == 1
+    assert outcome.receipt.field_id == "aum"
+    assert dense_provider.query_calls == 0
+
+
+def test_invalid_hclx_direction_falls_back_to_dense_and_fails_closed() -> None:
+    linker, dense_provider = _production_linker(_KureContractProvider(query_target="aum"))
+    trace = IntentRouter(adaptive_semantic_enabled=True).route_with_planning(
+        "시장체력값이 높은 국내 ETF를 3개 보여줘",
+        "adaptive-unseen-disagreement",
+    )
+
+    draft = _search_frame(
+        family=ProductFamily.DOMESTIC_ETP,
+        text_span="시장체력값이 높은",
+        field_span="시장체력값",
+        field_id="daily_trading_value",
+        operation=SemanticFrameOperation.RANK,
+        direction=SemanticFrameDirection.ASC,
+    )
+    outcome = AdaptiveSemanticResolver(linker).resolve(trace, intent_draft=draft)
+
+    assert outcome.status == "clarify"
+    assert outcome.reason_code == "semantic_field_evidence_missing"
+    assert dense_provider.query_calls == 1
+
+
+def test_unseen_rank_wording_without_primary_frame_fails_closed_end_to_end(
+    domestic_sample_database: tuple[
+        Path,
+        list[NormalizedDomesticEtpRecord],
+        DatabaseManifest,
+    ],
+) -> None:
+    path, _, _ = domestic_sample_database
+    linker, dense_provider = _production_linker(_KureContractProvider(query_target="aum"))
+    agent = RoutedFinanceAgent(
+        {ProductFamily.DOMESTIC_ETP: path},
+        adaptive_semantic_resolver=AdaptiveSemanticResolver(linker),
+    )
+
+    result = agent.answer(
+        "총보수율이 0.50% 이하이고 시장체력값이 높은 국내 ETF를 3개 보여줘",
+        "adaptive-unseen-e2e",
+    )
+
+    assert result.status == "clarify"
+    assert result.query_plan is None
+    assert dense_provider.query_calls == 1
 
 
 def test_hclx_semantic_resolver_uses_candidate_only_structured_schema() -> None:
@@ -502,21 +1291,9 @@ def test_unique_server_evidence_bypasses_hclx_even_when_dense_scores_tie(
 ) -> None:
     path, _, _ = domestic_sample_database
     linker, dense_provider = _production_linker(_AmbiguousKureProvider())
-    transport = _FakeTransport(
-        '{"decision":"resolve","selected_field_id":"aum","operation":"rank",'
-        '"direction":"desc","reason_code":"candidate_context_match",'
-        '"evidence_spans":["몸집"],"ambiguity_reason":""}'
-    )
-    hclx = HyperClovaXSemanticResolverProvider(
-        HyperClovaXSettings(model="HCX-CONTRACT-TEST", timeout_seconds=10),
-        transport,
-    )
     agent = RoutedFinanceAgent(
         {ProductFamily.DOMESTIC_ETP: path},
-        adaptive_semantic_resolver=AdaptiveSemanticResolver(
-            linker,
-            hclx_provider=hclx,
-        ),
+        adaptive_semantic_resolver=AdaptiveSemanticResolver(linker),
     )
 
     result = agent.answer(
@@ -528,7 +1305,6 @@ def test_unique_server_evidence_bypasses_hclx_even_when_dense_scores_tie(
     assert result.query_plan is not None
     assert result.query_plan.ranking[0].field == "aum"
     assert dense_provider.query_calls == 1
-    assert transport.requests == []
 
 
 class _DeadlineSemanticResolverProvider:
@@ -540,29 +1316,14 @@ class _DeadlineSemanticResolverProvider:
         raise RequestDeadlineExceeded("private semantic deadline detail")
 
 
-def test_hclx_semantic_deadline_preserves_timeout_causality(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_retired_secondary_hclx_provider_cannot_be_wired_into_runtime() -> None:
     linker, _ = _production_linker(_AmbiguousKureProvider())
-    monkeypatch.setattr(
-        "finance_agent_core.agent.adaptive_semantic.semantic_field_evidence",
-        lambda text, **kwargs: SemanticFieldEvidence(
-            status="supported",
-            reason_code="semantic_field_evidence_supported",
-            semantic_group="test_multiple_evidence",
-            evidence_spans=(text,),
-        ),
-    )
-    trace = IntentRouter(adaptive_semantic_enabled=True).route_with_planning(
-        "미해결척도가 큰 국내 ETF를 3개 보여줘",
-        "adaptive-hclx-deadline",
-    )
 
-    with pytest.raises(RequestDeadlineExceeded, match="private semantic deadline detail"):
-        AdaptiveSemanticResolver(
+    with pytest.raises(TypeError, match="hclx_provider"):
+        AdaptiveSemanticResolver(  # type: ignore[call-arg]
             linker,
             hclx_provider=_DeadlineSemanticResolverProvider(),
-        ).resolve(trace)
+        )
 
 
 def test_schema_dense_artifact_loader_requires_canonical_read_only_bytes(tmp_path: Path) -> None:
@@ -626,6 +1387,7 @@ def test_adaptive_release_binds_kure_index_policy_and_hclx_operation(tmp_path: P
             backend_root=backend,
             answer_provider="hyperclova",
             hcx_queryplan_enabled=False,
+            hcx_intent_analysis_enabled=True,
             hcx_model="HCX-007",
             fund_execution_policy="public_fund_v1_approved",
             hcx_semantic_resolver_enabled=True,
@@ -639,6 +1401,58 @@ def test_adaptive_release_binds_kure_index_policy_and_hclx_operation(tmp_path: P
     assert components.execution.planning_policy_version == "adaptive-semantic-v2"
     assert components.runtime_features.retrieval.schema_dense == ("activated_kure_candidate_only")
     assert components.runtime_features.model.semantic_resolver_operation_enabled is True
+
+
+def test_final_release_rejects_kure_without_hclx_semantic_frame(tmp_path: Path) -> None:
+    linker, _ = _production_linker()
+    artifact = linker.index.artifact
+    artifact_sha256 = hashlib.sha256(dense_schema_index_file_bytes(artifact)).hexdigest()
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    (backend / "runtime.py").write_text("VALUE = 1\n", encoding="utf-8")
+
+    with pytest.raises(AgentReleaseError, match="requires HCLX Semantic Resolver"):
+        build_release_components(
+            RuntimeReleaseInputs(
+                environment="evaluation",
+                source_commit="a" * 40,
+                image_reference="registry.example/agent@sha256:" + "b" * 64,
+                backend_version="0.1.0",
+                backend_root=backend,
+                answer_provider="hyperclova",
+                hcx_queryplan_enabled=False,
+                hcx_intent_analysis_enabled=True,
+                hcx_model="HCX-007",
+                fund_execution_policy="public_fund_v1_approved",
+                hcx_semantic_resolver_enabled=False,
+                schema_dense_enabled=True,
+                schema_dense_artifact=artifact,
+                schema_dense_artifact_file_sha256=artifact_sha256,
+                schema_dense_policy=_policy(),
+            )
+        )
+
+
+def test_runtime_feature_release_rejects_semantic_resolver_without_intent_analysis() -> None:
+    with pytest.raises(ValueError, match="requires HCLX Intent analysis"):
+        RuntimeFeatureRelease(
+            fund_execution_policy="public_fund_v1_approved",
+            model=ModelRelease(
+                provider="hyperclova",
+                model_id="HCX-007",
+                revision_status="provider_revision_not_exposed",
+                queryplan_operation_enabled=False,
+                intent_analysis_operation_enabled=False,
+                semantic_resolver_operation_enabled=True,
+                grounded_answer_operation_enabled=False,
+                final_answer_operation_enabled=True,
+            ),
+            retrieval=RetrievalRelease(
+                schema_dense="activated_kure_candidate_only",
+                schema_dense_manifest_sha256="a" * 64,
+                embedding_model_revision="d14c8a9423946e268a0c9952fecf3a7aabd73bd9",
+            ),
+        )
 
 
 def test_dense_audit_is_redacted_and_links_exact_model_and_index(

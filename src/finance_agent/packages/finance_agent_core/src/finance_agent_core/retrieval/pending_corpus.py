@@ -30,6 +30,18 @@ from finance_agent_core.retrieval.sqlite_fts import normalize_document_text
 _SHA256_PATTERN = r"^[0-9a-f]{64}$"
 _DOCUMENT_ID_PATTERN = r"^[a-z0-9][a-z0-9._-]{2,127}$"
 _MAX_TEXT_BYTES = 16 * 1024 * 1024
+_MAX_RAW_BYTES = 32 * 1024 * 1024
+
+
+PendingRawMediaType = Literal["text/html", "application/pdf", "application/zip"]
+
+
+def _raw_snapshot_suffix(media_type: PendingRawMediaType) -> str:
+    return {
+        "application/pdf": ".pdf",
+        "application/zip": ".zip",
+        "text/html": ".html",
+    }[media_type]
 
 
 class PendingCorpusError(RuntimeError):
@@ -93,8 +105,8 @@ class PendingCorpusSnapshot(PendingCorpusModel):
     language: DocumentLanguage
     purposes: tuple[DocumentPurpose, ...] = Field(min_length=1, max_length=10)
     raw_relative_path: str = Field(min_length=1, max_length=4096)
-    raw_media_type: Literal["text/html", "application/pdf"]
-    raw_size_bytes: int = Field(gt=0, le=16 * 1024 * 1024)
+    raw_media_type: PendingRawMediaType
+    raw_size_bytes: int = Field(gt=0, le=_MAX_RAW_BYTES)
     raw_sha256: str = Field(pattern=_SHA256_PATTERN)
     text_relative_path: str = Field(min_length=1, max_length=4096)
     text_size_bytes: int = Field(gt=0, le=_MAX_TEXT_BYTES)
@@ -108,6 +120,24 @@ class PendingCorpusSnapshot(PendingCorpusModel):
         if value.tzinfo is None or value.utcoffset() != UTC.utcoffset(value):
             raise ValueError("collection timestamp must use UTC")
         return value
+
+    @model_validator(mode="after")
+    def validate_source_metadata(self) -> PendingCorpusSnapshot:
+        capabilities = [item.value for item in self.capabilities]
+        if capabilities != sorted(capabilities) or len(capabilities) != len(set(capabilities)):
+            raise ValueError("pending snapshot capabilities must be unique and sorted")
+        if self.purposes != tuple(sorted(self.purposes)) or len(self.purposes) != len(
+            set(self.purposes)
+        ):
+            raise ValueError("pending snapshot purposes must be unique and sorted")
+        if self.as_of > self.collected_at_utc.date():
+            raise ValueError("pending snapshot as_of cannot follow collection date")
+        if self.published_at is not None:
+            if self.published_at > self.collected_at_utc.date():
+                raise ValueError("pending snapshot publication cannot follow collection date")
+            if self.as_of > self.published_at:
+                raise ValueError("pending snapshot as_of cannot follow publication date")
+        return self
 
 
 class PendingCorpusFailure(PendingCorpusModel):
@@ -151,6 +181,12 @@ class PendingCorpusManifest(PendingCorpusModel):
             raise ValueError("a pending document cannot be collected and failed")
         if self.requested_document_count != len(document_ids) + len(failure_ids):
             raise ValueError("pending requested document count differs")
+        if any(
+            item.as_of > self.evidence_cutoff
+            or (item.published_at is not None and item.published_at > self.evidence_cutoff)
+            for item in self.documents
+        ):
+            raise ValueError("pending snapshot metadata exceeds the evidence cutoff")
         if self.raw_file_manifest_sha256 != _file_manifest_sha256(
             self.documents,
             kind="raw",
@@ -402,9 +438,7 @@ def merge_pending_corpus_roots(
                                     key=lambda item: item.value,
                                 )
                             ),
-                            "purposes": tuple(
-                                sorted({*previous.purposes, *snapshot.purposes})
-                            ),
+                            "purposes": tuple(sorted({*previous.purposes, *snapshot.purposes})),
                         }
                     )
                     failures_by_id[snapshot.document_id] = PendingCorpusFailure(
@@ -414,7 +448,7 @@ def merge_pending_corpus_roots(
                         reason_code="duplicate_official_snapshot",
                     )
                     continue
-                raw_suffix = ".pdf" if snapshot.raw_media_type == "application/pdf" else ".html"
+                raw_suffix = _raw_snapshot_suffix(snapshot.raw_media_type)
                 raw_relative_path = f"raw/{snapshot.document_id}{raw_suffix}"
                 text_relative_path = f"snapshots/{snapshot.document_id}.txt"
                 _write_file(staging / raw_relative_path, raw)
@@ -641,6 +675,7 @@ __all__ = [
     "PendingCorpusError",
     "PendingCorpusFailure",
     "PendingCorpusManifest",
+    "PendingRawMediaType",
     "PendingCorpusSnapshot",
     "PendingCorpusSource",
     "collect_pending_corpus",

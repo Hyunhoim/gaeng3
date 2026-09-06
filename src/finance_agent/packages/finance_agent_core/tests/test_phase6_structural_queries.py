@@ -18,8 +18,10 @@ from finance_agent_core.agent.intent_analysis import (
 )
 from finance_agent_core.agent.knowledge_planning import CompositeKnowledgePlanCompiler
 from finance_agent_core.agent.linker import build_lexical_hints
+from finance_agent_core.agent.presentation import semantic_query_surface
 from finance_agent_core.agent.router import IntentRouter
 from finance_agent_core.agent.safety import SafetyDisposition, SafetyEnvelope
+from finance_agent_core.agent.semantic_gate import SemanticCoverageGate
 from finance_agent_core.config.knowledge_coverage import KnowledgeCapability
 from finance_agent_core.contracts.external_knowledge import KnowledgeIntentRequirement
 from finance_agent_core.contracts.queryplan import Intent, ProductFamily, SortDirection
@@ -33,6 +35,88 @@ from finance_agent_core.contracts.routing import (
 
 def _engine() -> TypedCompoundQueryEngine:
     return TypedCompoundQueryEngine({}, record_cache=object())  # type: ignore[arg-type]
+
+
+def test_dialogue_preamble_is_not_a_query_condition() -> None:
+    question = (
+        "상품 선택 전에 먼저 확인하고 싶습니다. 국내 ETF에서 "
+        "순자산 100억 이상인 상품을 큰 순으로 3개 보여주세요."
+    )
+
+    semantic = semantic_query_surface(question)
+
+    assert "상품 선택 전에" not in semantic
+    assert "순자산 100억 이상" in semantic
+
+
+def test_dialogue_preamble_does_not_erase_same_sentence_query() -> None:
+    question = (
+        "상품 선택 전에 먼저 확인하고 싶은데 국내 ETF에서 "
+        "순자산 100억 이상인 상품을 큰 순으로 3개 보여주세요."
+    )
+
+    semantic = semantic_query_surface(question)
+
+    assert "상품 선택 전에" not in semantic
+    assert "국내 ETF에서 순자산 100억 이상" in semantic
+
+
+def test_real_shortlist_first_stage_is_not_masked_as_dialogue() -> None:
+    question = "순자산 상위 10개를 먼저 추린 뒤 보수 낮은 순으로 3개 보여주세요."
+
+    assert semantic_query_surface(question) == question
+
+
+def test_negative_single_ranking_display_constraint_is_not_a_filter() -> None:
+    question = (
+        "해외 ETF와 공모펀드를 각각 찾아주세요. 상품군별 결과를 정리하고, "
+        "두 표를 단일 수익률 순위로 합치지는 마세요."
+    )
+
+    semantic = semantic_query_surface(question)
+
+    assert "단일 수익률 순위" not in semantic
+    assert "해외 ETF와 공모펀드" in semantic
+
+
+def test_positive_cross_family_merge_request_is_preserved() -> None:
+    question = "국내 ETF와 공모펀드를 한 순위로 합쳐 주세요."
+
+    assert semantic_query_surface(question) == question
+
+
+def test_dividend_word_in_product_name_does_not_bind_result_limit() -> None:
+    decision = IntentRouter().route(
+        "해외채권혼합형 공모펀드 중 미래에셋글로벌배당과인컴펀드를 기준으로 "
+        "순자산이 이 상품 이상인 다른 상품을 보수 낮은 순 최대 2개 보여줘.",
+        "dividend-name-limit",
+    )
+
+    assert decision.draft.intent is not InteractionIntent.UNSUPPORTED
+    assert decision.reason_code != "prohibited_financial_request"
+
+
+def test_real_dividend_ranking_remains_unsupported() -> None:
+    decision = IntentRouter().route(
+        "배당수익률이 가장 높은 국내 ETF를 보여줘.",
+        "unsupported-dividend-ranking",
+    )
+
+    assert decision.draft.intent is InteractionIntent.UNSUPPORTED
+
+
+def test_field_first_exact_anchor_is_not_a_two_metric_unsupported_action() -> None:
+    question = (
+        "Bond 해외 ETF 중 기준상품(NYF)을 기준으로 종가가 이 상품보다 큰 "
+        "다른 상품을 연간보수율 작은 순으로 4개 보여줘."
+    )
+
+    coverage = SemanticCoverageGate().evaluate(
+        question,
+        interaction_intent="search",
+    )
+
+    assert not coverage.unsupported_spans
 
 
 def test_exact_detail_treats_sentence_order_adverb_as_discourse_not_filter() -> None:
@@ -86,6 +170,13 @@ def test_two_stage_parser_is_structural_not_one_frozen_sentence(question: str) -
     assert ("isu_bal_amt", "gte", 30_000_000_000) in [
         (item.source_field, item.operator, item.value) for item in family.filters
     ]
+    assert {
+        ("dur", "neq", 0),
+        ("applied_yield", "neq", 0),
+        ("srfc_irt", "neq", 0),
+    }.issubset(
+        {(item.source_field, item.operator, item.value) for item in family.filters}
+    )
 
 
 def test_two_stage_parser_accepts_unseen_connectives_and_prefix_bounds() -> None:
@@ -175,9 +266,32 @@ def test_cross_family_two_stage_keeps_each_clause_filters_and_order() -> None:
     assert ("pd_net_tamt", "lte", 276_000_000_000) in [
         (item.source_field, item.operator, item.value) for item in plan.family_plans[0].filters
     ]
+    assert ("cu_fund_mgmt_co", "eq", "미래에셋") in [
+        (item.source_field, item.operator, item.value) for item in plan.family_plans[0].filters
+    ]
     assert ("cu_charge_rt", "gte", 0.73) in [
         (item.source_field, item.operator, item.value) for item in plan.family_plans[1].filters
     ]
+    assert {
+        ("du_er_3m", "neq", 0),
+        ("du_val_1d", "neq", 0),
+        ("du_val_1m", "neq", 0),
+    }.issubset(
+        {
+            (item.source_field, item.operator, item.value)
+            for item in plan.family_plans[0].filters
+        }
+    )
+    assert {
+        ("du_val_1d", "neq", 0),
+        ("du_clpr", "neq", 0),
+        ("du_opr", "neq", 0),
+    }.issubset(
+        {
+            (item.source_field, item.operator, item.value)
+            for item in plan.family_plans[1].filters
+        }
+    )
 
 
 def test_parallel_family_parser_preserves_two_independent_filter_sets() -> None:
@@ -743,6 +857,23 @@ def test_cohort_parser_accepts_difference_wording_and_unseen_manager_names() -> 
     assert plan.kind == "cohort"
     assert [item.cohort_label for item in plan.family_plans] == ["알파", "베타"]
     assert all(item.metric.source_fields == ("du_val_1d",) for item in plan.family_plans)
+
+
+def test_cohort_parser_preserves_one_common_hard_filter_in_both_subqueries() -> None:
+    question = (
+        "알파 운용 국내 ETF와 베타 운용 국내 ETF 중 위험등급 3등급 이하의 "
+        "일거래대금 분포를 비교해 주세요. 0·빈칸은 빼고 각각 유효 상품 수, "
+        "단순평균, 최솟값과 최댓값을 계산한 뒤 각 집단의 상위 3개도 보여주세요."
+    )
+
+    plan = _engine().compile(question, "cohort-common-filter")
+
+    assert plan is not None
+    assert plan.kind == "cohort"
+    assert all(
+        any(item.source_field == "pd_risk_nm" for item in family.filters)
+        for family in plan.family_plans
+    )
 
 
 def test_bounded_parser_does_not_depend_on_question_prefix() -> None:

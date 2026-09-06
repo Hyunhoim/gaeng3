@@ -16,10 +16,11 @@ from pydantic import BaseModel, ConfigDict, Field
 from finance_agent_core.contracts.queryplan import ProductFamily
 from finance_agent_core.evaluation.briefing_examples import (
     BriefingAnswerability,
+    BriefingEvaluationMode,
     LoadedBriefingExampleSuite,
 )
 
-FROZEN_BRIEFING_SUITE_SHA256 = "e448b0edda5957145e624aa2a60b97fcc697efc347c49e14074ba833944762c1"
+FROZEN_BRIEFING_SUITE_SHA256 = "c20eedce77d847f7fb1aca387b07f4cf9656180ce82b2752f57c96d852b57d0a"
 FROZEN_SOURCE_ARTIFACT_SHA256 = "1f06e7dbbbe7505516ff7f7dc0524cd45d86e8005bb49ae248e04526da877437"
 
 _EXPECTED_FAMILIES = ["bond", "domestic_etp", "overseas_etp", "fund"]
@@ -30,7 +31,7 @@ _OFFICIAL_FIELDS = {
     "think_trace",
     "answer",
 }
-_SAFE_CONTROL_STATUSES = {"clarification", "unsupported", "not_found"}
+_SAFE_CONTROL_STATUSES = {"clarification", "unsupported", "not_found", "cannot_verify"}
 _FORBIDDEN_PUBLIC_FRAGMENTS = (
     "/home/",
     "system prompt:",
@@ -40,7 +41,7 @@ _FORBIDDEN_PUBLIC_FRAGMENTS = (
 )
 _MALICIOUS_FRAGMENT = "<script>alert(1)</script>"
 _LONG_QUESTION = "가" * 2001
-_FUND_LOCKED_QUESTION = (
+_FUND_ENABLED_QUESTION = (
     "당사에서 판매 중인 해외 주식형 공모펀드 중 3개월 수익률이 높은 상품 5개 보여줘."
 )
 
@@ -196,17 +197,10 @@ def _public_example_cases(
 ) -> tuple[OfficialAcceptanceCase, ...]:
     cases: list[OfficialAcceptanceCase] = []
     for example in loaded_suite.suite.cases:
-        policy_locked = example.target_families == [ProductFamily.FUND]
-        safe_control = example.answerability is BriefingAnswerability.UNANSWERABLE or policy_locked
-        if policy_locked:
-            statuses = ("unsupported",)
-            intents = ("unsupported",)
-        elif example.answerability is BriefingAnswerability.UNANSWERABLE:
-            statuses = tuple(sorted(_SAFE_CONTROL_STATUSES))
-            intents = tuple(intent.value for intent in example.expected_interaction_intents)
-        else:
-            statuses = ()
-            intents = ()
+        expectation = example.mode_expectations[BriefingEvaluationMode.FINAL_CACHE_ONLY]
+        safe_control = expectation.require_no_evidence
+        statuses = tuple(item.value for item in expectation.allowed_statuses)
+        intents = tuple(intent.value for intent in example.expected_interaction_intents)
         cases.append(
             OfficialAcceptanceCase(
                 id=f"acceptance-{example.id}",
@@ -218,7 +212,8 @@ def _public_example_cases(
                 answerability=example.answerability,
                 expected_trace_statuses=statuses,
                 expected_intents=intents,
-                expected_families=(tuple(example.target_families) if policy_locked else ()),
+                expected_families=tuple(example.target_families),
+                require_evidence=expectation.require_evidence,
                 require_no_execution=safe_control,
             )
         )
@@ -254,18 +249,18 @@ def build_official_acceptance_transport_cases() -> tuple[OfficialAcceptanceCase,
             forbidden_output_fragments=(_MALICIOUS_FRAGMENT,),
         ),
         OfficialAcceptanceCase(
-            id="official-fund-locked",
+            id="official-fund-enabled",
             kind=OfficialAcceptanceCaseKind.TRANSPORT_EDGE,
             query=(
-                ("question_id", "docker-smoke-official-fund-locked-001"),
-                ("question", _FUND_LOCKED_QUESTION),
+                ("question_id", "docker-smoke-official-fund-enabled-001"),
+                ("question", _FUND_ENABLED_QUESTION),
             ),
-            expected_question_id="docker-smoke-official-fund-locked-001",
-            expected_question=_FUND_LOCKED_QUESTION,
-            expected_trace_statuses=("unsupported",),
-            expected_intents=("unsupported",),
+            expected_question_id="docker-smoke-official-fund-enabled-001",
+            expected_question=_FUND_ENABLED_QUESTION,
+            expected_trace_statuses=("success",),
+            expected_intents=("search",),
             expected_families=(ProductFamily.FUND,),
-            require_no_execution=True,
+            require_evidence=True,
         ),
         OfficialAcceptanceCase(
             id="official-blank-values",
@@ -484,7 +479,7 @@ def validate_health(
     http_status: int,
     body: dict[str, Any],
     *,
-    expected_fund_execution_policy: str = "locked",
+    expected_fund_execution_policy: str = "public_fund_v1_approved",
 ) -> list[str]:
     checks = {
         "http_status_200": http_status == 200,
@@ -553,7 +548,9 @@ class OfficialAcceptanceRunner:
         runtime_image_reference: str | None,
         observed_source_artifact_sha256: str | None,
         request_timeout_seconds: float = 60.0,
-        expected_fund_execution_policy: Literal["locked"] = "locked",
+        expected_fund_execution_policy: Literal["public_fund_v1_approved"] = (
+            "public_fund_v1_approved"
+        ),
         requester: HttpRequester = request_json,
     ) -> None:
         if request_timeout_seconds <= 0:
@@ -647,8 +644,8 @@ class OfficialAcceptanceRunner:
             interpretation_limits=[
                 "공개 예시 8개는 질의 분포 예시이며 실제 평가 문항이나 독립 blind가 아니다.",
                 "P0-4는 GET 전송·다섯 문자열·UTF-8·안전 제어 계약을 검증한다.",
-                "공개 답변 가능 예시의 success 관측 수는 기록만 하며 P0-4 통과 조건이 아니다.",
-                "문서·관계 검색의 의미 완결성은 P0-5~P0-7에서 별도로 검증한다.",
+                "공개 답변 가능 예시는 final_cache_only 기준의 success와 근거를 요구한다.",
+                "문서·관계의 capability·기간·DB 교집합은 briefing runner가 별도로 검증한다.",
                 "no-execution은 공개 응답의 candidate·evidence가 비어 있음을 확인하며 "
                 "내부 provider 호출 감사는 별도 Audit 검증 범위다.",
             ],

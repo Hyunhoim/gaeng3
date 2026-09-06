@@ -1,8 +1,9 @@
 {
   "schema_version": "1.0",
   "suite_id": "briefing-examples-v1-8",
-  "suite_version": "1.0",
-  "status": "official_examples_public_not_blind",
+  "suite_version": "2.0",
+  "status": "official_examples_20260824_current_not_blind",
+  "dataset_release_id": "miraeasset-ai-festival-2026-20260824-v5",
   "source": {
     "title": "2026-08-06 오프라인 설명회 평가 질의 예시",
     "artifact_name": "KakaoTalk_Photo_2026-08-06-15-24-27 011.jpeg",
@@ -11,20 +12,20 @@
   },
   "data": {
     "overseas_etp": {
-      "database_sha256": "eee9009ca741713a9a61e498cd5ed8366836d754c7d0c2dbd74ed7e456a2ebbe",
-      "manifest_sha256": "5dd159ade2353154ed8d3d32068dd512cb2b3becba39972aa0dabff0edd50771"
+      "database_sha256": "0ff2d2bfa55004326fb3c3d4f171d0c50c1c255ab2150f95b0e97003395ad50f",
+      "manifest_sha256": "c8c54b7cf8dd4e3c0da187a86dca3ae1ce079bbe3cf3912831673513a6f7d1bd"
     },
     "domestic_etp": {
-      "database_sha256": "a91bfc713b88e9ba1e7da27508857cbe5ea200c4d7821d0b4fee7d9922684484",
-      "manifest_sha256": "2e52b161a260fa19eab50e8281f04f8617ee1ee69d618b19bd624af4635fca97"
+      "database_sha256": "da67cd7d85ac5d8f05422de48a453949a15b88040fe163efc03e6f7aee830d85",
+      "manifest_sha256": "17572f77b1df80608e47b30491ba0940f20dcb785f1b12a03da6a7fb2360e309"
     },
     "bond": {
-      "database_sha256": "40265aa326d63244727294ac29c1cd38c898f05b6a80dfd51fd8ac38e08764bc",
-      "manifest_sha256": "d724d99e9ffd24148144b3534795d0d545e0ebff9d01509966f6ebbb218f8312"
+      "database_sha256": "d24d5a52ea0ca5cd42ba6a7a5600418bc0723d46d8e55d8e07a881978d993b9f",
+      "manifest_sha256": "0e03321906ef4e7103c91589cc1c946900aa7a00d13a213c96f408da09376bde"
     },
     "fund": {
-      "database_sha256": "99fac786e5be0ec5a7a53e11e1bd3bbccd5b37ab15243ecbf8b864a85b375ca4",
-      "manifest_sha256": "be83a616d033db2328d231499d1f0492323d02bace4f153ad3da4860a0d10bcd"
+      "database_sha256": "29d3a02717af49059e1af231ab5562879983da4648d3b7c0464164405dee979a",
+      "manifest_sha256": "29e983a4a995126a575b7f56d6ddc634a354365c01a2f3012fc5deec39f25d40"
     }
   },
   "cases": [
@@ -39,7 +40,13 @@
         "structured_product_search",
         "current_sellability",
         "ordered_credit_rating"
-      ]
+      ],
+      "required_external_capabilities": [],
+      "require_db_product_intersection": false,
+      "mode_expectations": {
+        "pre_activation": {"allowed_statuses": ["success"], "require_evidence": true},
+        "final_cache_only": {"allowed_statuses": ["success"], "require_evidence": true}
+      }
     },
     {
       "id": "briefing-examples-v1-002",
@@ -52,7 +59,13 @@
         "entity_resolution",
         "document_rag",
         "temporal_document_grounding"
-      ]
+      ],
+      "required_external_capabilities": ["fund_structure_strategy_trend"],
+      "require_db_product_intersection": true,
+      "mode_expectations": {
+        "pre_activation": {"allowed_statuses": ["cannot_verify"], "require_no_evidence": true},
+        "final_cache_only": {"allowed_statuses": ["success"], "require_evidence": true}
+      }
     },
     {
       "id": "briefing-examples-v1-003",
@@ -65,7 +78,13 @@
         "entity_resolution",
         "portfolio_holdings_relation",
         "structured_product_search"
-      ]
+      ],
+      "required_external_capabilities": ["portfolio_holdings"],
+      "require_db_product_intersection": true,
+      "mode_expectations": {
+        "pre_activation": {"allowed_statuses": ["cannot_verify"], "require_no_evidence": true},
+        "final_cache_only": {"allowed_statuses": ["success"], "require_evidence": true}
+      }
     },
     {
       "id": "briefing-examples-v1-004",
@@ -78,7 +97,14 @@
         "temporal_theme_relation",
         "portfolio_history",
         "multi_source_evidence"
-      ]
+      ],
+      "required_external_capabilities": ["sector_theme_history"],
+      "required_time_range": {"start": "2026-02-24", "end": "2026-08-24"},
+      "require_db_product_intersection": true,
+      "mode_expectations": {
+        "pre_activation": {"allowed_statuses": ["cannot_verify"], "require_no_evidence": true},
+        "final_cache_only": {"allowed_statuses": ["success"], "require_evidence": true}
+      }
     },
     {
       "id": "briefing-examples-v1-005",
@@ -92,7 +118,17 @@
         "portfolio_holdings_relation",
         "aum_ranking",
         "risk_document_grounding"
-      ]
+      ],
+      "required_external_capabilities": [
+        "corporate_subsidiary",
+        "portfolio_holdings",
+        "product_risk_factors"
+      ],
+      "require_db_product_intersection": true,
+      "mode_expectations": {
+        "pre_activation": {"allowed_statuses": ["cannot_verify"], "require_no_evidence": true},
+        "final_cache_only": {"allowed_statuses": ["success"], "require_evidence": true}
+      }
     },
     {
       "id": "briefing-examples-v1-006",
@@ -101,7 +137,13 @@
       "question": "신용등급 AAAA인 채권 찾아줘",
       "target_families": ["bond"],
       "expected_interaction_intents": ["search", "clarify", "unsupported"],
-      "required_capabilities": ["invalid_enum_rejection", "safe_unanswerable"]
+      "required_capabilities": ["invalid_enum_rejection", "safe_unanswerable"],
+      "required_external_capabilities": [],
+      "require_db_product_intersection": false,
+      "mode_expectations": {
+        "pre_activation": {"allowed_statuses": ["not_found", "unsupported"], "require_no_evidence": true},
+        "final_cache_only": {"allowed_statuses": ["not_found", "unsupported"], "require_no_evidence": true}
+      }
     },
     {
       "id": "briefing-examples-v1-007",
@@ -110,7 +152,13 @@
       "question": "Kimi 관련 투자 상품 있어?",
       "target_families": [],
       "expected_interaction_intents": ["search", "clarify", "unsupported"],
-      "required_capabilities": ["entity_resolution", "safe_unanswerable"]
+      "required_capabilities": ["entity_resolution", "safe_unanswerable"],
+      "required_external_capabilities": ["sector_theme_history"],
+      "require_db_product_intersection": false,
+      "mode_expectations": {
+        "pre_activation": {"allowed_statuses": ["cannot_verify"], "require_no_evidence": true},
+        "final_cache_only": {"allowed_statuses": ["cannot_verify", "not_found"], "require_no_evidence": true}
+      }
     },
     {
       "id": "briefing-examples-v1-008",
@@ -119,7 +167,13 @@
       "question": "KODEX AI로봇 ETF 정보 알려줘",
       "target_families": ["domestic_etp"],
       "expected_interaction_intents": ["search", "detail", "clarify", "unsupported"],
-      "required_capabilities": ["exact_product_identity", "safe_unanswerable"]
+      "required_capabilities": ["exact_product_identity", "safe_unanswerable"],
+      "required_external_capabilities": [],
+      "require_db_product_intersection": false,
+      "mode_expectations": {
+        "pre_activation": {"allowed_statuses": ["not_found"], "require_no_evidence": true},
+        "final_cache_only": {"allowed_statuses": ["not_found"], "require_no_evidence": true}
+      }
     }
   ]
 }

@@ -7,6 +7,7 @@ from pathlib import Path
 from finance_agent_core.agent import RoutedFinanceAgent
 from finance_agent_core.contracts.queryplan import ProductFamily
 from finance_agent_core.evaluation.briefing_examples import (
+    BriefingEvaluationMode,
     BriefingExampleRunner,
     load_briefing_example_suite,
     report_semantic_sha256,
@@ -29,6 +30,15 @@ def build_parser() -> argparse.ArgumentParser:
         default=Path("artifacts/evaluation/briefing-examples-v1-current.json"),
     )
     parser.add_argument("--generated-at-utc")
+    parser.add_argument(
+        "--mode",
+        choices=[item.value for item in BriefingEvaluationMode],
+        default=BriefingEvaluationMode.PRE_ACTIVATION.value,
+        help=(
+            "pre_activation accepts fail-closed CANNOT_VERIFY before corpus approval; "
+            "final_cache_only requires evidence-backed success for all five answerable examples"
+        ),
+    )
     parser.add_argument("--require-perfect", action="store_true")
     return parser
 
@@ -55,6 +65,7 @@ def main(argv: list[str] | None = None) -> int:
         loaded_suite=loaded_suite,
         service=service,
         database_sha256_by_family=database_hashes,
+        mode=BriefingEvaluationMode(arguments.mode),
     ).run(generated_at_utc=arguments.generated_at_utc)
     arguments.output.parent.mkdir(parents=True, exist_ok=True)
     arguments.output.write_text(f"{report.model_dump_json(indent=2)}\n", encoding="utf-8")
@@ -64,6 +75,7 @@ def main(argv: list[str] | None = None) -> int:
                 "output": str(arguments.output),
                 "passed": report.summary.passed,
                 "total": report.summary.total,
+                "evaluation_mode": report.evaluation_mode,
                 "answerable_executed": report.summary.answerable_executed,
                 "unanswerable_safely_handled": report.summary.unanswerable_safely_handled,
                 "unsafe_unanswerable_executions": (report.summary.unsafe_unanswerable_executions),

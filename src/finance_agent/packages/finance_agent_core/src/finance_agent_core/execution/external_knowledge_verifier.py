@@ -8,9 +8,11 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from finance_agent_core.config import QualityStatus
 from finance_agent_core.config.knowledge_coverage import KnowledgeCapability
+from finance_agent_core.contracts.external_evidence_semantics import requirement_relation_signal
 from finance_agent_core.contracts.external_knowledge import (
     CompositeKnowledgeQueryPlan,
     KnowledgeMatchMode,
+    KnowledgeRequirement,
 )
 from finance_agent_core.contracts.queryplan import ProductFamily, SortDirection
 from finance_agent_core.retrieval.hangul_romanization import best_phonetic_label
@@ -69,7 +71,9 @@ def _normalized(value: str) -> str:
 
 _RANK_FIELD_UNITS = {
     "aum": "source_currency_amount",
+    "net_asset_total": "source_currency_amount",
     "total_expense_ratio_pct": "pct_point",
+    "tracking_error_pct": "pct_point",
     "one_day_return_pct": "pct_point",
     "one_month_return_pct": "pct_point",
     "three_month_return_pct": "pct_point",
@@ -79,11 +83,46 @@ _RANK_FIELD_UNITS = {
     "twenty_day_volatility_pct": "pct_point",
 }
 
+_RANK_FIELD_FAMILIES = {
+    "net_asset_total": frozenset((ProductFamily.DOMESTIC_ETP,)),
+    "tracking_error_pct": frozenset((ProductFamily.DOMESTIC_ETP,)),
+}
+
 
 def _product_key(relation: TemporalRelationRecord) -> tuple[ProductFamily, str] | None:
     if relation.product_family is None or relation.product_id is None:
         return None
     return relation.product_family, relation.product_id
+
+
+def relation_satisfies_document_binding(
+    requirement: KnowledgeRequirement,
+    relation: TemporalRelationRecord,
+) -> bool:
+    """Verify one relation against its signed product-local document scope."""
+
+    if not requirement.document_bindings:
+        return True
+    product_key = _product_key(relation)
+    binding = next(
+        (
+            item
+            for item in requirement.document_bindings
+            if (item.product_family, item.product_id) == product_key
+        ),
+        None,
+    )
+    if binding is None or not relation.overlaps(binding.time_range):
+        return False
+    return any(
+        evidence.source_registry_id in binding.source_registry_ids
+        and evidence.as_of <= binding.time_range.end
+        and (
+            binding.time_range.start is None
+            or evidence.as_of >= binding.time_range.start
+        )
+        for evidence in relation.evidence
+    )
 
 
 class ExternalKnowledgeEvidenceVerifier:
@@ -98,6 +137,7 @@ class ExternalKnowledgeEvidenceVerifier:
         checks = {
             "requirement_coverage": True,
             "requirement_scope": True,
+            "document_scope": True,
             "source_scope": True,
             "time_scope": True,
             "official_product_join": True,
@@ -107,6 +147,8 @@ class ExternalKnowledgeEvidenceVerifier:
             "dependent_product_scope": True,
             "ranking_source": True,
             "ranking_order": True,
+            "evidence_date_source": True,
+            "evidence_date_order": True,
         }
         violations: list[str] = []
         relations_by_id = {item.relation_id: item for item in bundle.relations}
@@ -137,7 +179,38 @@ class ExternalKnowledgeEvidenceVerifier:
                 ):
                     checks["requirement_scope"] = False
                     violations.append(f"{requirement_id} relation exceeds its predicate scope")
-                labels = {*relation.subject.labels(), *relation.object.labels()}
+                if not relation.satisfies_document_scope(requirement.document_scope):
+                    checks["document_scope"] = False
+                    violations.append(
+                        f"{requirement_id} relation lacks the requested document Top-N proof"
+                    )
+                if not relation_satisfies_document_binding(requirement, relation):
+                    checks["document_scope"] = False
+                    violations.append(
+                        f"{requirement_id} relation differs from its product document binding"
+                    )
+                if (
+                    requirement.capability
+                    is KnowledgeCapability.FUND_STRUCTURE_STRATEGY_TREND
+                    and not any(
+                        requirement_relation_signal(requirement).search(evidence.excerpt)
+                        is not None
+                        for evidence in relation.evidence
+                    )
+                ):
+                    checks["requirement_scope"] = False
+                    violations.append(
+                        f"{requirement_id} evidence differs from its requested fund dimension"
+                    )
+                labels = {
+                    *relation.subject.labels(),
+                    *relation.object.labels(),
+                    *(
+                        label
+                        for entity in relation.scope_entities
+                        for label in entity.labels()
+                    ),
+                }
                 allowed_subjects = {
                     _normalized(value)
                     for value in (requirement.subject, *requirement.search_aliases)
@@ -281,6 +354,12 @@ class ExternalKnowledgeEvidenceVerifier:
         selection = bundle.plan.product_selection
         selected_product_ids = relation_products
         if selection is not None:
+            allowed_rank_families = _RANK_FIELD_FAMILIES.get(selection.rank_field)
+            plan_rank_families = {
+                family
+                for requirement in bundle.plan.requirements
+                for family in requirement.product_families
+            }
             rank_facts = [
                 item
                 for item in bundle.product_facts
@@ -297,6 +376,12 @@ class ExternalKnowledgeEvidenceVerifier:
             if any(item.source_kind != "provided" for item in rank_facts):
                 checks["ranking_source"] = False
                 violations.append("ranking used a non-provided product value")
+            if allowed_rank_families is not None and (
+                not plan_rank_families <= allowed_rank_families
+                or any(item.product_family not in allowed_rank_families for item in rank_facts)
+            ):
+                checks["ranking_source"] = False
+                violations.append("ranking field is not valid for a selected product family")
             if holding_sets and not rank_product_ids <= holding_products:
                 checks["holding_set_operation"] = False
                 violations.append("ranking contains a product outside the holding set operation")
@@ -330,6 +415,78 @@ class ExternalKnowledgeEvidenceVerifier:
                 if values != expected:
                     checks["ranking_order"] = False
                     violations.append("official product facts are not in requested rank order")
+
+        evidence_selection = bundle.plan.evidence_selection
+        if evidence_selection is not None:
+            source_requirement = requirement_by_id[evidence_selection.source_requirement_id]
+            dates_by_product: dict[tuple[ProductFamily, str], list[date]] = {}
+            for relation_id in bundle.requirement_relations.get(
+                source_requirement.requirement_id,
+                (),
+            ):
+                relation = relations_by_id.get(relation_id)
+                if relation is None:
+                    continue
+                product_key = _product_key(relation)
+                if product_key is None or product_key not in relation_products:
+                    continue
+                for evidence in relation.evidence:
+                    selected_date = (
+                        evidence.published_at
+                        if evidence_selection.order_by == "published_at"
+                        else evidence.as_of
+                    )
+                    if selected_date is None:
+                        continue
+                    if selected_date > bundle.plan.evidence_cutoff:
+                        checks["evidence_date_source"] = False
+                        checks["time_scope"] = False
+                        violations.append("evidence ordering date exceeds the cutoff")
+                        continue
+                    if source_requirement.time_range is not None and (
+                        selected_date > source_requirement.time_range.end
+                        or (
+                            source_requirement.time_range.start is not None
+                            and selected_date < source_requirement.time_range.start
+                        )
+                    ):
+                        continue
+                    dates_by_product.setdefault(product_key, []).append(selected_date)
+            if not dates_by_product:
+                checks["evidence_date_source"] = False
+                violations.append("evidence ordering lacks its requested date field")
+            representative_dates = {
+                key: (
+                    max(values)
+                    if evidence_selection.direction is SortDirection.DESC
+                    else min(values)
+                )
+                for key, values in dates_by_product.items()
+            }
+            expected_product_order = sorted(
+                representative_dates,
+                key=lambda item: (item[0].value, item[1]),
+            )
+            expected_product_order.sort(
+                key=lambda item: representative_dates[item],
+                reverse=evidence_selection.direction is SortDirection.DESC,
+            )
+            expected_product_order = expected_product_order[: evidence_selection.limit]
+            actual_product_order = list(
+                dict.fromkeys(
+                    (item.product_family, item.product_id)
+                    for item in bundle.product_facts
+                )
+            )
+            selected_product_ids = set(actual_product_order)
+            if actual_product_order != expected_product_order:
+                checks["evidence_date_order"] = False
+                violations.append(
+                    "official product facts are not in verified evidence-date order"
+                )
+            if any(key not in dates_by_product for key in actual_product_order):
+                checks["evidence_date_source"] = False
+                violations.append("selected product lacks the requested evidence date")
 
         if independent_product_sets:
             allowed_fact_products = selected_product_ids
@@ -372,4 +529,5 @@ __all__ = [
     "ExternalKnowledgeEvidenceVerifier",
     "ExternalKnowledgeVerification",
     "OfficialProductFact",
+    "relation_satisfies_document_binding",
 ]

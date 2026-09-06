@@ -13,8 +13,15 @@ from types import SimpleNamespace
 
 import finance_agent_core.agent  # noqa: F401 - resolves the retrieval import cycle
 from finance_agent_core.config.knowledge_coverage import KnowledgeCapability
+from finance_agent_core.config.source_registry import load_official_source_registry
+from finance_agent_core.contracts.external_knowledge import (
+    ProvidedProductCandidate,
+    ProvidedProductCandidateUniverse,
+)
+from finance_agent_core.contracts.queryplan import ProductFamily
 from finance_agent_core.execution.external_knowledge_runtime import (
     ExternalKnowledgeRuntime,
+    _evidence_extraction_universe,
     _plausible_dependency_entity,
     _relation_survives_universe,
 )
@@ -103,3 +110,81 @@ def test_subsidiary_relations_survive_the_universe_filter() -> None:
     assert _relation_survives_universe(subsidiary, approved)
     assert _relation_survives_universe(holding_in, approved)
     assert not _relation_survives_universe(holding_out, approved)
+
+
+def test_graph_page_seed_reuses_verified_relation_from_current_request() -> None:
+    registry = load_official_source_registry()
+    runtime = object.__new__(ExternalKnowledgeRuntime)
+    runtime.acquisition = SimpleNamespace(
+        connector=SimpleNamespace(registry=registry),
+        relation_store=SimpleNamespace(bundle=SimpleNamespace(relations=())),
+    )
+    product_key = (ProductFamily.DOMESTIC_ETP, "KR7305720005")
+    relation = SimpleNamespace(
+        product_family=product_key[0],
+        product_id=product_key[1],
+        evidence=(
+            SimpleNamespace(
+                source_uri="https://www.samsungfund.com/etf/product/view.do?id=2ETFB1",
+                title="KODEX 2차전지산업",
+            ),
+        ),
+    )
+
+    seeds = runtime._graph_page_seeds(
+        SimpleNamespace(capability=KnowledgeCapability.PRODUCT_RISK_FACTORS),
+        product_key,
+        (relation,),
+    )
+
+    assert [item.url for item in seeds] == [
+        "https://www.samsungfund.com/etf/product/view.do?id=2ETFB1"
+    ]
+
+
+def test_dependent_product_evidence_narrows_only_to_verified_db_key() -> None:
+    first = ProvidedProductCandidate(
+        product_family=ProductFamily.DOMESTIC_ETP,
+        product_id="KR7000000001",
+        product_name="첫 번째 ETF",
+    )
+    selected = ProvidedProductCandidate(
+        product_family=ProductFamily.DOMESTIC_ETP,
+        product_id="KR7000000002",
+        product_name="선택된 ETF",
+    )
+    universe = ProvidedProductCandidateUniverse(
+        candidates=(first, selected),
+        database_sha256s={ProductFamily.DOMESTIC_ETP: "a" * 64},
+        candidate_filter_sha256="b" * 64,
+    )
+
+    scoped = _evidence_extraction_universe(
+        universe,
+        (ProductFamily.DOMESTIC_ETP, selected.product_id),
+    )
+
+    assert scoped.explicit_identity_bound
+    assert scoped.candidates == (selected,)
+    assert universe.candidates == (first, selected)
+    assert universe.explicit_identity_bound is False
+
+
+def test_evidence_scope_never_invents_a_product_outside_signed_universe() -> None:
+    candidate = ProvidedProductCandidate(
+        product_family=ProductFamily.DOMESTIC_ETP,
+        product_id="KR7000000001",
+        product_name="승인 ETF",
+    )
+    universe = ProvidedProductCandidateUniverse(
+        candidates=(candidate,),
+        database_sha256s={ProductFamily.DOMESTIC_ETP: "a" * 64},
+        candidate_filter_sha256="b" * 64,
+    )
+
+    scoped = _evidence_extraction_universe(
+        universe,
+        (ProductFamily.DOMESTIC_ETP, "KR7999999999"),
+    )
+
+    assert scoped is universe

@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+from datetime import date
 from typing import Protocol
 
 from pydantic import BaseModel, ConfigDict
 
 from finance_agent_core.config.knowledge_coverage import KnowledgeCapability
+from finance_agent_core.contracts.external_evidence_semantics import requirement_relation_signal
 from finance_agent_core.contracts.external_knowledge import (
     CompositeKnowledgeQueryPlan,
     KnowledgeMatchMode,
@@ -17,6 +19,7 @@ from finance_agent_core.execution.external_knowledge_verifier import (
     ExternalKnowledgeEvidenceVerifier,
     ExternalKnowledgeVerification,
     OfficialProductFact,
+    relation_satisfies_document_binding,
 )
 from finance_agent_core.retrieval.temporal_relations import (
     TemporalEntityKind,
@@ -115,6 +118,56 @@ def selected_product_keys(
     product_fact_provider: OfficialProductFactProvider,
 ) -> tuple[ProductKey, ...]:
     matched = matched_product_keys(plan, requirement_relations)
+    evidence_selection = plan.evidence_selection
+    if evidence_selection is not None:
+        if not matched:
+            return ()
+        requirement = next(
+            item
+            for item in plan.requirements
+            if item.requirement_id == evidence_selection.source_requirement_id
+        )
+        dates_by_product: dict[ProductKey, list[date]] = {}
+        for relation in requirement_relations.get(requirement.requirement_id, ()):
+            key = _relation_product_key(relation)
+            if key is None or key not in matched:
+                continue
+            for evidence in relation.evidence:
+                selected_date = (
+                    evidence.published_at
+                    if evidence_selection.order_by == "published_at"
+                    else evidence.as_of
+                )
+                if selected_date is None or selected_date > plan.evidence_cutoff:
+                    continue
+                if requirement.time_range is not None and (
+                    selected_date > requirement.time_range.end
+                    or (
+                        requirement.time_range.start is not None
+                        and selected_date < requirement.time_range.start
+                    )
+                ):
+                    continue
+                dates_by_product.setdefault(key, []).append(selected_date)
+        if not dates_by_product:
+            raise ValueError("verified evidence has no requested date basis")
+        representative_dates = {
+            key: (
+                max(values)
+                if evidence_selection.direction.value == "desc"
+                else min(values)
+            )
+            for key, values in dates_by_product.items()
+        }
+        ordered = sorted(
+            representative_dates,
+            key=lambda item: (item[0].value, item[1]),
+        )
+        ordered.sort(
+            key=lambda item: representative_dates[item],
+            reverse=evidence_selection.direction.value == "desc",
+        )
+        return tuple(ordered[: evidence_selection.limit])
     if plan.product_selection is None:
         return matched
     facts = product_fact_provider.fetch(matched, plan.product_selection, ())
@@ -220,6 +273,7 @@ class ExternalKnowledgeExecutor:
                     subject=subject,
                     product_families=requirement.product_families,
                     time_range=requirement.time_range,
+                    document_scope=requirement.document_scope,
                     top_k=50,
                 )
                 found = self.relation_store.search(lookup)
@@ -235,6 +289,18 @@ class ExternalKnowledgeExecutor:
                         required_product_key is None
                         or _relation_product_key(relation) == required_product_key
                     )
+                    and (
+                        requirement.capability
+                        is not KnowledgeCapability.FUND_STRUCTURE_STRATEGY_TREND
+                        or any(
+                            requirement_relation_signal(requirement).search(
+                                evidence.excerpt
+                            )
+                            is not None
+                            for evidence in relation.evidence
+                        )
+                    )
+                    and relation_satisfies_document_binding(requirement, relation)
                 )
                 if (
                     required_product_key is not None
@@ -261,7 +327,12 @@ class ExternalKnowledgeExecutor:
             resolved[requirement.requirement_id] = ordered
             all_relations.update(matches)
 
-        product_keys = matched_product_keys(plan, resolved)
+        try:
+            product_keys = selected_product_keys(plan, resolved, self.product_fact_provider)
+        except (KeyError, TypeError, ValueError) as error:
+            raise ExternalKnowledgeExecutionError(
+                "verified external evidence could not resolve the requested ordering"
+            ) from error
         try:
             facts = self.product_fact_provider.fetch(
                 product_keys,
