@@ -138,8 +138,8 @@ DOCUMENT_CACHE_ACTIVATION=... APPROVED_TEMPORAL_RELATIONS=... \
 
 `all` 대신 `build | data | release | secrets | run | smoke | stop | status`를 단계별로 실행할 수 있다.
 산출물은 `RELEASE_DIR`(기본 `~/finance-agent-release`)에 놓인다. 봉인 값과 실제 파일이 하나라도
-다르면 컨테이너는 시작하지 않는다. 승인 문서 묶음·KURE-v1 모델 캐시·API 키는 Git에 포함하지 않고
-read-only로 마운트한다.
+다르면 컨테이너는 시작하지 않는다. 승인 문서 묶음은 `src/finance_agent/artifacts/approved-corpus/`에 있고, KURE-v1 모델 캐시와 API 키는
+배포 시 read-only로 마운트한다.
 
 ## 7. 주요 환경변수
 
@@ -167,7 +167,7 @@ read-only로 마운트한다.
 ## 8. 테스트
 
 ```bash
-umask 022; PYTHONPATH=src python -m pytest -q src/fastapi_backend/tests
+umask 022; PYTHONPATH=src/fastapi_backend:src python -m pytest -q src/fastapi_backend/tests
 ```
 
 실행 중인 서버에 대한 HTTP 스모크(`/health`, `POST /answer`, `GET /answer` 계약). 공모펀드

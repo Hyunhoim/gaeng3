@@ -76,7 +76,7 @@ tests/                 # 단위 · 계약 · 회귀 테스트
 | --- | --- |
 | 네 상품군 SQLite · 관계 색인 · 관계 artifact | `storage/prepare.py`가 공식 XLSX에서 생성. 승인 manifest와 해시 대조 |
 | KURE-v1 Schema Dense 색인 v9 (registry 1.8) | `src/finance_agent/artifacts/runtime/schema-dense/`. 필드 의미 연결 |
-| 승인 문서 묶음 · Document Dense 색인 · 활성화 영수증 | 258건 공식 문서. Git에 포함하지 않고 배포 시 read-only 마운트 |
+| 승인 문서 묶음 · Document Dense 색인 · 활성화 영수증 | 258건 공식 문서 정규화 텍스트·매니페스트·색인·영수증. `src/finance_agent/artifacts/approved-corpus/` |
 | `AgentReleaseManifest` · `DeploymentBinding` | 위 artifact와 코드·이미지의 SHA-256을 결속. `release_cli.py manifest|binding`으로 생성 |
 
 ## 6. 명령

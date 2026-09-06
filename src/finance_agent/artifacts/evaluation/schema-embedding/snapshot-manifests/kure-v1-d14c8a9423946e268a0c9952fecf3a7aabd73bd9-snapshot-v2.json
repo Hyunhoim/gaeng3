@@ -1,0 +1,91 @@
+{
+  "schema_version": "2.0",
+  "manifest_kind": "schema_embedding_snapshot_artifact",
+  "candidate": {
+    "alias": "kure-v1",
+    "model_id": "nlpai-lab/KURE-v1",
+    "revision": "d14c8a9423946e268a0c9952fecf3a7aabd73bd9",
+    "linkage_key": "204932b1cf5e14b48739ec68d7fdeee1bcc1b7fca9500a4897a1a4992b9c8b16"
+  },
+  "files": [
+    {
+      "relative_path": "1_Pooling/config.json",
+      "size_bytes": 297,
+      "sha256": "13e69897522ee8255104483ed9f219465d1be3936654a54a318758738052789e",
+      "category": "config"
+    },
+    {
+      "relative_path": "config.json",
+      "size_bytes": 807,
+      "sha256": "852d42e020c7f989c2acaf30fc683b7f768e8c6d1ab17166e835442162bd825d",
+      "category": "config"
+    },
+    {
+      "relative_path": "config_sentence_transformers.json",
+      "size_bytes": 220,
+      "sha256": "8c73684c2160f2209f3706d6cbe0e933287fe6945d9546042be4c105cdb5252e",
+      "category": "config"
+    },
+    {
+      "relative_path": "model.safetensors",
+      "size_bytes": 2271064456,
+      "sha256": "c18156e80caf8ff45eb84a24a853130c3bca03087ccb41b051f86e7556bae02c",
+      "category": "weights"
+    },
+    {
+      "relative_path": "modules.json",
+      "size_bytes": 349,
+      "sha256": "84e40c8e006c9b1d6c122e02cba9b02458120b5fb0c87b746c41e0207cf642cf",
+      "category": "config"
+    },
+    {
+      "relative_path": "sentence_bert_config.json",
+      "size_bytes": 54,
+      "sha256": "eb9b44b13c0f52a3b3685c3b1cbdea1ba8b04bea123b98f61610048940776eb1",
+      "category": "config"
+    },
+    {
+      "relative_path": "special_tokens_map.json",
+      "size_bytes": 964,
+      "sha256": "8c785abebea9ae3257b61681b4e6fd8365ceafde980c21970d001e834cf10835",
+      "category": "tokenizer"
+    },
+    {
+      "relative_path": "tokenizer.json",
+      "size_bytes": 17083053,
+      "sha256": "fb3c3b93c46fd5a8634e262e1b7de7da11a18b527aa2282b312952b692781dfd",
+      "category": "tokenizer"
+    },
+    {
+      "relative_path": "tokenizer_config.json",
+      "size_bytes": 1203,
+      "sha256": "b87c8703482b0300d3da30e201519aa641f6a450f5eb5bf1e624afbf70c74d80",
+      "category": "tokenizer"
+    }
+  ],
+  "file_count": 9,
+  "total_size_bytes": 2288151403,
+  "category_digests": {
+    "weights": {
+      "file_count": 1,
+      "total_size_bytes": 2271064456,
+      "file_manifest_sha256": "c1df28dea4119c2781f27821fa6aafa527c77b6461ea647073b51b572c69521b"
+    },
+    "tokenizer": {
+      "file_count": 3,
+      "total_size_bytes": 17085220,
+      "file_manifest_sha256": "8f7093c11fe26d9d0503955d94ff06d995d717c3693af17d58494a791f561337"
+    },
+    "config": {
+      "file_count": 5,
+      "total_size_bytes": 1727,
+      "file_manifest_sha256": "1d021a693716c5dfde8b0028ff89b66f95302aecd7e53a0de250c687a5b7dd76"
+    },
+    "other": {
+      "file_count": 0,
+      "total_size_bytes": 0,
+      "file_manifest_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    }
+  },
+  "snapshot_file_manifest_sha256": "b0b6229e5d2593371b7ac31519da186ccac3fcdfa8fb4e98fa6a430cc92bd597"
+}

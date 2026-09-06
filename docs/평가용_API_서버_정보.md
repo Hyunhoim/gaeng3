@@ -12,7 +12,7 @@ OpenAPI 문서와 실제 응답에서 확인한 값이다.
 
 | 항목 | 값 |
 | --- | --- |
-| 평가용 Endpoint | `http://{공인 IP}/answer` |
+| 평가용 Endpoint | `http://101.79.25.57/answer` |
 | Method | `GET` |
 | 인증 | 없음. 인증 헤더를 사용하지 않는다 |
 | Content-Type | `application/json; charset=utf-8` |
@@ -37,7 +37,7 @@ HTTP 500을 반환하지 않는다.
 ### 2.2 요청 예시
 
 ```bash
-curl --get "http://{공인 IP}/answer" \
+curl --get "http://101.79.25.57/answer" \
   --data-urlencode "question_id=Q-001" \
   --data-urlencode "question=현재 판매 가능한 원화채권 중 AA- 이상 종목 알려줘"
 ```
@@ -46,7 +46,7 @@ curl --get "http://{공인 IP}/answer" \
 import requests
 
 response = requests.get(
-    "http://{공인 IP}/answer",
+    "http://101.79.25.57/answer",
     params={"question_id": "Q-001", "question": "평가 질의"},
     timeout=300,
 )

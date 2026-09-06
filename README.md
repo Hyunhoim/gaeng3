@@ -15,27 +15,9 @@
 | 소스코드 | `src/`, `requirements.txt`, 이 README |
 | Ontology | [`ontology/`](ontology/) — `common.ttl` `bond_kr.ttl` `etf_kr.ttl` `etf_gl.ttl` `fund_pub.ttl` |
 | 기술 제안서 | [`docs/기술_제안서.pdf`](docs/기술_제안서.pdf) · [부록: 수집·적재 Flow, 활용 로직, 재현 절차](docs/기술_제안서_부록.md) |
-| 평가용 API 서버 정보 | End-point `http://101.79.25.57/answer` · [API 명세서](docs/평가용_API_서버_정보.md) |
+| 평가용 API 서버 정보 | [`docs/평가용_API_서버_정보.md`](docs/평가용_API_서버_정보.md) |
 
-## 동작 구조
-
-```mermaid
-flowchart LR
-    U["평가자 / 사용자"] --> B["FastAPI Backend<br/>GET /answer"]
-    B --> A["Finance Agent Core"]
-    A --> H["HyperCLOVA X HCX-007<br/>의도 분석 · 최종 답변"]
-    A --> D["상품군별 SQLite · 관계 색인"]
-    A --> C["봉인 문서 묶음 258건<br/>KURE Document Dense · BM25"]
-    X["공식 XLSX 8개"] --> I["data-init<br/>정규화 · 검증"] --> D
-```
-
-질문 → 안전 검사 → HCX-007 의도 분석(Semantic Frame) + 어휘 규칙으로 조건 잠금 → 남은 표현만
-KURE-v1 Schema Dense로 필드 연결 → 서버가 Typed QueryPlan 확정 → SQLite 실행과 Python 재검산 →
-(필요 시) 봉인 문서 묶음에서 근거 검색 후 제공 DB 상품과 교집합 → HCX-007 문장 생성 → Answer
-Verifier 재검사. 각 단계의 계약과 파일 위치는 [Agent README](src/finance_agent/README.md)와
-[Backend README](src/fastapi_backend/README.md)에 있다.
-
-## 실행
+## 환경 구성과 실행
 
 Docker Engine 24 이상, Docker Compose v2, 주최 측 XLSX 디렉터리(`2.금융상품_20260824`)가 필요하다.
 
