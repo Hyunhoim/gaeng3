@@ -109,6 +109,7 @@ step_data() {
         -v "$DATA_VOLUME:/data" "$IMAGE_TAG" \
         sh -c 'PYTHONPATH=/opt/finance-agent-core-src exec python -m finance_agent_core.storage.prepare --data-dir /raw --output-dir /data --owner-uid 10001 --owner-gid 10001' \
         | tail -n 3
+    rm -f "$RELEASE_DIR/relation-retrieval-artifact.sha256" "$RELEASE_DIR/relation-retrieval-artifact.json"
     docker run --rm -v "$DATA_VOLUME:/data:ro" "$IMAGE_TAG" sh -c 'cat /data/relation-retrieval-artifact.sha256' | tr -d '\n' > "$RELEASE_DIR/relation-retrieval-artifact.sha256"
     docker run --rm -v "$DATA_VOLUME:/data:ro" "$IMAGE_TAG" sh -c 'cat /data/relation-retrieval-artifact.json' > "$RELEASE_DIR/relation-retrieval-artifact.json"
     chmod 444 "$RELEASE_DIR/relation-retrieval-artifact.json"
