@@ -14,7 +14,7 @@
 | --- | --- |
 | 소스코드 | `src/`, `requirements.txt`, 이 README |
 | Ontology | [`ontology/`](ontology/) — `common.ttl` `bond_kr.ttl` `etf_kr.ttl` `etf_gl.ttl` `fund_pub.ttl` |
-| 기술 제안서 | [`docs/기술_제안서.pdf`](docs/기술_제안서.pdf) · [부록: 수집·적재 Flow, 활용 로직, 검증·재현 절차](docs/기술_제안서_부록.md) |
+| 기술 제안서 | [`docs/기술_제안서.pdf`](docs/기술_제안서.pdf) · [부록: 수집·적재 Flow, 활용 로직, 재현 절차](docs/기술_제안서_부록.md) |
 | 평가용 API | `GET http://101.79.25.57/answer` · [API 명세서](docs/평가용_API_서버_정보.md) |
 
 ## 평가용 API
@@ -93,38 +93,18 @@ KURE_CACHE_DIR=/path/to/kure-cache
 
 ```text
 .
-├── README.md · requirements.txt
-├── ontology/                  # Turtle 5개 (field_registry.yaml에서 생성)
-├── docs/                      # 기술 제안서 · 부록 · API 명세서
-├── src/finance_agent/         # Agent Core: 질의 해석 · 검색 · 검증 · 근거 · 답변 (+ 테스트)
-│   ├── artifacts/runtime/     # KURE 필드 의미 색인 v9
-│   └── artifacts/approved-corpus/  # 승인 문서 묶음 258건 · 색인 · 영수증
-├── src/fastapi_backend/       # FastAPI 서버 · Dockerfile · 배포 스크립트 (+ 테스트)
+├── README.md
+├── requirements.txt
+├── ontology/              # 도메인별 Ontology (.ttl)
+├── docs/                  # 기술 제안서 · 부록 · API 명세서
+├── src/finance_agent/     # Agent Core
+├── src/fastapi_backend/   # API 서버 · 배포
 ├── docker-compose.yml · compose.sh · compose-release.sh
 └── THIRD_PARTY_NOTICES.md
 ```
 
-## 검증
-
-```bash
-( cd src/finance_agent/packages/finance_agent_core && python -m pytest -q )   # Agent Core
-umask 022; PYTHONPATH=src/fastapi_backend:src python -m pytest -q src/fastapi_backend/tests   # Backend
-python src/finance_agent/scripts/sync-ontology.py --check                    # Ontology ↔ registry
-```
-
-| 검증 | 결과 (2026-09-06, 제출 트리) |
-| --- | --- |
-| Agent Core pytest | 4,039 passed · 12 skipped |
-| Backend pytest | 408 passed |
-| Ontology 일치 검사 | Turtle 5개가 `field_registry.yaml`과 일치 |
-| 배포본 공식 예시 8문항 | 예시 1·2·3·5 근거 포함 답변, 답변 불가 3문항 거부, 예시 4는 문서 묶음 범위 밖으로 확인 불가 |
-
-테스트는 원천 데이터·네트워크·LLM 자격증명 없이 실행된다. Backend 테스트는 파일 권한을 검사하므로
-`umask 022`로 실행한다.
-
 ## Ontology
 
-`ontology/`의 Turtle 5개는 [`field_registry.yaml`](src/finance_agent/packages/finance_agent_core/src/finance_agent_core/config/field_registry.yaml)에서
-`sync-ontology.py`가 생성한다. `common.ttl`이 공통 상위 클래스(`Product`)와 공통 속성을, 상품군별
-파일이 하위 클래스와 전용 속성을 정의한다. 런타임이 같은 registry로 질문을 해석하므로 온톨로지와
-실제 동작이 어긋나지 않는다.
+`ontology/`의 Turtle 5개(`common.ttl`, `bond_kr.ttl`, `etf_kr.ttl`, `etf_gl.ttl`, `fund_pub.ttl`)는
+Agent가 질문 해석에 쓰는 field registry에서 생성한다. `common.ttl`이 공통 상위 클래스와 공통 속성을,
+상품군별 파일이 하위 클래스와 전용 속성을 정의한다.

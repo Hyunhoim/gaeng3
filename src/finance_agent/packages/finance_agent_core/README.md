@@ -95,12 +95,7 @@ python src/finance_agent/scripts/sync-ontology.py --check
 
 ## 7. 테스트
 
-원천 데이터·네트워크·LLM 자격증명 없이 실행된다.
-
 ```bash
 cd src/finance_agent/packages/finance_agent_core && python -m pytest -q
 ```
 
-```bash
-python -m ruff check .
-```

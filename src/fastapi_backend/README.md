@@ -166,8 +166,6 @@ read-only로 마운트한다.
 
 ## 8. 테스트
 
-테스트가 릴리스 파일 권한을 확인하므로 `umask 022`로 실행한다.
-
 ```bash
 umask 022; PYTHONPATH=src python -m pytest -q src/fastapi_backend/tests
 ```

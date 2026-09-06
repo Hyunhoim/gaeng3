@@ -57,12 +57,12 @@ src/finance_agent/
 ├── packages/finance_agent_core/  # 설치 가능한 Agent Core Python 패키지 + 테스트
 ├── requirements/                 # base · dev · constraints (고정 버전)
 ├── scripts/sync-ontology.py      # field registry → ontology/*.ttl 생성 · 검사
-└── artifacts/runtime/schema-dense/  # KURE-v1 Schema Dense 색인 v9 (registry 1.8, 런타임 입력)
+└── artifacts/runtime/schema-dense/  # KURE 필드 의미 색인
 ```
 
-## 5. 설치와 검증
+## 5. 설치
 
-저장소 루트에서 실행한다. 테스트는 원천 데이터·네트워크·LLM 자격증명 없이 동작한다.
+저장소 루트에서 실행한다.
 
 ```bash
 python -m pip install -r requirements.txt
