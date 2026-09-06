@@ -1,0 +1,1423 @@
+1
+iShares Core ETFs are bolded
+iShares Core ETFs
+Low-cost stock and bond ETFs to build the foundation of a portfolio.
+iShares.com
+U.S. stocks
+Fund name
+Trading
+symbol
+Expense
+ratio (%)
+iShares Core Dividend ETF DIVB 0.05
+iShares Core Dividend Growth ETF DGRO 0.08
+iShares Core High Dividend ETF HDV 0.08
+iShares Core S&P 500 ETF IVV 0.03
+iShares Core S&P Mid-Cap ETF IJH 0.05
+iShares Core S&P Small-Cap ETF IJR 0.06
+iShares Core S&P Total U.S. Stock Market
+ETF ITOT 0.03
+iShares Core S&P U.S. Growth ETF IUSG 0.04
+iShares Core S&P U.S. Value ETF IUSV 0.04
+iShares Core U.S. REIT ETF USRT 0.08
+International stocks
+iShares Core MSCI EAFE ETF IEFA 0.07
+iShares Core MSCI International
+Developed Markets ETF IDEV 0.04
+iShares Core MSCI Total International
+Stock ETF IXUS 0.07
+International stocks (continued)
+Fund name
+Trading
+symbol
+Expense
+ratio (%)
+iShares Core MSCI Emerging Markets ETF IEMG 0.09
+iShares Core MSCI Europe ETF IEUR 0.09
+iShares Core MSCI Pacific ETF IPAC 0.09
+Bonds
+iShares Core 10+ Year USD Bond ETF ILTB 0.06
+iShares Core 1-5 Year USD Bond ETF ISTB 0.06
+iShares Core 5-10 Year USD Bond ETF IMTB 0.06 ‡
+iShares Core International Aggregate
+Bond ETF IAGG 0.07
+iShares Core Universal USD Bond ETF IUSB 0.06
+iShares Core U.S. Aggregate Bond ETF AGG 0.03
+iShares Core Allocation ETFs
+iShares Core Aggressive Allocation ETF AOA 0.15‡
+iShares Core Conservative Allocation ETF AOK 0.15‡
+iShares Core Growth Allocation ETF AOR 0.15‡
+iShares Core Moderate Allocation ETF AOM 0.15‡
+THE COMPLETE iSHARES ETF & ETP LINEUP
+GET INVESTED.
+iShares U.S. ETF & ETP Product List as of 5/1/2026
+MKTG0526-5508078-EXP0527-1/18
+2 iShares Core ETFs are bolded
+Target date
+Fund name
+Trading
+symbol
+Inception
+date
+Exp.
+ratio (%)
+iShares LifePath Retirement ETF† IRTR  10/17/23 0.08
+iShares LifePath Target Date† 2030 ETF ITDB  10/17/23 0.09
+iShares LifePath Target Date† 2035 ETF ITDC  10/17/23 0.10
+iShares LifePath Target Date† 2040 ETF ITDD  10/17/23 0.11
+iShares LifePath Target Date† 2045 ETF ITDE  10/17/23 0.11
+iShares LifePath Target Date† 2050 ETF ITDF  10/17/23 0.11
+iShares LifePath Target Date† 2055 ETF ITDG  10/17/23 0.11
+iShares LifePath Target Date† 2060 ETF ITDH  10/17/23 0.11
+iShares LifePath Target Date† 2065 ETF ITDI  10/17/23 0.11
+iShares LifePath Target Date 2070
+ETF ITDJ 11/12/24 0.12
+Regions
+U.S. – Broad market
+iShares Core S&P Total U.S.
+Stock Market ETF ITOT  1/20/04 0.03
+iShares Core S&P U.S. Growth ETF IUSG 7/24/0 0 0.04
+iShares Core S&P U.S. Value ETF IUSV 7/24/0 0 0.04
+iShares Dow Jones U.S. ETF IYY 6/12/00 0.20
+iShares Russell 3000 ETF IWV 5/22/00 0.20
+iShares S&P 500 3% ETF Capped ETF TOPC 4/15/25 0.09†
+U.S. – Large cap
+iShares Core Dividend ETF DIVB 11 / 7/17 0.05
+iShares Core Dividend Growth ETF DGRO 6/10/14 0.08
+iShares Core High Dividend ETF HDV 3/29/11 0.08
+iShares Core S&P 500 ETF IVV 5/15/00 0.03
+iShares Enhanced Large Cap Core
+Active ETF† ENHU 11/4/25 0.22
+iShares ESG Aware MSCI USA ETF ESGU 12/1/16 0.15
+iShares Factors U.S. Growth Style ETF STLG 1/14/20 0.15
+iShares Large Cap Accelerated ETF TWOX 1/15/25 0.50‡
+iShares Large Cap Core Active ETF† BLCR 10/24/23 0.36‡
+U.S. – Large cap (continued)
+Fund name
+Trading
+symbol
+Inception
+date
+Exp.
+ratio
+(%)
+iShares Large Cap Deep Quarterly
+Laddered ETF IVVB 6/28/23 0.51‡
+iShares Large Cap Growth Active ETF† BGRO 6/04/24 0.55
+iShares Large Cap Max Buffer Dec ETF DMAX 12/31/24 0.50‡
+iShares Large Cap Max Buffer Jun ETF† MAXJ 6/28/24 0.50‡
+iShares Large Cap Max Buffer Mar ETF†MMAX 3/31/25 0.50‡
+iShares Large Cap Max Buffer Sep ETF† SMAX 10/01/24 0.50
+iShares Large Cap 10% Target Buffer
+Dec ETF TEND 10/07/25 0.50‡
+iShares Large Cap 10% Target Buffer
+Jun ETF TENJ 10/21/25 0.50‡
+iShares Large Cap 10% Target Buffer
+Mar ETF TENM 10/21/25 0.50‡
+iShares Large Cap 10% Target Buffer
+Sep ETF STEN 9/30/25 0.50‡
+iShares Large Cap Moderate Quarterly
+Laddered ETF IVVM  6/28/23 0.50‡
+iShares Large Cap Value Active ETF† BLCV 5/19/23 0.45
+iShares Long-Term U.S. Equity Active
+ETF† BELT 6/17/24 0.75
+iShares Morningstar Growth ETF ILCG 6/28/04 0.04
+iShares Morningstar U.S. Equity ETF ILCB 6/28/04 0.03
+iShares Morningstar Value ETF ILCV 6/28/04 0.04
+iShares MSCI KLD 400 Social ETF DSI 11/14/06 0.25
+iShares MSCI USA Equal Weighted ETF EUSA 5/5/10 0.09
+iShares MSCI USA ESG Select ETF SUSA 1/24/05 0.25
+iShares MSCI USA Min Vol Factor ETF USMV 10/18/11 0.15
+iShares MSCI USA Momentum
+Factor ETF MTUM 4/16/13 0.15
+iShares MSCI USA
+Quality Factor ETF QUAL 7/16/13 0.15
+iShares MSCI USA Size Factor ETF SIZE 4/16/13 0.15
+iShares MSCI USA Value
+Factor ETF VLUE 4/16/13 0.15
+iShares Nasdaq-100 ex Top 30 ETF QNXT 10/23/24 0.20
+iShares Nasdaq Premium Income Active
+ETF† BALQ 12/2/25 0.35
+iShares Nasdaq Top 30 Stocks ETF QTOP 10/23/24 0.20
+iShares Russell 1000 ETF IWB 5/15/00 0.15
+iShares Russell 1000 Growth ETF IWF 5/22/00 0.19
+iShares Russell 1000 Value ETF IWD 5/22/00 0.19
+iShares Russell Top 200 ETF IWL 9/22/09 0.15
+iShares Russell Top 200 Growth ETF IWY 9/22/09 0.20
+iShares Russell Top 200 Value ETF IWX  9/22/09 0.20
+iShares Select Dividend ETF DVY 11/3/03 0.38
+MKTG0526-5508078-EXP0527-2/18
+3iShares Core ETFs are bolded
+U.S. – Large cap (continued)
+Fund name
+Trading
+symbol
+Inception
+date
+Exp.
+ratio
+(%)
+iShares S&P 100 ETF OEF  10 / 2 3 / 0 00.20
+iShares S&P 500 ex S&P 100 ETF XOEF 7/8/25 0.20
+iShares S&P 500 Growth ETF IVW 5/22/00 0.18
+iShares S&P 500 Value ETF IVE 5/22/00 0.18
+iShares Top 20 U.S. Stocks ETF TOPT 10/23/24 0.20
+iShares U.S Equity Factor ETF LRGF 4/28/15 0.08
+iShares U.S Large Cap Premium Income
+Active ETF† BALI 9/26/23 0.35
+U.S. – Mid cap
+iShares Core S&P Mid-Cap ETF IJH 5/22/00 0.05
+iShares Morningstar Mid-Cap ETF IMCB 6/28/04 0.04
+iShares Morningstar Mid-Cap
+Growth ETF IMCG 6/28/04 0.06
+iShares Morningstar Mid-Cap Value ETF IMCV 6/28/04 0.06
+iShares Russell 2500 ETF SMMD 7/6/17 0.15‡
+iShares Russell Mid-Cap ETF IWR 7/17/01 0.19
+iShares Russell Mid-Cap Growth ETF IWP 7/17/01 0.23
+iShares Russell Mid-Cap Value ETF IWS 7/17/01 0.23
+iShares S&P Mid-Cap 400 Growth ETF IJK 7/24/0 0 0.17
+iShares S&P Mid-Cap 400 Value ETF IJJ 7/24/0 0 0.18
+U.S. – Small cap
+iShares Core S&P Small-Cap ETF IJR 5/22/00 0.06
+iShares ESG Aware MSCI USA Small-
+Cap ETF ESML 4/10/18 0.17
+iShares Micro-Cap ETF IWC 8/12/05 0.60
+iShares Morningstar Small-Cap ETF ISCB 6/28/04 0.04
+iShares Morningstar Small-Cap
+Growth ETF ISCG 6/28/04 0.06
+iShares Morningstar Small-Cap
+Value ETF ISCV 6/28/04 0.06
+iShares MSCI USA Small-Cap Min Vol
+Factor ETF SMMV 9/ 7/16 0.20
+iShares MSCI USA Small-Cap Quality
+Factor ETF SQLT 3/31/26 0.20
+U.S. – Small cap (continued)
+Fund name
+Trading
+symbol
+Inception
+date
+Exp.
+ratio
+(%)
+iShares Russell 2000 ETF IWM 5/22/00 0.19
+iShares Russell 2000 Growth ETF IWO 7/24/0 0 0.24
+iShares Russell 2000 Value ETF IWN 7/24/0 0 0.24
+iShares S&P Small-Cap 600
+Growth ETF IJT 7/24/0 0 0.18
+iShares S&P Small-Cap 600 Value ETF IJS 7/24/0 0 0.18
+iShares U.S. Small-Cap Equity Factor
+ETF SMLF 4/28/15 0.15
+U.S. – Single state
+iShares Texas Equity ETF TEXN 6/23/25 0.20
+Global
+iShares Core MSCI Total International
+Stock ETF IXUS 10/18/12 0.07
+iShares Currency Hedged MSCI ACWI
+ex U.S. ETF HAWX 6/29/15 0.35‡
+iShares Disciplined Volatility Active ETF† BDVL 9/12/25 0.41‡
+iShares Dynamic Equity  Active ETF† BDYN 9/12/25 0.42‡
+iShares Future Exponential
+Technologies ETF XT  3/19/15 0.46
+iShares Global 100 ETF IOO  12/5/00 0.40
+iShares International Country Rotation
+Active ETF† CORO 12/03/24 0.55‡
+iShares MSCI ACWI ETF ACWI 3/26/08 0.32‡
+iShares MSCI ACWI ex U.S. ETF ACWX 3/26/08 0.32‡
+iShares MSCI Global Min Vol Factor ETFACWV  10/18/11 0.20
+iShares MSCI Global Sustainable
+Development Goals ETF SDG  4/20/16 0.49
+iShares MSCI World Small Cap ETF WSML 4/1/25 0.30
+iShares Self-Driving EV and Tech ETF IDRV 4/16/19 0.47
+Europe
+iShares Core MSCI Europe ETF IEUR 6/10/14 0.09
+iShares Currency Hedged MSCI
+Eurozone ETF HEZU 7/9/14 0.53‡
+MKTG0526-5508078-EXP0527-3/18
+4
+Europe (continued)
+Fund name
+Trading
+symbol
+Inception
+date
+Exp.
+ratio
+(%)
+iShares Europe ETF IEV 7/25/0 0 0.60
+iShares MSCI Europe Financials ETF EUFN 1/20/10 0.48
+iShares MSCI Europe Small-Cap ETF IEUS  11/12/07 0.41
+iShares MSCI Eurozone ETF EZU 7/25/0 0 0.51
+Asia Pacific
+iShares Asia 50 ETF AIA  11/13/07 0.50
+iShares Asia/Pacific Dividend ETF DV YA 2 / 2 3 /12 0.49
+iShares Core MSCI Pacific ETF IPAC  6/10/14 0.09
+iShares MSCI All Country
+Asia ex Japan ETF AAXJ 8/13/08 0.72
+iShares MSCI Emerging Markets Asia ETFEEMA 2/8/12 0.49
+iShares MSCI Pacific ex Japan ETF EPP  10 / 2 5 / 010.48
+Latin America
+iShares Latin America 40 ETF ILF 10/25/01 0.47
+Markets
+Developed markets
+iShares Asia 50 ETF AIA  11/13/07 0.50
+iShares Asia/Pacific Dividend ETF DV YA 2 / 2 3 /12 0.49
+iShares Core MSCI EAFE ETF IEFA  10 /1 8 /120.07
+iShares Core MSCI Europe ETF IEUR 6/10/14 0.09
+iShares Core MSCI International
+Developed Markets ETF IDEV  3 / 2 1 /170.04
+iShares Core MSCI Pacific ETF IPAC  6/10/14 0.09
+iShares Core MSCI Total International
+Stock ETF IXUS  10 /1 8 /120.07
+iShares Currency Hedged MSCI ACWI
+ex U.S. ETF HAWX 6/29/15 0.35‡
+iShares Currency Hedged
+MSCI EAFE ETF HEFA  1/31/14 0.35‡
+iShares Currency Hedged MSCI EAFE
+Small-Cap ETF HSCZ 6/29/15 0.43‡
+iShares Currency Hedged MSCI
+Eurozone ETF HEZU 7/9/14 0.53‡
+Developed markets (continued)
+Fund name
+Trading
+symbol
+Inception
+date
+Exp.
+ratio (%)
+iShares Enhanced International Active
+ETF† ENHI 3/10/26 0.27
+iShares ESG Aware MSCI EAFE ETF ESGD 6/28/16 0.21
+iShares Europe ETF IEV 7/25/0 0 0.60
+iShares Global 100 ETF IOO  12/5/00 0.40
+iShares Global Equity Factor ETF GLOF 4/28/15 0.20
+iShares International  Equity Factor ETF INTF 4/28/15 0.16
+iShares International  Equity Factor
+Rotation Active ETF† IDYN 8/5/25 0.45
+iShares International Select Dividend ETFIDV 6/11/07 0.50
+iShares International Small-Cap Equity
+Factor ETF ISCF 4/28/15 0.23
+iShares MSCI ACWI ETF ACWI 3/26/08 0.32
+iShares MSCI ACWI ex U.S. ETF ACWX 3/26/08 0.32
+iShares MSCI ACWI Low Carbon
+Target E TF CRBN 12/8/14 0.20
+iShares MSCI EAFE ETF EFA 8/14/01 0.32
+iShares MSCI EAFE Growth ETF EFG 8/1/05 0.36
+iShares MSCI EAFE Min Vol Factor ETF EFAV  10/18/11 0.20
+iShares MSCI EAFE Small-Cap ETF SCZ  12/10/07 0.40
+iShares MSCI EAFE Value ETF EFV 8/1/05 0.33
+iShares MSCI Europe Small-Cap ETF IEUS  11/12/07 0.41
+iShares MSCI Eurozone ETF EZU 7/25/0 0 0.51
+iShares MSCI Global Min Vol Factor ETF ACWV 10/18/11 0.20
+iShares MSCI Intl Momentum
+Factor ETF IMTM 1/13/15 0.30
+iShares MSCI Intl Quality Factor ETF IQLT 1/13/15 0.30
+iShares MSCI Intl Value Factor ETF IVLU 6/16/15 0.30
+iShares MSCI Kokusai ETF TOK  12/10/07 0.25
+iShares MSCI Pacific ex Japan ETF EPP  10/25/01 0.48
+iShares MSCI World ETF URTH  1/10/12 0.24
+iShares U.S. Industry Rotation Active
+ETF† INRO 03/26/24 0.42
+iShares Core ETFs are bolded
+MKTG0526-5508078-EXP0527-4/18
+5
+iShares Core ETFs are bolded
+Emerging markets
+Fund name
+Trading
+symbol Inception date
+Exp.
+ratio (%)
+iShares Core MSCI Emerging
+Markets ETF IEMG  10 /1 8 /120.09
+iShares Currency Hedged MSCI
+Emerging Markets ETF HEEM 9/23/14 0.72‡
+iShares Emerging Markets Dividend ETFDVYE 2 / 2 3 /12 0.49
+iShares Emerging Markets Equity
+Factor ETF EMGF 12/8/15 0.25
+iShares ESG Aware MSCI EM ETF ESGE 6/28/16 0.25
+iShares Latin America 40 ETF ILF  10/25/01 0.47
+iShares MSCI All Country Asia
+ex Japan ETF AAXJ 8/13/08 0.69
+iShares MSCI BIC ETF BKF  11/12/07 0.70
+iShares MSCI Emerging Markets Asia ETFEEMA 2/8/12 0.49
+iShares MSCI Emerging Markets ETF EEM 4/ 7/03 0.72
+iShares MSCI Emerging Markets
+ex China ETF EMXC 7/18/17 0.25
+iShares MSCI Emerging Markets Min
+Vol Factor ETF EEMV  10/18/11 0.25
+iShares MSCI Emerging Markets
+Small-Cap ETF EEMS 8/16/11 0.70
+Frontier markets
+iShares MSCI Kuwait ETF KWT 9/1/20 0.74
+Geographies
+Developed markets
+iShares Currency Hedged MSCI
+Japan ETF HEWJ 1/31/14 0.49‡
+iShares JPX-Nikkei 400 ETF JPXN 10/23/01 0.48
+iShares MSCI Australia ETF EWA 3/12/96 0.50
+iShares MSCI Austria ETF EWO 3/12/96 0.50
+iShares MSCI Belgium ETF EWK 3/12/96 0.50
+iShares MSCI Canada ETF EWC 3/12/96 0.50
+iShares MSCI Denmark ETF EDEN 1/25/12 0.53
+iShares MSCI Finland ETF EFNL 1/25/12 0.55
+iShares MSCI France ETF EWQ 3/12/96 0.50
+Developed markets (continued)
+Fund name
+Trading
+symbol
+Inception
+date
+Exp.
+ratio
+(%)
+iShares MSCI Germany ETF EWG 3/12/96 0.50
+iShares MSCI Hong Kong ETF EWH 3/12/96 0.50
+iShares MSCI Ireland ETF EIRL 5/5/10 0.50
+iShares MSCI Israel ETF EIS 3/26/08 0.59
+iShares MSCI Italy ETF EWI 3/12/96 0.50
+iShares MSCI Japan ETF EWJ 3/12/96 0.50
+iShares MSCI Japan Small-Cap ETF SCJ 12/20/07 0.50
+iShares MSCI Japan Value ETF EWJV 3/5/19 0.15
+iShares MSCI Netherlands ETF EWN 3/12/96 0.50
+iShares MSCI New Zealand ETF ENZL 9/1/10 0.50
+iShares MSCI Norway ETF ENOR 1/23/12 0.53
+iShares MSCI Singapore ETF EWS 3/12/96 0.50
+iShares MSCI Spain ETF EWP 3/12/96 0.50
+iShares MSCI Sweden ETF EWD 3/12/96 0.54
+iShares MSCI Switzerland ETF EWL 3/12/96 0.50
+iShares MSCI United Kingdom ETF EWU 3/12/96 0.50
+iShares MSCI United Kingdom
+Small-Cap ETF EWUS 1/25/12 0.59
+Emerging markets
+iShares China Large-Cap ETF FXI 10/5/04 0.74
+iShares India 50 ETF INDY 11/18/09 0.89
+iShares MSCI Brazil ETF EWZ 7/10/0 0 0.59
+iShares MSCI Brazil Small-Cap ETF EWZS 9/28/10 0.60
+iShares MSCI Chile ETF ECH 11/12/07 0.60
+iShares MSCI China A ETF CNYA 6/13/16 0.60
+iShares MSCI China ETF MCHI 3/29/11 0.59
+iShares MSCI China Multisector Tech
+ETF TCHI 1/25/22 0.59
+MKTG0526-5508078-EXP0527-5/18
+6
+iShares Core ETFs are bolded
+Emerging markets
+(continued)
+Fund name
+Trading
+symbol
+Inception
+date
+Exp.
+ratio
+(%)
+iShares MSCI China Small-Cap ETF ECNS 9/28/10 0.59
+iShares MSCI India ETF INDA 2/2/12 0.65
+iShares MSCI India Small-Cap ETF SMIN 2/8/12 0.79
+iShares MSCI Indonesia ETF EIDO 5/5/10 0.59
+iShares MSCI Malaysia ETF EWM 3/12/96 0.50
+iShares MSCI Mexico ETF EWW 3/12/96 0.50
+iShares MSCI Peru and Global Exposure
+ETF EPU 6/19/09 0.59
+iShares MSCI Philippines ETF EPHE 9/28/10 0.59
+iShares MSCI Poland ETF EPOL 5/25/10 0.59
+iShares MSCI Qatar ETF QAT 4/29/14 0.60
+iShares MSCI Saudi Arabia ETF KSA 9/16/15 0.75
+iShares MSCI South Africa ETF EZA 2/3/03 0.59
+iShares MSCI South Korea ETF EWY 5/9/00 0.59
+iShares MSCI Taiwan ETF EWT 6/20/00 0.59
+iShares MSCI Thailand ETF THD 3/26/08 0.59
+iShares MSCI Turkey ETF TUR 3/26/08 0.59
+iShares MSCI UAE ETF UAE 4/29/14 0.60
+Bonds
+Broad market bonds
+iBonds® 2033 Term High Yield and
+Income ETF IBHM 3/25/26 0.35
+iShares Core 10+ Year USD Bond ETF ILTB 12/8/09 0.06
+iShares Core 1-5 Year USD Bond ETF ISTB  10 /1 8 /120.06
+iShares Core 5-10 Year USD Bond ETF IMTB  11 /1 /16 0.06‡
+iShares Core Universal USD Bond ETF IUSB  6 /10 /14 0.06
+iShares Core U.S. Aggregate Bond ETF AGG 9/22/03 0.03
+iShares Enhanced Short-Term Bond
+ETF CSHP 7/17/24 0.20
+Broad market bonds
+Fund name
+Trading
+symbol
+Inception
+date
+Exp.
+ratio
+(%)
+iShares ESG Aware U.S. Aggregate
+Bond ETF EAGG 10/18/18 0.10‡
+iShares Flexible Income Active ETF† BINC 5/19/23 0.40‡
+iShares Government/Credit Bond ETF GBF  1/5/07 0.20
+iShares® iBonds® 1-5 Year Corporate
+Ladder ETF LDRC 11 /07/24 0.10
+iShares® iBonds® 1-5 Year High Yield
+and Income Ladder ETF LDRH 11 /07/24 0.35
+iShares® iBonds® 1-5 Year TIPS Ladder
+ETF LDRI 11 /07/24 0.10
+iShares® iBonds® 1-5 Year Treasury
+Ladder ETF LDRT 11 /07/24 0.07
+ iBonds® 2033 Term High Yield and
+Income ETF LDRT 11 /07/24 0.07
+iShares Intermediate Government/
+Credit Bond ETF GVI  1/5/07 0.20
+iShares Prime Money Market ETF PMMF 2/4/25 0.20
+iShares Short Duration Bond Active
+ETF† NEAR 9/25/13 0.25
+iShares Total Return Active ETF† BRTR 12/12/23 0.38‡
+iShares Ultra Short-Term Bond Active
+ETF† ICSH 12/11/13 0.08
+iShares USD Total Bond Market ETF† BTOT 12/10/25 0.09‡
+iShares Systematic Bond ETF SYSB 2/24/15 0.25
+iShares Yield Optimized Bond ETF BYLD 4/22/14 0.13‡
+U.S. government bonds
+iBonds® Dec 2026 Term Treasury ETF30 IBTG 2/25/20 0.07
+iBonds® Dec 2027 Term Treasury ETF31 IBTH 2/25/20 0.07
+iBonds® Dec 2028 Term Treasury ETF32 IBTI 2/25/20 0.07
+iBonds® Dec 2029 Term Treasury ETF33 IBTJ 2/25/20 0.07
+iBonds® Dec 2030 Term Treasury ETF34 IBTK 7/14/20 0.07
+iBonds® Dec 2031 Term Treasury ETF35 IBTL 7/13/21 0.07
+iBonds® Dec 2032 Term Treasury ETF36 IBTM 7/6/22 0.07
+iBonds® Dec 2033 Term Treasury ETF37 IBTO 6/27/23 0.07
+iBonds® Dec 2034 Term Treasury ETF38 IBTP 6/11/24 0.07
+MKTG0526-5508078-EXP0527-6/18
+7
+iShares Core ETFs are bolded
+U.S. government bonds (continued)
+Fund name
+Trading
+symbol
+Inception
+date
+Exp.
+ratio
+(%)
+iBonds® Dec 2036 Term Treasury ETF40 IBTR 3/25/26 0.07
+Bonds® Dec 2044 Term Treasury ETF41 IBGA 6/11/24 0.07
+Bonds® Dec 2046 Term Treasury ETF43 IBGC 3/25/26 0.07
+iBonds® Dec 2054 Term Treasury ETF44 IBGK 6/11/24 0.07
+iBonds® Dec 2056 Term Treasury ETF46 IBGM 3/25/26 0.07
+iShares 0-3 Month Treasury Bond ETF SGOV 5/26/20 0.09
+iShares 10–20 Year Treasury Bond ETF TLH  1/5/07 0.15
+iShares 1–3 Year Treasury Bond ETF SHY 7/22 /02 0.15
+iShares 20+ Year Treasury Bond
+BuyWrite Strategy ETF TLTW 8/16/22 0.35
+iShares 20+ Year Treasury Bond ETF TLT 7/22 /02 0.15
+iShares 25+ Year Treasury STRIPS
+Bond ETF GOVZ 9/22/20  0.15
+iShares 3–7 Year Treasury Bond ETF IEI  1/5/07 0.15
+iShares 7–10 Year Treasury Bond ETF IEF 7/22 /02 0.15
+iShares Agency Bond ETF AGZ  11/5/08 0.20
+iShares Government Money Market ETFGMMF  2/04/25 0.20
+iShares Short Treasury Bond ETF SHV  1/5/07 0.15
+iShares Treasury Floating Rate Bond ETFTFLO 2/3/14 0.15
+iShares U.S. Treasury Bond ETF GOVT 2/14/12 0.05
+Municipal bonds
+iBonds® Dec 2026 Term Muni Bond ETF12 IBMO 4/2/19 0.18
+iBonds® Dec 2027 Term Muni Bond ETF13 IBMP 4/9/19 0.18
+iBonds® Dec 2028 Term Muni Bond ETF14 IBMQ 4/16/19 0.18
+iBonds® Dec 2029 Term Muni Bond ETF15 IBMR 5/9/23 0.18
+iBonds® Dec 2030 Term Muni Bond ETF16 IBMS 5/22/24 0.18
+iBonds® Dec 2032 Term Muni Bond ETF18 IBMU 3/25/26 0.18
+iBonds® Dec 2033 Term Muni Bond ETF19 IBMV 3/25/26 0.18
+iBonds® Dec 2034 Term Muni Bond ETF20 IBMW 4/ 7/26 0.18
+Municipal bonds (continued)
+Fund name
+Trading
+symbol
+Inception
+date
+Exp.
+ratio
+(%)
+iBonds® Dec 2035 Term Muni Bond ETF21 IBMX 4/14/26 0.18
+iShares California Muni Bond ETF CMF  10/4/07 0.08
+iShares High Yield Active ETF† BRHY 6/17/24 0.45
+iShares High Yield Muni Income Active
+ETF† HIMU 2 /07/25 0.42
+iShares Intermediate Muni Income
+Active ETF† INMU 3/16/21 0.30‡
+iShares Long-Term National Muni Bond
+ETF LMUB 3/17/25 0.09
+iShares National Muni Bond ETF MUB 9/ 7/07 0.05
+iShares New York Muni Bond ETF NYF  10/4/07 0.25
+iShares Short Duration High Yield Muni
+Active ETF† SHYM 3/16/21 0.41‡
+iShares Short Maturity Municipal Bond
+Active ETF† MEAR 3/3/15 0.25
+iShares Short-Term California Muni
+Active ETF † CALI 07/11 /23 0.20‡
+iShares Short-Term National Muni
+Bond ETF SUB  11/5/08 0.07
+Inflation-linked bonds
+iBonds® Oct 2026 Term TIPS ETF47 IBIC 9/13/23 0.10
+iBonds® Oct 2027 Term TIPS ETF48 IBID 9/13/23 0.10
+ iBonds® Oct 2028 Term TIPS ETF49 IBIE 9/13/23 0.10
+iBonds® Oct 2029 Term TIPS ETF50 IBIF 9/19/23 0.10
+iBonds® Oct 2030 Term TIPS ETF51 IBIG 9/19/23 0.10
+iBonds® Oct 2031 Term TIPS ETF52 IBIH 9/19/23 0.10
+iBonds® Oct 2032 Term TIPS ETF53 IBII 9/19/23 0.10
+iBonds® Oct 2033 Term TIPS ETF54 IBIJ 9/19/23 0.10
+iBonds® Oct 2034 Term TIPS ETF55 IBIK 5/22/25 0.10
+iBonds® Oct 2036 Term TIPS ETF57 IBIM 3/25/26 0.10
+iShares 0-1 Year TIPS Bond ETF ICPI  11/19/25 0.09
+iShares 0-5 Year TIPS Bond ETF STIP  12/1/10 0.03
+iShares TIPS Bond ETF TIP  12/4/03 0.19
+MKTG0526-5508078-EXP0527-7/18
+8
+iShares Core ETFs are bolded
+Mortgage-backed bonds
+Fund name Trading
+symbol
+Inception
+date
+Exp.
+ratio
+(%)
+iShares CMBS ETF CMBS 2/14/12 0.25
+iShares GNMA Bond ETF GNMA 2/14/12 0.10‡
+iShares MBS ETF MBB 3/13/07 0.04
+iShares Mortgage-Backed Securities
+Active ETF† MBBA 1/23/26 0.25
+Investment grade bonds
+iBonds® Dec 2026 Term Corporate ETF1 IBDR 9/13/16 0.10
+iBonds® Dec 2027 Term Corporate ETF2 IBDS 9/12/17 0.10
+iBonds® Dec 2028 Term Corporate ETF3 IBDT 9/18/18 0.10
+iBonds® Dec 2029 Term Corporate ETF4 IBDU 9/17/19 0.10
+iBonds® Dec 2030 Term Corporate ETF5 IBDV 6/23/20 0.10
+iBonds® Dec 2031 Term Corporate ETF6 IBDW 6/22/21 0.10
+iBonds® Dec 2032 Term Corporate ETF7 IBDX 6/28/22 0.10
+iBonds® Dec 2033 Term Corporate ETF8 IBDY 6/21/23 0.10
+iBonds® Dec 2034 Term Corporate ETF9 IBDZ 5/22/24 0.10
+iBonds® Dec 2036 Term Corporate ETF11 IBCB 3/25/26 0.10
+iShares 0-5 Year Investment Grade
+Corporate Bond ETF SLQD 10/15/13 0.06
+iShares 10+ Year Investment Grade
+Corporate Bond ETF IGLB  12/8/09 0.04
+iShares 1-5 Year Investment Grade
+Corporate Bond ETF IGSB  1/5/07 0.04
+iShares 5-10 Year Investment Grade
+Corporate Bond ETF IGIB  1/5/07 0.04
+iShares AAA - A Rated Corporate Bond ETF QLTA 2/14/12 0.15
+iShares BBB Rated Corporate Bond ETF LQDB 5/18/21 0.15
+iShares Broad USD Investment Grade
+Corporate Bond ETF USIG  1/5/07 0.04
+iShares ESG Aware 1-5 Year USD
+Corporate Bond ETF  SUSB 7/11/17 0.12
+iShares ESG Aware USD Corporate Bond
+ETF SUSC 7/11/17 0.18
+iShares Floating Rate Bond ETF FLOT 6/14/11 0.15
+iShares iBoxx $ Investment Grade
+Corporate Bond ETF LQD 7/22 /02 0.14
+Investment grade bonds (continued)
+Fund name Trading
+symbol
+Inception
+date
+Exp.
+ratio
+(%)
+iShares Inflation Hedged Corporate
+Bond ETF LQDI 5/8/18  0.18‡
+iShares Interest Rate Hedged
+Corporate Bond ETF LQDH 5/27/14 0.24‡
+iShares Interest Rate Hedged Long-
+Term Corporate Bond ETF IGBH 7/22 /15 0.14‡
+iShares Interest Rate Hedged U.S.
+Aggregate Bond ETF AGRH 6/22/22 0.13‡
+iShares Investment Grade Corporate
+Bond BuyWrite Strategy ETF LQDW 8/16/22 0.34
+iShares Investment Grade Systematic
+Bond ETF IGEB 7/11/17 0.18
+iShares USD Green Bond ETF BGRN 11/13/18 0.20
+High yield bonds
+iBonds® 2026 Term High Yield and
+Income ETF22 IBHF 11/10/20 0.35
+iBonds® 2027 Term High Yield and
+Income ETF23  IBHG 7/ 7/21 0.35
+iBonds® 2028 Term High Yield and
+Income ETF24 IBHH 3/8/22 0.35
+iBonds® 2029 Term High Yield and
+Income ETF25 IBHI 3/8/22 0.35
+iBonds® 2030 Term High Yield and
+Income ETF26 IBHJ 6/21/23 0.35
+iBonds® 2031 Term High Yield and
+Income ETF27 IBHK 5/22/24 0.35
+iBonds® 2032 Term High Yield and
+Income ETF28 IBHL 3/25/25 0.35
+iShares 0-5 Year High Yield
+Corporate Bond ETF SHYG 10/15/13 0.30
+iShares BB Rated Corporate Bond ETF HYBB 10/6/20 0.25
+iShares Broad USD High Yield
+Corporate Bond ETF USHY 10/25/17 0.08
+iShares Euro High Yield Corporate Bond
+USD Hedged ETF EUHY 4/3/12 0.35
+iShares High Yield Corporate Bond
+BuyWrite Strategy  ETF HYGW 8/18/22 0.69
+iShares High Yield Muni Income Active
+ETF† HIMU 2 /07/25 0.42‡
+iShares High Yield Muni Income Active
+ETF† SHYM 3/16/21 0.35‡
+iShares High Yield Systematic Bond
+ETF HYDB 7/11/17 0.35
+iShares iBoxx $ High Yield
+Corporate Bond ETF HYG 4/4/07 0.49
+iShares Interest Rate Hedged
+High Yield Bond ETF HYGH 5/27/14 0.51‡
+iShares J.P. Morgan EM High Yield
+Bond ETF EMHY 4/3/12 0.50
+MKTG0526-5508078-EXP0527-8/18
+High yield bonds (continued)
+Fund name Trading
+symbol
+Inception
+date
+Exp.
+ratio
+(%)
+iShares U.S. Fallen Angels ETF FALN 6/14/16 0.25
+iShares U.S. & Intl High Yield
+Corp Bond ETF GHYG 4/3/12 0.40
+International bonds
+iShares 1–3 Year International Treasury
+Bond ETF ISHG  1/21/09 0.35
+iShares Core International
+Aggregate Bond ETF IAGG 11/10/15 0.07
+iShares Emerging Markets Bond Active
+ETF† BREM 10/15/25 0.50
+iShares Euro Investment Grade
+Corporate Bond USD Hedged ETF EUIG 11/4/25 0.18
+iShares Euro High Yield Corporate Bond
+USD Hedged ETF EUHY 4/3/12 0.35
+iShares International Treasury Bond ETFIGOV  1/21/09 0.35
+iShares J.P. Morgan EM Corporate
+Bond ETF CEMB 4/17/12 0.50
+International bonds (continued)
+Fund name Trading
+symbol
+Inception
+date
+Exp.
+ratio
+(%)
+iShares J.P. Morgan EM High Yield
+Bond ETF EMHY 4/3/12 0.50
+iShares J.P. Morgan EM Local
+Currency Bond ETF LEMB  10/18/11 0.30
+iShares J.P. Morgan USD Emerging
+Markets Bond ETF EMB  12 /17/07 0.39
+iShares USD Hedged Global
+Government Bond USD Hedged Active
+ETF†
+GGOV 6/25/25 0.40‡
+iShares U.S. & Intl High Yield
+Corp Bond ETF GHYG 4/3/12 0.40
+Emerging markets bonds
+iShares Emerging Markets Bond Active
+ETF† BREM 10/15/25 0.50
+iShares J.P. Morgan Broad USD
+Emerging Markets Bond ETF BEMB 2/22/23 0.18
+iShares J.P. Morgan EM Corporate
+Bond ETF CEMB 4/17/12 0.50
+iShares J.P. Morgan EM High Yield
+Bond ETF EMHY 4/3/12 0.50
+iShares J.P. Morgan EM Local
+Currency Bond ETF LEMB 10/18/11 0.30
+iShares J.P. Morgan USD
+Emerging Markets Bond ETF EMB 12 /17/07 0.39
+Convertible bonds
+Fund name Trading
+symbol
+Inception
+date
+Exp.
+ratio
+(%)
+iShares Convertible Bond ETF ICVT  6/2/15 0.20
+Short duration bonds
+iShares 0-3 Month Treasury Bond ETF SGOV 5/26/20 0.09
+iShares 0-5 Year High Yield Corporate
+Bond ETF SHYG 10/15/13 0.30
+iShares 0-5 Year Investment Grade
+Corporate Bond ETF SLQD 10/15/13 0.06
+iShares 0–5 Year TIPS Bond ETF STIP 12/1/10 0.03
+iShares 1–3 Year International Treasury
+Bond ETF ISHG  1/21/09 0.35
+iShares 1–3 Year Treasury Bond ETF SHY 7/22 /02 0.15
+iShares 1-5 Year Investment Grade
+Corporate Bond ETF IGSB  1/5/07 0.04
+iShares Core 1-5 Year USD Bond ETF ISTB  10 /1 8 /120.06
+iShares Floating Rate Bond ETF FLOT 6/14/11 0.15
+iShares Short Duration Bond Active
+ETF† NEAR 9/25/13 0.25
+iShares Short Maturity Municipal Bond
+Active ETF† MEAR 3/3/15 0.25
+iShares Short-Term National
+Muni Bond ETF SUB  11/5/08 0.07
+iShares 0-1 Year TIPS Bond ETF ICPI  11/19/25 0.09
+iShares Short Treasury Bond ETF SHV  1/5/07 0.15
+iShares Treasury Floating Rate Bond ETFTFLO 2/3/14 0.15
+iShares Ultra Short-Term Bond Active
+ETF† ICSH 12/11/13 0.08
+Intermediate duration bonds
+iShares 3–7 Year Treasury Bond ETF IEI  1/5/07 0.15
+iShares 5-10 Year Investment Grade
+Corporate Bond ETF IGIB  1/5/07 0.04
+iShares 7–10 Year Treasury Bond ETF IEF 7/22 /02 0.15
+iShares Core 5–10 Year USD Bond ETF IMTB 11/1/16 0.06‡
+iShares Intermediate Government/
+Credit Bond ETF GVI  1/5/07 0.20
+9iShares Core ETFs are bolded
+MKTG0526-5508078-EXP0527-9/18
+10
+Long duration bonds
+Fund name Trading
+symbol
+Inception
+date
+Exp.
+ratio
+(%)
+iShares 10–20 Year Treasury Bond ETF TLH  1/5/07 0.15
+iShares Core 10+ Year USD Bond ETF ILTB 12/8/09 0.06
+iShares 10+ Year Investment Grade
+Corporate Bond ETF IGLB  12/8/09 0.04
+iShares 20+ Year Treasury Bond
+BuyWrite Strategy ETF TLTW 8/16/22 0.35
+iShares 20+ Year Treasury Bond ETF TLT 7/22 /02 0.15
+iShares 25+ Year Treasury STRIPS
+Bond ETF GOVZ 9/22/20 0.15
+Interest rate hedged bonds
+iShares Interest Rate Hedged
+Corporate Bond ETF LQDH 5/27/14 0.24‡
+iShares Interest Rate Hedged
+Emerging Markets Bond ETF EMBH 7/22 /15 0.48‡
+iShares Interest Rate Hedged
+High Yield Bond ETF HYGH 5/27/14 0.51‡
+iShares Interest Rate Hedged Long-
+Term Corporate Bond ETF IGBH 7/22 /15 0.14‡
+iShares Interest Rate Hedged
+U.S. Aggregate Bond ETF AGRH 6/22/22 0.13‡
+Term maturity – iBonds®
+Corporate series
+iBonds® Dec 2026 Term Corporate ETF1 IBDR 9/13/16 0.10
+iBonds® Dec 2027 Term Corporate ETF2 IBDS 9/12/17 0.10
+iBonds® Dec 2028 Term Corporate ETF3 IBDT 9/18/18 0.10
+iBonds® Dec 2029 Term Corporate ETF4 IBDU 9/17/19 0.10
+iBonds® Dec 2030 Term Corporate ETF5 IBDV 6/23/20 0.10
+iBonds® Dec 2031 Term Corporate ETF6 IBDW 6/22/21 0.10
+iBonds® Dec 2032 Term Corporate ETF7 IBDX 6/28/22 0.10
+iBonds® Dec 2033 Term Corporate ETF8 IBDY 6/21/23 0.10
+iBonds® Dec 2034 Term Corporate ETF9 IBDZ 5/22/24 0.10
+iBonds® Dec 2035 Term Corporate ETF10 IBCA 3/25/25 0.10
+iBonds® Dec 2036 Term Corporate ETF11 IBCB 3/25/26 0.10
+Muni series
+Fund name Trading
+symbol
+Inception
+date
+Exp.
+ratio
+(%)
+iBonds® Dec 2026 Term Muni Bond ETF12 IBMO 4/2/19 0.18
+iBonds® Dec 2027 Term Muni Bond ETF13 IBMP 4/9/19 0.18
+iBonds® Dec 2028 Term Muni Bond ETF14 IBMQ 4/16/19 0.18
+iBonds® Dec 2029 Term Muni Bond ETF15 IBMR 5/9/23 0.18
+iBonds® Dec 2030 Term Muni Bond ETF16 IBMS 5/22/24 0.18
+iBonds® Dec 2031 Term Muni Bond ETF17 IBMT 3/25/25 0.18
+iBonds® Dec 2032 Term Muni Bond ETF18 IBMU 3/25/25 0.18
+iBonds® Dec 2031 Term Muni Bond ETF19 IBMV 3/25/25 0.18
+iBonds® Dec 2034 Term Muni Bond ETF20 IBMW 4/ 7/26 0.18
+High yield and income series
+iBonds® 2026 Term High Yield and
+Income ETF22 IBHF 11/10/20 0.35
+iBonds® 2027 Term High Yield and
+Income ETF23 IBHG  7/ 7/21 0.35
+iBonds® 2028 Term High Yield and
+Income ETF24 IBHH 3/8/22 0.35
+iBonds® 2029 Term High Yield and
+Income ETF25 IBHI 3/8/22 0.35
+iBonds® 2030 Term High Yield and
+Income ETF26 IBHJ 6/21/23 0.35
+iBonds® 2031 Term High Yield and
+Income ETF27 IBHK 5/22/24 0.35
+iBonds® 2033 Term High Yield and
+Income ETF29 IBHM 3/25/26 0.35
+U.S. Treasury series
+iBonds® Dec 2026 Term Treasury ETF30 IBTG 2/25/20 0.07
+iBonds® Dec 2027 Term Treasury ETF31 IBTH 2/25/20 0.07
+iBonds® Dec 2028 Term Treasury ETF32 IBTI 2/25/20 0.07
+iBonds® Dec 2029 Term Treasury ETF33 IBTJ 2/25/20 0.07
+iBonds® Dec 2030 Term Treasury ETF34 IBTK 7/14/20 0.07
+iBonds® Dec 2031 Term Treasury ETF35 IBTL 7/13/21 0.07
+iBonds® Dec 2032 Term Treasury ETF36 IBTM 7/6/22 0.07
+iBonds® Dec 2033 Term Treasury ETF37 IBTO  6/27/23 0.07
+iBonds® Dec 2034 Term Treasury ETF38 IBTP 6/11/24 0.07
+iBonds® Dec 2035 Term Treasury ETF39 IBTQ 3/25/25 0.07
+iShares Core ETFs are bolded
+MKTG0526-5508078-EXP0527-10/18
+11
+iShares Core ETFs are bolded
+U.S. Treasury series (continued)
+Fund name Trading
+symbol
+Inception
+date
+Exp.
+ratio
+iBonds® Dec 2036 Term Treasury ETF40 IBTR 3/25/26 0.07
+iBonds® Dec 2044 Term Treasury ETF41 IBGA 6/11/24 0.07
+iBonds® Dec 2045 Term Treasury ETF42 IBGB 3/25/25 0.07
+iBonds® Dec 2046 Term Treasury ETF43 IBGC 3/25/25 0.07
+iBonds® Dec 2054 Term Treasury ETF44 IBGK 6/11/24 0.07
+iBonds® Dec 2055 Term Treasury ETF45 IBGL 3/25/25 0.07
+iBonds® Dec 2056 Term Treasury ETF46 IBGM 3/25/26 0.07
+iBonds® Oct 2035 Term TIPS ETF56 IBIL 3/25/25 0.10
+iBonds® Oct 2036 Term TIPS ETF57 IBIM 3/25/26 0.10
+Loans
+iShares AAA CLO Active ETF† CLOA 1/10/23 0.20
+iShares BBB-B CLO Active ETF† BCLO 1/29/25 0.45
+iShares Broad USD Floating Rate Loan
+ETF USLN 3/3/26 0.40‡
+iShares Floating Rate Loan Active ETF† BRLN 10/4/22 0.55
+iShares Securitized Income Active ETF† SECU 1/23/26 0.40
+Factors
+Minimum volatility
+iShares ESG MSCI USA Min Vol
+Factor ETF ESMV 11/02/21 0.18
+iShares MSCI EAFE Min Vol Factor ETF EFAV 10/18/11 0.20
+iShares MSCI Emerging Markets Min
+Vol Factor ETF EEMV 10/18/11 0.25
+iShares MSCI Global Min Vol Factor ETFACWV 10/18/11 0.20
+iShares MSCI USA Min Vol Factor ETF USMV 10/18/11 0.15
+iShares MSCI USA Small-Cap Min Vol
+Factor ETF SMMV 9/ 7/16 0.20
+Single factor
+iShares International Developed Small
+Cap Value Factor ETF ISVL 3/22/21 0.30
+iShares MSCI Emerging Markets Quality
+Factor ETF EVLU 9/4/24 0.35
+iShares MSCI Emerging Markets Value
+Factor ETF EQLT 9/4/24 0.35
+iShares MSCI Global Quality Factor ETF AQLT 12/11/24 0.20‡
+Single factor
+Fund name Trading
+symbol
+Inception
+date
+Exp.
+ratio
+(%)
+iShares MSCI Intl Momentum
+Factor ETF IMTM 1/13/15 0.30
+iShares MSCI Intl Quality
+Factor ETF IQLT 1/13/15 0.30
+iShares MSCI Intl Value Factor ETF IVLU 6/16/15 0.30
+iShares MSCI USA Momentum
+Factor ETF MTUM 4/16/13 0.15
+iShares MSCI USA
+Quality Factor ETF QUAL 7/16/13 0.15
+iShares MSCI USA Size Factor ETF SIZE 4/16/13 0.15
+iShares MSCI USA Small-Cap Quality
+Factor ETF SQLT 3/31/26 0.20
+iShares MSCI USA Value  Factor ETF VLUE 4/16/13 0.15
+iShares US Small Cap Value Factor ETF SVAL 10/29/20 0.20
+Multifactor
+iShares Emerging Markets Equity
+Factor ETF EMGF 12/8/15 0.25
+iShares Global Equity Factor ETF GLOF 4/28/15 0.20
+iShares International Equity Factor ETF INTF 4/28/15 0.15
+iShares International Equity Factor
+Rotation Active ETF† IDYN 8/5/25 0.45
+iShares U.S Equity Factor ETF LRGF 4/28/15 0.08
+iShares U.S. Small-Cap Equity Factor
+ETF SMLF 4/28/15 0.15
+iShares International Small-Cap Equity
+Factor ETF ISCF 4/28/15 0.23
+iShares MSCI USA Quality GARP ETF GARP 1/14/20 0.15
+iShares U.S. Equity Factor Rotation
+Active ETF† DYNF 3/19/19 0.26
+Equal weighted
+iShares MSCI USA Equal Weighted ETF EUSA 5/5/10 0.09
+Dividend weighted
+iShares Asia/Pacific Dividend ETF DV YA 2/23/12 0.49
+iShares Core Dividend ETF DIVB  11 / 7/17 0.05
+iShares Core Dividend Growth ETF DGRO 6/10/14 0.08
+iShares Core High Dividend ETF HDV 3/29/11 0.08
+MKTG0526-5508078-EXP0527-11/18
+12
+iShares Core ETFs are bolded
+Dividend weighted
+(continued)
+Fund name Trading
+symbol Inception date Exp.
+ratio (%)
+iShares Emerging Markets Dividend ETF DVYE 2/23/12 0.49
+iShares International Dividend
+Growth ETF IGRO 5/17/16 0.15
+iShares International Select Dividend
+ETF IDV 6/11/07 0.50
+iShares Select Dividend ETF DVY  11/3/03 0.38
+Fixed income factors
+iShares High Yield Systematic Bond
+ETF HYDB 7/11/17 0.35
+iShares Investment Grade Systematic
+Bond ETF IGEB 7/11/17 0.18
+iShares U.S. Fallen Angels ETF FALN 6/14/16 0.25
+iShares Systematic Bond ETF SYSB 2/24/15 0.25
+iShares Yield Optimized Bond ETF BYLD 4/22/14 0.13‡
+Sustainable & Transition
+Screened
+iShares ESG Screened S&P 500 ETF XVV 9/22/20 0.08
+iShares ESG Screened S&P
+Mid-cap ETF XJH 9/22/20 0.12
+iShares ESG Screened S&P
+Small-cap ETF XJR 9/22/20 0.12
+Uplift
+BlackRock U.S. Carbon Transition
+Readiness ETF ‡ LCTU 4/6/21 0.14‡
+BlackRock World ex U.S. Carbon
+Transition Readiness ETF ‡ LCTD 4/6/21 0.20‡
+iShares Climate Conscious & Transition
+MSCI USA ETF USCL 6/6/23 0.08
+iShares Environmentally Aware Real
+Estate ETF ERET 11 /17/22 0.30
+iShares ESG Advanced High Yield
+Corporate Bond ETF HYXF 6/14/16 0.35
+iShares ESG Advanced MSCI EAFE ETF DMXF 6/18/20 0.12
+iShares ESG Advanced MSCI EM ETF EMXF 10/06/20 0.16
+iShares ESG Advanced MSCI USA ETF USXF 6/18/20 0.10
+iShares ESG Advanced Universal USD
+Bond ETF EUSB 6/23/20 0.12‡
+iShares ESG Aware 1-5 Year USD
+Corporate Bond ETF SUSB 7/11/17 0.12
+iShares ESG Aware MSCI EAFE ETF ESGD 6/28/16 0.20
+iShares ESG Aware MSCI EM ETF ESGE 6/28/16 0.25
+Uplift (continued)
+Fund name Trading
+symbol
+Inception
+date
+Exp.
+ratio
+(%)
+iShares ESG Aware MSCI USA ETF ESGU 12/1/16 0.15
+iShares ESG Aware MSCI USA Growth
+ETF EGUS 1/31/23 0.18
+iShares ESG Aware MSCI USA
+Small-Cap ETF ESML 4/10/18 0.17
+iShares ESG Aware MSCI USA Value
+ETF EVUS 1/31/23 0.18
+iShares ESG Aware U.S. Aggregate
+Bond ETF EAGG 10/18/18 0.10‡
+iShares ESG Aware USD Corporate
+Bond ETF SUSC 7/11/17 0.18
+iShares ESG MSCI EM Leaders ETF LDEM 2/5/20 0.17
+iShares ESG MSCI USA Leaders ETF SUSL 5/ 7/19 0.10
+iShares ESG MSCI USA Min Vol
+Factor ETF ESMV 11/2/21 0.18
+iShares MSCI ACWI Low Carbon
+Target E TF CRBN 12/8/14 0.20
+iShares MSCI KLD 400 Social ETF DSI 11/14/06 0.25
+iShares MSCI USA ESG Select ETF SUSA 1/24/05 0.25
+iShares Paris-Aligned Climate MSCI
+USA ETF PABU 2/8/22 0.10
+iShares Paris-Aligned Climate MSCI
+World ex USA ETF PABD 1 /17/24 0.12
+ESG Aware Allocation
+iShares ESG Aware Aggressive
+Allocation ETF EAOA 6/12/20 0.18‡
+iShares ESG Aware Conservative
+Allocation ETF EAOK 6/12/20 0.18‡
+iShares ESG Aware Growth
+Allocation ETF EAOR 6/12/20 0.18‡
+iShares ESG Aware Moderate
+Allocation ETF EAOM 6/12/20 0.18‡
+Thematic
+iShares Breakthrough Environmental
+Solutions ETF ETEC 3/28/23 0.47
+iShares Energy Storage & Materials ETF IBAT 3/19/24 0.47
+iShares Environmental Infrastructure
+and Industrials ETF EFRA 11/01/22 0.47
+iShares Global Clean Energy ETF ICLN 6/24/08 0.41
+iShares MSCI Global Sustainable
+Development Goals ETF SDG 4/20/16 0.49
+Impact
+iShares USD Green Bond ETF BGRN 11/13/18 0.20
+MKTG0526-5508078-EXP0527-12/18
+13
+iShares Core ETFs are bolded
+Thematics
+Fund name Trading
+symbol
+Inception
+date
+Exp.
+ratio (%)
+iShares A.I. Innovation and Tech Active
+ETF† BAI 10/21/24 0.55‡
+ iShares Blockchain and Tech ETF IBLC 4/25/22 0.47
+iShares Copper and Metals Mining ETF ICOP 6/21/23 0.47
+iShares Cybersecurity and Tech ETF IHAK 6/11/19 0.47
+iShares Emerging Markets
+Infrastructure ETF EMIF 6/16/09 0.60
+iShares Environmental Infrastructure
+and Industrials ETF EFRA 11/03/22 0.47
+iShares Future Exponential
+Technologies ETF XT 3/19/15 0.46
+iShares FinTech Active ETF† BPAY 8/16/22 0.70
+iShares Future AI & Tech ETF ARTY 6/26/18 0.47
+iShares Future Metaverse Tech and
+Communications ETF IVRS 2/14/23 0.47
+iShares Genomics Immunology and
+Healthcare ETF IDNA 6/11/19 0.47
+iShares Global Clean Energy ETF ICLN 6/24/08 0.41
+iShares Global Infrastructure ETF IGF 12/10/07 0.41
+iShares Health Innovation Active ETF† BMED 9/29/20 0.85
+iShares Lithium Miners and Producers
+ETF ILIT 6/21/23 0.47
+iShares MSCI China Multisector
+Tech ETF TCHI 1/25/22 0.59
+iShares Power Infrastructure ETF POWR 1/31/25 0.40
+iShares Self-Driving EV and Tech ETF IDRV 4/16/19 0.47
+iShares Technology Opportunities
+Active ETF† TEK 10/21/24 0.75‡
+iShares Transition-Enabling Metals ETFTMET   9/26/23    0.47‡
+iShares U.S. Infrastructure ETF IFRA 4/3/18 0.30
+iShares U.S. Manufacturing ETF MADE 7/17/24 0.40
+iShares U.S. Tech Breakthrough
+Multisector ETF TECB 1/8/20 0.40
+iShares U.S. Thematic Rotation Active
+ETF† THRO 12/14/21 0.60
+Currency hedged
+iShares Currency Hedged MSCI ACWI
+ex U.S. ETF HAWX 6/29/15 0.35‡
+iShares Currency Hedged MSCI  EAFE ETF HEFA 1/31/14 0.35‡
+iShares Currency Hedged MSCI EAFE
+Small-Cap ETF HSCZ 6/29/15 0.43‡
+Currency hedged (continued)
+Fund name Trading
+symbol
+Inception
+date
+Exp.
+ratio
+(%)
+iShares Currency Hedged MSCI
+Emerging Markets ETF HEEM 9/23/14 0.72‡
+iShares Currency Hedged MSCI
+Eurozone ETF HEZU 7/9/14 0.53‡
+iShares Currency Hedged MSCI
+Japan ETF HEWJ 1/31/14 0.49‡
+Equity income
+iShares Asia/Pacific Dividend ETF DV YA 2/23/12 0.49
+iShares Core Dividend Growth ETF DGRO 6/10/14 0.08
+iShares Core Dividend ETF DIVB 11 / 7/17 0.05
+iShares Core High Dividend ETF HDV 3/29/11 0.08
+iShares Emerging Markets
+Dividend ETF DVYE 2/23/12 0.49
+iShares International Dividend ETF BIDD 11/15/24 0.61
+iShares International Dividend
+Growth ETF IGRO 5/17/16 0.15
+iShares International Select Dividend ETF IDV 6/11/07 0.50
+iShares Managed  Futures Active  ETF† ISMF 3/12/25 0.80
+iShares Morningstar Multi-Asset
+Income ETF IYLD 4/3/12 0.58
+iShares Nasdaq Premium Income Active
+ETF† BALQ 12/2/25 0.35
+iShares Preferred and Income
+Securities ETF PFF 3/26/07 0.46
+iShares Russell 2000 BuyWrite ETF IWMW 3/14/24 0.39
+iShares Select Dividend ETF DVY 11/3/03 0.38
+iShares S&P 500 BuyWrite ETF IVVW 3/14/24 0.25
+iShares U.S Large Cap Premium Income
+Active ETF† BALI 9/26/23 0.35
+Sectors
+Consumer
+iShares Global Consumer
+Discretionary ETF RXI 9/12/06 0.41
+iShares Global Consumer Staples ETF KXI 9/12/06 0.41
+iShares U.S. Consumer
+Discretionary ETF IYC 6/12/00 0.40
+MKTG0526-5508078-EXP0527-13/18
+14
+iShares Core ETFs are bolded
+Consumer (continued)
+Fund name Trading
+symbol
+Inception
+date
+Exp.
+ratio
+(%)
+iShares U.S. Consumer Focused ETF† IEDI 3/21/18 0.18
+iShares U.S. Consumer Staples ETF IYK 6/12/00 0.40
+iShares U.S. Home Construction ETF ITB 5/1/06 0.40
+iShares Global Clean Energy ETF ICLN 6/24/08 0.41
+iShares Global Energy ETF IXC 11/12/01 0.44
+iShares U.S. Energy ETF IYE 6/12/00 0.40
+iShares U.S. Oil Equipment
+& Services ETF IEZ 5/1/06 0.40
+iShares U.S. Oil & Gas Exploration
+& Production ETF IEO 5/1/06 0.40
+Financials
+iShares Global Financials ETF IXG 11/12/01 0.42
+iShares MSCI Europe Financials ETF EUFN 1/20/10 0.49
+iShares U.S. Broker-Dealers &
+Securities Exchanges ETF IAI 5/1/06 0.40
+iShares U.S. Financial Services ETF IYG 6/12/00 0.40
+iShares U.S. Financials ETF IYF 5/22/00 0.40
+iShares U.S. Insurance ETF IAK 5/1/06 0.40
+iShares U.S. Regional Banks ETF IAT 5/1/06 0.40
+Healthcare
+iShares Biotechnology ETF IBB 2/5/01 0.45
+iShares Genomics Immunology and
+Healthcare ETF IDNA 6/11/19 0.47
+iShares Global Healthcare ETF IXJ 11/13/01 0.42
+iShares Neuroscience  and Healthcare
+ETF IBRN 8/23/22 0.47
+iShares U.S. Healthcare ETF IYH 6/12/00 0.40
+iShares U.S. Healthcare Providers ETF IHF 5/1/06 0.40
+iShares U.S. Medical Devices ETF IHI 5/1/06 0.40
+iShares U.S. Pharmaceuticals ETF IHE 5/1/06 0.40
+Industrials
+Fund name Trading
+symbol
+Inception
+date
+Exp.
+ratio
+(%)
+iShares Defense Industrials Active ETF† IDEF 5/19/25 0.55
+iShares Global Industrials ETF EXI 9/12/06 0.42
+iShares U.S. Aerospace & Defense ETF ITA 5/1/06 0.40
+iShares U.S. Industrials ETF IYJ 6/12/00 0.40
+iShares U.S. Transportation ETF IYT 10/6/03 0.40
+Infrastructure
+iShares Emerging Markets
+Infrastructure ETF EMIF 6/16/09 0.60
+iShares Environmental Infrastructure
+and Industrials ETF EFRA 11/03/22 0.47
+iShares Global Infrastructure ETF IGF 12/10/07 0.41
+iShares Infrastructure Active ETF† BILT 7/29/25 0.60
+iShares Power Infrastructure ETF POWR 1/31/12 0.40
+iShares U.S. Infrastructure ETF IFRA 4/3/18 0.30
+Materials
+iShares Global Materials ETF MXI 9/12/06 0.41
+iShares U.S. Basic Materials ETF IYM 6/12/00 0.40
+Natural resources and commodity
+producer equities
+iShares Copper and Metals Mining ETF ICOP 6/21/23 0.47
+iShares Global Timber & Forestry ETF WOOD 6/24/08 0.42
+ iShares Lithium Miners and Producers
+ETF ILIT  6/21/23 0.47
+iShares MSCI Agriculture Producers
+ETF VEGI 1/31/12 0.39
+iShares MSCI Global Gold Miners ETF RING 1/31/12 0.39
+iShares MSCI Global Metals & Mining
+Producers ETF PICK 1/31/12 0.39
+iShares MSCI Global Silver and Metals
+Miners ETF SLVP 1/31/12 0.39
+iShares North American Natural
+Resources ETF IGE 10/22/01 0.41
+iShares Transition-Enabling Metals
+ETF TMET 9/26/23 0.47‡
+MKTG0526-5508078-EXP0527-14/18
+15
+iShares Core ETFs are bolded
+Utilities
+Fund name Trading
+symbol
+Inception
+date
+Exp.
+ratio (%)
+iShares Global Utilities ETF JXI 9/12/06 0.43
+iShares U.S. Utilities ETF IDU 6/12/00 0.40
+Commodities
+Futures and equities-based
+iShares Bloomberg Roll Select
+Commodity Strategy ETF CMDY 4/3/18 0.28
+iShares Commodities Select
+Strategy ETF COMT 10/15/14 0.48
+Liquid Alternatives
+iShares Managed Futures Active ETF† ISMF 3/12/25 0.80‡
+iShares Systematic Alternatives Active
+ETF† IALT 12/9/25 0.99
+Real estate
+Fund name Trading
+symbol
+Inception
+date
+Exp.
+ratio
+(%)
+iShares Cohen & Steers REIT ETF ICF 1/29/01 0.33
+iShares Core U.S. REIT ETF USRT 5/1/07 0.08
+iShares Environmentally Aware Real
+Estate ETF ERET 11/15/22 0.30
+iShares Global REIT ETF REET 7/8/14 0.14
+iShares International Developed
+Real Estate ETF IFGL 11/12/07 0.48
+iShares Mortgage Real Estate ETF REM 5/1/07 0.48
+iShares Residential Real Estate ETF REZ 5/1/07 0.48
+iShares U.S. Real Estate ETF IYR 6/12/00 0.40
+Technology
+iShares Expanded Tech Sector ETF IGM 3/13/01 0.41
+iShares Future Exponential
+Technologies ETF XT 3/19/15 0.46
+iShares Global Tech ETF IXN 11/12/01 0.41
+iShares U.S. Tech Independence
+Focused ETF† IETC 3/21/18 0.18
+iShares Blockchain and Tech ETF IBLC 4/25/22 0.47
+iShares Cybersecurity and Tech ETF IHAK 6/11/19 0.47
+iShares Expanded Tech-Software
+Sector ETF IGV 7/10/01 0.41
+iShares Future AI & Tech ETF ARTY 6/26/18 0.47
+iShares MSCI China Multisector
+Tech ETF TCHI 1/25/22 0.59
+iShares Semiconductor ETF SOXX 7/10/01 0.35
+iShares U.S. Digital Infrastructure
+and Real Estate ETF IDGT 7/10/01 0.41
+iShares U.S. Technology ETF IYW 5/15/00 0.40
+Communications services
+iShares Global Comm Services ETF IXP 11/12/01 0.42
+iShares U.S. Telecommunications ETF IYZ 5/22/00 0.40
+MKTG0526-5508078-EXP0527-15/18
+16
+iShares Core ETFs are bolded
+iShares Exchange Traded Products
+The iShares Trusts are not investment companies registered under the
+Investment Company Act of 1940, and therefore are not subject to the same
+regulatory requirements as mutual funds or ETFs registered under the
+Investment Company Act of 1940. Investments in these products are
+speculative and involve a high degree of risk.
+'33 Act Trusts
+Fund name Trading
+symbol
+Inception
+date
+Commodities
+iShares Gold Trust IAU  1/21/05
+iShares Gold Trust Micro IAUM  6/15/21
+iShares Silver Trust SLV 4/21/06
+Digital assets
+iShares Bitcoin Trust ETF IBIT 1/05/24
+iShares Ethereum Trust ETF ETHA  6/24/24
+iShares Staked Ethereum Trust ETF ETHB  2/18/26
+Futures-based products
+iShares S&P GSCI
+Commodity-Indexed Trust GSG 7/10/0 6
+Visit www.iShares.com for a prospectus, which includes investment
+objectives, risks, fees, expenses and other information that you should read
+and consider carefully before investing.
+MKTG0526-5508078-EXP0527-16/18
+17
+iShares Core ETFs are bolded
+WANT TO KNOW MORE?
+Visit iShares.com or call 1-800-474-2737.
+†   Active fund
+‡   Net expense ratio shown. BlackRock Fund Advisors ("BFA"), the investment adviser to the Funds and an affiliate of BlackRock Investments, LLC, has contractually
+agreed to waive a portion of its management fees. Gross expense ratios (%) and contractual waiver dates are: AOA: 0.19, 11/30/2026; AOK: 0.20, 11/30/2026; AOM: 0.20,
+09/30/2026; AOR: 0.20, 09/30/2026; BYLD: 0.41, 02/28/2031; EAGG: 0.11, 06/30/2029; EAOA: 0.34, 11/29/2030; EAOK: 0.30, 11/29/2030; EAOM: 0.31,
+11/29/2030; EAOR, 0.32, 11/29/2030; GNMA: 0.11, 02/28/2029; HAWX: 0.70, 11/29/2030; HEEM: 1.51, 12/31/30; HEFA: 0.70, 11/29/2030; HEWJ: 1.02,
+12/31/2030; HEZU: 1.12, 12/31/2030; HSCZ: 0.83, 11/29/2030; HYGH: 1.11, 02/28/2027; SHYM: 0.35, 6/30/2026; IGBH: 0.39, 02/28/2027; IMTB: 0.07,
+02/28/2026; INMU: 0.42, 06/30/2027; LCTU: 0.29, 06/30/2027; LCTD: 0.35, 06/30/2027; AGRH: 0.16, 02/29/2028; LQDH: 0.44, 02/28/2027; LQDI: 0.33,
+02/29/2028; SMMD: 0.23, 07/31/2027; BINC 0.52, 06/30/2027, TMET: 0.48, 02/29/2028;  BLCR: 0.38, 06/30/2027; BRTR: 0.41, 06/30/2027; CALI: 0.26,
+06/30/2026; MAXJ: 0.53, 11/30/2029; TEK: 0.77, 06/30/2026; BAI: 0.65, 06/30/2026; CORO: 1.08, 07/30/2026; AQLT: 0.21, 12/31/29; DMAX: 0.53, 11/30/2029;
+TWOX: 0.53, 11/30/2030; HIMU: 0.43, 6/30/2026; MMAX: 0.53, 11/30/2029; TOPC: 0.15, 4/03/2026; GGOV: 0.39, 6/30/2027; BDVL: 0.40, 6/30/2027; BDNY: 0.40,
+6/30/2027; IVVB: 0.54, 6/30/2027; STEN: 0.53, 11/30/2030; TENM: 0.53, 11/30/2030; TENJ: 0.53, 11/30/2030; TEND: 0.53, 11/30/2030; BTOT: 0.10, 6/28/2030;
+ISMF: 0.82, 6/30/2027; USLN: 0.43, 6/28/2030 Please see the Funds' prospectuses for more information on such expenses.
+1.  The legal name of this fund is the iShares® iBonds® Dec 2026 Term Corporate ETF
+2.  The legal name of this fund is the iShares® iBonds® Dec 2027 Term Corporate ETF
+3.  The legal name of this fund is the iShares® iBonds® Dec 2028 Term Corporate ETF
+4.  The legal name of this fund is the iShares® iBonds® Dec 2029 Term Corporate ETF
+5.  The legal name of this fund is the iShares® iBonds® Dec 2030 Term Corporate ETF
+6. The legal name of this fund is the iShares® iBonds® Dec 2031 Term Corporate ETF
+7 . The legal name of this fund is the iShares® iBonds® Dec 2032 Term Corporate ETF
+8. The legal name of this fund is the iShares® iBonds® Dec 2033 Term Corporate ETF
+9. The legal name of this fund is the iShares® iBonds® Dec 2034 Term Corporate ETF
+10. The legal name of this fund is the iShares® iBonds® Dec 2035 Term Corporate ETF
+11. The legal name of this fund is the iShares® iBonds® Dec 2036 Term Corporate ETF
+12. The legal name of this fund is the iShares® iBonds® Dec 2026 Term Muni Bond ETF
+13. The legal name of this fund is the iShares® iBonds® Dec 2027 Term Muni Bond ETF
+14. The legal name of this fund is the iShares® iBonds® Dec 2028 Term Muni Bond ETF
+15. The legal name of this fund is the iShares® iBonds® Dec 2029 Term Muni Bond ETF
+16. The legal name of this fund is the iShares® iBonds® Dec 2030 Term Muni Bond ETF
+17 . The legal name of this fund is the iShares® iBonds® Dec 2031 Term Muni Bond ETF
+18.  The legal name of this fund is the iShares® iBonds® Dec 2032 Term Muni Bond ETF
+19. The legal name of this fund is the iShares® iBonds® Dec 2033 Term Muni Bond ETF
+20. The legal name of this fund is the iShares® iBonds® Dec 2034 Term Muni Bond ETF
+21.   The legal name of this fund is the iShares® iBonds® Dec 2035 Term Muni Bond ETF
+22.   The legal name of this fund is the iShares® iBonds® 2026 Term High Yield and
+Income ETF
+23.   The legal name of this fund is the iShares® iBonds® 2027 Term High Yield and
+Income ETF
+24.   The legal name of this fund is the iShares® iBonds® 2028 Term High Yield and
+Income ETF
+25.   The legal name of this fund is the iShares® iBonds® 2029 Term High Yield and
+Income ETF
+26.   The legal name of this fund is the iShares® iBonds® 2030 Term High Yield and
+Income ETF
+27 .   The legal name of this fund is the iShares® iBonds® 2031 Term High Yield and
+Income ETF
+28.   The legal name of this fund is the iShares® iBonds® 2032 Term High Yield and
+Income ETF
+29.   The legal name of this fund is the iShares® iBonds® 2033 Term High Yield and
+Income ETF
+30. The legal name of the fund is the iShares® iBonds® Dec 2026 Term Treasury ETF
+31. The legal name of the fund is the iShares® iBonds® Dec 2027 Term Treasury ETF
+32. The legal name of the fund is the iShares® iBonds® Dec 2028 Term Treasury ETF
+33. The legal name of the fund is the iShares® iBonds® Dec 2029 Term Treasury ETF
+34. The legal name of the fund is the iShares® iBonds® Dec 2030 Term Treasury ETF
+35. The legal name of the fund is the iShares® iBonds® Dec 2031 Term Treasury ETF
+36. The legal name of the fund is the iShares® iBonds® Dec 2032 Term Treasury ETF
+37 . The legal name of the fund is the iShares® iBonds® Dec 2033 Term Treasury ETF
+38. The legal name of the fund is the iShares® iBonds® Dec 2034 Term Treasury ETF
+39. The legal name of the fund is the iShares® iBonds® Dec 2035 Term Treasury ETF
+40. The legal name of the fund is the iShares® iBonds® Dec 2036 Term Treasury ETF
+41. The legal name of the fund is the iShares® iBonds® Dec 2044 Term Treasury ETF
+42. The legal name of the fund is the iShares® iBonds® Dec 2045 Term Treasury ETF
+43. The legal name of the fund is the iShares® iBonds® Dec 2046 Term Treasury ETF
+44. The legal name of the fund is the iShares® iBonds® Dec 2054 Term Treasury  ETF
+45. The legal name of the fund is the iShares® iBonds® Dec 2055 Term Treasury  ETF
+46. The legal name of the fund is the iShares® iBonds® Dec 2056 Term Treasury  ETF
+47 . The legal name of the fund is the iShares® iBonds® Oct 2026 Term TIPS ETF
+48.  The legal name of the fund is the iShares® iBonds® Oct 2027 Term TIPS ETF
+49. The legal name of the fund is the iShares® iBonds® Oct 2028 Term TIPS ETF
+50. The legal name of the fund is the iShares® iBonds® Oct 2029 Term TIPS ETF
+51. The legal name of the fund is the iShares® iBonds® Oct 2030 Term TIPS ETF
+52. The legal name of the fund is the iShares® iBonds® Oct 2031 Term TIPS ETF
+53. The legal name of the fund is the iShares® iBonds® Oct 2032 Term TIPS ETF
+54. The legal name of the fund is the iShares® iBonds® Oct 2033 Term TIPS ETF
+55. The legal name of the fund is the iShares® iBonds® Oct 2034 Term TIPS ETF
+56. The legal name of the fund is the iShares® iBonds® Oct 2035 Term TIPS ETF
+57 . The legal name of the fund is the iShares® iBonds® Oct 2036 Term TIPS ETF
+MKTG0526-5508078-EXP0527-17/18
+18
+iShares Core ETFs are bolded
+Carefully consider the iShares Funds’ investment objectives, risk factors, and charges and expenses before investing.
+This and other information can be found in the Funds’ prospectuses and, if available, the summary prospectuses, which
+may be obtained by calling 1-800-iShares (1-800-474-2737) or by visiting iShares.com. Read the prospectuses
+carefully before investing.
+Investing involves risk, including possible loss of principal.
+Transactions in shares of ETFs may result in brokerage commissions and will generate tax consequences. iShares Funds are obliged to distribute portfolio gains to shareholders.
+The iShares Funds that are registered with the United States Securities and Exchange Commission under the Investment Company Act of 1940 (“Funds”) are distributed in the
+U.S. by BlackRock Investments, LLC .
+The iShares Funds are not sponsored, endorsed, issued, sold or promoted by Bloomberg, BlackRock Index Services, LLC, Cboe Global Indices, LLC, Cohen & Steers, European
+Public Real Estate Association (“EPRA® ”), FTSE International Limited (“FTSE”), ICE Data Indices, LLC, NSE Indices Ltd, JPMorgan, JPX Group, London Stock Exchange Group
+(“LSEG”), MSCI Inc., Markit Indices Limited, Morningstar, Inc., Nasdaq, Inc., National Association of Real Estate Investment Trusts (“NAREIT”), Nikkei, Inc., Russell, S&P Dow
+Jones Indices LLC or STOXX Ltd. None of these companies make any representation regarding the advisability of investing in the Funds. With the exception of BlackRock Index
+Services, LLC, who is an affiliate, BlackRock Investments, LLC is not affiliated with the companies listed above.
+Neither FTSE, LSEG, nor NAREIT makes any warranty regarding the FTSE Nareit Equity REITS Index, FTSE Nareit All Residential Capped Index or FTSE Nareit All Mortgage
+Capped Index. Neither FTSE, EPRA, LSEG, nor NAREIT makes any warranty regarding the FTSE EPRA Nareit Developed ex-U.S. Index, FTSE EPRA Nareit Developed Green
+Target Index or FTSE EPRA Nareit Global REITs Index. “FTSE®” is a trademark of London Stock Exchange Group companies and is used by FTSE under license.
+©2026 BlackRock, Inc. or its affiliates. All Rights Reserved. BLACKROCK, iBONDS, and iSHARES are trademarks of BlackRock, Inc. or its affiliates. All other trademarks are
+those of their respective owners. GELM-2714-MAY26-U S
+Not FDIC Insured • May Lose Value • No Bank Guarantee Lit. No. iS-PRODLIST-0526
+MKTG0526-5508078-EXP0527-18/18

@@ -1,0 +1,127 @@
+KraneShares MSCI Emerging Markets ex China Index ETF
+Investment Strategy:
+KEMX is benchmarked to the MSCI Emerging Markets ex China Index, which tracks large-
+cap and mid-cap companies within emerging market countries, excluding China. KEMX
+enables investors to build tailored Emerging Market (EM) portfolios when combined with
+exposure to China. KEMX can be paired with KraneShares China-focused core and thematic
+funds to establish strategic positions in China without duplicating exposures.
+Why KEMX?
+Exposure to large-cap and mid-cap companies within emerging market countries,
+excluding China.
+Benchmarked to MSCI, a global leader in international indexing.
+By pairing KEMX with other KraneShares China-focused funds, investors
+can employ the following strategies to customize their allocation to China:
+China Core: Exposure to the full range of publicly listed Chinese companies across the
+Mainland, US, and Hong Kong Stock Exchanges.
+China Core-Thematic: Broad China exposure enhanced by specific sector or investment
+themes.
+China Thematic: Focused exposure to specific sectors or themes in China.
+China Tactical: Ability to dynamically adjust China’s weighting within an Emerging
+Market portfolio.
+Fund Details Data as of 07/31/2026
+Primary Exchange NYSE Arca, Inc.
+CUSIP 500767769
+ISIN US5007677694
+Total Annual Fund Operating Expense (Gross) 0.59%
+Total Annual Fund Operating Expense (Net)* 0.24%
+Inception Date 04/11/2019
+Distribution Frequency Annual
+Underlying Index MSCI Emerging Markets ex China
+Index
+Net Assets $131,963,500
+Number of Holdings 297
+Top 10 Holdings as of 07/31/2026
+Excluding cash. Holdings are subject to change.
+Ticker %
+TAIWAN SEMICONDUCTOR MANUFAC 2330 15.79
+SAMSUNG ELECTRONICS CO LTD 005930 6.91
+SK HYNIX INC 000660 5.11
+MEDIATEK INC 2454 2.24
+SK SQUARE CO LTD 402340 1.22
+ACCTON TECHNOLOGY CORP 2345 1.18
+DELTA ELECTRONICS INC 2308 1.11
+SAMSUNG ELECTRO-MECHANICS CO 009150 1.06
+RELIANCE INDUSTRIES LIMITED RELIANCE IN 1.05
+NAN YA PLASTICS CORP 1303 0.98
+KEMX Performance History:
+  Cumulative %
+Data as of month end: 07/31/2026
+Average Annualized %
+Data as of month end: 07/31/2026
+1 Mo 3 Mo YTD Since
+Inception 1 Yr 3 Yr 5 Yr Since
+Inception
+Fund NAV -4.40% 8.02% 31.70% 144.33% 56.03% 24.73% 12.89% 13.00%
+Closing Price -8.71% 2.75% 29.18% 137.94% 53.97% 23.45% 12.36% 12.59%
+Underlying Index -5.91% 6.82% 30.58% 132.14% 52.24% 23.99% 12.38% 12.21%
+The performance data quoted represents past performance. Past performance does not guarantee future results. The investment return and principal value of an investment
+will fluctuate so that an investors shares, when sold or redeemed, may be worth more or less than their original cost and current performance may be lower or higher than
+the performance quoted. For performance data current to the most recent quarter end, please visit kraneshares.com/etf/kemx.
+Index returns are for illustrative purposes only. Index performance returns do not reflect any management fees, transaction costs or expenses. Indexes are unmanaged and one
+cannot invest directly in an index.
+*Fee waivers are contractual and in effect until August 1, 2028
+Contact us:
++(1) 855 8KRANE8
+info@kraneshares.com
+
+KEMX
+Sector Breakdown
+Data from Bloomberg as of 07/31/2026
+%
+Information Technology 40.76
+Financials 22.45
+Industrials 8.70
+Materials 7.50
+Consumer Discretionary 5.16
+Energy 3.93
+Communication Services 3.50
+Consumer Staples 3.02
+Utilities 1.76
+Health Care 1.65
+Real Estate 1.07
+Country Breakdown
+Data from Bloomberg as of 07/31/2026
+%
+Taiwan 31.97
+South Korea 27.10
+India 15.26
+Brazil 5.91
+South Africa 3.46
+Mexico 3.27
+Poland 1.87
+Malaysia 1.67
+United Arab Emirates 1.26
+Thailand 1.23
+Others 6.51
+Carefully consider the Funds’ investment objectives, risk factors, charges and expenses before investing. This and additional information can be found in the Funds' full and
+summary prospectus, which may be obtained by visiting kraneshares.com/etf/kemx. Read the prospectus carefully before investing.
+Risk Disclosures:
+Investing involves risk, including possible loss of principal. There can be no assurance that a Fund will achieve its stated objectives.
+The Fund may invest in derivatives, which are often more volatile than other investments and may magnify the Fund’s gains or losses. A derivative (i.e., futures/forward
+contracts, swaps, and options) is a contract that derives its value from the performance of an underlying asset. The primary risk of derivatives is that changes in the asset’s
+market value and the derivative may not be proportionate, and some derivatives can have the potential for unlimited losses. Derivatives are also subject to liquidity and
+counterparty risk. The Fund is subject to liquidity risk, meaning that certain investments may become difficult to purchase or sell at a reasonable time and price. If a transaction
+for these securities is large, it may not be possible to initiate, which may cause the Fund to suffer losses. Counterparty risk is the risk of loss in the event that the counterparty to
+an agreement fails to make required payments or otherwise comply with the terms of the derivative.
+The Fund is subject to the political, social or economic instability associated with investing internationally which may cause a decline in value. Emerging markets involve
+heightened risk related to the same factors as well as increase volatility and lower trading volume. Fluctuations in currency of foreign countries may have an adverse effect to
+domestic currency values. The Fund may invest in Initial Public Offerings (IPOs). Securities issued in IPOs have no trading history, and information about the companies may be
+available for very limited periods. In addition, the prices of securities sold in IPOs may be highly volatile. In addition, as the Fund increases in size, the impact of IPOs on the
+Fund’s performance will generally decrease. Narrowly focused investments typically exhibit higher volatility. The Fund’s assets are expected to be concentrated in a sector,
+industry, market, or group of concentrations to the extent that the Underlying Index has such concentrations. The securities or futures in that concentration could react similarly
+to market developments. Thus, the Fund is subject to loss due to adverse occurrences that affect that concentration.
+In addition to the normal risks associated with investing, investments in smaller companies typically exhibit higher volatility.
+ETF shares are bought and sold on an exchange at market price (not NAV) and are not individually redeemed from the Fund. However, shares may be redeemed at NAV directly
+by certain authorized broker-dealers (Authorized Participants) in very large creation/redemption units. The returns shown do not represent the returns you would receive if you
+traded shares at other times. Shares may trade at a premium or discount to their NAV in the secondary market. Brokerage commissions will reduce returns. Beginning
+12/23/2020, market price returns are based on the official closing price of an ETF share or, if the official closing price isn't available, the midpoint between the national best bid
+and national best offer ("NBBO") as of the time the ETF calculates the current NAV per share. Prior to that date, market price returns were based on the midpoint between the Bid
+and Ask price. NAVs are calculated using prices as of 4:00 PM Eastern Time.
+The KraneShares ETFs and KFA Funds ETFs are distributed by SEI Investments Distribution Company (SIDCO), 1 Freedom Valley Drive, Oaks, PA 19456, which is not affiliated
+with Krane Funds Advisors, LLC, the Investment Adviser for the Funds, or any sub-advisers for the Funds.
+[R-SEI-KS]
+Contact us:
++(1) 855 8KRANE8
+info@kraneshares.com
+
+KEMX

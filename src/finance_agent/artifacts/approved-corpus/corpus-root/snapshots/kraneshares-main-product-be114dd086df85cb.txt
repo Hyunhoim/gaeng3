@@ -1,0 +1,139 @@
+KraneShares TrustTrT
+KraneShares Artificial Intelligence and Technology
+ETF
+Ticker: AGIX
+Principal Listing Exchange: NASDAQ
+Annual Shareholder Reportr eholder : March 31, 2026
+This annual shareholder report contains important informa tion about the KraneShares Artificial Intelligence and Technology ETF (the "Fund") for the period from April
+1, 2025 to March 31, 2026. You can find additional information about the Fund at https://kraneshares.com/agix/. You can also request this information by contacting us
+at 1-855-857-2638.This annual shareholder report describes changes to the Fund that occurred during the reporting period.
+What were the Fund costs for the last year?
+(based on a hypothetical $10,000 investment)
+Fund Name Costs of a $10,000 investment Costs paid as a percentage of a $10,000 investment
+KraneShares Artificial Intelligence and Technology ETF $117 1.00%
+How did the Fund perform in the last year?
+For the 12-month Period ended March 31, 2026 ("Period"), the Fund delivered the following returns:
+Fund NA V Return (%) Market Price Return (%) Underlying Index Return (%)
+AGIX^ 33.06 35.18 N/A
+^ Fund is actively managed and does not track an Underlying Index
+Under normal circumstances, the KraneShares Artificial Intelligence & Technology ETF invests at least 80% of its net assets (plus borrowings for investment purposes )
+in securities of artificial intelligence (AI) and technology companies and other instruments that have economic characteristics similar to such securities. The Fun d
+considers a company to be an "AI and Technology" company if it is classified in the Technology economy within the FactSet Revere Business Industry Classification
+system (RBICS), which requires a company to generate at least 50% of its revenue from within the Technology economy, and has an AI Exposure Score greater tha n
+zero. An "AI and Technology" company will generally operate in the following industries, as categorized by RBICS: computer peripherals, data processing services ,
+information technology services, internet retail, internet software/services, packaged software, semiconductors, or telecommunications equipment. An AI Exposure
+Score is a proprietary score used by the Underlying Index (as defined below) that attempts to quantify the exposure of a company with regard to AI. It is measured in a
+range from 0 (no exposure) to 5 (highest exposure) and is based on the company's public business descriptions, public filings, press releases, and financial disclosure s
+that directly indicate involvement in AI-related business or the incorporation of AI technologies into their key operations, offerings and research and development
+activities.
+U.S. AI equities outperformed the broader U.S. equity market, as defined by the S&P 500 Index, as expectations for the potential capabilities of AI-enabled agents ros e
+and chipmakers’ revenues remained stable at current levels. The Fund’s allocation to the privately-held company Anthropic contributed to its positive performanc e
+during the period. The Fund acquired a position in the privately held company xAI, now known as SpaceX, following a merger, during the period.
+How did the Fund perform since inception?
+Total Return Based on $10,000 Investment
+* Total Return (TR) - Reflects no deductions for fees, expenses or taxes.
+† Net Return (NR) - Reflects no deductions for fees, expenses or taxes (except foreign
+withholding taxes).
+Average Annual Total Returns as of March 31, 2026
+Fund/Index Name 1 Year
+Annualized
+Since
+Inception
+KraneShares Artificial Intelligence and
+Technology ETF 33.06% 17.39%
+S&P 500 Index (USD) (TR) 17.80% 10.98%
+Solactive Etna Artificial General
+Intelligence Index (USD) (NR) 26.69% 13.02%
+The line graph re presents historical performance of a hypothetical investment of $10,000 in the
+Fund since its inception on July 17, 2024. Returns shown are total returns, which assume the
+reinvestment of dividends and capital gains. The table and graph presented above do not
+reflect the deduction of taxes a shareholder would pay on Fund distributions or the redemption
+of Fund shares. P ast performance is not indicative of future performance. Call 1-855-857-
+2638 or visit https://kraneshares.com/agix/ for current month-end performance.
+KraneShares Artificial Intelligence and
+Technology ETF - $13,141
+S&P 500 Index (USD) (TR)* - $11,942
+Solactive Etna Artificial General
+Intelligence Index (USD) (NR)† - $12,320
+$8,000
+$9,000
+$10,000
+$11,000
+$12,000
+$13,000
+$14,000
+$15,000
+$16,000
+Jul/24
+Sep/24
+Dec/24
+Mar/25
+Jun/25
+Sep/25
+Dec/25
+Mar/26
+*
+†
+Key Fund Statistics as of March 31, 2026
+Total Net Assets Number of Holdings Total Advisory Fees Paid Portfolio Turnover Rate
+$171,473,296 57 $848,639 70%
+What did the Fund invest in?
+ Sector Weightings
+Percentages are calculated based on total net assets.
+Top Ten Holdings
+Holding Name
+Percentage of
+Total Net Assets
+NVIDIA 5.3%
+Microsoft 4.0%
+Meta Platforms, Cl A 3.7%
+SpaceX, Cl A 3.6%
+Alphabet, Cl A 3.4%
+Apple 3.3%
+Broadcom 3.1%
+Taiwan Semiconductor Manufacturing 2.9%
+Amazon.com 2.8%
+Anthropic 2.7%
+Material Fund Changes
+This is a summary of certain changes to the Fund since April 1, 2025. For more complete information, you may review the Fund’s prospectus, which is available at
+https://kraneshares.com/etf/agix/#fund-documents or upon request at 1-855-857-2638.
+Effective June 1, 2026, the Fund’s name changed from “KraneShares Artificial Intelligence and Technology ETF” to “KraneShares Public-Private AI and Technology
+ETF”. In addition, the Fund’s principal investment strategy has been updated to provide that, under normal circumstances, it will invest at least 80% of its net assets
+(plus borrowings for investment purposes) in the publicly traded or privately offered securities of “Artificial Intelligence (“AI”) and Technology” companies and other
+instruments that have economic characteristics similar to such securities.
+Krane Funds Advisors, LLC (“Krane” or the “Adviser”), the investment adviser to the Fund, entered into an agreement whereby its officers and employees, among
+others, through KFA Two Holdings, LLC, will acquire a majority interest in the Adviser from China International Capital Corporation (USA) Holdings Inc., a wholly-
+owned, indirect subsidiary of China International Capital Corporation Limited (the “Transaction”). Consummation of the Transaction will, under the Investment
+Company Act of 1940, result in the automatic termination of the Fund’s existing investment advisory and, if applicable, sub-advisory agreements. In anticipation of the
+Transaction, the Board approved new advisory and, if applicable, sub-advisory agreements on terms identical to the existing agreements (other than effective and
+termination dates), subject to shareholder approval of the new advisory agreement. The new sub-advisory agreement will take effect in reliance on a manager-of-
+managers exemptive order. To ensure continuity of management pending shareholder approval of the new advisory agreement, the Board also approved interim advisory
+and, if applicable, sub-advisory agreements, effective upon closing of the Transaction, each with terms substantially identical to the current agreements, to remain in
+effect for up to 150 days while shareholder approval is sought.
+Changes in and Disagreements with Accountants
+There were no changes in or disagreements with accountants during the reporting period.
+Additional Information
+For additional information about the Fund, including its prospectus, financial information, holdings, and proxy voting information, visit https://kraneshares.com/agix/.
+Householding
+You may have consented to receive one copy of a shareholder report at your address if you and one or more individuals in your home have multiple accounts at the same
+address. This practice is commonly called “householding” and is intended to reduce expenses. If you wish to change your householding status or receive individual
+copies of your shareholder report, please contact us at 1-855-857-2638 or your financial intermediary.
+KraneShares Trust
+KraneShares Artificial Intelligence and Technology ETF: AGIX
+Principal Listing Exchange: NASDAQ
+Annual Shareholder Report: March 31, 2026
+AGIX-AR-2026
+*
+1.0%
+3.3%
+5.3%
+6.0%
+11.2%
+72.8%
+Health Care
+Utilities
+Industrials
+Consumer Discretionary
+Communication Services
+Information Technology
+*

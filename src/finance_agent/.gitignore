@@ -33,3 +33,6 @@ pytorch_model*.bin
 models/
 .cache/huggingface/
 hf-cache/
+
+# Approved external document corpus (submitted for reproducibility)
+!artifacts/approved-corpus/

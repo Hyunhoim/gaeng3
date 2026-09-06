@@ -1,0 +1,117 @@
+KraneShares SSE STAR Market 50 Index ETF
+Investment Strategy:
+KSTR seeks to track the performance of the Shanghai Stock Exchange (SSE) Science and
+Technology Innovation Board 50 Index (STAR 50 Index). The Index is comprised of the 50
+largest companies listed on the SSE Science and Technology Innovation Board (STAR
+Market) as determined by market capitalization and liquidity.
+STAR Market Highlights:
+Facilitates the fast-tracking of private science and technology companies to an initial
+public offering (IPO).
+Since its establishment in July 2019, the STAR Market has become one of the largest
+IPO markets globally  and a premier listing venue for prominent Chinese unicorns
+(privately held startup companies valued at over $1 billion).
+1
+Recent increases in fund-raising activity on Chinese exchanges can largely be
+attributed to the STAR Market, which accounted for 41% of capital raised across
+China’s Mainland A-Share market in 2022 .2
+Potential inclusion in the SSE Composite Index and Shanghai-Hong Kong Stock
+Connect could result in greater flows for STAR Market securities.
+KSTR Features:
+Exposure to companies poised to be China’s future leaders across industries that could
+represent the growth engine of China for decades to come.
+Innovation-driven science and technology companies in China that offer a potential
+source of uncorrelated, long-term growth.
+Includes companies from industries such as new-generation information technology,
+biomedicine, new energy, and environmental protection.
+1. YiCai Global, “China’s Year-Old Star Market Outshines the Venerable Nasdaq”,
+7/23/2020. Retrieved 3/31/2024.
+2. PWC, “A-share IPOs lead the world; fundraising sets a new record in 2022”, 12/5/2022.
+Retrieved 3/31/2024.
+Fund Details Data as of 06/30/2025
+Primary Exchange NYSE Arca, Inc.
+CUSIP 500767694
+ISIN US5007676944
+Total Annual Fund Operating Expense 0.89%
+Inception Date 01/26/2021
+Distribution Frequency Annual
+Underlying Index SSE Science and Technology
+Innovation Board 50 Index
+Net Assets $33,958,744
+Number of Holdings 52
+Top 10 Holdings as of 06/30/2025
+Excluding cash. Holdings are subject to change.
+Ticker %
+CAMBRICON TECHNOLOGIES-A 688256 10.18
+MONTAGE TECHNO-A 688008 7.62
+BEIJING KINGSO-A 688111 5.26
+SHANGHAI UNITE-A 688271 5.12
+ADVANCED MICRO-A 688012 4.50
+SHENZHEN TRANS-A 688036 2.95
+NINEBOT LTD-CDR 689009 2.75
+VERISILICON MI-A 688521 2.74
+BEIJING ROBORO-A 688169 2.63
+NATIONAL SILIC-A 688126 2.50
+KSTR Performance History:
+  Cumulative %
+Data as of month end: 06/30/2025
+Average Annualized %
+Data as of month end: 06/30/2025
+1 Mo 3 Mo YTD Since
+Inception 1 Yr 3 Yr 5 Yr Since
+Inception
+Fund NAV 2.61% -0.65% 4.65% -45.04% 37.13% -8.74% – -12.65%
+Closing Price 3.91% -0.65% 6.06% -44.72% 37.79% -8.73% – -12.53%
+Underlying Index 3.23% -0.47% 3.65% -37.21% 43.67% -4.77% – -9.98%
+The performance data quoted represents past performance. Past performance does not guarantee future results. The investment return and principal value of an investment
+will fluctuate so that an investors shares, when sold or redeemed, may be worth more or less than their original cost and current performance may be lower or higher than
+the performance quoted. For performance data current to the most recent quarter end, please visit kraneshares.com/kstr.
+Index returns are for illustrative purposes only. Index performance returns do not reflect any management fees, transaction costs or expenses. Indexes are unmanaged and one
+cannot invest directly in an index.
+Contact us:
++(1) 855 8KRANE8
+info@kraneshares.com KSTR
+Sector Breakdown
+Data from Bloomberg as of 06/30/2025
+%
+Information Technology 72.54
+Health Care 14.34
+Consumer Discretionary 5.69
+Materials 3.30
+Industrials 2.90
+Consumer Staples 0.80
+Carefully consider the Funds’ investment objectives, risk factors, charges and expenses before investing. This and additional information can be found in the Funds' full and
+summary prospectus, which may be obtained by visiting kraneshares.com/kstr. Read the prospectus carefully before investing.
+Risk Disclosures:
+Investing involves risk, including possible loss of principal. There can be no assurance that a Fund will achieve its stated objectives.
+A-Shares are issued by companies in mainland China and traded on local exchanges. They are available to domestic and certain foreign investors, including QFIs and those
+participating in Stock Connect Programs like Shanghai-Hong Kong and Shenzhen-Hong Kong. Foreign investments in A-Shares face various regulations and restrictions,
+including limits on asset repatriation. A-Shares may experience frequent trading halts and illiquidity, which can lead to volatility in the Fund’s share price and increased trading
+halt risks. The Chinese economy is an emerging market, vulnerable to domestic and regional economic and political changes, often showing more volatility than developed
+markets. Companies face risks from potential government interventions, and the export-driven economy is sensitive to downturns in key trading partners, impacting the Fund.
+U.S.-China tensions raise concerns over tariffs and trade restrictions, which could harm China’s exports and the Fund. China's regulatory standards are less stringent than in the
+U.S., resulting in limited information about issuers. Tax laws are unclear and subject to change, potentially impacting the Fund and leading to unexpected liabilities for foreign
+investors. Fluctuations in currency of foreign countries may have an adverse effect to domestic currency values.
+The Fund may invest in derivatives, which are often more volatile than other investments and may magnify the Fund’s gains or losses. A derivative (i.e., futures/forward
+contracts, swaps, and options) is a contract that derives its value from the performance of an underlying asset. The primary risk of derivatives is that changes in the asset’s
+market value and the derivative may not be proportionate, and some derivatives can have the potential for unlimited losses. Derivatives are also subject to liquidity and
+counterparty risk. The Fund is subject to liquidity risk, meaning that certain investments may become difficult to purchase or sell at a reasonable time and price. If a transaction
+for these securities is large, it may not be possible to initiate, which may cause the Fund to suffer losses. Counterparty risk is the risk of loss in the event that the counterparty to
+an agreement fails to make required payments or otherwise comply with the terms of the derivative.
+The Fund may invest in Initial Public Offerings (IPOs). Securities issued in IPOs have no trading history, and information about the companies may be available for very limited
+periods. In addition, the prices of securities sold in IPOs may be highly volatile. In addition, as the Fund increases in size, the impact of IPOs on the Fund’s performance will
+generally decrease. Narrowly focused investments typically exhibit higher volatility. The Fund’s assets are expected to be concentrated in a sector, industry, market, or group of
+concentrations to the extent that the Underlying Index has such concentrations. The securities or futures in that concentration could react similarly to market developments.
+Thus, the Fund is subject to loss due to adverse occurrences that affect that concentration. In addition to the normal risks associated with investing, investments in smaller
+companies typically exhibit higher volatility. KSTR is non-diversified.
+ETF shares are bought and sold on an exchange at market price (not NAV) and are not individually redeemed from the Fund. However, shares may be redeemed at NAV directly
+by certain authorized broker-dealers (Authorized Participants) in very large creation/redemption units. The returns shown do not represent the returns you would receive if you
+traded shares at other times. Shares may trade at a premium or discount to their NAV in the secondary market. Brokerage commissions will reduce returns. Beginning
+12/23/2020, market price returns are based on the official closing price of an ETF share or, if the official closing price isn't available, the midpoint between the national best bid
+and national best offer ("NBBO") as of the time the ETF calculates the current NAV per share. Prior to that date, market price returns were based on the midpoint between the Bid
+and Ask price. NAVs are calculated using prices as of 4:00 PM Eastern Time.
+The KraneShares ETFs and KFA Funds ETFs are distributed by SEI Investments Distribution Company (SIDCO), 1 Freedom Valley Drive, Oaks, PA 19456, which is not affiliated
+with Krane Funds Advisors, LLC, the Investment Adviser for the Funds, or any sub-advisers for the Funds.
+[R-SEI-KS]
+Contact us:
++(1) 855 8KRANE8
+info@kraneshares.com KSTR

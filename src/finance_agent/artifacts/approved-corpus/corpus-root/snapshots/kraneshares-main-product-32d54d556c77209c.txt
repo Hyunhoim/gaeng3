@@ -1,0 +1,116 @@
+KraneShares Hang Seng TECH Index ETF
+Investment Strategy:
+KTEC seeks to track the performance of the Hang Seng TECH Index, which captures the 30
+largest companies in Hong Kong's rapidly growing technology sector. The Index provides
+exposure to innovative companies with strong research & development investment, high
+revenue growth, and themes such as cloud, E-Commerce, fintech and internet. The Index is
+freefloat market capitalization weighted with an 8% cap on individual constituent weighting.
+Hong Kong Technology Sector Highlights:
+In 2025, about 28.1% of total retail sales in China were made online, increasing from
+26.8% in 2024.1
+China is a world leader in 5G spending and adoption. By the end of 2025, China had
+approximately 892 million 5G connections and accounted for more than 40% of global
+5G connections.2
+In 2024, Chinese companies accounted for 79.8% of the Hong Kong Stock Exchange’s
+total market capitalization, with a combined value of $4.55 trillion.3
+Why KTEC?
+Holistic exposure to Hong Kong’s technology ecosystem, including E-Commerce, 5G,
+social media, healthcare IT, and more.
+Exposure to companies that may benefit from increasing domestic consumption by
+China's growing middle class.
+Access to Hong Kong-listed 5G and semiconductor companies that may offer a potential
+source of uncorrelated, long-term growth.
+1. Tanner Brown. “Yes, consumers in China are consuming again. It’s just not their No. 1
+priority these days”. February 27, 2026.
+2. GSMA. The Mobile Economy China 2026. GSMA Intelligence. 2026. Retrieved 6/30/2026.
+3. Ehsan Soltani. “Chinese Companies Command Nearly 80% of Hong Kong Stock Exchange
+Market Capitalization,” Voronoi. March 1, 2025. Retrieved 3/31/2026.
+Fund Details Data as of 07/31/2026
+Primary Exchange NYSE Arca, Inc.
+CUSIP 500767579
+ISIN US5007675797
+Total Annual Fund Operating Expense 0.69%
+Inception Date 06/08/2021
+Distribution Frequency Annual
+Underlying Index Hang Seng TECH Index
+Net Assets $55,884,018
+Number of Holdings 31
+Top 10 Holdings as of 07/31/2026
+Excluding cash. Holdings are subject to change.
+Ticker %
+MEITUAN-CLASS B 3690 9.97
+NETEASE INC 9999 9.70
+TENCENT HOLDINGS LTD 700 9.09
+BYD CO LTD-H 1211 8.97
+XIAOMI CORP-CLASS B 1810 8.96
+ALIBABA GROUP HOLDING LTD 9988 8.24
+JD.COM INC-CLASS A 9618 6.01
+LENOVO GROUP LTD 992 4.82
+BAIDU INC-CLASS A 9888 4.75
+KUAISHOU TECHNOLOGY 1024 3.95
+KTEC Performance History:
+  Cumulative %
+Data as of month end: 07/31/2026
+Average Annualized %
+Data as of month end: 07/31/2026
+1 Mo 3 Mo YTD Since
+Inception 1 Yr 3 Yr 5 Yr Since
+Inception
+Fund NAV 11.67% -0.59% -13.88% -43.14% -14.18% 0.03% -7.33% -10.39%
+Closing Price 11.21% -2.07% -12.58% -42.73% -13.67% -0.22% -7.23% -10.26%
+Underlying Index 7.99% -0.55% -12.50% -37.55% -10.61% 2.81% -5.96% -8.74%
+The performance data quoted represents past performance. Past performance does not guarantee future results. The investment return and principal value of an investment
+will fluctuate so that an investors shares, when sold or redeemed, may be worth more or less than their original cost and current performance may be lower or higher than
+the performance quoted. For performance data current to the most recent quarter end, please visit kraneshares.com/etf/ktec.
+Index returns are for illustrative purposes only. Index performance returns do not reflect any management fees, transaction costs or expenses. Indexes are unmanaged and one
+cannot invest directly in an index.
+Contact us:
++(1) 855 8KRANE8
+info@kraneshares.com
+
+KTEC
+Sector Breakdown
+Data from Bloomberg as of 07/31/2026
+%
+Consumer Discretionary 46.46
+Communication Services 29.06
+Information Technology 22.28
+Consumer Staples 2.00
+Carefully consider the Funds’ investment objectives, risk factors, charges and expenses before investing. This and additional information can be found in the Funds' full and
+summary prospectus, which may be obtained by visiting kraneshares.com/etf/ktec. Read the prospectus carefully before investing.
+Risk Disclosures:
+Investing involves risk, including possible loss of principal. There can be no assurance that a Fund will achieve its stated objectives.
+A-Shares are issued by companies in mainland China and traded on local exchanges. They are available to domestic and certain foreign investors, including QFIs and those
+participating in Stock Connect Programs like Shanghai-Hong Kong and Shenzhen-Hong Kong. Foreign investments in A-Shares face various regulations and restrictions,
+including limits on asset repatriation. A-Shares may experience frequent trading halts and illiquidity, which can lead to volatility in the Fund’s share price and increased trading
+halt risks. The Chinese economy is an emerging market, vulnerable to domestic and regional economic and political changes, often showing more volatility than developed
+markets. Companies face risks from potential government interventions, and the export-driven economy is sensitive to downturns in key trading partners, impacting the Fund.
+U.S.-China tensions raise concerns over tariffs and trade restrictions, which could harm China’s exports and the Fund. China's regulatory standards are less stringent than in the
+U.S., resulting in limited information about issuers. Tax laws are unclear and subject to change, potentially impacting the Fund and leading to unexpected liabilities for foreign
+investors. Fluctuations in currency of foreign countries may have an adverse effect to domestic currency values.
+The Fund may invest in derivatives, which are often more volatile than other investments and may magnify the Fund’s gains or losses. A derivative (i.e., futures/forward
+contracts, swaps, and options) is a contract that derives its value from the performance of an underlying asset. The primary risk of derivatives is that changes in the asset’s
+market value and the derivative may not be proportionate, and some derivatives can have the potential for unlimited losses. Derivatives are also subject to liquidity and
+counterparty risk. The Fund is subject to liquidity risk, meaning that certain investments may become difficult to purchase or sell at a reasonable time and price. If a transaction
+for these securities is large, it may not be possible to initiate, which may cause the Fund to suffer losses. Counterparty risk is the risk of loss in the event that the counterparty to
+an agreement fails to make required payments or otherwise comply with the terms of the derivative.
+The Fund may invest in Initial Public Offerings (IPOs). Securities issued in IPOs have no trading history, and information about the companies may be available for very limited
+periods. In addition, the prices of securities sold in IPOs may be highly volatile. In addition, as the Fund increases in size, the impact of IPOs on the Fund’s performance will
+generally decrease. Narrowly focused investments typically exhibit higher volatility. The Fund’s assets are expected to be concentrated in a sector, industry, market, or group of
+concentrations to the extent that the Underlying Index has such concentrations. The securities or futures in that concentration could react similarly to market developments.
+Thus, the Fund is subject to loss due to adverse occurrences that affect that concentration. In addition to the normal risks associated with investing, investments in smaller
+companies typically exhibit higher volatility. KTEC is non-diversified.
+ETF shares are bought and sold on an exchange at market price (not NAV) and are not individually redeemed from the Fund. However, shares may be redeemed at NAV directly
+by certain authorized broker-dealers (Authorized Participants) in very large creation/redemption units. The returns shown do not represent the returns you would receive if you
+traded shares at other times. Shares may trade at a premium or discount to their NAV in the secondary market. Brokerage commissions will reduce returns. Beginning
+12/23/2020, market price returns are based on the official closing price of an ETF share or, if the official closing price isn't available, the midpoint between the national best bid
+and national best offer ("NBBO") as of the time the ETF calculates the current NAV per share. Prior to that date, market price returns were based on the midpoint between the Bid
+and Ask price. NAVs are calculated using prices as of 4:00 PM Eastern Time.
+The KraneShares ETFs and KFA Funds ETFs are distributed by SEI Investments Distribution Company (SIDCO), 1 Freedom Valley Drive, Oaks, PA 19456, which is not affiliated
+with Krane Funds Advisors, LLC, the Investment Adviser for the Funds, or any sub-advisers for the Funds.
+[R-SEI-KS]
+Contact us:
++(1) 855 8KRANE8
+info@kraneshares.com
+
+KTEC
