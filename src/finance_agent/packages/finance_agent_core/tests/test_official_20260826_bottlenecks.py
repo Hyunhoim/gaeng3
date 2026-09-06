@@ -116,6 +116,12 @@ def test_phase3_exact_identity_alias_disclaimer_is_presentation_only() -> None:
     assert "외에는" not in surface
 
 
+def test_item_id_and_value_request_is_presentation_only() -> None:
+    question = "각 목록에는 상품번호와 상품명을 함께 적어 주세요."
+
+    assert semantic_query_surface(question) == ""
+
+
 def test_fund_comparison_supports_all_official_long_return_fields() -> None:
     fields = extract_fund_comparison_fields(
         "두 공모펀드의 18개월 수익률, 2년 수익률, 3년 수익률, 5년 수익률을 비교해 주세요."
@@ -2000,6 +2006,31 @@ def test_single_numeric_threshold_can_supply_the_generic_ranking_referent(
         {"field": field, "direction": direction, "nulls": "last"}
     ]
     assert hints["ambiguity_spans"] == []
+
+
+def test_registry_sort_field_owns_direction_across_neutral_value_noun() -> None:
+    """A registry alias remains executable through ``수치/값/지표`` wording."""
+
+    question = (
+        "해외 ETF 중 연간보수율이 0.4 이상인 상품을 "
+        "일거래량 수치가 높은 순서로 4개 찾아줘"
+    )
+
+    coverage = SemanticCoverageGate().evaluate(
+        question,
+        interaction_intent="search",
+    )
+    decision = IntentRouter().route(question, "registry-neutral-value-noun")
+    plan = ServerQueryPlanCompiler({}).compile(decision)
+
+    assert not coverage.has_unresolved_semantics
+    assert decision.disposition.value == "execute"
+    assert "total_expense_ratio_pct" in {
+        constraint.field for constraint in plan.constraints
+    }
+    assert plan.ranking[0].field == "daily_volume"
+    assert plan.ranking[0].direction is SortDirection.DESC
+    assert plan.limit == 4
 
 
 def test_data_scope_preamble_is_not_part_of_the_asset_manager_value() -> None:

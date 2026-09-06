@@ -722,6 +722,7 @@ _FAMILY_PATTERNS: tuple[
         ProductFamily.OVERSEAS_ETP,
         re.compile(
             r"투자자산군이\s*(?P<value>[^,;]+?)"
+            r"(?:(?:이고|이며)\s*투자지역이\s*[^,;]{1,80}?)?"
             r"(?:인|로\s*등록된)\s*해외\s*ETF"
         ),
         "wu_inv_ast_type",
@@ -730,6 +731,7 @@ _FAMILY_PATTERNS: tuple[
         ProductFamily.OVERSEAS_ETP,
         re.compile(
             r"투자지역이\s*(?P<value>[^,;]+?)"
+            r"(?:(?:이고|이며)\s*(?:투자)?자산군이\s*[^,;]{1,80}?)?"
             r"(?:인|로\s*등록된)\s*해외\s*ETF"
         ),
         "wu_inv_rgn",
@@ -822,9 +824,12 @@ _SOURCE_TO_CANONICAL: dict[tuple[ProductFamily, str], str] = {
     (ProductFamily.FUND, "fd_mm1_ern_r"): "one_month_return_pct",
     (ProductFamily.FUND, "fd_mm3_ern_r"): "three_month_return_pct",
     (ProductFamily.FUND, "fd_mm6_ern_r"): "six_month_return_pct",
+    (ProductFamily.FUND, "fd_mm18_ern_r"): "eighteen_month_return_pct",
     (ProductFamily.FUND, "fd_nast_suma"): "aum",
     (ProductFamily.FUND, "fd_yr1_ern_r"): "one_year_return_pct",
+    (ProductFamily.FUND, "fd_yr2_ern_r"): "two_year_return_pct",
     (ProductFamily.FUND, "fd_yr3_ern_r"): "three_year_return_pct",
+    (ProductFamily.FUND, "fd_yr5_ern_r"): "five_year_return_pct",
     (ProductFamily.FUND, "han_clas_fee_type"): "fee_type",
     (ProductFamily.FUND, "han_clas_sales_channel"): "sales_channel",
     (ProductFamily.FUND, "itm_no"): "product_id",
@@ -1158,7 +1163,8 @@ _METRIC_ALIASES: tuple[tuple[re.Pattern[str], dict[ProductFamily, str]], ...] = 
     ),
     (
         re.compile(
-            r"(?<![A-Za-z0-9])AUM(?![A-Za-z0-9])|순\s*자산(?!\s*총액)|"
+            r"(?<![A-Za-z0-9])(?:최근\s*|최종\s*|일간\s*)?AUM(?![A-Za-z0-9])|"
+            r"순\s*자산(?!\s*총액)|"
             r"운용\s*자산|자산\s*규모",
             re.IGNORECASE,
         ),
@@ -1253,7 +1259,7 @@ _METRIC_ALIASES: tuple[tuple[re.Pattern[str], dict[ProductFamily, str]], ...] = 
     (
         re.compile(
             r"평가(?:일)?\s*(?:단가|가격)|클린\s*프라이스|"
-            r"이자\s*제외\s*평가(?:\s*단가|가격)"
+            r"이자(?:를)?\s*(?:제외한?|뺀)\s*평가(?:\s*단가|가격)"
         ),
         {ProductFamily.BOND: "eval_price"},
     ),
@@ -1343,6 +1349,7 @@ _METRIC_ALIASES: tuple[tuple[re.Pattern[str], dict[ProductFamily, str]], ...] = 
     ),
     (
         re.compile(
+            r"(?:최근|지난)?\s*"
             r"(?:1\s*년|일\s*년|12\s*개월|열두\s*달|연간)\s*(?:누적\s*)?"
             r"(?:수익률|수익|성과|성적)"
         ),
@@ -1353,7 +1360,7 @@ _METRIC_ALIASES: tuple[tuple[re.Pattern[str], dict[ProductFamily, str]], ...] = 
     ),
     (
         re.compile(
-            r"(?:6\s*개월|반년|여섯\s*달)\s*"
+            r"(?:최근|지난)?\s*(?:6\s*개월|반년|여섯\s*달)\s*"
             r"(?:수익률|수익|성과|성적)"
         ),
         {
@@ -1362,12 +1369,35 @@ _METRIC_ALIASES: tuple[tuple[re.Pattern[str], dict[ProductFamily, str]], ...] = 
         },
     ),
     (
-        re.compile(r"3년\s*(?:누적\s*)?(?:수익률|수익|성과|성적)"),
+        re.compile(
+            r"(?:최근|지난)?\s*3년\s*(?:누적\s*)?(?:수익률|수익|성과|성적)"
+        ),
         {ProductFamily.FUND: "fd_yr3_ern_r"},
     ),
     (
         re.compile(
-            r"(?:3\s*개월|한\s*분기|분기|석\s*달)\s*"
+            r"(?:최근|지난)?\s*18\s*개월\s*(?:누적\s*)?"
+            r"(?:수익률|수익|성과|성적)"
+        ),
+        {ProductFamily.FUND: "fd_mm18_ern_r"},
+    ),
+    (
+        re.compile(
+            r"(?:최근|지난)?\s*2\s*년\s*(?:누적\s*)?"
+            r"(?:수익률|수익|성과|성적)"
+        ),
+        {ProductFamily.FUND: "fd_yr2_ern_r"},
+    ),
+    (
+        re.compile(
+            r"(?:최근|지난)?\s*5\s*년\s*(?:누적\s*)?"
+            r"(?:수익률|수익|성과|성적)"
+        ),
+        {ProductFamily.FUND: "fd_yr5_ern_r"},
+    ),
+    (
+        re.compile(
+            r"(?:최근|지난)?\s*(?:3\s*개월|한\s*분기|분기|석\s*달)\s*"
             r"(?:수익률|수익|성과|성적)"
         ),
         {
@@ -1376,7 +1406,9 @@ _METRIC_ALIASES: tuple[tuple[re.Pattern[str], dict[ProductFamily, str]], ...] = 
         },
     ),
     (
-        re.compile(r"(?:1개월|한\s*달)\s*(?:수익률|수익|성과|성적)"),
+        re.compile(
+            r"(?:최근|지난)?\s*(?:1개월|한\s*달)\s*(?:수익률|수익|성과|성적)"
+        ),
         {
             ProductFamily.DOMESTIC_ETP: "du_er_1m",
             ProductFamily.FUND: "fd_mm1_ern_r",
@@ -2250,7 +2282,68 @@ def _compound_family_matches(question: str) -> list[_FamilyScope]:
 
     explicit = _family_matches(question)
     if explicit:
-        return explicit
+        # A bare ``ETF`` in a compound request is not automatically domestic
+        # or overseas.  It becomes type-resolvable only when its own sentence
+        # contains a sortable field supported by exactly one ETP dataset
+        # (for example six-month return exists for domestic ETP, whereas
+        # open/close-price change exists for overseas ETP).  This is a schema
+        # capability inference, not a vocabulary guess, and therefore remains
+        # fail-closed for shared fields such as AUM or fees.
+        inferred: list[_FamilyScope] = []
+        for match in re.finditer(
+            r"(?<![0-9A-Za-z가-힣])(?:ETF|ETN|ETP)(?![0-9A-Za-z가-힣])",
+            question,
+            re.I,
+        ):
+            if any(item.start <= match.start() < item.end for item in explicit):
+                continue
+            prefix = question[max(0, match.start() - 8) : match.start()]
+            if re.search(r"(?:국내|해외)\s*$", prefix, re.I) is not None:
+                continue
+            left_boundary = max(
+                question.rfind(".", 0, match.start()),
+                question.rfind("!", 0, match.start()),
+                question.rfind("?", 0, match.start()),
+                question.rfind("。", 0, match.start()),
+            )
+            right_candidates = [
+                index
+                for token in (".", "!", "?", "。")
+                if (index := question.find(token, match.end())) >= 0
+            ]
+            right_boundary = min(right_candidates, default=len(question))
+            clause = question[left_boundary + 1 : right_boundary]
+            supported: list[ProductFamily] = []
+            for family in (ProductFamily.DOMESTIC_ETP, ProductFamily.OVERSEAS_ETP):
+                meanings = {
+                    item.field_id
+                    for item in rank_alias_matches(clause, family)
+                }
+                meanings.update(
+                    item.field_id
+                    for item in registry_field_mentions(
+                        clause,
+                        family.value,
+                        "sortable",
+                        value_types=frozenset({ValueType.NUMBER, ValueType.DATE}),
+                    )
+                )
+                if len(meanings) == 1:
+                    supported.append(family)
+            if len(supported) != 1 or any(
+                item.product_family is supported[0] for item in explicit
+            ):
+                continue
+            inferred.append(
+                _FamilyScope(
+                    start=match.start(),
+                    end=match.end(),
+                    product_family=supported[0],
+                    filters=(CompoundFilter("pd_grp_no", "eq", match.group(0).upper()),),
+                    label=match.group(0),
+                )
+            )
+        return sorted((*explicit, *inferred), key=lambda item: item.start)
     match = _ALL_FAMILY_PATTERN.search(question)
     if match is None:
         return []
@@ -2693,7 +2786,19 @@ def _closed_named_set_count(
 
     first_start = min(start for start, _end in identity_spans)
     last_end = max(end for _start, end in identity_spans)
-    if re.match(r"\s*(?:중|끼리)(?![가-힣])", question[last_end:]) is not None:
+    # DB matching deliberately owns the literal name/code, not surrounding
+    # punctuation.  Natural closed comparisons therefore leave the closing
+    # bracket of ``상품명(코드)`` immediately after the final identity span.
+    # Treat only that inert punctuation as part of the separator; otherwise
+    # two DB-proven products are misclassified as an open cohort and the
+    # already complete named-pair plan loses execution authority.
+    if (
+        re.match(
+            r"\s*[)\]}〉》」』’”'\"]*\s*(?:중|끼리)(?![가-힣])",
+            question[last_end:],
+        )
+        is not None
+    ):
         return logical_product_count
     # ``A하고 B를 비교`` is a closed set when the DB matcher resolved
     # exactly two logical products, only a coordination particle remains
@@ -3510,6 +3615,7 @@ _TWO_STAGE_STRUCTURAL_SURFACE = re.compile(
     r"(?:상위|하위|최상단|최하단|높은|낮은|큰|작은|많은|적은|짧은|긴|"
     r"가까운|먼(?!저)|빠른|늦은)(?:\s*순(?:서)?(?:대로|으로)?)?|"
     r"(?:내림차순|오름차순)(?:으로)?|"
+    r"순(?:서)?(?:대로|으로)?|"
     r"(?:먼저|우선|1\s*(?:차|단계)|예선|후보(?:로|를)?)|"
     r"(?:추린|추리고|추려|고른|고르고|골라|뽑은|뽑고|뽑아|"
     r"선별한|선별하고|남긴|남기고|남겨|거른|거르고|걸러|"
@@ -3519,7 +3625,7 @@ _TWO_STAGE_STRUCTURAL_SURFACE = re.compile(
     r"(?:다음|뒤|후)(?:에)?|"
     r"(?:고르되|골라내되|뽑되|선택하되|선정하되|선별하되|정리하되)|"
     r"(?:다시\s*)?(?:골라|고르|뽑아|뽑|선정|선별|추려|추리|"
-    r"남겨|남기|보여|알려|찾아|제시|나열|정리|조회|선택)"
+    r"남겨|남기|보여|알려|찾아|제시|나열|정리|조회|선택|확인)"
     r"(?:\s*(?:줘|주세요|주십시오|달라|세요|해\s*주세요))?|"
     r"(?:상품|종목|결과|목록|리스트)|"
     r"(?:각각|상품군별로|서로\s*다른\s*계산)|"
@@ -3528,8 +3634,8 @@ _TWO_STAGE_STRUCTURAL_SURFACE = re.compile(
 )
 _TWO_STAGE_GRAMMAR_ONLY_TOKEN = re.compile(
     r"(?:이|가|은|는|을|를|의|에|에서|에는|으로|로|와|과|및|하고|"
-    r"이고|이며|인|인데|것|만|씩|도|부터|까지|해|주세요|주십시오|"
-    r"수행|수행해|하지|마세요)",
+    r"이고|이며|이면서|하면서|인|인데|것|것부터|만|씩|도|부터|까지|해|주세요|주십시오|"
+    r"수행|수행해|하지|마세요|볼게요)",
     re.IGNORECASE,
 )
 _STAGED_TRANSITION_SURFACE = re.compile(
@@ -3680,6 +3786,10 @@ def _rank_spec(
             r"(?:개|을|를)?(?:씩)?"
         ),
         re.compile(rf"(.{{1,100}}?)\s*(상위|하위)\s*{count}\s*(?:개|을|를)?"),
+        re.compile(
+            rf"(.{{1,100}}?)(?:이|가|은|는)?\s*순(?:서)?(?:대로|으로)?\s*"
+            rf"(상위|하위)\s*{count}\s*(?:개|종목|상품|을|를)?"
+        ),
         re.compile(rf"(.{{1,100}}?)\s*(내림차순|오름차순)(?:으로)?\s*{count}\s*(?:개|을|를)?"),
         re.compile(
             r"(.{1,100}?)(?:이|가)?\s*"
@@ -3710,7 +3820,27 @@ def _rank_spec(
     for pattern in patterns:
         matches.extend((item.start(), item) for item in pattern.finditer(text))
     if not matches:
-        return None
+        # Typed Alias Registry is the shared semantic control plane.  It may
+        # recognize an explicit period/metric even when Korean places the
+        # count in a different surface order (for example ``성과가 앞선 세
+        # 상품``).  Admit only one Registry meaning and one explicit result
+        # count; ambiguous aliases or missing counts remain fail-closed.
+        semantic_meanings = {
+            (item.field_id, item.direction)
+            for item in rank_alias_matches(text, family)
+        }
+        limit = _final_limit(text)
+        if len(semantic_meanings) != 1 or limit is None:
+            return None
+        field_id, semantic_direction = next(iter(semantic_meanings))
+        source_fields = tuple(
+            source_field
+            for (source_family, source_field), canonical in _SOURCE_TO_CANONICAL.items()
+            if source_family is family and canonical == field_id
+        )
+        if len(source_fields) != 1:
+            return None
+        return CompoundMetric("field", source_fields), semantic_direction, limit
     _, match = max(matches, key=lambda item: item[0])
     metric = _metric_from_label(match.group(1), family)
     if metric is None:
@@ -3777,6 +3907,14 @@ def _named_set_rank_spec(
         if winner is not None:
             metric = _metric_from_label(winner.group(1), family)
             if metric is not None:
+                return_all_ranked = (
+                    re.match(
+                        r"\s*부터\s*둘\s*다",
+                        question[winner.end() :],
+                        re.IGNORECASE,
+                    )
+                    is not None
+                )
                 ranking = (
                     metric,
                     (
@@ -3784,7 +3922,7 @@ def _named_set_rank_spec(
                         if winner.group(2) in {"낮은", "작은"}
                         else SortDirection.DESC
                     ),
-                    identity_count,
+                    identity_count if return_all_ranked else 1,
                 )
     if ranking is None:
         pair_order = re.search(
@@ -8392,6 +8530,22 @@ class TypedCompoundQueryEngine:
         }
         represented_sources = {*filter_sources, *metric_sources}
 
+        # Credit grades are finite official enum literals.  Own one only when
+        # the identical source predicate is present in this frozen bond plan;
+        # this lets an HCX clause boundary include ``AA+`` without granting
+        # authority to an unknown or stronger grade.
+        if family is ProductFamily.BOND:
+            for item in plan.filters:
+                if item.source_field != "crd_grd" or item.operator != "eq":
+                    continue
+                literal = str(item.value)
+                for grade in re.finditer(
+                    rf"(?<![0-9A-Za-z]){re.escape(literal)}(?![0-9A-Za-z+-])",
+                    span,
+                    re.IGNORECASE,
+                ):
+                    own(grade.start(), grade.end())
+
         # Family/cohort literals are already parsed into a concrete scope and
         # its filters.  Own only matching ranges inside this exact family
         # segment, never another family's noun elsewhere in the question.
@@ -8404,6 +8558,28 @@ class TypedCompoundQueryEngine:
 
         def own_numeric_bound(alias_end: int, source_field: str) -> None:
             suffix = span[alias_end:]
+            between = re.match(
+                r"\s*(?:(?:원천\s*)?(?:값|수치|지표))?"
+                r"(?:이|가|은|는)?\s*"
+                r"(?P<lower>[-+]?\d[\d,]*(?:\.\d+)?)\s*"
+                r"(?:에서|부터|~|～|-)\s*"
+                r"(?P<upper>[-+]?\d[\d,]*(?:\.\d+)?)\s*"
+                r"(?:사이|까지)(?:인|이고|이며)?",
+                suffix,
+            )
+            if between is not None:
+                values: list[int | float] = []
+                for group in ("lower", "upper"):
+                    raw = between.group(group).replace(",", "")
+                    parsed = Decimal(raw)
+                    values.append(
+                        int(parsed)
+                        if parsed == parsed.to_integral_value()
+                        else float(parsed)
+                    )
+                if CompoundFilter(source_field, "between", tuple(values)) in plan.filters:
+                    own(alias_end, alias_end + between.end())
+                    return
             operators = {
                 "이상": "gte",
                 "이하": "lte",
@@ -8413,12 +8589,16 @@ class TypedCompoundQueryEngine:
                 "적어도": "gte",
                 "최대": "lte",
                 "많아야": "lte",
+                "넘는": "gt",
+                "웃도는": "gt",
+                "밑도는": "lt",
             }
             trailing = re.match(
                 r"\s*(?:이|가|은|는)?\s*"
                 r"(?:(?P<prefix>최소|최대|적어도|많아야)\s*)?"
-                r"(?P<value>[-+]?\d[\d,]*(?:\.\d+)?)\s*%?\s*"
-                r"(?P<suffix>이상|이하|초과|미만)?"
+                r"(?P<value>[-+]?\d[\d,]*(?:\.\d+)?)\s*"
+                r"(?P<unit>%|일|억\s*(?:원|달러)?|조\s*(?:원|달러)?|원|달러)?\s*"
+                r"(?:을|를)?\s*(?P<suffix>이상|이하|초과|미만|넘는|웃도는|밑도는)?"
                 r"(?:인|이고|이며)?",
                 suffix,
             )
@@ -8428,11 +8608,32 @@ class TypedCompoundQueryEngine:
             if operator_word is None:
                 return
             raw_value = trailing.group("value").replace(",", "")
+            parsed_value = Decimal(raw_value)
+            unit = re.sub(r"\s+", "", trailing.group("unit") or "")
+            if unit.startswith("억"):
+                parsed_value *= Decimal("100000000")
+            elif unit.startswith("조"):
+                parsed_value *= Decimal("1000000000000")
             value: int | float = (
-                float(raw_value) if "." in raw_value else int(raw_value)
+                int(parsed_value)
+                if parsed_value == parsed_value.to_integral_value()
+                else float(parsed_value)
             )
             if CompoundFilter(source_field, operators[operator_word], value) in plan.filters:
                 own(alias_end, alias_end + trailing.end())
+
+        # Some Korean maturity bounds put the numeric phrase before the field
+        # noun (``90일 안에 만기가 닿는``).  Mask it only when the exact
+        # normalized lte predicate already exists in the frozen plan.
+        if family is ProductFamily.BOND:
+            for maturity in re.finditer(
+                r"(?P<value>\d[\d,]*)\s*일\s*(?:안|이내)(?:에)?\s*"
+                r"(?:만기|상환)(?:가|는|일이)?\s*(?:닿는|도래하는|오는)?",
+                span,
+            ):
+                days = int(maturity.group("value").replace(",", ""))
+                if CompoundFilter("remaining_days", "lte", days) in plan.filters:
+                    own(maturity.start(), maturity.end())
 
         # Own exact field/alias literals only when their source column occurs
         # in this frozen plan.  Numeric predicate text is owned only when the
@@ -8461,12 +8662,30 @@ class TypedCompoundQueryEngine:
                 own(alias.start, alias.end)
         for alias in filter_alias_matches(span, family):
             source_field = _CANONICAL_TO_SOURCE.get((family, alias.field_id))
-            if (
-                source_field in filter_sources
-                and CompoundFilter(source_field, alias.operator, alias.value)
-                in plan.filters
-            ):
-                own(alias.start, alias.end)
+            if source_field not in filter_sources:
+                continue
+            definition = load_field_registry().require_field(alias.field_id, [family.value])
+            matched_filter = False
+            for item in plan.filters:
+                if item.source_field != source_field or item.operator != alias.operator:
+                    continue
+                try:
+                    canonical_value = _canonical_constraint_value(item.value, definition)
+                except ValueError:
+                    continue
+                if canonical_value == alias.value:
+                    matched_filter = True
+                    break
+            if not matched_filter:
+                continue
+            own(alias.start, alias.end)
+            if alias.field_id == "investment_region":
+                relation = re.match(
+                    r"\s*(?:에|로|을)?\s*(?:투자|노출)(?:하는|한|된)?",
+                    span[alias.end :],
+                )
+                if relation is not None:
+                    own(alias.end, alias.end + relation.end())
 
         expected_metrics = {
             plan.metric,
@@ -8946,6 +9165,17 @@ class TypedCompoundQueryEngine:
 
         if self._canonical_cohort_summary_proves_unresolved_span(span, compound):
             return True
+        if self._canonical_shared_ranking_span_is_owned(span, compound):
+            return True
+        if (
+            named_set_clause_coverage is not None
+            and self._canonical_named_set_scope_is_owned(
+                span,
+                compound,
+                named_set_clause_coverage,
+            )
+        ):
+            return True
 
         span_start = compound.question.find(span)
         if (
@@ -9222,6 +9452,134 @@ class TypedCompoundQueryEngine:
             else _KOREAN_SMALL_COUNTS.get(raw_count)
         )
         return declared_count == len(coverage.product_ids)
+
+    def _canonical_named_set_scope_is_owned(
+        self,
+        span: str,
+        compound: TypedCompoundPlan,
+        coverage: _NamedSetClauseCoverage,
+    ) -> bool:
+        """Prove ``family A, B 중`` as the exact frozen identity set.
+
+        HCX often labels the whole closed-set subject as ``UNRESOLVED`` even
+        though the approved database resolved every identifier.  Accept it
+        only when every frozen logical product occurs in the span and, after
+        masking those DB-owned identities, nothing remains except the exact
+        family label, coordination punctuation and the closed-set marker.
+        """
+
+        expected_map = self._canonical_plan_identity_keys(
+            coverage.product_family,
+            coverage.product_ids,
+        )
+        if expected_map is None:
+            return False
+        start = compound.question.find(span)
+        if start < 0 or compound.question.find(span, start + 1) >= 0:
+            return False
+        end = start + len(span)
+        represented: set[str] = set()
+        for match in self.database_identity_matcher.find(compound.question):
+            if match.start < start or match.end > end or not match.is_unique:
+                continue
+            owned = {
+                expected_map[key]
+                for candidate in match.candidates
+                for key in (
+                    (
+                        candidate.product_family,
+                        normalize_database_identity(candidate.canonical_literal),
+                    ),
+                )
+                if key in expected_map
+            }
+            if len(owned) != 1:
+                return False
+            represented.update(owned)
+        if represented != set(coverage.product_ids):
+            return False
+        masked_result = self._masked_canonical_identity_span(
+            span,
+            compound,
+            expected=set(expected_map),
+        )
+        if masked_result is None:
+            return False
+        masked, _contains_identity = masked_result
+        family_label = {
+            ProductFamily.BOND: r"(?:장내\s*)?(?:국내\s*)?채권",
+            ProductFamily.DOMESTIC_ETP: r"국내\s*(?:ETF|ETN|ETP)",
+            ProductFamily.OVERSEAS_ETP: r"해외\s*(?:ETF|ETN|ETP)",
+            ProductFamily.FUND: r"(?:공모\s*)?펀드",
+        }[coverage.product_family]
+        return re.fullmatch(
+            rf"\s*(?:{family_label})?\s*"
+            r"(?:[,，·ㆍ/&+]|와|과|및|하고|이랑|랑|\s)*"
+            r"(?:중|가운데|끼리)(?:에서|의)?\s*",
+            masked,
+            re.IGNORECASE,
+        ) is not None
+
+    @staticmethod
+    def _canonical_shared_ranking_span_is_owned(
+        span: str,
+        compound: TypedCompoundPlan,
+    ) -> bool:
+        """Prove one shared Registry metric/direction/count suffix.
+
+        The proof masks one literal Registry surface that maps to every
+        family-local frozen metric.  The residue is a closed coordination
+        grammar, so an extra criterion such as popularity cannot borrow the
+        authority of the valid metric.
+        """
+
+        if len(compound.family_plans) < 2 or compound.kind != "parallel":
+            return False
+        shared_order = _shared_parallel_order(compound.question)
+        if shared_order is None:
+            return False
+        expected_direction, expected_limit = shared_order
+        if any(
+            plan.direction is not expected_direction or plan.limit != expected_limit
+            for plan in compound.family_plans
+        ):
+            return False
+        mention_positions: set[tuple[int, int]] | None = None
+        for plan in compound.family_plans:
+            positions = {
+                (mention.start, mention.end)
+                for mention in registry_field_mentions(
+                    span,
+                    plan.product_family.value,
+                    "sortable",
+                    value_types=frozenset({ValueType.NUMBER, ValueType.DATE}),
+                )
+                if _CANONICAL_TO_SOURCE.get(
+                    (plan.product_family, mention.field_id)
+                )
+                in plan.metric.source_fields
+            }
+            mention_positions = (
+                positions
+                if mention_positions is None
+                else mention_positions.intersection(positions)
+            )
+        if mention_positions is None or len(mention_positions) != 1:
+            return False
+        metric_start, metric_end = next(iter(mention_positions))
+        masked = f"{span[:metric_start]} {span[metric_end:]}"
+        return re.fullmatch(
+            r"\s*(?:각각(?:의)?|상품군별(?:로)?|종류별(?:로)?|"
+            r"각\s*(?:상품군|시장)(?:에서|의)?)\s*"
+            r"(?:이|가|은|는)?\s*"
+            r"(?:높은|낮은|큰|작은|많은|적은|상위|하위|"
+            r"내림차순|오름차순)\s*"
+            r"(?:순(?:서)?(?:대로|으로)?)?\s*"
+            r"(?:(?:\d+|한|두|세|셋|네|넷|다섯|여섯|일곱|여덟|아홉|열)"
+            r"\s*(?:개|종목|상품)?\s*씩?)?\s*",
+            masked,
+            re.IGNORECASE,
+        ) is not None
 
     def _canonical_anchor_declaration_is_owned(
         self,

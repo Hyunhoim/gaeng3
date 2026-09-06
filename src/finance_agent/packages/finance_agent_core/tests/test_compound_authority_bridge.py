@@ -12,6 +12,7 @@ from finance_agent_core.agent.compound_query import (
     CompoundExecution,
     NamedComparisonIncompleteError,
     TypedCompoundQueryEngine,
+    _closed_named_set_count,
 )
 from finance_agent_core.agent.intent_analysis import (
     IntentAnalysisDraft,
@@ -1836,6 +1837,22 @@ def test_public_agent_executes_named_pair_only_after_db_identity_resolution(
     ]
 
 
+def test_parenthesized_name_and_code_pair_is_a_closed_comparison() -> None:
+    """Closing brackets are punctuation, not evidence of an open product set."""
+
+    question = "Alpha ETF(AAA)과 Beta ETF(BBB) 중 AUM이 더 높은 상품"
+    spans = tuple(
+        (question.index(surface), question.index(surface) + len(surface))
+        for surface in ("Alpha ETF", "AAA", "Beta ETF", "BBB")
+    )
+
+    assert _closed_named_set_count(
+        question,
+        spans,
+        logical_product_count=2,
+    ) == 2
+
+
 @pytest.mark.parametrize("unavailable_value", ["0", None])
 def test_named_comparison_with_unavailable_metric_never_returns_partial_success(
     domestic_sample_database,
@@ -2028,3 +2045,54 @@ def test_safety_unsupported_skips_compound_compilation_and_remains_terminal(
     assert result.decision.reason_code == "safety_transaction"
     assert result.query_plan is None
     assert result.products == []
+
+
+def test_compound_infers_bare_etf_only_from_unique_field_capability() -> None:
+    question = (
+        "첫째, 일본 투자지역 ETF 가운데 6개월 수익률이 높은 2개를 보여 주세요. "
+        "둘째, 종가가 10에서 30 사이인 해외 ETF를 일간 AUM이 큰 순으로 "
+        "3개 보여 주세요. 셋째, 글로벌에 투자하는 공모펀드를 2년 수익률 "
+        "상위 4개로 정리해 주세요."
+    )
+
+    _engine, _trace, plan = _compile_without_reading(question, "unique-etf-capability")
+
+    assert [item.product_family for item in plan.family_plans] == [
+        ProductFamily.DOMESTIC_ETP,
+        ProductFamily.OVERSEAS_ETP,
+        ProductFamily.FUND,
+    ]
+    assert [item.metric.source_fields for item in plan.family_plans] == [
+        ("du_er_6m",),
+        ("du_last_aum",),
+        ("fd_yr2_ern_r",),
+    ]
+
+
+def test_compound_literal_ledger_accepts_only_plan_owned_units_and_relation_words() -> None:
+    question = (
+        "첫째, 120일 안에 만기가 닿는 국내채권 중 이자를 뺀 평가가격이 "
+        "높은 순으로 2개를 보여 주세요. 둘째, 최종 AUM이 2조 원을 넘는 "
+        "국내 ETF를 1개월 수익률 높은 순으로 3개 보여 주세요. 셋째, "
+        "판매중이면서 글로벌에 투자하는 공모펀드를 순자산총액이 큰 것부터 "
+        "4개 보여 주세요."
+    )
+    engine, _trace, plan = _compile_without_reading(question, "owned-unit-ledger")
+    named = engine._named_set_clause_coverage(plan)
+    anchor = engine._anchor_relative_clause_coverage(plan)
+
+    spans = (
+        "120일 안에 만기가 닿는 국내채권",
+        "최종 AUM이 2조 원을 넘는",
+        "판매중이면서 글로벌에 투자하는 공모펀드",
+        "순자산총액이 큰 것부터 4개",
+    )
+    assert all(
+        engine._canonical_ledger_proves_unresolved_span(
+            span,
+            plan,
+            anchor_clause_coverage=anchor,
+            named_set_clause_coverage=named,
+        )
+        for span in spans
+    )
