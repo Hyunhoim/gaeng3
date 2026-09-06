@@ -1,0 +1,8 @@
+# 테스트·온톨로지 검사용 추가 의존성.
+#   python -m pip install -r requirements-dev.txt
+-c src/finance_agent/requirements/constraints.txt
+-r requirements.txt
+pytest==9.1.1
+cryptography==49.0.0
+rdflib==7.1.4
+ruff==0.16.0

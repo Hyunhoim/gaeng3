@@ -79,11 +79,11 @@ flowchart LR
 │   │   ├── packages/finance_agent_core/   # 설치 가능한 Python 패키지 + 테스트
 │   │   ├── requirements/                  # 고정 버전 constraints
 │   │   ├── scripts/sync-ontology.py       # registry → Turtle 생성 · 검사
-│   │   └── artifacts/runtime/             # 스키마 검색 인덱스 (런타임 입력)
-│   └── fastapi_backend/          # FastAPI 서버 · Dockerfile · 릴리스 스크립트 + 테스트
+│   │   └── artifacts/runtime/schema-dense/ # KURE 필드 의미 색인 v9 (런타임 입력)
+│   └── fastapi_backend/          # FastAPI 서버 · Dockerfile · 릴리스 봉인·배포 스크립트(manual-release.sh) + 테스트
 ├── docker-compose.yml            # data-init + backend
 ├── compose.sh                    # 한 명령 실행 진입점
-├── compose-release.sh            # 평가 서버와 같은 서명 릴리스 실행 경로
+├── compose-release.sh            # 봉인 릴리스를 Compose로 기동하는 대안 경로 (평가 서버는 manual-release.sh 사용)
 └── THIRD_PARTY_NOTICES.md
 ```
 
@@ -169,6 +169,7 @@ python -m venv .venv && source .venv/bin/activate
 python -m pip install -r requirements.txt
 ```
 
+KURE 의미 검색까지 켜려면 `src/fastapi_backend/requirements.embedding.txt`(torch CPU·sentence-transformers)를 추가 설치한다.
 네 상품군 SQLite 생성과 Backend 단독 실행은 [Agent README](src/finance_agent/README.md)와
 [Backend README](src/fastapi_backend/README.md)를 따른다.
 

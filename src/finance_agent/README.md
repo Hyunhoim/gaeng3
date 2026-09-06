@@ -58,8 +58,7 @@ src/finance_agent/
 ├── packages/finance_agent_core/  # 설치 가능한 Agent Core Python 패키지 + 테스트
 ├── requirements/                 # base · dev · constraints (고정 버전)
 ├── scripts/sync-ontology.py      # field registry → ontology/*.ttl 생성 · 검사
-├── artifacts/runtime/            # 스키마 검색 인덱스 (런타임 입력)
-└── environment.yml               # Conda 대안 환경 (Python 3.12)
+└── artifacts/runtime/            # KURE 필드 의미 색인 v9 (런타임 입력)
 ```
 
 ## 5. 설치와 검증
@@ -72,7 +71,6 @@ python -m pip install -r requirements-dev.txt
 python src/finance_agent/scripts/sync-ontology.py --check
 ```
 
-Conda를 쓴다면 `conda env create -f src/finance_agent/environment.yml` 뒤 같은 pip 명령을 실행한다.
 
 ## 6. 공식 데이터로 Agent Core만 실행
 
