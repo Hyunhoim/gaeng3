@@ -236,7 +236,8 @@ step_secrets() {
     NAMES=(clovastudio-api-key)
     [ "$EXTERNAL_MODE" = verified_live_official_with_relation_graph ] && NAMES+=(naver-api-hub-client-id naver-api-hub-client-secret)
     for name in "${NAMES[@]}"; do [ -s "$SECRETS_DIR/$name" ] || die "키 파일이 없습니다: $SECRETS_DIR/$name"; done
-    rm -rf "$RELEASE_DIR/secrets"; mkdir -p "$RELEASE_DIR/secrets" "$RELEASE_DIR/audit"
+    docker run --rm -v "$RELEASE_DIR:$RELEASE_DIR" alpine sh -c "rm -rf '$RELEASE_DIR/secrets'"   # 이전 실행의 uid 10001 소유 폴더 정리
+    mkdir -p "$RELEASE_DIR/secrets" "$RELEASE_DIR/audit"
     for name in "${NAMES[@]}"; do cp "$SECRETS_DIR/$name" "$RELEASE_DIR/secrets/"; done
     docker run --rm -v "$RELEASE_DIR/secrets:/s" -v "$RELEASE_DIR/audit:/a" alpine sh -c 'chown -R 10001:10001 /s /a && chmod 700 /s /a && chmod 600 /s/*'
     chmod 711 "$RELEASE_DIR"
