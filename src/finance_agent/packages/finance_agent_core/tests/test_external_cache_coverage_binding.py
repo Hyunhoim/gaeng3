@@ -294,14 +294,8 @@ def test_bundled_cache_only_authority_rejects_unbound_activation() -> None:
         entry.capability
         for entry in coverage.capabilities
         if entry.runtime_execution_enabled
-    } == {
-        KnowledgeCapability.CORPORATE_SUBSIDIARY,
-        KnowledgeCapability.PRODUCT_RISK_FACTORS,
-    }
-    assert all(
-        entry.status == ("approved" if entry.runtime_execution_enabled else "not_configured")
-        for entry in coverage.capabilities
-    )
+    } == set(KnowledgeCapability)
+    assert all(entry.status == "approved" for entry in coverage.capabilities)
 
 
 def test_cache_only_release_binds_capability_corpus_index_and_activation(

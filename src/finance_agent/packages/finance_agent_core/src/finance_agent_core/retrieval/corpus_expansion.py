@@ -9,8 +9,16 @@ from datetime import date
 
 from finance_agent_core.agent.source_selection import normalize_selection_surface
 from finance_agent_core.config.knowledge_coverage import KnowledgeCapability
-from finance_agent_core.config.source_registry import OfficialSourceRegistry
+from finance_agent_core.config.source_registry import (
+    OfficialSourceRegistry,
+    OfficialSourceRegistryError,
+)
 from finance_agent_core.contracts.queryplan import ProductFamily
+from finance_agent_core.retrieval.corpus_coverage import (
+    CorpusCoverageError,
+    GapAction,
+    GapCollectionQueue,
+)
 from finance_agent_core.retrieval.official_connector import (
     OfficialConnectorError,
     OfficialDiscoveryCandidate,
@@ -18,9 +26,11 @@ from finance_agent_core.retrieval.official_connector import (
     OfficialFetchRequest,
     OfficialSourceConnector,
     OfficialSourceSnapshot,
+    OfficialUrlExcludedError,
 )
 from finance_agent_core.retrieval.official_discovery import (
     BoundedOfficialDiscoveryProvider,
+    canonical_official_candidate_url,
 )
 from finance_agent_core.retrieval.pending_corpus import (
     PendingCorpusCatalog,
@@ -35,6 +45,12 @@ _CAPABILITY_QUERY_TERMS = {
     KnowledgeCapability.PRODUCT_RISK_FACTORS: "투자설명서 위험요인 상품 위험",
     KnowledgeCapability.SECTOR_THEME_HISTORY: "섹터 테마 관련 동향",
 }
+# Gap queues use the coverage analyzer's narrower relation-history wording.
+# Keep this collection contract separate from the legacy broad expansion terms.
+_GAP_CAPABILITY_QUERY_TERMS = {
+    **_CAPABILITY_QUERY_TERMS,
+    KnowledgeCapability.SECTOR_THEME_HISTORY: "섹터 테마 연결 이력",
+}
 _PURPOSES_BY_CAPABILITY = {
     KnowledgeCapability.CORPORATE_SUBSIDIARY: ("corporate_relation",),
     KnowledgeCapability.FUND_STRUCTURE_STRATEGY_TREND: (
@@ -46,6 +62,33 @@ _PURPOSES_BY_CAPABILITY = {
     KnowledgeCapability.PRODUCT_RISK_FACTORS: ("product_structure", "risk"),
     KnowledgeCapability.SECTOR_THEME_HISTORY: ("theme", "trend"),
 }
+_ORGANIZATION_SUFFIXES = tuple(
+    sorted(
+        (
+            "assetmanagement",
+            "investmentmanagement",
+            "fundsadvisors",
+            "자산운용",
+            "투자신탁운용",
+            "advisors",
+            "advisor",
+            "investments",
+            "investment",
+            "management",
+            "funds",
+            "shares",
+            "incorporated",
+            "corporation",
+            "company",
+            "corp",
+            "inc",
+            "ltd",
+            "llc",
+        ),
+        key=len,
+        reverse=True,
+    )
+)
 _HANGUL = re.compile(r"[\uac00-\ud7a3]")
 
 
@@ -54,6 +97,18 @@ class CorpusExpansionQuery:
     source_registry_id: str
     capability: KnowledgeCapability
     query: str
+    task_id: str | None = None
+    product_family: ProductFamily | None = None
+    product_id: str | None = None
+    product_name: str | None = None
+    source_owner: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class GapCorpusExpansionPlan:
+    queries: tuple[CorpusExpansionQuery, ...]
+    total_query_count: int
+    truncated: bool
 
 
 @dataclass(frozen=True, slots=True)
@@ -74,6 +129,52 @@ class CorpusExpansionStats:
     fetch_failure_count: int
     navigation_only_count: int
     catalog_document_count: int
+    excluded_existing_url_count: int = 0
+
+
+def _organization_brand_root(value: str) -> str | None:
+    root = normalize_selection_surface(value)
+    if not root:
+        return None
+    changed = True
+    while changed:
+        changed = False
+        for suffix in _ORGANIZATION_SUFFIXES:
+            if root.endswith(suffix) and len(root) - len(suffix) >= 3:
+                root = root[: -len(suffix)]
+                changed = True
+                break
+    return root if len(root) >= 3 else None
+
+
+def _owner_matches_aliases(
+    owner: str,
+    aliases: Sequence[str],
+    *,
+    product_name: str,
+) -> bool:
+    normalized_owner = normalize_selection_surface(owner)
+    if not normalized_owner:
+        return False
+    normalized_product_name = normalize_selection_surface(product_name)
+    owner_is_contaminated = normalized_owner == normalized_product_name or (
+        len(normalized_product_name) >= 8 and normalized_product_name in normalized_owner
+    )
+    owner_root = _organization_brand_root(owner)
+    for raw_alias in aliases:
+        alias = normalize_selection_surface(raw_alias)
+        if len(alias) < 3:
+            continue
+        if owner_is_contaminated:
+            position = normalized_product_name.find(alias)
+            if 0 <= position <= 5:
+                return True
+            continue
+        if normalized_owner == alias or alias in normalized_owner or normalized_owner in alias:
+            return True
+        if owner_root is not None and owner_root == _organization_brand_root(raw_alias):
+            return True
+    return False
 
 
 def _record_matches_source(
@@ -194,6 +295,162 @@ def build_corpus_expansion_queries(
     return tuple(planned)
 
 
+def build_gap_corpus_expansion_plan(
+    queue: GapCollectionQueue,
+    registry: OfficialSourceRegistry,
+    records_by_family: Mapping[ProductFamily, Sequence[ProductIdentityRecord]],
+    *,
+    max_queries: int = 600,
+) -> GapCorpusExpansionPlan:
+    """Build only the exact product queries authorized by a coverage gap queue.
+
+    The queue is analysis output, not identity authority. Every network task is
+    rebound to the approved DB identities and Source Registry before its query
+    can reach the discovery transport.
+    """
+
+    if not 1 <= max_queries <= 5000:
+        raise ValueError("max_queries must be between 1 and 5000")
+    network_task_ids = set(queue.network_collection_task_ids)
+    records: dict[tuple[ProductFamily, str], ProductIdentityRecord] = {}
+    for family, family_records in records_by_family.items():
+        for record in family_records:
+            if ProductFamily(record.product_family) is not family:
+                raise CorpusCoverageError("approved DB identity differs from its family bucket")
+            if record.is_quarantined or (
+                family is ProductFamily.FUND and record.public_offering is False
+            ):
+                continue
+            key = (family, record.product_id)
+            if key in records:
+                raise CorpusCoverageError("approved DB contains a duplicate product identity")
+            records[key] = record
+    planned: list[CorpusExpansionQuery] = []
+    total_query_count = 0
+    seen: set[tuple[str, str, str, str]] = set()
+    for item in queue.items:
+        if (
+            item.action is not GapAction.COLLECT_OFFICIAL_SNAPSHOT
+            or item.task_id not in network_task_ids
+        ):
+            continue
+        record = records.get((item.product_family, item.product_id))
+        if record is None:
+            raise CorpusCoverageError("gap collection product is absent from the approved DB")
+        expected_owner = (
+            " ".join(record.source_owner.split())
+            if record.source_owner
+            else "unknown_not_in_provided_schema"
+        )
+        if record.product_name != item.product_name or expected_owner != item.source_owner:
+            raise CorpusCoverageError("gap collection identity differs from the approved DB")
+        if '"' in record.product_name:
+            raise CorpusCoverageError("approved DB product name cannot form an exact query")
+        expected_query = f'"{record.product_name}" {_GAP_CAPABILITY_QUERY_TERMS[item.capability]}'
+        for source_id in item.source_registry_ids:
+            try:
+                source = registry.require_source_id(source_id)
+            except OfficialSourceRegistryError as error:
+                raise CorpusCoverageError(
+                    "gap collection source is absent from the Registry"
+                ) from error
+            if item.capability not in source.capabilities:
+                raise CorpusCoverageError("gap collection capability is outside the source scope")
+            if item.product_family not in source.product_families:
+                raise CorpusCoverageError("gap collection family is outside the source scope")
+            if source.status not in {
+                "approved_for_live_evidence",
+                "approved_for_snapshot_intake",
+            }:
+                raise CorpusCoverageError("gap collection source status is not intake-authorized")
+            if not _owner_matches_aliases(
+                record.source_owner or "",
+                (source.publisher, *source.selection_aliases),
+                product_name=record.product_name,
+            ):
+                raise CorpusCoverageError("gap collection source owner differs from the Registry")
+            for raw_query in item.queries:
+                query = " ".join(raw_query.split())
+                if query != expected_query:
+                    raise CorpusCoverageError(
+                        "gap collection query must be the exact quoted product name positive query"
+                    )
+                key = (item.task_id, source_id, item.capability.value, query)
+                if key in seen:
+                    continue
+                seen.add(key)
+                total_query_count += 1
+                planned_query = CorpusExpansionQuery(
+                    source_registry_id=source_id,
+                    capability=item.capability,
+                    query=query,
+                    task_id=item.task_id,
+                    product_family=item.product_family,
+                    product_id=item.product_id,
+                    product_name=item.product_name,
+                    source_owner=item.source_owner,
+                )
+                if len(planned) < max_queries:
+                    planned.append(planned_query)
+    return GapCorpusExpansionPlan(
+        queries=tuple(planned),
+        total_query_count=total_query_count,
+        truncated=total_query_count > len(planned),
+    )
+
+
+def build_gap_corpus_expansion_queries(
+    queue: GapCollectionQueue,
+    registry: OfficialSourceRegistry,
+    records_by_family: Mapping[ProductFamily, Sequence[ProductIdentityRecord]],
+    *,
+    max_queries: int = 600,
+) -> tuple[CorpusExpansionQuery, ...]:
+    return build_gap_corpus_expansion_plan(
+        queue,
+        registry,
+        records_by_family,
+        max_queries=max_queries,
+    ).queries
+
+
+def offline_snapshot_discovery_registry(
+    registry: OfficialSourceRegistry,
+    *,
+    source_registry_ids: Sequence[str],
+) -> OfficialSourceRegistry:
+    """Create a collection-only view that admits explicitly selected intake sources.
+
+    Runtime uses the original Registry and provider unchanged. This view exists
+    only so the offline expansion CLI can discover documents from an entry that
+    is authorized for snapshot intake but deliberately forbidden as live answer
+    evidence.
+    """
+
+    selected = set(source_registry_ids)
+    entries = []
+    for entry in registry.entries:
+        if entry.source_id in selected and entry.status == "approved_for_snapshot_intake":
+            entries.append(entry.model_copy(update={"status": "approved_for_live_evidence"}))
+        else:
+            entries.append(entry)
+    return registry.model_copy(update={"entries": tuple(entries)})
+
+
+def exclude_existing_corpus_candidates(
+    candidates: Sequence[CorpusExpansionCandidate],
+    *,
+    existing_urls: set[str] | frozenset[str],
+) -> tuple[tuple[CorpusExpansionCandidate, ...], int]:
+    existing_keys = {canonical_official_candidate_url(url) for url in existing_urls}
+    kept = tuple(
+        candidate
+        for candidate in candidates
+        if canonical_official_candidate_url(candidate.url) not in existing_keys
+    )
+    return kept, len(candidates) - len(kept)
+
+
 def discover_corpus_candidates(
     provider: BoundedOfficialDiscoveryProvider,
     registry: OfficialSourceRegistry,
@@ -308,6 +565,7 @@ def materialize_corpus_catalog(
     fetched_urls: set[str] = set()
     fetch_failures = 0
     navigation_only = 0
+    excluded_existing_urls = 0
 
     def admit(
         snapshot: OfficialSourceSnapshot, capabilities: tuple[KnowledgeCapability, ...]
@@ -347,6 +605,9 @@ def materialize_corpus_catalog(
                 ),
             )
             fetched_urls.add(candidate.url)
+        except OfficialUrlExcludedError:
+            excluded_existing_urls += 1
+            continue
         except OfficialConnectorError:
             fetch_failures += 1
             continue
@@ -375,6 +636,9 @@ def materialize_corpus_catalog(
                         ),
                     )
                     fetched_urls.add(linked_candidate.url)
+                except OfficialUrlExcludedError:
+                    excluded_existing_urls += 1
+                    continue
                 except OfficialConnectorError:
                     fetch_failures += 1
                     continue
@@ -402,6 +666,7 @@ def materialize_corpus_catalog(
         fetch_failure_count=fetch_failures,
         navigation_only_count=navigation_only,
         catalog_document_count=len(documents),
+        excluded_existing_url_count=excluded_existing_urls,
     )
 
 
@@ -463,8 +728,13 @@ __all__ = [
     "CorpusExpansionCandidate",
     "CorpusExpansionQuery",
     "CorpusExpansionStats",
+    "GapCorpusExpansionPlan",
     "build_corpus_expansion_queries",
+    "build_gap_corpus_expansion_plan",
+    "build_gap_corpus_expansion_queries",
     "discover_corpus_candidates",
+    "exclude_existing_corpus_candidates",
     "materialize_corpus_catalog",
     "merge_pending_catalogs",
+    "offline_snapshot_discovery_registry",
 ]
