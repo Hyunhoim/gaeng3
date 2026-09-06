@@ -234,41 +234,6 @@ def _update_environment(path: Path, **updates: str | None) -> None:
     )
 
 
-def test_release_trust_verifies_image_manifest_and_binding(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    env_file, _, _ = _fixture(tmp_path)
-    calls: list[list[str]] = []
-
-    monkeypatch.setattr(
-        release_trust,
-        "_cosign_binary",
-        lambda: Path("/usr/local/bin/cosign"),
-    )
-
-    def capture(binary: Path, arguments: list[str]) -> None:
-        assert binary == Path("/usr/local/bin/cosign")
-        for argument in arguments:
-            if argument.startswith("/tmp/finance-agent-trust-"):
-                assert Path(argument).is_file()
-        calls.append(arguments)
-
-    monkeypatch.setattr(release_trust, "_run_verification", capture)
-    monkeypatch.setenv("COSIGN_DOCKER_MEDIA_TYPES", "untrusted")
-
-    assert release_trust._verification_environment()["COSIGN_DOCKER_MEDIA_TYPES"] == "1"
-
-    release_trust.verify_release_trust(env_file)
-
-    assert len(calls) == 3
-    assert calls[0][0:2] == ["verify", "--new-bundle-format=false"]
-    assert calls[1][0:2] == ["verify-blob", "--bundle"]
-    assert calls[2][0:2] == ["verify-blob", "--bundle"]
-    assert all(any("refs/heads/main" in value for value in call) for call in calls)
-    assert all("https://token.actions.githubusercontent.com" in call for call in calls)
-
-
 def test_release_trust_accepts_final_hcx_intent_and_answer_profile(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

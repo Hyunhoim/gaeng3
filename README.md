@@ -1,256 +1,226 @@
-# gaeng3
+# 금융상품 Agent (팀 갱갱갱)
 
-미래에셋증권 AI Festival의 **금융상품 Agent** 프로젝트
+제10회 2026 미래에셋증권 AI Festival — 금융상품 Agent 과제 제출물
 
-사용자의 자연어 질문을 이해하고 주최 측 제공 데이터에서 국내채권, 국내·해외
-ETF·ETN, 공모펀드를 조회·비교·계산한 뒤 근거와 기준일을 함께 제공하는 서비스 개발
+자연어 질문을 이해하고 주최 측 제공 데이터에서 국내채권, 국내·해외 ETF·ETN, 공모펀드를
+조회·비교·계산한 뒤 **근거와 기준일을 함께 제시**하는 Agent다. 상품명·수치·순위·출처는
+LLM이 아니라 SQLite와 Python 검증기가 확정하고, LLM(HyperCLOVA X)은 질문 의도 해석과
+검증된 결과의 설명만 담당한다.
 
-이 문서는 프로젝트 전체 구조와 실행 방법을 안내함. 각 영역의 개발 방법은 해당
-디렉터리 README에서 관리
+## 1. 제출물 안내
 
-## 1. 프로젝트 목표
-
-- 여러 금융 조건이 포함된 자연어 상품 검색
-- 상품 상세 정보 조회와 두 상품 비교
-- 상품 수·평균·최솟값·최댓값·순위 등의 정확한 계산
-- 검색 결과와 금융 용어의 근거 기반 설명
-- 데이터로 확인할 수 없는 질문은 추측하지 않고 한계 안내 또는 역질문
-
-핵심 원칙은 LLM이 금융상품과 숫자를 임의로 만들어내지 않도록 하는 것
-
-- Python과 SQLite가 조건 검색·정렬·계산 수행
-- 검증기가 상품명·수치·순위·기준일·출처 재검사
-- LLM은 허용된 범위에서 질문 해석과 검증된 결과 설명 담당
-- 검증에 실패하면 근거 없는 답변 대신 안전한 정해진 답변 제공
-
-## 2. 현재 구성
-
-| 영역 | 현재 상태 |
+| 제출 항목 | 위치 |
 | --- | --- |
-| 데이터 | 공식 XLSX에서 네 상품군 SQLite와 관계 artifact·SHA sidecar·관계 SQLite를 자동 생성·검증 |
-| Ontology | 공식 파일명 Turtle 5개를 field registry에서 자동 생성·문법·정합성 검사 |
-| AI Agent | 검색·비교·집계·근거 생성·결과 검증과 공개 관계 Router 구현. 관계 엔터티 전체 값 exact match와 기존 상품 경로 fallthrough 적용 |
-| Backend | FastAPI `GET /health`, 내부용 `POST /answer`, 평가용 `GET /answer`, 관계 DTO·Audit·관계 readiness 구현. 과거 Shadow worker는 제거하고 주입 차단 계약만 유지 |
-| Release | `AgentReleaseManifest 1.2`가 코드·Prompt·Model·index·공식 데이터·관계 artifact·Docker digest를 결합. 로컬 fail-closed 검증 완료, 실제 NCP 서명 배포 대기 |
-| Frontend | 동료의 `nextjs-frontend/` 코드 합류 후 연결 예정 |
-| LLM | 최종 평가는 모든 유효 요청에 HCX-007 Intent 분석과 검증 근거 기반 최종 답변 생성을 필수화. HCLX 전체 QueryPlan 생성은 운영 배선에서 제거했으며 SQLite/Python·Verifier가 field·filter·정렬·계산·근거를 계속 확정 |
-| 자동 검증 | pre-HCX 동결 pytest 507개는 역사 기록으로 보존. 2026-09-01 `e58896f` 기준 Agent Core 2,232개·Backend 466개 통과. skip 2건은 봉인된 로컬 키와 선택적 승인 DB 경로 환경변수를 요구하는 opt-in 테스트 |
+| 소스코드 | `src/` (구현체), `requirements.txt`, 이 README |
+| 도메인별 Ontology | [`ontology/`](ontology/) — `common.ttl` `bond_kr.ttl` `etf_kr.ttl` `etf_gl.ttl` `fund_pub.ttl` |
+| 기술 제안서 | [`docs/technical-proposal.pdf`](docs/technical-proposal.pdf) ([Markdown 원문](docs/technical-proposal.md)) |
+| 평가용 API 서버 정보 | [`docs/api-specification.md`](docs/api-specification.md) |
 
-세부 기능과 평가 결과는 [AI Agent 작업공간](src/finance_agent/README.md)에서 관리
-배포 버전 고정과 평가·운영 실행은
-[AgentReleaseManifest 배포 계약](src/finance_agent/docs/agent-release-manifest.md)을 기준으로 한다.
-관계 검색의 공개 Router·Backend·Release·Docker 검증과 실제 NCP 배포 전 남은 일은
-[P0-10 인수인계 보고서](src/finance_agent/docs/p0-10-public-relation-release-integration-handover-2026-08-20.md)에서 확인한다.
+## 2. 평가용 API
 
-## 3. 전체 구조
+| 항목 | 값 |
+| --- | --- |
+| End-point | `GET http://101.79.25.57/answer?question_id={문항 ID}&question={질문}` |
+| 상태 확인 | `GET http://101.79.25.57/health` |
+| 인증 | 없음. 순차 1건 호출, 요청당 270초 외곽 timeout |
+| 응답 | `question_id` · `question` · `retrieved_context` · `think_trace` · `answer` 다섯 문자열 필드. 답할 수 없는 질문도 같은 스키마와 HTTP 200 |
+| 생성 모델 | 질문 의도 분석(의도 + Semantic Frame)과 최종 답변 생성 모두 NCP HyperCLOVA X `HCX-007`. 평가·운영 설정에서는 다른 LLM provider가 시작 단계에서 거부된다 |
+| 외부 근거 | 2026-08-24 이전 발행 공식 문서 258건(12개 발행기관)을 검토·승인해 봉인한 문서 묶음만 조회한다(`approved_corpus_cache_only`). 실시간 웹·NAVER 검색은 평가 환경에서 사용하지 않는다 |
+| 의미 검색 | 필드 의미 연결(KURE-v1 Schema Dense v9)과 문서 검색(KURE-v1 Document Dense + BM25)은 CPU에서 동작하며 색인은 릴리스에 해시로 결속된다 |
+
+```bash
+curl --get "http://101.79.25.57/answer" \
+  --data-urlencode "question_id=Q-001" \
+  --data-urlencode "question=현재 판매 가능한 원화채권 중 AA- 이상 종목 알려줘"
+```
+
+요청·응답 JSON 스키마와 오류 처리 규칙은 [API 명세서](docs/api-specification.md)에 있다.
+
+## 3. 시스템 개요
 
 ```mermaid
 flowchart LR
-    U["사용자"] --> F["Next.js Frontend<br/>nextjs-frontend · 합류 예정"]
-    F --> B["FastAPI Backend<br/>fastapi_backend"]
-    B --> A["Finance Agent Core<br/>finance_agent"]
-    A --> D["네 상품군 SQLite·관계 색인<br/>읽기 전용 Docker volume"]
-    X["공식 원천 XLSX<br/>읽기 전용"] --> I["data-init<br/>정규화·검증"]
+    U["평가자 / 사용자"] --> B["FastAPI Backend<br/>src/fastapi_backend · GET /answer"]
+    B --> A["Finance Agent Core<br/>src/finance_agent"]
+    A --> H["HyperCLOVA X HCX-007<br/>의도 분석 · 최종 답변 문장"]
+    A --> D["네 상품군 SQLite · 관계 색인<br/>읽기 전용 Docker volume"]
+    A --> C["승인 문서 묶음 258건<br/>KURE Document Dense · BM25 (봉인 캐시)"]
+    X["공식 원천 XLSX<br/>읽기 전용"] --> I["data-init<br/>정규화 · 검증"]
     I --> D
 ```
 
-현재 Agent Core는 별도 HTTP 서버가 아니라 Backend 이미지에 설치되어 같은 프로세스
-안에서 실행. 향후 Frontend가 합류해도 루트의 Compose가 전체 서비스를 관리
+답변 한 건은 다음 순서로 만들어진다.
+
+1. **의도 분석** — HCX-007이 질문 종류(검색·상세·비교·집계·관계)와 상품군을 해석한다
+2. **Typed QueryPlan** — 서버가 필드·조건·정렬·개수를 registry에 대해 검증한다. LLM은 이 값을 바꿀 수 없다
+3. **SQLite Oracle** — 검색·정렬·비교·집계를 SQL로 실행한다
+4. **Verifier** — Python이 같은 규칙으로 다시 계산해 결과를 대조한다. 어긋나면 답하지 않는다
+5. **근거 생성** — 필드별 값·출처·기준일을 보존한다
+6. **최종 답변** — HCX-007이 검증된 근거만 입력받아 문장을 만들고, Answer Verifier가 상품명·수치를 재검사한다
+
+데이터로 확인할 수 없는 질문은 추측하지 않고 한계를 안내하거나 되묻는다.
 
 ## 4. 저장소 구조
 
 ```text
-gaeng3/
-├── src/                              # 구현체 소스코드
-│   ├── finance_agent/                # 검색·검증·답변 생성 Agent Core
-│   │   └── README.md                 # Agent 개발·평가 안내
-│   └── fastapi_backend/              # FastAPI API·Docker·HTTP 테스트
-│       └── README.md                 # Backend 개발 안내
-├── ontology/                         # 제출용 공통·상품군별 Turtle 5개
-├── docs/                             # 팀 공통 문서와 기술 제안서 자료
-│   └── README.md                     # 문서 읽는 순서
-├── compose.sh                        # 전체 Docker 실행 진입점
-├── compose-release.sh                # 서명 릴리스 배포 진입점
-├── rehearse.sh                       # Docker·경계·테스트·문서 전체 리허설
-├── docker-compose.yml                # data-init·Backend 서비스 구성
-├── CONTRIBUTING.md                   # 브랜치·커밋·PR 규칙
-└── THIRD_PARTY_NOTICES.md            # 템플릿·외부 구성요소 고지
+.
+├── README.md                     # 이 문서: 환경 구성 · 실행 · 검증
+├── requirements.txt              # 실행 의존성 (고정 버전)
+├── requirements-dev.txt          # 테스트 · 온톨로지 검사 의존성
+├── ontology/                     # 제출용 Turtle 5개
+├── docs/
+│   ├── technical-proposal.pdf    # 기술 제안서
+│   ├── technical-proposal.md
+│   ├── user-scenarios.md
+│   ├── diagrams/                 # 시스템 구성도 · 답변 흐름도 (Mermaid)
+│   └── api-specification.md      # 평가용 API 명세서
+├── src/
+│   ├── finance_agent/            # Agent Core — 질의 해석 · 검색 · 검증 · 근거 · 답변
+│   │   ├── packages/finance_agent_core/   # 설치 가능한 Python 패키지 + 테스트
+│   │   ├── requirements/                  # 고정 버전 constraints
+│   │   ├── scripts/sync-ontology.py       # registry → Turtle 생성 · 검사
+│   │   └── artifacts/runtime/             # 스키마 검색 인덱스 (런타임 입력)
+│   └── fastapi_backend/          # FastAPI 서버 · Dockerfile · 릴리스 스크립트 + 테스트
+├── docker-compose.yml            # data-init + backend
+├── compose.sh                    # 한 명령 실행 진입점
+├── compose-release.sh            # 평가 서버와 같은 서명 릴리스 실행 경로
+└── THIRD_PARTY_NOTICES.md
 ```
 
-구현체는 공식 제출 예시와 같이 `src/` 아래에 둔다. Docker 빌드 컨텍스트와 모든 실행 명령은
-저장소 루트 기준이다.
+## 5. 실행 방법 (Docker)
 
-## 5. 전체 시스템 실행
+### 5.1 요구 사항
 
-모든 Docker 명령은 `src/fastapi_backend/`가 아니라 저장소 루트 `gaeng3/`에서 실행
+- Docker Engine 24 이상, Docker Compose v2
+- 주최 측 제공 금융상품 XLSX 디렉터리(`2.금융상품_20260824`)
 
-### 5.1 최초 준비
-
-Docker가 실행 중인지 확인하고 환경 설정 파일을 최초 한 번 생성
+### 5.2 준비
 
 ```bash
-docker info
-test -f src/fastapi_backend/.env || \
-  cp src/fastapi_backend/.env.example src/fastapi_backend/.env
+cp src/fastapi_backend/.env.example src/fastapi_backend/.env
 ```
 
-기본 원천 데이터 경로는 프로젝트의 `2. Data/1. Raw/2.금융상품_20260824`. 다른 위치를
-사용한다면 `src/fastapi_backend/.env`의 `FINANCE_RAW_DATA_DIR` 수정
+`src/fastapi_backend/.env`의 `FINANCE_RAW_DATA_DIR`를 XLSX 디렉터리 경로로 바꾼다.
+Compose가 이 디렉터리를 읽기 전용으로 연결해 네 상품군 SQLite와 관계 색인을 전용
+volume에 생성한다. 원본 XLSX는 수정하지 않는다.
 
-### 5.2 실행
+### 5.3 실행
 
 ```bash
 ./compose.sh up --detach --wait
 ```
 
-한 명령으로 다음 작업 수행
+한 명령으로 Backend 이미지 빌드 → XLSX 정규화·검증 → Backend 시작 → 정상 상태 대기까지 수행한다.
 
-1. Backend 이미지 빌드
-2. 공식 XLSX에서 네 상품군 SQLite 생성 또는 재사용
-3. 관계 artifact JSON·SHA sidecar·관계 SQLite 생성 또는 검증
-4. 데이터 무결성·상품군·관계 승인 manifest 결합 확인
-5. 데이터 준비 성공 후 FastAPI Backend 시작
-6. Backend와 관계 검색이 정상 상태가 될 때까지 대기
-
-`nextjs-frontend/`와 Compose `frontend` 서비스가 추가된 뒤에도 같은 명령으로 전체
-서비스를 실행할 예정
-
-### 5.3 상태와 API 확인
+### 5.4 확인
 
 ```bash
-./compose.sh ps --all
 curl --fail http://127.0.0.1:18001/health
-```
 
-기본 Backend 주소는 `http://127.0.0.1:18001`. `src/fastapi_backend/.env`에서
-`BACKEND_PORT=18002`로 변경했다면 확인 주소도 `18002` 사용
-
-질문 한 건을 직접 보내는 예시
-
-```bash
-curl --fail-with-body \
-  --request POST \
-  --header 'Content-Type: application/json' \
-  --data '{"schema_version":"1.0","request_id":"manual-001","question":"매수 가능한 국내채권을 매수수익률 높은 순으로 3개 보여줘.","locale":"ko-KR"}' \
-  http://127.0.0.1:18001/answer
-```
-
-발행사 관계 질문 예시
-
-```bash
-curl --fail-with-body \
-  --request POST \
-  --header 'Content-Type: application/json' \
-  --data '{"schema_version":"1.0","request_id":"relation-001","question":"한국주택금융공사가 발행한 국내채권 3개 보여줘.","locale":"ko-KR"}' \
-  http://127.0.0.1:18001/answer
-```
-
-정상 개발 환경의 `/health`에는 `relation_retrieval_status=ready`가 포함. 관계 파일을
-기동 후 수정하거나 교체하면 health와 관계 요청이 모두 503으로 fail closed
-
-위 `POST /answer`는 Frontend가 상품·근거·상태를 세부적으로 받기 위한 내부 API다.
-주최 측 평가 규격을 확인하는 `GET /answer`는 다음처럼 호출한다.
-
-```bash
 curl --get --fail-with-body \
   --data-urlencode 'question_id=Q-001' \
   --data-urlencode 'question=현재 판매 가능한 원화채권 중 AA- 이상 종목 알려줘' \
   http://127.0.0.1:18001/answer
 ```
 
-API 명세 화면은 `http://127.0.0.1:18001/docs`에서 확인
+`/health`에 `ready_product_families`가 네 상품군, `relation_retrieval_status=ready`이면 정상이다.
+OpenAPI 화면은 `http://127.0.0.1:18001/docs`.
 
-### 5.4 로그 확인
-
-```bash
-# 데이터 준비 결과
-./compose.sh logs data-init
-
-# Backend 실시간 로그
-./compose.sh logs --follow backend
-```
-
-실시간 로그 확인을 끝내려면 `Ctrl+C` 입력
-
-### 5.5 종료와 재실행
+### 5.5 종료
 
 ```bash
-# 컨테이너 종료, 생성된 SQLite volume은 보존
-./compose.sh down
-
-# 코드 변경 후 이미지 재빌드와 실행
-./compose.sh up --detach --wait
+./compose.sh down            # 컨테이너 종료, 생성 DB volume 보존
+./compose.sh down --volumes  # 생성 DB까지 삭제 (원본 XLSX는 영향 없음)
 ```
 
-정규화된 SQLite까지 지우고 공식 XLSX부터 다시 준비할 때만 다음 명령 사용
+포트 충돌 시 `.env`의 `BACKEND_PORT`를 바꾼다. 상세 진단은 [Backend README](src/fastapi_backend/README.md).
+
+### 5.6 평가 서버 배포 (HyperCLOVA X · 승인 문서 묶음)
+
+기본 Compose(`APP_ENV=development`)는 HCLX 자격증명 없이 결정론적 경로만으로 동작하므로
+데이터·검색·검증 로직을 credential 없이 재현할 수 있다. 평가 서버(`101.79.25.57`)는
+`src/fastapi_backend/scripts/manual-release.sh`로 서버 한 대에서 배포한다. 이 스크립트는
+이미지 빌드(`adaptive-runtime` 타깃) → XLSX 정규화·검증 → 릴리스 봉인(코드·DB·색인·문서 묶음·
+활성화 영수증의 SHA-256을 AgentReleaseManifest와 DeploymentBinding에 결속) → 컨테이너 기동 →
+`/health`·`/answer` 확인을 순서대로 수행한다. 봉인 값과 실제 파일이 하나라도 다르면 컨테이너는
+시작하지 않는다.
 
 ```bash
-./compose.sh down --volumes
-./compose.sh up --detach --wait
+RAW_DATA_DIR=/path/to/2.금융상품_20260824 SECRETS_DIR=~/.secrets/finance-agent \
+BIND_ADDRESS=0.0.0.0 PORT=80 EXTERNAL_MODE=approved_corpus_cache_only ADAPTIVE=true \
+KURE_CACHE_DIR=/path/to/kure-cache \
+APPROVED_CORPUS_MANIFEST=... APPROVED_CORPUS_ROOT=... APPROVED_DOCUMENT_DENSE=... \
+DOCUMENT_CACHE_ACTIVATION=... APPROVED_TEMPORAL_RELATIONS=... \
+  src/fastapi_backend/scripts/manual-release.sh all
 ```
 
-`down --volumes`는 Compose가 생성한 정규화 데이터 volume만 삭제. 읽기 전용으로
-연결한 공식 원본 XLSX는 삭제하지 않음
+CLOVA Studio API 키는 환경변수가 아니라 **읽기 전용 host 파일**(`SECRETS_DIR/clovastudio-api-key`)로
+전달한다. 승인 문서 묶음(원문 258건·매니페스트·KURE Document Dense 색인·활성화 영수증)과
+KURE-v1 모델 캐시는 Git에 포함하지 않고 배포 시 읽기 전용으로 마운트한다. 설정 항목은
+[`.env.release.example`](src/fastapi_backend/.env.release.example)과
+[Backend README](src/fastapi_backend/README.md)에 있다.
 
-### 5.6 실행 문제가 있을 때
+## 6. 실행 방법 (Docker 없이)
 
-- Docker 권한 오류: `id`에 `docker` 그룹이 있는지 확인한 뒤 재로그인
-- 포트 충돌: `src/fastapi_backend/.env`의 `BACKEND_PORT` 변경
-- Backend 상태 이상: `./compose.sh logs data-init backend` 확인
-- 자세한 진단과 HTTP 스모크: [Backend README](src/fastapi_backend/README.md) 참고
-
-루트 [compose.sh](compose.sh)는 한글 프로젝트 경로에서 일부 Docker Compose 버전이
-이미지 build context를 찾지 못하는 문제까지 처리하는 프로젝트 공식 실행 진입점
-
-### 5.7 한 명령 전체 리허설
-
-기본 Docker 기동, 공모펀드 잠금 확인, Backend·공식 GET 14건 스모크,
-개발/제출 경계 검사, Agent·Backend 전체 테스트와 문서 검사를 한 번에 실행
+Python 3.12 기준.
 
 ```bash
-PYTHON_BIN=/home/haeyeongcho/miniforge3/envs/gaeng3-dev/bin/python \
-  ./rehearse.sh
+python -m venv .venv && source .venv/bin/activate
+python -m pip install -r requirements.txt
 ```
 
-이미 최신 이미지를 빌드했다면 `--no-build` 사용. 공식 범위 확인 후 로컬 LLM
-흔적을 제거한 제출 후보에서는 `--submission`을 붙이며, 현재 개발 저장소에서는
-관련 파일이 남아 있으므로 이 옵션이 실패하는 것이 정상
+네 상품군 SQLite 생성과 Backend 단독 실행은 [Agent README](src/finance_agent/README.md)와
+[Backend README](src/fastapi_backend/README.md)를 따른다.
 
-## 6. 영역별 개발 안내
+## 7. 검증
 
-| 작업 | 시작 문서 | 실행 위치 |
-| --- | --- | --- |
-| 전체 시스템 실행 | 이 README | 저장소 루트 |
-| FastAPI·Docker·HTTP 계약 | [Backend README](src/fastapi_backend/README.md) | 저장소 루트 또는 `src/fastapi_backend/` |
-| Agent·검색·검증·평가 | [AI Agent README](src/finance_agent/README.md) | `src/finance_agent/` |
-| Ontology 생성·검사 | [Ontology 제출 계약](src/finance_agent/docs/ontology.md) | `src/finance_agent/` |
-| 팀 문서·기술 제안서 | [문서 안내](docs/README.md) | `docs/` |
-| 기술 제안서 작성 | [기술 제안서 허브](docs/proposal/README.md) | `docs/proposal/` |
-| 협업·커밋·PR | [CONTRIBUTING](CONTRIBUTING.md) | 저장소 전체 |
+```bash
+python -m pip install -r requirements-dev.txt
 
-## 7. LLM과 데이터 원칙
+# Agent Core
+( cd src/finance_agent/packages/finance_agent_core && python -m pytest -q )
 
-- 평가·제출 경로의 LLM은 공식 규칙에 따라 HyperCLOVA X만 사용
-- 로컬 Qwen 실험 기록은 개발 이력으로만 보존하며 최종 Runtime bundle·Docker image에는 코드·설정·의존성을 포함하지 않음
-- 과거 Shadow worker와 HCLX 전체 QueryPlan·grounded planning 실행 구현은 최종 Runtime에서 제거하고, 해당 설정·provider 주입을 거부하는 차단 검증만 유지
-- 답변의 상품명·수치·순위·출처는 제공 데이터와 결정론적 코드로 검증
-- 공식 데이터와 외부 데이터가 충돌하면 공식 데이터 우선
-- 원천 XLSX, 생성 DB, 평가 응답, 로그와 모델 가중치는 Git에 포함하지 않음
+# Backend (릴리스 보안 검사가 파일 권한을 확인하므로 umask 022 필요)
+umask 022
+PYTHONPATH=src/fastapi_backend:src python -m pytest -q src/fastapi_backend/tests
 
-세부 기준은 [현재 프로젝트 기준](src/finance_agent/docs/project-baseline.md)과
-[제출용 모델 경계](src/finance_agent/docs/submission-model-boundary.md)에서 관리
+# Ontology가 field registry와 일치하는지
+python src/finance_agent/scripts/sync-ontology.py --check
+```
 
-## 8. 문서와 담당
-
-처음 프로젝트를 확인한다면 다음 순서로 읽는 것을 권장
-
-1. 이 README에서 프로젝트와 실행 방법 확인
-2. [저장소 문서 안내](docs/README.md)에서 목적에 맞는 문서 선택
-3. 코드 작업 전 [CONTRIBUTING](CONTRIBUTING.md) 확인
-4. 담당 영역의 README에서 개발·검증 방법 확인
-
-| 역할 | 담당자 |
+| 검증 | 결과 (2026-09-06, 제출 트리) |
 | --- | --- |
-| Frontend & Backend | 임현호 |
+| Agent Core pytest | 4,039 passed · 12 skipped |
+| Backend pytest | 408 passed |
+| `sync-ontology.py --check` | Turtle 5개가 `field_registry.yaml`과 일치 |
+| Docker 빌드(`adaptive-runtime`) · 릴리스 봉인 · `GET /health` · 공식 예시 8문항 | 정상 (예시 1·2·3·5 근거 포함 답변, 답변 불가 3문항 거부, 예시 4는 문서 묶음 범위 밖으로 확인 불가) |
+
+테스트는 원천 데이터·네트워크·LLM 자격증명 없이 실행된다. skip으로 표시되는 소수는
+선택적 로컬 키나 승인 DB 경로를 요구하는 opt-in 테스트다.
+
+## 8. Ontology
+
+`ontology/`의 Turtle 5개는 손으로 쓰지 않고
+[`field_registry.yaml`](src/finance_agent/packages/finance_agent_core/src/finance_agent_core/config/field_registry.yaml)에서
+`sync-ontology.py`가 생성한다. `common.ttl`이 공통 상위 클래스(`Product`)와 공통 속성을,
+상품군별 파일이 하위 클래스와 전용 속성을 정의한다. 런타임이 같은 registry로 질문을
+해석하므로 온톨로지와 실제 동작이 어긋나지 않으며 `--check`가 이를 자동 검증한다.
+
+## 9. LLM과 데이터 원칙
+
+- 외부 근거는 승인·봉인된 문서 묶음(캐시)만 사용한다. 실시간 웹 검색 코드는 저장소에 남아 있으나 평가 환경에서는 자격증명을 두지 않아 동작하지 않는다
+- 평가·운영 경로의 LLM은 공식 규칙에 따라 **HyperCLOVA X만** 사용한다. `evaluation`·`production`
+  모드에서 다른 provider가 설정되면 프로세스가 시작되지 않는다
+- `finance_agent_core/agent/providers/`에는 개발 단계 단위 테스트용 mock·로컬 provider 코드가
+  남아 있으나, 평가 설정·릴리스 이미지·의존성에서는 선택될 수 없다
+- 답변의 상품명·수치·순위·출처는 제공 데이터와 결정론적 코드로 검증한다
+- 공식 데이터와 외부 데이터가 충돌하면 공식 데이터를 우선한다
+- 원천 XLSX, 생성 DB, 로그, 자격증명은 Git에 포함하지 않는다
+
+## 10. 팀
+
+| 역할 | 담당 |
+| --- | --- |
 | AI Agent | 조해영 |
-| Financial Domain | 박재모 |
+| Backend · 배포 | 임현호 |
+| 금융 도메인 | 박재모 |

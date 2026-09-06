@@ -2,7 +2,7 @@
 
 `finance_agent_core`를 HTTP API로 제공하는 FastAPI Backend 작업공간
 
-프로젝트 전체 실행은 [루트 README](../README.md)에서 관리. 이 문서는 Backend의
+프로젝트 전체 실행은 [루트 README](../../README.md)에서 관리. 이 문서는 Backend의
 책임, API 계약, 개별 개발·테스트와 장애 확인 방법만 설명
 
 ## 1. 이 디렉터리의 역할
@@ -41,7 +41,6 @@ src/fastapi_backend/
 ├── .env.example                 # Compose 환경변수 예시
 ├── .env.release.example         # 비밀값이 없는 release identity 예시
 ├── docker-compose.release.yml   # mutable build를 제거하는 공식 override
-├── docker-compose.local-llm.yml # 개발 전용 로컬 Qwen override
 ├── compose.sh                   # 과거 명령 호환용, 루트 스크립트로 위임
 └── pyproject.toml               # Backend Python package·의존성
 ```
@@ -61,7 +60,7 @@ Backend는 다음 Agent 공개 계약만 사용
 `execute_answer_request()`가 반환한 HTTP 상태와 DTO 필드를 삭제하거나 재해석하지 않음.
 계약을 바꾸려면 Agent와 Backend 담당자가 합의하고 다음 항목을 함께 수정
 
-- [Backend DTO 문서](../src/finance_agent/docs/backend-contract.md)
+- Agent Core의 Backend DTO (`finance_agent_core/contracts/backend.py`)
 - Agent Core 계약 테스트
 - `src/fastapi_backend/tests/`
 - Frontend의 응답 타입과 렌더링 분기
@@ -204,7 +203,7 @@ test -f src/fastapi_backend/.env || \
 ```
 
 이미지 빌드, 공식 XLSX 정규화·검증, Backend 시작은 루트 스크립트가 순서대로 처리.
-자세한 사용법은 [루트 전체 시스템 실행](../README.md#5-전체-시스템-실행) 참고
+자세한 사용법은 [루트 README의 실행 방법](../../README.md) 참고
 
 기본 `docker-compose.yml`은 `APP_ENV=development`인 로컬 개발 경로다. 기존 개인
 `.env`에 `evaluation` 또는 `production`이 남아 있으면 다음 재생성부터 release 설정
@@ -223,7 +222,7 @@ RELEASE_ENV_FILE=src/fastapi_backend/.env.release \
 실행하며 release별 SQLite volume도 read-only로 연결한다. 따라서 해당 volume은
 배포 전에 승인된 image/data 준비 job으로 생성·검증돼 있어야 한다. Manifest/Binding
 생성 순서, localhost에서 완료한 Registry·합성 rollback 검증과 아직 남은 NCP 공식 검증은
-[AgentReleaseManifest 배포 계약](../src/finance_agent/docs/agent-release-manifest.md)을 따른다.
+`AgentReleaseManifest` 계약(`finance_agent_core/release/`)을 따른다.
 HCLX release도 임의 `-f` override를 추가하지 않고 `.env.release`의 manifest와 동일한
 provider profile 및 read-only host secret file 경로를 사용한다.
 
@@ -272,7 +271,7 @@ uvicorn app.main:app \
   --reload
 ```
 
-SQLite 생성 방법은 [Agent README](../src/finance_agent/README.md#7-공식-데이터로-agent-core만-실행)
+SQLite 생성 방법은 [Agent README](../finance_agent/README.md)
 참고
 
 ## 7. Docker HTTP 스모크
@@ -337,8 +336,7 @@ python -m finance_agent_core.evaluation.official_mock_http_cli \
 이 채점기는 공식 다섯 문자열, 질문 보존, intent·상품군·후보 수, 상품 ID,
 비교·집계 근거와 60초 예산을 함께 검사한다. 2026-08-07 최초 관측은 형식·시간
 30/30, 의미 24/30이다. 여섯 실패는 모두 현재 Backend에서 의도적으로 잠근
-공모펀드 정상 질문이며, 모델 오류나 HTTP 오류가 아니다. 자세한 해석은
-[공식 형식 30문항 공개 모의평가](../src/finance_agent/docs/evaluation-official-mock.md)를 따른다
+공모펀드 정상 질문이며, 모델 오류나 HTTP 오류가 아니다
 
 최초 결과를 보존한 뒤 공모펀드만 `public_fund_v1_approved`로 열고
 같은 30문항을 재실행한 결과는 형식·시간·의미 30/30, 답변 생성
@@ -346,26 +344,6 @@ python -m finance_agent_core.evaluation.official_mock_http_cli \
 p95 약 3.01초·최대 약 3.04초로 통과. 단일 서버의 1회 관측이므로 부하 시험이나
 운영 SLO가 아니며, 정책값은 팀의 배포 승인을 표현할 뿐 주최 측의 공식 사용
 승인을 뜻하지 않음
-
-저장소 루트에서 다음과 같이 새 프로세스에만 적용한다
-
-```bash
-FINANCE_BACKEND_FUND_EXECUTION_POLICY=public_fund_v1_approved \
-./compose.sh -f docker-compose.yml \
-  -f src/fastapi_backend/docker-compose.local-llm.yml \
-  up --no-build --detach --force-recreate --wait backend
-
-curl --fail http://127.0.0.1:18002/health
-```
-
-실험이 끝나면 환경변수와 override를 빼고 Backend를 재생성한 다음,
-`fund_execution_policy=locked`를 확인한다
-
-결정론적 API의 Router·SQLite·Oracle·Verifier·직렬화 구간 분해, 격리 Docker
-benchmark·soak 실행법과 2026-08-14 검증 결과는 다음 문서를 따른다.
-
-- [성능 원인 분해 실행 가이드](docs/deterministic-performance-decomposition.md)
-- [성능 원인 분해·Audit 검증 결과](docs/deterministic-performance-audit-report-2026-08-14.md)
 
 ## 8. 주요 환경변수
 
@@ -492,29 +470,12 @@ answer-only 배선의 실호출 증거이며, 2026-08-25에 추가한 Intent+최
 - [Structured Outputs](https://api.ncloud-docs.com/docs/clovastudio-chatcompletionsv3-so)
 - [API 키 가이드](https://guide.ncloud-docs.com/docs/clovastudio-apikey)
 
-## 10. 과거 로컬 Qwen 실험 경계
+## 10. LLM provider 경계
 
-로컬 Qwen 실험 문서와 개발 이력은 재현성 때문에 저장소에 남지만 Backend Runtime에서는
-`local_test` 설정을 거부한다. 최종 Runtime bundle·Docker image에는 Qwen provider,
-로컬 LLM compose, 개발 평가 CLI와 관련 의존성이 포함되지 않는다.
-
-## 11. `nextjs-frontend` 연결 약속
-
-Frontend가 합류하면 다음 최소 범위부터 연결
-
-- 화면 진입 시 `GET /health`로 상품군 준비 상태 표시
-- 질문 입력에서 `POST /answer` 호출
-- `status`별 정상·역질문·미지원·결과 없음·오류 화면 구분
-- `products`, `comparisons`, `aggregates`는 값이 있을 때만 표시
-- `citations`, `as_of_dates`, `warnings`, `fallback_used`를 숨기지 않음
-- Frontend가 금융 조건·순위·평균을 다시 계산하지 않고 Backend DTO 사용
-- Next.js 서버가 `http://backend:8000`으로 대리 요청해 내부 주소와 CORS 문제 분리
-- Compose `frontend`는 Backend health 확인 후 연결
-
-첫 통합 목표는 디자인 완성이 아니라 질문 한 건이 Frontend→Backend→Agent를 거쳐
-근거 포함 응답으로 돌아오는지 확인하는 것
-
-## 12. 문제 해결
+평가·운영 Runtime은 HyperCLOVA X provider만 시작한다. 개발 단계 단위 테스트용
+`local_test` provider 코드는 패키지에 남아 있지만 `evaluation`·`production` 모드에서는
+설정 단계에서 거부되며, 릴리스 이미지의 의존성·compose·CLI에도 포함되지 않는다.
+## 11. 문제 해결
 
 | 증상 | 확인할 것 |
 | --- | --- |

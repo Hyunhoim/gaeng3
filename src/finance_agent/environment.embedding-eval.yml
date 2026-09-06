@@ -1,6 +1,0 @@
-name: gaeng3-embedding-eval
-channels:
-  - conda-forge
-dependencies:
-  - python=3.12
-  - pip
