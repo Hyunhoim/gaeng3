@@ -66,6 +66,29 @@ curl --fail http://127.0.0.1:18001/health
 릴리스 봉인(코드·DB·색인·문서 묶음의 SHA-256 결속) → 컨테이너 기동 → 확인 순서이며, 봉인 값과
 실제 파일이 다르면 시작하지 않는다. 절차와 환경변수는 [Backend README](src/fastapi_backend/README.md).
 
+## 재현용 외부 자료 (Git 미포함)
+
+평가 서버와 같은 외부 근거 검색을 재현하려면 아래 두 가지가 필요하다. 원천 XLSX 8개는 주최 측 배포본을 그대로 쓴다.
+
+| 자료 | 내용 | 받는 방법 |
+| --- | --- | --- |
+| 승인 문서 묶음 | 12개 발행기관 공식 문서 258건 원문(`corpus-root/snapshots/`), 문서 매니페스트, KURE Document Dense 색인, 활성화 영수증, 관계 파일 | `gaeng3-approved-corpus-v2-20260906.zip` (146 MB, 529 파일) — 다운로드: __CORPUS_LINK__ · SHA-256 `6b22c1450f807399deb46690f54e1b1bbd424b42aea103cd810b26b19771e6bd` |
+| KURE-v1 임베딩 모델 | `nlpai-lab/KURE-v1` revision `d14c8a9423946e268a0c9952fecf3a7aabd73bd9` (Hugging Face 공개 모델, 약 2.2 GB) | `huggingface-cli download nlpai-lab/KURE-v1 --revision d14c8a9423946e268a0c9952fecf3a7aabd73bd9 --cache-dir /path/to/kure-cache` |
+
+압축을 푼 뒤 `manual-release.sh`에 다음 경로를 넘긴다(`V`는 압축을 푼 폴더).
+
+```bash
+APPROVED_CORPUS_MANIFEST=$V/official-all-corpus-runtime-v1/approved-corpus-manifest.json
+APPROVED_CORPUS_ROOT=$V/corpus-root
+APPROVED_DOCUMENT_DENSE=$V/official-all-corpus-runtime-v1/release-bundle/document-dense.json
+DOCUMENT_CACHE_ACTIVATION=$V/official-all-corpus-runtime-v1/release-bundle/document-cache-activation.json
+APPROVED_TEMPORAL_RELATIONS=$V/official-all-corpus-runtime-v1/release-bundle/temporal-relations.json
+KURE_CACHE_DIR=/path/to/kure-cache
+```
+
+모든 파일은 SHA-256으로 릴리스에 결속되므로 내용이 다르면 서버가 시작하지 않는다. 문서 원문은 이 압축 파일로만
+배포하며, 저장소와 답변에는 근거 구간·출처 URL·발행일만 인용한다.
+
 ## 저장소 구조
 
 ```text
