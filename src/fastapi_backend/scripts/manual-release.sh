@@ -129,9 +129,22 @@ step_release() {
     docker run --rm -v "$RELEASE_DIR:$RELEASE_DIR" alpine sh -c "rm -rf '$RELEASE_DIR/work' '$RELEASE_DIR/release'"
     mkdir -p "$RELEASE_DIR/work" "$RELEASE_DIR/release"
     log "3/6 매니페스트·바인딩·외부지식 아티팩트 생성 (도구 컨테이너, python 3.12, 모드 $EXTERNAL_MODE, adaptive $ADAPTIVE)"
+    # 봉인 검사는 쓰기 비트가 전혀 없는(0444) 일반 파일만 받는다. git checkout 파일은 0644이므로
+    # 문서 묶음 입력 파일 4개를 릴리스 작업 폴더에 읽기 전용 사본으로 두고 그 경로를 쓴다.
+    if [ "$EXTERNAL_MODE" = approved_corpus_cache_only ]; then
+        mkdir -p "$RELEASE_DIR/work/inputs"
+        install -m 0444 "$APPROVED_CORPUS_MANIFEST" "$RELEASE_DIR/work/inputs/approved-corpus-manifest.json"
+        install -m 0444 "$APPROVED_DOCUMENT_DENSE" "$RELEASE_DIR/work/inputs/document-dense.json"
+        install -m 0444 "$DOCUMENT_CACHE_ACTIVATION" "$RELEASE_DIR/work/inputs/document-cache-activation.json"
+        install -m 0444 "$APPROVED_TEMPORAL_RELATIONS" "$RELEASE_DIR/work/inputs/temporal-relations.json"
+        APPROVED_CORPUS_MANIFEST="$RELEASE_DIR/work/inputs/approved-corpus-manifest.json"
+        APPROVED_DOCUMENT_DENSE="$RELEASE_DIR/work/inputs/document-dense.json"
+        DOCUMENT_CACHE_ACTIVATION="$RELEASE_DIR/work/inputs/document-cache-activation.json"
+        APPROVED_TEMPORAL_RELATIONS="$RELEASE_DIR/work/inputs/temporal-relations.json"
+    fi
     # 입력 파일은 모두 같은 절대경로로 읽기 전용 마운트한다.
     EXTRA_MOUNTS=()
-    for p in "$APPROVED_CORPUS_MANIFEST" "$APPROVED_CORPUS_ROOT" "$APPROVED_DOCUMENT_DENSE" "$DOCUMENT_CACHE_ACTIVATION" "$APPROVED_TEMPORAL_RELATIONS"; do
+    for p in "$APPROVED_CORPUS_ROOT"; do
         [ -n "$p" ] && EXTRA_MOUNTS+=(-v "$p:$p:ro")
     done
     docker run --rm --user 0:0 \

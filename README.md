@@ -19,9 +19,9 @@
 
 ## 환경 구성과 실행
 
-요구 사항: Docker Engine 24 이상, Docker Compose v2, 주최 측 XLSX 디렉터리(`2.금융상품_20260824`, 파일 8개).
+요구 사항: Ubuntu 22.04/24.04 x86_64, Docker Engine 24 이상, Docker Compose v2, 주최 측 XLSX 디렉터리(`2.금융상품_20260824`, 파일 8개). 아래 절차는 Ubuntu에서 확인했다.
 
-### 1. 기본 구성 — LLM·외부 문서 없이 데이터 경로만 재현
+### 1. 기본 구성
 
 ```bash
 cp src/fastapi_backend/.env.example src/fastapi_backend/.env   # FINANCE_RAW_DATA_DIR 를 XLSX 디렉터리 경로로 수정
@@ -33,7 +33,7 @@ curl --fail http://127.0.0.1:18001/health
 검색·조건·비교·집계 질문에 결정론적 경로로 답하며, HyperCLOVA X 호출과 외부 문서 검색은 하지 않는다.
 종료는 `./compose.sh down`.
 
-### 2. 평가 구성 — HyperCLOVA X + 승인 문서 묶음 (평가 서버와 같은 구성)
+### 2. 평가 구성
 
 준비할 것 세 가지.
 
