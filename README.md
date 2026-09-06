@@ -62,13 +62,13 @@ curl --fail http://127.0.0.1:18001/health
 `./compose.sh down`. Docker 없이 실행하려면 Python 3.12에서 `pip install -r requirements.txt`
 뒤 [Agent README](src/finance_agent/README.md)를 따른다.
 
-평가 서버는 `src/fastapi_backend/scripts/manual-release.sh`로 배포한다. 이미지 빌드 → 데이터 준비 →
+평가 구성(HCX-007 + 승인 문서 묶음)으로 실행하려면 `src/fastapi_backend/scripts/manual-release.sh`를 쓴다. 이미지 빌드 → 데이터 준비 →
 릴리스 봉인(코드·DB·색인·문서 묶음의 SHA-256 결속) → 컨테이너 기동 → 확인 순서이며, 봉인 값과
 실제 파일이 다르면 시작하지 않는다. 절차와 환경변수는 [Backend README](src/fastapi_backend/README.md).
 
 ## 재현용 외부 자료
 
-평가 서버와 같은 외부 근거 검색을 재현하기 위한 자료다. 원천 XLSX 8개는 주최 측 배포본을 그대로 쓴다.
+평가 구성의 외부 근거 검색을 재현하기 위한 자료다. 원천 XLSX 8개는 주최 측 배포본을 그대로 쓴다.
 
 | 자료 | 내용 | 위치 |
 | --- | --- | --- |

@@ -2,14 +2,14 @@
 
 `finance_agent_core`를 HTTP API로 제공하는 FastAPI Backend. 전체 실행은 [루트 README](../../README.md),
 요청·응답 JSON 스키마는 [API 명세서](../../docs/평가용_API_서버_정보.md)를 따른다.
-이 문서는 Backend의 책임, HTTP 계약, 평가 서버 배포, 테스트만 다룬다.
+이 문서는 Backend의 책임, HTTP 계약, 평가 구성 실행, 테스트만 다룬다.
 
 ## 1. 역할
 
 - `GET /health`, 평가용 `GET /answer`, 내부용 `POST /answer` route
 - 요청 검증, 오류 응답 변환, 요청당 deadline과 동시 실행 상한
 - Agent Core 의존성 조립과 시작 시 릴리스 봉인(manifest·binding·데이터 해시) 검증
-- Docker 이미지, 컨테이너 시작 명령, 평가 서버 배포 스크립트
+- Docker 이미지, 컨테이너 시작 명령, 평가 구성 실행 스크립트
 
 금융상품 SQL·검색·검증 로직은 `finance_agent_core`에 있다. Backend는 Agent 결과의 상품명·수치·근거를 수정하지 않는다.
 
@@ -24,7 +24,7 @@ src/fastapi_backend/
 │   ├── request_execution.py     # deadline · 동시 실행 상한 · 재시도 공유
 │   └── routes/                  # health.py · answer.py
 ├── scripts/
-│   ├── manual-release.sh        # 평가 서버 배포 (빌드 → 데이터 → 봉인 → 실행 → 확인)
+│   ├── manual-release.sh        # 평가 구성 실행 (빌드 → 데이터 → 봉인 → 실행 → 확인)
 │   └── smoke.py                 # 실행 중인 서버 HTTP 스모크
 ├── tests/                       # HTTP 계약 · 릴리스 · 런타임 테스트
 ├── Dockerfile                   # 타깃 final · adaptive-runtime (KURE 포함)
@@ -116,9 +116,9 @@ Docker 없이 실행할 때는 네 SQLite와 관계 색인을 먼저 만들고([
 `.env.example`의 `FINANCE_DB_*`·`FINANCE_RELATION_*` 경로를 환경변수로 설정한 뒤
 `uvicorn app.main:app --app-dir src/fastapi_backend --port 18001`로 시작한다.
 
-### 6.2 평가 서버 배포
+### 6.2 평가 구성 실행
 
-[`scripts/manual-release.sh`](scripts/manual-release.sh)가 NCP 서버 한 대에서 다음을 순서대로 수행한다.
+[`scripts/manual-release.sh`](scripts/manual-release.sh)가 한 대의 머신에서 다음을 순서대로 수행한다.
 
 1. `build` — `Dockerfile` 타깃 `adaptive-runtime`으로 이미지 빌드 (clean git checkout 필요)
 2. `data` — 원천 XLSX를 정규화·검증해 네 SQLite·관계 색인·관계 artifact를 데이터 volume에 생성
@@ -149,7 +149,7 @@ read-only로 마운트한다.
 | 변수 | 평가 릴리스 값 | 의미 |
 | --- | --- | --- |
 | `APP_ENV` | `evaluation` | 릴리스 봉인·provider 제한 강제 |
-| `BACKEND_BIND_ADDRESS` / `BACKEND_PORT` | `0.0.0.0` / `80` | 평가자 접근 주소 (NCP ACG로 발신 IP 제한) |
+| `BACKEND_BIND_ADDRESS` / `BACKEND_PORT` | `0.0.0.0` / `80` | 외부 접근 주소·포트 |
 | `OFFICIAL_ANSWER_TIMEOUT_SECONDS` | `270` | `GET /answer` 내부 시간 제한 |
 | `OFFICIAL_ANSWER_MAX_INFLIGHT` / `WEB_CONCURRENCY` | `2` / `1` | 프로세스당 동시 Agent 작업 상한 / Uvicorn worker 수 |
 | `FINANCE_BACKEND_ANSWER_PROVIDER` | `hyperclova` | 최종 답변 생성 provider |
