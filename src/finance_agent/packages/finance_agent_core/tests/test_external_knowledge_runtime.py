@@ -620,14 +620,17 @@ def test_cache_only_source_scopes_and_coverage_activate_only_approved_capabiliti
         for entry in coverage.capabilities
         if entry.runtime_execution_enabled
     }
-    assert enabled == {
-        KnowledgeCapability.CORPORATE_SUBSIDIARY,
-        KnowledgeCapability.PRODUCT_RISK_FACTORS,
-    }
+    # 2026-09-06 official-all-documents corpus(258 문서)로 다섯 capability 전부 승인·활성화
+    assert enabled == set(KnowledgeCapability)
     assert all(
-        entry.status == ("approved" if entry.runtime_execution_enabled else "not_configured")
+        entry.status == "approved"
+        and entry.runtime_execution_enabled
+        and entry.corpus_sha256 is not None
+        and entry.index_sha256 is not None
         for entry in coverage.capabilities
     )
+    assert len({entry.corpus_sha256 for entry in coverage.capabilities}) == 1
+    assert len({entry.index_sha256 for entry in coverage.capabilities}) == 1
 
 
 def test_external_named_etp_surface_is_server_derived_without_entity_hardcoding() -> None:
