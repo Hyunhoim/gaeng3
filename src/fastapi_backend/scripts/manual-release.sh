@@ -138,7 +138,7 @@ step_release() {
         -e APPROVED_CORPUS_MANIFEST="$APPROVED_CORPUS_MANIFEST" -e APPROVED_CORPUS_ROOT="$APPROVED_CORPUS_ROOT" \
         -e APPROVED_DOCUMENT_DENSE="$APPROVED_DOCUMENT_DENSE" -e DOCUMENT_CACHE_ACTIVATION="$DOCUMENT_CACHE_ACTIVATION" \
         -e APPROVED_TEMPORAL_RELATIONS="$APPROVED_TEMPORAL_RELATIONS" \
-        -e SCHEMA_DENSE_INDEX="$SCHEMA_DENSE_INDEX" -e SCHEMA_DENSE_CALIBRATION_REPORT_SHA256="$SCHEMA_DENSE_CALIBRATION_REPORT_SHA256" \
+        -e SCHEMA_DENSE_INDEX="$SCHEMA_DENSE_INDEX" -e KURE_SNAPSHOT_MANIFEST="$KURE_SNAPSHOT_MANIFEST" -e SCHEMA_DENSE_CALIBRATION_REPORT_SHA256="$SCHEMA_DENSE_CALIBRATION_REPORT_SHA256" \
         -e SCHEMA_DENSE_MIN_SCORE="$SCHEMA_DENSE_MIN_SCORE" -e SCHEMA_DENSE_HCLX_CANDIDATE_MIN_SCORE="$SCHEMA_DENSE_HCLX_CANDIDATE_MIN_SCORE" \
         -e SCHEMA_DENSE_MINIMUM_MARGIN="$SCHEMA_DENSE_MINIMUM_MARGIN" -e SCHEMA_DENSE_TOP_K="$SCHEMA_DENSE_TOP_K" \
         -w "$REPO_DIR" "$TOOLS_IMAGE" bash -eu -c '
@@ -194,8 +194,11 @@ PYEOF
             EXT_SHA="$(sha "$RELEASE_DIR/release/external-knowledge-artifact.json")"
             ADAPTIVE_ARGS=()
             if [ "$ADAPTIVE" = true ]; then
+                # 봉인 검사는 쓰기 비트가 전혀 없는(0444) 일반 파일만 받는다 → 릴리스 폴더에 읽기 전용 사본
+                install -m 0444 "$SCHEMA_DENSE_INDEX" "$RELEASE_DIR/release/schema-dense-index.json"
+                install -m 0444 "$KURE_SNAPSHOT_MANIFEST" "$RELEASE_DIR/release/kure-snapshot-manifest.json"
                 ADAPTIVE_ARGS=(--hcx-semantic-resolver-enabled --adaptive-semantic-enabled \
-                    --schema-dense-index "$SCHEMA_DENSE_INDEX" --schema-dense-index-sha256 "$(sha "$SCHEMA_DENSE_INDEX")" \
+                    --schema-dense-index "$RELEASE_DIR/release/schema-dense-index.json" --schema-dense-index-sha256 "$(sha "$SCHEMA_DENSE_INDEX")" \
                     --schema-dense-calibration-report-sha256 "$SCHEMA_DENSE_CALIBRATION_REPORT_SHA256" \
                     --schema-dense-min-score "$SCHEMA_DENSE_MIN_SCORE" --schema-dense-hclx-candidate-min-score "$SCHEMA_DENSE_HCLX_CANDIDATE_MIN_SCORE" \
                     --schema-dense-minimum-margin "$SCHEMA_DENSE_MINIMUM_MARGIN" --schema-dense-top-k "$SCHEMA_DENSE_TOP_K")
@@ -264,11 +267,11 @@ step_run() {
     ADAPTIVE_RUN=()
     if [ "$ADAPTIVE" = true ]; then
         require_adaptive_inputs
-        ADAPTIVE_RUN+=(-v "$SCHEMA_DENSE_INDEX:/models/schema-dense-index.json:ro" \
-            -v "$KURE_CACHE_DIR:/models/kure-cache:ro" -v "$KURE_SNAPSHOT_MANIFEST:/models/kure-snapshot-manifest.json:ro" \
+        ADAPTIVE_RUN+=(-v "$RELEASE_DIR/release/schema-dense-index.json:/models/schema-dense-index.json:ro" \
+            -v "$KURE_CACHE_DIR:/models/kure-cache:ro" -v "$RELEASE_DIR/release/kure-snapshot-manifest.json:/models/kure-snapshot-manifest.json:ro" \
             -e FINANCE_ADAPTIVE_SEMANTIC_ENABLED=true -e FINANCE_DENSE_SCHEMA_LINKER_ENABLED=true -e FINANCE_PRODUCT_DENSE_ENABLED=false \
             -e FINANCE_BACKEND_HCX_SEMANTIC_RESOLVER_ENABLED=true \
-            -e FINANCE_SCHEMA_DENSE_INDEX_FILE=/models/schema-dense-index.json -e FINANCE_SCHEMA_DENSE_INDEX_SHA256="$(sha "$SCHEMA_DENSE_INDEX")" \
+            -e FINANCE_SCHEMA_DENSE_INDEX_FILE=/models/schema-dense-index.json -e FINANCE_SCHEMA_DENSE_INDEX_SHA256="$(sha "$RELEASE_DIR/release/schema-dense-index.json")" \
             -e FINANCE_SCHEMA_DENSE_CALIBRATION_REPORT_SHA256="$SCHEMA_DENSE_CALIBRATION_REPORT_SHA256" \
             -e FINANCE_SCHEMA_DENSE_MIN_SCORE="$SCHEMA_DENSE_MIN_SCORE" -e FINANCE_SCHEMA_DENSE_HCLX_CANDIDATE_MIN_SCORE="$SCHEMA_DENSE_HCLX_CANDIDATE_MIN_SCORE" \
             -e FINANCE_SCHEMA_DENSE_MINIMUM_MARGIN="$SCHEMA_DENSE_MINIMUM_MARGIN" -e FINANCE_SCHEMA_DENSE_TOP_K="$SCHEMA_DENSE_TOP_K" \
