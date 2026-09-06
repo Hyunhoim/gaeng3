@@ -653,6 +653,37 @@ def _direction_has_metric(question: str, match: re.Match[str]) -> bool:
     # Without this, adding an alias to the registry silently fails to work.
     if _known_field_surface(prefix):
         return True
+    # Field Registry aliases are the canonical lexical control layer even
+    # when a writer inserts a neutral noun between the field and direction:
+    # ``일거래량 수치가 높은 순``, ``AUM 값이 큰 순``.  Typed Alias rules
+    # intentionally cover only selected semantic families, so requiring one
+    # of those rules here makes a valid registry surface look unresolved.
+    # Admit exactly one nearest sortable field and only across particles plus
+    # the neutral value nouns below.  A second field or any descriptive word
+    # keeps the direction ambiguous.
+    nearby_registry_fields: set[str] = set()
+    for family in ProductFamily:
+        for mention in registry_field_mentions(
+            question,
+            family.value,
+            "sortable",
+            value_types=frozenset({ValueType.NUMBER, ValueType.DATE}),
+        ):
+            if mention.end > match.start() or match.start() - mention.end > 24:
+                continue
+            bridge = question[mention.end : match.start()]
+            if (
+                re.fullmatch(
+                    r"\s*(?:(?:원천\s*)?(?:값|수치|지표))?"
+                    r"(?:이|가|은|는|을|를)?\s*",
+                    bridge,
+                    re.IGNORECASE,
+                )
+                is not None
+            ):
+                nearby_registry_fields.add(mention.field_id)
+    if len(nearby_registry_fields) == 1:
+        return True
     # A trailing "높은 순" can refer back to one and only one explicit metric
     # used earlier as a threshold (for example, "1주 수익률 5% 이상 ... 높은
     # 순"). Multiple possible metric antecedents remain ambiguous.

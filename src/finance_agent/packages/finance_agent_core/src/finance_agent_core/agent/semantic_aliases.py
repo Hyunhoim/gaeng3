@@ -890,7 +890,8 @@ SEMANTIC_ALIAS_RULES: tuple[SemanticAliasRule, ...] = (
         "one_month_return_pct",
         SortDirection.DESC,
         r"(?:최근|지난)?\s*(?:한\s*달|1\s*개월).{0,12}?"
-        r"(?:(?:수익률|수익|성적(?:표)?|성과)(?:이|가|은|는|을|를)?\s*(?:좋|높)|잘\s*나간)",
+        r"(?:(?:수익률|수익|성적(?:표)?|성과)(?:이|가|은|는|을|를)?\s*"
+        r"(?:좋|높|앞(?:서|선)|우수)|잘\s*나간)",
     ),
     _rule(
         "product.return.three_month_colloquial",
@@ -899,7 +900,7 @@ SEMANTIC_ALIAS_RULES: tuple[SemanticAliasRule, ...] = (
         SortDirection.DESC,
         r"(?:최근|지난)?\s*(?:한\s*분기|분기|석\s*달|3\s*개월).{0,12}?"
         r"(?:(?:수익률|수익|성적(?:표)?|성과)(?:이|가|은|는|을|를)?\s*"
-        r"(?:가장\s*|제일\s*)?(?:좋|높)|잘\s*나간)",
+        r"(?:가장\s*|제일\s*)?(?:좋|높|앞(?:서|선)|우수)|잘\s*나간)",
     ),
     _rule(
         "product.return.six_month_colloquial",
@@ -908,7 +909,7 @@ SEMANTIC_ALIAS_RULES: tuple[SemanticAliasRule, ...] = (
         SortDirection.DESC,
         r"(?:최근|지난)?\s*(?:반년|여섯\s*달|6\s*개월).{0,12}?"
         r"(?:(?:수익률|수익|성적(?:표)?|성과)(?:이|가|은|는|을|를)?\s*"
-        r"(?:가장\s*|제일\s*)?(?:좋|높)|잘\s*나간)",
+        r"(?:가장\s*|제일\s*)?(?:좋|높|앞(?:서|선)|우수)|잘\s*나간)",
     ),
     _rule(
         "product.return.one_year_colloquial",
@@ -917,7 +918,7 @@ SEMANTIC_ALIAS_RULES: tuple[SemanticAliasRule, ...] = (
         SortDirection.DESC,
         r"(?:최근|지난)?\s*(?:1\s*년|일\s*년).{0,12}?"
         r"(?:(?:수익률|수익|성적(?:표)?|성과)(?:이|가|은|는|을|를)?\s*"
-        r"(?:가장\s*|제일\s*)?(?:좋|높)|잘\s*나간)",
+        r"(?:가장\s*|제일\s*)?(?:좋|높|앞(?:서|선)|우수)|잘\s*나간)",
     ),
     _rule(
         "domestic_etp.return.ytd_colloquial",
@@ -1478,6 +1479,15 @@ _CONTEXTUAL_FILTER_ALIASES: tuple[FilterAliasRule, ...] = (
         True,
         r"(?:현재\s*)?(?:판매할|팔)\s*수\s*있(?:는|고)|"
         r"(?:현재\s*)?판매\s*(?:가능한|중인)",
+        evidence_source="field-registry-v1.8",
+    ),
+    _filter_rule(
+        "fund.sellable.colloquial_available",
+        (ProductFamily.FUND,),
+        "sellable",
+        True,
+        r"(?:현재\s*)?(?:판매할|팔)\s*수\s*있(?:는|고)|"
+        r"(?:현재\s*)?판매\s*(?:가능한|중인|중)",
         evidence_source="field-registry-v1.8",
     ),
     _filter_rule(

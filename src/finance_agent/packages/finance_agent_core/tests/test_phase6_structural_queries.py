@@ -1119,13 +1119,13 @@ def test_two_exact_id_comparison_compiles_ranked_metric_winner(
     assert family_plan.product_family is family
     assert family_plan.metric.source_fields == (metric_field,)
     assert family_plan.direction is direction
-    # Both exact products remain in the grounded comparison; the first result
-    # is the deterministic winner for the requested direction.
-    assert family_plan.limit == 2
+    # Both exact products remain the verified comparison inputs, while the
+    # singular winner request returns only the deterministic winner.
+    assert family_plan.limit == 1
     assert len(family_plan.include_product_ids) == 2
 
 
-def test_exact_id_winner_is_first_but_loser_remains_grounded(
+def test_exact_id_winner_returns_only_the_verified_winner(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     engine = _engine()
@@ -1164,10 +1164,9 @@ def test_exact_id_winner_is_first_but_loser_remains_grounded(
     assert plan is not None
     execution = engine.execute(plan)
     assert [item.product_id for item in execution.families[0].products] == [
-        "KR601980AEC2",
-        "KR601980AEB4",
+        "KR601980AEC2"
     ]
-    assert execution.families[0].metric_values == (Decimal("4.5"), Decimal("4.1"))
+    assert execution.families[0].metric_values == (Decimal("4.5"),)
 
 
 def test_new_parallel_grammar_cannot_override_safety_terminal() -> None:

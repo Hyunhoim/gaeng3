@@ -97,6 +97,7 @@ from finance_agent_core.agent.planning_policy import (
     PlanningPath,
     PlanningTrace,
 )
+from finance_agent_core.agent.presentation import semantic_query_surface
 from finance_agent_core.agent.product_comparison import normalize_product_mention
 from finance_agent_core.agent.product_family_language import (
     BOND_KIND_PATTERN,
@@ -3931,6 +3932,7 @@ class RoutedFinanceAgent:
                 for item in intent_draft.execution_clauses
                 if item.semantic_status is SemanticFrameStatus.UNRESOLVED
                 and item.role != "presentation"
+                and semantic_query_surface(item.text_span)
                 and question.count(item.text_span) == 1
             )
         )
@@ -4061,6 +4063,19 @@ class RoutedFinanceAgent:
                         request_id,
                         hclx_structure=hclx_structure,
                     )
+                    if compound_plan is None and hclx_structure:
+                        # HCX clause boundaries are mandatory semantic input,
+                        # but they are not execution authority.  A valid
+                        # server grammar must not disappear merely because HCX
+                        # split one deterministic formula, family clause, or
+                        # TOP-K phrase differently.  Recompile once without
+                        # the advisory segmentation; the exact HCX unresolved
+                        # spans are still passed to the canonical ledger below
+                        # and must each be proven before execution.
+                        compound_plan = self.compound_query_engine.compile(
+                            question,
+                            request_id,
+                        )
                 except ValueError:
                     decision = self._compound_control_decision(
                         decision,
