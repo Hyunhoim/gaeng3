@@ -127,7 +127,3 @@ python src/finance_agent/scripts/sync-ontology.py --check                    # O
 `sync-ontology.py`가 생성한다. `common.ttl`이 공통 상위 클래스(`Product`)와 공통 속성을, 상품군별
 파일이 하위 클래스와 전용 속성을 정의한다. 런타임이 같은 registry로 질문을 해석하므로 온톨로지와
 실제 동작이 어긋나지 않는다.
-
-## 팀
-
-조해영(AI Agent) · 임현호(Backend · 배포) · 박재모(금융 도메인)
