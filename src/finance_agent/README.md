@@ -65,7 +65,7 @@ src/finance_agent/
 저장소 루트에서 실행한다. 테스트는 원천 데이터·네트워크·LLM 자격증명 없이 동작한다.
 
 ```bash
-python -m pip install -r requirements-dev.txt
+python -m pip install -r requirements.txt
 ```
 
 ```bash

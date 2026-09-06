@@ -192,7 +192,7 @@ curl --get "http://101.79.25.57/answer" \
 ### 9.3 테스트
 
 ```bash
-python -m pip install -r requirements-dev.txt
+python -m pip install -r requirements.txt
 
 # Agent Core
 ( cd src/finance_agent/packages/finance_agent_core && python -m pytest -q )

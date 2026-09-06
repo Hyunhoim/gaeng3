@@ -1,5 +1,10 @@
-# 제출용 단일 설치 파일. Agent Core와 Backend를 Docker 이미지와 같은 고정 버전으로 설치한다.
+# 실행·검증 의존성을 한 번에 설치한다. Docker 이미지와 같은 고정 버전이다.
 #   python -m pip install -r requirements.txt
 -c src/finance_agent/requirements/constraints.txt
 -r src/fastapi_backend/requirements.txt
 -e src/finance_agent/packages/finance_agent_core
+
+# 테스트·온톨로지 검사
+pytest==9.1.1
+cryptography==49.0.0
+rdflib==7.1.4

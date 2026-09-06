@@ -70,7 +70,7 @@ curl --fail http://127.0.0.1:18001/health
 
 ```text
 .
-├── README.md · requirements.txt · requirements-dev.txt
+├── README.md · requirements.txt
 ├── ontology/                  # Turtle 5개 (field_registry.yaml에서 생성)
 ├── docs/                      # 기술 제안서 · 부록 · API 명세서
 ├── src/finance_agent/         # Agent Core: 질의 해석 · 검색 · 검증 · 근거 · 답변 (+ 테스트)
@@ -83,7 +83,6 @@ curl --fail http://127.0.0.1:18001/health
 ## 검증
 
 ```bash
-python -m pip install -r requirements-dev.txt
 ( cd src/finance_agent/packages/finance_agent_core && python -m pytest -q )   # Agent Core
 umask 022; PYTHONPATH=src/fastapi_backend:src python -m pytest -q src/fastapi_backend/tests   # Backend
 python src/finance_agent/scripts/sync-ontology.py --check                    # Ontology ↔ registry
