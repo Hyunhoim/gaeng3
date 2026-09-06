@@ -29,6 +29,9 @@ from finance_agent_core.agent.providers.hyperclova import (
 )
 from finance_agent_core.agent.providers.hyperclova_http import HyperClovaXHTTPTransport
 from finance_agent_core.agent.routed_service import RoutedFinanceAgent
+from finance_agent_core.config.knowledge_coverage import (
+    load_approved_knowledge_coverage_manifest,
+)
 from finance_agent_core.config.source_registry import load_official_source_registry
 from finance_agent_core.contracts.backend import BackendAgentRequest
 from finance_agent_core.contracts.queryplan import ProductFamily
@@ -47,8 +50,10 @@ from finance_agent_core.retrieval.document_dense import (
 from finance_agent_core.retrieval.document_discovery import (
     CacheFirstOfficialDiscoveryProvider,
     build_cache_first_discovery_provider,
+    build_release_pinned_cache_first_discovery,
 )
 from finance_agent_core.retrieval.external_knowledge_release import (
+    build_cache_first_external_knowledge_bootstrap,
     build_live_external_knowledge_bootstrap,
 )
 from finance_agent_core.retrieval.official_acquisition import (
@@ -76,6 +81,7 @@ from finance_agent_core.storage.approval import require_approved_database_paths
 from app.config import Settings
 from app.dependencies import (
     _build_knowledge_agent,
+    _DisabledOfficialHttpTransport,
     build_audit_sink,
     require_approval_guard,
     resolve_runtime_release,
@@ -352,7 +358,11 @@ def _runtime_source_provenance() -> dict[str, str]:
     core_root = core_init.parent
     source_root = Path(__file__).resolve().parents[2]
     expected_core_root = (
-        source_root / "finance_agent" / "packages" / "finance_agent_core" / "src"
+        source_root
+        / "finance_agent"
+        / "packages"
+        / "finance_agent_core"
+        / "src"
         / "finance_agent_core"
     )
     if expected_core_root.is_dir() and core_root != expected_core_root.resolve():
@@ -404,9 +414,7 @@ def _validate_question_only(
     id_width = int(contract.get("id_width", 3))
     id_sets = contract.get("id_sets")
     if id_sets is None:
-        expected_ids = [
-            f"{id_prefix}-{index:0{id_width}d}" for index in range(1, case_count + 1)
-        ]
+        expected_ids = [f"{id_prefix}-{index:0{id_width}d}" for index in range(1, case_count + 1)]
     else:
         cases_per_set = int(contract["cases_per_set"])
         expected_ids = [
@@ -567,7 +575,8 @@ def _validate_document_calibration(arguments: argparse.Namespace) -> None:
         or hybrid.get("recall_at_5") != 1
         or dense.get("recall_at_5", 0) < 0.95
         or dense["top1_accuracy"] < bm25["top1_accuracy"]
-        or hybrid["recall_at_5"] < max(
+        or hybrid["recall_at_5"]
+        < max(
             bm25["recall_at_5"],
             dense["recall_at_5"],
         )
@@ -627,7 +636,16 @@ def _build_lab_live_agent(
         overseas_etp_db=database_paths[ProductFamily.OVERSEAS_ETP],
         fund_db=database_paths[ProductFamily.FUND],
         relation_retrieval_artifact_file=arguments.relation_artifact,
-        relation_retrieval_artifact_sha256_file=arguments.relation_artifact_sha256_file,
+        relation_retrieval_artifact_sha256=(
+            arguments.relation_artifact_sha256
+            if arguments.external_mode == "lab-approved-cache-only"
+            else None
+        ),
+        relation_retrieval_artifact_sha256_file=(
+            arguments.relation_artifact_sha256_file
+            if arguments.external_mode == "lab-live-pending"
+            else None
+        ),
         relation_index_file=arguments.relation_index,
     )
     knowledge_agent = _build_knowledge_agent(knowledge_settings, None)
@@ -635,42 +653,108 @@ def _build_lab_live_agent(
         raise RuntimeError("provided relation knowledge path did not activate")
 
     registry = load_official_source_registry()
-    live_bootstrap = build_live_external_knowledge_bootstrap()
-    relation_store = TemporalRelationStore(live_bootstrap.relation_bundle, registry)
-    live_discovery = BoundedOfficialDiscoveryProvider(
-        NaverApiHubWebSearchTransport(
-            client_id_file=arguments.naver_client_id_file,
-            client_secret_file=arguments.naver_client_secret_file,
-            timeout_seconds=arguments.discovery_timeout_seconds,
-        ),
-        registry,
-    )
-    document_artifact = load_document_dense_artifact(arguments.document_dense_index)
-    if _sha256(arguments.document_dense_index) != arguments.document_dense_index_sha256:
-        raise RuntimeError("Document Dense artifact SHA-256 differs")
-    _validate_document_calibration(arguments)
-    pending_manifest = load_pending_corpus_manifest(arguments.pending_corpus_manifest)
-    if _sha256(arguments.pending_corpus_manifest) != arguments.pending_corpus_manifest_sha256:
-        raise RuntimeError("pending corpus manifest SHA-256 differs")
-    document_discovery = build_cache_first_discovery_provider(
-        index=OfflineHybridDocumentIndex(document_artifact, embedding),
-        artifact=document_artifact,
-        corpus_manifest=pending_manifest,
-        corpus_manifest_path=arguments.pending_corpus_manifest,
-        fallback=live_discovery,
-        registry=registry,
-        minimum_dense_score=arguments.document_dense_min_score,
-        minimum_dense_margin=arguments.document_dense_minimum_margin,
-        # This runner is an explicitly post-Gold, non-release laboratory
-        # regression.  It may evaluate the SHA-bound pending corpus bytes, but
-        # the release constructor remains fail-closed until independent corpus
-        # approval produces a DocumentCacheActivationReceipt.
-        allow_pending_snapshot_evidence=True,
-    )
+    if arguments.external_mode == "lab-approved-cache-only":
+        expected_external_sha256 = _required_text(
+            arguments,
+            "external_knowledge_artifact_sha256",
+        )
+        if _sha256(_required_path(arguments, "external_knowledge_artifact_file")) != (
+            expected_external_sha256
+        ):
+            raise RuntimeError("external knowledge artifact SHA-256 differs")
+        bootstrap = build_cache_first_external_knowledge_bootstrap(
+            approved_corpus_manifest_path=_required_path(
+                arguments,
+                "approved_corpus_manifest",
+            ),
+            approved_corpus_root=_required_path(arguments, "approved_corpus_root"),
+            expected_approved_corpus_manifest_sha256=(
+                _sha256(_required_path(arguments, "approved_corpus_manifest"))
+            ),
+            document_dense_artifact_path=arguments.document_dense_index,
+            expected_document_dense_file_sha256=(arguments.document_dense_index_sha256),
+            activation_receipt_path=_required_path(
+                arguments,
+                "document_cache_activation_file",
+            ),
+            expected_activation_receipt_file_sha256=(
+                _sha256(_required_path(arguments, "document_cache_activation_file"))
+            ),
+            relation_bundle_path=_required_path(
+                arguments,
+                "external_temporal_relation_file",
+            ),
+            expected_relation_bundle_file_sha256=_required_text(
+                arguments,
+                "external_temporal_relation_sha256",
+            ),
+            retrieval_mode="approved_corpus_cache_only",
+        )
+        if (
+            bootstrap.artifact_file_sha256 != expected_external_sha256
+            or bootstrap.artifact_bytes
+            != _required_path(arguments, "external_knowledge_artifact_file").read_bytes()
+        ):
+            raise RuntimeError("approved cache-only external artifact differs")
+        coverage = load_approved_knowledge_coverage_manifest()
+        document_discovery = build_release_pinned_cache_first_discovery(
+            activation_receipt_path=_required_path(
+                arguments,
+                "document_cache_activation_file",
+            ),
+            expected_activation_receipt_sha256=bootstrap.activation_file_sha256,
+            document_dense_artifact_path=arguments.document_dense_index,
+            expected_document_dense_sha256=arguments.document_dense_index_sha256,
+            expected_corpus_manifest_sha256=(bootstrap.artifact.corpus_manifest_sha256),
+            expected_document_bm25_sha256=bootstrap.artifact.document_bm25_sha256,
+            expected_embedding_model_revision=(bootstrap.artifact.embedding_model_revision),
+            embedding=embedding,
+            fallback=None,
+            registry=registry,
+            approved_corpus_manifest_path=_required_path(
+                arguments,
+                "approved_corpus_manifest",
+            ),
+            approved_corpus_root=_required_path(arguments, "approved_corpus_root"),
+            cache_only_coverage_manifest=coverage,
+        )
+        external_bootstrap = bootstrap
+        connector_transport = _DisabledOfficialHttpTransport()
+    else:
+        live_bootstrap = build_live_external_knowledge_bootstrap()
+        live_discovery = BoundedOfficialDiscoveryProvider(
+            NaverApiHubWebSearchTransport(
+                client_id_file=arguments.naver_client_id_file,
+                client_secret_file=arguments.naver_client_secret_file,
+                timeout_seconds=arguments.discovery_timeout_seconds,
+            ),
+            registry,
+        )
+        document_artifact = load_document_dense_artifact(arguments.document_dense_index)
+        if _sha256(arguments.document_dense_index) != arguments.document_dense_index_sha256:
+            raise RuntimeError("Document Dense artifact SHA-256 differs")
+        _validate_document_calibration(arguments)
+        pending_manifest = load_pending_corpus_manifest(arguments.pending_corpus_manifest)
+        if _sha256(arguments.pending_corpus_manifest) != arguments.pending_corpus_manifest_sha256:
+            raise RuntimeError("pending corpus manifest SHA-256 differs")
+        document_discovery = build_cache_first_discovery_provider(
+            index=OfflineHybridDocumentIndex(document_artifact, embedding),
+            artifact=document_artifact,
+            corpus_manifest=pending_manifest,
+            corpus_manifest_path=arguments.pending_corpus_manifest,
+            fallback=live_discovery,
+            registry=registry,
+            minimum_dense_score=arguments.document_dense_min_score,
+            minimum_dense_margin=arguments.document_dense_minimum_margin,
+            allow_pending_snapshot_evidence=True,
+        )
+        external_bootstrap = live_bootstrap
+        connector_transport = UrllibOfficialHttpTransport()
+    relation_store = TemporalRelationStore(external_bootstrap.relation_bundle, registry)
     acquisition = OfficialEvidenceAcquisitionCoordinator(
         relation_store=relation_store,
         discovery_provider=document_discovery,
-        connector=OfficialSourceConnector(UrllibOfficialHttpTransport(), registry),
+        connector=OfficialSourceConnector(connector_transport, registry),
     )
     external_runtime = ExternalKnowledgeRuntime(
         acquisition=acquisition,
@@ -678,8 +762,8 @@ def _build_lab_live_agent(
             database_paths,
             verify_approved_databases=not arguments.development_unapproved_databases,
         ),
-        release_artifact=live_bootstrap.artifact,
-        release_artifact_file_sha256=live_bootstrap.artifact_file_sha256,
+        release_artifact=external_bootstrap.artifact,
+        release_artifact_file_sha256=external_bootstrap.artifact_file_sha256,
     )
     agent = RoutedFinanceAgent(
         database_paths,
@@ -802,9 +886,7 @@ def _build_approved_cache_only_agent(
         schema_dense_index_sha256=arguments.schema_dense_index_sha256,
         schema_dense_calibration_report_sha256=(arguments.schema_dense_calibration_sha256),
         schema_dense_min_score=arguments.schema_dense_min_score,
-        schema_dense_hclx_candidate_min_score=(
-            arguments.schema_dense_hclx_candidate_min_score
-        ),
+        schema_dense_hclx_candidate_min_score=(arguments.schema_dense_hclx_candidate_min_score),
         schema_dense_minimum_margin=arguments.schema_dense_minimum_margin,
         schema_dense_top_k=10,
         kure_snapshot_dir=arguments.kure_snapshot_dir,
@@ -1001,11 +1083,14 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--image-id", type=str, required=True)
     parser.add_argument(
         "--external-mode",
-        choices=("lab-live-pending", "approved-cache-only"),
+        choices=(
+            "lab-live-pending",
+            "lab-approved-cache-only",
+            "approved-cache-only",
+        ),
         default="lab-live-pending",
         help=(
-            "use the legacy post-Gold lab path or the exact signed production "
-            "cache-only assembly"
+            "use the legacy post-Gold lab path or the exact signed production cache-only assembly"
         ),
     )
     parser.add_argument(
@@ -1158,15 +1243,41 @@ def _validate_mode_arguments(arguments: argparse.Namespace) -> None:
             "pending corpus manifest": arguments.pending_corpus_manifest,
             "pending corpus manifest SHA-256": arguments.pending_corpus_manifest_sha256,
             "Document Dense calibration file": arguments.document_dense_calibration_file,
-            "Document Dense calibration SHA-256": (
-                arguments.document_dense_calibration_sha256
-            ),
+            "Document Dense calibration SHA-256": (arguments.document_dense_calibration_sha256),
         }
         missing = sorted(label for label, value in required.items() if value is None)
         if missing:
             raise SystemExit("lab live/pending mode requires " + ", ".join(missing))
         if arguments.relation_artifact_sha256 is not None:
             raise SystemExit("lab live/pending mode requires the SHA sidecar, not a direct hash")
+        return
+    if arguments.external_mode == "lab-approved-cache-only":
+        required = {
+            "external knowledge artifact": arguments.external_knowledge_artifact_file,
+            "external knowledge artifact SHA-256": (arguments.external_knowledge_artifact_sha256),
+            "external temporal relation file": arguments.external_temporal_relation_file,
+            "external temporal relation SHA-256": (arguments.external_temporal_relation_sha256),
+            "Document Cache activation": arguments.document_cache_activation_file,
+            "approved corpus manifest": arguments.approved_corpus_manifest,
+            "approved corpus root": arguments.approved_corpus_root,
+        }
+        missing = sorted(label for label, value in required.items() if value is None)
+        if missing:
+            raise SystemExit("lab approved/cache-only mode requires " + ", ".join(missing))
+        forbidden = {
+            "naver client ID file": arguments.naver_client_id_file,
+            "naver client secret file": arguments.naver_client_secret_file,
+            "pending corpus manifest": arguments.pending_corpus_manifest,
+            "pending corpus manifest SHA-256": arguments.pending_corpus_manifest_sha256,
+            "Document Dense calibration file": arguments.document_dense_calibration_file,
+            "Document Dense calibration SHA-256": arguments.document_dense_calibration_sha256,
+            "release manifest": arguments.release_manifest_file,
+            "deployment binding": arguments.deployment_binding_file,
+            "runtime audit file": arguments.runtime_audit_file,
+        }
+        configured = sorted(label for label, value in forbidden.items() if value is not None)
+        if configured:
+            raise SystemExit("lab approved/cache-only mode forbids " + ", ".join(configured))
         return
     if arguments.development_unapproved_databases:
         raise SystemExit("approved cache-only mode forbids unapproved databases")
@@ -1232,9 +1343,7 @@ def main(argv: list[str] | None = None) -> int:
                             load_official_source_registry().canonical_sha256
                         ),
                         "document_cache_queries": document_discovery.cache_queries,
-                        "document_cache_evidence_hits": (
-                            document_discovery.cache_evidence_hits
-                        ),
+                        "document_cache_evidence_hits": (document_discovery.cache_evidence_hits),
                         "hclx_calls": len(calls),
                     },
                     sort_keys=True,
@@ -1406,17 +1515,17 @@ def main(argv: list[str] | None = None) -> int:
         ),
         "approved_corpus_manifest_sha256": (
             _sha256(arguments.approved_corpus_manifest)
-            if arguments.external_mode == "approved-cache-only"
+            if arguments.external_mode in {"lab-approved-cache-only", "approved-cache-only"}
             else None
         ),
         "document_cache_activation_sha256": (
             _sha256(arguments.document_cache_activation_file)
-            if arguments.external_mode == "approved-cache-only"
+            if arguments.external_mode in {"lab-approved-cache-only", "approved-cache-only"}
             else None
         ),
         "relation_artifact_sha256": (
             arguments.relation_artifact_sha256
-            if arguments.external_mode == "approved-cache-only"
+            if arguments.external_mode in {"lab-approved-cache-only", "approved-cache-only"}
             else _sha256(arguments.relation_artifact)
         ),
         "relation_artifact_sha256_file_sha256": (
@@ -1438,12 +1547,12 @@ def main(argv: list[str] | None = None) -> int:
         ),
         "external_knowledge_artifact_sha256": (
             arguments.external_knowledge_artifact_sha256
-            if arguments.external_mode == "approved-cache-only"
+            if arguments.external_mode in {"lab-approved-cache-only", "approved-cache-only"}
             else None
         ),
         "external_temporal_relation_sha256": (
             arguments.external_temporal_relation_sha256
-            if arguments.external_mode == "approved-cache-only"
+            if arguments.external_mode in {"lab-approved-cache-only", "approved-cache-only"}
             else None
         ),
         "runtime_audit_sha256": (
@@ -1461,13 +1570,15 @@ def main(argv: list[str] | None = None) -> int:
             "semantic_admission": "on_server_verified_sequential",
             "sql_python_verifier": "on",
             "official_external_live_search": (
-                "off_signed_cache_only"
-                if arguments.external_mode == "approved-cache-only"
+                "off_cache_only"
+                if arguments.external_mode in {"lab-approved-cache-only", "approved-cache-only"}
                 else "on"
             ),
             "document_dense": (
                 "on_release_pinned_approved_cache"
                 if arguments.external_mode == "approved-cache-only"
+                else "on_lab_verified_approved_cache"
+                if arguments.external_mode == "lab-approved-cache-only"
                 else "on_lab_sha_bound_snapshot_evidence_pending_release_approval"
             ),
             "provided_db_intersection": "on",
