@@ -19,45 +19,71 @@
 
 ## 환경 구성과 실행
 
-Docker Engine 24 이상, Docker Compose v2, 주최 측 XLSX 디렉터리(`2.금융상품_20260824`)가 필요하다.
+요구 사항: Docker Engine 24 이상, Docker Compose v2, 주최 측 XLSX 디렉터리(`2.금융상품_20260824`, 파일 8개).
+
+### 1. 기본 구성 — LLM·외부 문서 없이 데이터 경로만 재현
 
 ```bash
-cp src/fastapi_backend/.env.example src/fastapi_backend/.env   # FINANCE_RAW_DATA_DIR 를 XLSX 경로로
+cp src/fastapi_backend/.env.example src/fastapi_backend/.env   # FINANCE_RAW_DATA_DIR 를 XLSX 디렉터리 경로로 수정
 ./compose.sh up --detach --wait
 curl --fail http://127.0.0.1:18001/health
 ```
 
-한 명령으로 이미지 빌드 → XLSX 정규화·검증 → 상품군별 SQLite·관계 색인 생성 → Backend 시작까지
-수행한다. 이 기본 실행은 HCLX 자격증명 없이 결정론적 경로만으로 동작한다. 종료는
-`./compose.sh down`. Docker 없이 실행하려면 Python 3.12에서 `pip install -r requirements.txt`
-뒤 [Agent README](src/finance_agent/README.md)를 따른다.
+이미지 빌드 → XLSX 정규화·검증 → 상품군별 SQLite·관계 색인 생성 → 서버 시작까지 한 번에 수행한다.
+검색·조건·비교·집계 질문에 결정론적 경로로 답하며, HyperCLOVA X 호출과 외부 문서 검색은 하지 않는다.
+종료는 `./compose.sh down`.
 
-평가 구성(HCX-007 + 승인 문서 묶음)으로 실행하려면 `src/fastapi_backend/scripts/manual-release.sh`를 쓴다. 이미지 빌드 → 데이터 준비 →
-릴리스 봉인(코드·DB·색인·문서 묶음의 SHA-256 결속) → 컨테이너 기동 → 확인 순서이며, 봉인 값과
-실제 파일이 다르면 시작하지 않는다. 절차와 환경변수는 [Backend README](src/fastapi_backend/README.md).
+### 2. 평가 구성 — HyperCLOVA X + 승인 문서 묶음 (평가 서버와 같은 구성)
 
-## 재현용 외부 자료
+준비할 것 세 가지.
 
-평가 구성의 외부 근거 검색을 재현하기 위한 자료다. 원천 XLSX 8개는 주최 측 배포본을 그대로 쓴다.
+1. **CLOVA Studio API 키** — 키 값만 담은 파일을 만든다. 환경변수로 넘기지 않는다.
 
-| 자료 | 내용 | 위치 |
-| --- | --- | --- |
-| 승인 문서 묶음 | 12개 발행기관 공식 문서 258건의 정규화 텍스트(`corpus-root/snapshots/`), 문서 매니페스트(문서별 출처 URL·발행일·SHA-256), KURE Document Dense 색인, 활성화 영수증, 관계 파일 | `src/finance_agent/artifacts/approved-corpus/` (97 MB, 저장소 포함) |
-| KURE-v1 임베딩 모델 | `nlpai-lab/KURE-v1` revision `d14c8a9423946e268a0c9952fecf3a7aabd73bd9` (Hugging Face 공개 모델, 약 2.2 GB) | `huggingface-cli download nlpai-lab/KURE-v1 --revision d14c8a9423946e268a0c9952fecf3a7aabd73bd9 --cache-dir /path/to/kure-cache` |
+   ```bash
+   mkdir -p ~/.secrets/finance-agent
+   printf '%s' '<CLOVA Studio API 키>' > ~/.secrets/finance-agent/clovastudio-api-key
+   chmod 600 ~/.secrets/finance-agent/clovastudio-api-key
+   ```
 
-문서 원문(HTML·PDF)은 저장하지 않으며, 매니페스트 `approved-corpus-manifest.json`의 `source_uri`·`published_at`·`content_sha256`로
-출처와 무결성을 확인한다. `manual-release.sh`에는 다음 경로를 넘긴다(`C`는 `src/finance_agent/artifacts/approved-corpus`).
+2. **KURE-v1 임베딩 모델** (Hugging Face 공개 모델, 약 2.2 GB)
+
+   ```bash
+   pip install -U huggingface_hub
+   huggingface-cli download nlpai-lab/KURE-v1 \
+     --revision d14c8a9423946e268a0c9952fecf3a7aabd73bd9 --cache-dir ~/kure-cache
+   ```
+
+3. **승인 문서 묶음** — 저장소에 포함되어 있다(`src/finance_agent/artifacts/approved-corpus/`, 97 MB).
+   12개 발행기관 공식 문서 258건의 정규화 텍스트, 문서 매니페스트(문서별 출처 URL·발행일·SHA-256),
+   KURE Document Dense 색인, 활성화 영수증, 관계 파일이다. 원문 HTML·PDF는 저장하지 않는다.
+
+실행은 한 명령이다. 이미지 빌드 → 데이터 준비 → 릴리스 봉인(코드·DB·색인·문서 묶음의 SHA-256 결속) →
+컨테이너 기동 → `/health`·`/answer` 확인 순서로 진행하며, 봉인 값과 실제 파일이 다르면 시작하지 않는다.
 
 ```bash
-APPROVED_CORPUS_MANIFEST=$C/runtime/approved-corpus-manifest.json
-APPROVED_CORPUS_ROOT=$C/corpus-root
-APPROVED_DOCUMENT_DENSE=$C/runtime/release-bundle/document-dense.json
-DOCUMENT_CACHE_ACTIVATION=$C/runtime/release-bundle/document-cache-activation.json
-APPROVED_TEMPORAL_RELATIONS=$C/runtime/release-bundle/temporal-relations.json
-KURE_CACHE_DIR=/path/to/kure-cache
+C=$PWD/src/finance_agent/artifacts/approved-corpus
+RAW_DATA_DIR=/path/to/2.금융상품_20260824 \
+SECRETS_DIR=$HOME/.secrets/finance-agent \
+KURE_CACHE_DIR=$HOME/kure-cache \
+EXTERNAL_MODE=approved_corpus_cache_only ADAPTIVE=true \
+APPROVED_CORPUS_MANIFEST=$C/runtime/approved-corpus-manifest.json \
+APPROVED_CORPUS_ROOT=$C/corpus-root \
+APPROVED_DOCUMENT_DENSE=$C/runtime/release-bundle/document-dense.json \
+DOCUMENT_CACHE_ACTIVATION=$C/runtime/release-bundle/document-cache-activation.json \
+APPROVED_TEMPORAL_RELATIONS=$C/runtime/release-bundle/temporal-relations.json \
+BIND_ADDRESS=127.0.0.1 PORT=8080 \
+  src/fastapi_backend/scripts/manual-release.sh all
 ```
 
-모든 파일은 SHA-256으로 릴리스에 결속되므로 내용이 다르면 서버가 시작하지 않는다.
+```bash
+curl --get "http://127.0.0.1:8080/answer" \
+  --data-urlencode "question_id=Q-001" \
+  --data-urlencode "question=캠브리콘이 편입된 중국 반도체 ETF를 알려줘"
+```
+
+중지는 `CONTAINER_NAME=finance-agent-release src/fastapi_backend/scripts/manual-release.sh stop`.
+Docker 없이 실행하려면 Python 3.12에서 `pip install -r requirements.txt` 뒤 [Agent README](src/finance_agent/README.md)를 따른다.
+환경변수 전체 목록은 [Backend README](src/fastapi_backend/README.md)에 있다.
 
 ## 저장소 구조
 

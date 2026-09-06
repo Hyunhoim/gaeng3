@@ -2,7 +2,7 @@
 set -euo pipefail
 
 REPOSITORY_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
-COMPOSE_ENV_FILE="${COMPOSE_ENV_FILE:-${BACKEND_ENV_FILE:-fastapi_backend/.env}}"
+COMPOSE_ENV_FILE="${COMPOSE_ENV_FILE:-${BACKEND_ENV_FILE:-src/fastapi_backend/.env}}"
 
 # The generated data volume is private and owned by the caller. The one-shot
 # initializer runs as root only long enough to assign these numeric IDs.
