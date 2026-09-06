@@ -15,19 +15,7 @@
 | 소스코드 | `src/`, `requirements.txt`, 이 README |
 | Ontology | [`ontology/`](ontology/) — `common.ttl` `bond_kr.ttl` `etf_kr.ttl` `etf_gl.ttl` `fund_pub.ttl` |
 | 기술 제안서 | [`docs/기술_제안서.pdf`](docs/기술_제안서.pdf) · [부록: 수집·적재 Flow, 활용 로직, 재현 절차](docs/기술_제안서_부록.md) |
-| 평가용 API | `GET http://101.79.25.57/answer` · [API 명세서](docs/평가용_API_서버_정보.md) |
-
-## 평가용 API
-
-```bash
-curl --get "http://101.79.25.57/answer" \
-  --data-urlencode "question_id=Q-001" \
-  --data-urlencode "question=현재 판매 가능한 원화채권 중 AA- 이상 종목 알려줘"
-```
-
-인증 없음, 순차 1건 호출. 응답은 `question_id` · `question` · `retrieved_context` · `think_trace` ·
-`answer` 다섯 문자열 필드이며, 답할 수 없는 질문도 같은 스키마와 HTTP 200으로 돌아온다.
-상태 확인은 `GET http://101.79.25.57/health`.
+| 평가용 API 서버 정보 | End-point `http://101.79.25.57/answer` · [API 명세서](docs/평가용_API_서버_정보.md) |
 
 ## 동작 구조
 
