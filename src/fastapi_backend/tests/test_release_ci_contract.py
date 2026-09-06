@@ -988,22 +988,35 @@ def test_release_workflow_cache_modes_require_protected_tracked_approved_inputs(
     assert "approved-corpus-manifest.sigstore.json" in upload_step["with"]["path"]
 
 
-def test_historical_manual_release_path_is_hard_deprecated() -> None:
+def test_manual_release_path_supports_cache_only_and_adaptive_release() -> None:
+    """2026-09-06 팀 결정: 서버 한 대에서 끝나는 수동 배포가 최종 평가 배포 경로다.
+
+    스크립트는 자동 빌드와 같은 봉인 검사(AgentReleaseManifest·DeploymentBinding·
+    외부지식 아티팩트)를 거치며, 캐시 전용 외부 근거 모드와 adaptive(KURE) 이미지
+    타깃을 지원해야 한다. 키 값은 파일로만 전달하고 어떤 단계에서도 출력하지 않는다.
+    """
+
     script = (
         _repository_root() / "src" / "fastapi_backend" / "scripts" / "manual-release.sh"
     ).read_text(encoding="utf-8")
 
-    assert "this historical partial release path is retired" in script
-    assert "compose-release.sh" in script
-    assert "exit 64" in script
-    for forbidden in (
-        "docker build",
-        "docker run",
-        "CLOVASTUDIO_API_KEY_FILE",
-        "FINANCE_BACKEND_ANSWER_PROVIDER",
-        "curl -fsS",
-    ):
-        assert forbidden not in script
+    assert "set -euo pipefail" in script
+    assert "approved_corpus_cache_only" in script
+    assert "verified_live_official_with_relation_graph" in script
+    assert '--target "$IMAGE_TARGET"' in script
+    assert "adaptive-runtime" in script
+    assert "finance_agent_core.release_cli manifest" in script
+    assert "finance_agent_core.release_cli binding" in script
+    assert "external_knowledge_release_cli" in script
+    assert "--hcx-intent-analysis-enabled" in script
+    assert "CLOVASTUDIO_API_KEY_FILE=/run/secrets/clovastudio_api_key" in script
+    assert 'cat "$SECRETS_DIR' not in script
+    assert 'echo "$SECRETS_DIR' not in script
+    # 캐시 전용 모드 분기는 NAVER 자격증명을 마운트하지 않는다
+    cache_branch = script.split(
+        'if [ "$EXTERNAL_MODE" = approved_corpus_cache_only ]; then\n        EXT_ARGS+='
+    )[1].split("    else")[0]
+    assert "NAVER_API_HUB" not in cache_branch
 
 
 def test_release_workflow_has_a_commit_pinned_keyless_trust_boundary() -> None:
