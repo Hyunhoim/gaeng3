@@ -237,7 +237,10 @@ _UNVERIFIABLE_FRESHNESS = re.compile(
     r".{0,24}?(?:알려|보여|조회|확인|검색|가져|반영|얼마|어때|[?？]?$)|"
     r"현재\s*(?:(?:해외|국내)\s*)?"
     r"(?:(?:ETF|ETN|ETP|국내\s*채권|채권|공모\s*펀드|펀드|상품|종목)"
-    r"(?:의|을|를|은|는)?\s*)?(?:가격|종가|시세|호가)",
+    r"(?:의|을|를|은|는)?\s*)?(?:가격|종가|시세|호가)|"
+    # The provided snapshots end on 2026-08-24; a ``2026년 9월 N일 기준``
+    # value cannot be verified from any approved data or document.
+    r"2026\s*년\s*(?:9|1[0-2])\s*월(?:\s*\d{1,2}\s*일)?\s*기준",
     re.IGNORECASE,
 )
 _BOND_PURCHASE_YIELD_CONTEXT = re.compile(
@@ -295,7 +298,9 @@ _MARKET_ABUSE = re.compile(
     re.IGNORECASE,
 )
 _FORECAST = re.compile(
-    r"전망|예측|예상\s*(?:수익|가격|수익률)|목표\s*가격|"
+    r"전망|예측|예상\s*(?:수익|가격|수익률|배당금?|배당\s*수익)|목표\s*가격|"
+    # ``연말에 몇 포인트가 될지`` / ``얼마가 될지`` asks for a future level.
+    r"(?:몇\s*(?:퍼센트|포인트|원|배)|얼마).{0,12}?(?:될지|오를지|내릴지|갈지)|"
     r"(?:내일|다음\s*(?:주|달|분기|해)|향후|앞으로).{0,28}?"
     r"(?:오를|내릴|상승|하락|수익|가격)|"
     r"(?:오를|내릴|상승할|하락할)\s*(?:까|것|상품)|"
@@ -369,7 +374,11 @@ _OUT_OF_SCOPE = re.compile(
     r"\bcrypto(?:currency)?\b(?!\s+(?:ETF|ETN|ETP)\b)|"
     r"예금|적금|대출(?!형)|보험(?!회사채)|개별\s*주식|주식\s*종목|"
     r"선물\s*옵션|"
-    r"외환\s*매매|환전|부동산\s*(?:매물|시세)",
+    r"외환\s*매매|환전|부동산\s*(?:매물|시세)|"
+    # Personal account/holdings and identity data are outside the provided
+    # product datasets; ``다른 증권사 전용`` products are outside the DB too.
+    r"(?:내|제)\s*(?:계좌|포트폴리오)|(?:내가|제가)\s*(?:산|보유한|가입한|매수한)|"
+    r"주민\s*등록\s*번호|다른\s*증권사",
     re.IGNORECASE,
 )
 _DATA_SCOPE_BYPASS = re.compile(
