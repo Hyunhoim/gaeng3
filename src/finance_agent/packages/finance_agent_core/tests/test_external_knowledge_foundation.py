@@ -570,10 +570,11 @@ def test_normal_external_question_waits_for_approved_cache_evidence() -> None:
         ),
     )
 
-    assert decision.disposition is ExternalKnowledgeRouteDisposition.KNOWLEDGE_SEARCH
-    assert decision.reason_code == "approved_evidence_required"
+    # 2026-09-06 official-all-documents corpus로 portfolio_holdings가 승인·활성화되어
+    # 정상 외부 질문은 승인 cache 근거 위에서 바로 실행된다
+    assert decision.disposition is ExternalKnowledgeRouteDisposition.EXECUTE
     assert decision.plan is not None
-    assert decision.plan.execution_authorized is False
+    assert decision.plan.execution_authorized is True
 
 
 def test_temporal_relation_store_requires_cutoff_and_exact_entity_aliases() -> None:

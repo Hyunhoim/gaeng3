@@ -33,19 +33,28 @@ _MAX_TEXT_BYTES = 16 * 1024 * 1024
 _MAX_RAW_BYTES = 32 * 1024 * 1024
 
 
-PendingRawMediaType = Literal["text/html", "application/pdf", "application/zip"]
-
-
-def _raw_snapshot_suffix(media_type: PendingRawMediaType) -> str:
-    return {
-        "application/pdf": ".pdf",
-        "application/zip": ".zip",
-        "text/html": ".html",
-    }[media_type]
+PendingRawMediaType = Literal[
+    "text/html",
+    "application/json",
+    "application/pdf",
+    "application/zip",
+]
 
 
 class PendingCorpusError(RuntimeError):
     """Raised when an unapproved official snapshot cannot be staged safely."""
+
+
+def _raw_snapshot_suffix(media_type: str) -> str:
+    try:
+        return {
+            "application/json": ".json",
+            "application/pdf": ".pdf",
+            "application/zip": ".zip",
+            "text/html": ".html",
+        }[media_type]
+    except KeyError as error:
+        raise PendingCorpusError("official snapshot media type cannot be staged") from error
 
 
 class PendingCorpusModel(BaseModel):
@@ -488,13 +497,54 @@ def merge_pending_corpus_roots(
             shutil.rmtree(staging, ignore_errors=True)
 
 
+def _json_object_without_duplicate_keys(
+    pairs: list[tuple[str, object]],
+) -> dict[str, object]:
+    payload: dict[str, object] = {}
+    for key, value in pairs:
+        if key in payload:
+            raise ValueError("official snapshot JSON contains a duplicate object key")
+        payload[key] = value
+    return payload
+
+
+def _reject_non_finite_json_number(value: str) -> object:
+    raise ValueError(f"official snapshot JSON contains non-finite number {value}")
+
+
 def _extract_text(
     media_type: str,
     content: bytes,
     pdf_text_extractor: PdfTextExtractor,
 ) -> str:
-    if media_type.casefold().split(";", maxsplit=1)[0] == "application/pdf":
+    if not content or len(content) > _MAX_RAW_BYTES:
+        raise PendingCorpusError("official snapshot raw content is empty or oversized")
+    normalized_media_type = media_type.casefold().split(";", maxsplit=1)[0].strip()
+    if normalized_media_type == "application/pdf":
         text = pdf_text_extractor.extract(content)
+    elif normalized_media_type == "application/json":
+        try:
+            decoded = content.decode("utf-8")
+            payload = json.loads(
+                decoded,
+                object_pairs_hook=_json_object_without_duplicate_keys,
+                parse_constant=_reject_non_finite_json_number,
+            )
+            text = json.dumps(
+                payload,
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+                allow_nan=False,
+            )
+        except (
+            UnicodeDecodeError,
+            UnicodeEncodeError,
+            ValueError,
+            TypeError,
+            RecursionError,
+        ) as error:
+            raise PendingCorpusError("official snapshot JSON is invalid") from error
     else:
         try:
             decoded = content.decode("utf-8")
@@ -505,8 +555,13 @@ def _extract_text(
         parser.close()
         text = parser.text()
     normalized = normalize_document_text(text)
-    encoded = normalized.encode("utf-8")
-    if not normalized or len(encoded) > _MAX_TEXT_BYTES:
+    try:
+        encoded = normalized.encode("utf-8")
+    except UnicodeEncodeError as error:
+        raise PendingCorpusError("official snapshot produced invalid UTF-8 text") from error
+    # Collection persists one trailing UTF-8 newline; include it in the model's
+    # bounded text size before constructing the pending snapshot.
+    if not normalized or len(encoded) + 1 > _MAX_TEXT_BYTES:
         raise PendingCorpusError("official snapshot produced invalid extracted text")
     return normalized
 
@@ -580,11 +635,10 @@ def collect_pending_corpus(
                     )
                 )
                 continue
-            media_type = snapshot.content_type.casefold().split(";", maxsplit=1)[0]
-            raw_suffix = ".pdf" if media_type == "application/pdf" else ".html"
-            raw_relative_path = f"raw/{source.document_id}{raw_suffix}"
+            media_type = snapshot.content_type.casefold().split(";", maxsplit=1)[0].strip()
             text_relative_path = f"snapshots/{source.document_id}.txt"
             try:
+                raw_suffix = _raw_snapshot_suffix(media_type)
                 text = _extract_text(media_type, snapshot.content, pdf_text_extractor)
             except PendingCorpusError:
                 failures.append(
@@ -596,6 +650,7 @@ def collect_pending_corpus(
                     )
                 )
                 continue
+            raw_relative_path = f"raw/{source.document_id}{raw_suffix}"
             text_bytes = (text + "\n").encode("utf-8")
             raw_sha256 = hashlib.sha256(snapshot.content).hexdigest()
             text_sha256 = hashlib.sha256(text_bytes).hexdigest()

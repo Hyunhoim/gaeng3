@@ -35,12 +35,22 @@ _SEARCH_MARKUP = re.compile(r"<[^>]{1,200}>")
 _SEARCH_TOKEN = re.compile(r"[^\W_]+", re.UNICODE)
 
 
-def _canonical_candidate_url(url: str) -> str:
+def canonical_official_candidate_url(url: str) -> str:
     """Normalize transport/tracking noise without changing evidence identity."""
 
     parsed = urllib.parse.urlsplit(url)
     if parsed.hostname is None:
         return url
+    # Preserve unsafe authority syntax so Source Registry authorization still
+    # rejects credentials and explicit ports instead of canonicalizing them away.
+    plain_hostname = parsed.hostname.casefold()
+    netloc = (
+        plain_hostname
+        if parsed.username is None
+        and parsed.password is None
+        and parsed.netloc.casefold() == plain_hostname
+        else parsed.netloc
+    )
     query = urllib.parse.parse_qsl(parsed.query, keep_blank_values=True)
     tracking_names = {
         "fbclid",
@@ -59,7 +69,7 @@ def _canonical_candidate_url(url: str) -> str:
         doseq=True,
     )
     scheme = "https" if parsed.scheme == "http" else parsed.scheme
-    return urllib.parse.urlunsplit((scheme, parsed.netloc, parsed.path, stable_query, ""))
+    return urllib.parse.urlunsplit((scheme, netloc, parsed.path or "/", stable_query, ""))
 
 
 def _candidate_specificity(url: str) -> int:
@@ -701,7 +711,7 @@ class BoundedOfficialDiscoveryProvider:
             )
             for rank, raw_candidate in enumerate(page.items):
                 candidate = raw_candidate.model_copy(
-                    update={"url": _canonical_candidate_url(raw_candidate.url)}
+                    update={"url": canonical_official_candidate_url(raw_candidate.url)}
                 )
                 try:
                     authorized = self.registry.authorize_url(candidate.url, capability)
@@ -867,6 +877,7 @@ class BoundedOfficialDiscoveryProvider:
 
 __all__ = [
     "BoundedOfficialDiscoveryProvider",
+    "canonical_official_candidate_url",
     "DiscoveryFailureCode",
     "NaverApiHubWebSearchTransport",
     "OfficialDiscoveryError",

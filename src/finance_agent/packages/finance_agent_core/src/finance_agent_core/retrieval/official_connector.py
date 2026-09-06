@@ -9,6 +9,7 @@ import re
 import urllib.error
 import urllib.parse
 import urllib.request
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date
 from html.parser import HTMLParser
@@ -90,6 +91,10 @@ _ENGLISH_MONTHS.update(
 
 class OfficialConnectorError(RuntimeError):
     """Raised when discovery or fetching crosses the approved source boundary."""
+
+
+class OfficialUrlExcludedError(OfficialConnectorError):
+    """Raised before an already-collected official URL can be fetched or admitted."""
 
 
 class OfficialConnectorModel(BaseModel):
@@ -772,8 +777,7 @@ class OfficialDocumentLinkResolver:
                     or parsed_link.query
                     or parsed_link.fragment
                     or holdings_match is None
-                    or holdings_match.group("ticker").casefold()
-                    != snapshot.db_ticker.casefold()
+                    or holdings_match.group("ticker").casefold() != snapshot.db_ticker.casefold()
                 ):
                     continue
                 try:
@@ -979,10 +983,29 @@ class OfficialSourceConnector:
         self,
         transport: OfficialHttpTransport,
         registry: OfficialSourceRegistry | None = None,
+        *,
+        url_is_excluded: Callable[[str], bool] | None = None,
     ) -> None:
         self.transport = transport
         self.registry = registry or load_official_source_registry()
+        self._url_is_excluded = url_is_excluded
         self._celero_materializer = CeleroShortLinkDocumentMaterializer(transport)
+
+    def _require_url_not_excluded(self, url: str) -> None:
+        if self._url_is_excluded is not None and self._url_is_excluded(url):
+            raise OfficialUrlExcludedError("official source URL was already collected")
+
+    def _authorize_url(
+        self,
+        url: str,
+        capability: KnowledgeCapability,
+    ) -> OfficialSourceEntry:
+        try:
+            return self.registry.authorize_url(url, capability)
+        except OfficialSourceRegistryError as error:
+            raise OfficialConnectorError(
+                "official source URL is outside the approved Registry scope"
+            ) from error
 
     @staticmethod
     def _content_type_allowed(
@@ -1025,7 +1048,8 @@ class OfficialSourceConnector:
     ) -> OfficialSourceSnapshot | OfficialNavigationSnapshot:
         if candidate.url != request.url:
             raise OfficialConnectorError("fetch request differs from its discovered candidate")
-        source = self.registry.authorize_url(request.url, request.capability)
+        self._require_url_not_excluded(request.url)
+        source = self._authorize_url(request.url, request.capability)
         if (
             request.published_at is not None
             and request.published_at > self.registry.evidence_cutoff
@@ -1047,15 +1071,14 @@ class OfficialSourceConnector:
             # the downgraded URL: upgrade it locally, then require its exact
             # hostname/path to belong to an explicitly trusted source ID.
             if parsed_redirect.scheme == "http":
-                redirected_url = urllib.parse.urlunsplit(
-                    parsed_redirect._replace(scheme="https")
-                )
-            redirected_source = self.registry.authorize_url(
+                redirected_url = urllib.parse.urlunsplit(parsed_redirect._replace(scheme="https"))
+            redirected_source = self._authorize_url(
                 redirected_url,
                 request.capability,
             )
             if redirected_source.source_id not in source.trusted_redirect_source_ids:
                 raise OfficialConnectorError("official redirect target is not explicitly trusted")
+            self._require_url_not_excluded(redirected_url)
             response = self.transport.fetch(
                 redirected_url,
                 timeout_seconds=request.timeout_seconds,
@@ -1071,11 +1094,12 @@ class OfficialSourceConnector:
                 timeout_seconds=request.timeout_seconds,
                 max_bytes=request.max_bytes,
             )
+        self._require_url_not_excluded(response.final_url)
         if response.status_code != 200:
             raise OfficialConnectorError("official source did not return HTTP 200")
         # Redirects are disabled in the production transport.  Rechecking the final
         # URL also protects injected test/alternate transports from changing hosts.
-        final_source = self.registry.authorize_url(response.final_url, request.capability)
+        final_source = self._authorize_url(response.final_url, request.capability)
         if final_source.source_id != source.source_id:
             raise OfficialConnectorError("official source changed trust domain while fetching")
         if not self._content_type_allowed(
@@ -1145,6 +1169,7 @@ __all__ = [
     "BoundedOfficialDiscovery",
     "CeleroShortLinkDocumentMaterializer",
     "OfficialConnectorError",
+    "OfficialUrlExcludedError",
     "OfficialDiscoveryCandidate",
     "OfficialFetchRequest",
     "OfficialNavigationSnapshot",

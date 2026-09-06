@@ -190,7 +190,7 @@ def build_external_cannot_verify_narrative(
     kind = _failure_kind(reasons, acquisition_items)
     if kind == "cache_miss":
         first = (
-            f"승인된 공식 문서 저장소(Cache)에서 {scope} 관련 사실을 직접 뒷받침하는 "
+            f"보유한 공식 문서 자료에서 {scope} 관련 사실을 직접 뒷받침하는 "
             "근거를 찾지 못해 확인할 수 없습니다."
         )
     elif kind == "exact_evidence_missing":
@@ -212,8 +212,8 @@ def build_external_cannot_verify_narrative(
         )
     elif kind == "release_evidence_unavailable":
         first = (
-            f"현재 승인된 Release(배포 단위)에 {scope} 관련 사실을 검증할 공식 근거가 "
-            "활성화되지 않아 확인할 수 없습니다."
+            f"{scope} 관련 사실은 현재 서비스가 확인할 수 있는 공식 근거 자료 범위에 "
+            "포함되어 있지 않아 확인할 수 없습니다."
         )
     else:
         first = f"{scope} 관련 사실을 뒷받침하는 승인된 공식 외부 근거를 끝까지 검증할 수 없습니다."

@@ -144,17 +144,12 @@ def test_external_knowledge_capabilities_use_only_approved_cache_authority() -> 
         entry for entry in manifest.capabilities if not entry.runtime_execution_enabled
     )
 
-    assert {entry.capability for entry in enabled} == {
-        KnowledgeCapability.CORPORATE_SUBSIDIARY,
-        KnowledgeCapability.PRODUCT_RISK_FACTORS,
-    }
+    assert {entry.capability for entry in enabled} == set(KnowledgeCapability)
     assert all(entry.status == "approved" for entry in enabled)
     assert len({entry.corpus_sha256 for entry in enabled}) == 1
     assert len({entry.index_sha256 for entry in enabled}) == 1
     assert all(entry.corpus_sha256 is not None for entry in enabled)
     assert all(entry.index_sha256 is not None for entry in enabled)
 
-    assert all(entry.status == "not_configured" for entry in disabled)
-    assert all(entry.corpus_sha256 is None for entry in disabled)
-    assert all(entry.index_sha256 is None for entry in disabled)
+    assert not disabled
     assert all(entry.status != "approved_live_official" for entry in manifest.capabilities)
