@@ -26,6 +26,7 @@ artifacts/runtime/holdings-graph/*
 artifacts/runtime/schema-dense/*
 !artifacts/runtime/schema-dense/kure-schema-dense-production-v1.json
 !artifacts/runtime/schema-dense/kure-schema-dense-production-v8-registry18-calibrated-20260905.json
+!artifacts/runtime/schema-dense/kure-schema-dense-production-v9-registry18-calibrated-20260906.json
 
 # Local research material pending redistribution review
 docs/research/**/audit-bundle/
