@@ -28,6 +28,7 @@ from finance_agent_core.retrieval.official_acquisition import (
     _expand_globalx_product_roots,
 )
 from finance_agent_core.retrieval.official_connector import (
+    OfficialConnectorError,
     OfficialDiscoveryCandidate,
     OfficialDocumentLinkResolver,
     OfficialFetchRequest,
@@ -144,7 +145,8 @@ def test_tiger_legacy_redirect_never_fetches_an_unapproved_target() -> None:
                 as_of=_AS_OF,
             ),
         )
-    except OfficialSourceRegistryError:
+    except (OfficialSourceRegistryError, OfficialConnectorError):
+        # 2026-09-06: connector가 Registry 범위 밖 URL을 자체 오류로 감싸 거부한다
         pass
     else:  # pragma: no cover
         raise AssertionError("unapproved redirect target was fetched")

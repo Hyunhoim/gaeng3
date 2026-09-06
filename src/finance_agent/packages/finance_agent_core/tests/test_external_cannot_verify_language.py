@@ -83,7 +83,7 @@ def test_cache_only_miss_has_question_specific_safe_narrative() -> None:
     assert narrative.failure_kind == "cache_miss"
     assert "캠브리콘" in narrative.answer
     assert "구성종목·편입 관계" in narrative.answer
-    assert "공식 문서 저장소(Cache)" in narrative.answer
+    assert "보유한 공식 문서 자료" in narrative.answer
     assert "확인할 수 없습니다" in narrative.answer
     assert "확인되지 않은 상품도 제시하지 않았습니다" in narrative.answer
     assert "source_scope_incomplete" not in narrative.answer
