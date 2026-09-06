@@ -13,7 +13,7 @@ LLM이 아니라 SQLite와 Python 검증기가 확정하고, LLM(HyperCLOVA X)�
 | --- | --- |
 | 소스코드 | `src/` (구현체), `requirements.txt`, 이 README |
 | 도메인별 Ontology | [`ontology/`](ontology/) — `common.ttl` `bond_kr.ttl` `etf_kr.ttl` `etf_gl.ttl` `fund_pub.ttl` |
-| 기술 제안서 | [`docs/technical-proposal.pdf`](docs/technical-proposal.pdf) ([Markdown 원문](docs/technical-proposal.md)) |
+| 기술 제안서 | [`docs/technical-proposal.pdf`](docs/technical-proposal.pdf) · 부록 [데이터 수집·적재 Flow·활용 로직·검증·재현 절차](docs/technical-proposal-appendix.md) |
 | 평가용 API 서버 정보 | [`docs/api-specification.md`](docs/api-specification.md) |
 
 ## 2. 평가용 API
@@ -70,7 +70,7 @@ flowchart LR
 ├── ontology/                     # 제출용 Turtle 5개
 ├── docs/
 │   ├── technical-proposal.pdf    # 기술 제안서
-│   ├── technical-proposal.md
+│   ├── technical-proposal-appendix.md  # 부록: 수집·적재 Flow · 활용 로직 · 검증 · 재현 절차
 │   ├── user-scenarios.md
 │   ├── diagrams/                 # 시스템 구성도 · 답변 흐름도 (Mermaid)
 │   └── api-specification.md      # 평가용 API 명세서
