@@ -25,6 +25,7 @@ where = ["src"]
     "approved_knowledge_coverage_manifest.json",
     "approved_source_registry.json",
     "external_knowledge_source_catalog.json",
+    "open_dart_filing_policy.json",
 ]
 "finance_agent_core.contracts" = ["queryplan.hcx.schema.json"]
 "finance_agent_core.evaluation" = ["schema_embedding_models_v1.json"]
