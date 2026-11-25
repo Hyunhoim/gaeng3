@@ -1,65 +1,130 @@
-# 금융상품 Agent (팀 갱갱갱)
+<div align="center">
 
-제10회 2026 미래에셋증권 AI Festival — 금융상품 Agent 과제 제출물
+# 금융상품 AI Agent
 
-자연어 질문을 받아 주최 측 제공 데이터(국내채권, 국내·해외 ETF·ETN, 공모펀드)에서 상품을
-조회·비교·집계하고 근거와 기준일을 함께 답한다. 상품명·수치·순위·출처는 SQLite와 Python 검증기가
-확정하고, HyperCLOVA X(HCX-007)는 질문 의도 해석과 검증된 결과의 문장화만 담당한다. 구성종목·
-자회사·테마·위험요인 같은 외부 근거는 검토·승인해 봉인한 공식 문서 258건(12개 발행기관)에서만
-찾는다. 데이터로 확인할 수 없는 질문에는 추측하지 않고 확인 불가를 안내하거나 되묻는다.
+**미래에셋증권 AI Festival · 근거 기반 금융상품 검색 및 분석 서비스**
 
-## 제출물
+![Python](https://img.shields.io/badge/Python-315B89?style=flat-square) ![FastAPI](https://img.shields.io/badge/FastAPI-315B89?style=flat-square) ![SQLite](https://img.shields.io/badge/SQLite-315B89?style=flat-square) ![HyperCLOVA X](https://img.shields.io/badge/HyperCLOVA%20X-315B89?style=flat-square) ![KURE-v1](https://img.shields.io/badge/KURE--v1-315B89?style=flat-square) ![Docker](https://img.shields.io/badge/Docker-315B89?style=flat-square) ![Ontology](https://img.shields.io/badge/Ontology-315B89?style=flat-square)
 
-| 항목 | 위치 |
+[Overview](#overview) · [Features](#features) · [Architecture](#architecture) · [Tech Stack](#tech-stack) · [How to Run](#how-to-run)
+
+</div>
+
+---
+
+## Overview
+
+자연어 질문을 받아 공식 금융상품 데이터에서 국내채권, 국내·해외 ETF·ETN, 공모펀드를 조회·비교·집계하고, 상품별 근거와 기준일을 함께 제공하는 AI Agent입니다. HyperCLOVA X(HCX-007)는 의도 해석과 검증된 결과의 자연어 설명을 담당하며, 검색 조건·수치·순위·출처는 서버의 결정론적 처리와 독립 검증을 통해 확정합니다.
+
+공식 상품 데이터와 별도로 12개 발행기관의 승인 문서 258건을 활용해 구성종목, 자회사, 테마 이력, 위험요인 등에 관한 외부 근거를 검색합니다. 확인할 수 없는 정보는 추정하지 않습니다.
+
+## Features
+
+| 기능 | 설명 |
 | --- | --- |
-| 소스코드 | `src/`, `requirements.txt`, 이 README |
-| Ontology | [`ontology/`](ontology/) — `common.ttl` `bond_kr.ttl` `etf_kr.ttl` `etf_gl.ttl` `fund_pub.ttl` |
-| 기술 제안서 | [`docs/기술_제안서.pdf`](docs/기술_제안서.pdf) · [부록: 수집·적재 Flow, 활용 로직, 재현 절차](docs/기술_제안서_부록.md) |
-| 평가용 API 서버 정보 | [`docs/평가용_API_서버_정보.md`](docs/평가용_API_서버_정보.md) |
+| 금융상품 검색 | 네 상품군의 조건 검색, 정확한 식별자 조회, 정렬 |
+| 비교 및 집계 | 상품 비교, 개수·평균·최솟값·최댓값 등 결정론적 연산 |
+| 의미 기반 질의 해석 | HCX-007 Intent 및 Semantic Frame, KURE-v1 Schema Dense 필드 연결, 서버 교차검증 |
+| 관계 검색 | 발행사·운용사·기초지수·자산유형·투자지역 관계 색인과 정확한 엔터티 일치 |
+| 문서 검색 | 승인 문서 258건의 KURE-v1 Document Dense 및 BM25 검색, 근거 구간과 출처 제공 |
+| 검증 | Typed QueryPlan, SQLite Oracle, 독립 Result Verifier, Answer Verifier |
+| 안전 처리 | 결측·기준일·통화 호환성 확인, 확인 불가 및 역질문 처리 |
+| 릴리스 무결성 | 코드·데이터·모델·색인·문서 묶음 SHA-256 결속, 불일치 시 실행 차단 |
 
-## 환경 구성과 실행
+외부 근거는 승인된 문서 묶음으로 제한하며 실시간 웹 검색을 사용하지 않습니다. 공식 데이터와 외부 근거가 충돌할 경우 공식 데이터를 우선합니다.
 
-요구 사항: Ubuntu 22.04/24.04 x86_64, Docker Engine 24 이상, Docker Compose v2, 주최 측 XLSX 디렉터리(`2.금융상품_20260824`, 파일 8개). 아래 절차는 Ubuntu에서 확인했다.
+## Architecture
 
-### 1. 기본 구성
+```mermaid
+flowchart TD
+    Q["자연어 질문"] --> B["FastAPI"]
+    B --> S["안전 검사 / Intent Router"]
+    S --> H["HCX-007 Intent + Semantic Frame"]
+    H --> K["Schema Dense / 서버 교차검증"]
+    K --> P["Typed QueryPlan"]
+    S --> R["관계 QueryPlan / FTS"]
+    P --> O["SQLite Oracle"]
+    R --> V["Result Verifier"]
+    O --> V
+    X["공식 XLSX"] --> I["정규화 / 해시 검증"]
+    I --> DB["SQLite / 관계 색인"]
+    DB --> O
+    DB --> R
+    V --> E["Field-level Evidence"]
+    E --> D["승인 문서 검색: KURE-v1 + BM25"]
+    D --> A["HCX-007 답변 생성"]
+    A --> AV["Answer Verifier"]
+    AV --> OUT["근거와 기준일 포함 응답"]
+```
+
+기본 개발 실행은 LLM 및 외부 문서 검색 없이 결정론적 검색 경로를 사용합니다. 평가 구성에서는 HCX-007과 봉인된 승인 문서 색인을 활성화합니다. Agent Core는 FastAPI Backend 프로세스에 설치되어 동작합니다.
+
+| Path | Responsibility |
+| --- | --- |
+| `src/finance_agent/` | Agent Core, 질의 해석, 검색, 검증, 근거 생성 |
+| `src/finance_agent/artifacts/approved-corpus/` | 승인 문서 텍스트, 매니페스트, 색인 및 관계 파일 |
+| `src/fastapi_backend/` | HTTP API, 실행 제어, 배포 및 릴리스 검증 |
+| `ontology/` | 공통 및 상품군별 RDF/Turtle 정의 5개 |
+| `docs/` | 기술 제안서, 부록 및 API 명세 |
+| `compose.sh`, `docker-compose.yml` | 기본 컨테이너 실행 |
+
+## Tech Stack
+
+| Layer | Technology |
+| --- | --- |
+| Agent & LLM | Python 3.12, HyperCLOVA X HCX-007 |
+| Retrieval | KURE-v1, Schema Dense, Document Dense, BM25, SQLite FTS |
+| Data & Knowledge | SQLite, XLSX 정규화, Field Registry, RDF/Turtle Ontology |
+| Backend | FastAPI, Pydantic, JSON Schema |
+| Infrastructure | Docker Engine, Docker Compose, SHA-256 Release Manifest |
+| Verification | pytest, SQLite Oracle, 독립 Python Verifier |
+
+## How to Run
+
+### 1. Prerequisites
+
+Ubuntu 22.04/24.04 x86_64, Docker Engine 24 이상, Docker Compose v2, 공식 XLSX 디렉터리(파일 8개)가 필요합니다. 원천 XLSX 및 생성 DB는 저장소에 포함되지 않습니다.
 
 ```bash
-cp src/fastapi_backend/.env.example src/fastapi_backend/.env   # FINANCE_RAW_DATA_DIR 를 XLSX 디렉터리 경로로 수정
+git clone https://github.com/Hyunhoim/gaeng3.git
+cd gaeng3
+cp src/fastapi_backend/.env.example src/fastapi_backend/.env
+```
+
+환경 파일의 `FINANCE_RAW_DATA_DIR`에 실제 XLSX 디렉터리를 지정합니다.
+
+### 2. Basic Mode
+
+```bash
 ./compose.sh up --detach --wait
 curl --fail http://127.0.0.1:18001/health
 ```
 
-이미지 빌드 → XLSX 정규화·검증 → 상품군별 SQLite·관계 색인 생성 → 서버 시작까지 한 번에 수행한다.
-검색·조건·비교·집계 질문에 결정론적 경로로 답하며, HyperCLOVA X 호출과 외부 문서 검색은 하지 않는다.
-종료는 `./compose.sh down`.
+이미지 빌드, XLSX 정규화 및 검증, SQLite·관계 색인 생성, Backend 기동을 수행합니다.
 
-### 2. 평가 구성
+```bash
+curl --get http://127.0.0.1:18001/answer \
+  --data-urlencode 'question_id=Q-001' \
+  --data-urlencode 'question=현재 판매 가능한 원화채권 중 AA- 이상 종목 알려줘'
+```
 
-준비할 것 세 가지.
+종료: `./compose.sh down`
 
-1. **CLOVA Studio API 키** — 키 값만 담은 파일을 만든다. 환경변수로 넘기지 않는다.
+### 3. Evaluation Mode
 
-   ```bash
-   mkdir -p ~/.secrets/finance-agent
-   printf '%s' '<CLOVA Studio API 키>' > ~/.secrets/finance-agent/clovastudio-api-key
-   chmod 600 ~/.secrets/finance-agent/clovastudio-api-key
-   ```
+CLOVA Studio API 키를 별도의 읽기 전용 파일로 준비합니다. 키는 Git이나 환경변수에 저장하지 않습니다.
 
-2. **KURE-v1 임베딩 모델** (Hugging Face 공개 모델, 약 2.2 GB)
+```bash
+mkdir -p ~/.secrets/finance-agent
+chmod 700 ~/.secrets/finance-agent
+# clovastudio-api-key 파일에 발급받은 API 키를 저장
+chmod 600 ~/.secrets/finance-agent/clovastudio-api-key
+pip install -U huggingface_hub
+huggingface-cli download nlpai-lab/KURE-v1 \
+  --revision d14c8a9423946e268a0c9952fecf3a7aabd73bd9 --cache-dir ~/kure-cache
+```
 
-   ```bash
-   pip install -U huggingface_hub
-   huggingface-cli download nlpai-lab/KURE-v1 \
-     --revision d14c8a9423946e268a0c9952fecf3a7aabd73bd9 --cache-dir ~/kure-cache
-   ```
-
-3. **승인 문서 묶음** — 저장소에 포함되어 있다(`src/finance_agent/artifacts/approved-corpus/`, 97 MB).
-   12개 발행기관 공식 문서 258건의 정규화 텍스트, 문서 매니페스트(문서별 출처 URL·발행일·SHA-256),
-   KURE Document Dense 색인, 활성화 영수증, 관계 파일이다. 원문 HTML·PDF는 저장하지 않는다.
-
-실행은 한 명령이다. 이미지 빌드 → 데이터 준비 → 릴리스 봉인(코드·DB·색인·문서 묶음의 SHA-256 결속) →
-컨테이너 기동 → `/health`·`/answer` 확인 순서로 진행하며, 봉인 값과 실제 파일이 다르면 시작하지 않는다.
-문서 묶음 경로는 저장소 안의 기본값을 쓴다.
+승인 문서 묶음은 저장소의 기본 경로를 사용합니다. 깨끗한 Git 작업 트리에서 다음을 실행합니다.
 
 ```bash
 RAW_DATA_DIR=/path/to/2.금융상품_20260824 \
@@ -69,31 +134,20 @@ KURE_CACHE_DIR=$HOME/kure-cache \
 ```
 
 ```bash
-curl --get "http://127.0.0.1:8080/answer" \
-  --data-urlencode "question_id=Q-001" \
-  --data-urlencode "question=캠브리콘이 편입된 중국 반도체 ETF를 알려줘"
+curl --get http://127.0.0.1:8080/answer \
+  --data-urlencode 'question_id=Q-001' \
+  --data-urlencode 'question=캠브리콘이 편입된 중국 반도체 ETF를 알려줘'
 ```
 
-중지는 `src/fastapi_backend/scripts/manual-release.sh stop`. 포트는 `PORT=`로 바꾼다.
-Docker 없이 실행하려면 Python 3.12에서 `pip install -r requirements.txt` 뒤 [Agent README](src/finance_agent/README.md)를 따른다.
-환경변수 전체 목록은 [Backend README](src/fastapi_backend/README.md)에 있다.
+종료: `src/fastapi_backend/scripts/manual-release.sh stop`
 
-## 저장소 구조
+### 4. Development & Verification
 
-```text
-.
-├── README.md
-├── requirements.txt
-├── ontology/              # 도메인별 Ontology (.ttl)
-├── docs/                  # 기술 제안서 · 부록 · API 명세서
-├── src/finance_agent/     # Agent Core
-├── src/fastapi_backend/   # API 서버 · 배포
-├── docker-compose.yml · compose.sh · compose-release.sh
-└── THIRD_PARTY_NOTICES.md
+```bash
+python -m pip install -r requirements.txt
+python src/finance_agent/scripts/sync-ontology.py --check
+cd src/finance_agent/packages/finance_agent_core
+python -m pytest -q
 ```
 
-## Ontology
-
-`ontology/`의 Turtle 5개(`common.ttl`, `bond_kr.ttl`, `etf_kr.ttl`, `etf_gl.ttl`, `fund_pub.ttl`)는
-Agent가 질문 해석에 쓰는 field registry에서 생성한다. `common.ttl`이 공통 상위 클래스와 공통 속성을,
-상품군별 파일이 하위 클래스와 전용 속성을 정의한다.
+[Agent 개발 문서](src/finance_agent/README.md) · [Backend 실행 가이드](src/fastapi_backend/README.md) · [기술 제안서 부록](docs/기술_제안서_부록.md) · [외부 구성요소 고지](THIRD_PARTY_NOTICES.md)
