@@ -27,7 +27,7 @@ RELEASE_DIR="${RELEASE_DIR:-$HOME/finance-agent-release}"
 RAW_DATA_DIR="${RAW_DATA_DIR:-}"
 SECRETS_DIR="${SECRETS_DIR:-$HOME/.secrets/finance-agent}"
 BIND_ADDRESS="${BIND_ADDRESS:-127.0.0.1}"
-PORT="${PORT:-80}"
+PORT="${PORT:-8080}"
 CONTAINER_NAME="${CONTAINER_NAME:-finance-agent-release}"
 RELEASE_ENV="${RELEASE_ENV:-evaluation}"
 EXTERNAL_MODE="${EXTERNAL_MODE:-approved_corpus_cache_only}"
@@ -35,11 +35,13 @@ RELATION_GRAPH="${RELATION_GRAPH:-$REPO_DIR/src/finance_agent/artifacts/runtime/
 TOOLS_IMAGE="${TOOLS_IMAGE:-docker.io/library/python@sha256:4766d8b510c428e595d74b9cc5bbb2fae8e26316fffb4adc89908d79aacd58a2}"
 
 # 승인 corpus 캐시 입력 (cache 모드)
-APPROVED_CORPUS_MANIFEST="${APPROVED_CORPUS_MANIFEST:-}"
-APPROVED_CORPUS_ROOT="${APPROVED_CORPUS_ROOT:-}"
-APPROVED_DOCUMENT_DENSE="${APPROVED_DOCUMENT_DENSE:-}"
-DOCUMENT_CACHE_ACTIVATION="${DOCUMENT_CACHE_ACTIVATION:-}"
-APPROVED_TEMPORAL_RELATIONS="${APPROVED_TEMPORAL_RELATIONS:-}"
+# 기본값은 저장소에 포함된 승인 문서 묶음(src/finance_agent/artifacts/approved-corpus)이다.
+APPROVED_CORPUS_DIR="${APPROVED_CORPUS_DIR:-$REPO_DIR/src/finance_agent/artifacts/approved-corpus}"
+APPROVED_CORPUS_MANIFEST="${APPROVED_CORPUS_MANIFEST:-$APPROVED_CORPUS_DIR/runtime/approved-corpus-manifest.json}"
+APPROVED_CORPUS_ROOT="${APPROVED_CORPUS_ROOT:-$APPROVED_CORPUS_DIR/corpus-root}"
+APPROVED_DOCUMENT_DENSE="${APPROVED_DOCUMENT_DENSE:-$APPROVED_CORPUS_DIR/runtime/release-bundle/document-dense.json}"
+DOCUMENT_CACHE_ACTIVATION="${DOCUMENT_CACHE_ACTIVATION:-$APPROVED_CORPUS_DIR/runtime/release-bundle/document-cache-activation.json}"
+APPROVED_TEMPORAL_RELATIONS="${APPROVED_TEMPORAL_RELATIONS:-$APPROVED_CORPUS_DIR/runtime/release-bundle/temporal-relations.json}"
 
 # adaptive semantic 입력
 ADAPTIVE="${ADAPTIVE:-true}"
@@ -127,9 +129,22 @@ step_release() {
     docker run --rm -v "$RELEASE_DIR:$RELEASE_DIR" alpine sh -c "rm -rf '$RELEASE_DIR/work' '$RELEASE_DIR/release'"
     mkdir -p "$RELEASE_DIR/work" "$RELEASE_DIR/release"
     log "3/6 매니페스트·바인딩·외부지식 아티팩트 생성 (도구 컨테이너, python 3.12, 모드 $EXTERNAL_MODE, adaptive $ADAPTIVE)"
+    # 봉인 검사는 쓰기 비트가 전혀 없는(0444) 일반 파일만 받는다. git checkout 파일은 0644이므로
+    # 문서 묶음 입력 파일 4개를 릴리스 작업 폴더에 읽기 전용 사본으로 두고 그 경로를 쓴다.
+    if [ "$EXTERNAL_MODE" = approved_corpus_cache_only ]; then
+        mkdir -p "$RELEASE_DIR/work/inputs"
+        install -m 0444 "$APPROVED_CORPUS_MANIFEST" "$RELEASE_DIR/work/inputs/approved-corpus-manifest.json"
+        install -m 0444 "$APPROVED_DOCUMENT_DENSE" "$RELEASE_DIR/work/inputs/document-dense.json"
+        install -m 0444 "$DOCUMENT_CACHE_ACTIVATION" "$RELEASE_DIR/work/inputs/document-cache-activation.json"
+        install -m 0444 "$APPROVED_TEMPORAL_RELATIONS" "$RELEASE_DIR/work/inputs/temporal-relations.json"
+        APPROVED_CORPUS_MANIFEST="$RELEASE_DIR/work/inputs/approved-corpus-manifest.json"
+        APPROVED_DOCUMENT_DENSE="$RELEASE_DIR/work/inputs/document-dense.json"
+        DOCUMENT_CACHE_ACTIVATION="$RELEASE_DIR/work/inputs/document-cache-activation.json"
+        APPROVED_TEMPORAL_RELATIONS="$RELEASE_DIR/work/inputs/temporal-relations.json"
+    fi
     # 입력 파일은 모두 같은 절대경로로 읽기 전용 마운트한다.
     EXTRA_MOUNTS=()
-    for p in "$APPROVED_CORPUS_MANIFEST" "$APPROVED_CORPUS_ROOT" "$APPROVED_DOCUMENT_DENSE" "$DOCUMENT_CACHE_ACTIVATION" "$APPROVED_TEMPORAL_RELATIONS"; do
+    for p in "$APPROVED_CORPUS_ROOT"; do
         [ -n "$p" ] && EXTRA_MOUNTS+=(-v "$p:$p:ro")
     done
     docker run --rm --user 0:0 \

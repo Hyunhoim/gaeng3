@@ -1,0 +1,145 @@
+UNDERSTANDING
+ETF
+DISTRIBUTIONS
+2
+Distribute at least 90% of its investment
+company taxable income (ICTI) and net tax-
+exempt income for the taxable year to
+maintain RIC status
+Pay at least 98% of its ordinary income in
+calendar year and 98.2% of its net capital
+gains earned during the 12 months prior to
+10/31 each year to avoid a 4% excise tax on
+undistributed income
+1
+ETF distributions reflect taxable
+income from their holdings
+iShares ETFs are registered under the Investment Company
+Act of 1940 (’40 Act ETFs) and treated as Regulated
+Investment Companies (RICs) under the Internal Revenue
+Code. As RICs, they are subject to certain annual
+distribution requirements. ETF distributions reflect income
+from their underlying holdings plus impact from the
+additional factors listed below. RICs generally must:
+Blackrock’s distribution policies
+• Each ETF has regularly scheduled distribution dates.
+iShares also reserves an additional distribution date in
+late December for a potential distribution to avoid excise
+tax if actual income is materially different from
+estimates.
+• iShares only provides estimates for ETFs paying capital
+gains and does not provide any estimates for regular
+distributions.
+• To help reduce potential for overdistribution and
+maintain an appropriate distribution yield, the ETF fund
+administrator seeks to pay the fund’s approximate
+earned income.
+• Fixed income ETFs pay out earned income that is based
+on the yields on bonds when the ETF acquired them. Thus,
+it takes portfolio turnover either from inflows or monthly
+rebalances for fund distributions to adjust to current
+yields in dynamically changing rate environments.
+• December distributions can be inconsistent with other
+regular distributions as it is difficult to estimate calendar
+year income before the close of the calendar year due to
+several factors such as those listed below.
+Fixed income
+• Change in the net income, calculated daily. (Net
+income includes securities lending income and fund
+expenses)
+• Actual net income that remains undistributed in the
+fund
+• Large fund share changes
+• Impact from amortization & accretion of premium &
+discount bonds
+• Gain/loss from paydowns or payups for MBS/ABS
+• Income (loss) from inflation adjustments due to
+holding inflationary linked securities
+• Gain/loss from foreign currency exposure
+Equity
+• Change in the net income, calculated daily. (Net
+income includes securities lending income and fund
+expenses)
+• Actual net income that remains undistributed in the
+fund
+• Large fund share changes
+• Corporate actions resulting in a taxable event
+• Adjustments from Passive Foreign Investment
+Companies (PFICs)
+• Adjustments for Real Estate Investment Trust (REIT)
+return of capital estimates (see list of ETFs on page 2)
+• Impact from actual income reclassification (return of
+capital) from underlying holdings (REITs or
+corporations)
+• Gain/loss from foreign currency exposure
+Factors that may affect a fund’s distribution rate
+While income from underlying holdings is typically the largest driver of an ETFs distribution, there are several factors that
+can impact a fund’s net income and thus  affect distributions paid to shareholders.
+GPS0326-5283591-EXP0327-1/3
+Since equity REITs don’t report their tax information until after year end, please be advised certain iShares funds
+holding REIT securities apply an estimated return of capital (ROC) percentage to withhold dividend income throughout
+the fund’s fiscal year. This is being done in an effort to avoid an overdistribution that would result in a return of capital
+to fund shareholders due to ROC adjustments from the underlying REIT holdings.
+iShares Funds with 25% ROC adjustment: IYR, REM, REZ, USRT, & WOOD
+iShares Funds with 20% ROC adjustment: ERET, ICF, REET, & IDGT
+iShares Funds with 15% ROC adjustment: IJS, IWC, IWM, & IWN
+iShares Funds with 10% ROC adjustment: ESML, IJH, IJJ, IJK, IJR, IJT, IMCB, ISCB, ISCG, ISCV, IWR, IWS, IYF, SMLF,
+SMMV, XJH & XJR *
+As of 2/28/2026, subject to change.
+1
+ETFs can help shield investors from capital gain distributions, or the periodic distributions funds make to
+shareholders on realized profits from the sale of underlying assets. ETFs held 38% of U.S. managed fund
+assets at the end of 2025 but accounted for less than 1% of capital gains distributions**.
+3
+iShares releases estimates for ETFs paying a capital gain distribution on an annual basis. Capital gain
+estimates are typically released by mid-November and paid in December. Capital gain distribution
+information can be found at www.ishares.com/us/capital-gains-distributions. In each of the past 5
+calendar years, only ~6% of iShares ETFs distributed capital gains.
+2
+ETFs tend to be tax efficient as the ETF structure is designed to insulate investors from the actions of
+departing investors. Investors generally trade existing ETF shares with each other on exchange, so most
+ETF trading doesn’t trigger trading of underlying securities. When shares need to be created or redeemed,
+an Authorized Participant (“AP”) can conduct an in-kind trade, meaning securities are exchanged, which
+allows ETFs to avoid a taxable event within the fund***.
+ETFs with Return Of Capital (ROC) adjustments:
+A note on option-based ETFs:
+Note that certain ETFs that use options-based strategies have a higher risk of making distributions in excess of a fund’s
+current and accumulated earnings and profits. These distributions may be characterized as a tax-free return of capital
+to the extent of a shareholder’s basis in shares of the fund and as a capital gain thereafter (if the shareholder holds
+shares of the Fund as capital assets). For further information please see the funds statement of additional information.
+iShares examples: TLTW, LQDW, HYGW, BALI, BALQ, IVVW, IWMW
+As of 2/28/2026, subject to change
+ETF distribution schedule
+iShares maintains an ETF distribution schedule that discloses record dates, ex-dividend dates, and pay dates across its
+ETF lineup.
+Formulas for distributions:
+• Fixed income earned income = accrued coupon interest – premium amortization + discount accretion – net expenses
++/- inflation adjustment (TIPS ETFs only) +/- FX gains/losses (ETFs with foreign currency only)
+• Equity earned income = dividends from equities + taxable corporate actions – net expenses – REIT adjustments +/-
+PFIC adjustments +/- FX gains/losses (ETFs with foreign currency only)
+An equity ETF’s earned income is primarily derived from the fund’s underlying equities that have gone ex -
+dividend before the ex-dividend date of the ETF. Cutoff for inclusion of a dividend in the ETF’s distribution is 2
+business days prior to the funds ex-dividend date.
+Information on capital gain distributions
+*ESML, SMLF, SMMV, & XJR will begin applying a 10% ROC adjustment beginning with their Q2 2026 distributions. **Source: Morningstar, as of 12/31/25. ETFs only paid 0.2% of
+capital gains distributions. Past distributions not indicative of future distributions. ***Note that  certain emerging & frontier market countries do not allow for in-kind transactions.
+GPS0326-5283591-EXP0327-2/3
+WANT TO KNOW MORE?
+iShares.com
+Carefully consider the Funds’ investment objectives, risk factors, and charges and expenses before investing. This
+and other information can be found in the Funds’ prospectuses or, if available, the summary prospectuses which may
+be obtained by visiting www.iShares.com or www.blackrock.com. Read the prospectus carefully before investing.
+Investing involves risk, including possible loss of principal.
+iShares Funds are obliged to distribute portfolio gains to shareholders by year-end. These gains may be generated due to index
+rebalancing or to meet diversification requirements. Trading shares of the iShares Funds will also generate tax consequences and
+transaction expenses. There is no guaranteethat any fund will pay dividends.
+This material is provided for educational purposes only and does not constitute investment advice. The information contained
+herein is based on current tax laws, which may change in the future. BlackRock cannot be held responsible for any direct or incidental
+loss resulting from applying any of the information provided in this publication or from any other source mentioned. The information
+provided in this material does not constitute any specific legal, tax or accounting advice. Please consult with qualified professionals
+for this type of advice.
+The iShares Funds are distributed by BlackRock Investments, LLC (together with its affiliates, “BlackRock”).
+©2026 BlackRock, Inc or its affiliates. All Rights Reserved. BLACKROCK and iSHARES are trademarks of BlackRock, Inc. or its affiliates. All other trademarks are those of their
+respective owners.
+Not FDIC Insured • May Lose Value • No Bank Guarantee
+GPS0326-5283591-EXP0327-3/3

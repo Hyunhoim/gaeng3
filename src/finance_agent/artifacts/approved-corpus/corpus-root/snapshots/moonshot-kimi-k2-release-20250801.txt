@@ -1,0 +1,38 @@
+Kimi K2 High-Speed Model Released！ - Announcement - Kimi Forum
+Kimi Forum
+Kimi K2 High-Speed Model Released！
+Announcement
+kimi-k2,
+news
+Cellen
+August 1, 2025, 9:19am
+1
+Say hello to kimi-k2-turbo-preview
+Same model. Same context. NOW 4× FASTER.
+From 10 tok/s to 40 tok/s.
+Limited-Time Launch Price (50% off until Sept 1)
+- $0.30 / million input tokens (cache hit)
+- $1.20 / million input tokens (cache miss)
+- $5.00 / million output tokens
+Explore more: https://platform.moonshot.ai
+i18n-turbo1708×1008 88.1 KB
+price1464×766 103 KB
+1 Like
+Cellen
+August 1, 2025, 9:22am
+2
+Kimi K2 高速版发布！
+kimi-k2-turbo-preview 是 kimi-k2 的高速版，模型参数与 kimi-k2 一致，但输出速度由每秒 10 Tokens 提升至每秒 40 Tokens。目前限时 5 折特惠，9月1日恢复原价，折扣后的价格：模型每百万 tokens 输入价格（缓存命中）¥2.00，输入价格（缓存未命中）¥8.00，输出价格 ¥32.00。
+我们还将继续努力优化，进一步提升 kimi-k2 模型的输出速度。
+前往官网了解详情：https://platform.moonshot.cn/
+白色公众号1154×688 79.8 KB
+价格1432×706 101 KB
+3 Likes
+benton
+August 1, 2025, 1:47pm
+4
+fucking perfect，2333333
+Home
+Categories
+Guidelines
+Powered by Discourse, best viewed with JavaScript enabled

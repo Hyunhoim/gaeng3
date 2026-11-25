@@ -1,0 +1,516 @@
+1
+info@kraneshares.com
+6/30/2026
+1
+New Opportunities From
+The Generative AI
+Ecosystem & Beyond
+Overview of the KraneShares
+Public-Private AI & Technology ETF
+(Ticker: AGIX)
+AGIX
+2
+1. Data from “AI Is Now a Macro Variable. Are You Positioned?,” Morgan Stanley, as of 3/9/2026.
+2. Data from “The economic potential of generative AI: The next productivity frontier,” McKinsey & Company. Retrieved 6/30/2026.
+Please see end of presentation for definitions. See page 16 for AGIX top 10 holdings.
+Investment Strategy:
+AGIX is an artificial intelligence (AI) ETF that invests in both publicly listed and private AI and technology companies, seeking to capture a multi-
+segment AI ecosystem. AGIX’s approach is designed to deliver exposure to the broader AI value chain — from companies building foundational AI
+models to providers of the hardware, computing power, cloud infrastructure, and data services that enable AI training, inference, and deployment.
+AGIX invests at least 80% of its net assets in securities included in the Solactive Etna Artificial General Intelligence Index, seeking to capture the
+performance of companies engaged in developing and applying AI technologies. The underlying index focuses on three key categories within the AI
+sector: hardware, infrastructure, and applications. Constituents are selected based on a proprietary AI Exposure Score, which assesses each company's
+relevance to and readiness for AI technology.
+AI Sector Highlights:
+• According to Morgan Stanley Research, 21% of S&P 500 companies mentioned at least one AI benefit in 2026 (up from 10% in 2024).1
+• Morgan Stanley Research estimates that nearly $3 trillion of AI-related infrastructure investment will flow through the global economy by 2028, with
+more than 80% of that spending still ahead.1
+• Advances in AI could produce a $17.1-25.6 trillion boost to the global economy annually, according to McKinsey’s predictive models.2
+AGIX Features:
+• Exposure to opportunities across the entire AI value chain, categorized by three main categories: hardware, infrastructure, and applications.
+• AGIX is supported by AI-native engineers and investors, aiming to prepare investors’ portfolios for the era of artificial general intelligence (AGI).
+• Allocate to private AI companies such as Anthropic, Apptronik, Ayar Labs, Nuro, and Polymarket.
+KraneShares Public-
+Private AI &
+Technology ETF
+AGIX
+3
+Data from KraneShares as of 6/30/2026. Valuations of private holdings are inherently subject to estimation risk and may not reflect actual
+realizable values, especially in illiquid or rapidly evolving markets. Holdings are subject to change. See page 16 for AGIX top 10 holdings.
+*AGIX is a registered investment company under the Investment Company Act of 1940 and complies with SEC Rule 22e-4, which limits
+investments in illiquid assets—including private companies—to 15% of net assets to support daily liquidity and retail suitability.
+What we believe is the basis for a successful AI ETF
+AI-Native + Public–Private: the blueprint for a complete AI portfolio
+• We believe that privately held foundational model and AI
+companies represent a critical opportunity for gaining
+exposure to the AI sector.
+• AGIX ETF currently has exposure to private AI companies
+such as Anthropic, Apptronik, Ayar Labs, Nuro, and
+Polymarket.
+AGIX is sub-advised by Etna Capital Management, an
+investment management firm specializing in artificial
+intelligence ventures. Founded by AI-native investors and
+engineers, Etna leverages deep technical expertise and an
+extensive network to identify and support innovative AI
+companies. The team likens AI’s disruptive power to the
+force of Mount Etna, renowned for its exceptional level of
+volcanic activity. It’s portfolio companies include Anthropic,
+Perplexity and xAI, etc.
+AI-Native Investment Approach
+100+ Research Reports on LLMs
+20+ AI-Native Researchers Covering Full AI Stacks
+300+ AI & LLMs Experts Network
+Public-Private Hybrid AI portfolio
+AGIX ETF
+
+4
+The Next Wave of AI is Happening In Enterprises
+Data from “The state of AI in 2025: Agents, innovation, and transformation,” McKinsey, as of 12/31/2025.
+• The first wave of AI adoption centered on
+generative AI, as tools for text, code, and
+image generation spread rapidly to
+consumers and workers in 2023–2024.
+• The experimentation phase is evolving
+into broader enterprise AI deployment
+with AI starting to be embedded into
+core workflows.
+• We believe that after broader enterprise
+AI deployment, a new wave may emerge
+around enterprise AI agents, meaning
+organizations could potentially move
+from simple prompts to autonomous,
+workflow-integrated agents that execute
+tasks end-to-end.
+Adoption trends are evolving, though implementation and scalability challenges may remain. Please see the end of the presentation for definitions.
+The AI Opportunity
+5
+Token Consumption Could Potentially “Multiply”
+• At Google I/O two years ago, monthly
+token consumption stood at 9.7 trillion.1
+• In 2025, it reached 480 trillion per
+month.
+1
+• Today the figure is 3,200 trillion per
+month — roughly 7x year-on-year
+growth.
+1
+• Goldman Sacks estimates token use by
+AI agents could go up 24X by 2030.
+2
+1. Inside Google I/O 2026, CTO Magazine, May 25, 2026.
+2. AI Agents Forecast to Boost Tech Cash Flow as Usage Soars, Goldman Sacks, May 20, 2026.
+Projected information is hypothetical, provided for illustrative purposes only, and not indicative of
+an actual result.
+The AI Opportunity
+Projected
+Token use by AI agents is expected by Goldman Sachs to multiply 24 times by 2030
+6
+10 150 1000
+30,000
+47000
+0
+5000
+10000
+15000
+20000
+25000
+30000
+35000
+40000
+45000
+50000
+2022 2023 2024 2026 April ARR 2026 May ARR
+$Million
+Anthropic Revenue Growth1
+What Are Investor Portfolios Missing When They Don’t Have Exposure To Anthropic?
+We believe there are limited direct publicly traded equivalents to Anthropic
+1. Data from Sacra and Anthropic as of 5/28/2026. Private company growth figures are illustrative and not indicative of future results or ETF performance. Investments in private companies are subject to
+greater risk, including valuation uncertainty and limited liquidity Holdings are subject to change. See page 16 for AGIX top 10 holdings.
+The AI Opportunity
+7
+The Physical Wall: Four Constraints On AI Scale For Large Language Model Companies Like OpenAI and
+Anthropic
+The AI Opportunity
+• The Cerebras–OpenAI deal, with over 750MW of
+contracted inference capacity and an option to
+scale to 2GW by 2030, shows that the physical
+limits of AI infrastructure are now being explicitly
+priced in capital markets, not treated as
+background noise.
+• We define the “Physical Wall” as four linked
+constraints: HBM capacity, advanced wafers and
+packaging, power and power electronics, and
+optical communication plus protocol layers.
+• These constraints collectively cap how many
+effective tokens the industry can produce each
+year.
+• Because these walls move at roughly the same
+speed for everyone, the competition frontier is
+shifting from “who has the best model” to “who
+can generate more completed tasks per dollar
+per watt within the same physical envelope.”
+Data from OpenAI Website as of January 2026.
+8
+Owning the Wall: How AGIX Is Repositioning
+The AI Opportunity
+Hardware & Materials
+• New positions like Teradyne (HBM and
+custom ASIC testing plus robotics), Nittobo
+(specialty glass cloth for ABF substrates and
+high-speed PCBs), Texas Instruments, and
+Tower Semiconductor (power
+semiconductors, 800V rack architectures,
+silicon photonics) are designed to benefit as
+HBM stack counts rise and rack power moves
+from tens to hundreds of kilowatts.
+Edge & Protocol
+• Renesas (endpoint and edge inference), Nuro
+(physical agents in autonomous delivery), and
+Cloudflare (DNS, security, and API traffic
+management) aim to capture the diffusion of
+AI from GPU clusters into cars, robots, AI PCs,
+and the high-growth machine-to-machine
+traffic that agents will generate.
+Holdings are subject to change. See page 16 for AGIX top 10 holdings.
+9
+2000-3000
+Initial company universe
+300-400
+Industry selection
+40-50
+AI exposure
+assessment
+Weighting
+Initial company will be selected based on company’s free-float market cap,
+trading volume, etc.
+Retain companies that have a minimum market cap of $2b or more
+Each company will be filtered by industry.
+Trimmed down to AI Related Industries
+Each company will receive an AI Exposure Score. The score is calculated by
+a proprietary formula based on their 'AI relevance' and ‘AI readiness’.
+Top ranking companies are selected for inclusion in the index.
+Weightings will be adjusted based on both AI Exposure Score and free-float
+market cap. Additionally, The Underlying Index is weighted such that no more
+than 40% of the Underlying Index is composed of securities within each
+category (AI Hardware/Infrastructure/Application). Single company is capped
+at 10%
+Rebalanced quarterly
+AGIX uses a process-driven methodology for public equity investment
+AGIX ETF
+10
+The Solactive Etna Artificial General Intelligence Index evaluates public companies across four key dimensions that capture the breadth and depth of their AI capabilities and
+commercial traction. This multi-faceted assessment provides a comprehensive view of each company's AI potential and competitive positioning.
+AI BUSINESS IMPACT
+Analyzing the transformative
+power of AI on the company's
+business model and operations.
+AI PRODUCT PROGRESS
+Tracking the evolution and
+advancement of the company's AI
+product offerings.
+AI REVENUE CONTRIBUTION AI REVENUE VISIBILITY
+Quantifying the financial impact
+and contribution of AI to the
+company's overall revenue.
+Assessing the clarity and visibility
+of a company's AI-driven revenue
+streams.
+AI “Relevance” AI “Readiness”
+Qualitative
+Quantitative
+AI exposure score – a holistic framework for assessing AI opportunities
+AGIX ETF
+11
+KraneShares AI ETF AGIX creates an access tool to the AI value chain across public and private
+AI hardware Private AI Application
+The goal of generative AI is to create and automate; it implies tremendous amount of infrastructure investment that lays the foundation for future applications. AGIX aims to capture value by seizing opportunities as the AI value
+chain transitions over time, by anticipating the migration of value across different segments of the AI stack to stay ahead of the curve. Data from KraneShares as of 6/30/2026. Holdings are subject to change. See page 16 for
+AGIX top 10 holdings.
+AGIX ETF
+AI Infrastructure
+
+12
+Data from KraneShares as of 6/30/2026. Valuations of private holdings are inherently subject to estimation risk and may not reflect actual realizable values, especially in illiquid or rapidly evolving markets.
+Holdings are subject to change. See page 16 for AGIX top 10 holdings.
+*AGIX is a registered investment company under the Investment Company Act of 1940 and complies with SEC Rule 22e-4, which limits investments in illiquid assets—including private companies—to 15% of net
+assets to support daily liquidity and retail suitability.
+AGIX delivers daily liquidity and has exposure to private AI companies
+PE/VC Funds
+Illiquid
+~100% Private
+Lock-up, high fee, high
+minimum
+Closed-End Funds
+Daily Liquidity
+~100% Private
+Premium/Discount risk
+Interval Funds
+Quarterly Liquidity
+60-90% Private
+Uncertain redemption
+windows
+Public-Private ETFs*
+Daily Liquidity
+≤15% Private
+Balance access with
+liquidity
+Spectrum of Liquidity and Private Market Exposure
+Private AI Exposure
+i Private company shares can be accessed with direct ownership or through an intermediate entity,
+usually a special purpose vehicle (SPV).
+13
+How did AGIX buy Anthropic, Apptronik, Ayar Labs, Nuro, & Polymarket? How do we value it?
+Private AI Exposure
+AGIX’s Fair Value Process
+1. When available, we use the price from the most recent financing round as the starting point, because it reflects the latest
+transaction negotiated between independent parties.
+2. Secondary market data factors into our decisions once secondary trading in late-stage private companies becomes more active.
+AGIX’s committee integrates these real-world transaction prices as additional inputs. The fund increasingly relies on external
+providers that aggregate and analyze secondary transaction data, further enhancing valuation accuracy and transparency.
+3. The valuation committee then documents the process and the decisions made, including all methodologies and benchmarking
+assumptions used.
+This multi-source, committee-driven approach enables AGIX to meet daily net asset value (NAV) requirements, even as the fund
+holds illiquid, private assets.
+Liquidity Management
+AGIX balances private exposure with regulatory constraints such that no more than 15% of net assets are allocated to illiquid
+holdings, as required by SEC Rule 22e-4. The ETF structure itself provides daily liquidity to investors, while the secondary market
+offers a practical path for the fund to liquidate private positions if needed for redemptions or regulatory compliance.
+AGIX is a shareholder of Anthropic, Apptronik, Ayar Labs, Nuro, and Polymarket.
+See page 16 for AGIX top 10 holdings. Please see the end of the presentation for definitions.
+14
+AGIX Exposure Overlap vs The Nasdaq 100 Index
+Data from KraneShares and Bloomberg 6/30/2026. Holdings are subject to change. See page 16 for AGIX top 10
+holdings.
+AGIX Top 10 Non-Nasdaq 100
+Holdings Weight (%)
+SpaceX 3.60
+ASTERA LABS 3.18
+TAIWAN SEMICONDUCTOR 2.71
+SNOWFLAKE 2.46
+SK HYNIX 2.41
+SAMSUNG ELECTRONICS 1.75
+MEDIATEK 1.63
+ANTHROPIC (Private) 1.61
+FLEX 1.58
+RIOT PLATFORMS 1.48
+53%
+47%
+Over Half Of The AGIX Portfolio Is Not Included
+in the Nasdaq 100 Index
+Non-Nasdaq Weight % Nasdaq Overlap Weight %
+AGIX ETF
+15
+55.07%
+77.34%
+90.15%
+20.00%
+30.00%
+40.00%
+50.00%
+60.00%
+70.00%
+80.00%
+90.00%
+100.00%
+Nasdaq 100 Index Soleactive Etna Artificial
+Intelligence Index (AGIX Public
+Equity Benchmark)
+AGIX ETF
+Total Return % (7/17/2024-6/30/2026)
+How Has AGIX’s Private Exposure Added To The Fund’s Performance?
+AGIX has also outperformed its own public market index by about +13%
+AGIX ETF
++12.81%
++22.27%
+Captures combined impact of public
+and private sleeves
+Thoughtful, systematic, AI-driven
+public equity selection
+A widely recognized and accepted
+technology/growth benchmark
++35.08%
+Data from Bloomberg as of 6/30/2026. The performance data quoted represents past performance. Past performance does not guarantee future results. For fund performance see slide 16.
+16
+KraneShares Public-Private AI & Technology ETF
+InvestmentStrategy:
+AGIX seeks to measure the performance of the Solactive Etna Artificial
+General Intelligence Index (Ticker: SOLEAGIX). The fund is designed to
+track the performance of companies engaged in the development and
+application of artificial intelligence technologies, including the latest
+large language model and generative AI, machine learning, deep
+learning, natural language processing, computer vision, and autonomous
+systems.
+Fund Details Data as of
+06/30/2026
+Primary Exchange NASDAQ
+CUSIP 500767363
+ISIN US5007673636
+Total Annual Fund Operating Expense 0.99%
+Inception Date 07/18/2024
+Distribution Frequency Annual
+Performance Benchmark Solactive Etna
+Artificial General
+Intelligence Index
+Management Style Active
+Net Assets $807,395,410
+Number of Holdings 68
+Top 10 Holdings as of 06/30/2026
+Holdings are subject to change. Ticker %
+NVIDIA CORP NVDA 4.09
+ALPHABET INC-CL A GOOGL 3.44
+ASTERA LABS INC ALAB 3.18
+META PLATFORMS INC META 3.16
+MICROSOFT CORP MSFT 3.16
+APPLE INC AAPL 2.93
+AMAZON.COM INC AMZN 2.83
+TAIWAN SEMICONDUCTOR MANUFAC 2330 2.71
+ADVANCED MICRO DEVICES AMD 2.69
+BROADCOM INC AVGO 2.54
+AGIX Performance History as of 06/30/2026:
+Cumulative % Average Annualized %
+3 Mo 6 Mo Since Inception 1 Yr 3 Yr 5 Yr Since Inception
+Fund NAV 44.70% 28.85% 90.15% 50.41% – – 38.96%
+Closing Price 43.09% 29.17% 90.48% 49.58% – – 39.08%
+Solactive Etna Artificial
+General Intelligence Index 43.95% 26.53% 77.34% 40.63% – – 34.08%
+The performance data quoted represents past performance. Past performance does not guarantee future results. The investment return and principal value of an investment will fluctuate so that an investors shares, when sold or
+redeemed, may be worth more or less than their original cost and current performance may be lower or higher than the performance quoted. For performance data current to the most recent month end, please visit
+https://www.kraneshares.com/etf/agix.
+Index returns are for illustrative purposes only. Index performance returns do not reflect any management fees, transaction costs or expenses. Indexes are unmanaged and one cannot invest directly in an index.
+17
+KraneShares
+Empowering investors with access to
+the world’ s most powerful growth themes
+through ETFs, private strategies, and
+innovative investment solutions.
+
+18
+China, Emerging Markets & Regional
+AlternativesIncome & Covered Call
+AI, Robotics & Emerging
+Technology
+KURE Healthcare
+KGRN Clean Technology
+KSTR STAR Market
+KTEC Hang Seng Tech
+KWEB Internet & E-Commerce
+China A SharesKBA / CHIN
+KCAI China Onshore Alpha Index
+AGIX Artificial Intelligence & Technology
+KOID Humanoid & Embodied Intelligence
+Electric Vehicles & Future MobilityKARS
+China Suite
+Future Tech
+Broader Emerging Markets
+KEMQ Emerging Markets Consumer Tech
+KPHO Dragon Capital Vietnam Growth
+KEMX MSCI Emerging Markets ex China
+U.S. & Developed Markets
+KVLE Value Line® Dynamic Dividend Equity
+Hedgeye Hedged EquityKSPY
+Man Buyout Beta IndexBUYO
+Fixed Income
+BNDD Quadratic Deflation ETF
+IVOL
+Quadratic Interest Rate Volatility
+& Inflation Hedge
+KHYB Asia High Income USD Bond
+Sustainable Ultra Short
+DurationKCSH
+KEUA European Carbon Allowance
+Global Carbon StrategyKRBN
+Carbon Credits
+KPDD 2X Long PDD Daily
+KJD 2X Long JD Daily
+KBAB 2X Long BABA Daily
+KMLI 2X Long MELI Daily
+Covered Call & Options Income Managed Futures
+KMLM Mount Lucas Managed Futures
+KWIN Wahed Alternative Income
+KLIP China Internet & Covered Call
+Outcome Based Equity
+KIQQ Nasdaq Buffer & Option Income
+Levered & High-Conviction Exposure
+KBUF 90% KWEB Defined Outcome
+100% KWEB Defined OutcomeKPRO
+Alternative Income
+KCCA California Carbon Allowance
+Extensive ETF Product Suite Spanning High Growth Sectors
+Strategy also available in UCITS / ETC
+KBDU 2X Long BIDU Daily
+19
+Index Definitions:
+Solactive Etna Artificial General Intelligence Index: captures the performance of companies engaged in developing and applying artificial intelligence technologies.
+NASDAQ-100  Index: The Nasdaq 100 is an index that tracks the performance of 100 of the largest and most actively trades stocks on the Nasdaq exchange.
+The S&P 500 Index: The S&P 500 Index is an American stock market index based on the market capitalization of the 500 largest companies having common stock listed on the NYSE or NASDAQ. countries in
+the universe prior to the removal of state-owned enterprises while also limiting sector deviations to 3% of the starting universe.
+Term Definitions:
+Price-to-Earnings Ratio (P/E): A company’s price per share divided by the company’s current earnings per share. The ratio is widely used as a valuation metric.
+Total Addressable Market (TAM): The Total Addressable Market (TAM) is a measure of the total revenue opportunity available for a product or service if it achieved 100% market share.
+Generative AI: Generative AI refers to artificial intelligence systems that create new content, such as text, images, or music, by learning patterns from existing data.
+Neural Networks: Neural networks are computing systems inspired by the human brain's structure that consist of interconnected nodes (neurons) and are used to recognize patterns and solve complex
+problems through learning from data.
+Deep Learning: Deep learning is a subset of machine learning that utilizes neural networks with many layers to analyze and learn from large amounts of data, enabling complex pattern recognition and
+decision-making.
+Large Language Models (LLMs): A large language model is a type of artificial intelligence that uses deep learning techniques to understand and generate human-like text by training on vast amounts of textual
+data.
+Artificial General Intelligence (AGI): Artificial General Intelligence (AGI) refers to a type of artificial intelligence that has the ability to understand, learn, and apply knowledge across a wide range of tasks at a
+level comparable to human intelligence.
+Forward P/E Multiple: The Forward Price to Earnings (PE) Ratio is similar to the price to earnings ratio. The regular P/E ratio is a current stock price over its earnings per share. The forward P/E ratio is a
+current stock's price over its "predicted" earnings per share.
+Gross Margin: The percentage of a company's revenue that's retained after direct expenses such as labor and materials have been subtracted.
+Earnings Before Interest, Taxes, Depreciation, and Amortization (EBITDA): Financial metric that represents the operational profitability of a company
+Compound Annual Growth Rate (CAGR): Mean annual growth rate of an investment over a period longer than one year.
+Total Return: The overall gain or loss on an investment over a period, including both price change (capital appreciation) and any income such as dividends or interest, usually expressed as a percentage.
+Annualized Volatility (Risk): A measure of how much an investment’s returns typically fluctuate over a year, calculated by using the standard deviation of daily return times the square root of 252
+to quantify the asset’s risk.
+Total Return/Risk: A performance metric that divides an investment’s total return by its annualized volatility, indicating how much return is earned per unit of risk taken.
+AI Agents: Software systems that can autonomously perceive context, decide on actions, and interact with digital or physical environments to achieve specific goals.
+Application Programming Interface (API): A defined set of rules and protocols that allows different software applications to communicate with each other and exchange data or functionality.
+Annual Recurring Revenue (ARR): A metric that represents the predictable yearly revenue from subscription-based or recurring contracts, normalized to a 12-month period.
+Run-rate: A projection of a company’s future financial performance that annualizes current revenue or earnings over a longer period, assuming present conditions continue.
+Financing Round: A financing round is a discrete, structured process in which a private company raises capital—typically by issuing equity or convertible securities to investors—at an agreed valuation and set
+of terms.
+20
+Important Notes:
+Carefully consider the Funds’ investment objectives, risk factors, charges and expenses before investing. This and additional information can be
+found in the Funds' full and summary prospectus, which may be obtained by visiting www.kraneshares.com/agix. Read the prospectus carefully
+before investing.
+Risk Disclosures:
+Investing involves risk, including possible loss of principal. There can be no assurance that a Fund will achieve its stated objectives. Indices are unmanaged and do not include the effect of fees. One cannot
+invest directly in an index.
+This information should not be relied upon as research, investment advice, or a recommendation regarding any products, strategies, or any security in particular. This material is strictly for illustrative,
+educational, or informational purposes and is subject to change. Certain content represents an assessment of the market environment at a specific time and is not intended to be a forecast of future events or a
+guarantee of future results; material is as of the dates noted and is subject to change without notice.
+The Fund may invest in derivatives, which are often more volatile than other investments and may magnify the Fund’s gains or losses. A derivative (i.e., futures/forward contracts, swaps, and options) is a
+contract that derives its value from the performance of an underlying asset. The primary risk of derivatives is that changes in the asset’s market value and the derivative may not be proportionate, and some
+derivatives can have the potential for unlimited losses. Derivatives are also subject to liquidity and counterparty risk. The Fund is subject to liquidity risk, meaning that certain investments may become difficult
+to purchase or sell at a reasonable time and price. If a transaction for these securities is large, it may not be possible to initiate, which may cause the Fund to suffer losses. Counterparty risk is the risk of loss in
+the event that the counterparty to an agreement fails to make required payments or otherwise comply with the terms of the derivative.
+AI-exposed companies face profitability challenges due to high research costs, competition, IP reliance, and regulatory risk. Product failures or safety concerns could be detrimental. Identifying AI companies
+accurately is complex. Tech firms face risks of product failure, obsolescence, regulatory impact, and uncertain profitability due to technological advancements and government policies. Certain tech investments
+may lack current profitability and future success is uncertain. The Fund is subject to non-U.S. issuers risk, which may be less liquid than investments in U.S. issuers, may have less governmental regulation and
+oversight, are typically subject to different investor protection standards than U.S. issuers, and the economic instability of the non-U.S. countries. Fluctuations in currency of foreign countries may have an
+adverse effect to domestic currency values. The Fund may invest in Initial Public Offerings (IPOs). Securities issued in IPOs have no trading history, and information about the companies may be available for
+very limited periods. In addition, the prices of securities sold in IPOs may be highly volatile. In addition, as the Fund increases in size, the impact of IPOs on the Fund’s performance will generally decrease.
+Large capitalization companies may struggle to adapt fast, impacting their growth compared to smaller firms, especially in expansive times. This could result in lower stock returns than investing in smaller
+and mid-sized companies. In addition to the normal risks associated with investing, investments in smaller companies typically exhibit higher volatility. The Fund is new and does not yet have a significant
+number of shares outstanding. If the Fund does not grow in size, it will be at greater risk than larger funds of wider bid- ask spreads for its shares, trading at a greater premium or discount to NAV, liquidation
+and/or a trading halt. Narrowly focused investments typically exhibit higher volatility. The Fund’s assets are expected to be concentrated in a sector, industry, market, or group of concentrations to the extent
+that the Underlying Index has such concentrations. The securities or futures in that concentration could react similarly to market developments. Thus, the Fund is subject to loss due to adverse occurrences
+that affect that concentration.
+21
+Risk disclosures continued:
+The Fund may invest in privately-issued and private company securities, which are generally not registered, may carry resale restrictions, and often lack active markets. These investments can be less liquid,
+harder to value, and subject to larger price swings, which may result in delays or higher costs when buying or selling. Private companies may have limited operating histories, smaller or less established
+businesses, fewer financial resources, and less available information. They may be more vulnerable to competition, market conditions, or economic downturns. A liquid market for their securities may never
+develop, and IPOs, if they occur, can be volatile and may negatively affect the Fund’s investment.
+A large number of shares of the Fund are held by a single shareholder or a small group of shareholders. Redemptions from these shareholders can harm Fund performance, especially in declining markets,
+leading to forced sales at disadvantageous prices, increased costs, and adverse tax effects for remaining shareholders. AGIX is non-diversified.
+ETF shares are bought and sold on an exchange at market price (not NAV) and are not individually redeemed from the Fund. However, shares may be redeemed at NAV directly by certain authorized broker-
+dealers (Authorized Participants) in very large creation/redemption units. The returns shown do not represent the returns you would receive if you traded shares at other times. Shares may trade at a premium
+or discount to their NAV in the secondary market. Brokerage commissions will reduce returns. Beginning 12/23/2020, market price returns are based on the official closing price of an ETF share or, if the
+official closing price isn't available, the midpoint between the national best bid and national best offer ("NBBO") as of the time the ETF calculates the current NAV per share. Prior to that date, market price
+returns were based on the midpoint between the Bid and Ask price. NAVs are calculated using prices as of 4:00 PM Eastern Time.
+The KraneShares ETFs and KFA Funds ETFs are distributed by SEI Investments Distribution Company (SIDCO), 1 Freedom Valley Drive, Oaks, PA 19456, which is not affiliated with Krane Funds Advisors, LLC,
+the Investment Adviser for the Funds, or any sub-advisers for the Funds.

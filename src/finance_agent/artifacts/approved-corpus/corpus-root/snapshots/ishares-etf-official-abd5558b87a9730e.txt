@@ -1,0 +1,209 @@
+IEMG
+iShares Core MSCI Emerging Markets ETF
+Fact Sheet as of June 30, 2026
+FUND DESCRIPTION
+The iShares Core MSCI Emerging Markets ETF seeks to track an index composed of large-,
+mid-, and small-cap equities from emerging markets. The fund offers a low-cost way to build
+exposure to emerging economies and seek long-term growth.
+GROWTH OF HYPOTHETICAL $10,000 SINCE INCEPTION
+Fund  Benchmark
+The  Growth  of  $10,000  chart  reflects  a  hypothetical  $10,000  investment  and
+assumes  reinvestment  of  dividends  and  capital  gains.  Fund  expenses,  including
+management fees and other expenses were deducted.
+CALENDAR YEAR PERFORMANCE (%)
+2021 2022 2023 2024 2025
+NAV -0.64 -19.87 11.31 6.92 32.12
+Market Price -0.61 -19.97 11.57 6.51 32.56
+Benchmark -0.28 -19.83 11.67 7.09 31.38
+ANNUALIZED PERFORMANCE (%)
+1y 3y 5y 10y Since
+Inception
+NAV 42.48 22.61 7.46 10.13 6.59
+Market Price 41.50 22.44 7.43 10.02 6.56
+Benchmark 40.30 22.09 7.17 9.97 6.47
+The  performance  quoted  represents  past  performance  and  does  not  guarantee
+future results. Investment return and principal value of an investment will fluctuate
+so that an investor’s shares, when sold or redeemed, may be worth more or less
+than  the  original  cost.  Current  performance  may  be  lower  or  higher  than  the
+performance quoted. Performance data current to the most recent month end may
+be obtained by visiting www.iShares.com  or www.blackrock.com .
+Beginning 8/10/20, the market price returns are calculated using the closing price.
+Prior  to  8/10/20,  the  market  price  returns  were  calculated  using  the  midpoint  of
+the  bid/ask  spread  at  4:00  PM  ET.  The  returns  shown  do  not  represent  the
+returns you would receive if you traded shares at other times.
+RATINGS
+Morningstar  has  awarded  the  Fund  a  BRONZE
+medal (Effective 04/27/2026).†
+Analyst-Driven % : 100.00%
+Data Coverage % : 100.00%
+Overall  Morningstar  Rating  for  iShares  Core
+MSCI Emerging Markets ETF, as of 06/30/2026
+rated  against  688  Diversified  Emerging  Mkts
+Funds based on risk adjusted total return.††
+KEY FACTS
+Asset Class : Equity
+Benchmark : MSCI Emerging Markets
+Investable Market Index (USD) (Net)
+Fund Launch Date : 10/18/2012
+Distribution Frequency : Semi-Annual
+CUSIP : 46434G103
+Shares Outstanding : 1,936,200,000
+Exchange : NYSE Arca
+Net Assets of Fund (M) : $160,718.42
+FEES AND EXPENSES BREAKDOWN
+Expense Ratio 0.09%
+Management Fee 0.09%
+Acquired Fund Fees and
+Expenses
+0.00%
+Other Expenses 0.00%
+FUND CHARACTERISTICS
+30 Day SEC Yield : 1.59%
+Equity Beta (3y) : 0.81
+P/B Ratio : 2.59x
+P/E Ratio : 19.90x
+Standard Deviation (3y) : 15.45%
+Number of Holdings : 2,827
+Contact Us
+For US: 1-800-474-2737 •  ISHARES.COM
+iShares Core MSCI Emerging Markets ETF
+TOP HOLDINGS (%)
+TAIWAN SEMICONDUCTOR MANUFACTURING 13.22%
+SAMSUNG ELECTRONICS LTD 7.15%
+SK HYNIX INC 6.70%
+TENCENT HOLDINGS LTD 2.40%
+ALIBABA GROUP HOLDING LTD 1.41%
+MEDIATEK INC 1.36%
+DELTA ELECTRONICS INC 0.85%
+SAMSUNG ELECTRONICS NON VOTING PRE 0.78%
+SK SQUARE LTD 0.72%
+HON HAI PRECISION INDUSTRY LTD 0.68%
+Total of Portfolio 35.27%
+Holdings are subject to change.
+TOP SECTORS (%)
+Fund
+Information Technology 42.93
+Financials 17.36
+Industrials 7.93
+Consumer Discretionary 7.51
+Materials 5.90
+Communication 5.62
+Health Care 3.10
+Energy 2.92
+Consumer Staples 2.91
+Utilities 1.94
+Other 1.88
+Allocations are subject to change.
+GEOGRAPHIC BREAKDOWN (%)
+Fund
+Taiwan 27.41
+Korea (South) 22.50
+China 17.71
+India 12.24
+Other 7.06
+Brazil 3.71
+South Africa 2.98
+Saudi Arabia 2.48
+Mexico 1.64
+Malaysia 1.15
+United Arab Emirates 1.13
+Allocations are subject to change.
+Contact Us
+For US: 1-800-474-2737 •  ISHARES.COM 4989443
+4989443
+iShares Core MSCI Emerging Markets ETF
+GLOSSARY
+Equity  Beta  (3y): Beta  is  a  measure  of  the  tendency  of  securities  to
+move  with  the  market  as  a  whole.  A  beta  of  1  indicates  that  the
+security's price will move with the market. A beta less than 1 indicates
+the  security  tends  to  be  less  volatile  than  the  market,  while  a  beta
+greater  than  1  indicates  the  security  is  more  volatile  than  the  market.
+Calculated vs. S&P 500.
+P/E Ratio: The price to earnings ratio is a fundamental measure used
+to determine if an investment is valued appropriately. Each holdings' P/
+E  is  the  latest  closing  price  divided  by  the  latest  12  months'  earnings
+per  share.  Negative  earnings  are  excluded,  extraordinary  items  are
+excluded, and P/E ratios over 60 are set to 60.
+Analyst-Driven  %: Analyst  Driven  %  is  the  analyst  input  into  the
+overall  rating  assignment,  including  direct  analyst  coverage  and
+inheritance of an analyst-rated pillar.
+30  Day  SEC  Yield: A  standard  calculation  of  yield  introduced  by  the
+SEC  in  order  to  provide  fairer  comparison  among  funds.  This  yield
+reflects the interest earned after deducting the fund's expenses during
+the  most  recent  30-day  period  by  the  average  investor  in  the  fund.
+Negative 30-Day SEC Yield results when accrued expenses of the past
+30 days exceed the income collected during the past 30 days.
+Number  of  Holdings: The  number  of  holdings  in  the  fund  excluding
+cash positions and derivatives such as futures and currency forwards.
+P/B Ratio: represents the ratio of the current closing price of the share
+to the latest quarter's book value per share.
+Distribution  Frequency: How  often  a  distribution  is  paid  by  the  fund.
+The  most  common  distribution  frequencies  are  annually,  biannually
+and quarterly.
+Data Coverage %:  Data Coverage % is available input data for rating
+calculation at the Pillar level.
+Standard Deviation (3y):  Standard deviation measures how dispersed
+returns  are  around  the  average.  A  higher  standard  deviation  indicates
+that returns are spread out over a larger range of values and thus, more
+volatile.
+IMPORTANT INFORMATION:
+Source: BlackRock, unless otherwise noted.
+Carefully consider the Fund's investment objectives, risk factors, and charges and expenses before investing. This and other information can
+be found in the Fund's prospectus, and if available, summary prospectus, which may be obtained by calling 1-800-iShares (1-800-474-2737)
+or by visiting www.iShares.com or www.blackrock.com. Read the prospectus carefully before investing.
+Investing involves risk, including possible loss of principal.
+†The Morningstar Medalist RatingTM is the summary expression of Morningstar’s forward-looking analysis of investment strategies as offered via
+specific vehicles using a rating scale of Gold, Silver, Bronze, Neutral, and Negative. The Medalist Ratings indicate which investments Morningstar
+believes are likely to outperform a relevant index or peer group average on a risk-adjusted basis over time. Investment products are evaluated on
+three key pillars (People, Parent, and Process) which, when coupled with a fee assessment, forms the basis for Morningstar’s conviction in those
+products’ investment merits and determines the Medalist Rating they’re assigned. Pillar ratings take the form of Low, Below Average, Average,
+Above Average, and High. Pillars may be evaluated via an analyst’s qualitative assessment (either directly to a vehicle the analyst covers or
+indirectly when the pillar ratings of a covered vehicle are mapped to a related uncovered vehicle) or using algorithmic techniques. Vehicles are
+sorted by their expected performance into rating groups defined by their Morningstar Category and their active or passive status. When analysts
+directly cover a vehicle, they assign the three pillar ratings based on their qualitative assessment, subject to the oversight of the Analyst Rating
+Committee, and monitor and reevaluate them at least every 14 months. When the vehicles are covered either indirectly by analysts or by algorithm,
+the ratings are assigned monthly. For more detailed information about these ratings, including their methodology, please go to
+global.morningstar.com/managerdisclosures/. The Morningstar Medalist Ratings are not statements of fact, nor are they credit or risk ratings. The
+Morningstar Medalist Rating (i) should not be used as the sole basis in evaluating an investment product, (ii) involves unknown risks and
+uncertainties which may cause expectations not to occur or to differ significantly from what was expected, (iii) are not guaranteed to be based on
+complete or accurate assumptions or models when determined algorithmically, (iv) involve the risk that the return target will not be met due to
+such things as unforeseen changes in management, technology, economic development, interest rate development, operating and/or material
+costs, competitive pressure, supervisory law, exchange rate, tax rates, exchange rate changes, and/or changes in political and social conditions,
+and (v) should not be considered an offer or solicitation to buy or sell the investment product. A change in the fundamental factors underlying the
+Morningstar Medalist Rating can mean that the rating is subsequently no longer accurate.
+††iShares Core MSCI Emerging Markets ETF received a Morningstar Rating of 3 stars for the 3-year period, 3 stars for the 5-year period and 4 stars
+for the 10-year period, rated against 688, 626 and 464 Diversified Emerging Mkts Funds, respectively. Performance results represent past
+performance and are no guarantee of future results.
+For each U.S.-domiciled fund with at least a 3-year history, Morningstar calculates a Morningstar RatingTM based on a Morningstar Risk-Adjusted
+Return measure that accounts for variation in a fund's monthly performance (including the effects of sales charges, loads and redemption fees),
+placing more emphasis on downward variations and rewarding consistent performance. The top 10% of funds in each category receive five stars,
+the next 22.5% receive four stars, the next 35% receive three stars, the next 22.5% receive two stars and the bottom 10% receive one star. (Each
+share class is counted as a fraction of one fund within this scale and rated separately, which may cause slight variations in the distribution
+percentages.) The Overall Morningstar Rating for a fund is derived from a weighted-average of the performance figures associated with its 3-, 5-
+and 10-year (if applicable) Morningstar Rating metrics.
+Morningstar Ratings are for the share classes cited only; other classes may have different ratings.
+International investing involves risks, including risks related to foreign currency, limited liquidity, less government regulation and the possibility of
+substantial  volatility  due  to  adverse  political,  economic  or  other  developments.  These  risks  often  are  heightened  for  investments  in  emerging/
+developing markets or in concentrations of single countries.
+Diversification may not protect against market risk or loss of principal. Shares of ETFs are bought and sold at market price (not NAV) and are not
+individually redeemed from the fund. Any applicable brokerage commissions will reduce returns.
+Index returns are for illustrative purposes only. Index performance returns do not reflect any management fees or expenses. Returns for net
+indices generally assume the reinvestment of dividends after the deduction of the maximum withholding tax in each country applicable to
+non-residents of the country as determined by the index provider. Such indices use withholding tax rates that are often at a higher rate than
+Contact Us
+For US: 1-800-474-2737 •  ISHARES.COM 4989443
+4989443
+IMPORTANT INFORMATION:
+the rates to which the Fund is subject in each country, including for countries where the Fund is not subject to withholding taxes. When this
+is the case, index performance will be lower than if the index used the Fund's applicable withholding tax rates, if any. Indexes are unmanaged
+and one cannot invest directly in an index. Past performance does not guarantee future results.
+"Acquired  Fund  Fees  and  Expenses"  reflect  the  Fund's  pro  rata  share  of  the  indirect  fees  and  expenses  incurred  by  investing  in  one  or  more
+acquired funds, such as mutual funds, business development companies, or other pooled investment vehicles. AFFE are reflected in the prices of
+the acquired funds and thus included in the total returns of the Fund.
+The iShares Funds are distributed by BlackRock Investments, LLC (together with its affiliates, "BlackRock").
+The iShares Funds are not sponsored, endorsed, issued, sold or promoted by MSCI Inc., nor does this company make any representation regarding
+the advisability of investing in the Funds. BlackRock is not affiliated with MSCI Inc.
+BlackRock provides compensation in connection with obtaining or using third-party ratings and rankings.
+© 2026 BlackRock, Inc. or its affiliates . All rights reserved. iSHARES, iBONDS and BLACKROCK are trademarks of BlackRock, Inc. or its affiliates.
+All other trademarks are those of their respective owners.
+Not FDIC Insured - No Bank Guarantee - May Lose Value

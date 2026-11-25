@@ -1,0 +1,793 @@
+{
+  "activation_gate": {
+    "minimum_hybrid_recall_at_5": 0.8,
+    "passed": true
+  },
+  "artifact_sha256": "f782df683d9fd4535acc45db0cb56c473a6481ef04e6dc493122d5c8c80d9da6",
+  "case_count": 84,
+  "cases": [
+    {
+      "document_ranks": {
+        "bm25": 2,
+        "dense": 1,
+        "hybrid_rrf": 1
+      },
+      "expected_document_id": "ecopro-company-overview-20260824",
+      "id": "DOC-PUB-001"
+    },
+    {
+      "document_ranks": {
+        "bm25": 3,
+        "dense": 1,
+        "hybrid_rrf": 1
+      },
+      "expected_document_id": "ecopro-company-overview-20260824",
+      "id": "DOC-PUB-002"
+    },
+    {
+      "document_ranks": {
+        "bm25": 4,
+        "dense": 1,
+        "hybrid_rrf": 1
+      },
+      "expected_document_id": "ecopro-company-overview-20260824",
+      "id": "DOC-PUB-003"
+    },
+    {
+      "document_ranks": {
+        "bm25": 1,
+        "dense": 2,
+        "hybrid_rrf": 1
+      },
+      "expected_document_id": "fsc-national-growth-fund-structure-20260521",
+      "id": "DOC-PUB-004"
+    },
+    {
+      "document_ranks": {
+        "bm25": 4,
+        "dense": null,
+        "hybrid_rrf": 6
+      },
+      "expected_document_id": "fsc-national-growth-fund-structure-20260521",
+      "id": "DOC-PUB-005"
+    },
+    {
+      "document_ranks": {
+        "bm25": 5,
+        "dense": 4,
+        "hybrid_rrf": 5
+      },
+      "expected_document_id": "fsc-national-growth-fund-structure-20260521",
+      "id": "DOC-PUB-006"
+    },
+    {
+      "document_ranks": {
+        "bm25": 5,
+        "dense": null,
+        "hybrid_rrf": 3
+      },
+      "expected_document_id": "fsc-national-growth-fund-structure-20260521",
+      "id": "DOC-PUB-007"
+    },
+    {
+      "document_ranks": {
+        "bm25": 2,
+        "dense": 2,
+        "hybrid_rrf": 1
+      },
+      "expected_document_id": "fsc-national-growth-fund-trend-20260529",
+      "id": "DOC-PUB-008"
+    },
+    {
+      "document_ranks": {
+        "bm25": 3,
+        "dense": 1,
+        "hybrid_rrf": 1
+      },
+      "expected_document_id": "fsc-national-growth-fund-trend-20260529",
+      "id": "DOC-PUB-009"
+    },
+    {
+      "document_ranks": {
+        "bm25": 3,
+        "dense": 6,
+        "hybrid_rrf": 4
+      },
+      "expected_document_id": "fsc-national-growth-fund-trend-20260529",
+      "id": "DOC-PUB-010"
+    },
+    {
+      "document_ranks": {
+        "bm25": 1,
+        "dense": 8,
+        "hybrid_rrf": 1
+      },
+      "expected_document_id": "fsc-national-growth-fund-trend-20260529",
+      "id": "DOC-PUB-011"
+    },
+    {
+      "document_ranks": {
+        "bm25": 1,
+        "dense": 6,
+        "hybrid_rrf": 3
+      },
+      "expected_document_id": "samsungfund-kodex-pension-guide-20260416",
+      "id": "DOC-PUB-012"
+    },
+    {
+      "document_ranks": {
+        "bm25": 5,
+        "dense": 2,
+        "hybrid_rrf": 1
+      },
+      "expected_document_id": "samsungfund-kodex-pension-guide-20260416",
+      "id": "DOC-PUB-013"
+    },
+    {
+      "document_ranks": {
+        "bm25": 1,
+        "dense": 1,
+        "hybrid_rrf": 1
+      },
+      "expected_document_id": "samsungfund-kodex-pension-guide-20260416",
+      "id": "DOC-PUB-014"
+    },
+    {
+      "document_ranks": {
+        "bm25": 1,
+        "dense": 1,
+        "hybrid_rrf": 1
+      },
+      "expected_document_id": "samsungfund-kodex-battery-industry-20260824",
+      "id": "DOC-PUB-015"
+    },
+    {
+      "document_ranks": {
+        "bm25": 1,
+        "dense": 1,
+        "hybrid_rrf": 1
+      },
+      "expected_document_id": "samsungfund-kodex-battery-materials-20260824",
+      "id": "DOC-PUB-016"
+    },
+    {
+      "document_ranks": {
+        "bm25": 1,
+        "dense": 1,
+        "hybrid_rrf": 1
+      },
+      "expected_document_id": "moonshot-kimi-k2-release-20250801",
+      "id": "DOC-PUB-017"
+    },
+    {
+      "document_ranks": {
+        "bm25": 1,
+        "dense": 1,
+        "hybrid_rrf": 1
+      },
+      "expected_document_id": "moonshot-kimi-k2-release-20250801",
+      "id": "DOC-PUB-018"
+    },
+    {
+      "document_ranks": {
+        "bm25": 1,
+        "dense": 1,
+        "hybrid_rrf": 1
+      },
+      "expected_document_id": "moonshot-kimi-k2-release-20250801",
+      "id": "DOC-PUB-019"
+    },
+    {
+      "document_ranks": {
+        "bm25": 1,
+        "dense": 1,
+        "hybrid_rrf": 1
+      },
+      "expected_document_id": "phase4-globalx-aiq-20250331",
+      "id": "DOC-PUB-020"
+    },
+    {
+      "document_ranks": {
+        "bm25": 14,
+        "dense": 7,
+        "hybrid_rrf": 4
+      },
+      "expected_document_id": "phase4-globalx-aiq-20250331",
+      "id": "DOC-PUB-021"
+    },
+    {
+      "document_ranks": {
+        "bm25": 1,
+        "dense": 1,
+        "hybrid_rrf": 1
+      },
+      "expected_document_id": "phase4-globalx-aiq-20250331",
+      "id": "DOC-PUB-022"
+    },
+    {
+      "document_ranks": {
+        "bm25": 1,
+        "dense": 1,
+        "hybrid_rrf": 1
+      },
+      "expected_document_id": "phase4-globalx-botz-20250331",
+      "id": "DOC-PUB-023"
+    },
+    {
+      "document_ranks": {
+        "bm25": 4,
+        "dense": 1,
+        "hybrid_rrf": 1
+      },
+      "expected_document_id": "phase4-globalx-botz-20250331",
+      "id": "DOC-PUB-024"
+    },
+    {
+      "document_ranks": {
+        "bm25": 1,
+        "dense": 1,
+        "hybrid_rrf": 1
+      },
+      "expected_document_id": "phase4-globalx-botz-20250331",
+      "id": "DOC-PUB-025"
+    },
+    {
+      "document_ranks": {
+        "bm25": 1,
+        "dense": 1,
+        "hybrid_rrf": 1
+      },
+      "expected_document_id": "phase4-globalx-bug-20250331",
+      "id": "DOC-PUB-026"
+    },
+    {
+      "document_ranks": {
+        "bm25": 3,
+        "dense": 1,
+        "hybrid_rrf": 1
+      },
+      "expected_document_id": "phase4-globalx-bug-20250331",
+      "id": "DOC-PUB-027"
+    },
+    {
+      "document_ranks": {
+        "bm25": 1,
+        "dense": 1,
+        "hybrid_rrf": 1
+      },
+      "expected_document_id": "phase4-globalx-bug-20250331",
+      "id": "DOC-PUB-028"
+    },
+    {
+      "document_ranks": {
+        "bm25": 1,
+        "dense": 1,
+        "hybrid_rrf": 1
+      },
+      "expected_document_id": "phase4-globalx-clou-20250331",
+      "id": "DOC-PUB-029"
+    },
+    {
+      "document_ranks": {
+        "bm25": 6,
+        "dense": 1,
+        "hybrid_rrf": 1
+      },
+      "expected_document_id": "phase4-globalx-clou-20250331",
+      "id": "DOC-PUB-030"
+    },
+    {
+      "document_ranks": {
+        "bm25": 1,
+        "dense": 1,
+        "hybrid_rrf": 1
+      },
+      "expected_document_id": "phase4-globalx-clou-20250331",
+      "id": "DOC-PUB-031"
+    },
+    {
+      "document_ranks": {
+        "bm25": 1,
+        "dense": 1,
+        "hybrid_rrf": 1
+      },
+      "expected_document_id": "phase4-globalx-copx-20250331",
+      "id": "DOC-PUB-032"
+    },
+    {
+      "document_ranks": {
+        "bm25": 3,
+        "dense": 1,
+        "hybrid_rrf": 1
+      },
+      "expected_document_id": "phase4-globalx-copx-20250331",
+      "id": "DOC-PUB-033"
+    },
+    {
+      "document_ranks": {
+        "bm25": 1,
+        "dense": 1,
+        "hybrid_rrf": 1
+      },
+      "expected_document_id": "phase4-globalx-copx-20250331",
+      "id": "DOC-PUB-034"
+    },
+    {
+      "document_ranks": {
+        "bm25": 1,
+        "dense": 1,
+        "hybrid_rrf": 1
+      },
+      "expected_document_id": "phase4-globalx-driv-20250331",
+      "id": "DOC-PUB-035"
+    },
+    {
+      "document_ranks": {
+        "bm25": 3,
+        "dense": 1,
+        "hybrid_rrf": 2
+      },
+      "expected_document_id": "phase4-globalx-driv-20250331",
+      "id": "DOC-PUB-036"
+    },
+    {
+      "document_ranks": {
+        "bm25": 1,
+        "dense": 1,
+        "hybrid_rrf": 1
+      },
+      "expected_document_id": "phase4-globalx-driv-20250331",
+      "id": "DOC-PUB-037"
+    },
+    {
+      "document_ranks": {
+        "bm25": 1,
+        "dense": 1,
+        "hybrid_rrf": 1
+      },
+      "expected_document_id": "phase4-globalx-finx-20250331",
+      "id": "DOC-PUB-038"
+    },
+    {
+      "document_ranks": {
+        "bm25": 1,
+        "dense": 1,
+        "hybrid_rrf": 1
+      },
+      "expected_document_id": "phase4-globalx-finx-20250331",
+      "id": "DOC-PUB-039"
+    },
+    {
+      "document_ranks": {
+        "bm25": 1,
+        "dense": 1,
+        "hybrid_rrf": 1
+      },
+      "expected_document_id": "phase4-globalx-finx-20250331",
+      "id": "DOC-PUB-040"
+    },
+    {
+      "document_ranks": {
+        "bm25": 1,
+        "dense": 1,
+        "hybrid_rrf": 1
+      },
+      "expected_document_id": "phase4-globalx-gnom-20250331",
+      "id": "DOC-PUB-041"
+    },
+    {
+      "document_ranks": {
+        "bm25": 7,
+        "dense": 1,
+        "hybrid_rrf": 1
+      },
+      "expected_document_id": "phase4-globalx-gnom-20250331",
+      "id": "DOC-PUB-042"
+    },
+    {
+      "document_ranks": {
+        "bm25": 1,
+        "dense": 1,
+        "hybrid_rrf": 1
+      },
+      "expected_document_id": "phase4-globalx-gnom-20250331",
+      "id": "DOC-PUB-043"
+    },
+    {
+      "document_ranks": {
+        "bm25": 1,
+        "dense": 1,
+        "hybrid_rrf": 1
+      },
+      "expected_document_id": "phase4-globalx-hero-20250331",
+      "id": "DOC-PUB-044"
+    },
+    {
+      "document_ranks": {
+        "bm25": 4,
+        "dense": 1,
+        "hybrid_rrf": 1
+      },
+      "expected_document_id": "phase4-globalx-hero-20250331",
+      "id": "DOC-PUB-045"
+    },
+    {
+      "document_ranks": {
+        "bm25": 1,
+        "dense": 1,
+        "hybrid_rrf": 1
+      },
+      "expected_document_id": "phase4-globalx-hero-20250331",
+      "id": "DOC-PUB-046"
+    },
+    {
+      "document_ranks": {
+        "bm25": 1,
+        "dense": 1,
+        "hybrid_rrf": 1
+      },
+      "expected_document_id": "phase4-globalx-lit-20250331",
+      "id": "DOC-PUB-047"
+    },
+    {
+      "document_ranks": {
+        "bm25": 4,
+        "dense": 1,
+        "hybrid_rrf": 1
+      },
+      "expected_document_id": "phase4-globalx-lit-20250331",
+      "id": "DOC-PUB-048"
+    },
+    {
+      "document_ranks": {
+        "bm25": 1,
+        "dense": 1,
+        "hybrid_rrf": 1
+      },
+      "expected_document_id": "phase4-globalx-lit-20250331",
+      "id": "DOC-PUB-049"
+    },
+    {
+      "document_ranks": {
+        "bm25": 1,
+        "dense": 1,
+        "hybrid_rrf": 1
+      },
+      "expected_document_id": "phase4-globalx-snsr-20250331",
+      "id": "DOC-PUB-050"
+    },
+    {
+      "document_ranks": {
+        "bm25": 1,
+        "dense": 3,
+        "hybrid_rrf": 1
+      },
+      "expected_document_id": "phase4-globalx-snsr-20250331",
+      "id": "DOC-PUB-051"
+    },
+    {
+      "document_ranks": {
+        "bm25": 1,
+        "dense": 1,
+        "hybrid_rrf": 1
+      },
+      "expected_document_id": "phase4-globalx-snsr-20250331",
+      "id": "DOC-PUB-052"
+    },
+    {
+      "document_ranks": {
+        "bm25": 1,
+        "dense": 1,
+        "hybrid_rrf": 1
+      },
+      "expected_document_id": "phase4-globalx-ura-20250331",
+      "id": "DOC-PUB-053"
+    },
+    {
+      "document_ranks": {
+        "bm25": 2,
+        "dense": 1,
+        "hybrid_rrf": 1
+      },
+      "expected_document_id": "phase4-globalx-ura-20250331",
+      "id": "DOC-PUB-054"
+    },
+    {
+      "document_ranks": {
+        "bm25": 1,
+        "dense": 1,
+        "hybrid_rrf": 1
+      },
+      "expected_document_id": "phase4-globalx-ura-20250331",
+      "id": "DOC-PUB-055"
+    },
+    {
+      "document_ranks": {
+        "bm25": 1,
+        "dense": 1,
+        "hybrid_rrf": 1
+      },
+      "expected_document_id": "phase4-tiger-battery-lev-20240531",
+      "id": "DOC-PUB-056"
+    },
+    {
+      "document_ranks": {
+        "bm25": 1,
+        "dense": 9,
+        "hybrid_rrf": 1
+      },
+      "expected_document_id": "phase4-tiger-battery-lev-20240531",
+      "id": "DOC-PUB-057"
+    },
+    {
+      "document_ranks": {
+        "bm25": 1,
+        "dense": 1,
+        "hybrid_rrf": 1
+      },
+      "expected_document_id": "phase4-tiger-battery-lev-20240531",
+      "id": "DOC-PUB-058"
+    },
+    {
+      "document_ranks": {
+        "bm25": 1,
+        "dense": 1,
+        "hybrid_rrf": 1
+      },
+      "expected_document_id": "phase4-tiger-semi-20250630",
+      "id": "DOC-PUB-059"
+    },
+    {
+      "document_ranks": {
+        "bm25": 1,
+        "dense": 1,
+        "hybrid_rrf": 1
+      },
+      "expected_document_id": "phase4-tiger-semi-20250630",
+      "id": "DOC-PUB-060"
+    },
+    {
+      "document_ranks": {
+        "bm25": 1,
+        "dense": 2,
+        "hybrid_rrf": 1
+      },
+      "expected_document_id": "phase4-tiger-semi-20250630",
+      "id": "DOC-PUB-061"
+    },
+    {
+      "document_ranks": {
+        "bm25": 1,
+        "dense": 1,
+        "hybrid_rrf": 1
+      },
+      "expected_document_id": "phase4-tiger-semi-lev-20250530",
+      "id": "DOC-PUB-062"
+    },
+    {
+      "document_ranks": {
+        "bm25": 1,
+        "dense": 1,
+        "hybrid_rrf": 1
+      },
+      "expected_document_id": "phase4-tiger-semi-lev-20250530",
+      "id": "DOC-PUB-063"
+    },
+    {
+      "document_ranks": {
+        "bm25": 2,
+        "dense": 1,
+        "hybrid_rrf": 2
+      },
+      "expected_document_id": "phase4-tiger-semi-lev-20250530",
+      "id": "DOC-PUB-064"
+    },
+    {
+      "document_ranks": {
+        "bm25": 1,
+        "dense": 1,
+        "hybrid_rrf": 1
+      },
+      "expected_document_id": "open-dart-20250620000104",
+      "id": "DOC-PUB-101"
+    },
+    {
+      "document_ranks": {
+        "bm25": 5,
+        "dense": 1,
+        "hybrid_rrf": 1
+      },
+      "expected_document_id": "open-dart-20250707000186",
+      "id": "DOC-PUB-102"
+    },
+    {
+      "document_ranks": {
+        "bm25": 1,
+        "dense": 1,
+        "hybrid_rrf": 1
+      },
+      "expected_document_id": "open-dart-20250910000621",
+      "id": "DOC-PUB-103"
+    },
+    {
+      "document_ranks": {
+        "bm25": 5,
+        "dense": 1,
+        "hybrid_rrf": 2
+      },
+      "expected_document_id": "open-dart-20260121000497",
+      "id": "DOC-PUB-104"
+    },
+    {
+      "document_ranks": {
+        "bm25": 1,
+        "dense": 1,
+        "hybrid_rrf": 1
+      },
+      "expected_document_id": "open-dart-20260127000429",
+      "id": "DOC-PUB-105"
+    },
+    {
+      "document_ranks": {
+        "bm25": 5,
+        "dense": 1,
+        "hybrid_rrf": 1
+      },
+      "expected_document_id": "open-dart-20260211001111",
+      "id": "DOC-PUB-106"
+    },
+    {
+      "document_ranks": {
+        "bm25": 1,
+        "dense": 1,
+        "hybrid_rrf": 1
+      },
+      "expected_document_id": "open-dart-20260527000588",
+      "id": "DOC-PUB-107"
+    },
+    {
+      "document_ranks": {
+        "bm25": 1,
+        "dense": 1,
+        "hybrid_rrf": 1
+      },
+      "expected_document_id": "open-dart-20260609000513",
+      "id": "DOC-PUB-108"
+    },
+    {
+      "document_ranks": {
+        "bm25": 1,
+        "dense": 1,
+        "hybrid_rrf": 1
+      },
+      "expected_document_id": "open-dart-20260713000459",
+      "id": "DOC-PUB-109"
+    },
+    {
+      "document_ranks": {
+        "bm25": 1,
+        "dense": 1,
+        "hybrid_rrf": 1
+      },
+      "expected_document_id": "open-dart-20260727000377",
+      "id": "DOC-PUB-110"
+    },
+    {
+      "document_ranks": {
+        "bm25": 4,
+        "dense": 1,
+        "hybrid_rrf": 2
+      },
+      "expected_document_id": "open-dart-20260814002198",
+      "id": "DOC-PUB-111"
+    },
+    {
+      "document_ranks": {
+        "bm25": 2,
+        "dense": 1,
+        "hybrid_rrf": 1
+      },
+      "expected_document_id": "open-dart-20260814002522",
+      "id": "DOC-PUB-112"
+    },
+    {
+      "document_ranks": {
+        "bm25": 1,
+        "dense": 1,
+        "hybrid_rrf": 1
+      },
+      "expected_document_id": "open-dart-20260814003715",
+      "id": "DOC-PUB-113"
+    },
+    {
+      "document_ranks": {
+        "bm25": 1,
+        "dense": 1,
+        "hybrid_rrf": 1
+      },
+      "expected_document_id": "open-dart-20260814003574",
+      "id": "DOC-PUB-114"
+    },
+    {
+      "document_ranks": {
+        "bm25": 1,
+        "dense": 2,
+        "hybrid_rrf": 1
+      },
+      "expected_document_id": "open-dart-20260814003422",
+      "id": "DOC-PUB-115"
+    },
+    {
+      "document_ranks": {
+        "bm25": 1,
+        "dense": 1,
+        "hybrid_rrf": 1
+      },
+      "expected_document_id": "open-dart-20260814004019",
+      "id": "DOC-PUB-116"
+    },
+    {
+      "document_ranks": {
+        "bm25": 1,
+        "dense": 1,
+        "hybrid_rrf": 1
+      },
+      "expected_document_id": "open-dart-20260819000378",
+      "id": "DOC-PUB-117"
+    },
+    {
+      "document_ranks": {
+        "bm25": 2,
+        "dense": 1,
+        "hybrid_rrf": 1
+      },
+      "expected_document_id": "open-dart-20260814003151",
+      "id": "DOC-PUB-118"
+    },
+    {
+      "document_ranks": {
+        "bm25": 1,
+        "dense": 1,
+        "hybrid_rrf": 1
+      },
+      "expected_document_id": "open-dart-20260814002500",
+      "id": "DOC-PUB-119"
+    },
+    {
+      "document_ranks": {
+        "bm25": 3,
+        "dense": 1,
+        "hybrid_rrf": 1
+      },
+      "expected_document_id": "open-dart-20260814001979",
+      "id": "DOC-PUB-120"
+    }
+  ],
+  "metrics": {
+    "bm25": {
+      "mrr": 0.7668367346938775,
+      "recall_at_3": 0.8214285714285714,
+      "recall_at_5": 0.9642857142857143,
+      "top1_accuracy": 0.6666666666666666
+    },
+    "dense": {
+      "mrr": 0.8785194633408919,
+      "recall_at_3": 0.9047619047619048,
+      "recall_at_5": 0.9166666666666666,
+      "top1_accuracy": 0.8333333333333334
+    },
+    "hybrid_rrf": {
+      "mrr": 0.923015873015873,
+      "recall_at_3": 0.9523809523809523,
+      "recall_at_5": 0.9880952380952381,
+      "top1_accuracy": 0.8809523809523809
+    }
+  },
+  "report_kind": "document_dense_public_calibration_not_blind",
+  "schema_version": "1.0",
+  "selected_policy": {
+    "minimum_dense_margin": 0.03,
+    "minimum_dense_score": 0.55
+  },
+  "suite_id": "document-dense-public-calibration-v2"
+}

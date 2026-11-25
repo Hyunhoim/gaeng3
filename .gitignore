@@ -26,33 +26,9 @@ htmlcov/
 .venv/
 venv/
 
-# Frontend
-node_modules/
-.next/
-out/
-coverage/
-
 # Logs
 *.log
 logs/
 
-# Locally held keys/source for the sealed safety-blind evaluation.
-# Public questions and encrypted expectations are versioned separately.
-src/finance_agent/evaluation/safety_blind/.private/
-
-# Generated local evaluation observations and rendered reports. Keep the
-# reusable suites and evaluator code in Git, but never commit raw responses.
-src/finance_agent/evaluation/baselines/document-dense-public-calibration-kure-*.json
-src/finance_agent/evaluation/baselines/kure-schema-dense-*.json
-src/finance_agent/evaluation/baselines/schema-dense-final-runtime-probe-*.json
-src/finance_agent/reports/internal-100-*.json
-src/finance_agent/reports/internal-100-*.html
-
-# Generated immutable release artifacts. They are built only from a clean
-# checkout and distributed through the deployment control plane, not Git.
+# Generated release artifacts (built at deploy time, not tracked)
 src/fastapi_backend/release/*.json
-
-# Local Codex/research workspaces. These may contain official databases,
-# raw corpora, evaluation predictions, model caches, or approval receipts.
-/_workspace/
-/finance_agent/

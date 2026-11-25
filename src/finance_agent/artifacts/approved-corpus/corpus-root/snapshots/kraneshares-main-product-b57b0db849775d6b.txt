@@ -1,0 +1,136 @@
+KraneShares California Carbon Allowance Strategy ETF
+KCCA is a carbon ETF providing targeted exposure to the California Carbon Allowance
+(CCA) cap-and-invest program, one of the world's most liquid and fastest-growing carbon
+markets. KCCA is benchmarked to the S&P Carbon Credit CCA Excess Return Index, which
+tracks the most traded CCA futures contracts.
+Why KCCA?
+Structural growth opportunity: Access an asset class with regulatory-driven supply
+constraints that help support long-term structural upside potential.
+Diversification: Low correlations to major assets, including just 0.1 to US large cap.1
+Inflation resilience: Potential inflation hedge with a downside floor that rises annually
+by 5% plus the Consumer Price Index (CPI).
+Market impact: Supports price discovery and market liquidity in one of the state’s
+leading tools for state-economy-wide decarbonization.
+Global relevance: The California carbon allowance market covers ~80% of the state’s
+greenhouse gas (GHG) emissions  across the world’s fourth-largest economy , with
+nearly $60 billion in trading volume in 2025,  making it the second-largest carbon
+market by trading volume globally.
+2 3
+1
+Fund Details Data as of 07/31/2026
+Primary Exchange NYSE Arca, Inc.
+CUSIP 500767553
+ISIN US5007675532
+Total Annual Fund Operating Expense 0.95%
+Inception Date 10/04/2021
+Distribution Frequency Quarterly
+Underlying Index S&P Carbon Credit CCA Excess
+Return Index
+Net Assets $120,123,554
+What is California’s cap-and-invest market?
+Established in 2013 and recently extended through 2045,  the programme operates under a declining emissions cap, tightening supply over time while demand is driven by mandatory
+participation from large emitters that acquire allowances through auctions or secondary markets.
+4
+As government-mandated and regulated programmes, cap-and-invest creates transparent and liquid markets that incentivise companies to pursue the most cost-effective emissions
+reduction strategies while driving broader industry innovation.
+The programme’s annual declining cap aligns with the state’s statutory target of reducing emissions by 40% of 1990 levels by 2030 and achieving carbon neutrality by 2045.4
+CCA auction proceeds fund community programs and provide utility bill rebates for households and small businesses.
+By pairing KCCA with other KraneShares carbon funds, investors can customize their allocation to the global carbon credit market:
+The KraneShares Global Carbon Strategy ETF (KRBN) offers broad exposure to carbon allowances by tracking the major global cap-and-trade programs: European Union Allowances
+(EUA), California Carbon Allowances (CCA), and the Regional Greenhouse Gas Initiative (RGGI).
+1. Data from Bloomberg since fund index inception to 3/31/2026, based on monthly correlations of KCCA to the S&P 500 Index ("US large cap"). The S&P 500 is widely regarded
+as the best single gauge of large-cap U.S. equities. The index includes 500 leading companies and covers approximately 80% of available market capitalization. The performance
+data quoted represents past performance, and current returns may be higher or lower. Past performance does not guarantee future results.
+2. Congressional Research Service. The California Cap‑and‑Trade Program: Overview and Considerations for Congress. CRS Report R48314, 12/18/2024. Library of Congress.
+3. Governor Gavin Newsom, “California is now the 4th largest economy in the world,” 04/23/2025.
+4. International Carbon Action Partnership, “California extends cap-and-trade to 2045, renames program “Cap-and-Invest,” 9/29/2025.
+KCCA Performance History:
+  Cumulative %
+Data as of month end: 07/31/2026
+Average Annualized %
+Data as of month end: 07/31/2026
+1 Mo 3 Mo YTD Since
+Inception 1 Yr 3 Yr 5 Yr Since
+Inception
+Fund NAV -0.65% 12.88% 0.65% -7.33% 12.28% -7.46% – -1.57%
+Closing Price -0.41% 12.93% 0.77% -7.17% 12.71% -7.42% – -1.53%
+Underlying Index -0.85% 12.23% -0.67% -3.27% 10.83% -6.61% – -0.69%
+The performance data quoted represents past performance. Past performance does not guarantee future results. The investment return and principal value of an investment
+will fluctuate so that an investors shares, when sold or redeemed, may be worth more or less than their original cost and current performance may be lower or higher than
+the performance quoted. For performance data current to the most recent quarter end, please visit kraneshares.com/etf/kcca.
+Index returns are for illustrative purposes only. Index performance returns do not reflect any management fees, transaction costs or expenses. Indexes are unmanaged and one
+cannot invest directly in an index.
+Contact us:
++(1) 855 8KRANE8
+info@kraneshares.com
+
+KCCA
+Holdings and Exposures of the KraneShares California Carbon Allowance Strategy ETF
+Carbon Allowance Exposures as of 07/31/2026 Identifier Position Current Exposure($) % NAV
+California Carbon Allowance (CCA) Vintage 2026 Future KBCZ26 Comdty 3,480 113,726,400 100%
+113,726,400 100%
+Collateral and Currency Management as of 07/31/2026 Identifier Position Current Notional($) % NAV
+KraneShares Sustainable Ultra Short Duration Index ETF 500767355 3,638,400 91,141,920 80.14%
+USD Cash & Equivalents** USD 18,885,004 18,885,004 16.61%
+State Street Institutional U.S. Government Money Market Fund GVMXX 3,276,840 3,276,839 2.88%
+113,303,763 100%
+Holdings, carbon allowance exposures, and collateral are subject to change.
+**Includes USD cash deposits & cash in margin accounts ($18,885,004)
+About KraneShares
+Krane Funds Advisors, LLC is the investment manager for KraneShares ETFs. KraneShares offers innovative investment solutions tailored to three key pillars: China, Climate, and
+Alternatives. Our team is determined to provide industry-leading, differentiated, and high-conviction investment strategies that offer access to key market trends. Our mission is to
+empower investors with the knowledge and tools necessary to capture the importance of these themes as an essential element of a well-designed investment portfolio.
+About Climate Finance Partners
+Climate Finance Partners serves as the sub-adviser of the Fund. Climate Finance Partners delivers innovative climate finance solutions and investment products to address capital
+needs for emerging environmental challenges. CLIFI is led by a team of investment professionals with deep experience in the fields of traditional investment and environmental finance.
+Contact us:
++(1) 855 8KRANE8
+info@kraneshares.com
+
+KCCA
+Carefully consider the Funds’ investment objectives, risk factors, charges and expenses before investing. This and additional information can be found in the Funds' full and
+summary prospectus, which may be obtained by visiting kraneshares.com/etf/kcca. Read the prospectus carefully before investing.
+Risk Disclosures:
+Investing involves risk, including possible loss of principal. There can be no assurance that a Fund will achieve its stated objectives.
+The Fund may invest in derivatives, which are often more volatile than other investments and may magnify the Fund’s gains or losses. A derivative (i.e., futures/forward
+contracts, swaps, and options) is a contract that derives its value from the performance of an underlying asset. The primary risk of derivatives is that changes in the asset’s
+market value and the derivative may not be proportionate, and some derivatives can have the potential for unlimited losses. Derivatives are also subject to liquidity and
+counterparty risk. The Fund is subject to liquidity risk, meaning that certain investments may become difficult to purchase or sell at a reasonable time and price. If a transaction
+for these securities is large, it may not be possible to initiate, which may cause the Fund to suffer losses. Counterparty risk is the risk of loss in the event that the counterparty to
+an agreement fails to make required payments or otherwise comply with the terms of the derivative.
+The Fund relies on the existence of cap and trade regimes. There is no assurance that cap and trade regimes will continue to exist, or that they will prove to be an effective
+method of reduction in GHG emissions. Changes in U.S. law and related regulations may impact the way the Fund operates, increase Fund costs and/or change the competitive
+landscape. New technologies may arise that may diminish or eliminate the need for cap and trade markets. Ultimately, the cost of emissions credits is determined by the cost of
+actually reducing emissions levels. If the price of credits becomes too high, it will be more economical for companies to develop or invest in green technologies, thereby
+suppressing the demand for credits. Fluctuations in currency of foreign countries may have an adverse effect to domestic currency values. The use of futures contracts is subject
+to special risk considerations. The primary risks associated with the use of futures contracts include: (a) an imperfect correlation between the change in market value of the
+reference asset and the price of the futures contract; (b) possible lack of a liquid secondary market for a futures contract and the resulting inability to close a futures contract
+when desired; (c) losses caused by unanticipated market movements, which are potentially unlimited; (d) the inability to predict correctly the direction of market prices, interest
+rates, currency exchange rates and other economic factors; and (e) if the Fund has insufficient cash, it may have to sell securities or financial instruments from its portfolio to
+meet daily variation margin requirements, which may lead to the Fund selling securities or financial instruments at a loss.
+The Fund invests through a subsidiary, and is indirectly exposed to the risks associated with the Subsidiary’s investments. Since the Subsidiary is organized under the law of the
+Cayman Islands and is not registered with the SEC under the Investment Company Act of 1940, as such the Fund will not receive all of the protections offered to shareholders of
+registered investment companies. The Fund and the Subsidiary will be considered commodity pools upon commencement of operations, and each will be subject to regulation
+under the Commodity Exchange Act and CFTC rules. Commodity pools are subject to additional laws, regulations and enforcement policies, which may increase compliance costs
+and may affect the operations and performance of the Fund and the Subsidiary. Futures and other contracts may have to be liquidated at disadvantageous times or prices to
+prevent the Fund from exceeding any applicable position limits established by the CFTC. The value of a commodity-linked derivative investment typically is based upon the price
+movements of a physical commodity and may be affected by changes in overall market movements, volatility of the Index, changes in interest rates, or factors affecting a
+particular industry or commodity.
+The Fund is subject to interest rate risk, which is the chance that bonds will decline in value as interest rates rise. Narrowly focused investments typically exhibit higher volatility.
+The Fund’s assets are expected to be concentrated in a sector, industry, market, or group of concentrations to the extent that the Underlying Index has such concentrations. The
+securities or futures in that concentration could react similarly to market developments. Thus, the Fund is subject to loss due to adverse occurrences that affect that
+concentration. KCCA is non-diversified.
+ETF shares are bought and sold on an exchange at market price (not NAV) and are not individually redeemed from the Fund. However, shares may be redeemed at NAV directly
+by certain authorized broker-dealers (Authorized Participants) in very large creation/redemption units. The returns shown do not represent the returns you would receive if you
+traded shares at other times. Shares may trade at a premium or discount to their NAV in the secondary market. Brokerage commissions will reduce returns. Beginning
+12/23/2020, market price returns are based on the official closing price of an ETF share or, if the official closing price isn't available, the midpoint between the national best bid
+and national best offer ("NBBO") as of the time the ETF calculates the current NAV per share. Prior to that date, market price returns were based on the midpoint between the Bid
+and Ask price. NAVs are calculated using prices as of 4:00 PM Eastern Time.
+The KraneShares ETFs and KFA Funds ETFs are distributed by SEI Investments Distribution Company (SIDCO), 1 Freedom Valley Drive, Oaks, PA 19456, which is not affiliated
+with Krane Funds Advisors, LLC, the Investment Adviser for the Funds, or any sub-advisers for the Funds.
+[R-SEI-KS]
+Contact us:
++(1) 855 8KRANE8
+info@kraneshares.com
+
+KCCA

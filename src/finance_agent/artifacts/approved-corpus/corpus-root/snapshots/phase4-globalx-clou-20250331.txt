@@ -1,0 +1,123 @@
+CLOU
+Global X Cloud Computing ETF
+REASONS TO CONSIDER
+High Growth Potential
+Increasing AI investments are likely to boost cloud’s share of IT spending from an estimated 15% in
+2023 to an estimated 40% in 2030.(1)
+Structural Tailwinds
+More data requires more cloud resources. By 2030, AI could drive over half of all online data
+creation, potentially benefitting cloud providers.(2)
+Unconstrained Approach
+CLOU invests without regard for sector or geography, and its most innovative companies include
+both household names and newcomers.
+ETF Category: Thematic -
+Disruptive Technology
+As of 3/31/2025
+KEY INFORMATION
+Inception Date 04/12/2019
+Underlying Index Indxx Global Cloud Computing
+Index
+Number of Holdings 37
+Assets Under Management $307.43 mil
+Total Expense Ratio 0.68%
+Distribution Frequency Semi-Annually
+TRADING DETAILS
+Ticker CLOU
+CUSIP 37954Y442
+Exchange NASDAQ
+Bloomberg IOPV Ticker CLOUIV
+Index Ticker ICLOU
+PERFORMANCE (%)
+ 1M YTD 1Y 3Y 5Y Since
+Inception
+NAV -11.00% -12.59% -3.85% -1.57% 7.83% 6.01%
+Market
+Price -10.76% -12.40% -3.49% -1.54% 7.87% 6.10%
+Index -10.97% -12.46% -3.24% -0.91% 8.52% 6.68%
+TOP 10 HOLDINGS (%) Holdings Subject to Change
+Snowflake Inc-class A 5.05%
+Shopify Inc - Class A 4.84%
+Twilio Inc - A 4.81%
+Zscaler Inc 4.35%
+Qualys Inc 4.19%
+Paycom Software Inc 4.14%
+Dropbox Inc-class A 4.10%
+Hubspot Inc 4.08%
+Procore Technologies Inc 3.99%
+Workday Inc-class A 3.96%
+The performance data quoted represents past performance and does not guarantee future results. Investment return and principal value of an investment will fluctuate so that an
+investor’s shares, when sold or redeemed, may be worth more or less than their original cost. Current performance may be higher or lower than the performance quoted. High short-
+term performance, when observed, is unusual and investors should not expect such performance to be repeated. Returns for periods greater than one year are annualized.
+For performance data current to the most recent month end, please call 1-888-493-8631, or visit www.globalxetfs.com.
+INDUSTRY BREAKDOWN (%)
+Application Software
+43.57%
+Internet Services & Infrastruc
+28.75%
+Systems Software
+14.07%
+Human Resource & Employment
+Se
+4.14%
+Data Center REITs
+3.18%
+Broadline Retail
+2.52%
+Interactive Media & Services
+2.18%
+Health Care Technology
+0.88%
+IT Consulting & Other Services
+0.36%
+Advertising
+0.34%
+ COUNTRY BREAKDOWN (%)
+United States
+85.56%
+Canada
+4.89%
+Israel
+3.85%
+China
+3.78%
+Sweden
+1.60%
+Japan
+0.32%
+All Sector, Industry and Geographic breakdowns, where provided, are based on equity positions held by the ETF and exclude cash, currencies, and other holdings.
+605 THIRD AVENUE
+NEW YORK, NY 10158
+1 (888) 493-8631
+GLOBALXETFS.COM
+@GLOBALXETFS
+CLOU Global X Cloud Computing ETF As of 3/31/2025
+DEFINITIONS
+Indxx Global Cloud Computing Index The Indxx Global Cloud Computing Index is designed to provide exposure to exchange-listed companies in developed and emerging
+markets that are positioned to benefit from the increased adoption of cloud computing technology, including but not limited to companies
+whose principal business is in offering computing Software-as-a-Service (“SaaS”), Platform-as-a-Service (“PaaS”), Infrastructure-as-a-Service
+(“IaaS”), managed server storage space and data center REITs, and/or cloud and edge computing infrastructure and hardware (collectively,
+“Cloud Computing Companies”), as defined by Indxx LLC, the provider of the Indxx Global Cloud Computing Index (“Index Provider”).
+(1) Gartner, Nov 2023
+(2) Gartner, Aug 2023
+Investing involves risk, including the possible loss of principal. The investable universe of companies in which CLOU may invest may be limited. The Fund invests in securities of
+companies engaged in Information Technology, which can be affected by rapid product obsolescence, and intense industry competition. International investments may involve risk of
+capital loss from unfavorable fluctuation in currency values, from differences in generally accepted accounting principles or from social, economic or political instability in other nations.
+CLOU is non-diversified. The information provided is not intended for trading purposes, and should not be considered investment advice.
+Carefully consider the Fund’s investment objectives, risk factors, charges, and expenses before investing. This and additional information can be found in the Fund’s full or
+summary prospectus, which may be obtained by calling 1.888.493.8631, or by visiting globalxetfs.com. Please read the prospectus carefully before investing.
+Shares of ETFs are bought and sold at market price (not NAV) and are not individually redeemed from the Fund. Brokerage commissions will reduce returns. Beginning October 15,
+2020, market price returns are based on the official closing price of an ETF share or, if the official closing price isn’t available, the midpoint between the national best bid and national
+best offer (“NBBO”) as of the time the ETF calculates current NAV per share. Prior to October 15, 2020, market price returns were based on the midpoint between the Bid and Ask price.
+NAVs are calculated using prices as of 4:00 PM Eastern Time. The returns shown do not represent the returns you would receive if you traded shares at other times. Indices are
+unmanaged and do not include the effect of fees, expenses or sales charges. One cannot invest directly in an index.
+Since the Fund’s shares did not trade in the secondary market until several days after the Fund’s inception, for the period from inception to the first day of secondary market trading in
+Shares, the NAV of the Fund is used to calculate market returns.
+Global X Management Company LLC serves as an advisor to the Global X Funds. The Funds are distributed by SEI Investments Distribution Co. (SIDCO, 1 Freedom Valley Drive, Oaks, PA,
+19456), which is not affiliated with Global X Management Company LLC or Mirae Asset Global Investments. Global X Funds are not sponsored, endorsed, issued, sold or promoted by
+Indxx, nor does Indxx make any representations regarding the advisability of investing in the Global X Funds. Neither SIDCO, Global X nor Mirae Asset Global Investments are affiliated
+with Indxx.
+605 THIRD AVENUE
+NEW YORK, NY 10158
+1 (888) 493-8631
+GLOBALXETFS.COM
+@GLOBALXETFS

@@ -1,120 +1,99 @@
-<div align="center">
+# 금융상품 Agent (팀 갱갱갱)
 
-# 금융상품 AI Agent
+제10회 2026 미래에셋증권 AI Festival — 금융상품 Agent 과제 제출물
 
-**자연어 기반 금융상품 검색·비교·계산 및 근거 검증**
+자연어 질문을 받아 주최 측 제공 데이터(국내채권, 국내·해외 ETF·ETN, 공모펀드)에서 상품을
+조회·비교·집계하고 근거와 기준일을 함께 답한다. 상품명·수치·순위·출처는 SQLite와 Python 검증기가
+확정하고, HyperCLOVA X(HCX-007)는 질문 의도 해석과 검증된 결과의 문장화만 담당한다. 구성종목·
+자회사·테마·위험요인 같은 외부 근거는 검토·승인해 봉인한 공식 문서 258건(12개 발행기관)에서만
+찾는다. 데이터로 확인할 수 없는 질문에는 추측하지 않고 확인 불가를 안내하거나 되묻는다.
 
-![Python](https://img.shields.io/badge/Python-315B89?style=flat-square) ![FastAPI](https://img.shields.io/badge/FastAPI-315B89?style=flat-square) ![SQLite](https://img.shields.io/badge/SQLite-315B89?style=flat-square) ![HyperCLOVA X](https://img.shields.io/badge/HyperCLOVA%20X-315B89?style=flat-square) ![Docker](https://img.shields.io/badge/Docker-315B89?style=flat-square) ![Ontology](https://img.shields.io/badge/Ontology-315B89?style=flat-square) ![Pytest](https://img.shields.io/badge/Pytest-315B89?style=flat-square)
+## 제출물
 
-[Overview](#overview) · [Features](#features) · [Architecture](#architecture) · [Tech Stack](#tech-stack) · [How to Run](#how-to-run)
-
-</div>
-
----
-
-## Overview
-
-금융상품 Product Finder는 자연어로 입력된 금융 조건을 검증 가능한 검색 계획으로 변환하고, 공식 제공 데이터에 대해 검색·비교·집계한 결과를 근거 및 기준일과 함께 제공하는 AI Agent입니다. 미래에셋증권 AI Festival의 금융상품 Agent 과제를 기반으로 설계되었습니다.
-
-LLM은 질문 의도 파악과 검증된 결과의 자연어 설명을 담당하며, 실제 필터링·순위·수치 계산은 Python과 SQLite가 수행합니다. 독립 검증기가 결과와 최종 문장의 사실성을 검사하여 근거 없는 답변을 제한합니다.
-
-## Features
-
-| 기능 | 설명 |
+| 항목 | 위치 |
 | --- | --- |
-| SEARCH / DETAIL | 상품군별 조건 검색 및 정확한 상품 식별자 조회 |
-| COMPARE | 동일 상품군 두 상품의 허용 필드 비교, 통화·기준일·결측 확인 |
-| AGGREGATE | 개수·평균·최솟값·최댓값 및 허용 집계를 Decimal 기반으로 계산 |
-| EXPLAIN | 필드 단위 evidence 및 기준일을 바탕으로 설명 |
-| Relation Retrieval | 발행사·운용사·기초지수 등 관계 색인과 전체 엔터티 정확 일치 |
-| Safety | 불명확한 조건에는 역질문, 미지원 요청에는 안전 응답 |
-| Verification | Result Verifier, Answer Verifier 및 결정론적 fallback |
-| Release | 코드·모델·프롬프트·데이터·관계 artifact 및 이미지 digest 검증 |
+| 소스코드 | `src/`, `requirements.txt`, 이 README |
+| Ontology | [`ontology/`](ontology/) — `common.ttl` `bond_kr.ttl` `etf_kr.ttl` `etf_gl.ttl` `fund_pub.ttl` |
+| 기술 제안서 | [`docs/기술_제안서.pdf`](docs/기술_제안서.pdf) · [부록: 수집·적재 Flow, 활용 로직, 재현 절차](docs/기술_제안서_부록.md) |
+| 평가용 API 서버 정보 | [`docs/평가용_API_서버_정보.md`](docs/평가용_API_서버_정보.md) |
 
-국내채권, 국내 ETF·ETN, 해외 ETF·ETN을 지원합니다. 공모펀드 검색·비교·집계 엔진은 구현되어 있으나 공식 실행은 기본 잠금 정책을 따릅니다. 상품군 간 직접 수치 비교, 근거 없는 수익률 예측·보장 및 단정적인 투자 추천은 지원 범위가 아닙니다.
+## 환경 구성과 실행
 
-## Architecture
+요구 사항: Ubuntu 22.04/24.04 x86_64, Docker Engine 24 이상, Docker Compose v2, 주최 측 XLSX 디렉터리(`2.금융상품_20260824`, 파일 8개). 아래 절차는 Ubuntu에서 확인했다.
 
-~~~mermaid
-flowchart TD
-  X["공식 XLSX"] --> I["data-init / 정규화"]
-  I --> D["SQLite / 관계 색인"]
-  Q["자연어 질문"] --> B["FastAPI"]
-  B --> R["안전 검사 / HCX Intent / Router"]
-  R --> P["서버 QueryPlan"]
-  P --> O["SQLite Oracle"]
-  D --> O
-  O --> V["독립 Result Verifier"]
-  V --> E["Field-level Evidence"]
-  E --> A["HyperCLOVA X 답변 생성"]
-  A --> AV["Answer Verifier"]
-  AV -->|검증 성공| OUT["근거 포함 응답"]
-  AV -->|검증 실패| F["결정론적 Fallback"]
-~~~
+### 1. 기본 구성
 
-Agent Core는 Backend 이미지에 설치되어 동일 프로세스에서 실행됩니다. 데이터 초기화 서비스는 공식 파일을 읽기 전용으로 사용하고 정규화된 DB를 별도 volume으로 제공합니다. API와 관계 검색은 승인된 데이터·릴리스의 무결성을 확인합니다.
-
-| Path | Responsibility |
-| --- | --- |
-| `src/finance_agent/` | Agent Core, 데이터 정규화, 검색·검증·평가 |
-| `src/fastapi_backend/` | HTTP API, DTO, Audit, 릴리스 가드 |
-| `ontology/` | 상품군 및 공통 Turtle 정의 |
-| `compose.sh` | 전체 시스템 실행 |
-| `docker-compose.yml` | 데이터 초기화 및 Backend 서비스 |
-
-## Tech Stack
-
-| Layer | Technology |
-| --- | --- |
-| Agent | Python, typed QueryPlan, HyperCLOVA X HCX-007 |
-| Data | SQLite, FTS, Decimal, XLSX normalization |
-| Knowledge | Ontology, RDF/Turtle, relation artifacts |
-| API | FastAPI, Pydantic, JSON Schema |
-| Infrastructure | Docker, Docker Compose, release manifest, SHA-256 |
-| Verification | pytest, Oracle, independent verifiers |
-
-## How to Run
-
-### 1. Prerequisites
-
-Git, Docker 및 Docker Compose, Bash 실행 환경, 공식 원천 XLSX 데이터와 필요한 HyperCLOVA X 인증 정보를 준비합니다. 원천 데이터와 생성 DB는 Git에 포함되지 않습니다.
-
-~~~bash
-git clone https://github.com/Hyunhoim/gaeng3.git
-cd gaeng3
-docker info
-test -f src/fastapi_backend/.env || cp src/fastapi_backend/.env.example src/fastapi_backend/.env
-~~~
-
-환경 파일의 `FINANCE_RAW_DATA_DIR`를 실제 원천 데이터 경로로 설정하고 모델 인증 및 실행 정책은 예제 설정과 Backend 문서에 맞춥니다.
-
-### 2. Start
-
-~~~bash
+```bash
+cp src/fastapi_backend/.env.example src/fastapi_backend/.env   # FINANCE_RAW_DATA_DIR 를 XLSX 디렉터리 경로로 수정
 ./compose.sh up --detach --wait
-./compose.sh ps --all
 curl --fail http://127.0.0.1:18001/health
-~~~
+```
 
-API 문서: http://127.0.0.1:18001/docs
+이미지 빌드 → XLSX 정규화·검증 → 상품군별 SQLite·관계 색인 생성 → 서버 시작까지 한 번에 수행한다.
+검색·조건·비교·집계 질문에 결정론적 경로로 답하며, HyperCLOVA X 호출과 외부 문서 검색은 하지 않는다.
+종료는 `./compose.sh down`.
 
-### 3. API Example
+### 2. 평가 구성
 
-~~~bash
-curl --get --fail-with-body \
-  --data-urlencode 'question_id=Q-001' \
-  --data-urlencode 'question=현재 판매 가능한 원화채권 중 AA- 이상 종목 알려줘' \
-  http://127.0.0.1:18001/answer
-~~~
+준비할 것 세 가지.
 
-내부 통합 API는 `POST /answer`, 평가용 API는 `GET /answer`를 사용합니다.
+1. **CLOVA Studio API 키** — 키 값만 담은 파일을 만든다. 환경변수로 넘기지 않는다.
 
-### 4. Logs & Shutdown
+   ```bash
+   mkdir -p ~/.secrets/finance-agent
+   printf '%s' '<CLOVA Studio API 키>' > ~/.secrets/finance-agent/clovastudio-api-key
+   chmod 600 ~/.secrets/finance-agent/clovastudio-api-key
+   ```
 
-~~~bash
-./compose.sh logs data-init
-./compose.sh logs --follow backend
-./compose.sh down
-~~~
+2. **KURE-v1 임베딩 모델** (Hugging Face 공개 모델, 약 2.2 GB)
 
-[Agent 기술 문서](src/finance_agent/README.md) · [Backend 실행 가이드](src/fastapi_backend/README.md) · [API 명세](docs/submission/api-specification.md) · [상세 실행 안내](README_DEVELOPMENT.md)
+   ```bash
+   pip install -U huggingface_hub
+   huggingface-cli download nlpai-lab/KURE-v1 \
+     --revision d14c8a9423946e268a0c9952fecf3a7aabd73bd9 --cache-dir ~/kure-cache
+   ```
+
+3. **승인 문서 묶음** — 저장소에 포함되어 있다(`src/finance_agent/artifacts/approved-corpus/`, 97 MB).
+   12개 발행기관 공식 문서 258건의 정규화 텍스트, 문서 매니페스트(문서별 출처 URL·발행일·SHA-256),
+   KURE Document Dense 색인, 활성화 영수증, 관계 파일이다. 원문 HTML·PDF는 저장하지 않는다.
+
+실행은 한 명령이다. 이미지 빌드 → 데이터 준비 → 릴리스 봉인(코드·DB·색인·문서 묶음의 SHA-256 결속) →
+컨테이너 기동 → `/health`·`/answer` 확인 순서로 진행하며, 봉인 값과 실제 파일이 다르면 시작하지 않는다.
+문서 묶음 경로는 저장소 안의 기본값을 쓴다.
+
+```bash
+RAW_DATA_DIR=/path/to/2.금융상품_20260824 \
+SECRETS_DIR=$HOME/.secrets/finance-agent \
+KURE_CACHE_DIR=$HOME/kure-cache \
+  src/fastapi_backend/scripts/manual-release.sh all
+```
+
+```bash
+curl --get "http://127.0.0.1:8080/answer" \
+  --data-urlencode "question_id=Q-001" \
+  --data-urlencode "question=캠브리콘이 편입된 중국 반도체 ETF를 알려줘"
+```
+
+중지는 `src/fastapi_backend/scripts/manual-release.sh stop`. 포트는 `PORT=`로 바꾼다.
+Docker 없이 실행하려면 Python 3.12에서 `pip install -r requirements.txt` 뒤 [Agent README](src/finance_agent/README.md)를 따른다.
+환경변수 전체 목록은 [Backend README](src/fastapi_backend/README.md)에 있다.
+
+## 저장소 구조
+
+```text
+.
+├── README.md
+├── requirements.txt
+├── ontology/              # 도메인별 Ontology (.ttl)
+├── docs/                  # 기술 제안서 · 부록 · API 명세서
+├── src/finance_agent/     # Agent Core
+├── src/fastapi_backend/   # API 서버 · 배포
+├── docker-compose.yml · compose.sh · compose-release.sh
+└── THIRD_PARTY_NOTICES.md
+```
+
+## Ontology
+
+`ontology/`의 Turtle 5개(`common.ttl`, `bond_kr.ttl`, `etf_kr.ttl`, `etf_gl.ttl`, `fund_pub.ttl`)는
+Agent가 질문 해석에 쓰는 field registry에서 생성한다. `common.ttl`이 공통 상위 클래스와 공통 속성을,
+상품군별 파일이 하위 클래스와 전용 속성을 정의한다.

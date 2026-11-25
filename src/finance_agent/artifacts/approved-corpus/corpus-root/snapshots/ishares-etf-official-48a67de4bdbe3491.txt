@@ -1,0 +1,148 @@
+SOXX
+iShares Semiconductor ETF
+Fact Sheet as of June 30, 2026
+FUND DESCRIPTION
+The  iShares  Semiconductor  ETF  seeks  to  track  an  U.S.  equity  index  of  companies  in  the
+semiconductor  sector.  The  fund  offers  a  way  to  invest  in  companies  across  the
+semiconductor  value  chain,  including  those  driving  innovation  in  AI  and  benefiting  from
+capital investments in digital infrastructure.
+GROWTH OF HYPOTHETICAL $10,000 SINCE INCEPTION
+Fund  Benchmark
+The  Growth  of  $10,000  chart  reflects  a  hypothetical  $10,000  investment  and
+assumes  reinvestment  of  dividends  and  capital  gains.  Fund  expenses,  including
+management fees and other expenses were deducted.
+CALENDAR YEAR PERFORMANCE (%)
+2021 2022 2023 2024 2025
+NAV 44.00 -35.03 66.90 12.97 40.71
+Market Price 44.10 -35.09 67.13 12.92 40.73
+Benchmark 44.70 -34.77 67.61 13.41 41.22
+ANNUALIZED PERFORMANCE (%)
+1y 3y 5y 10y Since
+Inception
+NAV 169.60 56.92 34.50 36.59 15.42
+Market Price 169.69 56.95 34.51 36.60 15.42
+Benchmark 170.76 57.48 35.04 37.20 -
+The  performance  quoted  represents  past  performance  and  does  not  guarantee
+future results. Investment return and principal value of an investment will fluctuate
+so that an investor’s shares, when sold or redeemed, may be worth more or less
+than  the  original  cost.  Current  performance  may  be  lower  or  higher  than  the
+performance quoted. Performance data current to the most recent month end may
+be obtained by visiting www.iShares.com  or www.blackrock.com .
+Beginning 8/10/20, the market price returns are calculated using the closing price.
+Prior  to  8/10/20,  the  market  price  returns  were  calculated  using  the  midpoint  of
+the  bid/ask  spread  at  4:00  PM  ET.  The  returns  shown  do  not  represent  the
+returns you would receive if you traded shares at other times.
+RATINGS
+Overall  Morningstar  Rating  for  iShares
+Semiconductor  ETF,  as  of  06/30/2026  rated
+against  243  Technology  Funds  based  on  risk
+adjusted total return.††
+KEY FACTS
+Asset Class : Equity
+Benchmark : NYSE Semiconductor Index
+Fund Launch Date : 07/10/2001
+Distribution Frequency : Quarterly
+CUSIP : 464287523
+Shares Outstanding : 74,650,000
+Exchange : NASDAQ
+Net Assets of Fund (M) : $47,824.83
+FEES AND EXPENSES BREAKDOWN
+Expense Ratio 0.34%
+Management Fee 0.34%
+Acquired Fund Fees and
+Expenses
+0.00%
+Other Expenses 0.00%
+FUND CHARACTERISTICS
+30 Day SEC Yield : 0.01%
+Equity Beta (3y) : 2.00
+P/B Ratio : 13.23x
+P/E Ratio : 76.39x
+Standard Deviation (3y) : 35.47%
+Number of Holdings : 30
+Contact Us
+For US: 1-800-474-2737 •  ISHARES.COM
+iShares Semiconductor ETF
+TOP HOLDINGS (%)
+MICRON TECHNOLOGY INC 8.54%
+ADVANCED MICRO DEVICES INC 8.09%
+NVIDIA CORP 6.81%
+INTEL CORPORATION 6.33%
+BROADCOM INC 6.08%
+APPLIED MATERIAL INC 5.77%
+KLA CORP 5.64%
+LAM RESEARCH CORP 4.89%
+MARVELL TECHNOLOGY INC 4.88%
+TAIWAN SEMICONDUCTOR MANUFACTURING 4.26%
+Total of Portfolio 61.29%
+Holdings are subject to change.
+TOP SECTORS (%)
+Fund
+Semiconductors 75.59
+Semiconductor Equipment 23.97
+Cash and/or Derivatives 0.44
+Allocations are subject to change.
+Contact Us
+For US: 1-800-474-2737 •  ISHARES.COM 4989452
+4989452
+iShares Semiconductor ETF
+GLOSSARY
+Equity  Beta  (3y): Beta  is  a  measure  of  the  tendency  of  securities  to
+move  with  the  market  as  a  whole.  A  beta  of  1  indicates  that  the
+security's price will move with the market. A beta less than 1 indicates
+the  security  tends  to  be  less  volatile  than  the  market,  while  a  beta
+greater  than  1  indicates  the  security  is  more  volatile  than  the  market.
+Calculated vs. S&P 500.
+P/E Ratio: The price to earnings ratio is a fundamental measure used
+to determine if an investment is valued appropriately. Each holdings' P/
+E  is  the  latest  closing  price  divided  by  the  latest  12  months'  earnings
+per  share.  Negative  earnings  are  excluded,  extraordinary  items  are
+excluded, and P/E ratios over 60 are set to 60.
+30  Day  SEC  Yield: A  standard  calculation  of  yield  introduced  by  the
+SEC  in  order  to  provide  fairer  comparison  among  funds.  This  yield
+reflects the interest earned after deducting the fund's expenses during
+the  most  recent  30-day  period  by  the  average  investor  in  the  fund.
+Negative 30-Day SEC Yield results when accrued expenses of the past
+30 days exceed the income collected during the past 30 days.
+Number  of  Holdings: The  number  of  holdings  in  the  fund  excluding
+cash positions and derivatives such as futures and currency forwards.
+P/B Ratio: represents the ratio of the current closing price of the share
+to the latest quarter's book value per share.
+Distribution  Frequency: How  often  a  distribution  is  paid  by  the  fund.
+The  most  common  distribution  frequencies  are  annually,  biannually
+and quarterly.
+Standard Deviation (3y):  Standard deviation measures how dispersed
+returns  are  around  the  average.  A  higher  standard  deviation  indicates
+that returns are spread out over a larger range of values and thus, more
+volatile.
+IMPORTANT INFORMATION:
+Source: BlackRock, unless otherwise noted.
+Carefully consider the Fund's investment objectives, risk factors, and charges and expenses before investing. This and other information can
+be found in the Fund's prospectus, and if available, summary prospectus, which may be obtained by calling 1-800-iShares (1-800-474-2737)
+or by visiting www.iShares.com or www.blackrock.com. Read the prospectus carefully before investing.
+Investing involves risk, including possible loss of principal.
+††iShares Semiconductor ETF received a Morningstar Rating of 5 stars for the 3-year period, 5 stars for the 5-year period and 5 stars for the 10-year
+period, rated against 243, 218 and 153 Technology Funds, respectively. Performance results represent past performance and are no guarantee of
+future results.
+For each U.S.-domiciled fund with at least a 3-year history, Morningstar calculates a Morningstar RatingTM based on a Morningstar Risk-Adjusted
+Return measure that accounts for variation in a fund's monthly performance (including the effects of sales charges, loads and redemption fees),
+placing more emphasis on downward variations and rewarding consistent performance. The top 10% of funds in each category receive five stars,
+the next 22.5% receive four stars, the next 35% receive three stars, the next 22.5% receive two stars and the bottom 10% receive one star. (Each
+share class is counted as a fraction of one fund within this scale and rated separately, which may cause slight variations in the distribution
+percentages.) The Overall Morningstar Rating for a fund is derived from a weighted-average of the performance figures associated with its 3-, 5-
+and 10-year (if applicable) Morningstar Rating metrics.
+Morningstar Ratings are for the share classes cited only; other classes may have different ratings.
+Funds that concentrate investments in a single sector will be more susceptible to factors affecting that sector and more volatile than funds that
+invest in many different sectors.
+Diversification may not protect against market risk or loss of principal. Shares of ETFs are bought and sold at market price (not NAV) and are not
+individually redeemed from the fund. Any applicable brokerage commissions will reduce returns.
+Index  returns  are  for  illustrative  purposes  only.  Index  performance  returns  do  not  reflect  any  management  fees  or  expenses.  Indexes  are
+unmanaged and one cannot invest directly in an index. Past performance does not guarantee future results.
+"Acquired  Fund  Fees  and  Expenses"  reflect  the  Fund's  pro  rata  share  of  the  indirect  fees  and  expenses  incurred  by  investing  in  one  or  more
+acquired funds, such as mutual funds, business development companies, or other pooled investment vehicles. AFFE are reflected in the prices of
+the acquired funds and thus included in the total returns of the Fund.
+The iShares Funds are distributed by BlackRock Investments, LLC (together with its affiliates, "BlackRock").
+BlackRock provides compensation in connection with obtaining or using third-party ratings and rankings.
+© 2026 BlackRock, Inc. or its affiliates . All rights reserved. iSHARES, iBONDS and BLACKROCK are trademarks of BlackRock, Inc. or its affiliates.
+All other trademarks are those of their respective owners.
+Not FDIC Insured - No Bank Guarantee - May Lose Value

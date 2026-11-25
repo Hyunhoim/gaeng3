@@ -2,7 +2,7 @@
 set -euo pipefail
 
 REPOSITORY_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
-RELEASE_ENV_FILE="${RELEASE_ENV_FILE:-fastapi_backend/.env.release}"
+RELEASE_ENV_FILE="${RELEASE_ENV_FILE:-src/fastapi_backend/.env.release}"
 RELEASE_SNAPSHOT_DIR="$(mktemp -d "${TMPDIR:-/tmp}/finance-agent-release.XXXXXXXX")"
 RELEASE_ENV_SNAPSHOT="$RELEASE_SNAPSHOT_DIR/release.env"
 RELEASE_ADAPTIVE_MARKER="$RELEASE_SNAPSHOT_DIR/adaptive.enabled"
